@@ -6,6 +6,7 @@ import AppEnhancements from "@/components/layout/AppEnhancements";
 import NavigationProgress from "@/components/layout/NavigationProgress";
 import AccessBlockGuard from "@/components/security/AccessBlockGuard";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
+import { getServerSession } from "@/lib/server/session";
 import "../design-system.css";
 
 // 受保護頁面使用 per-request CSP nonce；禁止 Next 將含有 inline bootstrap
@@ -19,13 +20,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const initialUser = await getServerSession();
+
   return (
     <>
       <AccessBlockGuard />
       <NavigationProgress />
       <ScrollProgressBar />
-      <AppShell>{children}</AppShell>
+      <AppShell initialUser={initialUser}>{children}</AppShell>
       <AppEnhancements />
       <Toaster
         position="top-right"

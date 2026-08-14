@@ -24,40 +24,24 @@ const ImpersonationBanner = dynamic(
   { ssr: false },
 );
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
-import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
+import { isBareRoute, isPublicRoute, requiresAuthentication } from "@/lib/route-access";
 import { ApiError } from "@/lib/api-helpers";
 import { authApi } from "@/lib/api/auth";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
+import type { ServerSessionUser } from "@/lib/server/session";
 
-/** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
-const BARE_PATHS = [
-  "/",
-  "/about",
-  "/system-info",
-  "/links",
-  "/news",
-  "/officers",
-  "/pages",
-  "/login",
-  "/auth",
-  "/maintenance",
-  "/module-status",
-  "/profile/complete",
-  "/public",
-  "/live",
-  "/unsubscribe",
-];
-
-function isBare(pathname: string) {
-  return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
-}
-
-function SessionGate({ children }: { children: React.ReactNode }) {
+function SessionGate({
+  children,
+  initialUser,
+}: {
+  children: React.ReactNode;
+  initialUser: ServerSessionUser | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
-  const [authReady, setAuthReady] = useState(false);
+  const [authReady, setAuthReady] = useState(Boolean(initialUser));
   const [redirecting, setRedirecting] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(initialUser));
   const authCheckStarted = useRef(false);
   const redirectedFrom = useRef<string | null>(null);
 
@@ -77,7 +61,8 @@ function SessionGate({ children }: { children: React.ReactNode }) {
     // Shell，避免底部導覽列跟著整個 AppShellContent 被卸載又重新掛載。
     const isInitialAuthCheck = !authCheckStarted.current;
     authCheckStarted.current = true;
-    if (isInitialAuthCheck) setAuthReady(false);
+    if (initialUser) cacheCurrentUser(initialUser);
+    if (isInitialAuthCheck && !initialUser) setAuthReady(false);
     const verifySession = async () => {
       const loggedIn = Boolean(localStorage.getItem("user_id"));
       if (!loggedIn) {
@@ -131,7 +116,7 @@ function SessionGate({ children }: { children: React.ReactNode }) {
       window.removeEventListener("focus", revalidate);
       document.removeEventListener("visibilitychange", revalidate);
     };
-  }, [pathname, router]);
+  }, [initialUser, pathname, router]);
 
   // 公開詳情頁不需要等待瀏覽器端驗證；讓伺服器預先輸出的正文直接進入首屏。
   // 受保護路徑仍沿用原本的驗證閘門與登入導向。
@@ -276,12 +261,18 @@ function AppShellContent({
   );
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  initialUser = null,
+}: {
+  children: React.ReactNode;
+  initialUser?: ServerSessionUser | null;
+}) {
   const pathname = usePathname();
 
-  if (isBare(pathname)) {
+  if (isBareRoute(pathname)) {
     return <>{children}</>;
   }
 
-  return <SessionGate>{children}</SessionGate>;
+  return <SessionGate initialUser={initialUser}>{children}</SessionGate>;
 }

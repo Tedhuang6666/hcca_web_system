@@ -703,7 +703,7 @@ export default function DocumentDetailPageClient({
           </div>
           <UserPicker selectedIds={approverIds} onChange={setApproverIds} />
           <button onClick={handleSubmit} disabled={!approverIds.length}
-            className="w-full py-2.5 rounded-lg text-sm font-medium transition-all hover:opacity-90 disabled:opacity-40"
+            className="w-full py-2.5 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-40"
             style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" }}>
             確認送審（{approverIds.length} 位審核人）
           </button>

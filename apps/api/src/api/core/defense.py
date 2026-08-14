@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import ipaddress
 import json
+import logging
 import time
 from typing import Any
 
@@ -13,6 +14,8 @@ from redis.exceptions import RedisError
 
 from api.core.config import settings
 from api.core.security import redis_client
+
+logger = logging.getLogger(__name__)
 
 DEFENSE_RULES_KEY = "defense:rules:v1"
 RATE_LIMIT_CONFIG_KEY = "defense:rate_limit:v1"
@@ -60,7 +63,9 @@ async def publish_rules(rules: list[dict[str, Any]]) -> None:
             timeout=_REDIS_TIMEOUT_SECONDS,
         )
     except (RedisError, TimeoutError):
-        return
+        # 測試／Redis 短暫中斷時仍保留本程序的最新 policy；否則管理者剛
+        # 發布的 IP block 會在下一個 request 被誤當成「沒有規則」。
+        logger.warning("防禦規則寫入 Redis 失敗，暫存於 process cache", exc_info=True)
     _rules_cache = (time.monotonic() + _LOCAL_CACHE_TTL, rules)
     _rate_config_cache = None
 

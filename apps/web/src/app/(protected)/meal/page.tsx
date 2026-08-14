@@ -134,7 +134,7 @@ function OrderModal({
           <div className="flex gap-3">
             {availability.product?.image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={availability.product.image_url} alt={availability.product.name}
+              <img src={availability.product.image_url} alt={availability.product.name} width={80} height={80}
                 className="h-20 w-20 rounded-md object-cover" />
             ) : (
               <div className="flex h-20 w-20 items-center justify-center rounded-md"
@@ -249,7 +249,7 @@ export default function MealPage() {
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -373,7 +373,7 @@ export default function MealPage() {
                       style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
                       {item.product?.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.product.image_url} alt={item.product.name}
+                        <img src={item.product.image_url} alt={item.product.name} width={640} height={144}
                           className="h-36 w-full object-cover" />
                       ) : (
                         <div className="flex h-28 items-center justify-center"

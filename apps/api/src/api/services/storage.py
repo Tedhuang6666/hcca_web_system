@@ -6,9 +6,13 @@ import abc
 import functools
 import logging
 import mimetypes
+import os
 import re
+import tempfile
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 import anyio.to_thread
 from fastapi import UploadFile
@@ -203,6 +207,71 @@ def _sanitize_filename(filename: str) -> str:
     return sanitized
 
 
+@dataclass(frozen=True, slots=True)
+class _StagedUpload:
+    path: Path
+    content_type: str
+    file_size: int
+
+
+def _copy_upload_sync(
+    source: BinaryIO,
+    destination: Path,
+    max_file_size: int,
+) -> tuple[int, bytes]:
+    """在 worker thread 內以固定 chunk 複製檔案，避免阻塞 event loop 或吃滿 RAM。"""
+    size = 0
+    prefix = bytearray()
+    with destination.open("wb") as output:
+        while chunk := source.read(1024 * 1024):
+            size += len(chunk)
+            if size > max_file_size:
+                raise ValueError(f"檔案超過最大限制 {max_file_size // 1024 // 1024} MB")
+            if len(prefix) < 12:
+                prefix.extend(chunk[: 12 - len(prefix)])
+            output.write(chunk)
+    return size, bytes(prefix)
+
+
+def _new_temp_path(directory: Path | None = None) -> Path:
+    fd, raw_path = tempfile.mkstemp(dir=str(directory) if directory else None)
+    os.close(fd)
+    return Path(raw_path)
+
+
+def _unlink_if_exists(path: Path) -> None:
+    path.unlink(missing_ok=True)
+
+
+async def _stage_upload(
+    file: UploadFile,
+    *,
+    max_file_size: int,
+    allowed_content_types: set[str] | frozenset[str] | None,
+    temp_dir: Path | None = None,
+) -> _StagedUpload:
+    content_type = _detect_content_type(file.filename or "", file.content_type)
+    if not content_type or content_type not in _ALLOWED_TYPES:
+        raise ValueError(f"不支援的檔案類型：{content_type}")
+    if allowed_content_types is not None and content_type not in allowed_content_types:
+        raise ValueError(f"此投稿僅接受：{', '.join(sorted(allowed_content_types))}")
+
+    temp_path = await anyio.to_thread.run_sync(_new_temp_path, temp_dir)
+    try:
+        file_size, prefix = await anyio.to_thread.run_sync(
+            _copy_upload_sync,
+            file.file,
+            temp_path,
+            max_file_size,
+        )
+        if not _validate_magic_bytes(prefix, content_type):
+            raise ValueError(f"檔案內容與宣告的類型 {content_type} 不符")
+        return _StagedUpload(temp_path, content_type, file_size)
+    except Exception:
+        await anyio.to_thread.run_sync(_unlink_if_exists, temp_path)
+        raise
+
+
 class LocalStorageBackend(StorageBackend):
     """
     本地檔案系統儲存後端（開發環境）。
@@ -223,42 +292,36 @@ class LocalStorageBackend(StorageBackend):
     ) -> StoredFile:
         """讀取上傳內容、驗證類型與大小、存至本地目錄"""
         effective_max_file_size = max_file_size if max_file_size is not None else MAX_FILE_SIZE
-        # 讀取全部內容（限制大小）
-        content = await file.read(effective_max_file_size + 1)
-        if len(content) > effective_max_file_size:
-            msg = f"檔案超過最大限制 {effective_max_file_size // 1024 // 1024} MB"
-            raise ValueError(msg)
-
-        # 偵測 MIME type；若兩者皆無法提供白名單內的類型，直接拒絕（不 fallback 到 octet-stream）。
-        content_type = _detect_content_type(file.filename or "", file.content_type)
-        if not content_type or content_type not in _ALLOWED_TYPES:
-            msg = f"不支援的檔案類型：{content_type}"
-            raise ValueError(msg)
-        if allowed_content_types is not None and content_type not in allowed_content_types:
-            raise ValueError(f"此投稿僅接受：{', '.join(sorted(allowed_content_types))}")
-
-        if not _validate_magic_bytes(content, content_type):
-            msg = f"檔案內容與宣告的類型 {content_type} 不符"
-            raise ValueError(msg)
-
+        staged = await _stage_upload(
+            file,
+            max_file_size=effective_max_file_size,
+            allowed_content_types=allowed_content_types,
+            temp_dir=self._base,
+        )
         # 產生唯一 storage_key。副檔名一律由「通過驗證的 MIME」決定，不採用用戶端
         # 提供的原始副檔名，避免 content-type/副檔名混淆造成的儲存型 XSS。
         original_filename = file.filename or "file"
         sanitized = _sanitize_filename(original_filename)
-        ext = _MIME_TO_EXT[content_type]  # content_type 已驗證在白名單內
+        ext = _MIME_TO_EXT[staged.content_type]
         unique_name = f"{uuid.uuid4().hex}{ext}"
         key = _build_storage_key(prefix, unique_name)
 
         dest = self._base.joinpath(*_storage_key_parts(key))
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(content)
+        try:
+            await anyio.to_thread.run_sync(
+                functools.partial(dest.parent.mkdir, parents=True, exist_ok=True)
+            )
+            await anyio.to_thread.run_sync(staged.path.replace, dest)
+        except Exception:
+            await anyio.to_thread.run_sync(_unlink_if_exists, staged.path)
+            raise
 
-        logger.info("檔案儲存 key=%s size=%d original_name=%s", key, len(content), sanitized)
+        logger.info("檔案儲存 key=%s size=%d original_name=%s", key, staged.file_size, sanitized)
         return StoredFile(
             storage_key=key,
             filename=sanitized,
-            content_type=content_type,
-            file_size=len(content),
+            content_type=staged.content_type,
+            file_size=staged.file_size,
             url=f"/uploads/{key}",
         )
 
@@ -335,45 +398,35 @@ class S3StorageBackend(StorageBackend):
         allowed_content_types: set[str] | frozenset[str] | None = None,
     ) -> StoredFile:
         effective_max_file_size = max_file_size if max_file_size is not None else MAX_FILE_SIZE
-        content = await file.read(effective_max_file_size + 1)
-        if len(content) > effective_max_file_size:
-            msg = f"檔案超過最大限制 {effective_max_file_size // 1024 // 1024} MB"
-            raise ValueError(msg)
-
-        # 與 LocalStorageBackend 共用同一份判定順序：驗證 MIME 白名單 + magic bytes
-        content_type = _detect_content_type(file.filename or "", file.content_type)
-        if not content_type or content_type not in _ALLOWED_TYPES:
-            msg = f"不支援的檔案類型：{content_type}"
-            raise ValueError(msg)
-        if allowed_content_types is not None and content_type not in allowed_content_types:
-            raise ValueError(f"此投稿僅接受：{', '.join(sorted(allowed_content_types))}")
-
-        if not _validate_magic_bytes(content, content_type):
-            msg = f"檔案內容與宣告的類型 {content_type} 不符"
-            raise ValueError(msg)
-
         original_filename = file.filename or "file"
         sanitized = _sanitize_filename(original_filename)
-        # 副檔名由白名單推導（與 LocalStorageBackend 一致），防止副檔名混淆
-        ext = _MIME_TO_EXT[content_type]
+        staged = await _stage_upload(
+            file,
+            max_file_size=effective_max_file_size,
+            allowed_content_types=allowed_content_types,
+        )
+        ext = _MIME_TO_EXT[staged.content_type]
         key = _build_storage_key(prefix, f"{uuid.uuid4().hex}{ext}")
-
         client = self._client
-        await anyio.to_thread.run_sync(
-            lambda: client.put_object(
-                Bucket=self._bucket,
-                Key=key,
-                Body=content,
-                ContentType=content_type,
+        try:
+            await anyio.to_thread.run_sync(
+                functools.partial(
+                    client.upload_file,
+                    str(staged.path),
+                    self._bucket,
+                    key,
+                    ExtraArgs={"ContentType": staged.content_type},
+                )
             )
-        )
-        return StoredFile(
-            storage_key=key,
-            filename=sanitized,
-            content_type=content_type,
-            file_size=len(content),
-            url=await self.get_url(key),
-        )
+            return StoredFile(
+                storage_key=key,
+                filename=sanitized,
+                content_type=staged.content_type,
+                file_size=staged.file_size,
+                url=await self.get_url(key),
+            )
+        finally:
+            await anyio.to_thread.run_sync(_unlink_if_exists, staged.path)
 
     async def delete(self, storage_key: str) -> None:
         try:

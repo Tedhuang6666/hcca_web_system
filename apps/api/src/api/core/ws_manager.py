@@ -9,6 +9,7 @@ import logging
 from collections import defaultdict
 from datetime import UTC, datetime
 
+import redis.asyncio as aioredis
 from fastapi import WebSocket
 
 from api.core.config import settings
@@ -264,13 +265,21 @@ class _RedisBroker:
     def __init__(self, mgr: ConnectionManager) -> None:
         self._mgr = mgr
         self._pubsub = None
+        self._redis_client: aioredis.Redis | None = None
         self._task: asyncio.Task | None = None
         self._stopping = asyncio.Event()
 
     async def start(self) -> None:
-        from api.core.security import redis_client
-
-        self._pubsub = redis_client.pubsub()
+        self._redis_client = aioredis.from_url(
+            str(settings.REDIS_REALTIME_URL or settings.REDIS_URL),
+            encoding="utf-8",
+            decode_responses=True,
+            max_connections=settings.REDIS_MAX_CONNECTIONS,
+            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+        )
+        self._pubsub = self._redis_client.pubsub()
         await self._pubsub.subscribe(_PUBSUB_CHANNEL)
         self._task = asyncio.create_task(self._listen(), name="ws_pubsub_listener")
         logger.debug("WS Redis pub/sub listener started")
@@ -285,13 +294,17 @@ class _RedisBroker:
             with contextlib.suppress(Exception):
                 await self._pubsub.unsubscribe(_PUBSUB_CHANNEL)
                 await self._pubsub.aclose()
+        if self._redis_client is not None:
+            with contextlib.suppress(Exception):
+                await self._redis_client.aclose()
+            self._redis_client = None
         logger.debug("WS Redis pub/sub listener stopped")
 
     async def publish(self, payload: dict) -> None:
-        from api.core.security import redis_client
-
         try:
-            await redis_client.publish(_PUBSUB_CHANNEL, json.dumps(payload))
+            if self._redis_client is None:
+                raise RuntimeError("WS realtime Redis 尚未初始化")
+            await self._redis_client.publish(_PUBSUB_CHANNEL, json.dumps(payload))
         except Exception:
             # publish 失敗：退回本機廣播以維持單機可用性
             logger.warning("WS pub/sub publish failed, falling back to local", exc_info=True)

@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -40,6 +40,7 @@ from api.models.email_message import (
 )
 from api.models.user import User
 from api.services import audit as audit_svc
+from api.services.email_dispatch import send_now as dispatch_send_now
 from api.services.permission import get_user_permission_codes
 from api.services.recipient import resolve_recipients, spec_to_resolve_kwargs
 from api.services.storage import get_storage
@@ -685,83 +686,6 @@ async def _render_requested_attachments(
     return await _render_attachments(list(attachments))
 
 
-async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
-    """解析收件人、落庫後逐封排入寄送佇列，並更新 msg 狀態。"""
-    rows = await _resolve_personalized_recipients(db, msg)
-    if not rows:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="解析後無有效收件人"
-        )
-    await _check_quota(db, user, len(rows))
-    await db.execute(
-        delete(EmailCampaignRecipient).where(EmailCampaignRecipient.message_id == msg.id)
-    )
-    await db.flush()
-    recipient_models: list[EmailCampaignRecipient] = []
-    for row in rows:
-        recipient = EmailCampaignRecipient(
-            message_id=msg.id,
-            user_id=row.user_id,
-            email=row.email,
-            name=row.name,
-            variables=row.variables,
-        )
-        db.add(recipient)
-        recipient_models.append(recipient)
-    await db.flush()
-    msg.resolved_emails = [row.email for row in rows]
-    msg.recipient_count = len(rows)
-    msg.status = EmailStatus.QUEUED
-    msg.scheduled_at = None
-    msg.error_detail = None
-    await db.flush()
-    attachments = (
-        (await db.execute(select(EmailAttachment).where(EmailAttachment.message_id == msg.id)))
-        .scalars()
-        .all()
-    )
-    resend_attachments, link_blocks = await _render_attachments(list(attachments))
-    render_context = dict(msg.context or {})
-    render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
-    dispatches: list[tuple[PersonalizedRecipient, EmailCampaignRecipient, str, str]] = []
-    for row, recipient in zip(rows, recipient_models, strict=True):
-        personal = _make_personalization_context(row)
-        subject = render_generic_subject(msg.subject, personal)
-        html = render_generic_message(msg.subject, msg.body, render_context, personal)
-        dispatches.append((row, recipient, subject, html))
-
-    # Worker 可能在 API request 結束前立刻取件；先 commit，確保 task 查得到收件人紀錄，
-    # 才能正確回寫 attempt_count 與寄送狀態。
-    await db.commit()
-
-    task_ids: list[str] = []
-    enqueue_errors = 0
-    for row, recipient, subject, html in dispatches:
-        try:
-            task_ids.extend(
-                enqueue_rendered(
-                    [row.email],
-                    subject,
-                    html,
-                    str(msg.id),
-                    str(recipient.id),
-                    resend_attachments or None,
-                )
-            )
-            recipient.celery_task_id = task_ids[-1] if task_ids else None
-        except Exception as exc:  # noqa: BLE001
-            enqueue_errors += 1
-            recipient.status = EmailRecipientStatus.FAILED
-            recipient.error_detail = f"無法排入寄送佇列：{str(exc)[:450]}"
-    msg.celery_task_id = task_ids[0] if task_ids else None
-    if not task_ids:
-        msg.status = EmailStatus.FAILED
-        msg.error_detail = f"全部收件人無法排入寄送佇列（{enqueue_errors} 人）"
-    elif enqueue_errors:
-        msg.error_detail = f"部分收件人無法排入寄送佇列（{enqueue_errors} 人）"
-    await db.flush()
-
-
 async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
     """重新把尚未成功（queued/failed）的收件人渲染後排入寄送佇列。
 
@@ -1145,7 +1069,7 @@ async def create_message(body: EmailMessageCreate, db: DbDep, user: EmailUser) -
         msg.status = EmailStatus.SCHEDULED
         msg.scheduled_at = scheduled
     else:  # send
-        await _send_now(db, user, msg)
+        await dispatch_send_now(db, user, msg, enqueue=enqueue_rendered)
 
     if msg.template_id:
         template = await db.get(EmailTemplate, msg.template_id)
@@ -1274,7 +1198,7 @@ async def send_message(message_id: uuid.UUID, db: DbDep, user: EmailUser) -> Ema
         )
     spec = RecipientSelector(**spec_to_resolve_kwargs(msg.recipient_spec or {}))
     await _ensure_can_send(db, user, spec)
-    await _send_now(db, user, msg)
+    await dispatch_send_now(db, user, msg, enqueue=enqueue_rendered)
     await db.flush()
     await _audit(db, user, msg, "send")
     await db.refresh(msg)

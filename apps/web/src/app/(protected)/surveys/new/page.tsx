@@ -123,10 +123,10 @@ function ImageField({
       {value ? (
         <div className="relative inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={uploadUrl(value)} alt="圖片預覽" className="max-h-40 rounded-lg"
+          <img src={uploadUrl(value)} alt="圖片預覽" width={320} height={180} className="max-h-40 rounded-lg"
             style={{ border: "1px solid var(--border)" }} />
           <button type="button" onClick={() => onChange("")}
-            className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-sm"
+            className="absolute -top-2 -right-2 h-11 w-11 rounded-full flex items-center justify-center text-sm"
             style={{ background: "var(--danger)", color: "white" }} aria-label="移除圖片">
             ×
           </button>

@@ -746,7 +746,7 @@ async def review_admin_submission(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    from api.routers.notifications import create_notification
+    from api.services.notification import create_notification
 
     if submission.user.email:
         try:

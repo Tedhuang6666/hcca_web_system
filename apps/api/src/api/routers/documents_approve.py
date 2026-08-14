@@ -38,7 +38,6 @@ from api.routers.documents_helpers import (
     unique_doc_ids,
     ws_broadcast_bg,
 )
-from api.routers.notifications import create_notification
 from api.schemas.document import (
     ApproveRequest,
     BatchApproveRequest,
@@ -61,6 +60,7 @@ from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
 from api.services.discord_bot import emit_public_document_notice
+from api.services.notification import create_notification
 from api.services.permission import get_user_permission_codes_for_org, user_is_org_leader
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])

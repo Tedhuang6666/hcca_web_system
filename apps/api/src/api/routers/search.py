@@ -44,7 +44,11 @@ async def global_search(
     return [
         SearchResultOut.model_validate(item)
         for item in await search_service.search(
-            db, q, limit=limit, is_superuser=current_user.is_superuser
+            db,
+            q,
+            limit=limit,
+            viewer_id=current_user.id,
+            is_superuser=current_user.is_superuser,
         )
     ]
 

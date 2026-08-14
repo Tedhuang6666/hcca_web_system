@@ -106,7 +106,7 @@ async def test_emit_routed_notification_includes_fields_and_multiple_images(
 async def test_personal_notification_uses_user_discord_preference(
     db_session: AsyncSession, make_user
 ) -> None:
-    from api.routers.notifications import create_notification
+    from api.services.notification import create_notification
 
     user = await make_user(
         notification_preferences={

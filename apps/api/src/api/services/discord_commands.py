@@ -30,7 +30,6 @@ from api.models.regulation import Regulation, RegulationArticle
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
-from api.routers.notifications import create_notification
 from api.schemas.announcement import AnnouncementAudience, AnnouncementCreate
 from api.schemas.calendar import CalendarEventCreate
 from api.schemas.document import RejectMode
@@ -60,6 +59,7 @@ from api.services.discord_bot import (
     get_user_by_discord_id,
 )
 from api.services.discord_regulation import lookup_citation, parse_citations
+from api.services.notification import create_notification
 from api.services.permission import (
     active_tenure_filter,
     get_user_permission_codes,

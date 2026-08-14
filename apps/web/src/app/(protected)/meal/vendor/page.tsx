@@ -829,7 +829,7 @@ function ProductsPanel({
         <div className="mt-4 grid gap-3">
           {form.image_url && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={form.image_url} alt="商品圖片預覽" className="h-36 w-full rounded-md object-cover"
+            <img src={form.image_url} alt="商品圖片預覽" width={640} height={144} className="h-36 w-full rounded-md object-cover"
               style={{ border: "1px solid var(--border)" }} />
           )}
           <input className="input" placeholder="商品名稱" value={form.name}
@@ -932,7 +932,7 @@ function ProductsPanel({
                     <div className="flex items-center gap-3">
                       {product.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={product.image_url} alt={product.name}
+                        <img src={product.image_url} alt={product.name} width={48} height={48}
                           className="h-12 w-12 rounded-md object-cover" />
                       ) : (
                         <div className="flex h-12 w-12 items-center justify-center rounded-md text-xs"
@@ -1020,7 +1020,7 @@ function ProductEditorForm({
     <div className="grid gap-3">
       {form.image_url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={form.image_url} alt="商品圖片預覽" className="h-40 w-full rounded-md object-cover"
+        <img src={form.image_url} alt="商品圖片預覽" width={640} height={160} className="h-40 w-full rounded-md object-cover"
           style={{ border: "1px solid var(--border)" }} />
       )}
       <input className="input" placeholder="商品名稱" value={form.name}

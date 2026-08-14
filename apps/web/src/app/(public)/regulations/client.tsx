@@ -222,7 +222,7 @@ export default function RegulationsClient({
             return (
               <button key={key} type="button" aria-pressed={active}
                 onClick={() => setCategory(key)}
-                className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
+                className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap cursor-pointer hover:opacity-80"
                 style={active
                   ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                   : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
@@ -241,7 +241,7 @@ export default function RegulationsClient({
                   type="button"
                   aria-pressed={active}
                   onClick={() => setWorkflow(key)}
-                  className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
+                  className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap cursor-pointer hover:opacity-80"
                   style={active
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}

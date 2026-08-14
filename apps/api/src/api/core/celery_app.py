@@ -48,8 +48,8 @@ def _start_worker_metrics(**_kwargs) -> None:
 
 celery_app = Celery(
     "campus_platform",
-    broker=str(settings.REDIS_URL),
-    backend=str(settings.REDIS_URL),
+    broker=str(settings.CELERY_BROKER_URL or settings.REDIS_URL),
+    backend=str(settings.CELERY_RESULT_BACKEND) or None,
     # 明確列出包含 Task 的模組（Worker 啟動時自動載入）
     include=[
         "api.services.mail",

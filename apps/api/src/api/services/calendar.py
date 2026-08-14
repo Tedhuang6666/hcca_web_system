@@ -514,7 +514,7 @@ async def _notify_participants(
     notification_type: str,
 ) -> None:
     try:
-        from api.routers.notifications import create_notification
+        from api.services.notification import create_notification
 
         for participant in event.participants:
             if participant.user_id == actor.id:

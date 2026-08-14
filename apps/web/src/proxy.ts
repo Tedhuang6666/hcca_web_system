@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isPublicRoute } from "@/lib/route-access";
+import {
+  isIndexablePublicPath,
+  isMaintenanceExempt,
+} from "@/lib/route-access";
 
 const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -63,23 +66,6 @@ const publicContentLastModifiedCache = new BoundedTtlCache<Date | null>(2_048);
  * 規則：至少含有一個中文字 + 「字」 + 「第」（可選）+ 數字 + 「號」
  */
 const SERIAL_RE = /^[一-鿿]+字(?:第)?(\d+)號$/;
-const MAINTENANCE_EXEMPT_PREFIXES = [
-  "/maintenance",
-  "/blocked",
-  "/admin/system",
-  "/login",
-  "/auth",
-  "/public",
-];
-const MAINTENANCE_EXEMPT_PATHS = new Set([
-  "/apple-icon.svg",
-  "/favicon.ico",
-  "/icon.svg",
-  "/manifest.webmanifest",
-  "/robots.txt",
-  "/sw.js",
-]);
-
 /** 產生 per-request CSP nonce（Edge runtime：用 Web Crypto，不可用 Buffer）。 */
 function generateNonce(): string {
   const bytes = new Uint8Array(16);
@@ -98,8 +84,8 @@ function generateNonce(): string {
  *   - 明列的 https 來源是給支援 nonce 但不支援 strict-dynamic 的舊瀏覽器的後備。
  *   - script-src-elem 允許同源 Next.js 動態 chunk；Next.js 某些 client dynamic
  *     preload 會沒有 nonce，但 inline script 仍由 script-src 的 nonce 保護。
- * style-src 仍保留 'unsafe-inline'：React 行內樣式、站台自訂 CSS、Toaster 需要，
- *   且樣式注入風險遠低於腳本注入。
+ * React 行內 style attribute 透過 style-src-attr 明確隔離；script/style element
+ * 仍要求 nonce，避免公開頁回退到 unsafe-inline。
  */
 function webSocketSources(): string[] {
   const sources = new Set<string>();
@@ -149,27 +135,9 @@ function buildCsp(nonce: string): string {
     "form-action 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com${devEval}`,
     `script-src-elem 'self' 'nonce-${nonce}' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
-    `connect-src 'self' ${webSocketSources().join(" ")} https://accounts.google.com ${postHogSources().join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com`,
-    "frame-src 'self' https://accounts.google.com",
-    "worker-src 'self' blob:",
-    "manifest-src 'self' https://hcca.tw https://www.hcca.tw",
-  ].join("; ");
-}
-
-/** 公開站使用固定 CSP，避免 nonce/header 讓 HTML 被 Next.js 視為動態。 */
-function buildPublicCsp(): string {
-  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
-  return [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    `script-src 'self' 'unsafe-inline' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com${devEval}`,
-    "script-src-elem 'self' 'unsafe-inline' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
+    `style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com https://accounts.google.com`,
+    `style-src-elem 'self' 'nonce-${nonce}' https://fonts.googleapis.com https://accounts.google.com`,
+    "style-src-attr 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
     `connect-src 'self' ${webSocketSources().join(" ")} https://accounts.google.com ${postHogSources().join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com`,
@@ -194,88 +162,6 @@ function withCsp(req: NextRequest): NextResponse {
   return res;
 }
 
-function withPublicCsp(): NextResponse {
-  const res = NextResponse.next();
-  res.headers.set("content-security-policy", buildPublicCsp());
-  return res;
-}
-
-const PUBLIC_CSP_EXCLUDED_PATHS = [
-  "/auth",
-  "/login",
-  "/maintenance",
-  "/module-status",
-  "/profile/complete",
-  "/unsubscribe",
-];
-const INDEXABLE_PUBLIC_PATHS = new Set([
-  "/",
-  "/about",
-  "/contact",
-  "/links",
-  "/news",
-  "/officers",
-  "/pages",
-  "/public",
-  "/system-info",
-  "/announcements",
-  "/documents",
-  "/legal",
-  "/partner-map",
-  "/petitions",
-  "/petitions/public",
-  "/regulations",
-  "/surveys",
-]);
-const INDEXABLE_PUBLIC_PREFIXES = [
-  "/about/",
-  "/announcements/",
-  "/documents/",
-  "/legal/",
-  "/news/",
-  "/officers/",
-  "/pages/",
-  "/partner-map/",
-  "/petitions/public/",
-  "/public/",
-  "/regulations/",
-  "/surveys/",
-  "/live/elections/",
-];
-const NON_INDEXABLE_PUBLIC_PATHS = [
-    "/announcements/new",
-    "/documents/new",
-    "/documents/delegations",
-    "/partner-map/admin",
-    "/partner-map/my-businesses",
-    "/petitions/new",
-    "/petitions/share",
-    "/regulations/new",
-    "/regulations/pending",
-    "/regulations/archived",
-    "/surveys/new",
-  ];
-
-function isPublicPath(pathname: string): boolean {
-  return isPublicRoute(pathname)
-    && !PUBLIC_CSP_EXCLUDED_PATHS.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    );
-}
-
-function isIndexablePublicPath(pathname: string): boolean {
-  if (NON_INDEXABLE_PUBLIC_PATHS.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  )) {
-    return false;
-  }
-  if (pathname.endsWith("/edit") || pathname.endsWith("/amendment")) {
-    return false;
-  }
-  return INDEXABLE_PUBLIC_PATHS.has(pathname)
-    || INDEXABLE_PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
 function cacheKey(value: string): string {
   // Do not retain raw cookies or IP addresses in a long-lived worker heap.
   let hash = 2_166_136_261;
@@ -284,11 +170,6 @@ function cacheKey(value: string): string {
     hash = Math.imul(hash, 16_777_619);
   }
   return (hash >>> 0).toString(16);
-}
-
-function isMaintenanceExempt(pathname: string) {
-  return MAINTENANCE_EXEMPT_PATHS.has(pathname)
-    || MAINTENANCE_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function decodePathPart(value: string) {
@@ -377,7 +258,9 @@ async function maintenanceRedirect(req: NextRequest) {
   url.searchParams.set("retry", "60");
   if (state.message) url.searchParams.set("detail", state.message);
   if (state.until) url.searchParams.set("until", String(state.until));
-  return NextResponse.redirect(url);
+  const response = NextResponse.redirect(url);
+  response.headers.set("Retry-After", "60");
+  return response;
 }
 
 async function blockedRedirect(req: NextRequest) {
@@ -560,9 +443,12 @@ export default async function proxy(req: NextRequest) {
     return notModifiedResponse(lastModified);
   }
 
-  const response = isPublicPath(pathname) ? withPublicCsp() : withCsp(req);
+  const response = withCsp(req);
   if (!isIndexablePublicPath(pathname)) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  if (pathname === "/maintenance" || pathname.startsWith("/maintenance/")) {
+    response.headers.set("Retry-After", "60");
   }
   if (lastModified) {
     response.headers.set("Last-Modified", lastModified.toUTCString());

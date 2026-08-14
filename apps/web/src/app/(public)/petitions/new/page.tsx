@@ -168,7 +168,7 @@ export default function NewPetitionPage() {
             type="button"
             onClick={() => setIsNamed(true)}
             aria-pressed={isNamed}
-            className="rounded-lg p-4 text-left transition-all"
+            className="rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={{
               border: `1px solid ${isNamed ? "var(--primary)" : "var(--border)"}`,
               background: isNamed ? "var(--primary-dim)" : "transparent",
@@ -180,7 +180,7 @@ export default function NewPetitionPage() {
             type="button"
             onClick={() => setIsNamed(false)}
             aria-pressed={!isNamed}
-            className="rounded-lg p-4 text-left transition-all"
+            className="rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={{
               border: `1px solid ${!isNamed ? "var(--primary)" : "var(--border)"}`,
               background: !isNamed ? "var(--primary-dim)" : "transparent",

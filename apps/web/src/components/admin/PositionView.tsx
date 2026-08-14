@@ -265,7 +265,7 @@ export default function PositionView({
             <span className="ml-2 text-xs font-normal" style={{ color: "var(--text-muted)" }}>({members.length} 人)</span>
           </h3>
           <button onClick={() => setAddingMember(v => !v)}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
             {addingMember ? "取消" : "+ 新增成員"}
           </button>
@@ -317,7 +317,7 @@ export default function PositionView({
               </div>
             </div>
             <button onClick={addMember} disabled={!memberUserId || addingMemberLoading}
-              className="w-full py-2 rounded-xl text-sm font-medium disabled:opacity-40 transition-all"
+              className="w-full py-2 rounded-xl text-sm font-medium disabled:opacity-40 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
               style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
               {addingMemberLoading ? "新增中..." : "確認新增"}
             </button>

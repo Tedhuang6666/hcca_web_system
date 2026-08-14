@@ -8,7 +8,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "20260815110000"
-down_revision: str | Sequence[str] | None = "20260814170000"
+down_revision: str | Sequence[str] | None = "20260815100000"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -5,6 +5,14 @@ import PublicContactSection from "@/components/site/PublicContactSection";
 import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "關於班聯會",
+  description: "了解新竹高中班聯會的使命、沿革、組織與聯絡方式。",
+  path: "/about",
+  type: "website",
+});
 
 export default async function AboutPage() {
   const [bundle, officers] = await Promise.all([fetchPublicBundle(), fetchPublicOfficers()]);

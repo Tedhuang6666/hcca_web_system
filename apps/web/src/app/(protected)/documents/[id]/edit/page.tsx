@@ -810,7 +810,7 @@ export default function EditDocumentPage() {
                 className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
             </div>
             <button onClick={save} disabled={saving}
-              className="w-full py-2.5 rounded-lg text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50"
+              className="w-full py-2.5 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-50"
               style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
               {saving ? "儲存中..." : "儲存變更"}
             </button>

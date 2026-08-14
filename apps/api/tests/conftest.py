@@ -20,6 +20,9 @@ os.environ.setdefault("LOAD_SHED_ENABLED", "false")
 # 全域 rate limit 的計數器跨測試案例共用，長測試序列會讓無關端點被 429；
 # 需要驗證限流的案例會透過 defense config 明確開啟。
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+# 測試 middleware 的 IP block 行為時，不能把 loopback 預設視為正式環境的信任來源；
+# 個別 trust unit test 會自行 monkeypatch settings.RATE_LIMIT_TRUSTED_IPS。
+os.environ["RATE_LIMIT_TRUSTED_IPS"] = "[]"
 # 同理：測試不使用真實 Redis broker，避免事件迴圈跨 test 互鎖。
 os.environ.setdefault("WS_PUBSUB_BACKEND", "memory")
 
@@ -59,6 +62,7 @@ async def _isolate_redis_client_per_test():
     """
     import redis.asyncio as _aioredis
 
+    from api.core import cache as _cache
     from api.core import security as _security
     from api.core.config import settings as _settings
 
@@ -69,13 +73,24 @@ async def _isolate_redis_client_per_test():
         max_connections=_settings.REDIS_MAX_CONNECTIONS,
     )
     old_pool = _security.redis_client.connection_pool
+    fresh_cache_pool = _aioredis.ConnectionPool.from_url(
+        str(_settings.REDIS_CACHE_URL or _settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=_settings.REDIS_MAX_CONNECTIONS,
+    )
+    old_cache_pool = _cache.cache_client.connection_pool
     _security.redis_client.connection_pool = fresh_pool
+    _cache.cache_client.connection_pool = fresh_cache_pool
     try:
         yield
     finally:
         with contextlib.suppress(Exception):
             await fresh_pool.disconnect(inuse_connections=True)
+        with contextlib.suppress(Exception):
+            await fresh_cache_pool.disconnect(inuse_connections=True)
         _security.redis_client.connection_pool = old_pool
+        _cache.cache_client.connection_pool = old_cache_pool
 
 
 @pytest_asyncio.fixture(autouse=True)

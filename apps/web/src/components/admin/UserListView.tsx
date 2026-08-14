@@ -95,7 +95,7 @@ export default function UserListView({
           />
         </div>
         <button onClick={onPreRegister}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all hover:opacity-90"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90"
           style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -227,7 +227,7 @@ export default function UserListView({
                         </div>
                         <button onClick={() => addPosition(u.id)}
                           disabled={!assignPos[u.id] || assigning === u.id}
-                          className="mt-2 text-xs px-4 py-1.5 rounded-lg font-medium disabled:opacity-40 transition-all"
+                          className="mt-2 text-xs px-4 py-1.5 rounded-lg font-medium disabled:opacity-40 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                           style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
                           {assigning === u.id ? "指派中..." : "＋ 指派"}
                         </button>

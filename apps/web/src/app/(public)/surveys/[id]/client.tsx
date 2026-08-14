@@ -138,7 +138,7 @@ function RankingInput({
               type="button"
               onClick={() => onAdd(opt)}
               disabled={!canAdd}
-              className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left transition-all"
+              className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
               style={{
                 background: "var(--bg-elevated)",
                 border: "1px solid var(--border)",
@@ -242,6 +242,8 @@ function QuestionInput({
             key={image}
             src={uploadUrl(image)}
             alt="投稿圖稿預覽"
+            width={80}
+            height={80}
             className="h-20 w-20 rounded-lg object-cover"
           />
         ))}
@@ -266,6 +268,8 @@ function QuestionInput({
         {src && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt={question.question_text || "問卷圖片"}
+            width={640}
+            height={360}
             className="max-h-80 w-full rounded-lg object-contain" />
         )}
         {question.question_text && (
@@ -337,7 +341,7 @@ function QuestionInput({
     return (
       <div className="space-y-2">
         {options.map((opt, index) => (
-          <label key={opt} className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-all"
+          <label key={opt} className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={{
               background: value.options[0] === opt ? "var(--primary-dim)" : "var(--bg-elevated)",
               border: `1px solid ${value.options[0] === opt ? "var(--border-strong)" : "var(--border)"}`,
@@ -385,7 +389,7 @@ function QuestionInput({
           const isOther = otherSet.has(opt);
           return (
             <div key={opt}>
-              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-all"
+              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 style={{
                   background: checked ? "var(--primary-dim)" : "var(--bg-elevated)",
                   border: `1px solid ${checked ? "var(--border-strong)" : "var(--border)"}`,
@@ -469,7 +473,7 @@ function QuestionInput({
             key={n}
             type="button"
             onClick={() => onChange({ ...value, text: String(n) })}
-            className="w-10 h-10 rounded-xl text-sm font-semibold transition-all"
+            className="w-10 h-10 rounded-xl text-sm font-semibold transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={current === n
               ? { background: "var(--primary)", color: "white", border: "none" }
               : { background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
@@ -541,6 +545,8 @@ function ShareModal({ title, onClose }: { title: string; onClose: () => void }) 
         {qr && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={qr} alt="問卷 QR code" className="mx-auto rounded-lg"
+            width={200}
+            height={200}
             style={{ width: 200, height: 200 }} />
         )}
         <div className="flex gap-2">
@@ -651,7 +657,7 @@ function StatsView({ surveyId }: { surveyId: string }) {
               key={v}
               type="button"
               onClick={() => setView(v)}
-              className="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
+              className="px-2.5 py-1 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
               style={view === v
                 ? { background: "var(--primary)", color: "var(--primary-fg)" }
                 : { color: "var(--text-muted)" }}>
@@ -722,7 +728,7 @@ function StatsView({ surveyId }: { surveyId: string }) {
                       </div>
                       <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
                         <div
-                          className="h-full rounded-full transition-all duration-500 ease-out"
+                          className="h-full rounded-full transition-[width] duration-500 ease-out"
                           style={{ width: `${pct}%`, background: "var(--primary)" }}
                         />
                       </div>
@@ -1128,6 +1134,8 @@ export default function SurveyDetailClient({
               {q.image_url && q.question_type !== "image" && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={uploadUrl(q.image_url)} alt=""
+                  width={640}
+                  height={360}
                   className="max-h-72 w-full rounded-lg object-contain"
                   style={{ border: "1px solid var(--border)" }} />
               )}

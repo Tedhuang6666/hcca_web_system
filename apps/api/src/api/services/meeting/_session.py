@@ -432,7 +432,7 @@ async def confirm_meeting(
     await session.flush()
 
     try:
-        from api.routers.notifications import create_notification
+        from api.services.notification import create_notification
 
         starts_label = (
             meeting.starts_at.astimezone().strftime("%Y/%m/%d %H:%M")

@@ -4,6 +4,7 @@ import { regulationHref } from "@/lib/api/regulations";
 import { BRANDING } from "@/lib/branding";
 import { serverApiUrl } from "@/lib/config";
 import { resolvePublicNav } from "@/lib/publicNav";
+import { isSitemapRoute } from "@/lib/route-access";
 import type { PublicSiteBundleOut } from "@/lib/types";
 
 // Sitemap 必須在請求時讀取資料庫；若只在 build time 產生，API 尚未啟動時
@@ -61,13 +62,24 @@ const FETCH_TIMEOUT_MS = 4000;
 let lastKnownGoodSitemap: MetadataRoute.Sitemap | null = null;
 
 function fallbackSitemap(site: string): MetadataRoute.Sitemap {
-  return [
-    { url: `${site}/`, changeFrequency: "daily", priority: 1 },
-    { url: `${site}/about`, changeFrequency: "monthly", priority: 0.7 },
-    { url: `${site}/news`, changeFrequency: "daily", priority: 0.8 },
-    { url: `${site}/regulations`, changeFrequency: "daily", priority: 0.7 },
-    { url: `${site}/documents`, changeFrequency: "daily", priority: 0.6 },
+  const entries: Array<[string, "daily" | "weekly" | "monthly", number]> = [
+    ["/", "daily", 1],
+    ["/about", "monthly", 0.7],
+    ["/news", "daily", 0.8],
+    ["/announcements", "daily", 0.8],
+    ["/regulations", "daily", 0.7],
+    ["/documents", "daily", 0.6],
+    ["/partner-map", "weekly", 0.5],
+    ["/petitions/public", "weekly", 0.5],
+    ["/surveys", "daily", 0.5],
   ];
+  return entries
+    .filter(([path]) => isSitemapRoute(path))
+    .map(([path, changeFrequency, priority]) => ({
+      url: `${site}${path}`,
+      changeFrequency: changeFrequency as MetadataRoute.Sitemap[number]["changeFrequency"],
+      priority: priority as number,
+    }));
 }
 
 async function fetchJson<T>(url: URL): Promise<T | null> {
@@ -249,7 +261,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   };
 
   const navEntries = visibleNavItems
-    .filter((item) => item.key !== "petition-new")
+    .filter((item) => item.key !== "petition-new" && isSitemapRoute(item.href))
     .map((item) => ({
       url: `${site}${item.href}`,
       lastModified: lastModifiedByNavKey[item.key] ?? settingsLastModified,

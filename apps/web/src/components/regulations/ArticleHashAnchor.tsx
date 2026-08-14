@@ -136,7 +136,7 @@ export function ArticleCopyButton({ ariaLabel }: { ariaLabel?: string } = {}) {
     <button
       type="button"
       onClick={onClick}
-      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all"
+      className="no-print inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md transition-[color,background-color,border-color,opacity,transform]"
       style={{
         color: copied ? "#10b981" : "var(--text-muted)",
         border: `1px solid ${copied ? "rgba(16,185,129,0.4)" : "var(--border)"}`,
@@ -172,7 +172,7 @@ export function ArticleClearHighlightButton() {
         event.stopPropagation();
         ctx.clear();
       }}
-      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80"
+      className="no-print inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80"
       style={{
         color: "var(--primary)",
         border: "1px solid var(--border-strong)",

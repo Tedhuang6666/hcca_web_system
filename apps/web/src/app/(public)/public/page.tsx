@@ -8,6 +8,14 @@ import {
 
 import PublicHomeServices from "./PublicHomeServices";
 import { fetchPublicModuleStatuses } from "@/lib/serverFetch";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "公開資料與校園服務",
+  description: "查詢公開法規、公文、即時開票與校園自治服務。",
+  path: "/public",
+  type: "website",
+});
 
 const DATABASES = [
   {

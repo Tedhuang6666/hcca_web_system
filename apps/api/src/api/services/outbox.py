@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.prometheus_metrics import record_outbox_delivery
@@ -15,6 +17,13 @@ from api.models.outbox import OutboxEvent, OutboxStatus
 logger = logging.getLogger(__name__)
 
 _MAX_RETRY = 5
+_CLAIM_BATCH_SIZE = 50
+_LEASE_SECONDS = 300
+
+
+def _retry_delay(retry_count: int) -> timedelta:
+    """指數退避，將短暫外部故障與 Beat 頻率解耦。"""
+    return timedelta(seconds=min(3600, 5 * 2 ** max(0, retry_count - 1)))
 
 
 async def emit(
@@ -29,6 +38,7 @@ async def emit(
         payload=payload,
         status=OutboxStatus.PENDING,
         created_at=datetime.now(UTC),
+        next_attempt_at=datetime.now(UTC),
     )
     session.add(event)
     await session.flush()
@@ -311,11 +321,11 @@ def _handle_petition_external_notify(payload: dict) -> None:
 
 
 async def process_pending_outbox() -> None:
-    """Celery Beat task：以可重試的非同步 DB session 處理 pending outbox events。"""
-    from sqlalchemy.exc import SQLAlchemyError
-
+    """Claim pending events，提交 claim 後才進行外部 I/O。"""
     from api.core.database import task_session
 
+    now = datetime.now(UTC)
+    worker_id = uuid.uuid4().hex
     async with task_session() as db:
         rows = (
             (
@@ -323,38 +333,116 @@ async def process_pending_outbox() -> None:
                     select(OutboxEvent)
                     .where(OutboxEvent.status == OutboxStatus.PENDING)
                     .where(~OutboxEvent.event_type.like("discord.%"))
+                    .where(
+                        or_(
+                            OutboxEvent.next_attempt_at.is_(None),
+                            OutboxEvent.next_attempt_at <= now,
+                        )
+                    )
+                    .where(
+                        or_(
+                            OutboxEvent.locked_until.is_(None),
+                            OutboxEvent.locked_until < now,
+                        )
+                    )
                     .order_by(OutboxEvent.created_at)
-                    .limit(50)
+                    .limit(_CLAIM_BATCH_SIZE)
                     .with_for_update(skip_locked=True)
                 )
             )
             .scalars()
             .all()
         )
-
+        claims: list[tuple[uuid.UUID, str]] = []
+        lease_until = now + timedelta(seconds=_LEASE_SECONDS)
         for event in rows:
-            try:
-                await _dispatch(db, event)
-                event.status = OutboxStatus.PROCESSED
-                event.processed_at = datetime.now(UTC)
-                record_outbox_delivery(event.event_type, "processed")
-            except SQLAlchemyError:
-                # DB 連線中斷或 transaction 失效時不可把事件標成已處理；
-                # 讓 Celery 重新執行，task_session 也會重建連線。
-                await db.rollback()
-                raise
-            except Exception as exc:
-                event.retry_count += 1
-                event.last_error = str(exc)
-                if event.retry_count >= _MAX_RETRY:
-                    event.status = OutboxStatus.DEAD
-                    record_outbox_delivery(event.event_type, "dead")
+            event.locked_by = worker_id
+            event.locked_until = lease_until
+            claims.append((event.id, worker_id))
+        await db.commit()
+
+    for event_id, owner in claims:
+        await _process_claimed_event(event_id, owner)
+
+
+async def _process_claimed_event(event_id: uuid.UUID, owner: str) -> None:
+    """處理單一 claim；row lock 只在 claim/finalize 交易中存在。"""
+    from api.core.database import task_session
+
+    async with task_session() as db:
+        event = await db.scalar(
+            select(OutboxEvent).where(
+                OutboxEvent.id == event_id,
+                OutboxEvent.locked_by == owner,
+                OutboxEvent.status == OutboxStatus.PENDING,
+            )
+        )
+        if event is None:
+            return
+        try:
+            await _dispatch(db, event)
+            event.status = OutboxStatus.PROCESSED
+            event.processed_at = datetime.now(UTC)
+            event.next_attempt_at = None
+            event.locked_until = None
+            event.locked_by = None
+            await db.commit()
+            record_outbox_delivery(event.event_type, "processed")
+        except SQLAlchemyError:
+            # DB transaction 失敗時保留 lease，待逾時後由下一個 worker 接手。
+            await db.rollback()
+            raise
+        except Exception as exc:
+            event_type = event.event_type
+            retry_count = event.retry_count + 1
+            await db.rollback()
+            async with task_session() as update_db:
+                current = await update_db.scalar(
+                    select(OutboxEvent).where(
+                        OutboxEvent.id == event_id,
+                        OutboxEvent.locked_by == owner,
+                        OutboxEvent.status == OutboxStatus.PENDING,
+                    )
+                )
+                if current is None:
+                    return
+                current.retry_count = retry_count
+                current.last_error = str(exc)
+                current.locked_until = None
+                current.locked_by = None
+                if retry_count >= _MAX_RETRY:
+                    current.status = OutboxStatus.DEAD
+                    current.next_attempt_at = None
+                    outcome = "dead"
                     logger.error(
-                        "Outbox event %s dead after %d retries: %s", event.id, _MAX_RETRY, exc
+                        "Outbox event %s dead after %d retries: %s",
+                        event_id,
+                        _MAX_RETRY,
+                        exc,
                     )
                 else:
-                    record_outbox_delivery(event.event_type, "retry")
+                    current.next_attempt_at = datetime.now(UTC) + _retry_delay(retry_count)
+                    outcome = "retry"
                     logger.warning(
-                        "Outbox event %s failed (retry %d): %s", event.id, event.retry_count, exc
+                        "Outbox event %s failed (retry %d): %s", event_id, retry_count, exc
                     )
-        await db.commit()
+                await update_db.commit()
+            record_outbox_delivery(event_type, outcome)
+
+
+async def replay_dead_event(session: AsyncSession, event_id: uuid.UUID) -> OutboxEvent:
+    """將 dead-letter 事件重設為 pending，供管理介面人工重播。"""
+    event = await session.get(OutboxEvent, event_id)
+    if event is None:
+        raise LookupError("找不到此 outbox 事件")
+    if event.status != OutboxStatus.DEAD:
+        raise ValueError("只有 dead 事件可以重播")
+    event.status = OutboxStatus.PENDING
+    event.retry_count = 0
+    event.last_error = None
+    event.processed_at = None
+    event.next_attempt_at = datetime.now(UTC)
+    event.locked_until = None
+    event.locked_by = None
+    await session.flush()
+    return event

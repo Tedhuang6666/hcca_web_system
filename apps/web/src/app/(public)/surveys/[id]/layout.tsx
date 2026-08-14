@@ -30,8 +30,14 @@ export async function generateMetadata(
     survey ? `${survey.title}${survey.description ? `｜${survey.description.slice(0, 80)}` : ""}` : surveyTitle,
     "問卷填答連結。",
   );
-  const path = `/surveys/${encodeURIComponent(surveyTitle)}`;
-  return pageMetadata({ title: surveyTitle, description, path, type: "website" });
+  const encodedId = encodeURIComponent(id);
+  return pageMetadata({
+    title: surveyTitle,
+    description,
+    path: `/surveys/${encodedId}`,
+    imagePath: `/og/surveys/${encodedId}`,
+    type: "website",
+  });
 }
 
 export default function SurveyDetailLayout({ children }: { children: ReactNode }) {

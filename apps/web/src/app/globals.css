@@ -2299,10 +2299,12 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   top: 0;
   left: 0;
   height: 2.5px;
-  width: 0%;
+  width: 100%;
   background: linear-gradient(90deg, #c9a84c 0%, #9b6dd1 100%);
   z-index: 9999;
-  transition: width 0.1s linear;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.1s linear;
   border-radius: 0 2px 2px 0;
   pointer-events: none;
 }
@@ -2324,7 +2326,6 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   border: none;
   color: #fff;
   z-index: 500;
-  animation: bounce-ig 2.4s ease-in-out infinite;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 .float-btn:hover {
@@ -3865,12 +3866,6 @@ details[open] > :not(summary) {
     padding: 0 1rem;
     font-size: 0.8125rem;
   }
-}
-
-/* Instagram 風格呼吸跳動（懸浮球） */
-@keyframes bounce-ig {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-5px); }
 }
 
 /* 進度條入場 */

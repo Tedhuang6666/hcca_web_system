@@ -418,21 +418,21 @@ export function RevisionCard({
         <div className="flex flex-col gap-1.5 flex-shrink-0 items-end">
           {rev.content_snapshot && prevRev?.content_snapshot && (
             <button onClick={() => onDiff(prevRev, rev)}
-              className="text-xs px-2.5 py-1 rounded-lg transition-all hover:opacity-80"
+              className="text-xs px-2.5 py-1 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80"
               style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
               ↔ 與前版比較
             </button>
           )}
           {rev.content_snapshot && currentRev && !isLatest && (
             <button onClick={() => onDiff(rev, currentRev)}
-              className="text-xs px-2.5 py-1 rounded-lg transition-all hover:opacity-80"
+              className="text-xs px-2.5 py-1 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80"
               style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
               ↔ 與最新版比較
             </button>
           )}
           {rev.content_snapshot && (
             <button onClick={() => setExpanded(p => !p)}
-              className="text-xs px-2.5 py-1 rounded-lg transition-all hover:opacity-80"
+              className="text-xs px-2.5 py-1 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80"
               style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}>
               {expanded ? "▲ 收起" : "▼ 查看快照"}
             </button>

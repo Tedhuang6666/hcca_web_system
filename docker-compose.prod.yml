@@ -46,10 +46,20 @@ x-api-common: &api-common
     OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
     APP_RELEASE: ${APP_RELEASE:-}
+    REDIS_CACHE_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-cache:6379/0
+    REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
+    CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
+    CELERY_RESULT_BACKEND: ""
   depends_on:
     db:
       condition: service_healthy
     redis:
+      condition: service_healthy
+    redis-cache:
+      condition: service_healthy
+    redis-broker:
+      condition: service_healthy
+    redis-realtime:
       condition: service_healthy
   volumes:
     - uploads:/app/uploads
@@ -96,12 +106,53 @@ services:
       autoheal: "true"
     # noeviction（Redis 預設）：broker 任務絕不可被 evict 掉；queue-routing 修正後
     # 佇列不再無限成長，mem_limit 僅作 backstop。
-    # maxmemory 設為 mem_limit 的 80%（200mb），讓 Redis 主動拋 OOM 而非等 Docker 強殺。
-    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory 200mb --requirepass \"$${REDIS_PASSWORD}\""]
+    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      ["sh", "-c", "redis-server --maxmemory $${REDIS_CACHE_MAXMEMORY:-256mb} --maxmemory-policy allkeys-lfu --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+      REDIS_CACHE_MAXMEMORY: ${REDIS_CACHE_MAXMEMORY:-256mb}
+    volumes:
+      - rediscachedata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-broker:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes:
+      - redisbrokerdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-realtime:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --save \"\" --appendonly no --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
       interval: 10s
@@ -139,6 +190,10 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      REDIS_CACHE_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-cache:6379/0
+      REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
+      CELERY_RESULT_BACKEND: ""
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
@@ -182,7 +237,7 @@ services:
       --pool=solo
       --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
       --prefetch-multiplier=1
-      --queues=default,email,meal,documents,backup,recovery
+      --queues=default,email,meal,documents,backup,recovery,gcal
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -196,6 +251,10 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      REDIS_CACHE_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-cache:6379/0
+      REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
+      CELERY_RESULT_BACKEND: ""
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
       PROMETHEUS_METRICS_PORT: "9101"
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -243,6 +302,10 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      REDIS_CACHE_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-cache:6379/0
+      REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
+      CELERY_RESULT_BACKEND: ""
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
       PROMETHEUS_METRICS_PORT: "9102"
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -293,6 +356,10 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      REDIS_CACHE_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-cache:6379/0
+      REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
+      CELERY_RESULT_BACKEND: ""
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
     volumes:
       - uploads:/app/uploads
@@ -597,6 +664,8 @@ services:
 volumes:
   pgdata:
   redisdata:
+  rediscachedata:
+  redisbrokerdata:
   uploads:
   backups:
   celerybeat:

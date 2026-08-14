@@ -49,7 +49,7 @@ function AvailabilityBar({ available, total }: { available: number; total: numbe
     <div className="flex items-center gap-2">
       <div className="flex-1 rounded-full h-1.5" style={{ background: "var(--bg-elevated)" }}>
         <div
-          className="h-1.5 rounded-full transition-all"
+          className="h-1.5 rounded-full transition-[width]"
           style={{ width: `${pct}%`, background: color }}
         />
       </div>
@@ -427,7 +427,7 @@ export default function LoansAdminPage() {
             items.map((item) => (
               <button
                 key={item.id}
-                className="card w-full text-left p-4 space-y-2 transition-all"
+                className="card w-full text-left p-4 space-y-2 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 style={
                   selectedId === item.id
                     ? { border: "1.5px solid var(--primary)" }

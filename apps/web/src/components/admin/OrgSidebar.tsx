@@ -47,7 +47,7 @@ export default function OrgSidebar({
     <aside className="flex flex-col h-full" style={{ borderRight: "1px solid var(--border)" }}>
       <button
         onClick={onSelectAllUsers}
-        className="flex items-center gap-2.5 mx-3 mt-3 px-3 py-2.5 rounded-xl text-sm transition-all"
+        className="flex items-center gap-2.5 mx-3 mt-3 px-3 py-2.5 rounded-xl text-sm transition-[color,background-color,border-color,opacity,box-shadow,transform]"
         style={
           viewingUsers
             ? {
@@ -118,7 +118,7 @@ export default function OrgSidebar({
                     <button
                       key={p.id}
                       onClick={() => onSelectPos(p.id)}
-                      className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-left text-xs transition-all"
+                      className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-left text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={
                         active
                           ? {
@@ -157,7 +157,7 @@ export default function OrgSidebar({
       <div className="p-3 border-t" style={{ borderColor: "var(--border)" }}>
         <button
           onClick={onNewPosition}
-          className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-xs font-medium transition-all hover:opacity-90"
+          className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90"
           style={{
             background: "var(--primary-dim)",
             color: "var(--primary)",

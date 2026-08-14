@@ -1,42 +1,15 @@
 import type { MetadataRoute } from "next";
 
 import { SITE_URL } from "@/lib/seo";
+import { robotsAllowPaths, robotsDisallowPaths } from "@/lib/route-access";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: [
-          "/",
-          "/announcements",
-          "/public",
-          "/regulations",
-          "/regulations/",
-          "/documents",
-          "/documents/",
-          "/meetings",
-          "/petitions",
-          "/petitions/public",
-          "/petitions/public/",
-        ],
-        disallow: [
-          "/admin",
-          "/analytics",
-          "/audit-logs",
-          "/auth",
-          "/documents/new",
-          "/documents/*/edit",
-          "/regulations/new",
-          "/regulations/pending",
-          "/regulations/archived",
-          "/regulations/*/edit",
-          "/regulations/*/amendment",
-          "/email",
-          "/login",
-          "/profile",
-          "/settings",
-        ],
+        allow: [...robotsAllowPaths()],
+        disallow: [...robotsDisallowPaths()],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

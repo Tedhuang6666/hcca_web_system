@@ -649,7 +649,7 @@ async def test_petition_updates_email_logged_in_submitter(
         sent.append({"to": to, "subject": subject, "template": template, "context": context})
         return []
 
-    monkeypatch.setattr("api.routers.notifications.send_branded_email", fake_send_branded_email)
+    monkeypatch.setattr("api.services.notification.send_branded_email", fake_send_branded_email)
     ac = authed_client_factory(handler)
 
     if scenario == "needs_info":
