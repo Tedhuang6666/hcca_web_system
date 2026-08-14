@@ -40,6 +40,7 @@ from api.core.security import decode_token
 from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
+PROTECTIVE_RESPONSE_HEADER = "X-HCCA-Protective-Response"
 
 # 維護模式 / shed 啟動時，少數路徑要永遠可用：
 ALWAYS_ALLOWED_PATHS = frozenset(
@@ -252,7 +253,7 @@ class LoadShedMiddleware:
         resp = JSONResponse(
             {"detail": message, "maintenance": True, "until": state.get("until")},
             status_code=503,
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": "60", PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 
@@ -264,7 +265,11 @@ class LoadShedMiddleware:
         if _is_browser_navigation(scope):
             frontend = settings.FRONTEND_BASE_URL.rstrip("/")
             location = f"{frontend}/module-status?module={quote(module_id, safe='')}"
-            resp = RedirectResponse(url=location, status_code=303)
+            resp = RedirectResponse(
+                url=location,
+                status_code=303,
+                headers={PROTECTIVE_RESPONSE_HEADER: "1"},
+            )
             await self._send_response(resp, scope, send)
             return
         message = (
@@ -283,7 +288,7 @@ class LoadShedMiddleware:
                 "until": state.get("until"),
             },
             status_code=503,
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": "60", PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 
@@ -301,7 +306,7 @@ class LoadShedMiddleware:
         resp = JSONResponse(
             {"detail": "伺服器壅塞，請稍後再試", "load_shed": True},
             status_code=503,
-            headers={"Retry-After": str(retry_after)},
+            headers={"Retry-After": str(retry_after), PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 
@@ -309,7 +314,7 @@ class LoadShedMiddleware:
         resp = JSONResponse(
             {"detail": "此功能因全站防護策略暫時停用", "load_shed": True, "reason": reason},
             status_code=503,
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": "60", PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 

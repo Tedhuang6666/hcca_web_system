@@ -100,6 +100,7 @@ async def test_module_maintenance_blocks_target_module_returns_503(
     assert resp.status_code == 503
     body = resp.json()
     assert body["module_maintenance"] is True
+    assert resp.headers["X-HCCA-Protective-Response"] == "1"
     assert body["module"] == "shop"
 
     # 其他模組不受影響
