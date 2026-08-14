@@ -58,6 +58,17 @@ type PublicSitePageListItem = {
 };
 
 const FETCH_TIMEOUT_MS = 4000;
+let lastKnownGoodSitemap: MetadataRoute.Sitemap | null = null;
+
+function fallbackSitemap(site: string): MetadataRoute.Sitemap {
+  return [
+    { url: `${site}/`, changeFrequency: "daily", priority: 1 },
+    { url: `${site}/about`, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${site}/news`, changeFrequency: "daily", priority: 0.8 },
+    { url: `${site}/regulations`, changeFrequency: "daily", priority: 0.7 },
+    { url: `${site}/documents`, changeFrequency: "daily", priority: 0.6 },
+  ];
+}
 
 async function fetchJson<T>(url: URL): Promise<T | null> {
   const controller = new AbortController();
@@ -76,14 +87,14 @@ async function fetchJson<T>(url: URL): Promise<T | null> {
   }
 }
 
-async function pagedFetch<T>(url: URL, limit = 100): Promise<T[]> {
+async function pagedFetch<T>(url: URL, limit = 100): Promise<T[] | null> {
   const all: T[] = [];
   let offset = 0;
   while (true) {
     url.searchParams.set("limit", String(limit));
     url.searchParams.set("offset", String(offset));
     const items = await fetchJson<T[]>(url);
-    if (!items) return [];
+    if (!items) return null;
     all.push(...items);
     if (items.length < limit) break;
     offset += limit;
@@ -126,6 +137,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     fetchJson<PublicModuleStatusListItem[]>(new URL(serverApiUrl("/system/module-status"))),
     fetchJson<PublicSitePageListItem[]>(new URL(serverApiUrl("/site/pages"))),
   ]);
+  const minimalFallback = fallbackSitemap(site);
+  if (!bundle || !moduleStatuses || !publicPages) {
+    return lastKnownGoodSitemap ?? minimalFallback;
+  }
   const settingsLastModified = latestModifiedAt([bundle?.settings.updated_at]);
   const visibleNavItems = visiblePublicNavItems(bundle, moduleStatuses);
   const visibleNavKeys = new Set(visibleNavItems.map((item) => item.key));
@@ -148,18 +163,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       : Promise.resolve([] as DocumentListItem[]),
     hasNavItem("news")
       ? pagedFetch<AnnouncementListItem>(new URL(serverApiUrl("/announcements"))).then((items) =>
-          items.filter((item) => item.is_published),
+          items ? items.filter((item) => item.is_published) : null,
         )
       : Promise.resolve([] as AnnouncementListItem[]),
     hasNavItem("elections")
       ? fetchJson<PublicElectionListItem[]>(new URL(serverApiUrl("/elections/public"))).then(
-          (items) => items ?? [],
+          (items) => items,
         )
       : Promise.resolve([] as PublicElectionListItem[]),
     hasNavItem("petitions")
       ? pagedFetch<PublicPetitionListItem>(new URL(serverApiUrl("/petitions/public")))
       : Promise.resolve([] as PublicPetitionListItem[]),
   ]);
+  if (!regs || !docs || !announcements || !elections || !petitions) {
+    return lastKnownGoodSitemap ?? minimalFallback;
+  }
 
   const announcementLastModified = latestModifiedAt(
     announcements.map((announcement) => announcement.updated_at),
@@ -241,7 +259,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: item.key === "public-db" ? 0.6 : item.group === "primary" ? 0.8 : 0.7,
     }));
 
-  return [
+  const entries: MetadataRoute.Sitemap = [
     { url: `${site}/`, lastModified: homepageLastModified, changeFrequency: "daily", priority: 1 },
     ...navEntries,
     ...announcements.map((a) => ({
@@ -283,4 +301,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.5,
       })),
   ];
+  lastKnownGoodSitemap = entries;
+  return entries;
 }

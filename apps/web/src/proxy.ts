@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isPublicRoute } from "@/lib/route-access";
 
 const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -14,24 +15,46 @@ interface CacheEntry<T> {
 }
 const CACHE_TTL_MS = 30_000;
 
-function cacheGet<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
-  const e = map.get(key);
-  if (!e) return undefined;
-  if (Date.now() - e.ts > CACHE_TTL_MS) { map.delete(key); return undefined; }
-  return e.value;
-}
+class BoundedTtlCache<T> {
+  private readonly entries = new Map<string, CacheEntry<T>>();
 
-function cacheSet<T>(map: Map<string, CacheEntry<T>>, key: string, value: T) {
-  map.set(key, { value, ts: Date.now() });
+  constructor(private readonly maxEntries: number) {}
+
+  get(key: string): T | undefined {
+    const entry = this.entries.get(key);
+    if (!entry) return undefined;
+    if (Date.now() - entry.ts > CACHE_TTL_MS) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    // Map insertion order is used as a small LRU queue.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry.value;
+  }
+
+  set(key: string, value: T): void {
+    const now = Date.now();
+    for (const [entryKey, entry] of this.entries) {
+      if (now - entry.ts > CACHE_TTL_MS) this.entries.delete(entryKey);
+    }
+    this.entries.delete(key);
+    this.entries.set(key, { value, ts: now });
+    while (this.entries.size > this.maxEntries) {
+      const oldestKey = this.entries.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      this.entries.delete(oldestKey);
+    }
+  }
 }
 
 type MaintenanceState = { enabled: false } | { enabled: true; message?: string; until?: number | null };
 type AccessState = { blocked: false } | { blocked: true; reason?: string; expires_at?: number | null };
 
-const maintenanceCache = new Map<string, CacheEntry<MaintenanceState>>();
-const accessStatusCache = new Map<string, CacheEntry<AccessState>>();
-const bypassCache = new Map<string, CacheEntry<boolean>>();
-const publicContentLastModifiedCache = new Map<string, CacheEntry<Date | null>>();
+const maintenanceCache = new BoundedTtlCache<MaintenanceState>(4);
+const accessStatusCache = new BoundedTtlCache<AccessState>(2_048);
+const bypassCache = new BoundedTtlCache<boolean>(2_048);
+const publicContentLastModifiedCache = new BoundedTtlCache<Date | null>(2_048);
 
 /**
  * 識別中文公文字號格式，例如：
@@ -78,31 +101,46 @@ function generateNonce(): string {
  * style-src 仍保留 'unsafe-inline'：React 行內樣式、站台自訂 CSS、Toaster 需要，
  *   且樣式注入風險遠低於腳本注入。
  */
-function buildCsp(nonce: string): string {
-  // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
-  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
-  const wsSources = new Set(["ws://localhost:8000", "wss://localhost:8000"]);
-  const posthogConnectSources = new Set([
+function webSocketSources(): string[] {
+  const sources = new Set<string>();
+  if (process.env.NODE_ENV !== "production") {
+    sources.add("ws://localhost:8000");
+    sources.add("wss://localhost:8000");
+  }
+  const configuredWsUrl = process.env.NEXT_PUBLIC_WS_URL;
+  if (configuredWsUrl) {
+    try {
+      const parsed = new URL(configuredWsUrl.replace(/^http/, "ws"));
+      if (process.env.NODE_ENV === "production" && ["localhost", "127.0.0.1"].includes(parsed.hostname)) {
+        return [...sources];
+      }
+      sources.add(`${parsed.protocol}//${parsed.host}`);
+    } catch {
+      // 無效的公開 WebSocket URL 由前端設定檢查處理，不讓 CSP 建立失敗。
+    }
+  }
+  return [...sources];
+}
+
+function postHogSources(): string[] {
+  const sources = new Set([
     "https://us.i.posthog.com",
     "https://us-assets.i.posthog.com",
   ]);
   const configuredPostHogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
   if (configuredPostHogHost) {
     try {
-      posthogConnectSources.add(new URL(configuredPostHogHost).origin);
+      sources.add(new URL(configuredPostHogHost).origin);
     } catch {
       // 無效的 PostHog endpoint 不應讓整份 CSP 建立失敗。
     }
   }
-  const configuredWsUrl = process.env.NEXT_PUBLIC_WS_URL;
-  if (configuredWsUrl) {
-    try {
-      const parsed = new URL(configuredWsUrl.replace(/^http/, "ws"));
-      wsSources.add(`${parsed.protocol}//${parsed.host}`);
-    } catch {
-      // 無效的公開 WebSocket URL 由前端設定檢查處理，不讓 CSP 建立失敗。
-    }
-  }
+  return [...sources];
+}
+
+function buildCsp(nonce: string): string {
+  // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
+  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
   return [
     "default-src 'self'",
     "base-uri 'self'",
@@ -114,7 +152,27 @@ function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
-    `connect-src 'self' ${[...wsSources].join(" ")} https://accounts.google.com ${[...posthogConnectSources].join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com`,
+    `connect-src 'self' ${webSocketSources().join(" ")} https://accounts.google.com ${postHogSources().join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com`,
+    "frame-src 'self' https://accounts.google.com",
+    "worker-src 'self' blob:",
+    "manifest-src 'self' https://hcca.tw https://www.hcca.tw",
+  ].join("; ");
+}
+
+/** 公開站使用固定 CSP，避免 nonce/header 讓 HTML 被 Next.js 視為動態。 */
+function buildPublicCsp(): string {
+  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    `script-src 'self' 'unsafe-inline' https://accounts.google.com https://us-assets.i.posthog.com${devEval}`,
+    "script-src-elem 'self' 'unsafe-inline' https://accounts.google.com https://us-assets.i.posthog.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
+    `connect-src 'self' ${webSocketSources().join(" ")} https://accounts.google.com ${postHogSources().join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com`,
     "frame-src 'self' https://accounts.google.com",
     "worker-src 'self' blob:",
     "manifest-src 'self' https://hcca.tw https://www.hcca.tw",
@@ -134,6 +192,98 @@ function withCsp(req: NextRequest): NextResponse {
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("content-security-policy", csp);
   return res;
+}
+
+function withPublicCsp(): NextResponse {
+  const res = NextResponse.next();
+  res.headers.set("content-security-policy", buildPublicCsp());
+  return res;
+}
+
+const PUBLIC_CSP_EXCLUDED_PATHS = [
+  "/auth",
+  "/login",
+  "/maintenance",
+  "/module-status",
+  "/profile/complete",
+  "/unsubscribe",
+];
+const INDEXABLE_PUBLIC_PATHS = new Set([
+  "/",
+  "/about",
+  "/contact",
+  "/links",
+  "/news",
+  "/officers",
+  "/pages",
+  "/public",
+  "/system-info",
+  "/announcements",
+  "/documents",
+  "/legal",
+  "/partner-map",
+  "/petitions",
+  "/petitions/public",
+  "/regulations",
+  "/surveys",
+]);
+const INDEXABLE_PUBLIC_PREFIXES = [
+  "/about/",
+  "/announcements/",
+  "/documents/",
+  "/legal/",
+  "/news/",
+  "/officers/",
+  "/pages/",
+  "/partner-map/",
+  "/petitions/public/",
+  "/public/",
+  "/regulations/",
+  "/surveys/",
+  "/live/elections/",
+];
+const NON_INDEXABLE_PUBLIC_PATHS = [
+    "/announcements/new",
+    "/documents/new",
+    "/documents/delegations",
+    "/partner-map/admin",
+    "/partner-map/my-businesses",
+    "/petitions/new",
+    "/petitions/share",
+    "/regulations/new",
+    "/regulations/pending",
+    "/regulations/archived",
+    "/surveys/new",
+  ];
+
+function isPublicPath(pathname: string): boolean {
+  return isPublicRoute(pathname)
+    && !PUBLIC_CSP_EXCLUDED_PATHS.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
+}
+
+function isIndexablePublicPath(pathname: string): boolean {
+  if (NON_INDEXABLE_PUBLIC_PATHS.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  )) {
+    return false;
+  }
+  if (pathname.endsWith("/edit") || pathname.endsWith("/amendment")) {
+    return false;
+  }
+  return INDEXABLE_PUBLIC_PATHS.has(pathname)
+    || INDEXABLE_PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+function cacheKey(value: string): string {
+  // Do not retain raw cookies or IP addresses in a long-lived worker heap.
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 function isMaintenanceExempt(pathname: string) {
@@ -156,8 +306,8 @@ function decodePathPart(value: string) {
 }
 
 async function canBypassMaintenance(req: NextRequest) {
-  const cookieKey = (req.headers.get("cookie") ?? "").slice(0, 64);
-  const cached = cacheGet(bypassCache, cookieKey);
+  const cookieKey = cacheKey(req.headers.get("cookie") ?? "anonymous");
+  const cached = bypassCache.get(cookieKey);
   if (cached !== undefined) return cached;
 
   const controller = new AbortController();
@@ -168,7 +318,7 @@ async function canBypassMaintenance(req: NextRequest) {
       cache: "no-store",
       signal: controller.signal,
     });
-    if (!res.ok) { cacheSet(bypassCache, cookieKey, false); return false; }
+    if (!res.ok) { bypassCache.set(cookieKey, false); return false; }
     const me = (await res.json()) as {
       is_superuser?: boolean;
       is_owner?: boolean;
@@ -181,7 +331,7 @@ async function canBypassMaintenance(req: NextRequest) {
       || permissions.has("admin:all")
       || permissions.has("system:maintenance_bypass"),
     );
-    cacheSet(bypassCache, cookieKey, result);
+    bypassCache.set(cookieKey, result);
     return result;
   } catch {
     return false;
@@ -194,7 +344,7 @@ async function maintenanceRedirect(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isMaintenanceExempt(pathname)) return null;
 
-  let state = cacheGet(maintenanceCache, "global");
+  let state = maintenanceCache.get("global");
   if (!state) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
@@ -208,7 +358,7 @@ async function maintenanceRedirect(req: NextRequest) {
       state = raw.enabled
         ? { enabled: true, message: raw.message, until: raw.until }
         : { enabled: false };
-      cacheSet(maintenanceCache, "global", state);
+      maintenanceCache.set("global", state);
     } catch {
       // fail-open：API 不可達時放行。維護模式需要 API 運作才有意義；
       // API 整體掛掉時不應連帶讓前端對所有人回傳 503。
@@ -239,7 +389,8 @@ async function blockedRedirect(req: NextRequest) {
     ?? req.headers.get("x-real-ip")
     ?? "local";
 
-  let state = cacheGet(accessStatusCache, ip);
+  const ipKey = cacheKey(ip);
+  let state = accessStatusCache.get(ipKey);
   if (!state) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
@@ -261,7 +412,7 @@ async function blockedRedirect(req: NextRequest) {
       state = raw.blocked
         ? { blocked: true, reason: raw.reason, expires_at: raw.expires_at }
         : { blocked: false };
-      cacheSet(accessStatusCache, ip, state);
+      accessStatusCache.set(ipKey, state);
     } catch {
       // fail-open：API 不可達時放行。封鎖檢查依賴 API；API 整體掛掉時
       // 以 503 封鎖所有人（包含正常使用者）的代價高於放行少數被封鎖 IP。
@@ -306,7 +457,7 @@ async function publicContentLastModified(req: NextRequest): Promise<Date | null>
   const apiPath = publicContentApiPath(req);
   if (!apiPath) return null;
 
-  const cached = cacheGet(publicContentLastModifiedCache, apiPath);
+  const cached = publicContentLastModifiedCache.get(apiPath);
   if (cached !== undefined) return cached;
 
   const controller = new AbortController();
@@ -320,7 +471,7 @@ async function publicContentLastModified(req: NextRequest): Promise<Date | null>
       signal: controller.signal,
     });
     if (!res.ok) {
-      cacheSet(publicContentLastModifiedCache, apiPath, null);
+      publicContentLastModifiedCache.set(apiPath, null);
       return null;
     }
 
@@ -332,18 +483,18 @@ async function publicContentLastModified(req: NextRequest): Promise<Date | null>
     const value = raw.updated_at ?? raw.published_at ?? raw.created_at;
     const timestamp = value ? new Date(value).getTime() : Number.NaN;
     if (!Number.isFinite(timestamp)) {
-      cacheSet(publicContentLastModifiedCache, apiPath, null);
+      publicContentLastModifiedCache.set(apiPath, null);
       return null;
     }
 
     // HTTP-date 只有秒精度；截斷毫秒避免瀏覽器拿剛收到的 header
     // 回傳 If-Modified-Since 時永遠比資料庫時間早幾毫秒。
     const lastModified = new Date(Math.floor(timestamp / 1000) * 1000);
-    cacheSet(publicContentLastModifiedCache, apiPath, lastModified);
+    publicContentLastModifiedCache.set(apiPath, lastModified);
     return lastModified;
   } catch {
     // SEO header 失敗不應影響公開頁面正常回應。
-    cacheSet(publicContentLastModifiedCache, apiPath, null);
+    publicContentLastModifiedCache.set(apiPath, null);
     return null;
   } finally {
     clearTimeout(timeout);
@@ -366,6 +517,14 @@ function notModifiedResponse(lastModified: Date) {
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const host = (forwardedHost ?? req.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (process.env.NODE_ENV === "production" && host === "www.hcca.tw") {
+    const url = req.nextUrl.clone();
+    url.host = "hcca.tw";
+    return NextResponse.redirect(url, 308);
+  }
 
   // Next.js App Router 的客戶端換頁是 RSC payload request（帶 "RSC: 1" header），
   // 不代表新使用者到達網站，不需要每次都打 blocked/maintenance API。
@@ -401,7 +560,10 @@ export default async function proxy(req: NextRequest) {
     return notModifiedResponse(lastModified);
   }
 
-  const response = withCsp(req);
+  const response = isPublicPath(pathname) ? withPublicCsp() : withCsp(req);
+  if (!isIndexablePublicPath(pathname)) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
   if (lastModified) {
     response.headers.set("Last-Modified", lastModified.toUTCString());
   }

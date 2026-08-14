@@ -6,7 +6,7 @@ import Image from "next/image";
 import { ArrowLeft, Search, WifiOff } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { notificationsApi, tasksApi } from "@/lib/api";
+import { authFetch, notificationsApi, tasksApi } from "@/lib/api";
 import type { NotificationItem, TaskItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { useWS } from "@/hooks/useWS";
@@ -170,9 +170,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
   const handleLogout = async () => {
     try {
-      await fetch(apiUrl("/auth/logout"), {
+      await authFetch(apiUrl("/auth/logout"), {
         method: "POST",
         credentials: "include",
+        skipImpersonation: true,
       });
     } catch { /* ignore */ }
     clearAuthCache();

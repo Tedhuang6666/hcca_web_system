@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections import defaultdict
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 
 from redis.exceptions import RedisError
@@ -18,10 +18,36 @@ from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
 
-# 內存降級 rate limit（Redis 不可用時的最後防線）。
-# 警告：此計數器為 per-process，多 worker 部署時每個 worker 各自計數，
-# 等效上限為 N × requests；攻擊者可輪詢不同 worker 繞過。Redis 恢復後立即失效。
-_memory_buckets: dict[str, list[float]] = defaultdict(list)
+class _BoundedMemoryBuckets:
+    """Redis 故障時使用的 bounded per-process 固定視窗計數器。"""
+
+    def __init__(self, max_entries: int = 8_192) -> None:
+        self.max_entries = max_entries
+        self.buckets: OrderedDict[str, list[float]] = OrderedDict()
+
+    def check(self, key: str, req_limit: int, window_seconds: int) -> bool:
+        now = time.monotonic()
+        window_start = now - window_seconds
+
+        # 每次寫入都掃描並清理過期項目，避免只有再次命中同一 key 才釋放記憶體。
+        for bucket_key, timestamps in list(self.buckets.items()):
+            fresh = [timestamp for timestamp in timestamps if timestamp > window_start]
+            if fresh:
+                self.buckets[bucket_key] = fresh
+            else:
+                del self.buckets[bucket_key]
+
+        timestamps = self.buckets.pop(key, [])
+        timestamps.append(now)
+        self.buckets[key] = timestamps
+        while len(self.buckets) > self.max_entries:
+            self.buckets.popitem(last=False)
+
+        return len(timestamps) > req_limit
+
+
+# Redis 恢復後這些短期資料自然在下一次請求被覆蓋；每個 middleware 實例各自限流。
+_MEMORY_CACHE_MAX_ENTRIES = 8_192
 
 
 class SimpleRateLimitMiddleware:
@@ -45,6 +71,7 @@ class SimpleRateLimitMiddleware:
         self.enabled = enabled
         self.requests = requests
         self.window_seconds = window_seconds
+        self._memory_buckets = _BoundedMemoryBuckets(_MEMORY_CACHE_MAX_ENTRIES)
 
         self._overrides: list[tuple[str, int, int]] = [
             ("/auth/refresh", 20, 60),
@@ -82,16 +109,19 @@ class SimpleRateLimitMiddleware:
                 return enabled, req, win
         return enabled, req_limit, win
 
+    @staticmethod
+    def _route_template(path: str) -> str:
+        """將高基數 URL 歸併成有限的路由模板，避免每個資源 ID 建立新 key。"""
+        segments = [segment for segment in path.split("/") if segment]
+        if not segments:
+            return "/"
+        if len(segments) == 1:
+            return f"/{segments[0]}"
+        return f"/{segments[0]}/{{route}}"
+
     def _check_memory_rate_limit(self, key: str, req_limit: int, win: int) -> bool:
         """簡單的內存降級 rate limit（固定視窗）"""
-        now = time.time()
-        window_start = now - win
-
-        # 清理舊記錄
-        _memory_buckets[key] = [t for t in _memory_buckets[key] if t > window_start]
-        _memory_buckets[key].append(now)
-
-        return len(_memory_buckets[key]) > req_limit
+        return self._memory_buckets.check(key, req_limit, win)
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
@@ -115,7 +145,8 @@ class SimpleRateLimitMiddleware:
             return
         now = int(time.time())
         bucket = now - (now % win)
-        key = f"rate_limit:{client_host}:{request.method}:{request.url.path}:{bucket}"
+        route_template = self._route_template(request.url.path)
+        key = f"rate_limit:{client_host}:{request.method}:{route_template}:{bucket}"
 
         try:
             # INCR + EXPIRE：固定視窗計數

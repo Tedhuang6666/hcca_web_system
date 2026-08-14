@@ -1,8 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
+
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((element) => element.getClientRects().length > 0 || element === document.activeElement);
+}
 
 interface DrawerProps {
   /** 由父層控制開關，false → 觸發收起動畫後 unmount。 */
@@ -43,10 +57,13 @@ export default function Drawer({
   width = "480px",
   sheetHeight = "85vh",
   closeOnBackdrop = true,
-  ariaLabel,
 }: DrawerProps) {
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -63,22 +80,73 @@ export default function Drawer({
   }, [open, mounted]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!mounted) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const inertSiblings = new Map<HTMLElement, { inert: boolean; ariaHidden: string | null }>();
+    for (const child of Array.from(document.body.children)) {
+      if (child === dialog) continue;
+      const element = child as HTMLElement;
+      inertSiblings.set(element, {
+        inert: element.hasAttribute("inert"),
+        ariaHidden: element.getAttribute("aria-hidden"),
+      });
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
+    }
+    const focusTarget = dialog.querySelector<HTMLElement>("[data-autofocus]")
+      ?? closeButtonRef.current
+      ?? focusableElements(dialog)[0]
+      ?? dialog;
+    const focusFrame = requestAnimationFrame(() => focusTarget.focus());
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = prev;
+      for (const [element, previous] of inertSiblings) {
+        if (previous.inert) element.setAttribute("inert", "");
+        else element.removeAttribute("inert");
+        if (previous.ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", previous.ariaHidden);
+      }
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !dialogRef.current) return;
+    const dialog = dialogRef.current;
     const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements(dialog);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [mounted]);
+  }, [mounted, onClose]);
 
   if (!mounted) return null;
 
@@ -92,10 +160,13 @@ export default function Drawer({
 
   return createPortal(
     <div
+      ref={dialogRef}
+      data-drawer-root="true"
       className="fixed inset-0 z-50"
       role="dialog"
       aria-modal="true"
-      aria-label={ariaLabel ?? title}
+      aria-labelledby={titleId}
+      tabIndex={-1}
     >
       <div
         className="absolute inset-0 transition-opacity"
@@ -128,13 +199,14 @@ export default function Drawer({
           className="flex flex-shrink-0 items-center justify-between gap-3 px-5 py-3.5"
           style={{ borderBottom: "1px solid var(--border)" }}
         >
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 id={titleId} className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
             {title}
           </h2>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:opacity-70"
+            className="flex h-11 w-11 items-center justify-center rounded-lg transition-colors hover:opacity-70"
             style={{ color: "var(--text-muted)" }}
             aria-label="關閉"
           >

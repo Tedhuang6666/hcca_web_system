@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 export interface ComboboxOption {
@@ -57,6 +57,7 @@ export default function Combobox({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = `combobox-listbox-${useId().replaceAll(":", "")}`;
 
   const selectedLabel = useMemo(
     () => options.find((o) => o.value === value)?.label ?? "",
@@ -88,6 +89,10 @@ export default function Combobox({
     inputRef.current?.focus();
   };
 
+  const activeOptionId = open && filtered[activeIndex]
+    ? `${listboxId}-option-${activeIndex}`
+    : undefined;
+
   return (
     <div className={`relative ${className}`}>
       <input
@@ -95,7 +100,8 @@ export default function Combobox({
         type="text"
         role="combobox"
         aria-expanded={open}
-        aria-controls="combobox-listbox"
+        aria-controls={listboxId}
+        aria-activedescendant={activeOptionId}
         aria-autocomplete="list"
         aria-label={ariaLabel ?? placeholder}
         disabled={disabled}
@@ -134,7 +140,7 @@ export default function Combobox({
           type="button"
           onMouseDown={(e) => { e.preventDefault(); clear(); }}
           aria-label="清除選擇"
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] hover:opacity-70"
+          className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm hover:opacity-70"
           style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
         >
           ×
@@ -142,7 +148,7 @@ export default function Combobox({
       )}
       {open && filtered.length > 0 && (
         <ul
-          id="combobox-listbox"
+            id={listboxId}
           role="listbox"
           className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl shadow-lg overflow-y-auto"
           style={{
@@ -154,7 +160,12 @@ export default function Combobox({
           {filtered.map((opt, idx) => {
             const isActive = idx === activeIndex;
             return (
-              <li key={opt.value} role="option" aria-selected={value === opt.value}>
+              <li
+                id={`${listboxId}-option-${idx}`}
+                key={opt.value}
+                role="option"
+                aria-selected={value === opt.value}
+              >
                 <button
                   type="button"
                   onMouseEnter={() => setActiveIndex(idx)}

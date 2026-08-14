@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
+import Script from "next/script";
 import "./globals.css";
 import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -67,28 +67,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-async function ThemeScript() {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
-  const script = `
-    (function(){
-      try {
-        var t = localStorage.getItem('hcca-theme');
-        if (!t) {
-          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-        document.documentElement.setAttribute('data-theme', t);
-      } catch(e) {}
-    })();
-  `;
-  // 瀏覽器在解析後會隱藏 nonce 屬性（nonce hiding），client 端會看到空字串，
-  // 造成預期內的 hydration 不一致，故在此元素抑制警告。
-  return (
-    <script
-      nonce={nonce}
-      suppressHydrationWarning
-      dangerouslySetInnerHTML={{ __html: script }}
-    />
-  );
+function ThemeScript() {
+  return <Script src="/theme.js" strategy="beforeInteractive" />;
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

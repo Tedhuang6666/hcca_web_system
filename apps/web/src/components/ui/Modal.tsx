@@ -1,7 +1,21 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((element) => element.getClientRects().length > 0 || element === document.activeElement);
+}
 
 type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "full";
 
@@ -33,21 +47,83 @@ export default function Modal({
   footer,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
   }, []);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    if (!mounted || !dialogRef.current) return;
+    const dialog = dialogRef.current;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const previousOverflow = document.body.style.overflow;
+    const inertSiblings = new Map<HTMLElement, { inert: boolean; ariaHidden: string | null }>();
+    document.body.style.overflow = "hidden";
+    for (const child of Array.from(document.body.children)) {
+      if (child === dialog) continue;
+      const element = child as HTMLElement;
+      inertSiblings.set(element, {
+        inert: element.hasAttribute("inert"),
+        ariaHidden: element.getAttribute("aria-hidden"),
+      });
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
+    }
+    const focusTarget = dialog.querySelector<HTMLElement>("[data-autofocus]")
+      ?? closeButtonRef.current
+      ?? focusableElements(dialog)[0]
+      ?? dialog;
+    const focusFrame = requestAnimationFrame(() => focusTarget.focus());
+
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      for (const [element, previous] of inertSiblings) {
+        if (previous.inert) element.setAttribute("inert", "");
+        else element.removeAttribute("inert");
+        if (previous.ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", previous.ariaHidden);
+      }
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !dialogRef.current) return;
+    const dialog = dialogRef.current;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusable = focusableElements(dialog);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [mounted, onClose]);
 
   if (!mounted) return null;
 
@@ -60,11 +136,14 @@ export default function Modal({
 
   return createPortal(
     <div
+      ref={dialogRef}
+      data-modal-root="true"
       className={`fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-labelledby={titleId}
+      tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
@@ -75,12 +154,14 @@ export default function Modal({
           className="flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3"
           style={{ borderBottom: "1px solid var(--border)" }}
         >
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 id={titleId} className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
             {title}
           </h2>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:opacity-70"
+            className="flex h-11 w-11 items-center justify-center rounded-lg transition-colors hover:opacity-70"
             style={{ color: "var(--text-muted)" }}
             aria-label="關閉"
           >

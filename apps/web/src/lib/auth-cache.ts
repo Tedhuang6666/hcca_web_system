@@ -1,4 +1,5 @@
 import type { UserSummary } from "./types";
+import { cachePurge } from "./api-cache";
 
 export interface CurrentUserCache {
   id: string;
@@ -44,6 +45,15 @@ function notifyAuthCacheUpdated(): void {
 
 function notifyImpersonationUpdated(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(IMPERSONATION_EVENT));
+}
+
+function clearServiceWorkerPrivateCaches(): void {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  void navigator.serviceWorker.ready.then((registration) => {
+    registration.active?.postMessage({ type: "CLEAR_PRIVATE_CACHES" });
+  }).catch(() => {
+    // Service Worker registration is optional; auth cache cleanup must still finish.
+  });
 }
 
 export function saveImpersonationSession(session: ImpersonationSession): void {
@@ -110,6 +120,8 @@ export function clearAuthCache(): void {
   ss()?.removeItem("is_owner");
   ss()?.removeItem("permissions");
   clearImpersonationSession();
+  cachePurge();
+  clearServiceWorkerPrivateCaches();
   notifyAuthCacheUpdated();
 }
 
