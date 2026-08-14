@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text", label: "簡答（單行）" },
@@ -96,8 +97,6 @@ function QuestionRow({
       [next[i], next[t]] = [next[t], next[i]];
       return next;
     });
-  const fileRef = useRef<HTMLInputElement>(null);
-
   const isMultiple = q.question_type === "multiple";
   const isRanking = q.question_type === "ranking";
   const isChoice = q.question_type === "single" || isMultiple || isRanking;
@@ -113,15 +112,9 @@ function QuestionRow({
   const toggleOther = (opt: string) =>
     setOtherOpts(prev => prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]);
 
-  const uploadImage = async (file: File) => {
-    if (!file.type.startsWith("image/")) { toast.error("請選擇圖片檔案"); return; }
-    try {
-      const { url } = await surveysApi.uploadImage(file);
-      setImageUrl(url);
-      toast.success("圖片已上傳，記得儲存此題");
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "上傳失敗"));
-    }
+  const uploadImage = (file: File, reportProgress: (progress: number) => void) => {
+    if (!file.type.startsWith("image/")) throw new Error("請選擇圖片檔案");
+    return surveysApi.uploadImage(file, reportProgress);
   };
 
   const save = async () => {
@@ -335,11 +328,16 @@ function QuestionRow({
                 style={{ background: "var(--danger)", color: "white" }} aria-label="移除">×</button>
             </div>
           )}
-          <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ghost w-full text-xs">
-            {imageUrl ? "更換圖片" : "上傳圖片"}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }} />
+          <AnimatedFileUpload
+            accept="image/*"
+            label={imageUrl ? "拖曳新圖片到這裡" : "拖曳圖片到這裡"}
+            hint="支援點擊選取或貼上圖片"
+            onUpload={uploadImage}
+            onUploaded={(result) => {
+              setImageUrl(result.url);
+              toast.success("圖片已上傳，記得儲存此題");
+            }}
+          />
         </div>
       )}
 

@@ -11,6 +11,7 @@ import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent"
 import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 function fmt(iso: string | null) {
   if (!iso) return "未設定";
@@ -136,7 +137,13 @@ export default function PetitionDetailPage() {
               {item.supplement_request && <p className="text-sm" style={{ color: "var(--danger)" }}>{item.supplement_request}</p>}
               <textarea className="input w-full min-h-28" value={supplement} onChange={(e) => setSupplement(e.target.value)} placeholder="請補充承辦機關要求的資料" />
               <input className="input w-full" placeholder="訪客驗證碼（登入本人可留空）" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))} maxLength={5} />
-              <input className="input w-full" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+              <AnimatedFileUpload
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                label="拖曳補件附件到這裡"
+                hint="檔案會和補充內容一起送出"
+                onFiles={(files) => setFile(files[0] ?? null)}
+                onRemove={() => setFile(null)}
+              />
               <button className="btn btn-primary w-full" disabled={!supplement.trim()} onClick={submitSupplement}>送出補件</button>
             </section>
           )}

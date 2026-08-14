@@ -9,22 +9,22 @@ import type {
   MerchandiseSubmissionSettingsUpdate,
   MerchandiseSubmissionUploadOut,
 } from "../types";
-import { BASE, ApiError, authFetch, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
+import { BASE, ApiError, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh, uploadWithProgress } from "./core";
 
 type MerchandiseSubmissionReviewBody = Omit<MerchandiseSubmissionReview, "status"> & {
   status: MerchandiseSubmissionReview["status"] | "review_completed";
   voting_survey_id?: string | null;
 };
 
-async function upload<T>(path: string, file: File, query = "", method = "POST"): Promise<T> {
+async function upload<T>(path: string, file: File, query = "", method = "POST", onProgress?: (progress: number) => void): Promise<T> {
   const body = new FormData();
   body.append("file", file);
-  const request = () => authFetch(`${BASE}${path}${query}`, {
+  const request = () => uploadWithProgress(`${BASE}${path}${query}`, {
     method,
     credentials: "include",
     headers: csrfHeaders("POST"),
     body,
-  });
+  }, onProgress);
   let response = await request();
   if (response.status === 401 && await silentRefresh()) response = await request();
   if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
@@ -34,11 +34,13 @@ async function upload<T>(path: string, file: File, query = "", method = "POST"):
 export const merchandiseSubmissionsApi = {
   portal: () => get<MerchandiseSubmissionPortalOut>("/merchandise-submissions/portal"),
   mine: () => get<MerchandiseSubmissionOut[]>("/merchandise-submissions/submissions/me"),
-  upload: (itemId: string, file: File) =>
+  upload: (itemId: string, file: File, onProgress?: (progress: number) => void) =>
     upload<MerchandiseSubmissionUploadOut>(
       "/merchandise-submissions/uploads",
       file,
       `?item_id=${encodeURIComponent(itemId)}`,
+      "POST",
+      onProgress,
     ),
   save: (body: {
     item_id: string;
@@ -67,18 +69,22 @@ export const merchandiseSubmissionsApi = {
     patch<MerchandiseSubmissionAdminListItem>(`/merchandise-submissions/admin/submissions/${id}/review`, body),
   prepareVotingSurvey: (body: { org_id: string; title?: string; description?: string | null }) =>
     post<import("../types").SurveyOut>("/merchandise-submissions/admin/voting-survey/prepare", body),
-  uploadTemplateImage: (file: File) =>
-    upload<MerchandiseSubmissionUploadOut>("/merchandise-submissions/admin/template-images", file),
-  addSubmissionFile: (submissionId: string, file: File) =>
+  uploadTemplateImage: (file: File, onProgress?: (progress: number) => void) =>
+    upload<MerchandiseSubmissionUploadOut>("/merchandise-submissions/admin/template-images", file, "", "POST", onProgress),
+  addSubmissionFile: (submissionId: string, file: File, onProgress?: (progress: number) => void) =>
     upload<MerchandiseSubmissionAdminListItem>(
       `/merchandise-submissions/admin/submissions/${submissionId}/files`,
       file,
+      "",
+      "POST",
+      onProgress,
     ),
-  replaceSubmissionFile: (submissionId: string, fileId: string, file: File) =>
+  replaceSubmissionFile: (submissionId: string, fileId: string, file: File, onProgress?: (progress: number) => void) =>
     upload<MerchandiseSubmissionAdminListItem>(
       `/merchandise-submissions/admin/submissions/${submissionId}/files/${fileId}`,
       file,
       "",
       "PUT",
+      onProgress,
     ),
 };

@@ -3,11 +3,12 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { electionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import DraftStatus from "@/components/ui/DraftStatus";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 type MemberForm = { position: string; name: string; photo_url: string | null };
 type CandidateForm = {
@@ -52,7 +53,6 @@ export default function NewElectionPage() {
   const [turnoutPct, setTurnoutPct] = useState("");
   const [thresholdPct, setThresholdPct] = useState("");
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState<string | null>(null);
 
   const restoreDraft = useCallback((draft: ElectionDraft) => {
     setTitle(draft.title);
@@ -96,17 +96,11 @@ export default function NewElectionPage() {
     );
   }
 
-  async function uploadPhoto(ci: number, mi: number, file: File) {
-    const key = `${ci}-${mi}`;
-    setUploading(key);
-    try {
-      const { url } = await electionsApi.uploadImage(file);
+  function uploadPhoto(ci: number, mi: number, file: File, reportProgress: (progress: number) => void) {
+    return electionsApi.uploadImage(file, reportProgress).then(({ url }) => {
       patchMember(ci, mi, { photo_url: url });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "照片上傳失敗");
-    } finally {
-      setUploading(null);
-    }
+      return url;
+    });
   }
 
   async function submit(event: React.FormEvent) {
@@ -223,53 +217,25 @@ export default function NewElectionPage() {
             </div>
             <div className="space-y-2">
               {candidate.members.map((member, memberIndex) => {
-                const uploadKey = `${index}-${memberIndex}`;
-                const isUploading = uploading === uploadKey;
                 return (
-                <div key={memberIndex} className="grid grid-cols-[auto_minmax(110px,0.7fr)_minmax(150px,1fr)_auto] items-center gap-2">
-                  <label
-                    className="relative grid h-14 w-14 cursor-pointer place-items-center overflow-hidden rounded-full border text-center"
-                    style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}
-                    title="上傳照片"
-                  >
-                    {member.photo_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={uploadUrl(member.photo_url)}
-                        alt={member.name || "候選人照片"}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : isUploading ? (
-                      <Loader2 size={18} className="animate-spin" style={{ color: "var(--text-muted)" }} />
-                    ) : (
-                      <ImagePlus size={18} style={{ color: "var(--text-muted)" }} />
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="sr-only"
-                      disabled={isUploading}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void uploadPhoto(index, memberIndex, file);
-                        event.target.value = "";
-                      }}
-                    />
+                <div key={memberIndex} className="grid grid-cols-[minmax(170px,0.8fr)_minmax(110px,0.7fr)_minmax(150px,1fr)_auto] items-center gap-2">
+                  <div className="min-w-0">
                     {member.photo_url && (
-                      <button
-                        type="button"
-                        aria-label="移除照片"
-                        className="absolute right-0 top-0 grid h-5 w-5 place-items-center rounded-full text-white"
-                        style={{ background: "var(--danger)" }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          patchMember(index, memberIndex, { photo_url: null });
-                        }}
-                      >
-                        <X size={12} />
-                      </button>
+                      <div className="mb-1 flex items-center gap-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={uploadUrl(member.photo_url)} alt={member.name || "候選人照片"} className="h-10 w-10 rounded-full object-cover" />
+                        <button type="button" aria-label="移除照片" className="text-xs" style={{ color: "var(--danger)" }} onClick={() => patchMember(index, memberIndex, { photo_url: null })}>
+                          <X size={13} />
+                        </button>
+                      </div>
                     )}
-                  </label>
+                    <AnimatedFileUpload
+                      accept="image/*"
+                      label={member.photo_url ? "拖曳新照片到這裡" : "拖曳照片到這裡"}
+                      hint="支援點擊選取或貼上"
+                      onUpload={(file, reportProgress) => uploadPhoto(index, memberIndex, file, reportProgress)}
+                    />
+                  </div>
                   <input
                     required
                     className="input"

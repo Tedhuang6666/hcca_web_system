@@ -8,6 +8,7 @@ import type { PetitionCaseListItem, PetitionCaseOut, PetitionEventOut, PetitionS
 import { cacheGet, cacheSet, cachePurge } from "@/lib/api-cache";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
@@ -414,7 +415,13 @@ export default function PetitionManagePage() {
                   </div>
                   <textarea className="input w-full min-h-32" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="公開說明、補件原因或正式回覆" />
                   <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="內部備註（選填）" />
-                  <input className="input w-full" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                  <AnimatedFileUpload
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                    label="拖曳處理附件到這裡"
+                    hint="選取後會在送出處理動作時上傳"
+                    onFiles={(files) => setFile(files[0] ?? null)}
+                    onRemove={() => setFile(null)}
+                  />
                   <div className="flex flex-wrap gap-2">
                     <button className="btn btn-ghost" disabled={busy} onClick={() => run("progress")}>標記處理中</button>
                     <button className="btn btn-ghost" disabled={!publicText.trim() || busy} onClick={() => run("needs_info")}>退回補件</button>
@@ -495,7 +502,13 @@ export default function PetitionManagePage() {
               {activeAction === "attachments" && (
                 <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
                   <h3 className="font-medium">附件與內部備註</h3>
-                  <input className="input w-full" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                  <AnimatedFileUpload
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                    label="拖曳內部附件到這裡"
+                    hint="可點擊選檔，或直接貼上圖片"
+                    onFiles={(files) => setFile(files[0] ?? null)}
+                    onRemove={() => setFile(null)}
+                  />
                   <textarea className="input w-full min-h-24" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="新增內部備註" />
                   <button className="btn btn-primary" disabled={(!file && !internalNote.trim()) || busy} onClick={() => run("note")}>儲存附件/備註</button>
                   <div className="space-y-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
@@ -10,11 +10,11 @@ import {
   Save,
   ScanSearch,
   ShieldAlert,
-  Upload,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { apiErrorMessage, merchandiseSubmissionsApi, orgsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -399,7 +399,6 @@ function ItemEditor({
   onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const update = <K extends keyof ItemDraft>(key: K, value: ItemDraft[K]) =>
     onChange({ ...draft, [key]: value });
   const addField = () =>
@@ -412,26 +411,8 @@ function ItemEditor({
       "custom_fields",
       draft.custom_fields.map((field, i) => (i === index ? next : field)),
     );
-  const uploadTemplate = async (source: FileList | null) => {
-    if (!source?.length) return;
-    setUploadingTemplate(true);
-    try {
-      const uploaded = [];
-      for (const file of Array.from(source))
-        uploaded.push(
-          await merchandiseSubmissionsApi.uploadTemplateImage(file),
-        );
-      update("template_images", [
-        ...draft.template_images,
-        ...uploaded.map((file) => ({ url: file.url, label: file.filename })),
-      ]);
-      toast.success(`已上傳 ${uploaded.length} 張範本圖片`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "範本上傳失敗"));
-    } finally {
-      setUploadingTemplate(false);
-    }
-  };
+  const draftRef = useRef(draft);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
   const save = async () => {
     if (!draft.name.trim()) {
       toast.error("請輸入品項名稱");
@@ -535,21 +516,24 @@ function ItemEditor({
               可一次上傳多張；會放大顯示在學生投稿頁並可下載原圖。
             </p>
           </div>
-          <label className="btn btn-ghost min-h-10 cursor-pointer">
-            {uploadingTemplate ? (
-              <LoaderCircle className="animate-spin" size={15} />
-            ) : (
-              <Upload size={15} />
-            )}
-            批次上傳範本
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
+          <div className="w-full max-w-sm">
+            <AnimatedFileUpload
               multiple
-              className="sr-only"
-              onChange={(event) => void uploadTemplate(event.target.files)}
+              accept="image/jpeg,image/png,image/webp"
+              label="拖曳範本圖片到這裡"
+              hint="可一次上傳多張"
+              onUpload={(file, reportProgress) => merchandiseSubmissionsApi.uploadTemplateImage(file, reportProgress)}
+              onUploaded={(uploaded) => {
+                const next = {
+                  ...draftRef.current,
+                  template_images: [...draftRef.current.template_images, { url: uploaded.url, label: uploaded.filename }],
+                };
+                draftRef.current = next;
+                onChange(next);
+                toast.success("範本圖片已上傳");
+              }}
             />
-          </label>
+          </div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {draft.template_images.map((template, index) => (
@@ -852,7 +836,6 @@ function ReviewRow({
   );
   const [note, setNote] = useState(submission.review_note ?? "");
   const [saving, setSaving] = useState(false);
-  const [uploadingFileId, setUploadingFileId] = useState<string | null>(null);
   const review = async () => {
     setSaving(true);
     try {
@@ -868,30 +851,10 @@ function ReviewRow({
       setSaving(false);
     }
   };
-  const uploadFiles = async (source: FileList | null, replaceFileId?: string) => {
-    if (!source?.length) return;
-    setUploadingFileId(replaceFileId ?? "new");
-    try {
-      const files = Array.from(source);
-      if (replaceFileId) {
-        await merchandiseSubmissionsApi.replaceSubmissionFile(
-          submission.id,
-          replaceFileId,
-          files[0],
-        );
-      } else {
-        for (const file of files) {
-          await merchandiseSubmissionsApi.addSubmissionFile(submission.id, file);
-        }
-      }
-      toast.success(replaceFileId ? "投稿檔案已替換" : `已增加 ${files.length} 個投稿檔案`);
-      onReviewed();
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "投稿檔案更新失敗"));
-    } finally {
-      setUploadingFileId(null);
-    }
-  };
+  const uploadFile = (file: File, reportProgress: (progress: number) => void, replaceFileId?: string) =>
+    replaceFileId
+      ? merchandiseSubmissionsApi.replaceSubmissionFile(submission.id, replaceFileId, file, reportProgress)
+      : merchandiseSubmissionsApi.addSubmissionFile(submission.id, file, reportProgress);
   return (
     <article
       className="min-w-0 border-b py-4 last:border-0"
@@ -982,23 +945,18 @@ function ReviewRow({
                 {file.filename}
               </span>
               {canReview && (
-                <label
-                  className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded"
-                  style={{ color: "var(--primary-text)" }}
-                  title="替換檔案"
-                >
-                  <Upload size={14} />
-                  <input
-                    type="file"
+                <div className="w-40 shrink-0">
+                  <AnimatedFileUpload
                     accept="image/jpeg,image/png,image/webp,application/pdf"
-                    className="sr-only"
-                    disabled={uploadingFileId !== null}
-                    onChange={(event) => {
-                      void uploadFiles(event.target.files, file.id);
-                      event.target.value = "";
+                    label="替換檔案"
+                    hint=""
+                    onUpload={(replacement, reportProgress) => uploadFile(replacement, reportProgress, file.id)}
+                    onUploaded={() => {
+                      toast.success("投稿檔案已替換");
+                      onReviewed();
                     }}
                   />
-                </label>
+                </div>
               )}
             </div>
             <AIEvidencePanel file={file} />
@@ -1007,26 +965,18 @@ function ReviewRow({
       </div>
       {canReview && (
         <>
-          <div className="mt-3">
-            <label className="btn btn-ghost min-h-10 cursor-pointer">
-              {uploadingFileId === "new" ? (
-                <LoaderCircle className="animate-spin" size={15} />
-              ) : (
-                <Plus size={15} />
-              )}
-              增加檔案
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                multiple
-                className="sr-only"
-                disabled={uploadingFileId !== null}
-                onChange={(event) => {
-                  void uploadFiles(event.target.files);
-                  event.target.value = "";
-                }}
-              />
-            </label>
+          <div className="mt-3 max-w-sm">
+            <AnimatedFileUpload
+              multiple
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              label="拖曳新投稿檔案到這裡"
+              hint="可一次增加多個檔案"
+              onUpload={(file, reportProgress) => uploadFile(file, reportProgress)}
+              onUploaded={() => {
+                toast.success("投稿檔案已增加");
+                onReviewed();
+              }}
+            />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-[11rem_1fr_auto]">
             <select

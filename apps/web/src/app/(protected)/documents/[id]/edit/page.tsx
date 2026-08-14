@@ -14,6 +14,7 @@ import SmartTextarea from "@/components/ui/SmartTextarea";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 interface Recipient {
   id: string;
@@ -149,7 +150,6 @@ export default function EditDocumentPage() {
   const [newRecipient, setNewRecipient] = useState({ name: "", email: "", recipient_type: "main" as RecipientType });
   const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [uploadingFile, setUploadingFile] = useState(false);
   const [doc, setDoc] = useState<DocumentOut | null>(null);
   const draftValue = useMemo<DocumentEditDraft>(() => ({
     title,
@@ -473,15 +473,11 @@ export default function EditDocumentPage() {
     } finally { setSaving(false); }
   };
 
-  const uploadFile = async (file: File) => {
-    setUploadingFile(true);
-    try {
-      await documentsApi.uploadAttachment(id, file);
-      toast.success(`已上傳 ${file.name}`);
-      fetchDoc();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "上傳失敗"));
-    } finally { setUploadingFile(false); }
+  const uploadFile = async (file: File, reportProgress: (progress: number) => void) => {
+    const uploaded = await documentsApi.uploadAttachment(id, file, reportProgress);
+    toast.success(`已上傳 ${uploaded.filename}`);
+    fetchDoc();
+    return uploaded;
   };
 
   const deleteAttachment = async (attId: string) => {
@@ -723,13 +719,12 @@ export default function EditDocumentPage() {
                 ))}
               </ul>
             )}
-            <label className={`flex items-center justify-center gap-2 py-3 rounded cursor-pointer border-dashed
-              hover:opacity-80 transition-opacity text-xs ${uploadingFile ? "opacity-50 pointer-events-none" : ""}`}
-              style={{ border: "2px dashed var(--border)", color: "var(--text-muted)" }}>
-              <input type="file" className="hidden" disabled={uploadingFile}
-                onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }} />
-              {uploadingFile ? "上傳中..." : "＋ 點擊上傳附件（PDF / 圖片 / ZIP，上限 20MB）"}
-            </label>
+            <AnimatedFileUpload
+              accept=".pdf,image/*,.zip"
+              label="拖曳附件到這裡"
+              hint="支援 PDF、圖片、ZIP，上限 20MB"
+              onUpload={uploadFile}
+            />
           </div>
         </div>
 

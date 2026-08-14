@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCreatedOut, PetitionTypeOut } from "@/lib/types";
 import DraftStatus from "@/components/ui/DraftStatus";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 type PetitionDraft = {
@@ -25,7 +26,7 @@ export default function NewPetitionPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [files, setFiles] = useState<FileList | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<PetitionCreatedOut | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -81,10 +82,8 @@ export default function NewPetitionPage() {
         title,
         content,
       });
-      if (files) {
-        for (const file of Array.from(files)) {
+      for (const file of files) {
           await petitionsApi.uploadAttachment(result.id, file, { verification_code: result.verification_code });
-        }
       }
       clearDraft();
       setCreated(result);
@@ -202,10 +201,15 @@ export default function NewPetitionPage() {
         ) : null}
         <input className="input w-full" placeholder="標題" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
         <textarea className="input w-full min-h-52" placeholder="請描述事實、期待處理方式與相關時間地點" value={content} onChange={(e) => setContent(e.target.value)} required />
-        <label className="block">
-          <span className="text-sm font-medium">附件</span>
-          <input className="input w-full mt-1" type="file" multiple onChange={(e) => setFiles(e.target.files)} />
-        </label>
+        <AnimatedFileUpload
+          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+          multiple
+          maxFiles={10}
+          label="拖曳陳情附件到這裡"
+          hint="可點擊選檔，或貼上圖片；送出陳情時會一併上傳"
+          onFiles={setFiles}
+          onRemove={(removed) => setFiles((current) => current.filter((file) => file !== removed))}
+        />
         <div className="flex justify-end gap-2">
           <Link className="btn btn-ghost" href="/petitions">取消</Link>
           <button className="btn btn-primary" disabled={submitting || !typeId}>{submitting ? "送出中..." : "送出陳情"}</button>

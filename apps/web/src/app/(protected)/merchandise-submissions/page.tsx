@@ -13,7 +13,6 @@ import {
   Pencil,
   Send,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +20,7 @@ import { apiErrorMessage, merchandiseSubmissionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { excerpt } from "@/lib/seo";
 import type {
   MerchandiseSubmissionItemPortalOut,
@@ -88,76 +88,30 @@ function UploadBox({
   onChange: (next: MerchandiseSubmissionUploadOut[]) => void;
   disabled: boolean;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const upload = async (picked: FileList | null) => {
-    if (!picked?.length || disabled) return;
-    if (files.length + picked.length > 10) {
-      toast.error("每次投稿最多可上傳 10 個檔案");
-      return;
-    }
-    setUploading(true);
-    try {
-      const added: MerchandiseSubmissionUploadOut[] = [];
-      for (const file of Array.from(picked))
-        added.push(await merchandiseSubmissionsApi.upload(item.id, file));
-      onChange([...files, ...added]);
-      toast.success(`已上傳 ${added.length} 個檔案`);
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "上傳失敗，請確認檔案格式與大小"));
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  };
+  const filesRef = useRef(files);
+  useEffect(() => { filesRef.current = files; }, [files]);
   return (
     <div className="space-y-3">
-      <div
-        className="rounded-xl border border-dashed p-5 text-center"
-        style={{ borderColor: "var(--border-strong)" }}
-      >
-        <Upload
-          size={30}
-          className="mx-auto"
-          style={{ color: "var(--primary-text)" }}
-        />
-        <p className="mt-3 font-medium">可一次選擇多個設計圖稿</p>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          JPG、PNG、WebP、PDF；單檔上限 {item.effective_max_file_size_mb} MB
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          className="sr-only"
-          disabled={disabled || uploading}
-          onChange={(event) => void upload(event.target.files)}
-        />
-        <button
-          type="button"
-          className="btn mt-4 min-h-11"
-          disabled={disabled || uploading}
-          onClick={() => inputRef.current?.click()}
-          style={{
-            background: "var(--primary)",
-            color: "var(--primary-fg)",
-            border: "none",
-          }}
-        >
-          {uploading ? (
-            <LoaderCircle size={16} className="animate-spin" />
-          ) : (
-            <Upload size={16} />
-          )}
-          {uploading ? "正在上傳…" : "選擇圖稿檔案"}
-        </button>
+      <AnimatedFileUpload
+        multiple
+        maxFiles={Math.max(0, 10 - files.length)}
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        disabled={disabled}
+        label="拖曳設計圖稿到這裡"
+        hint={`JPG、PNG、WebP、PDF；單檔上限 ${item.effective_max_file_size_mb} MB`}
+        onUpload={(file, reportProgress) => merchandiseSubmissionsApi.upload(item.id, file, reportProgress)}
+        onUploaded={(uploaded) => {
+          const next = [...filesRef.current, uploaded];
+          filesRef.current = next;
+          onChange(next);
+          toast.success("檔案已上傳");
+        }}
+      />
         {disabled && (
           <p className="mt-3 text-xs" style={{ color: "var(--danger)" }}>
             目前無法上傳，請確認投稿時間與校務信箱限制。
           </p>
         )}
-      </div>
       {files.length > 0 && (
         <ul
           className="divide-y rounded-lg border"

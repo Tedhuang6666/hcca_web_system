@@ -12,12 +12,12 @@ import {
   RefreshCw,
   Save,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { adminApi, classApi, meetingsApi, orgsApi, serialTemplatesApi } from "@/lib/api";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type {
   AttendanceRole,
   AttendanceSourceType,
@@ -336,19 +336,6 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
       await refreshMeeting();
     } catch (err) {
       setError(err instanceof Error ? err.message : "刪除附件失敗");
-    }
-  }
-
-  async function uploadAgendaFiles(itemId: string, files: FileList | null) {
-    if (!id || !files?.length) return;
-    setError("");
-    try {
-      for (const file of Array.from(files)) {
-        await meetingsApi.uploadAgendaAttachment(id, itemId, file);
-      }
-      await refreshMeeting();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "上傳附件失敗");
     }
   }
 
@@ -954,15 +941,18 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
                           className="rounded-md border border-[var(--border)] px-2 py-1.5 text-xs disabled:opacity-50">
                           加連結
                         </button>
-                        <label className="inline-flex cursor-pointer items-center rounded-md border border-[var(--border)] px-2 py-1.5 text-xs">
-                          <Upload size={13} aria-hidden="true" />
-                          <input
-                            type="file"
-                            multiple
-                            className="hidden"
-                            onChange={(e) => uploadAgendaFiles(item.id, e.target.files)}
-                          />
-                        </label>
+                <AnimatedFileUpload
+                  className="min-w-56"
+                  multiple
+                  maxFiles={10}
+                  label="拖曳附件到這裡"
+                  hint="或點擊選檔"
+                  onUpload={(file, reportProgress) => {
+                    if (!id) throw new Error("尚未載入會議");
+                    return meetingsApi.uploadAgendaAttachment(id, item.id, file, reportProgress);
+                  }}
+                  onUploaded={() => { void refreshMeeting(); }}
+                />
                       </div>
                     </div>
                   )}
@@ -1028,18 +1018,17 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
                 className="w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
               />
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-                <Upload size={15} aria-hidden="true" />
-                上傳附件
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => setNewFiles(Array.from(e.target.files ?? []))}
-                />
-              </label>
-              <span className="text-xs text-[var(--muted)]">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+       <AnimatedFileUpload
+         key={newFiles.length === 0 ? "new-files-empty" : "new-files-selected"}
+         multiple
+         maxFiles={10}
+         label="拖曳新議案附件到這裡"
+         hint="可加入法規對照表、PDF、試算表或其他會議資料"
+         onFiles={setNewFiles}
+         onRemove={(removed) => setNewFiles((current) => current.filter((file) => file !== removed))}
+       />
+       <span className="text-xs text-[var(--muted)]">
                 {newFiles.length
                   ? newFiles.map((file) => file.name).join("、")
                   : "可加入法規對照表、PDF、試算表或其他會議資料"}

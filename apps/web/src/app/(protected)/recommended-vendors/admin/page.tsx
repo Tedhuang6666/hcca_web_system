@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Archive, Check, ExternalLink, FileText, Image as ImageIcon, Plus, RefreshCw, Save,
-  ShieldCheck, Store, Trash2, Upload,
+  ShieldCheck, Store, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { recommendedVendorsApi, ApiError } from "@/lib/api";
@@ -14,6 +14,7 @@ import type {
   RecommendedVendorStatus,
 } from "@/lib/types";
 import BusinessHoursEditor from "../../partner-map/BusinessHoursEditor";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type { BusinessHours, RecommendedVendorOutWithHours } from "@/lib/partner-map-types";
 
 type VendorForm = {
@@ -74,7 +75,6 @@ export default function RecommendedVendorsAdminPage() {
   const [menuTitle, setMenuTitle] = useState("");
   const [menuUrl, setMenuUrl] = useState("");
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -188,18 +188,6 @@ export default function RecommendedVendorsAdminPage() {
     } catch (error) { toast.error(error instanceof ApiError ? error.message : "新增菜單連結失敗"); }
   };
 
-  const uploadMenus = async (files: FileList | null) => {
-    if (!selected || !files?.length) return;
-    setUploading(true);
-    try {
-      const uploaded: RecommendedVendorMenuOut[] = [];
-      for (const file of Array.from(files)) uploaded.push(await recommendedVendorsApi.uploadMenu(selected.id, file));
-      setSelected({ ...selected, menus: [...selected.menus, ...uploaded] });
-      toast.success(`已上傳 ${uploaded.length} 個菜單檔案`);
-    } catch (error) { toast.error(error instanceof ApiError ? error.message : "上傳菜單失敗"); }
-    finally { setUploading(false); }
-  };
-
   const removeMenu = async (menu: RecommendedVendorMenuOut) => {
     try {
       await recommendedVendorsApi.deleteMenu(menu.id);
@@ -218,7 +206,7 @@ export default function RecommendedVendorsAdminPage() {
         <aside className="rounded-lg border" style={{ borderColor: "var(--border)" }}><div className="flex items-center gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}><Store size={16} aria-hidden="true" /><span className="font-semibold" style={{ color: "var(--text-primary)" }}>商家清單</span></div><div className="max-h-[calc(100vh-250px)] overflow-y-auto p-2">{loading ? <p className="p-3 text-sm" style={{ color: "var(--text-muted)" }}>載入中…</p> : vendors.map((vendor) => <button type="button" key={vendor.id} onClick={() => void selectVendor(vendor.id)} className="w-full rounded-md p-3 text-left hover:bg-[var(--bg-elevated)]" style={{ background: selected?.id === vendor.id ? "var(--primary-dim)" : "transparent" }}><p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{vendor.name}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{vendor.category || "未分類"} · {vendor.status} · {vendor.hygiene_verified ? "檢驗有效" : "待補檢驗"}</p></button>)}</div></aside>
         <section className="space-y-5">
           <VendorFormPanel form={form} categories={categories} selected={selected} saving={saving} update={update} onSave={save} />
-          {selected && <MenuPanel selected={selected} menuTitle={menuTitle} menuUrl={menuUrl} uploading={uploading} setMenuTitle={setMenuTitle} setMenuUrl={setMenuUrl} addMenuLink={addMenuLink} uploadMenus={uploadMenus} removeMenu={removeMenu} />}
+          {selected && <MenuPanel selected={selected} menuTitle={menuTitle} menuUrl={menuUrl} setMenuTitle={setMenuTitle} setMenuUrl={setMenuUrl} addMenuLink={addMenuLink} removeMenu={removeMenu} onUploaded={(menu) => { setSelected((current) => current ? { ...current, menus: [...current.menus, menu] } : current); toast.success("菜單檔案已上傳"); }} />}
           {selected && <ProductPanel selected={selected} productForm={productForm} setProductForm={setProductForm} addProduct={addProduct} saveProduct={saveProduct} removeProduct={removeProduct} />}
           {selected && selected.status !== "archived" && <div className="flex justify-end"><button type="button" className="btn btn-secondary" onClick={async () => { if (!confirm("確定封存這間推薦商家？")) return; await recommendedVendorsApi.archive(selected.id); setSelected(null); setForm(emptyForm); await load(); toast.success("已封存商家"); }}><Archive size={15} aria-hidden="true" />封存商家</button></div>}
         </section>
@@ -237,8 +225,8 @@ function VendorFormPanel({ form, categories, selected, saving, update, onSave }:
   </div><div className="mt-4 flex justify-end"><button type="button" className="btn btn-primary" disabled={saving} onClick={onSave}><Save size={15} aria-hidden="true" />{saving ? "儲存中…" : "儲存商家"}</button></div></section>;
 }
 
-function MenuPanel({ selected, menuTitle, menuUrl, uploading, setMenuTitle, setMenuUrl, addMenuLink, uploadMenus, removeMenu }: { selected: VendorDetail; menuTitle: string; menuUrl: string; uploading: boolean; setMenuTitle: (value: string) => void; setMenuUrl: (value: string) => void; addMenuLink: () => Promise<void>; uploadMenus: (files: FileList | null) => Promise<void>; removeMenu: (menu: RecommendedVendorMenuOut) => Promise<void> }) {
-  return <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>菜單檔案與連結</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填；可新增多個外部連結，或一次選取多個圖片／PDF。前台會提供預覽。</p></div><label className="btn btn-secondary cursor-pointer"><Upload size={15} aria-hidden="true" />{uploading ? "上傳中…" : "上傳圖片／PDF"}<input className="sr-only" type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple disabled={uploading} onChange={(event) => { void uploadMenus(event.target.files); event.currentTarget.value = ""; }} /></label></div><div className="mt-4 grid gap-2 md:grid-cols-[1fr_1.5fr_auto]"><Field label="連結名稱" required value={menuTitle} onChange={setMenuTitle} /><Field label="菜單連結" type="url" required value={menuUrl} onChange={setMenuUrl} /><button type="button" className="btn btn-secondary self-end" onClick={() => void addMenuLink()}><Plus size={15} aria-hidden="true" />新增連結</button></div><div className="mt-4 space-y-2">{selected.menus.length === 0 ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚未提供菜單。</p> : selected.menus.map((menu) => <MenuRow key={menu.id} menu={menu} onDelete={removeMenu} />)}</div></section>;
+function MenuPanel({ selected, menuTitle, menuUrl, setMenuTitle, setMenuUrl, addMenuLink, removeMenu, onUploaded }: { selected: VendorDetail; menuTitle: string; menuUrl: string; setMenuTitle: (value: string) => void; setMenuUrl: (value: string) => void; addMenuLink: () => Promise<void>; removeMenu: (menu: RecommendedVendorMenuOut) => Promise<void>; onUploaded: (menu: RecommendedVendorMenuOut) => void }) {
+  return <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>菜單檔案與連結</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填；可新增多個外部連結，或一次選取多個圖片／PDF。前台會提供預覽。</p></div><div className="w-full max-w-sm"><AnimatedFileUpload multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" label="拖曳菜單檔案到這裡" hint="可一次加入多個圖片／PDF" onUpload={(file, reportProgress) => recommendedVendorsApi.uploadMenu(selected.id, file, undefined, reportProgress)} onUploaded={onUploaded} /></div></div><div className="mt-4 grid gap-2 md:grid-cols-[1fr_1.5fr_auto]"><Field label="連結名稱" required value={menuTitle} onChange={setMenuTitle} /><Field label="菜單連結" type="url" required value={menuUrl} onChange={setMenuUrl} /><button type="button" className="btn btn-secondary self-end" onClick={() => void addMenuLink()}><Plus size={15} aria-hidden="true" />新增連結</button></div><div className="mt-4 space-y-2">{selected.menus.length === 0 ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚未提供菜單。</p> : selected.menus.map((menu) => <MenuRow key={menu.id} menu={menu} onDelete={removeMenu} />)}</div></section>;
 }
 
 function ProductPanel({ selected, productForm, setProductForm, addProduct, saveProduct, removeProduct }: { selected: VendorDetail; productForm: typeof emptyProduct; setProductForm: (value: typeof emptyProduct) => void; addProduct: () => Promise<void>; saveProduct: (product: RecommendedVendorProductOut) => Promise<void>; removeProduct: (product: RecommendedVendorProductOut) => Promise<void> }) {

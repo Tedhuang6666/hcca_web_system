@@ -7,11 +7,9 @@ import {
   File,
   FileImage,
   FilePlus2,
-  Loader2,
   Pencil,
   Plus,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { governanceApi } from "@/lib/api";
@@ -20,6 +18,7 @@ import type {
   PlanningDocumentAttachmentOut,
   PlanningDocumentOut,
 } from "@/lib/types";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 type MobileTab = "content" | "versions" | "attachments";
 
@@ -59,7 +58,6 @@ function PlanningDocumentCard({
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<MobileTab>("content");
-  const [uploading, setUploading] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
   const [versionLabel, setVersionLabel] = useState(`第 ${document.current_version + 1} 版`);
   const [versionContent, setVersionContent] = useState(
@@ -89,20 +87,8 @@ function PlanningDocumentCard({
     if (updated) onChange(updated);
   };
 
-  const upload = async (file: File) => {
-    setUploading(true);
-    try {
-      const attachment = await governanceApi.uploadPlanningAttachment(document.id, file);
-      onChange({ ...document, attachments: [...document.attachments, attachment] });
-      setSelectedIds((ids) => [...ids, attachment.id]);
-      setPrimaryId((id) => id ?? attachment.id);
-      toast.success("附件已上傳，可在新版本中引用");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "附件上傳失敗");
-    } finally {
-      setUploading(false);
-    }
-  };
+  const upload = (file: File, reportProgress: (progress: number) => void) =>
+    governanceApi.uploadPlanningAttachment(document.id, file, reportProgress);
 
   const remove = async (attachment: PlanningDocumentAttachmentOut) => {
     try {
@@ -285,22 +271,19 @@ function PlanningDocumentCard({
               <section className={`${tab === "attachments" ? "block" : "hidden"} lg:block`}>
                 <div className="mb-2 flex items-center justify-between">
                   <h4 className="text-sm font-semibold">共用附件</h4>
-                  <label className="btn btn-secondary min-h-10 cursor-pointer text-xs">
-                    <input
-                      type="file"
-                      className="hidden"
-                      disabled={uploading}
-                      accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void upload(file);
-                        event.target.value = "";
-                      }}
-                    />
-                    {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                    上傳
-                  </label>
                 </div>
+                <AnimatedFileUpload
+                  accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                  label="拖曳附件到這裡"
+                  hint="支援 PDF、Office 與圖片；完成後可在新版本中引用"
+                  onUpload={upload}
+                  onUploaded={(attachment) => {
+                    onChange({ ...document, attachments: [...document.attachments, attachment] });
+                    setSelectedIds((ids) => [...ids, attachment.id]);
+                    setPrimaryId((id) => id ?? attachment.id);
+                    toast.success("附件已上傳，可在新版本中引用");
+                  }}
+                />
                 <div className="space-y-2">
                   {document.attachments.map((attachment) => (
                     <div key={attachment.id} className="flex min-h-12 items-center gap-2 rounded-lg p-2" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>

@@ -100,3 +100,51 @@ export function authFetch(input: RequestInfo | URL, init: HccaRequestInit = {}):
   if (impersonation) headers.set("Authorization", `Bearer ${impersonation.token}`);
   return fetch(input, { credentials: "include", ...requestInit, headers });
 }
+
+export type UploadProgressHandler = (progress: number) => void;
+
+/**
+ * Upload a multipart request through XHR so callers can render byte-level progress.
+ * Falls back to the shared fetch wrapper when progress reporting is not requested.
+ */
+export function uploadWithProgress(
+  input: RequestInfo | URL,
+  init: HccaRequestInit,
+  onProgress?: UploadProgressHandler,
+): Promise<Response> {
+  if (!onProgress || typeof XMLHttpRequest === "undefined") return authFetch(input, init);
+
+  const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
+  const impersonation = _skipImpersonation ? null : getImpersonationSession();
+  const headers = new Headers(
+    typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
+  );
+  new Headers(requestInit.headers).forEach((value, key) => headers.set(key, value));
+  if (impersonation) headers.set("Authorization", `Bearer ${impersonation.token}`);
+
+  const url = input instanceof URL ? input.toString() : input.toString();
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(requestInit.method ?? "POST", url, true);
+    xhr.withCredentials = requestInit.credentials === "omit" ? false : true;
+    headers.forEach((value, key) => xhr.setRequestHeader(key, value));
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
+    });
+    xhr.onload = () => {
+      const responseHeaders = new Headers();
+      xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).forEach((line) => {
+        const separator = line.indexOf(":");
+        if (separator > 0) responseHeaders.set(line.slice(0, separator), line.slice(separator + 1).trim());
+      });
+      resolve(new Response(xhr.responseText, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: responseHeaders,
+      }));
+    };
+    xhr.onerror = () => reject(new NetworkRequestError(`無法連線至 API：${url}`));
+    xhr.onabort = () => reject(new NetworkRequestError("上傳已取消"));
+    xhr.send(requestInit.body as XMLHttpRequestBodyInit | null);
+  });
+}

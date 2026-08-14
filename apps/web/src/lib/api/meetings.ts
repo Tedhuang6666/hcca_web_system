@@ -1,7 +1,7 @@
 import type {
   AgendaItemType, AttendanceRole, AttendanceSourceType, AttendanceStatus, BallotChoice, MeetingAgendaAttachmentOut, MeetingAgendaItemOut, MeetingArtifactLinkOut, MeetingArtifactType, MeetingAttendanceOut, MeetingAttendanceSourceOut, MeetingAttendanceSourcePreviewOut, MeetingBallotOut, MeetingBillStage, MeetingDecisionOut, MeetingDecisionStatus, MeetingEventOut, MeetingJoinOut, MeetingListItem, MeetingMinutesOut, MeetingMode, MeetingMotionOut, MeetingMotionStatus, MeetingMotionType, MeetingOut, MeetingRegulationBrief, MeetingRequestOut, MeetingRequestStatus, MeetingRequestType, MeetingScreenOut, MeetingScreenReadingMode, MeetingScreenStateOut, MeetingSpeechQueueItemOut, MeetingSpeechQueueStatus, MeetingVoteOption, MeetingVoteOut, MeetingVoteRecordMethod, MeetingWorkspaceOut, VoteThresholdType, VoteVisibility,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 議事系統 ──────────────────────────────────────────────────────────────────
 
@@ -86,16 +86,17 @@ export const meetingsApi = {
     id: string,
     itemId: string,
     file: File,
+    onProgress?: (progress: number) => void,
   ): Promise<MeetingAgendaAttachmentOut> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/meetings/${id}/agenda-items/${itemId}/attachments`, {
+      uploadWithProgress(`${BASE}/meetings/${id}/agenda-items/${itemId}/attachments`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();

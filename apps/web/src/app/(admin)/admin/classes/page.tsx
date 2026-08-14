@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { ApiError, classApi, usersApi } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import MobileBackToList from "@/components/ui/MobileBackToList";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type {
   ClassMemberOut,
   ClassMembershipOut,
@@ -1210,24 +1211,7 @@ function ClassWorkspace({
 
 function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
   const [academicYear, setAcademicYear] = useState(String(new Date().getFullYear() - 1911));
-  const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
-
-  const importFile = async (file: File) => {
-    setFileName(file.name);
-    setBusy(true);
-    try {
-      const result = await classApi.importRosterFile(file, Number(academicYear) || undefined);
-      toast.success(
-        `匯入 ${result.total} 筆，建立 ${result.classes_created} 個班級，新增 ${result.roster_created} 筆座號名冊`,
-      );
-      onImported();
-    } catch (error) {
-      toast.error(getErrorMessage(error, "編班名單匯入失敗"));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
@@ -1242,7 +1226,7 @@ function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
           </p>
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-[96px_1fr] gap-2">
+      <div className="mt-3 grid gap-2 md:grid-cols-[96px_1fr]">
         <input
           className="input"
           inputMode="numeric"
@@ -1251,30 +1235,31 @@ function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
           placeholder="學年度"
           aria-label="匯入學年度"
         />
-        <label
-          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold"
-          style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
-        >
-          <FileUp size={15} />
-          {busy ? "匯入中…" : "選擇檔案並匯入"}
-          <input
-            type="file"
-            className="sr-only"
-            accept=".pdf,.csv,application/pdf,text/csv"
-            disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void importFile(file);
-              event.target.value = "";
-            }}
-          />
-        </label>
+        <AnimatedFileUpload
+          accept=".pdf,.csv,application/pdf,text/csv"
+          label={busy ? "名冊匯入中…" : "拖曳 PDF / CSV 名冊到這裡"}
+          hint="選取後立即匯入，支援 UTF-8 CSV"
+          disabled={busy}
+          onUpload={async (file, reportProgress) => {
+            setBusy(true);
+            try {
+              return await classApi.importRosterFile(
+                file,
+                Number(academicYear) || undefined,
+                reportProgress,
+              );
+            } finally {
+              setBusy(false);
+            }
+          }}
+          onUploaded={(result) => {
+            toast.success(
+              `匯入 ${result.total} 筆，建立 ${result.classes_created} 個班級，新增 ${result.roster_created} 筆座號名冊`,
+            );
+            onImported();
+          }}
+        />
       </div>
-      {fileName && (
-        <p className="mt-2 truncate text-xs" style={{ color: "var(--text-muted)" }} title={fileName}>
-          {fileName}
-        </p>
-      )}
     </section>
   );
 }

@@ -13,7 +13,7 @@ import type {
   RecommendedVendorOutWithHours,
   RecommendedVendorUpdateWithHours,
 } from "../partner-map-types";
-import { authFetch, del, get, patch, post, BASE, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { del, get, patch, post, BASE, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 export const recommendedVendorsApi = {
   listCategories: () => get<RecommendedVendorCategoryOut[]>("/recommended-vendors/categories"),
@@ -57,16 +57,16 @@ export const recommendedVendorsApi = {
   updateMenu: (id: string, body: { title?: string; sort_order?: number; is_active?: boolean }) =>
     patch<RecommendedVendorMenuOut>(`/recommended-vendors/admin/menus/${id}`, body),
   deleteMenu: (id: string) => del<void>(`/recommended-vendors/admin/menus/${id}`),
-  uploadMenu: async (vendorId: string, file: File, title?: string): Promise<RecommendedVendorMenuOut> => {
+  uploadMenu: async (vendorId: string, file: File, title?: string, onProgress?: (progress: number) => void): Promise<RecommendedVendorMenuOut> => {
     const form = new FormData();
     form.append("file", file);
     if (title?.trim()) form.append("title", title.trim());
-    const request = () => authFetch(`${BASE}/recommended-vendors/admin/vendors/${vendorId}/menus/upload`, {
+    const request = () => uploadWithProgress(`${BASE}/recommended-vendors/admin/vendors/${vendorId}/menus/upload`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),
       body: form,
-    });
+    }, onProgress);
     let response = await request();
     if (response.status === 401 && (await silentRefresh())) response = await request();
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));

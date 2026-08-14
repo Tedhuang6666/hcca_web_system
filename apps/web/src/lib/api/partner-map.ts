@@ -9,7 +9,7 @@ import type {
   PartnerBusinessUpdateWithHours,
   UnifiedMapItem,
 } from "../partner-map-types";
-import { ApiError, authFetch, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, put, del } from "./core";
+import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, put, del, uploadWithProgress } from "./core";
 
 export type PartnerBusinessListingType = "physical" | "online";
 type PartnerBusinessContactFields = {
@@ -128,29 +128,29 @@ export const partnerMapApi = {
     post<PartnerBusinessDetail>("/partner-map/admin/businesses", body),
   updateBusiness: (id: string, body: PartnerBusinessUpdate & PartnerBusinessUpdateWithHours) =>
     patch<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`, body),
-  uploadFlyer: async (id: string, file: File): Promise<PartnerBusinessDetail> => {
+  uploadFlyer: async (id: string, file: File, onProgress?: (progress: number) => void): Promise<PartnerBusinessDetail> => {
     const form = new FormData();
     form.append("file", file);
-    const response = await authFetch(`${BASE}/partner-map/admin/businesses/${id}/flyer`, {
+    const response = await uploadWithProgress(`${BASE}/partner-map/admin/businesses/${id}/flyer`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),
       body: form,
-    });
+    }, onProgress);
     if (!response.ok) {
       throw new ApiError(response.status, await errorMessageFromResponse(response));
     }
     return response.json() as Promise<PartnerBusinessDetail>;
   },
-  uploadPromoImage: async (id: string, file: File): Promise<PartnerBusinessDetail> => {
+  uploadPromoImage: async (id: string, file: File, onProgress?: (progress: number) => void): Promise<PartnerBusinessDetail> => {
     const form = new FormData();
     form.append("file", file);
-    const response = await authFetch(`${BASE}/partner-map/admin/businesses/${id}/images`, {
+    const response = await uploadWithProgress(`${BASE}/partner-map/admin/businesses/${id}/images`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),
       body: form,
-    });
+    }, onProgress);
     if (!response.ok) {
       throw new ApiError(response.status, await errorMessageFromResponse(response));
     }

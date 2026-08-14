@@ -1,7 +1,7 @@
 import type {
   BallotBoxStatus, ElectionListItem, ElectionLiveSummary, ElectionOut, ElectionStatus, VoteEventKind, VoteEventOut,
 } from "../types";
-import { authFetch, BASE, get, post, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
+import { BASE, get, post, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment, uploadWithProgress } from "./core";
 
 export const electionsApi = {
   list: () => get<ElectionListItem[]>("/elections"),
@@ -27,16 +27,16 @@ export const electionsApi = {
       sort_order?: number;
     }[];
   }) => post<ElectionOut>("/elections", body),
-  uploadImage: async (file: File): Promise<{ url: string }> => {
+  uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<{ url: string }> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/elections/images`, {
+      uploadWithProgress(`${BASE}/elections/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();
