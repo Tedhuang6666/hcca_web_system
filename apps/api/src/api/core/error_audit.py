@@ -24,6 +24,8 @@ _REDIS_RETENTION_ITEMS = 1000
 _MESSAGE_MAX = 1000
 _TRACEBACK_MAX = 6000
 _REDIS_WRITE_TIMEOUT_SECONDS = 0.25
+_READINESS_PATHS = frozenset({"/ready", "/health/ready"})
+_SYNTHETIC_PROBE_MARKERS = ("smoke-test",)
 
 _SENSITIVE_TEXT = re.compile(
     r"(?i)(bearer\s+)[^\s,;]+|((?:password|passwd|secret|token|api[_-]?key|authorization|cookie)\s*[=:]\s*)[^\s,;]+"
@@ -48,6 +50,18 @@ _DB_KEYWORDS = (
 )
 _REDIS_KEYWORDS = ("redis", "rediserror")
 _TIMEOUT_KEYWORDS = ("timeouterror", "timed out", "asyncio.timeout")
+
+
+def is_suppressed_error(*, category: str, path: str, status_code: int) -> bool:
+    """判斷是否為預期 HTTP 回應或合成探測，不進入錯誤稽核。"""
+    if category == "http":
+        # 4xx 是客戶端/權限/資源狀態，不代表伺服器故障；健康檢查的 503
+        # 也應由 readiness logger 回報依賴狀態，不能污染錯誤事件清單。
+        return status_code < 500 or path in _READINESS_PATHS
+    if category == "validation":
+        normalized_path = path.lower()
+        return any(marker in normalized_path for marker in _SYNTHETIC_PROBE_MARKERS)
+    return False
 
 
 def classify(exc_type: str, message: str) -> str:
@@ -287,6 +301,13 @@ async def record_error(
     """記錄一筆錯誤；相同簽章（類別+型別+方法+路徑）只聚合計數。"""
     exc_type = type(exc).__name__
     message = str(exc)
+    resolved_category = category or classify(exc_type, message)
+    if is_suppressed_error(
+        category=resolved_category,
+        path=path,
+        status_code=status_code,
+    ):
+        return error_id
     return await _record_event(
         error_id=error_id,
         exc_type=exc_type,
@@ -295,7 +316,7 @@ async def record_error(
         method=method,
         path=path,
         status_code=status_code,
-        category=category or classify(exc_type, message),
+        category=resolved_category,
         request_id=request_id,
         trace_id=trace_id,
         client_ip=client_ip,
@@ -439,10 +460,13 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
             if not isinstance(item, dict):
                 continue
             category, status_code = _normalize_error_fields(item)
+            path = str(item.get("path") or "")
+            if is_suppressed_error(category=category, path=path, status_code=status_code):
+                continue
             signature = str(
                 item.get("signature")
                 or f"{item.get('category', 'unhandled')}:{item.get('exc_type', '')}:"
-                f"{item.get('method', '')}:{item.get('path', '')}"
+                f"{item.get('method', '')}:{path}"
             )
             occurred_at = float(item.get("occurred_at") or 0)
             current = aggregated.get(signature)
@@ -522,6 +546,9 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
         if not isinstance(item, dict) or item.get("error_id") != needle:
             continue
         category, status_code = _normalize_error_fields(item)
+        path = str(item.get("path") or "")
+        if is_suppressed_error(category=category, path=path, status_code=status_code):
+            continue
         occurred_at = float(item.get("occurred_at") or 0)
         return {
             "error_id": str(item.get("error_id") or ""),
@@ -533,7 +560,7 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
             "exc_type": str(item.get("exc_type") or ""),
             "message": str(item.get("message") or ""),
             "method": str(item.get("method") or ""),
-            "path": str(item.get("path") or ""),
+            "path": path,
             "status_code": status_code,
             "traceback_head": str(item.get("traceback_head") or ""),
             "first_seen": occurred_at,

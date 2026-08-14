@@ -26,7 +26,7 @@ from api.core.config import settings
 from api.core.csrf import CSRFMiddleware
 from api.core.database import engine
 from api.core.defense import record_status as record_defense_status
-from api.core.error_audit import classify, record_error
+from api.core.error_audit import classify, is_suppressed_error, record_error
 from api.core.idempotency import IdempotencyMiddleware
 from api.core.load_shed import LoadShedMiddleware
 from api.core.load_signals import dec_active, inc_active, record_status
@@ -533,6 +533,13 @@ def create_app() -> FastAPI:
 
         error_id = uuid.uuid4().hex[:12]
         request.state.error_id = error_id
+        resolved_category = category or classify(type(exc).__name__, str(exc))
+        if is_suppressed_error(
+            category=resolved_category,
+            path=request.url.path,
+            status_code=status_code,
+        ):
+            return error_id
         try:
             await record_error(
                 error_id=error_id,
@@ -540,14 +547,14 @@ def create_app() -> FastAPI:
                 method=request.method,
                 path=request.url.path,
                 status_code=status_code,
-                category=category,
+                category=resolved_category,
                 request_id=getattr(request.state, "request_id", None),
                 trace_id=getattr(request.state, "trace_id", None),
                 client_ip=request.client.host if request.client else None,
                 user_agent=request.headers.get("user-agent"),
             )
             if status_code >= 500:
-                incident_category = category or classify(type(exc).__name__, str(exc))
+                incident_category = resolved_category
                 await persist_error_incident(
                     error_id=error_id,
                     exception_type=type(exc).__name__,
@@ -612,7 +619,11 @@ def create_app() -> FastAPI:
                 # 5xx 與 4xx 升 level 方便肉眼掃描；2xx/3xx 維持 INFO。
                 if response.status_code >= 500:
                     log_fn = logger.error
-                elif response.status_code >= 400:
+                elif response.status_code >= 400 and not is_suppressed_error(
+                    category="http",
+                    path=request.url.path,
+                    status_code=response.status_code,
+                ):
                     log_fn = logger.warning
                 else:
                     log_fn = logger.info
@@ -685,13 +696,18 @@ def create_app() -> FastAPI:
                 status_code=exc.status_code,
                 headers=getattr(exc, "headers", None) or {},
             )
-        logger.warning(
-            "HTTP error id=%s path=%s status=%s detail=%s",
-            err_id,
-            request.url.path,
-            exc.status_code,
-            exc.detail,
-        )
+        if not is_suppressed_error(
+            category="http",
+            path=request.url.path,
+            status_code=exc.status_code,
+        ):
+            logger.warning(
+                "HTTP error id=%s path=%s status=%s detail=%s",
+                err_id,
+                request.url.path,
+                exc.status_code,
+                exc.detail,
+            )
         return JSONResponse(
             {
                 "detail": exc.detail,

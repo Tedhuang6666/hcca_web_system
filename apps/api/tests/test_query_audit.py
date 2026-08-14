@@ -35,3 +35,9 @@ async def test_install_listeners_is_idempotent() -> None:
         await engine.dispose()
 
     assert query_count == 1
+
+
+def test_readiness_probe_select_is_not_a_slow_query_sample() -> None:
+    assert query_audit._is_noise_statement("SELECT 1") is True
+    assert query_audit._is_noise_statement("SELECT ?") is True
+    assert query_audit._is_noise_statement("SELECT id FROM users") is False
