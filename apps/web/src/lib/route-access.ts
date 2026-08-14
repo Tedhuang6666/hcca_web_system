@@ -31,6 +31,7 @@ const PUBLIC_PATTERNS = [
   /^\/announcements\/(?!new$)[^/]+$/,
   /^\/documents\/(?!new$|delegations$)[^/]+$/,
   /^\/meetings\/(?:join|screen)\/[^/]+$/,
+  /^\/partner-map\/(?!admin(?:\/|$)|my-businesses(?:\/|$))[^/]+$/,
   /^\/regulations\/(?!new(?:\/|$)|pending(?:\/|$))[^/]+(?:\/(?!edit(?:\/|$)|amendment(?:\/|$)).*)?$/,
   /^\/surveys\/(?!new$)[^/]+$/,
   /^\/petitions\/public\/[^/]+$/,
