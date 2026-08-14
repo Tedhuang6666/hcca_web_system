@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.finance import (
     ChartAccount,
     ExpenseClaimItem,
+    ExpenseClaimStatus,
+    ExpensePaymentStatus,
+    ExpenseProcurementStatus,
     FinanceAccountType,
     FinanceLedger,
     FiscalPeriod,
@@ -25,7 +28,9 @@ from api.models.finance import (
 )
 from api.schemas.finance import (
     ChartAccountUpdate,
+    ExpenseBudgetUpdate,
     ExpenseClaimCreate,
+    ExpenseProcurementUpdate,
     JournalCreate,
     TransferCreate,
 )
@@ -177,6 +182,8 @@ async def submit_journal(db: AsyncSession, entry: JournalEntry) -> JournalEntry:
     if entry.status not in (JournalStatus.DRAFT, JournalStatus.RETURNED):
         raise HTTPException(400, "此傳票無法送覆核")
     entry.status = JournalStatus.PENDING_REVIEW
+    if entry.source_type == "expense_claim":
+        entry.claim_status = ExpenseClaimStatus.PENDING_REVIEW
     await db.flush()
     return entry
 
@@ -204,6 +211,100 @@ async def post_journal(
     entry.status = JournalStatus.POSTED
     entry.reviewed_by_id = reviewer_id
     entry.posted_at = datetime.now(UTC)
+    if entry.source_type == "expense_claim":
+        entry.claim_status = ExpenseClaimStatus.APPROVED
+    await db.flush()
+    return entry
+
+
+async def return_expense_claim(
+    db: AsyncSession, entry: JournalEntry, reviewer_id: uuid.UUID, note: str
+) -> JournalEntry:
+    if entry.source_type != "expense_claim":
+        raise HTTPException(400, "只有報帳案件可以退回")
+    if entry.status != JournalStatus.PENDING_REVIEW:
+        raise HTTPException(400, "僅待覆核報帳可以退回")
+    if entry.created_by_id == reviewer_id:
+        raise HTTPException(403, "不得退回自己登錄的報帳")
+    entry.status = JournalStatus.RETURNED
+    entry.claim_status = ExpenseClaimStatus.RETURNED
+    entry.reviewed_by_id = reviewer_id
+    entry.note = note
+    await db.flush()
+    return entry
+
+
+async def update_expense_procurement(
+    db: AsyncSession,
+    entry: JournalEntry,
+    body: ExpenseProcurementUpdate,
+    user_id: uuid.UUID,
+) -> JournalEntry:
+    if entry.source_type != "expense_claim":
+        raise HTTPException(400, "只有報帳案件可以管理校商請購")
+    if entry.claim_status != ExpenseClaimStatus.APPROVED:
+        raise HTTPException(400, "報帳必須先完成第二人覆核")
+    current = ExpenseProcurementStatus(
+        entry.procurement_status or ExpenseProcurementStatus.NOT_REQUIRED
+    )
+    allowed = {
+        ExpenseProcurementStatus.NOT_REQUIRED: {
+            ExpenseProcurementStatus.NOT_REQUIRED,
+            ExpenseProcurementStatus.REQUESTED,
+        },
+        ExpenseProcurementStatus.REQUESTED: {
+            ExpenseProcurementStatus.REQUESTED,
+            ExpenseProcurementStatus.ORDERED,
+            ExpenseProcurementStatus.NOT_REQUIRED,
+        },
+        ExpenseProcurementStatus.ORDERED: {
+            ExpenseProcurementStatus.ORDERED,
+            ExpenseProcurementStatus.RECEIVED,
+        },
+        ExpenseProcurementStatus.RECEIVED: {ExpenseProcurementStatus.RECEIVED},
+    }
+    if body.status not in allowed[current]:
+        raise HTTPException(400, "校商請購狀態不可往回跳轉")
+    entry.procurement_status = body.status
+    entry.procurement_updated_by_id = user_id
+    entry.procurement_updated_at = datetime.now(UTC)
+    if body.note:
+        entry.note = body.note
+    await db.flush()
+    return entry
+
+
+async def mark_expense_paid(
+    db: AsyncSession, entry: JournalEntry, payment_status: ExpensePaymentStatus, user_id: uuid.UUID
+) -> JournalEntry:
+    if entry.source_type != "expense_claim":
+        raise HTTPException(400, "只有報帳案件可以登錄付款")
+    if entry.claim_status != ExpenseClaimStatus.APPROVED or entry.status != JournalStatus.POSTED:
+        raise HTTPException(400, "報帳必須先完成第二人覆核並過帳")
+    if entry.payment_status not in (None, ExpensePaymentStatus.UNPAID):
+        raise HTTPException(400, "此報帳已登錄付款，不可重複付款")
+    entry.payment_status = payment_status
+    entry.payment_by_id = user_id
+    entry.payment_at = datetime.now(UTC)
+    await db.flush()
+    return entry
+
+
+async def update_expense_budget(
+    db: AsyncSession,
+    entry: JournalEntry,
+    body: ExpenseBudgetUpdate,
+    user_id: uuid.UUID,
+) -> JournalEntry:
+    if entry.source_type != "expense_claim":
+        raise HTTPException(400, "只有報帳案件可以管理預算列管")
+    if entry.claim_status != ExpenseClaimStatus.APPROVED:
+        raise HTTPException(400, "報帳必須先完成第二人覆核")
+    entry.budget_included = body.included
+    entry.budget_included_by_id = user_id
+    entry.budget_included_at = datetime.now(UTC)
+    if body.note:
+        entry.note = body.note
     await db.flush()
     return entry
 
@@ -280,6 +381,7 @@ async def create_expense_claim(
             source_type="expense_claim",
             source_event="expense_claim",
             evidence_url=body.evidence_url,
+            source_url=body.source_url,
             note=body.note,
             lines=[
                 {"account_id": expense_account.id, "debit": amount},
@@ -289,6 +391,10 @@ async def create_expense_claim(
         user_id,
         pending=True,
     )
+    entry.claim_status = ExpenseClaimStatus.PENDING_REVIEW
+    entry.procurement_status = ExpenseProcurementStatus.NOT_REQUIRED
+    entry.payment_status = ExpensePaymentStatus.UNPAID
+    entry.budget_included = False
     db.add_all(
         [
             ExpenseClaimItem(
@@ -346,6 +452,16 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
         "source_url": entry.source_url,
         "evidence_url": entry.evidence_url,
         "note": entry.note,
+        "claim_status": entry.claim_status,
+        "procurement_status": entry.procurement_status,
+        "procurement_updated_by_id": entry.procurement_updated_by_id,
+        "procurement_updated_at": entry.procurement_updated_at,
+        "payment_status": entry.payment_status,
+        "payment_by_id": entry.payment_by_id,
+        "payment_at": entry.payment_at,
+        "budget_included": entry.budget_included,
+        "budget_included_by_id": entry.budget_included_by_id,
+        "budget_included_at": entry.budget_included_at,
         "lines": [
             {
                 "id": line.id,

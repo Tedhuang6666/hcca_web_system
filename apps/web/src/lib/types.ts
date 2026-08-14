@@ -12,6 +12,8 @@
  */
 
 // ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
+import type { ExpenseClaimCreate, JournalOut } from './api-bridge'
+
 export type {
   DiscordNotificationRouteIn,
   DiscordNotificationRouteOut,
@@ -138,6 +140,39 @@ export type {
   PeriodOut,
   TransferCreate
 } from './api-bridge'
+
+// 財務報帳工作流的手寫擴充；後端新增欄位時，財務 API 先以此維持型別安全。
+export type ExpenseClaimStatus =
+  | 'pending_review'
+  | 'approved'
+  | 'returned'
+  | 'rejected'
+  | 'completed'
+export type ExpenseProcurementStatus = 'not_required' | 'requested' | 'ordered' | 'received'
+export type ExpensePaymentStatus = 'unpaid' | 'school_paid' | 'dues_paid'
+export type ExpenseProcurementUpdate = {
+  status: ExpenseProcurementStatus
+  note?: string | null
+}
+export type ExpenseBudgetUpdate = {
+  included: boolean
+  note?: string | null
+}
+export type FinanceExpenseClaimCreate = Omit<ExpenseClaimCreate, 'source_url'> & {
+  source_url?: string | null
+}
+export type FinanceJournalOut = JournalOut & {
+  claim_status?: ExpenseClaimStatus | null
+  procurement_status?: ExpenseProcurementStatus | null
+  procurement_updated_by_id?: string | null
+  procurement_updated_at?: string | null
+  payment_status?: ExpensePaymentStatus | null
+  payment_by_id?: string | null
+  payment_at?: string | null
+  budget_included?: boolean | null
+  budget_included_by_id?: string | null
+  budget_included_at?: string | null
+}
 
 /**
  * types.ts — 型別薄層（部分自動生成）

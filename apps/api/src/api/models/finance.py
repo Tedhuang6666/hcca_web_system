@@ -47,6 +47,27 @@ class JournalStatus(enum.StrEnum):
     REVERSED = "reversed"
 
 
+class ExpenseClaimStatus(enum.StrEnum):
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    RETURNED = "returned"
+    REJECTED = "rejected"
+    COMPLETED = "completed"
+
+
+class ExpenseProcurementStatus(enum.StrEnum):
+    NOT_REQUIRED = "not_required"
+    REQUESTED = "requested"
+    ORDERED = "ordered"
+    RECEIVED = "received"
+
+
+class ExpensePaymentStatus(enum.StrEnum):
+    UNPAID = "unpaid"
+    SCHOOL_PAID = "school_paid"
+    DUES_PAID = "dues_paid"
+
+
 class FinanceLedger(Base, TimestampMixin):
     __tablename__ = "finance_ledgers"
     __table_args__ = (UniqueConstraint("org_id", name="uq_finance_ledger_org"),)
@@ -141,6 +162,26 @@ class JournalEntry(Base, TimestampMixin):
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     evidence_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    claim_status: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
+    procurement_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    procurement_updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    procurement_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    payment_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    payment_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    payment_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    budget_included: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    budget_included_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    budget_included_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     reversal_of_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("finance_journal_entries.id"), nullable=True
     )
