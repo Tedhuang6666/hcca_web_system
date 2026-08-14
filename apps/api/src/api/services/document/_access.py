@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, time
 
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from api.core.clock import local_today
 from api.core.search import like_contains
@@ -102,6 +102,34 @@ async def _has_active_org_membership(
         .limit(1)
     )
     return result.scalar_one_or_none() is not None
+
+
+async def _get_active_descendant_org_ids(
+    session: AsyncSession,
+    org_ids: list[uuid.UUID],
+) -> set[uuid.UUID]:
+    """取得指定機關的所有下屬機關，供密件的上層機關存取判斷使用。"""
+    if not org_ids:
+        return set()
+
+    from api.models.org import Org
+
+    org_tree = (
+        select(Org.id)
+        .where(Org.id.in_(org_ids), Org.is_active.is_(True))
+        .cte("viewer_org_tree", recursive=True)
+    )
+    child_org = aliased(Org)
+    org_tree = org_tree.union_all(
+        select(child_org.id).where(
+            child_org.parent_id == org_tree.c.id,
+            child_org.is_active.is_(True),
+        )
+    )
+    result = await session.execute(
+        select(org_tree.c.id).where(~org_tree.c.id.in_(org_ids)).distinct()
+    )
+    return set(result.scalars().all())
 
 
 async def _has_active_class_membership(
@@ -258,7 +286,6 @@ def is_sensitive_document(doc: Document) -> bool:
 def can_anonymous_access_document(doc: Document) -> bool:
     return (
         doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
-        or doc.visibility_level == DocumentVisibility.PUBLIC
         or doc.is_public is True  # 舊版 API 只寫入 is_public 的資料
     ) and not is_sensitive_document(doc)
 
@@ -324,15 +351,15 @@ async def user_has_full_document_access(
 
     today = local_today()
     result = await session.execute(
-        select(UserPosition.id)
-        .join(Position, UserPosition.position_id == Position.id)
-        .where(
-            Position.org_id == doc.org_id,
-            UserPosition.user_id == user_id,
-            *active_tenure_filter(today),
-        )
+        select(Position.org_id)
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(UserPosition.user_id == user_id, *active_tenure_filter(today))
     )
-    return result.scalar_one_or_none() is not None
+    viewer_org_ids = list(result.scalars().all())
+    if doc.visibility_level == DocumentVisibility.SUBJECT_ONLY:
+        descendant_org_ids = await _get_active_descendant_org_ids(session, viewer_org_ids)
+        return doc.org_id in descendant_org_ids
+    return doc.org_id in viewer_org_ids
 
 
 async def check_document_access(
@@ -371,6 +398,7 @@ async def _build_visibility_filter(
         .distinct()
     )
     viewer_org_ids = list(org_ids_result.scalars().all())
+    subject_org_ids = await _get_active_descendant_org_ids(session, viewer_org_ids)
     viewer_class_ids = await get_user_active_class_ids(session, viewer_id)
 
     is_approver = exists(
@@ -421,11 +449,7 @@ async def _build_visibility_filter(
         ),
         and_(
             Document.visibility_level == DocumentVisibility.SUBJECT_ONLY,
-            or_(
-                Document.created_by == viewer_id,
-                is_approver,
-                is_subject_recipient,
-            ),
+            Document.org_id.in_(subject_org_ids) if subject_org_ids else False,
         ),
     ]
 
@@ -486,7 +510,6 @@ async def list_documents(
         q = q.where(
             or_(
                 Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
-                Document.visibility_level == DocumentVisibility.PUBLIC,
                 Document.is_public.is_(True),
             )
         )
@@ -505,10 +528,9 @@ async def list_documents(
     if classification:
         q = q.where(Document.classification == classification)
     if visibility:
-        if visibility in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}:
+        if visibility == DocumentVisibility.PUBLICLY_OPEN:
             q = q.where(
                 or_(
-                    Document.visibility_level == DocumentVisibility.PUBLIC,
                     Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
                     Document.is_public.is_(True),
                 )

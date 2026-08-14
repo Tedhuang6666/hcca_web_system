@@ -158,6 +158,15 @@ async def test_can_anonymous_access_publicly_open_normal_doc(
     assert can_anonymous_access_document(doc) is True
 
 
+async def test_can_anonymous_access_denies_login_only_document(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = _make_doc(org, creator, visibility_level=DocumentVisibility.PUBLIC)
+    assert can_anonymous_access_document(doc) is False
+
+
 async def test_can_anonymous_access_legacy_is_public_doc(
     db_session: AsyncSession, make_user
 ) -> None:
@@ -376,6 +385,25 @@ async def test_full_access_denied_to_unrelated_stranger(
     assert await user_has_full_document_access(db_session, doc, stranger.id) is False
 
 
+async def test_full_access_granted_to_creator_org_superior_for_secret_visibility(
+    db_session: AsyncSession, make_user
+) -> None:
+    parent_org = await _make_org(db_session)
+    child_org = await _make_org(db_session, parent_id=parent_org.id)
+    creator = await make_user()
+    superior_member = await make_user()
+    child_member = await make_user()
+    await _grant_position(db_session, superior_member, parent_org)
+    await _grant_position(db_session, child_member, child_org)
+    doc = _make_doc(child_org, creator, visibility_level=DocumentVisibility.SUBJECT_ONLY)
+    db_session.add(doc)
+    await db_session.flush()
+    await db_session.refresh(doc, attribute_names=["approvals"])
+
+    assert await user_has_full_document_access(db_session, doc, superior_member.id) is True
+    assert await user_has_full_document_access(db_session, doc, child_member.id) is False
+
+
 # ── check_document_access ───────────────────────────────────────────────────
 
 
@@ -526,7 +554,7 @@ async def test_list_documents_public_only_excludes_non_open_docs(
 
     result_ids = {d.id for d in results}
     assert open_doc.id in result_ids
-    assert legacy_public_doc.id in result_ids
+    assert legacy_public_doc.id not in result_ids
     assert legacy_flag_doc.id in result_ids
     assert private_doc.id not in result_ids
 
@@ -537,7 +565,7 @@ async def test_list_documents_public_only_excludes_non_open_docs(
     )
     filtered_ids = {d.id for d in filtered_results}
     assert open_doc.id in filtered_ids
-    assert legacy_public_doc.id in filtered_ids
+    assert legacy_public_doc.id not in filtered_ids
     assert legacy_flag_doc.id in filtered_ids
     assert private_doc.id not in filtered_ids
 
@@ -559,6 +587,23 @@ async def test_list_documents_viewer_visibility_hides_org_only_for_non_member(
     result_ids = {d.id for d in results}
     assert public_doc.id in result_ids
     assert org_only_doc.id not in result_ids
+
+
+async def test_list_documents_shows_secret_to_creator_org_superior(
+    db_session: AsyncSession, make_user
+) -> None:
+    parent_org = await _make_org(db_session)
+    child_org = await _make_org(db_session, parent_id=parent_org.id)
+    creator = await make_user()
+    superior_member = await make_user()
+    await _grant_position(db_session, superior_member, parent_org)
+    secret_doc = _make_doc(child_org, creator, visibility_level=DocumentVisibility.SUBJECT_ONLY)
+    db_session.add(secret_doc)
+    await db_session.flush()
+
+    results = await list_documents(db_session, viewer_id=superior_member.id)
+
+    assert secret_doc.id in {document.id for document in results}
 
 
 async def test_list_documents_viewer_visibility_shows_org_only_for_member(

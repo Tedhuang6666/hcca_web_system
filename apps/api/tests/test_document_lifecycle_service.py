@@ -288,7 +288,7 @@ async def test_create_document_sets_is_public_for_public_visibility(
 
     doc = await _make_draft(db_session, org, creator, visibility_level=DocumentVisibility.PUBLIC)
 
-    assert doc.is_public is True
+    assert doc.is_public is False
 
 
 async def test_create_document_legacy_is_public_maps_to_publicly_open(
