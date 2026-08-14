@@ -28,7 +28,7 @@ from api.core.database import engine
 from api.core.defense import record_status as record_defense_status
 from api.core.error_audit import classify, is_suppressed_error, record_error
 from api.core.idempotency import IdempotencyMiddleware
-from api.core.load_shed import LoadShedMiddleware
+from api.core.load_shed import PROTECTIVE_RESPONSE_HEADER, LoadShedMiddleware
 from api.core.load_signals import dec_active, inc_active, record_status
 from api.core.module_health import maybe_trip_module, record_module_status
 from api.core.modules import match_module
@@ -577,10 +577,12 @@ def create_app() -> FastAPI:
         inc_active()
         reset_request_counters()
         status_code = 500
+        protective_response = False
         try:
             response = await call_next(request)
             status_code = response.status_code
-            if response.status_code >= 400:
+            protective_response = response.headers.get(PROTECTIVE_RESPONSE_HEADER) == "1"
+            if response.status_code >= 400 and not protective_response:
                 await _record_request_error(
                     request,
                     StarletteHTTPException(
@@ -617,7 +619,9 @@ def create_app() -> FastAPI:
             if settings.ACCESS_LOG_ENABLED and not _is_quiet_polling(request.url.path):
                 # 訊息本身做成自我可讀（text/json 模式都有用）。
                 # 5xx 與 4xx 升 level 方便肉眼掃描；2xx/3xx 維持 INFO。
-                if response.status_code >= 500:
+                if protective_response:
+                    log_fn = logger.info
+                elif response.status_code >= 500:
                     log_fn = logger.error
                 elif response.status_code >= 400 and not is_suppressed_error(
                     category="http",
@@ -655,7 +659,8 @@ def create_app() -> FastAPI:
             raise
         finally:
             dec_active()
-            record_status(status_code)
+            if not protective_response:
+                record_status(status_code)
             await record_defense_status(status_code)
             try:
                 # 健康探測端點不計入模組健康樣本（避免自我反饋迴圈）
