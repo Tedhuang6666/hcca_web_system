@@ -208,7 +208,7 @@ export function ApprovalPanel({
             <div key={step.id} className="flex items-center flex-1" role="listitem">
               <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
                 <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+                  className="w-9 h-9 rounded-full flex items-center justify-center transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   style={{
                     border: `2px solid var(${s.colorVar})`,
                     color: `var(${s.colorVar})`,
@@ -228,7 +228,7 @@ export function ApprovalPanel({
               </div>
               {i < steps.length - 1 && (
                 <div
-                  className="flex-1 h-0.5 mx-2 rounded-full transition-all"
+                  className="flex-1 h-0.5 mx-2 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   style={{
                     background: step.status === "approved"
                       ? "var(--success)"
@@ -316,7 +316,7 @@ export function ApprovalPanel({
                       <button
                         type="button"
                         onClick={() => void toggleDelegatePicker(step.step_order)}
-                        className="min-h-11 rounded px-3 py-2 text-[10px] transition-all"
+                        className="min-h-11 rounded px-3 py-2 text-[10px] transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                         style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
                         {step.delegate ? "變更代理" : "指定代理"}
                       </button>
@@ -416,7 +416,7 @@ export function ApprovalPanel({
                   key={m}
                   onClick={() => setRejectMode(m)}
                   aria-pressed={active}
-                  className="flex-1 py-2 rounded-xl transition-all"
+                  className="flex-1 py-2 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   style={
                     active
                       ? { background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger-dim)" }

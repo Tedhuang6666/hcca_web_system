@@ -258,14 +258,14 @@ export default function NotificationsPage() {
         <div className="flex flex-wrap items-center gap-2">
         <Link
           href="/settings/notifications"
-          className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80"
           style={{ color: "var(--text-secondary)", border: "1px solid var(--border)", textDecoration: "none" }}>
           偏好設定
         </Link>
         {unreadCount > 0 && (
           <button
             onClick={handleReadAll}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80"
             style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
             全部標為已讀
           </button>
@@ -282,7 +282,7 @@ export default function NotificationsPage() {
           <button
             key={String(key)}
             onClick={() => setUnreadOnly(key)}
-            className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+            className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={unreadOnly === key
               ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary)" }
               : { color: "#475569" }}>

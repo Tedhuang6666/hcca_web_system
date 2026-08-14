@@ -84,6 +84,8 @@ function CartProductCard({
           <img
             src={uploadUrl(group.product_image_url)}
             alt={group.product_name}
+            width={76}
+            height={76}
             className="rounded-lg object-cover flex-shrink-0"
             style={{ width: 76, height: 76, border: "1px solid var(--border)" }}
           />

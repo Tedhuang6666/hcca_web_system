@@ -29,7 +29,7 @@ export default function OrgsPage() {
     return (
       <div style={{ marginLeft: depth * 16 }}>
         <Link href={`/orgs/${org.id}`}
-          className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all group"
+          className="flex items-center gap-3 px-4 py-3 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform] group"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", textDecoration: "none" }}
           onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--border-strong)")}
           onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>

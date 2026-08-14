@@ -304,7 +304,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                   return (
                     <label
                       key={code}
-                      className="flex items-start gap-2.5 cursor-pointer px-3 py-2.5 rounded-xl transition-all"
+                      className="flex items-start gap-2.5 cursor-pointer px-3 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={{
                         background: on ? "var(--primary-dim)" : "transparent",
                         border: `1px solid ${on ? "var(--border-strong)" : "transparent"}`,

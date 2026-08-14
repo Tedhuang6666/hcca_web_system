@@ -1153,7 +1153,7 @@ export default function EditRegulationPage() {
                 </div>
                 <button
                   onClick={() => { setAddingEnd(v => !v); }}
-                  className="w-full text-xs px-3 py-1.5 rounded transition-all cursor-pointer sm:w-auto"
+                  className="w-full text-xs px-3 py-1.5 rounded transition-[color,background-color,border-color,opacity,box-shadow,transform] cursor-pointer sm:w-auto"
                   style={addingEnd
                     ? { color: "var(--text-muted)", background: "var(--bg-elevated)", border: "1px solid var(--border)" }
                     : { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>

@@ -87,7 +87,7 @@ export default function ArchivedRegulationsPage() {
                 key={key}
                 aria-pressed={active}
                 onClick={() => setCategory(key)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap cursor-pointer hover:opacity-80"
                 style={
                   active
                     ? {

@@ -127,7 +127,7 @@ export default function SurveysClient({
             <button
               key={t}
               onClick={() => setTab(t)}
-              className="flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium transition-all md:flex-none"
+              className="flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] md:flex-none"
               style={tab === t
                 ? { background: "var(--bg-surface)", color: "var(--text-primary)", boxShadow: "var(--shadow-sm)" }
                 : { color: "var(--text-muted)" }}>

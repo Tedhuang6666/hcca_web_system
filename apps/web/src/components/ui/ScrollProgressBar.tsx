@@ -32,7 +32,7 @@ export default function ScrollProgressBar() {
   return (
     <div
       className="scroll-progress-bar"
-      style={{ width: `${progress}%` }}
+      style={{ transform: `scaleX(${progress / 100})` }}
       role="progressbar"
       aria-valuenow={Math.round(progress)}
       aria-valuemin={0}

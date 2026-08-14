@@ -4,15 +4,27 @@ import json
 import logging
 from typing import Any
 
-from api.core.security import redis_client
+import redis.asyncio as aioredis
+
+from api.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+cache_client: aioredis.Redis = aioredis.from_url(
+    str(settings.REDIS_CACHE_URL or settings.REDIS_URL),
+    encoding="utf-8",
+    decode_responses=True,
+    max_connections=settings.REDIS_MAX_CONNECTIONS,
+    socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+    socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+    health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+)
 
 
 async def cache_get(key: str) -> Any | None:
     """從 Redis 快取取得值；Redis 異常時 fallback 為 cache miss 並記錄。"""
     try:
-        value = await redis_client.get(key)
+        value = await cache_client.get(key)
         if value is None:
             return None
         return json.loads(value)
@@ -25,7 +37,7 @@ async def cache_set(key: str, value: Any, ttl: int = 60) -> None:
     """設定 Redis 快取值；Redis 異常時記錄但不中斷業務邏輯。"""
     try:
         serialized = json.dumps(value, default=str)
-        await redis_client.setex(key, ttl, serialized)
+        await cache_client.setex(key, ttl, serialized)
     except Exception:
         logger.error("cache_set failed key=%s ttl=%d", key, ttl, exc_info=True)
 
@@ -36,7 +48,7 @@ async def cache_invalidate(pattern: str, max_iterations: int = 500) -> None:
         keys: list[str] = []
         cursor = 0
         for _ in range(max_iterations):
-            cursor, batch = await redis_client.scan(cursor, match=pattern, count=100)
+            cursor, batch = await cache_client.scan(cursor, match=pattern, count=100)
             keys.extend(batch)
             if cursor == 0:
                 break
@@ -47,7 +59,7 @@ async def cache_invalidate(pattern: str, max_iterations: int = 500) -> None:
                 len(keys),
             )
         if keys:
-            await redis_client.unlink(*keys)
+            await cache_client.unlink(*keys)
     except Exception:
         logger.error("cache_invalidate failed pattern=%s", pattern, exc_info=True)
 

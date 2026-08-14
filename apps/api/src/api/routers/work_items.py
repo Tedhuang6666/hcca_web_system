@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import suppress
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +15,7 @@ from api.models.user import User
 from api.schemas.work_item import WorkItemCreate, WorkItemOut, WorkItemUpdate
 from api.services import audit as audit_svc
 from api.services import work_item as work_item_svc
+from api.services.notification import create_notification
 
 router = APIRouter(prefix="/work-items", tags=["工作分配"])
 
@@ -52,9 +54,7 @@ async def create_work_item(
         summary=f"建立工作分配：{item.title}",
     )
     if body.assigned_to_id and body.assigned_to_id != current_user.id:
-        try:
-            from api.routers.notifications import create_notification
-
+        with suppress(Exception):
             await create_notification(
                 db,
                 user_id=body.assigned_to_id,
@@ -64,8 +64,6 @@ async def create_work_item(
                 link="/work-items",
                 related_id=item.id,
             )
-        except Exception:
-            pass
     return WorkItemOut.model_validate(item)
 
 

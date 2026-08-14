@@ -615,7 +615,7 @@ export default function InventoryProcurementPage() {
             filteredProcs.map((proc) => (
               <button
                 key={proc.id}
-                className="card w-full text-left p-4 space-y-1.5 transition-all"
+                className="card w-full text-left p-4 space-y-1.5 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 style={selectedId === proc.id ? { border: "1.5px solid var(--primary)" } : undefined}
                 onClick={() => handleSelect(proc.id)}
               >

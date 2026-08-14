@@ -1,7 +1,6 @@
 import { BRANDING } from "@/lib/branding";
 import { contentCategoryLabel, DOCUMENT_CATEGORY_LABELS, REGULATION_CATEGORY_LABELS } from "@/lib/content-labels";
 import {
-  CONTENT_OG_CONTENT_TYPE,
   renderContentOgImage,
 } from "@/lib/content-og-image";
 import { fetchPublicDocument, fetchPublicPetition, fetchPublicRegulation } from "@/lib/publicSeoFetch";
@@ -55,10 +54,30 @@ export async function GET(_request: Request, { params }: OgRouteProps) {
     });
   }
 
+  if (kind === "surveys") {
+    return renderContentOgImage({
+      title: id ? `公開問卷｜${decodeURIComponent(id)}` : "公開問卷",
+      category: "問卷",
+    });
+  }
+
+  if (kind === "live" && rest[0] === "elections") {
+    return renderContentOgImage({
+      title: "即時選舉開票",
+      category: id ? `選舉 ${decodeURIComponent(id)}` : "選舉",
+    });
+  }
+
+  if (kind === "partner-map") {
+    const businessName = id ? decodeURIComponent(id).replace(/[-_]+/g, " ").trim() : "";
+    return renderContentOgImage({
+      title: businessName ? `${businessName}｜合作商家` : "合作商家地圖",
+      category: "校園服務",
+    });
+  }
+
   return renderContentOgImage({
     title: "公開資訊",
     category: BRANDING.orgShortName,
   });
 }
-
-export const contentType = CONTENT_OG_CONTENT_TYPE;

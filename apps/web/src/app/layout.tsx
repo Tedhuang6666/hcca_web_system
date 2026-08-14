@@ -4,11 +4,16 @@ import "./globals.css";
 import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import ClientErrorReporter from "@/components/providers/ClientErrorReporter";
+import WebVitalsReporter from "@/components/providers/WebVitalsReporter";
 import { BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 import { SITE_URL } from "@/lib/seo";
 
 const DEFAULT_DESCRIPTION = BRANDING.description;
+
+// CSP nonce is generated per request by proxy.ts. Dynamic rendering lets Next.js
+// propagate that nonce to inline runtime, JSON-LD and beforeInteractive scripts.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -79,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased">
         <ClientErrorReporter />
+        <WebVitalsReporter />
         <ThemeProvider>
           {children}
         </ThemeProvider>

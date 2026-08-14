@@ -33,6 +33,8 @@ function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?
     <img
       src={uploadUrl(url)}
       alt={alt}
+      width={size}
+      height={size}
       className="rounded-lg object-cover flex-shrink-0"
       style={{ width: size, height: size, border: "1px solid var(--border)" }}
     />

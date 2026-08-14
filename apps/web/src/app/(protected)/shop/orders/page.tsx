@@ -142,7 +142,7 @@ export default function OrdersPage() {
                   }
                   setTab(key);
                 }}
-                className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-45"
+                className="px-4 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] disabled:opacity-45"
                 style={
                   active
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--primary-dim)" }

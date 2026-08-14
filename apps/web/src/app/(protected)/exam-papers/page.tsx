@@ -99,7 +99,7 @@ export default function ExamPapersPage() {
 
   useEffect(() => {
     void loadCatalog();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     void load();

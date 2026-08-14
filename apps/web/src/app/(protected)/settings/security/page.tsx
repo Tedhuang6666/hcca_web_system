@@ -348,7 +348,8 @@ export default function SecuritySettingsPage() {
                   style={{ border: "1px solid var(--border)" }}>
                   {qrDataUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={qrDataUrl} alt="2FA TOTP QRCode" className="h-[220px] w-[220px]" />
+                    <img src={qrDataUrl} alt="2FA TOTP QRCode" width={220} height={220}
+                      className="h-[220px] w-[220px]" />
                   ) : (
                     <span className="text-xs" style={{ color: "var(--text-muted)" }}>產生中</span>
                   )}

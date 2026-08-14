@@ -328,10 +328,10 @@ function QuestionRow({
           {imageUrl && (
             <div className="relative inline-block mb-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={uploadUrl(imageUrl)} alt="預覽" className="max-h-32 rounded-lg"
+              <img src={uploadUrl(imageUrl)} alt="預覽" width={320} height={180} className="max-h-32 rounded-lg"
                 style={{ border: "1px solid var(--border)" }} />
               <button type="button" onClick={() => setImageUrl("")}
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-xs"
+                className="absolute -top-2 -right-2 h-11 w-11 rounded-full text-xs"
                 style={{ background: "var(--danger)", color: "white" }} aria-label="移除">×</button>
             </div>
           )}

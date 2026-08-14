@@ -44,8 +44,8 @@ export default function NavigationProgress() {
     s.current.active = false;
     if (s.current.raf !== null) { cancelAnimationFrame(s.current.raf); s.current.raf = null; }
     if (s.current.timer !== null) { clearTimeout(s.current.timer); s.current.timer = null; }
-    bar.style.transition = "width 0.15s ease-out";
-    bar.style.width = "100%";
+    bar.style.transition = "transform 0.15s ease-out";
+    bar.style.transform = "scaleX(1)";
     s.current.timer = setTimeout(() => {
       if (barRef.current) barRef.current.style.opacity = "0";
       document.documentElement.removeAttribute("data-navigation");
@@ -68,11 +68,11 @@ export default function NavigationProgress() {
       document.documentElement.setAttribute("data-navigation", "pending");
       bar.style.transition = "none";
       bar.style.opacity = "1";
-      bar.style.width = "0%";
+      bar.style.transform = "scaleX(0)";
       s.current.raf = requestAnimationFrame(() => {
         if (!barRef.current) return;
-        barRef.current.style.transition = "width 8s cubic-bezier(0.1, 0.8, 0.5, 1)";
-        barRef.current.style.width = "80%";
+        barRef.current.style.transition = "transform 8s cubic-bezier(0.1, 0.8, 0.5, 1)";
+        barRef.current.style.transform = "scaleX(0.8)";
       });
     };
 
@@ -144,7 +144,9 @@ export default function NavigationProgress() {
         top: 0,
         left: 0,
         height: "2px",
-        width: "0%",
+        width: "100%",
+        transform: "scaleX(0)",
+        transformOrigin: "left center",
         opacity: 0,
         background: "var(--primary)",
         zIndex: 9999,

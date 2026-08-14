@@ -65,6 +65,7 @@ from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import context as context_svc
 from api.services import document as doc_svc
+from api.services.document._access import decode_document_cursor, encode_document_cursor
 from api.services.permission import (
     get_user_permission_codes,
     get_user_permission_codes_for_org,
@@ -239,6 +240,7 @@ async def create_document(
 )
 async def list_documents(
     session: DbDep,
+    response: Response,
     current_user: OptionalUser,
     org_id: uuid.UUID | None = Query(None, description="過濾組織（不填則依使用者所在組織）"),
     activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
@@ -264,7 +266,14 @@ async def list_documents(
     my_only: bool = Query(False, description="僅顯示我建立的公文"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    cursor: str | None = Query(None, max_length=300, description="上一頁最後一筆的 opaque cursor"),
 ) -> list[DocumentListItem]:
+    if cursor:
+        try:
+            decode_document_cursor(cursor)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     can_view_all = False
     if current_user is not None:
         codes = await get_user_permission_codes(session, current_user.id)
@@ -297,9 +306,12 @@ async def list_documents(
         created_by=current_user.id if (my_only and current_user) else None,
         limit=limit,
         offset=offset,
+        cursor=cursor,
         public_only=(current_user is None),  # 未登入僅顯示公開公文
         viewer_id=None if can_view_all else (current_user.id if current_user else None),
     )
+    if len(docs) == limit:
+        response.headers["X-Next-Cursor"] = encode_document_cursor(docs[-1])
     return await doc_svc.build_document_list_items(
         session,
         docs,

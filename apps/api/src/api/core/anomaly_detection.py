@@ -45,7 +45,15 @@ async def record_login(user_id: str, ip: str, user_agent: str | None = None) -> 
 
 
 async def get_login_ips(user_id: str) -> list[str]:
-    rows = await redis_client.zrevrange(f"login_history:{user_id}", 0, 99)
+    try:
+        rows = await redis_client.zrevrange(f"login_history:{user_id}", 0, 99)
+        legacy = await redis_client.get(f"login:{user_id}")
+    except (RedisError, TimeoutError):
+        # 這是管理頁的輔助資訊；Redis 暫時失效時回傳空清單，不能讓
+        # 使用者封鎖預覽整個 endpoint 變成 500。
+        logger.warning("登入 IP 歷史暫時無法讀取 Redis", exc_info=True)
+        return []
+
     ips: list[str] = []
     for raw in rows:
         try:
@@ -55,7 +63,6 @@ async def get_login_ips(user_id: str) -> list[str]:
         ip = str(value.get("ip", "")).strip()
         if ip and ip != "unknown" and ip not in ips:
             ips.append(ip)
-    legacy = await redis_client.get(f"login:{user_id}")
     if legacy:
         legacy_ip = str(legacy).split("|", maxsplit=1)[0].strip()
         if legacy_ip and legacy_ip != "unknown" and legacy_ip not in ips:

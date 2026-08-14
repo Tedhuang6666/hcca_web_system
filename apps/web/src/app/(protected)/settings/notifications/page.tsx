@@ -297,7 +297,7 @@ export default function NotificationSettingsPage() {
                 type="button"
                 onClick={() => updateDigest(key)}
                 disabled={digestSaving || loading}
-                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer hover:opacity-80 disabled:opacity-50"
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] cursor-pointer hover:opacity-80 disabled:opacity-50"
                 style={
                   active
                     ? {

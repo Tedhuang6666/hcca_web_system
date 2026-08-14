@@ -123,7 +123,7 @@ export function PreRegisterModal({
       <div className="flex gap-2 justify-end pt-1">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl" style={{ color: "var(--text-muted)" }}>取消</button>
         <button onClick={submit} disabled={loading}
-          className="px-5 py-2 text-sm rounded-xl font-medium disabled:opacity-50 transition-all"
+          className="px-5 py-2 text-sm rounded-xl font-medium disabled:opacity-50 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
           style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
           {loading ? "建立中..." : "建立帳號"}
         </button>

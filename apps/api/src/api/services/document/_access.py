@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import uuid
 from datetime import UTC, date, datetime, time
 
@@ -35,6 +37,21 @@ SENSITIVE_DOCUMENT_CLASSIFICATIONS = frozenset(
         DocumentClassification.ABSOLUTELY_CONFIDENTIAL,
     }
 )
+
+
+def encode_document_cursor(document: Document) -> str:
+    """以 created_at + UUID 建立不受 offset 漂移影響的 opaque cursor。"""
+    raw = f"{document.created_at.isoformat()}|{document.id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def decode_document_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        created_at, document_id = base64.urlsafe_b64decode(padded).decode().split("|", 1)
+        return datetime.fromisoformat(created_at), uuid.UUID(document_id)
+    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        raise ValueError("無效的公文 cursor") from exc
 
 
 def _active_assignment_exists_for_viewer(
@@ -507,6 +524,7 @@ async def list_documents(
     roc_year: int | None = None,
     limit: int = 20,
     offset: int = 0,
+    cursor: str | None = None,
     public_only: bool = False,
     viewer_id: uuid.UUID | None = None,
 ) -> list[Document]:
@@ -586,6 +604,15 @@ async def list_documents(
                 Document.content.ilike(pattern),
             )
         )
-    q = q.order_by(Document.created_at.desc()).limit(limit).offset(offset)
+    if cursor:
+        cursor_created_at, cursor_id = decode_document_cursor(cursor)
+        q = q.where(
+            or_(
+                Document.created_at < cursor_created_at,
+                and_(Document.created_at == cursor_created_at, Document.id < cursor_id),
+            )
+        )
+        offset = 0
+    q = q.order_by(Document.created_at.desc(), Document.id.desc()).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().all())

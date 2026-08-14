@@ -121,7 +121,7 @@ function CheckoutFlow() {
                   key={item.id}
                   disabled={isEmpty}
                   onClick={() => handleSelectItem(item)}
-                  className="card p-4 text-left space-y-2 transition-all active:scale-95"
+                  className="card p-4 text-left space-y-2 transition-[color,background-color,border-color,opacity,box-shadow,transform] active:scale-95"
                   style={
                     isEmpty
                       ? { opacity: 0.4, cursor: "not-allowed" }
@@ -425,7 +425,7 @@ export default function LoanCheckoutPage() {
       {/* Tab 切換 */}
       <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--bg-elevated)" }}>
         <button
-          className="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all"
+          className="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
           style={
             tab === "checkout"
               ? { background: "var(--bg-base)", boxShadow: "var(--shadow-sm)" }
@@ -436,7 +436,7 @@ export default function LoanCheckoutPage() {
           借出
         </button>
         <button
-          className="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all"
+          className="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
           style={
             tab === "return"
               ? { background: "var(--bg-base)", boxShadow: "var(--shadow-sm)" }

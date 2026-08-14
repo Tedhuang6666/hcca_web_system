@@ -157,7 +157,7 @@ async def _notify(
 ) -> None:
     if user_id is not None:
         try:
-            from api.routers.notifications import create_notification
+            from api.services.notification import create_notification
 
             await create_notification(
                 session,

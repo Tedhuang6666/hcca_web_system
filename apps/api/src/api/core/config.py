@@ -107,6 +107,12 @@ class Settings(BaseSettings):
 
     # --- Redis 設定 ---
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
+    # 應用狀態（token revoke、rate limit、idempotency）仍由 REDIS_URL 承擔；
+    # 快取、即時 pub/sub、Celery broker 可在正式環境分離故障域。
+    REDIS_CACHE_URL: str = Field(default="")
+    REDIS_REALTIME_URL: str = Field(default="")
+    CELERY_BROKER_URL: str = Field(default="")
+    CELERY_RESULT_BACKEND: str = Field(default="")
     REDIS_MAX_CONNECTIONS: int = Field(default=50, ge=1)
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0)
     REDIS_HEALTH_CHECK_INTERVAL: int = Field(default=30, ge=1)

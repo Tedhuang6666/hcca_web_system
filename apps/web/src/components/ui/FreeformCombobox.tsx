@@ -138,7 +138,7 @@ export default function FreeformCombobox({
             inputRef.current?.blur();
           }
         }}
-        className={`w-full rounded-lg px-3 py-2 pr-8 text-sm outline-none disabled:opacity-50 ${inputClassName}`}
+        className={`w-full rounded-lg px-3 py-2 pr-11 text-sm outline-none disabled:opacity-50 ${inputClassName}`}
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
@@ -154,7 +154,7 @@ export default function FreeformCombobox({
             clear();
           }}
           aria-label="清除內容"
-          className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-[10px] hover:opacity-70"
+          className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-[10px] hover:opacity-70"
           style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
         >
           x

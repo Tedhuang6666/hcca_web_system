@@ -780,7 +780,7 @@ export default function DocumentListClient({
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>公文類別</p>
                 <div className="flex flex-wrap gap-1.5">
                   <button onClick={() => dispatchFilter({ type: "set", key: "category", value: "" })}
-                    className="text-xs px-2.5 py-1 rounded-full transition-all"
+                    className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.category
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -788,7 +788,7 @@ export default function DocumentListClient({
                   </button>
                   {DOC_CATEGORIES.map(c => (
                     <button key={c.key} onClick={() => dispatchFilter({ type: "set", key: "category", value: c.key === filters.category ? "" : c.key })}
-                      className="text-xs px-2.5 py-1 rounded-full transition-all"
+                      className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.category === c.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -803,7 +803,7 @@ export default function DocumentListClient({
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>密等</p>
                 <div className="flex flex-wrap gap-1.5">
                   <button onClick={() => dispatchFilter({ type: "set", key: "classification", value: "" })}
-                    className="text-xs px-2.5 py-1 rounded-full transition-all"
+                    className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.classification
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -811,7 +811,7 @@ export default function DocumentListClient({
                   </button>
                   {DOC_CLASSIFICATIONS.map(c => (
                     <button key={c.key} onClick={() => dispatchFilter({ type: "set", key: "classification", value: c.key === filters.classification ? "" : c.key })}
-                      className="text-xs px-2.5 py-1 rounded-full transition-all"
+                      className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.classification === c.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -826,7 +826,7 @@ export default function DocumentListClient({
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>可見度</p>
                 <div className="flex flex-wrap gap-1.5">
                   <button onClick={() => dispatchFilter({ type: "set", key: "visibility", value: "" })}
-                    className="text-xs px-2.5 py-1 rounded-full transition-all"
+                    className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.visibility
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -834,7 +834,7 @@ export default function DocumentListClient({
                   </button>
                   {DOC_VISIBILITIES.map(v => (
                     <button key={v.key} onClick={() => dispatchFilter({ type: "set", key: "visibility", value: v.key === filters.visibility ? "" : v.key })}
-                      className="text-xs px-2.5 py-1 rounded-full transition-all"
+                      className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.visibility === v.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -939,7 +939,7 @@ export default function DocumentListClient({
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>其他</p>
                 <button onClick={() => dispatchFilter({ type: "toggleMyOnly" })}
-                  className="text-xs px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 transition-all"
+                  className="text-xs px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   style={filters.myOnly
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>

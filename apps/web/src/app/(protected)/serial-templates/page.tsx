@@ -194,7 +194,7 @@ export default function SerialTemplatesPage() {
             僅顯示有效
           </label>
           <button onClick={() => setShowCreate(p => !p)}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-90"
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90"
             style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
             ＋ 新增模板
           </button>
@@ -343,7 +343,7 @@ export default function SerialTemplatesPage() {
               取消
             </button>
             <button onClick={handleCreate} disabled={saving}
-              className="px-5 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50"
+              className="px-5 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-50"
               style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
               {saving ? "建立中..." : "建立模板"}
             </button>

@@ -66,7 +66,7 @@ function StockBar({ quantity, threshold }: { quantity: number; threshold: number
         style={{ background: "var(--bg-elevated)" }}
       >
         <div
-          className="h-1.5 rounded-full transition-all"
+          className="h-1.5 rounded-full transition-[width]"
           style={{
             width: threshold > 0 ? `${Math.min(100, Math.round((quantity / (threshold * 3 || 10)) * 100))}%` : "100%",
             background: color,
@@ -619,7 +619,7 @@ export default function InventoryItemsPage() {
             filteredItems.map((item) => (
               <button
                 key={item.id}
-                className="card w-full text-left p-4 space-y-2 transition-all"
+                className="card w-full text-left p-4 space-y-2 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 style={selectedId === item.id ? { border: "1.5px solid var(--primary)" } : undefined}
                 onClick={() => handleSelect(item.id)}
               >

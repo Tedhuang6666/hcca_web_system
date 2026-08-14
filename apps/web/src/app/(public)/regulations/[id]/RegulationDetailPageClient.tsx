@@ -657,7 +657,7 @@ export default function RegulationDetailPageClient({
 
                 {/* 分享 */}
                 <button onClick={handleShare}
-                  className="px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80 inline-flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1"
                   style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
                   title="分享">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -670,7 +670,7 @@ export default function RegulationDetailPageClient({
 
                 {/* 複製連結 */}
                 <button onClick={handleCopyLink}
-                  className="px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80 inline-flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1"
                   style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
                   title="複製連結">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -732,7 +732,7 @@ export default function RegulationDetailPageClient({
                 {/* 編輯（限建立者或管理員） */}
                 {(reg.created_by === currentUserId || isAdmin) && (
                   <Link href={`${currentRegHref}/edit`}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90 inline-flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 inline-flex items-center gap-1.5"
                     style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -748,7 +748,7 @@ export default function RegulationDetailPageClient({
                 {can("regulation:create") && reg.is_active && reg.published_at && (
                   <Link
                     href={`${currentRegHref}/amendment`}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90 inline-flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 inline-flex items-center gap-1.5"
                     style={{ background: "rgba(99,102,241,0.1)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.3)" }}>
                     <FilePenLine size={12} strokeWidth={2} aria-hidden="true" />
                     起草修正案
@@ -878,7 +878,7 @@ export default function RegulationDetailPageClient({
             ...(currentUserId ? [{ key: "workflow" as Tab, label: "審議流程" }] : []),
           ] as { key: Tab; label: string }[]).map(({ key, label }) => (
             <button key={key} onClick={() => handleTabChange(key)}
-              className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap"
+              className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap"
               style={tab === key
                 ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary)" }
                 : { color: "var(--text-muted)" }}>
@@ -946,7 +946,7 @@ export default function RegulationDetailPageClient({
                         Object.fromEntries(chapterArticles.map((article) => [article.id, nextValue])),
                       );
                     }}
-                    className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
+                    className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
                     style={{
                       color: allChaptersCollapsed ? "var(--primary)" : "var(--text-muted)",
                       border: "1px solid var(--border)",
@@ -955,7 +955,7 @@ export default function RegulationDetailPageClient({
                     {allChaptersCollapsed ? "展開各章條文" : "收合各章條文"}
                   </button>
                   <button onClick={() => setTocVisible(v => !v)}
-                    className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
+                    className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
                     style={{
                       color: tocVisible ? "var(--primary)" : "var(--text-muted)",
                       border: "1px solid var(--border)",
@@ -965,7 +965,7 @@ export default function RegulationDetailPageClient({
                   </button>
                   {deletedCount > 0 && (
                     <button onClick={() => setShowDeleted(v => !v)}
-                      className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
+                      className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
                       style={showDeleted
                         ? { color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>

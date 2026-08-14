@@ -41,7 +41,7 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
               <button
                 onClick={() => setExpanded(isOpen ? null : rev.id)}
                 aria-expanded={isOpen}
-                className="w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-xl transition-all"
+                className="w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 style={{
                   background: isOpen ? "var(--primary-dim)" : "var(--bg-elevated)",
                   border: `1px solid ${isOpen ? "var(--border-focus)" : "var(--border)"}`,

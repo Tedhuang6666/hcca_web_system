@@ -42,7 +42,11 @@ async def is_blocked(ip: str) -> bool:
     try:
         raw = await asyncio.wait_for(redis_client.hget(BLOCKLIST_KEY, ip), timeout=0.8)
     except (RedisError, TimeoutError):
-        return False  # Redis 異常時不擋（避免誤殺）
+        # defense projection 會在 Redis 寫入失敗時保留短期 process cache；
+        # fallback 到它，避免管理者剛發布的 block 因 Redis 短暫中斷直接失效。
+        blocked = await is_ip_blocked(ip)
+        _cache[ip] = (now + _LOCAL_CACHE_TTL, blocked)
+        return blocked
 
     blocked = False
     if raw:

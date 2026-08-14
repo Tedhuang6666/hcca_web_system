@@ -24,10 +24,20 @@ x-api-common: &api-common
     DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
     HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
     REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+    REDIS_CACHE_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-cache:6379/0
+    REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
+    CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
+    CELERY_RESULT_BACKEND: ""
   depends_on:
     db:
       condition: service_healthy
     redis:
+      condition: service_healthy
+    redis-cache:
+      condition: service_healthy
+    redis-broker:
+      condition: service_healthy
+    redis-realtime:
       condition: service_healthy
   volumes:
     - uploads:/app/uploads
@@ -122,11 +132,53 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      ["sh", "-c", "redis-server --maxmemory $${REDIS_CACHE_MAXMEMORY:-256mb} --maxmemory-policy allkeys-lfu --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+      REDIS_CACHE_MAXMEMORY: ${REDIS_CACHE_MAXMEMORY:-256mb}
+    volumes:
+      - rediscachedata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-broker:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes:
+      - redisbrokerdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-realtime:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --save \"\" --appendonly no --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
       interval: 10s
@@ -172,7 +224,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery
+      --queues=celery,default,documents,email,meal,backup,recovery,gcal
       -n worker-blue@%h
     # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
     # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
@@ -186,7 +238,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery
+      --queues=celery,default,documents,email,meal,backup,recovery,gcal
       -n worker-green@%h
     # 同 worker-blue：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
@@ -240,6 +292,8 @@ services:
 volumes:
   pgdata:
   redisdata:
+  rediscachedata:
+  redisbrokerdata:
   uploads:
   celerybeat:
   caddydata:

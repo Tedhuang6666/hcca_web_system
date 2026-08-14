@@ -7,6 +7,7 @@ import logging
 
 from api.core.celery_app import celery_app
 from api.services import feature_flag
+from api.services.email_dispatch import send_now
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,6 @@ async def _dispatch_scheduled() -> dict:
     from api.core.database import task_session
     from api.models.email_message import EmailMessage, EmailStatus
     from api.models.user import User
-    from api.routers.email import _send_now
 
     dispatched = 0
     async with task_session() as session:
@@ -77,7 +77,7 @@ async def _dispatch_scheduled() -> dict:
                         msg.error_detail = "找不到寄件者"
                         continue
                     # 寄送當下才解析收件人，反映最新職位/組織成員
-                    await _send_now(session, sender, msg)
+                    await send_now(session, sender, msg)
                     dispatched += 1
                 except Exception as exc:  # noqa: BLE001
                     msg.status = EmailStatus.FAILED

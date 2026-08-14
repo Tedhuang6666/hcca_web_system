@@ -298,7 +298,8 @@ export default function MeetingDetailPageClient({
         <div className="grid justify-items-center rounded-md border border-[var(--border)] p-3">
           {joinQr ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={joinQr} alt="議員入口 QR Code" className="h-40 w-40 rounded-md bg-white p-2" />
+            <img src={joinQr} alt="議員入口 QR Code" width={160} height={160}
+              className="h-40 w-40 rounded-md bg-white p-2" />
           ) : (
             <div className="grid h-40 w-40 place-items-center rounded-md bg-white/10 text-xs text-[var(--muted)]">QR</div>
           )}
