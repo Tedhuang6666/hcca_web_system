@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import Script from "next/script";
 import "./globals.css";
 import "./accessibility.css";
@@ -72,15 +73,17 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-function ThemeScript() {
-  return <Script src="/theme.js" strategy="beforeInteractive" />;
+function ThemeScript({ nonce }: { nonce?: string }) {
+  return <Script src="/theme.js" strategy="beforeInteractive" nonce={nonce} />;
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html lang="zh-TW" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
-        <ThemeScript />
+        <ThemeScript nonce={nonce} />
       </head>
       <body className="antialiased">
         <ClientErrorReporter />

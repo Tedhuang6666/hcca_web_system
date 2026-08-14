@@ -6,9 +6,14 @@ import * as Sentry from "@sentry/nextjs";
 
 import { getServerSentryDsn } from "./src/lib/sentry-config";
 
-const dsn = getServerSentryDsn();
+type SentryServerGlobal = typeof globalThis & {
+  __hccaSentryServerInitialized?: boolean;
+};
 
-if (dsn) {
+const dsn = getServerSentryDsn();
+const sentryGlobal = globalThis as SentryServerGlobal;
+
+if (dsn && !sentryGlobal.__hccaSentryServerInitialized) {
   Sentry.init({
     dsn,
     environment: process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV,
@@ -22,4 +27,5 @@ if (dsn) {
     // 不主動上傳使用者 PII（IP / headers / 使用者資料）— 學生平台隱私考量
     sendDefaultPii: false,
   });
+  sentryGlobal.__hccaSentryServerInitialized = true;
 }
