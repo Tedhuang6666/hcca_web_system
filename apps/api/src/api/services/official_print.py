@@ -25,7 +25,7 @@ _BUNDLED_KAI_FONT = "edukai-5.1_20251208.ttf"
 _FALLBACK_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
 _BUNDLED_LISHU_FONT = "MoeLI-3.0.ttf"
 _BUNDLED_TITLE_FONT = "朝華標題B.ttf"
-_BUNDLED_XINGSHU_FONT = "KouzanGyoushoOTF.otf"
+_BUNDLED_XINGSHU_FONT = "Bakudai-Bold.ttf"
 
 
 def _bundled_font_candidates(filename: str) -> tuple[Path, ...]:
