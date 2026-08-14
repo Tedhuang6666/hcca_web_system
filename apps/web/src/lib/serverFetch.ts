@@ -1,10 +1,18 @@
 import type {
   AnnouncementListItem,
   AnnouncementOut,
+  DocumentListItem,
   PublicOfficerOut,
   PublicSiteBundleOut,
   PublicSitePageOut,
+  PartnerRankingItem,
+  PartnerTagOut,
+  RegulationListItem,
+  SurveyOut,
+  SurveyListItem,
 } from "./types";
+import type { PartnerBusinessDirectoryItem } from "./api/partner-map";
+import type { UnifiedMapItem } from "./partner-map-types";
 import type { ModuleStatusPublic } from "./api/system";
 import { serverApiUrl } from "./config";
 
@@ -36,6 +44,89 @@ export async function fetchAnnouncements(limit = 100): Promise<AnnouncementListI
   } catch {
     return [];
   }
+}
+
+export async function fetchPublicDocuments(
+  params: { limit?: number; offset?: number } = {},
+): Promise<DocumentListItem[] | null> {
+  const search = new URLSearchParams();
+  if (params.limit !== undefined) search.set("limit", String(params.limit));
+  if (params.offset !== undefined) search.set("offset", String(params.offset));
+
+  try {
+    const res = await fetch(serverApiUrl(`/documents?${search.toString()}`), {
+      next: { revalidate: REVALIDATE },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPublicRegulations(): Promise<RegulationListItem[]> {
+  try {
+    const res = await fetch(serverApiUrl("/regulations"), {
+      next: { revalidate: REVALIDATE },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchPublicSurveys(status?: string): Promise<SurveyListItem[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+
+  try {
+    const res = await fetch(serverApiUrl(`/surveys/public${query}`), {
+      next: { revalidate: REVALIDATE },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchPublicSurvey(id: string): Promise<SurveyOut | null> {
+  try {
+    const res = await fetch(
+      serverApiUrl(`/surveys/public/${encodeURIComponent(id)}`),
+      { next: { revalidate: REVALIDATE } },
+    );
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPublicPartnerMapData(): Promise<{
+  initialItems: UnifiedMapItem[];
+  initialContactBusinesses: PartnerBusinessDirectoryItem[];
+  initialTags: PartnerTagOut[];
+  initialRankings: PartnerRankingItem[];
+}> {
+  const fetchJson = async <T>(path: string): Promise<T> => {
+    try {
+      const res = await fetch(serverApiUrl(path), { next: { revalidate: REVALIDATE } });
+      if (!res.ok) return [] as T;
+      return res.json();
+    } catch {
+      return [] as T;
+    }
+  };
+
+  const [initialItems, initialContactBusinesses, initialTags, initialRankings] = await Promise.all([
+    fetchJson<UnifiedMapItem[]>("/partner-map?limit=300"),
+    fetchJson<PartnerBusinessDirectoryItem[]>("/partner-map/directory"),
+    fetchJson<PartnerTagOut[]>("/partner-map/tags"),
+    fetchJson<PartnerRankingItem[]>("/partner-map/rankings?limit=5"),
+  ]);
+
+  return { initialItems, initialContactBusinesses, initialTags, initialRankings };
 }
 
 export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut | null> {
