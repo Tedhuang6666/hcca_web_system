@@ -741,6 +741,18 @@ export type PartnerApplicationFieldType = "text" | "textarea" | "email" | "tel" 
 
 export type SchoolClassBulkActionKind = "activate" | "deactivate" | "delete";
 
+export interface ClassRosterPdfImportOut {
+  academic_year: number;
+  class_codes: string[];
+  classes_created: number;
+  total: number;
+  people_created: number;
+  people_updated: number;
+  affiliations_created: number;
+  roster_created: number;
+  roster_updated: number;
+}
+
 
 // ── 人員與身分總表 ────────────────────────────────────────────────────────────
 

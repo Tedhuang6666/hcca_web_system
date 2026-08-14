@@ -46,6 +46,39 @@ async def test_list_classes_requires_permission(
     assert response.status_code == 403
 
 
+async def test_import_roster_file_requires_permission(
+    authed_client_factory: Callable[[User], AsyncClient], member_user: User
+) -> None:
+    ac = authed_client_factory(member_user)
+    response = await ac.post(
+        "/classes/roster/import",
+        files={"file": ("roster.csv", b"display_name,class_code,seat_number,student_id\n")},
+        data={"academic_year": "115"},
+    )
+    assert response.status_code == 403
+
+
+async def test_import_roster_file_creates_records(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+) -> None:
+    ac = authed_client_factory(admin_user)
+    response = await ac.post(
+        "/classes/roster/import",
+        files={
+            "file": (
+                "115-1-roster-import.csv",
+                ("display_name,class_code,seat_number,student_id\n王○勛,101,1,510001\n").encode(),
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["class_codes"] == ["101"]
+    assert response.json()["roster_created"] == 1
+
+
 async def test_create_class_and_get_detail(
     authed_client_factory: Callable[[User], AsyncClient], admin_user: User
 ) -> None:

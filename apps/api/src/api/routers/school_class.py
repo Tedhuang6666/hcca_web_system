@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from api.schemas.school_class import (
     ClassRosterEntryCreate,
     ClassRosterEntryOut,
     ClassRosterEntryUpdate,
+    ClassRosterPdfImportOut,
     ClassStudentRangeCreate,
     ClassStudentRangeOut,
     SchoolClassBulkAction,
@@ -43,12 +44,14 @@ from api.schemas.school_class import (
     SchoolClassUpdate,
 )
 from api.services import school_class as class_svc
+from api.services import school_class_import as class_import_svc
 
 router = APIRouter(prefix="/classes", tags=["班級系統"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.CLASS_MANAGE))]
+MAX_ROSTER_IMPORT_BYTES = 10 * 1024 * 1024
 
 
 async def _get_class_or_404(class_id: uuid.UUID, session: AsyncSession) -> SchoolClass:
@@ -76,6 +79,38 @@ async def list_classes(
 )
 async def list_recipient_options(session: DbDep, _: CurrentUser) -> list[SchoolClass]:
     return await class_svc.list_recipient_options(session)
+
+
+@router.post(
+    "/roster/import",
+    response_model=ClassRosterPdfImportOut,
+    summary="匯入 PDF 或 UTF-8 CSV 編班名單",
+)
+async def import_roster_file(
+    session: DbDep,
+    current_user: ManagerUser,
+    file: UploadFile = File(..., description="編班名單 PDF 或 UTF-8 CSV"),
+    academic_year: int | None = Form(
+        None, ge=1, le=999, description="學年度；CSV 無法從檔名判斷時必填"
+    ),
+) -> ClassRosterPdfImportOut:
+    file_bytes = await file.read(MAX_ROSTER_IMPORT_BYTES + 1)
+    if len(file_bytes) > MAX_ROSTER_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="匯入檔不可超過 10 MB"
+        )
+    try:
+        return await class_import_svc.import_roster_pdf(
+            session,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            academic_year=academic_year,
+            created_by=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.post(

@@ -1,7 +1,41 @@
 import type {
-  ClassCadreOut, ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassRosterBulkCreate, ClassRosterBulkOut, ClassRosterEntryOut, ClassStudentRangeOut, SchoolClassBulkActionKind, SchoolClassBulkActionOut, SchoolClassBulkCreate, SchoolClassBulkCreateOut, SchoolClassListItem, SchoolClassOut,
+  ClassCadreOut, ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassRosterBulkCreate, ClassRosterBulkOut, ClassRosterEntryOut, ClassRosterPdfImportOut, ClassStudentRangeOut, SchoolClassBulkActionKind, SchoolClassBulkActionOut, SchoolClassBulkCreate, SchoolClassBulkCreateOut, SchoolClassListItem, SchoolClassOut,
 } from "../types";
-import { get, post, patch, del } from "./core";
+import { ApiError } from "../api-helpers";
+import {
+  BASE,
+  authFetch,
+  csrfHeaders,
+  del,
+  formatErrorDetail,
+  get,
+  patch,
+  post,
+  silentRefresh,
+} from "./core";
+
+async function postForm<T>(path: string, body: FormData, retried = false): Promise<T> {
+  const response = await authFetch(`${BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: csrfHeaders("POST"),
+    body,
+  });
+  if (response.status === 401 && !retried && await silentRefresh()) {
+    return postForm<T>(path, body, true);
+  }
+  if (!response.ok) {
+    let detail: unknown = response.statusText;
+    try {
+      const payload = await response.json() as { detail?: unknown };
+      detail = payload.detail ?? detail;
+    } catch {
+      // Keep the HTTP status text when the server returns a non-JSON error.
+    }
+    throw new ApiError(response.status, formatErrorDetail(detail, "檔案匯入失敗"));
+  }
+  return response.json() as Promise<T>;
+}
 
 // ── 班級 ──────────────────────────────────────────────────────────────────────
 
@@ -27,6 +61,12 @@ export const classApi = {
     post<ClassRosterEntryOut>(`/classes/${id}/roster`, body),
   bulkRoster: (id: string, body: ClassRosterBulkCreate) =>
     post<ClassRosterBulkOut>(`/classes/${id}/roster/bulk`, body),
+  importRosterFile: (file: File, academicYear?: number) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (academicYear) form.append("academic_year", String(academicYear));
+    return postForm<ClassRosterPdfImportOut>("/classes/roster/import", form);
+  },
   updateRoster: (id: string, entryId: string, body: { seat_number?: number; student_id?: string }) =>
     patch<ClassRosterEntryOut>(`/classes/${id}/roster/${entryId}`, body),
   deleteRoster: (id: string, entryId: string) => del<void>(`/classes/${id}/roster/${entryId}`),
