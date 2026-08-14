@@ -17,6 +17,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.finance import (
     ChartAccount,
+    ExpensePaymentStatus,
     FinanceAccountType,
     FinanceLedger,
     FiscalPeriod,
@@ -29,7 +30,10 @@ from api.schemas.finance import (
     ChartAccountCreate,
     ChartAccountOut,
     ChartAccountUpdate,
+    ExpenseBudgetUpdate,
     ExpenseClaimCreate,
+    ExpenseProcurementUpdate,
+    ExpenseReturnCreate,
     FinanceEvidenceUploadOut,
     FundAccountCreate,
     FundAccountOut,
@@ -395,7 +399,13 @@ async def list_journals(
 @router.post(
     "/journals/{entry_id}/submit",
     response_model=JournalOut,
-    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_RECORD))],
+    dependencies=[
+        Depends(
+            require_journal_permission(
+                PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD
+            )
+        )
+    ],
 )
 async def submit_journal(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> JournalOut:
     entry = await db.get(JournalEntry, entry_id)
@@ -424,6 +434,127 @@ async def post_journal(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> Jou
         actor_id=str(user.id),
         actor_email=user.email,
         summary=f"過帳：{entry.description}",
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.post(
+    "/journals/{entry_id}/return",
+    response_model=JournalOut,
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_REVIEW))],
+)
+async def return_expense_claim(
+    entry_id: uuid.UUID, body: ExpenseReturnCreate, db: DbDep, user: CurrentUser
+) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    await service.return_expense_claim(db, entry, user.id, body.note)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action="finance.expense_return",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"退回報帳：{entry.description}",
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.patch(
+    "/journals/{entry_id}/procurement",
+    response_model=JournalOut,
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_PROCUREMENT))],
+)
+async def update_expense_procurement(
+    entry_id: uuid.UUID, body: ExpenseProcurementUpdate, db: DbDep, user: CurrentUser
+) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    await service.update_expense_procurement(db, entry, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action="finance.expense_procurement",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"更新校商請購：{entry.description}／{body.status}",
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.post(
+    "/journals/{entry_id}/school-payment",
+    response_model=JournalOut,
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_SCHOOL_PAYMENT))],
+)
+async def mark_school_payment(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    await service.mark_expense_paid(db, entry, ExpensePaymentStatus.SCHOOL_PAID, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action="finance.school_payment",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"登錄校方付款：{entry.description}",
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.post(
+    "/journals/{entry_id}/dues-payment",
+    response_model=JournalOut,
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_DUES_PAYMENT))],
+)
+async def mark_dues_payment(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    await service.mark_expense_paid(db, entry, ExpensePaymentStatus.DUES_PAID, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action="finance.dues_payment",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"登錄會費付款：{entry.description}",
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.patch(
+    "/journals/{entry_id}/budget",
+    response_model=JournalOut,
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def update_expense_budget(
+    entry_id: uuid.UUID, body: ExpenseBudgetUpdate, db: DbDep, user: CurrentUser
+) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    await service.update_expense_budget(db, entry, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action="finance.budget",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"更新預算列管：{entry.description}／{body.included}",
     )
     await db.commit()
     return _journal_out(await service.journal_with_lines(db, entry))

@@ -5,7 +5,14 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from api.models.finance import FinanceAccountType, FundStorageType, JournalStatus
+from api.models.finance import (
+    ExpenseClaimStatus,
+    ExpensePaymentStatus,
+    ExpenseProcurementStatus,
+    FinanceAccountType,
+    FundStorageType,
+    JournalStatus,
+)
 
 
 class LedgerCreate(BaseModel):
@@ -133,7 +140,22 @@ class ExpenseClaimCreate(BaseModel):
     description: str = Field(min_length=1, max_length=300)
     items: list[ExpenseClaimItemCreate] = Field(min_length=1, max_length=100)
     evidence_url: str | None = Field(None, max_length=500)
+    source_url: str | None = Field(None, max_length=500)
     note: str | None = None
+
+
+class ExpenseProcurementUpdate(BaseModel):
+    status: ExpenseProcurementStatus
+    note: str | None = Field(None, max_length=500)
+
+
+class ExpenseBudgetUpdate(BaseModel):
+    included: bool
+    note: str | None = Field(None, max_length=500)
+
+
+class ExpenseReturnCreate(BaseModel):
+    note: str = Field(min_length=1, max_length=500)
 
 
 class FinanceEvidenceUploadOut(BaseModel):
@@ -166,6 +188,16 @@ class JournalOut(BaseModel):
     source_url: str | None
     evidence_url: str | None
     note: str | None
+    claim_status: ExpenseClaimStatus | None
+    procurement_status: ExpenseProcurementStatus | None
+    procurement_updated_by_id: uuid.UUID | None
+    procurement_updated_at: datetime | None
+    payment_status: ExpensePaymentStatus | None
+    payment_by_id: uuid.UUID | None
+    payment_at: datetime | None
+    budget_included: bool | None
+    budget_included_by_id: uuid.UUID | None
+    budget_included_at: datetime | None
     lines: list[JournalLineOut]
 
 

@@ -2,11 +2,13 @@ import type {
   ChartAccountCreate,
   ChartAccountOut,
   ChartAccountUpdate,
-  ExpenseClaimCreate,
+  FinanceExpenseClaimCreate,
+  ExpenseBudgetUpdate,
+  FinanceJournalOut,
+  ExpenseProcurementUpdate,
   FinanceEvidenceUploadOut,
   FundAccountOut,
   JournalCreate,
-  JournalOut,
   LedgerOut,
   PeriodCreate,
   PeriodOut,
@@ -41,13 +43,23 @@ export const financeApi = {
     post<PeriodOut>(`/finance/ledgers/${ledgerId}/periods`, body),
   listPeriods: (ledgerId: string) => get<PeriodOut[]>(`/finance/ledgers/${ledgerId}/periods`),
   createJournal: (ledgerId: string, body: JournalCreate) =>
-    post<JournalOut>(`/finance/ledgers/${ledgerId}/journals`, body),
-  createExpenseClaim: (ledgerId: string, body: ExpenseClaimCreate) =>
-    post<JournalOut>(`/finance/ledgers/${ledgerId}/expense-claims`, body),
+    post<FinanceJournalOut>(`/finance/ledgers/${ledgerId}/journals`, body),
+  createExpenseClaim: (ledgerId: string, body: FinanceExpenseClaimCreate) =>
+    post<FinanceJournalOut>(`/finance/ledgers/${ledgerId}/expense-claims`, body),
   listJournals: (ledgerId: string, status?: string) =>
-    get<JournalOut[]>(`/finance/ledgers/${ledgerId}/journals${status ? `?status=${status}` : ""}`),
+    get<FinanceJournalOut[]>(`/finance/ledgers/${ledgerId}/journals${status ? `?status=${status}` : ""}`),
   createTransfer: (ledgerId: string, body: TransferCreate) =>
-    post<JournalOut>(`/finance/ledgers/${ledgerId}/transfers`, body),
-  submit: (entryId: string) => post<JournalOut>(`/finance/journals/${entryId}/submit`, {}),
-  post: (entryId: string) => post<JournalOut>(`/finance/journals/${entryId}/post`, {}),
+    post<FinanceJournalOut>(`/finance/ledgers/${ledgerId}/transfers`, body),
+  submit: (entryId: string) => post<FinanceJournalOut>(`/finance/journals/${entryId}/submit`, {}),
+  post: (entryId: string) => post<FinanceJournalOut>(`/finance/journals/${entryId}/post`, {}),
+  returnClaim: (entryId: string, note: string) =>
+    post<FinanceJournalOut>(`/finance/journals/${entryId}/return`, { note }),
+  updateProcurement: (entryId: string, body: ExpenseProcurementUpdate) =>
+    patch<FinanceJournalOut>(`/finance/journals/${entryId}/procurement`, body),
+  markSchoolPaid: (entryId: string) =>
+    post<FinanceJournalOut>(`/finance/journals/${entryId}/school-payment`, {}),
+  markDuesPaid: (entryId: string) =>
+    post<FinanceJournalOut>(`/finance/journals/${entryId}/dues-payment`, {}),
+  updateBudget: (entryId: string, body: ExpenseBudgetUpdate) =>
+    patch<FinanceJournalOut>(`/finance/journals/${entryId}/budget`, body),
 };

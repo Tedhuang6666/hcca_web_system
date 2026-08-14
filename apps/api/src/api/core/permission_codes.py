@@ -101,6 +101,10 @@ class PermissionCode(StrEnum):
     FINANCE_RECORD = "finance:record"
     FINANCE_REVIEW = "finance:review"
     FINANCE_MANAGE = "finance:manage"
+    FINANCE_PROCUREMENT = "finance:procurement"
+    FINANCE_SCHOOL_PAYMENT = "finance:school_payment"
+    FINANCE_DUES_PAYMENT = "finance:dues_payment"
+    FINANCE_BUDGET = "finance:budget"
 
     SEATING_MANAGE = "seating:manage"
     SEATING_ASSIGN = "seating:assign"
@@ -695,6 +699,30 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.FINANCE_MANAGE,
         "label": "財務設定",
         "desc": "管理帳本、會計期間、科目與資金帳戶",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_PROCUREMENT,
+        "label": "管理校商請購",
+        "desc": "更新報帳的校商請購、下單與收貨狀態",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_SCHOOL_PAYMENT,
+        "label": "登錄校方付款",
+        "desc": "將已覆核報帳標記為校方已支付",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_DUES_PAYMENT,
+        "label": "登錄會費付款",
+        "desc": "將已覆核報帳標記為會費已支付",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_BUDGET,
+        "label": "管理預算列管",
+        "desc": "標記報帳是否已列入預算並保留稽核資訊",
     },
     {
         "group": "商品系統",
