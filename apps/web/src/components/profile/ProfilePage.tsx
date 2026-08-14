@@ -19,6 +19,12 @@ const POSITION_CATEGORY_LABEL = {
   system: "系統職位",
 } as const;
 
+const PERMISSION_LABELS: Record<string, string> = {
+  "merchandise_submission:view": "查看校商投稿",
+  "merchandise_submission:manage": "管理校商投稿",
+  "merchandise_submission:review": "審核校商投稿",
+};
+
 type ProfileTab = "account" | "positions" | "permissions";
 
 const PROFILE_TABS: { key: ProfileTab; label: string }[] = [
@@ -561,7 +567,7 @@ export default function ProfilePage() {
             {permissionCodes.map(code => (
               <span key={code} className="text-xs px-2 py-1 rounded font-mono"
                 style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-                {code}
+                {PERMISSION_LABELS[code] ?? code}
               </span>
             ))}
           </div>
