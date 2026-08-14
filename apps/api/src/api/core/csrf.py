@@ -86,6 +86,9 @@ class CSRFMiddleware:
             # 匿名瀏覽器錯誤回報不能依賴既有登入 session；端點本身只接收
             # 有長度限制的診斷資料，並受 rate limit / payload limit 保護。
             "/system/client-errors",
+            # 匿名遙測使用 sendBeacon，無法附加 X-CSRF-Token header；端點只接收
+            # Web Vitals／API latency，並受 rate limit / payload limit 保護。
+            "/analytics/client-metrics",
         ]
 
     def _is_exempt(self, path: str) -> bool:
