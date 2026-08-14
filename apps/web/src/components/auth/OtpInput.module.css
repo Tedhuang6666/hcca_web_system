@@ -22,14 +22,14 @@
 
 .shell:focus-within {
   z-index: 1;
-  border-color: var(--primary);
-  background: var(--primary-dim);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 17%, transparent);
+  border-color: var(--mfa-accent, var(--primary));
+  background: color-mix(in srgb, var(--mfa-accent, var(--primary)) 10%, var(--bg-surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mfa-accent, var(--primary)) 17%, transparent);
   transform: translateY(-1px) scale(1.035);
 }
 
 .shell[data-filled="true"] {
-  border-color: color-mix(in srgb, var(--primary) 48%, var(--border-strong));
+  border-color: color-mix(in srgb, var(--mfa-accent, var(--primary)) 48%, var(--border-strong));
 }
 
 .shell[data-status="success"] {
