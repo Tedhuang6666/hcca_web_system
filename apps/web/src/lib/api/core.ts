@@ -18,6 +18,17 @@ let refreshPromise: Promise<RefreshStatus> | null = null;
 let sessionExpiryRedirectStarted = false;
 
 const AUTH_REFRESH_TIMEOUT_MS = 8_000;
+const AUTH_REFRESH_LOCK_NAME = "hcca-auth-refresh";
+const AUTH_REFRESH_LOCK_KEY = "hcca:auth-refresh-lock";
+const AUTH_REFRESH_STATE_KEY = "hcca:auth-refresh-state";
+const AUTH_REFRESH_LOCK_TTL_MS = AUTH_REFRESH_TIMEOUT_MS + 2_000;
+const AUTH_REFRESH_WAIT_TIMEOUT_MS = AUTH_REFRESH_TIMEOUT_MS + 3_000;
+const AUTH_REFRESH_STATE_TTL_MS = 15_000;
+
+type RefreshState = { completedAt: number; status: RefreshStatus };
+type RefreshLock = { owner: string; expiresAt: number };
+
+const refreshOwner = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 export function formatErrorDetail(detail: unknown, fallback: string): string {
   if (!detail) return fallback;
@@ -122,9 +133,7 @@ function createSpanId(): string {
     .padStart(16, "0");
 }
 
-async function refreshWithStatus(): Promise<RefreshStatus> {
-  if (refreshPromise) return refreshPromise;
-
+async function refreshOnce(): Promise<RefreshStatus> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AUTH_REFRESH_TIMEOUT_MS);
   const nextRefresh = fetch(apiUrl("/auth/refresh"), {
@@ -140,8 +149,142 @@ async function refreshWithStatus(): Promise<RefreshStatus> {
     .catch((): RefreshStatus => "unavailable")
     .finally(() => {
       clearTimeout(timeout);
-      refreshPromise = null;
     });
+  return nextRefresh;
+}
+
+function browserStorage(): Storage | null {
+  return typeof window === "undefined" ? null : window.localStorage;
+}
+
+function readRefreshState(): RefreshState | null {
+  const storage = browserStorage();
+  if (!storage) return null;
+  try {
+    const value = JSON.parse(storage.getItem(AUTH_REFRESH_STATE_KEY) ?? "null") as Partial<RefreshState>;
+    if (
+      typeof value.completedAt !== "number"
+      || !Number.isFinite(value.completedAt)
+      || !["ok", "invalid", "unavailable"].includes(value.status ?? "")
+    ) {
+      return null;
+    }
+    return { completedAt: value.completedAt, status: value.status as RefreshStatus };
+  } catch {
+    return null;
+  }
+}
+
+function writeRefreshState(status: RefreshStatus): void {
+  const storage = browserStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(AUTH_REFRESH_STATE_KEY, JSON.stringify({ completedAt: Date.now(), status }));
+  } catch {
+    // Storage may be disabled; the in-tab promise lock still protects this tab.
+  }
+}
+
+function recentRefreshSince(observedAt: number): RefreshStatus | null {
+  const state = readRefreshState();
+  if (!state || state.completedAt <= observedAt) return null;
+  return Date.now() - state.completedAt <= AUTH_REFRESH_STATE_TTL_MS ? state.status : null;
+}
+
+async function refreshWithNavigatorLock(observedAt: number): Promise<RefreshStatus | null> {
+  if (typeof navigator === "undefined" || !("locks" in navigator)) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AUTH_REFRESH_WAIT_TIMEOUT_MS);
+  try {
+    return await navigator.locks.request(
+      AUTH_REFRESH_LOCK_NAME,
+      { signal: controller.signal },
+      async () => {
+        const recent = recentRefreshSince(observedAt);
+        if (recent) return recent;
+        const status = await refreshOnce();
+        writeRefreshState(status);
+        return status;
+      },
+    );
+  } catch {
+    return "unavailable";
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function readRefreshLock(): RefreshLock | null {
+  const storage = browserStorage();
+  if (!storage) return null;
+  try {
+    const value = JSON.parse(storage.getItem(AUTH_REFRESH_LOCK_KEY) ?? "null") as Partial<RefreshLock>;
+    if (typeof value.owner !== "string" || typeof value.expiresAt !== "number") return null;
+    return value as RefreshLock;
+  } catch {
+    return null;
+  }
+}
+
+function tryAcquireRefreshLock(): boolean {
+  const storage = browserStorage();
+  if (!storage) return false;
+  const now = Date.now();
+  const current = readRefreshLock();
+  if (current && current.owner !== refreshOwner && current.expiresAt > now) return false;
+  try {
+    storage.setItem(
+      AUTH_REFRESH_LOCK_KEY,
+      JSON.stringify({ owner: refreshOwner, expiresAt: now + AUTH_REFRESH_LOCK_TTL_MS }),
+    );
+    return readRefreshLock()?.owner === refreshOwner;
+  } catch {
+    return false;
+  }
+}
+
+function releaseRefreshLock(): void {
+  const storage = browserStorage();
+  if (!storage || readRefreshLock()?.owner !== refreshOwner) return;
+  try {
+    storage.removeItem(AUTH_REFRESH_LOCK_KEY);
+  } catch {
+    // Ignore cleanup failures; the lock has a short expiry as a safety net.
+  }
+}
+
+async function refreshWithStorageLock(observedAt: number): Promise<RefreshStatus> {
+  if (!browserStorage()) return refreshOnce();
+
+  const deadline = Date.now() + AUTH_REFRESH_WAIT_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (tryAcquireRefreshLock()) {
+      try {
+        const recent = recentRefreshSince(observedAt);
+        if (recent) return recent;
+        const status = await refreshOnce();
+        writeRefreshState(status);
+        return status;
+      } finally {
+        releaseRefreshLock();
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 75));
+  }
+  return "unavailable";
+}
+
+async function refreshWithStatus(): Promise<RefreshStatus> {
+  if (refreshPromise) return refreshPromise;
+
+  const observedAt = readRefreshState()?.completedAt ?? 0;
+  const nextRefresh = (async () => {
+    const lockedStatus = await refreshWithNavigatorLock(observedAt);
+    return lockedStatus ?? refreshWithStorageLock(observedAt);
+  })().finally(() => {
+    refreshPromise = null;
+  });
   refreshPromise = nextRefresh;
   return nextRefresh;
 }
