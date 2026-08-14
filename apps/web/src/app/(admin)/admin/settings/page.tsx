@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import OtpInput from "@/components/auth/OtpInput";
 import {
   ApiError,
   systemApi,
@@ -426,18 +427,13 @@ function MfaModal({
           <h2 className="text-base font-semibold">{title}</h2>
         </div>
         <p className="mb-3 text-sm text-[var(--text-secondary)]">{detail}</p>
-        <input
-          type="text"
-          inputMode="numeric"
-          autoFocus
-          maxLength={16}
+        <OtpInput
           value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-          }}
-          placeholder="123456"
-          className="input w-full font-mono text-center text-lg tracking-widest"
+          onChange={setCode}
+          label="MFA TOTP 驗證碼"
+          autoFocus
+          disabled={busy}
+          onEnter={() => void submit()}
         />
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="btn btn-ghost" disabled={busy}>

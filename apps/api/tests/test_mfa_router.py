@@ -275,6 +275,23 @@ async def test_login_verify_with_wrong_code_returns_401(
     assert response.status_code == 401
 
 
+async def test_login_verify_accepts_full_length_backup_code(
+    client: AsyncClient, make_user: Callable[..., Any], db_session: AsyncSession
+) -> None:
+    user = await make_user()
+    setup = await mfa_svc.setup_mfa(db_session, user)
+    confirm_code = pyotp.TOTP(setup["secret"]).now()
+    await mfa_svc.confirm_mfa(db_session, user, confirm_code)
+    challenge_token = create_mfa_challenge_token(subject=str(user.id))
+
+    response = await client.post(
+        "/auth/mfa/login/verify",
+        json={"challenge_token": challenge_token, "code": setup["backup_codes"][0]},
+    )
+
+    assert response.status_code == 200
+
+
 async def test_login_verify_for_unknown_user_id_returns_401(client: AsyncClient) -> None:
     challenge_token = create_mfa_challenge_token(subject=str(uuid.uuid4()))
 
