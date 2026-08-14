@@ -596,28 +596,30 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-          <span>
-            <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>跨模組動態</span>
-            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
-              {widgets.length} 個摘要 · {visibleItems} 筆項目
+      {profile !== "student" && (
+        <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <span>
+              <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>跨模組動態</span>
+              <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
+                {widgets.length} 個摘要 · {visibleItems} 筆項目
+              </span>
             </span>
-          </span>
-          <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
-        </summary>
-        <div className="mt-4">
-          {loading ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
-            </div>
-          ) : hasAny ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {widgets.map((w, index) => <WidgetCard key={w.key} w={w} index={index} />)}
-            </div>
-          ) : <EmptyState />}
-        </div>
-      </details>
+            <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+          </summary>
+          <div className="mt-4">
+            {loading ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : hasAny ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {widgets.map((w, index) => <WidgetCard key={w.key} w={w} index={index} />)}
+              </div>
+            ) : <EmptyState />}
+          </div>
+        </details>
+      )}
 
       {loading && (
         <p className="flex items-center justify-center gap-2 text-xs"
