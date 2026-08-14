@@ -11,7 +11,6 @@ import {
   FilePenLine,
   ScrollText,
   Trash2,
-  Loader2,
   Undo2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -29,7 +28,6 @@ import {
   WorkflowStatusBadge,
   WorkflowTimeline,
   buildArticleDisplayRows,
-  filenameFromContentDisposition,
   isTab,
   type Tab,
 } from "@/components/regulations/RegulationDetailSections";
@@ -39,6 +37,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { authFetch, documentsApi, regulationsApi, regulationHref, apiErrorMessage } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
 import { recordRecent } from "@/lib/recents";
 import {
@@ -128,7 +127,6 @@ export default function RegulationDetailPageClient({
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
   const [highlightedArticleId, setHighlightedArticleId] = useState<string | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const [printingPdf, setPrintingPdf] = useState(false);
   const [publishedDoc, setPublishedDoc] = useState<DocumentOut | null>(null);
   const { can, isAdmin } = usePermissions();
   const [currentUserId, setCurrentUserId] = useState("");
@@ -682,49 +680,14 @@ export default function RegulationDetailPageClient({
                 </button>
 
                 {/* 匯出法規 PDF（帶 token 避免 401） */}
-                <button
-                  onClick={async () => {
-                    if (printingPdf) return;
-                    const toastId = toast.loading("正在處理檔案，請稍候...");
-                    setPrintingPdf(true);
-                    try {
-                      const res = await authFetch(apiUrl(`${currentRegHref}/print`), {
-                        credentials: "include",
-                      });
-                      if (!res.ok) throw new Error(res.statusText);
-                      const blob = await res.blob();
-                      const filename = filenameFromContentDisposition(
-                        res.headers.get("Content-Disposition"),
-                        `${reg.title || "法規"}.pdf`,
-                      );
-                      const url = URL.createObjectURL(blob);
-                      const anchor = document.createElement("a");
-                      anchor.href = url;
-                      anchor.download = filename;
-                      document.body.appendChild(anchor);
-                      anchor.click();
-                      anchor.remove();
-                      setTimeout(() => URL.revokeObjectURL(url), 10000);
-                      toast.success("PDF 已下載", { id: toastId });
-                    } catch (e) {
-                      toast.error(`列印失敗${e instanceof Error && e.message ? `：${e.message}` : ""}`, { id: toastId });
-                    } finally {
-                      setPrintingPdf(false);
-                    }
-                  }}
-                  disabled={printingPdf}
+                <AnimatedDownloadButton
+                  request={() => authFetch(apiUrl(`${currentRegHref}/print`), { credentials: "include" })}
+                  filename={`${reg.title || "法規"}.pdf`}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 transition-colors hover:opacity-80 disabled:opacity-60 disabled:cursor-wait"
-                  style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-                  {printingPdf ? (
-                    <Loader2 size={12} className="animate-spin" aria-hidden={true} />
-                  ) : (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                      <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                      <rect x="6" y="14" width="12" height="8"/>
-                    </svg>
-                  )}
-                  {printingPdf ? "正在處理檔案" : "匯出 PDF"}
-                </button>
+                  style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+                  label="匯出 PDF"
+                  onComplete={() => toast.success("PDF 已下載")}
+                  onError={(error) => toast.error(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
                 </div>
 
                 <div className="regulation-detail-management-group" role="group" aria-label="法規管理">

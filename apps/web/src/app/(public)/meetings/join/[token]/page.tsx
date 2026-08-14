@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertCircle, BookOpen, CheckCircle2, FileText, Hand, MessageSquare, Shield } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
 import { unlockMeetings } from "@/lib/navigation";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { useWS } from "@/hooks/useWS";
 import type { BallotChoice, MeetingJoinOut, MeetingRequestType, MeetingScreenOut } from "@/lib/types";
 
@@ -191,17 +192,15 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
             </Link>
           )}
           {current?.attachments.map((attachment) => (
-            <a
+            <AnimatedDownloadButton
               key={attachment.id}
               href={
                 attachment.link_url ||
                 meetingsApi.agendaAttachmentDownloadUrl(meeting.id, current.id, attachment.id)
               }
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-              {attachment.display_name || attachment.filename}
-            </a>
+              className="rounded-md border border-[var(--border)] px-3 py-2 text-left text-sm"
+              filename={attachment.display_name || attachment.filename}
+              label={attachment.display_name || attachment.filename} />
           ))}
           {current?.artifact_links.map((link) => (
             <a

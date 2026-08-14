@@ -7,6 +7,7 @@ import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionEventOut, PetitionStatsOut, PetitionStatus } from "@/lib/types";
 import { cacheGet, cacheSet, cachePurge } from "@/lib/api-cache";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
@@ -501,9 +502,13 @@ export default function PetitionManagePage() {
                     {selected.attachments.length === 0 ? (
                       <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無附件。</p>
                     ) : selected.attachments.map((att) => (
-                      <a key={att.id} className="block rounded-lg p-3 text-sm" style={{ border: "1px solid var(--border)", textDecoration: "none" }} href={petitionsApi.attachmentDownloadUrl(selected.id, att.id)} target="_blank">
-                        {att.display_name || att.filename} · {att.visibility === "internal" ? "內部" : "公開"}
-                      </a>
+                      <AnimatedDownloadButton
+                        key={att.id}
+                        className="block w-full rounded-lg p-3 text-left text-sm"
+                        style={{ border: "1px solid var(--border)" }}
+                        href={petitionsApi.attachmentDownloadUrl(selected.id, att.id)}
+                        filename={att.display_name || att.filename}
+                        label={`${att.display_name || att.filename} · ${att.visibility === "internal" ? "內部" : "公開"}`} />
                     ))}
                   </div>
                 </div>

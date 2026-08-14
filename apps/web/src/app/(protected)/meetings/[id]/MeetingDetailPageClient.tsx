@@ -10,7 +10,6 @@ import {
   FileText,
   Mail,
   Monitor,
-  Paperclip,
   Pause,
   Play,
   Radio,
@@ -19,6 +18,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type { MeetingMinutesOut, MeetingOut } from "@/lib/types";
 import { recordRecent } from "@/lib/recents";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
@@ -409,17 +409,12 @@ export default function MeetingDetailPageClient({
                       attachment.link_url ||
                       meetingsApi.agendaAttachmentDownloadUrl(meeting.id, item.id, attachment.id);
                     return (
-                      <a
+                      <AnimatedDownloadButton
                         key={attachment.id}
                         href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-xs hover:underline">
-                        <Paperclip size={12} aria-hidden="true" />
-                        <span className="truncate">
-                          {attachment.display_name || attachment.filename}
-                        </span>
-                      </a>
+                        className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-xs hover:underline"
+                        filename={attachment.display_name || attachment.filename}
+                        label={attachment.display_name || attachment.filename} />
                     );
                   })}
                 </div>

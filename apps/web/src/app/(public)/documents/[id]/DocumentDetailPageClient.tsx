@@ -4,7 +4,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 import { authFetch, documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
 import type { DocumentWithArchive, UserSummary } from "@/lib/api";
 import type { DocumentVisibility, RecipientDownloadVariant } from "@/lib/types";
@@ -17,6 +16,7 @@ import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { useWS } from "@/hooks/useWS";
 import { apiUrl } from "@/lib/config";
 import { recordRecent } from "@/lib/recents";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 
 const DeferredPanel = () => <div className="card min-h-24 animate-pulse" aria-hidden="true" />;
 const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
@@ -73,18 +73,6 @@ function fmtSize(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function filenameFromContentDisposition(disposition: string | null, fallback: string) {
-  if (!disposition) return fallback;
-  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-  if (encoded) {
-    try {
-      return decodeURIComponent(encoded);
-    } catch {
-      return fallback;
-    }
-  }
-  return disposition.match(/filename="?([^"]+)"?/i)?.[1] ?? fallback;
-}
 
 function formatActingSignature(step: DocumentWithArchive["approvals"][number] | undefined) {
   if (!step) return null;
@@ -201,7 +189,6 @@ export default function DocumentDetailPageClient({
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
   const [allUsersLoaded, setAllUsersLoaded] = useState(false);
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
-  const [printingPdf, setPrintingPdf] = useState(false);
   const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
   const [archiveAtInput, setArchiveAtInput] = useState("");
   const [archiveSettingsBusy, setArchiveSettingsBusy] = useState(false);
@@ -623,7 +610,6 @@ export default function DocumentDetailPageClient({
                 aria-label="下載版本"
                 value={downloadVariant}
                 onChange={(event) => setDownloadVariant(event.target.value as RecipientDownloadVariant)}
-                disabled={printingPdf}
                 className="h-full min-w-[5.25rem] appearance-auto bg-transparent px-2.5 pr-7 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
                 style={{ color: "var(--text-primary)", borderColor: "var(--primary)" }}
               >
@@ -633,59 +619,26 @@ export default function DocumentDetailPageClient({
               </select>
             </label>
           )}
-          <button
-            onClick={async () => {
-              if (printingPdf) return;
-              const toastId = toast.loading("正在處理檔案，請稍候...");
-              setPrintingPdf(true);
-              try {
-                const query = canChoosePrintVariant ? `?variant=${downloadVariant}` : "";
-                const res = await authFetch(apiUrl(`/documents/${id}/print${query}`), {
-                  credentials: "include",
-                });
-                if (!res.ok) {
-                  const body = await res.json().catch(() => null) as { detail?: string } | null;
-                  throw new Error(body?.detail || res.statusText);
-                }
-                const blob = await res.blob();
-                const fallbackName = `${doc.serial_number || doc.title || "公文"}.pdf`;
-                const filename = filenameFromContentDisposition(
-                  res.headers.get("Content-Disposition"),
-                  fallbackName,
-                );
-                const url = URL.createObjectURL(blob);
-                const anchor = document.createElement("a");
-                anchor.href = url;
-                anchor.download = filename;
-                document.body.appendChild(anchor);
-                anchor.click();
-                anchor.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 10000);
-                toast.success("PDF 已下載", { id: toastId });
-              } catch (e) {
-                toast.error(`列印失敗${e instanceof Error && e.message ? `：${e.message}` : ""}`, { id: toastId });
-              } finally {
-                setPrintingPdf(false);
+          <AnimatedDownloadButton
+            request={async () => {
+              const query = canChoosePrintVariant ? `?variant=${downloadVariant}` : "";
+              const res = await authFetch(apiUrl(`/documents/${id}/print${query}`), { credentials: "include" });
+              if (!res.ok) {
+                const body = await res.json().catch(() => null) as { detail?: string } | null;
+                throw new Error(body?.detail || res.statusText);
               }
+              return res;
             }}
-            disabled={printingPdf}
-            aria-busy={printingPdf}
+            filename={`${doc.serial_number || doc.title || "公文"}.pdf`}
             className="px-4 py-2 text-sm font-medium inline-flex flex-1 items-center justify-center gap-1.5 transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-wait"
             style={{
               background: "var(--primary-dim)",
               color: "var(--primary)",
               borderLeft: canChoosePrintVariant ? "1px solid var(--border-strong)" : undefined,
-            }}>
-            {printingPdf ? (
-              <Loader2 size={13} className="animate-spin" aria-hidden={true} />
-            ) : (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                <rect x="6" y="14" width="12" height="8"/>
-              </svg>
-            )}
-            {printingPdf ? "正在處理檔案" : "列印公文"}
-          </button>
+            }}
+            label="列印公文"
+            onComplete={() => toast.success("PDF 已下載")}
+            onError={(error) => toast.error(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
           </div>
           </div>
         </div>
@@ -1219,8 +1172,12 @@ export default function DocumentDetailPageClient({
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
                             {!isLink && (
-                              <a href={fileUrl}
-                                className="hover:underline" style={{ color: "var(--primary)" }}>下載</a>
+                              <AnimatedDownloadButton
+                                href={fileUrl}
+                                filename={a.display_name || a.filename}
+                                className="text-xs hover:underline"
+                                style={{ color: "var(--primary)" }}
+                                label="下載" />
                             )}
                             {isDraft && (
                               <button
@@ -1253,9 +1210,13 @@ export default function DocumentDetailPageClient({
                           <object data={previewUrl} type="application/pdf"
                             className="w-full" style={{ height: "420px", display: "block" }}>
                             <p className="text-xs p-3" style={{ color: "var(--text-muted)" }}>
-                              瀏覽器不支援 PDF 預覽，請
-                              <a href={fileUrl} target="_blank" rel="noopener noreferrer"
-                                style={{ color: "var(--primary)" }}>下載查看</a>。
+                              瀏覽器不支援 PDF 預覽，請{" "}
+                              <AnimatedDownloadButton
+                                href={fileUrl}
+                                filename={a.display_name || a.filename}
+                                className="text-xs underline"
+                                style={{ color: "var(--primary)" }}
+                                label="下載查看" />。
                             </p>
                           </object>
                         )}

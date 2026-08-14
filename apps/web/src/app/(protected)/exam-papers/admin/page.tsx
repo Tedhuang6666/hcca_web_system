@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Search, Upload } from "lucide-react";
+import { Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError, examPapersApi } from "@/lib/api";
 import type {
@@ -10,6 +10,7 @@ import type {
   ExamPaperListItem,
   ExamTraceInspectOut,
 } from "@/lib/types";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 
 const tracks: { value: ExamGradeTrack; label: string }[] = [
   { value: "first", label: "一類" },
@@ -349,11 +350,11 @@ export default function ExamPaperAdminPage() {
                     onClick={() => showDownloads(paper)}>
                     <Search size={15} /> 紀錄
                   </button>
-                  <a
+                  <AnimatedDownloadButton
                     className="btn btn-ghost inline-flex min-w-0 items-center justify-center gap-2"
-                    href={examPapersApi.downloadUrl(paper.id)}>
-                    <Download size={15} /> 測試
-                  </a>
+                    href={examPapersApi.downloadUrl(paper.id)}
+                    filename={`${paper.title}.pdf`}
+                    label="測試" />
                 </div>
               </div>
             ))}
