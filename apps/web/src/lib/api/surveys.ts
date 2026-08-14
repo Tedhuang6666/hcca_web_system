@@ -1,7 +1,7 @@
 import type {
   SurveyListItem, SurveyOut, SurveyQuestionOut, SurveyResponseAdminItem, SurveyResponseOut, SurveyStats,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment, uploadWithProgress } from "./core";
 
 // ── 問卷系統 ──────────────────────────────────────────────────────────────────
 
@@ -58,16 +58,16 @@ export const surveysApi = {
   stats: (id: string) => get<SurveyStats>(`/surveys/${pathSegment(id)}/stats`),
   responses: (id: string) =>
     get<SurveyResponseAdminItem[]>(`/surveys/${pathSegment(id)}/responses`),
-  uploadImage: async (file: File): Promise<{ url: string; filename: string }> => {
+  uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<{ url: string; filename: string }> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/surveys/images`, {
+      uploadWithProgress(`${BASE}/surveys/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();

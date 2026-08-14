@@ -1,7 +1,7 @@
 import type {
   AmendmentComparisonRow, RegulationArticleOut, RegulationCategory, RegulationListItem, RegulationOut, RegulationRevisionOut, RegulationSearchResult, RegulationTreeNodeOut, RegulationWorkflowLogOut,
 } from "../types";
-import { authFetch, BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
+import { authFetch, BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment, uploadWithProgress } from "./core";
 
 // ── 法規 ──────────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export const regulationsApi = {
     category: RegulationCategory;
     publish_immediately?: boolean;
     change_brief?: string;
-  }) => {
+  }, onProgress?: (progress: number) => void) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("org_id", body.org_id);
@@ -56,12 +56,12 @@ export const regulationsApi = {
     fd.append("change_brief", body.change_brief ?? "匯入既有現行法規");
 
     const doFetch = () =>
-      authFetch(`${BASE}/regulations/import-docx`, {
+      uploadWithProgress(`${BASE}/regulations/import-docx`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
 
     let res = await doFetch();
     if (res.status === 401) {
@@ -85,7 +85,7 @@ export const regulationsApi = {
     category: RegulationCategory;
     publish_immediately?: boolean;
     change_brief?: string;
-  }) => {
+  }, onProgress?: (progress: number) => void) => {
     const fd = new FormData();
     files.forEach(file => fd.append("files", file));
     fd.append("org_id", body.org_id);
@@ -94,12 +94,12 @@ export const regulationsApi = {
     fd.append("change_brief", body.change_brief ?? "匯入既有現行法規");
 
     const doFetch = () =>
-      authFetch(`${BASE}/regulations/import-documents`, {
+      uploadWithProgress(`${BASE}/regulations/import-documents`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
 
     let res = await doFetch();
     if (res.status === 401) {

@@ -14,18 +14,18 @@ import type {
   PeriodOut,
   TransferCreate,
 } from "@/lib/types";
-import { ApiError, authFetch, BASE, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
+import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh, uploadWithProgress } from "./core";
 
 export const financeApi = {
-  uploadEvidence: async (ledgerId: string, file: File): Promise<FinanceEvidenceUploadOut> => {
+  uploadEvidence: async (ledgerId: string, file: File, onProgress?: (progress: number) => void): Promise<FinanceEvidenceUploadOut> => {
     const form = new FormData();
     form.append("file", file);
-    const doFetch = () => authFetch(`${BASE}/finance/ledgers/${ledgerId}/evidence`, {
+    const doFetch = () => uploadWithProgress(`${BASE}/finance/ledgers/${ledgerId}/evidence`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),
       body: form,
-    });
+    }, onProgress);
     let response = await doFetch();
     if (response.status === 401 && await silentRefresh()) response = await doFetch();
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));

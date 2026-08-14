@@ -2,18 +2,18 @@ import type {
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut, PetitionStatsOut, PetitionStatus, PetitionTypeOut,
   PetitionPublicListItem, PetitionPublicOut,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 陳情系統 ──────────────────────────────────────────────────────────────────
 
-async function uploadPetitionFile<T>(path: string, fd: FormData): Promise<T> {
+async function uploadPetitionFile<T>(path: string, fd: FormData, onProgress?: (progress: number) => void): Promise<T> {
   const doFetch = () =>
-    authFetch(`${BASE}${path}`, {
+    uploadWithProgress(`${BASE}${path}`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),
       body: fd,
-    });
+    }, onProgress);
   let res = await doFetch();
   if (res.status === 401) {
     const ok = await silentRefresh();
@@ -96,12 +96,12 @@ export const petitionsApi = {
   updateStatus: (id: string, body: { status: PetitionStatus; public_message?: string | null; internal_note?: string | null }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/status`, body),
   addNote: (id: string, content: string) => post<PetitionCaseOut>(`/petitions/${id}/notes`, { content }),
-  uploadAttachment: (id: string, file: File, options?: { verification_code?: string; visibility?: "public" | "internal" }) => {
+  uploadAttachment: (id: string, file: File, options?: { verification_code?: string; visibility?: "public" | "internal" }, onProgress?: (progress: number) => void) => {
     const fd = new FormData();
     fd.append("file", file);
     if (options?.verification_code) fd.append("verification_code", options.verification_code);
     if (options?.visibility) fd.append("visibility", options.visibility);
-    return uploadPetitionFile<{ id: string; filename: string; url: string }>(`/petitions/${id}/attachments`, fd);
+    return uploadPetitionFile<{ id: string; filename: string; url: string }>(`/petitions/${id}/attachments`, fd, onProgress);
   },
   attachmentDownloadUrl: (id: string, attachmentId: string, verificationCode?: string) => {
     const qs = verificationCode ? `?${new URLSearchParams({ verification_code: verificationCode }).toString()}` : "";

@@ -4,7 +4,6 @@ import type {
 import { ApiError } from "../api-helpers";
 import {
   BASE,
-  authFetch,
   csrfHeaders,
   del,
   formatErrorDetail,
@@ -12,17 +11,18 @@ import {
   patch,
   post,
   silentRefresh,
+  uploadWithProgress,
 } from "./core";
 
-async function postForm<T>(path: string, body: FormData, retried = false): Promise<T> {
-  const response = await authFetch(`${BASE}${path}`, {
+async function postForm<T>(path: string, body: FormData, onProgress?: (progress: number) => void, retried = false): Promise<T> {
+  const response = await uploadWithProgress(`${BASE}${path}`, {
     method: "POST",
     credentials: "include",
     headers: csrfHeaders("POST"),
     body,
-  });
+  }, onProgress);
   if (response.status === 401 && !retried && await silentRefresh()) {
-    return postForm<T>(path, body, true);
+    return postForm<T>(path, body, onProgress, true);
   }
   if (!response.ok) {
     let detail: unknown = response.statusText;
@@ -61,11 +61,11 @@ export const classApi = {
     post<ClassRosterEntryOut>(`/classes/${id}/roster`, body),
   bulkRoster: (id: string, body: ClassRosterBulkCreate) =>
     post<ClassRosterBulkOut>(`/classes/${id}/roster/bulk`, body),
-  importRosterFile: (file: File, academicYear?: number) => {
+  importRosterFile: (file: File, academicYear?: number, onProgress?: (progress: number) => void) => {
     const form = new FormData();
     form.append("file", file);
     if (academicYear) form.append("academic_year", String(academicYear));
-    return postForm<ClassRosterPdfImportOut>("/classes/roster/import", form);
+    return postForm<ClassRosterPdfImportOut>("/classes/roster/import", form, onProgress);
   },
   updateRoster: (id: string, entryId: string, body: { seat_number?: number; student_id?: string }) =>
     patch<ClassRosterEntryOut>(`/classes/${id}/roster/${entryId}`, body),

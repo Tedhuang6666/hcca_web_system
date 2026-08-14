@@ -1,7 +1,7 @@
 import type {
   AnnouncementCreate, AnnouncementListItem, AnnouncementMediaOut, AnnouncementOut, AnnouncementStatsOut, AnnouncementUpdate,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 公告系統 ───────────────────────────────────────────────────────────────────
 
@@ -85,16 +85,16 @@ export const announcementsApi = {
     invalidateActiveUrgentCache();
     return result;
   },
-  uploadMedia: async (id: string, file: File): Promise<AnnouncementMediaOut> => {
+  uploadMedia: async (id: string, file: File, onProgress?: (progress: number) => void): Promise<AnnouncementMediaOut> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/announcements/${id}/media`, {
+      uploadWithProgress(`${BASE}/announcements/${id}/media`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();

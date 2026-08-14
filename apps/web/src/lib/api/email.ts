@@ -1,7 +1,7 @@
 import type {
   EmailAnalyticsOut, EmailAttachmentOut, EmailCampaignRecipientOut, EmailComposePayload, EmailMessageCreate, EmailMessageDetailOut, EmailMessageOut, EmailPosition, EmailPreflightOut, EmailRecipientListOut, EmailTemplateOut, RecipientPreviewOut, RecipientSelector, UploadedImageOut,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 電子郵件 ──────────────────────────────────────────────────────────────────
 
@@ -51,16 +51,16 @@ export const emailApi = {
     return get<EmailMessageOut[]>(`/email/messages${q.size ? `?${q}` : ""}`);
   },
   getMessage: (id: string) => get<EmailMessageDetailOut>(`/email/messages/${id}`),
-  uploadImage: async (file: File): Promise<UploadedImageOut> => {
+  uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<UploadedImageOut> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/email/images`, {
+      uploadWithProgress(`${BASE}/email/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();
@@ -109,17 +109,17 @@ export const emailApi = {
   updateRecipientList: (id: string, body: Partial<EmailRecipientListOut>) =>
     patch<EmailRecipientListOut>(`/email/recipient-lists/${id}`, body),
   deleteRecipientList: (id: string) => del<void>(`/email/recipient-lists/${id}`),
-  uploadAttachment: async (file: File, templateId?: string): Promise<EmailAttachmentOut> => {
+  uploadAttachment: async (file: File, templateId?: string, onProgress?: (progress: number) => void): Promise<EmailAttachmentOut> => {
     const fd = new FormData();
     fd.append("file", file);
     const q = templateId ? `?template_id=${encodeURIComponent(templateId)}` : "";
     const doFetch = () =>
-      authFetch(`${BASE}/email/attachments${q}`, {
+      uploadWithProgress(`${BASE}/email/attachments${q}`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();

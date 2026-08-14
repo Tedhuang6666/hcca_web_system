@@ -1,7 +1,7 @@
 import type {
   ExamGradeTrack, ExamPaperDownloadOut, ExamPaperListItem, ExamPaperOut, ExamPaperUpdate, ExamTraceInspectOut,
 } from "../types";
-import { authFetch, BASE, get, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { BASE, get, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 段考題庫 ────────────────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ export const examPapersApi = {
     grade_track?: ExamGradeTrack | null;
     exam_number: number;
     is_published: boolean;
-  }): Promise<ExamPaperOut> => {
+  }, onProgress?: (progress: number) => void): Promise<ExamPaperOut> => {
     const fd = new FormData();
     fd.append("file", body.file);
     fd.append("title", body.title);
@@ -44,12 +44,12 @@ export const examPapersApi = {
     fd.append("exam_number", String(body.exam_number));
     fd.append("is_published", String(body.is_published));
     const doFetch = () =>
-      authFetch(`${BASE}/exam-papers`, {
+      uploadWithProgress(`${BASE}/exam-papers`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401 && await silentRefresh()) res = await doFetch();
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
@@ -59,16 +59,16 @@ export const examPapersApi = {
   delete: (id: string) => del<void>(`/exam-papers/${id}`),
   downloadUrl: (id: string) => `${BASE}/exam-papers/${id}/download`,
   downloads: (id: string) => get<ExamPaperDownloadOut[]>(`/exam-papers/${id}/downloads`),
-  inspectTrace: async (file: File): Promise<ExamTraceInspectOut> => {
+  inspectTrace: async (file: File, onProgress?: (progress: number) => void): Promise<ExamTraceInspectOut> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/exam-papers/trace/inspect`, {
+      uploadWithProgress(`${BASE}/exam-papers/trace/inspect`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401 && await silentRefresh()) res = await doFetch();
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));

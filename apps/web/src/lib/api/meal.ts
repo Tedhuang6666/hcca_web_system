@@ -1,7 +1,7 @@
 import type {
   ItemStatOut, MealAvailabilityOut, MealClassPickupCodeOut, MealOrderListItem, MealOrderOut, MealPickupLookupOut, MealProductOut, MealVendorApplicationOut, MealVendorOut, MenuItemOut, MenuScheduleListItem, MenuScheduleOut, PickupListItemOut, VendorManagerOut,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 學餐系統 ──────────────────────────────────────────────────────────────────
 
@@ -70,16 +70,16 @@ export const mealApi = {
     get<VendorManagerOut[]>(`/meal/vendors/${vendorId}/managers`),
   removeVendorManager: (vendorId: string, userId: string) =>
     del<void>(`/meal/vendors/${vendorId}/managers/${userId}`),
-  uploadImage: async (file: File): Promise<{ url: string }> => {
+  uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<{ url: string }> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/meal/images`, {
+      uploadWithProgress(`${BASE}/meal/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401 && (await silentRefresh())) res = await doFetch();
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));

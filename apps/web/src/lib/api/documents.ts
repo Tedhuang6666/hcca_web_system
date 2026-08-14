@@ -2,7 +2,7 @@ import type {
   BatchDocumentOperationOut, DocumentApprovalDelegationOut, DocumentCreate, DocumentListItem,
   DocumentOut, RecipientDownloadVariant,
 } from "../types";
-import { authFetch, BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 export type DocumentWithArchive = DocumentOut & {
   archive_at: string | null;
@@ -95,7 +95,7 @@ export const documentsApi = {
     is_active: boolean;
   }>) => patch<DocumentApprovalDelegationOut>(`/documents/management/delegations/${id}`, body),
   deleteDelegation: (id: string) => del<void>(`/documents/management/delegations/${id}`),
-  uploadAttachment: async (id: string, file: File): Promise<{ id: string; filename: string; display_name: string | null; url: string }> => {
+  uploadAttachment: async (id: string, file: File, onProgress?: (progress: number) => void): Promise<{ id: string; filename: string; display_name: string | null; url: string }> => {
     // 不使用 request() — 它會強制 Content-Type: application/json，
     // 導致 browser 無法自動設定 multipart/form-data boundary，後端收到 422。
     // 此處直接用 fetch，讓 browser 自動處理 multipart Content-Type。
@@ -103,12 +103,12 @@ export const documentsApi = {
     fd.append("file", file);
 
     const doFetch = () =>
-      authFetch(`${BASE}/documents/${id}/attachments`, {
+      uploadWithProgress(`${BASE}/documents/${id}/attachments`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
 
     let res = await doFetch();
 

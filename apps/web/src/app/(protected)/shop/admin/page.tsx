@@ -6,6 +6,7 @@ import { activitiesApi, shopApi, classApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import type {
   SchoolClassListItem,
@@ -36,26 +37,20 @@ function Thumb({ url, size = 44 }: { url: string | null; size?: number }) {
 }
 
 function ImageField({ value, onChange }: { value: string | null; onChange: (u: string | null) => void }) {
-  const [busy, setBusy] = useState(false);
-  const upload = async (file: File) => {
-    setBusy(true);
-    try {
-      const { url } = await shopApi.uploadImage(file);
-      onChange(url);
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "上傳失敗"));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const upload = (file: File, reportProgress: (progress: number) => void) =>
+    shopApi.uploadImage(file, reportProgress);
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-start gap-3">
       <Thumb url={value} size={48} />
-      <label className="btn btn-ghost text-xs cursor-pointer">
-        {busy ? "上傳中…" : value ? "更換圖片" : "上傳圖片"}
-        <input type="file" accept="image/*" className="hidden"
-          onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-      </label>
+      <div className="min-w-0 flex-1">
+        <AnimatedFileUpload
+          accept="image/*"
+          label={value ? "拖曳新圖片到這裡" : "拖曳商品圖片到這裡"}
+          hint="支援點擊選取或貼上圖片"
+          onUpload={upload}
+          onUploaded={(result) => onChange(result.url)}
+        />
+      </div>
       {value && (
         <button onClick={() => onChange(null)} className="text-xs" style={{ color: "var(--text-muted)" }}>
           移除

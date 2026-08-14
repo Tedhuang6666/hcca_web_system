@@ -1,7 +1,7 @@
 import type {
   CartOut, CatalogCategoryOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
@@ -163,16 +163,16 @@ export const shopApi = {
   },
 
   // 圖片上傳
-  uploadImage: async (file: File): Promise<{ url: string }> => {
+  uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<{ url: string }> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/shop/images`, {
+      uploadWithProgress(`${BASE}/shop/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401 && (await silentRefresh())) res = await doFetch();
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));

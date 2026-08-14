@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import {
   GovernanceLinkNotice,
   createGovernanceBacklink,
@@ -100,21 +101,9 @@ function ImageField({
   label: string;
   hint?: string;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-
-  const upload = async (file: File) => {
-    if (!file.type.startsWith("image/")) { toast.error("請選擇圖片檔案"); return; }
-    setUploading(true);
-    try {
-      const { url } = await surveysApi.uploadImage(file);
-      onChange(url);
-      toast.success("圖片已上傳");
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "圖片上傳失敗"));
-    } finally {
-      setUploading(false);
-    }
+  const upload = (file: File, reportProgress: (progress: number) => void) => {
+    if (!file.type.startsWith("image/")) throw new Error("請選擇圖片檔案");
+    return surveysApi.uploadImage(file, reportProgress);
   };
 
   return (
@@ -132,19 +121,18 @@ function ImageField({
           </button>
         </div>
       ) : (
-        <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-          className="btn btn-ghost w-full" aria-busy={uploading}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          {uploading ? "上傳中…" : "選擇圖片上傳"}
-        </button>
+        <AnimatedFileUpload
+          accept="image/*"
+          label="拖曳圖片到這裡"
+          hint="圖片會在上傳時逐步恢復色彩"
+          onUpload={upload}
+          onUploaded={(result) => {
+            onChange(result.url);
+            toast.success("圖片已上傳");
+          }}
+        />
       )}
       {hint && <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{hint}</p>}
-      <input ref={inputRef} type="file" accept="image/*" className="hidden"
-        onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
     </div>
   );
 }

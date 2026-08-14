@@ -17,6 +17,7 @@ import { useWS } from "@/hooks/useWS";
 import { apiUrl } from "@/lib/config";
 import { recordRecent } from "@/lib/recents";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 const DeferredPanel = () => <div className="card min-h-24 animate-pulse" aria-hidden="true" />;
 const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
@@ -72,7 +73,6 @@ function fmtSize(bytes: number) {
     ? `${(bytes / 1024).toFixed(1)} KB`
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
-
 
 function formatActingSignature(step: DocumentWithArchive["approvals"][number] | undefined) {
   if (!step) return null;
@@ -185,7 +185,6 @@ export default function DocumentDetailPageClient({
   const [forbidden, setForbidden] = useState(false);
   const [submitMode, setSubmitMode] = useState(false);
   const [approverIds, setApproverIds] = useState<string[]>([]);
-  const [uploadingFile, setUploadingFile] = useState(false);
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
   const [allUsersLoaded, setAllUsersLoaded] = useState(false);
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
@@ -344,15 +343,11 @@ export default function DocumentDetailPageClient({
     } catch { /* 查無建議審核人時靜默失敗 */ }
   };
 
-  const uploadFile = async (file: File) => {
-    setUploadingFile(true);
-    try {
-      await documentsApi.uploadAttachment(id, file);
-      toast.success(`已上傳 ${file.name}`);
-      fetchDoc();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "上傳失敗"));
-    } finally { setUploadingFile(false); }
+  const uploadFile = async (file: File, reportProgress: (progress: number) => void) => {
+    const uploaded = await documentsApi.uploadAttachment(id, file, reportProgress);
+    toast.success(`已上傳 ${uploaded.filename}`);
+    fetchDoc();
+    return uploaded;
   };
 
   const deleteAttachment = async (attId: string) => {
@@ -1113,13 +1108,14 @@ export default function DocumentDetailPageClient({
                 附件 {doc.attachments.length > 0 && `(${doc.attachments.length})`}
               </h2>
               {isDraft && (
-                <label className={`text-xs cursor-pointer px-2.5 py-1 rounded transition-opacity hover:opacity-80
-                  ${uploadingFile ? "opacity-40 pointer-events-none" : ""}`}
-                  style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
-                  <input type="file" className="hidden" disabled={uploadingFile}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }} />
-                  {uploadingFile ? "上傳中..." : "＋ 上傳附件"}
-                </label>
+                <div className="w-full max-w-sm">
+                  <AnimatedFileUpload
+                    accept=".pdf,image/*,.zip"
+                    label="拖曳附件到這裡"
+                    hint="支援 PDF、圖片、ZIP，上限 20MB"
+                    onUpload={uploadFile}
+                  />
+                </div>
               )}
             </div>
             {doc.attachments.length === 0

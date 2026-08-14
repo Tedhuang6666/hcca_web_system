@@ -1,7 +1,7 @@
 import type {
   AutomationMeta, AutomationRuleCreate, AutomationRuleOut, AutomationRuleUpdate, DecisionCreate, DecisionOut, DecisionUpdate, EntityRelationCreate, EntityRelationGraphOut, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut, GovernanceCaseUpdate, GovernanceDashboardOut, GovernanceDiscordEventRouteIn, GovernanceDiscordEventRouteOut, GovernanceDiscordWorkspaceIn, GovernanceDiscordWorkspaceOut, GovernanceModuleCapabilityOut, GovernanceResourceSearchOut, GovernanceWorkflowTemplateCreate, GovernanceWorkflowTemplateOut, MatterCreate, MatterLinkRef, MatterListItem, MatterOut, MatterResourceCreate, MatterResourceOut, MatterResourceUpdate, MatterRoleAssignmentCreate, MatterRoleAssignmentOut, MatterRoleAssignmentUpdate, MatterSpawnKind, MatterSpawnResult, MatterUpdate, PlanningDocumentAttachmentOut, PlanningDocumentCreate, PlanningDocumentOut, PlanningDocumentRevisionCreate, PlanningDocumentRevisionOut, PlanningDocumentUpdate, ProgramCreate, ProgramOut, ProgramUpdate, TimelineEventCreate, TimelineEventOut, WorkItemCreate, WorkItemOut,
 } from "../types";
-import { authFetch, BASE, get, post, patch, put, del, pathSegment, csrfHeaders, silentRefresh, formatErrorDetail, ApiError } from "./core";
+import { BASE, get, post, patch, put, del, pathSegment, csrfHeaders, silentRefresh, formatErrorDetail, ApiError, uploadWithProgress } from "./core";
 
 export const governanceApi = {
   dashboard: () => get<GovernanceDashboardOut>("/governance/dashboard"),
@@ -117,16 +117,16 @@ export const governanceApi = {
     patch<MatterResourceOut>(`/governance/matters/${matterId}/resources/${resourceId}`, body),
   deleteResource: (matterId: string, resourceId: string) =>
     del<void>(`/governance/matters/${matterId}/resources/${resourceId}`),
-  uploadPlanningAttachment: async (id: string, file: File) => {
+  uploadPlanningAttachment: async (id: string, file: File, onProgress?: (progress: number) => void) => {
     const form = new FormData();
     form.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/governance/planning-documents/${id}/attachments`, {
+      uploadWithProgress(`${BASE}/governance/planning-documents/${id}/attachments`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: form,
-      });
+      }, onProgress);
     let response = await doFetch();
     if (response.status === 401 && await silentRefresh()) response = await doFetch();
     if (!response.ok) {

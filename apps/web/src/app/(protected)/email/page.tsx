@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type { RichTextareaHandle } from "@/components/ui/RichTextarea";
 const RichTextarea = dynamic(() => import("@/components/ui/RichTextarea"), { ssr: false });
 import RecipientPicker from "@/components/email/RecipientPicker";
@@ -95,7 +96,6 @@ function ComposeInner() {
   const [cardRows, setCardRows] = useState<EmailCardRow[]>([]);
   const [buttons, setButtons] = useState<EmailButton[]>([]);
   const [blocks, setBlocks] = useState<EmailBlock[]>([]);
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [variableDefinitions, setVariableDefinitions] = useState<EmailVariableDefinition[]>([]);
   const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
   const [recipientRows, setRecipientRows] = useState<RecipientRow[]>([
@@ -131,7 +131,6 @@ function ComposeInner() {
   const [recipientListId, setRecipientListId] = useState("");
   const [attachments, setAttachments] = useState<EmailAttachmentOut[]>([]);
   const [retainedAttachmentIds, setRetainedAttachmentIds] = useState<string[]>([]);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [trackOpens, setTrackOpens] = useState(true);
   const [trackClicks, setTrackClicks] = useState(true);
   const [preflightResult, setPreflightResult] = useState<EmailPreflightOut | null>(null);
@@ -773,21 +772,15 @@ function ComposeInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedTemplateId, requestedListId, platformTemplates, recipientLists]);
 
-  const uploadAttachment = async (file: File) => {
-    setUploadingAttachment(true);
-    try {
-      const attachment = await emailApi.uploadAttachment(file, platformTemplateId || undefined);
-      setAttachments((rows) => [...rows, attachment]);
-      toast.success(
-        attachment.delivery_mode === "attachment"
-          ? "附件已加入郵件"
-          : "檔案較大，將以安全下載連結寄送",
-      );
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "附件上傳失敗"));
-    } finally {
-      setUploadingAttachment(false);
-    }
+  const uploadAttachment = async (file: File, reportProgress: (progress: number) => void) => {
+    const attachment = await emailApi.uploadAttachment(file, platformTemplateId || undefined, reportProgress);
+    setAttachments((rows) => [...rows, attachment]);
+    toast.success(
+      attachment.delivery_mode === "attachment"
+        ? "附件已加入郵件"
+        : "檔案較大，將以安全下載連結寄送",
+    );
+    return attachment;
   };
 
   const removeAttachment = async (attachment: EmailAttachmentOut) => {
@@ -829,30 +822,18 @@ function ComposeInner() {
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
-  const uploadBlockImage = async (i: number, file: File) => {
-    setUploadingImage(true);
-    try {
-      const result = await emailApi.uploadImage(file);
-      updateBlock(i, { url: result.url });
-      toast.success("圖片已上傳");
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "圖片上傳失敗"));
-    } finally {
-      setUploadingImage(false);
-    }
+  const uploadBlockImage = async (i: number, file: File, reportProgress: (progress: number) => void) => {
+    const result = await emailApi.uploadImage(file, reportProgress);
+    updateBlock(i, { url: result.url });
+    toast.success("圖片已上傳");
+    return result;
   };
-  const uploadBannerImage = async (file: File) => {
-    setUploadingImage(true);
-    try {
-      const result = await emailApi.uploadImage(file);
-      setBannerImageUrl(result.url);
-      if (!bannerImageAlt.trim()) setBannerImageAlt(result.filename);
-      toast.success("主圖已上傳");
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "主圖上傳失敗"));
-    } finally {
-      setUploadingImage(false);
-    }
+  const uploadBannerImage = async (file: File, reportProgress: (progress: number) => void) => {
+    const result = await emailApi.uploadImage(file, reportProgress);
+    setBannerImageUrl(result.url);
+    if (!bannerImageAlt.trim()) setBannerImageAlt(result.filename);
+    toast.success("主圖已上傳");
+    return result;
   };
 
   // ── 個人化變數 ─────────────────────────────────────────────────────────────
@@ -1410,28 +1391,20 @@ function ComposeInner() {
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 信件主圖
               </label>
-              <div className="flex gap-2">
+              <div className="grid gap-2">
                 <input
-                  className="input flex-1"
+                  className="input"
                   value={bannerImageUrl}
                   maxLength={500}
                   onChange={(e) => setBannerImageUrl(e.target.value)}
                   placeholder="圖片網址，或點右側上傳"
                 />
-                <label className={`btn btn-secondary btn-sm shrink-0 ${uploadingImage ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
-                  {uploadingImage ? "上傳中…" : "上傳"}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp"
-                    className="hidden"
-                    disabled={uploadingImage}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void uploadBannerImage(file);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                </label>
+                <AnimatedFileUpload
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  label="拖曳主圖到這裡"
+                  hint="支援點擊選取或貼上圖片"
+                  onUpload={uploadBannerImage}
+                />
               </div>
               <input
                 className="input"
@@ -1587,26 +1560,19 @@ function ComposeInner() {
                   )}
                   {block.type === "image" && (
                     <div className="space-y-2">
-                      <div className="flex gap-2">
+                      <div className="grid gap-2">
                         <input
                           className="input min-w-0 flex-1"
                           value={block.url ?? ""}
                           placeholder="圖片網址，或使用右側上傳"
                           onChange={(event) => updateBlock(index, { url: event.target.value })}
                         />
-                        <label className="btn btn-secondary btn-sm cursor-pointer">
-                          上傳
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/gif,image/webp"
-                            className="hidden"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (file) void uploadBlockImage(index, file);
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
+                        <AnimatedFileUpload
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          label="拖曳圖片到這裡"
+                          hint="支援點擊選取或貼上圖片"
+                          onUpload={(file, reportProgress) => uploadBlockImage(index, file, reportProgress)}
+                        />
                       </div>
                       <input
                         className="input"
@@ -1975,7 +1941,7 @@ function ComposeInner() {
                   )}
                   {blk.type === "image" && (
                     <div className="space-y-2">
-                      <div className="flex gap-2">
+                      <div className="grid gap-2">
                         <input
                           className="input flex-1"
                           value={blk.url ?? ""}
@@ -1983,20 +1949,12 @@ function ComposeInner() {
                           placeholder="圖片網址，或點右側上傳"
                           onChange={(e) => updateBlock(i, { url: e.target.value })}
                         />
-                        <label className={`btn btn-secondary btn-sm shrink-0 ${uploadingImage ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
-                          {uploadingImage ? "上傳中…" : "上傳"}
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/gif,image/webp"
-                            className="hidden"
-                            disabled={uploadingImage}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) void uploadBlockImage(i, file);
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
+                        <AnimatedFileUpload
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          label="拖曳圖片到這裡"
+                          hint="支援點擊選取或貼上圖片"
+                          onUpload={(file, reportProgress) => uploadBlockImage(i, file, reportProgress)}
+                        />
                       </div>
                       <input
                         className="input"
@@ -2065,20 +2023,12 @@ function ComposeInner() {
                   小檔直接附加；較大檔案自動改為限時安全下載連結。
                 </p>
               </div>
-              <label className={`btn btn-secondary btn-sm ${uploadingAttachment ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
-                {uploadingAttachment ? "上傳中…" : "+ 上傳附件"}
-                <input
-                  type="file"
-                  className="hidden"
-                  disabled={uploadingAttachment}
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadAttachment(file);
-                    e.currentTarget.value = "";
-                  }}
-                />
-              </label>
+              <AnimatedFileUpload
+                accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp"
+                label="拖曳附件到這裡"
+                hint="支援 PDF、Office 與圖片"
+                onUpload={uploadAttachment}
+              />
             </div>
             {attachments.map((attachment) => (
               <div key={attachment.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>

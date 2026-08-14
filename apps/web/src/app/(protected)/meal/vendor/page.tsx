@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import Modal from "@/components/ui/Modal";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { UserPicker } from "@/components/meal/UserPicker";
 import { mealApi, type UserSummary } from "@/lib/api";
 import type {
@@ -836,21 +837,19 @@ function ProductsPanel({
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
           <input className="input" placeholder="分類，例如：便當、飲料" value={form.category}
             onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} />
-          <label className="grid gap-1 text-sm">
+          <div className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>商品圖片</span>
-            <input className="input" type="file" accept="image/*"
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                try {
-                  const uploaded = await mealApi.uploadImage(file);
-                  setForm((current) => ({ ...current, image_url: uploaded.url }));
-                  toast.success("圖片已上傳");
-                } catch (error: unknown) {
-                  toast.error(error instanceof Error ? error.message : "圖片上傳失敗");
-                }
-              }} />
-          </label>
+            <AnimatedFileUpload
+              accept="image/*"
+              label="拖曳商品圖片到這裡"
+              hint="支援點擊選取或貼上圖片"
+              onUpload={(file, reportProgress) => mealApi.uploadImage(file, reportProgress)}
+              onUploaded={(uploaded) => {
+                setForm((current) => ({ ...current, image_url: uploaded.url }));
+                toast.success("圖片已上傳");
+              }}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <input className="input" type="number" min={0} placeholder="價格" value={form.price}
               onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} />
@@ -1027,21 +1026,19 @@ function ProductEditorForm({
         onChange={(event) => setForm((current) => current && ({ ...current, name: event.target.value }))} />
       <input className="input" placeholder="分類" value={form.category}
         onChange={(event) => setForm((current) => current && ({ ...current, category: event.target.value }))} />
-      <label className="grid gap-1 text-sm">
+      <div className="grid gap-1 text-sm">
         <span style={{ color: "var(--text-muted)" }}>商品圖片</span>
-        <input className="input" type="file" accept="image/*"
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            try {
-              const uploaded = await mealApi.uploadImage(file);
-              setForm((current) => current && ({ ...current, image_url: uploaded.url }));
-              toast.success("圖片已上傳");
-            } catch (error: unknown) {
-              toast.error(error instanceof Error ? error.message : "圖片上傳失敗");
-            }
-          }} />
-      </label>
+        <AnimatedFileUpload
+          accept="image/*"
+          label="拖曳新商品圖片到這裡"
+          hint="支援點擊選取或貼上圖片"
+          onUpload={(file, reportProgress) => mealApi.uploadImage(file, reportProgress)}
+          onUploaded={(uploaded) => {
+            setForm((current) => current && ({ ...current, image_url: uploaded.url }));
+            toast.success("圖片已上傳");
+          }}
+        />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <input className="input" type="number" min={0} placeholder="價格" value={form.price}
           onChange={(event) => setForm((current) => current && ({ ...current, price: event.target.value }))} />

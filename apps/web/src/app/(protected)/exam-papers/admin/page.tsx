@@ -11,6 +11,7 @@ import type {
   ExamTraceInspectOut,
 } from "@/lib/types";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 const tracks: { value: ExamGradeTrack; label: string }[] = [
   { value: "first", label: "一類" },
@@ -23,9 +24,6 @@ const nestedStyle = { background: "var(--bg-elevated)", borderColor: "var(--bord
 const labelClass = "min-w-0 text-sm font-medium text-[var(--text-secondary)]";
 const mutedClass = "text-sm text-[var(--text-muted)]";
 const requiredMark = <span className="ml-1 text-[var(--danger)]">*</span>;
-const fileInputClass =
-  "block w-full min-w-0 text-sm text-[var(--text-secondary)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--bg-hover)] file:px-3 file:py-2 file:text-sm file:font-medium file:text-[var(--text-primary)]";
-
 const TRACK_LABEL: Record<ExamGradeTrack, string> = {
   first: "一類",
   second: "二類",
@@ -153,15 +151,6 @@ export default function ExamPaperAdminPage() {
     }
   };
 
-  const inspect = async (candidate: File | null) => {
-    if (!candidate) return;
-    try {
-      setTraceResult(await examPapersApi.inspectTrace(candidate));
-    } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "判斷失敗");
-    }
-  };
-
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 text-[var(--text-primary)] sm:px-5 sm:py-6">
       <header>
@@ -278,13 +267,12 @@ export default function ExamPaperAdminPage() {
           </label>
           <label className="min-w-0 sm:col-span-2 lg:col-span-3">
             <span className={labelClass}>PDF 檔案{requiredMark}</span>
-            <input
-              className={`${fileInputClass} mt-2`}
-              type="file"
-              accept="application/pdf"
-              required
-              aria-required="true"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            <AnimatedFileUpload
+              accept="application/pdf,.pdf"
+              label="拖曳段考 PDF 到這裡"
+              hint="可點擊選取檔案，或直接拖曳"
+              onFiles={(files) => setFile(files[0] ?? null)}
+              onRemove={() => setFile(null)}
             />
           </label>
           <button
@@ -298,11 +286,16 @@ export default function ExamPaperAdminPage() {
       <section className="rounded-lg border p-4" style={panelStyle}>
         <h2 className="text-base font-semibold">外流檔案判斷</h2>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-          <input
-            className={fileInputClass}
-            type="file"
-            accept="application/pdf,image/*"
-            onChange={(e) => inspect(e.target.files?.[0] ?? null)}
+          <AnimatedFileUpload
+            accept="application/pdf,.pdf,image/*"
+            label="拖曳待檢查檔案到這裡"
+            hint="支援 PDF 或圖片，選取後立即分析"
+            onUpload={async (candidate, reportProgress) => {
+              const result = await examPapersApi.inspectTrace(candidate, reportProgress);
+              setTraceResult(result);
+              return result;
+            }}
+            onUploaded={() => { toast.success("檔案分析完成"); }}
           />
           <span className={mutedClass}>PDF metadata / 頁面文字 / 圖片最佳努力掃描</span>
         </div>

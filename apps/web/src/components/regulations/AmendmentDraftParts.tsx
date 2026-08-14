@@ -9,6 +9,7 @@ const LawTreeEditor = dynamic(() => import("@/components/regulations/LawTreeEdit
   loading: () => <div className="flex h-48 items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>載入編輯器…</div>,
 });
 import type { ArticleType, RegulationArticleOut } from "@/lib/types";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import {
   ARTICLE_TYPE_LABEL,
   fallbackTreeContent,
@@ -357,23 +358,11 @@ export function StepDraftList({
   onDelete: (id: string) => void;
   onImport: (file: File) => void;
 }) {
-  const fileRef = { current: null as HTMLInputElement | null };
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>已儲存的修正草案</h3>
         <div className="flex gap-2">
-          <button onClick={() => fileRef.current?.click()}
-            className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80 inline-flex items-center gap-1.5"
-            style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
-              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
-            </svg>
-            匯入草案 (.json)
-          </button>
-          <input ref={el => { fileRef.current = el; }} type="file" accept=".json,.ckla" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) { onImport(f); e.target.value = ""; } }} />
           <button onClick={onNew}
             className="text-xs px-3 py-1.5 rounded-lg hover:opacity-90 inline-flex items-center gap-1.5 font-medium"
             style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
@@ -384,6 +373,13 @@ export function StepDraftList({
           </button>
         </div>
       </div>
+
+      <AnimatedFileUpload
+        accept=".json,.ckla,application/json"
+        label="拖曳修正草案 JSON 到這裡"
+        hint="也可以點擊選取草案檔案"
+        onFiles={(files) => { if (files[0]) onImport(files[0]); }}
+      />
 
       {drafts.length === 0 ? (
         <div className="card p-12 text-center space-y-4">

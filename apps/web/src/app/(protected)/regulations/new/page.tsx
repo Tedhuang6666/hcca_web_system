@@ -20,6 +20,7 @@ import {
   createGovernanceBacklink,
   governanceContextFromParams,
 } from "@/lib/governanceLinking";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 const CATEGORIES: [RegulationCategory, string][] = [
   ["constitution", "憲章"],
@@ -348,13 +349,14 @@ export default function NewRegulationPage() {
                 可一次選取多份 Word/PDF。系統會解析「第○章」「第○節」「第○條」，並自動抓取文件前段的歷史沿革。
               </p>
             </div>
-            <input
-              type="file"
-              multiple
+            <AnimatedFileUpload
               accept=".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
-              onChange={e => setImportFiles(Array.from(e.target.files ?? []))}
-              className="w-full text-xs"
-              style={{ color: "var(--text-secondary)" }}
+              multiple
+              maxFiles={10}
+              label="拖曳 Word / PDF 到這裡"
+              hint="可點擊選取多份文件，或貼上圖片"
+              onFiles={setImportFiles}
+              onRemove={(removed) => setImportFiles((current) => current.filter((file) => file !== removed))}
             />
             {importFiles.length > 0 && (
               <div className="rounded-lg p-2 text-xs space-y-1"

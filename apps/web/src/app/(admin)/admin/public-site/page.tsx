@@ -24,7 +24,6 @@ import {
   RotateCcw,
   Save,
   Trash2,
-  Upload,
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -34,6 +33,7 @@ import { ApiError, partnerApplicationApi, siteApi } from "@/lib/api";
 import { safeImageUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
@@ -275,39 +275,24 @@ function ImageField({
   alt?: string;
   onChange: (url: string) => void;
 }) {
-  const [uploading, setUploading] = useState(false);
   const previewUrl = safeImageUrl(value);
-  const handleFile = async (file: File) => {
-    setUploading(true);
-    try {
-      const result = await siteApi.uploadImage(file);
-      onChange(result.url);
-      toast.success("圖片已上傳");
-    } catch (error) {
-      displayError(error, "圖片上傳失敗");
-    } finally {
-      setUploading(false);
-    }
-  };
+  const upload = (file: File, reportProgress: (progress: number) => void) =>
+    siteApi.uploadImage(file, reportProgress);
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_12rem] md:items-end">
       <Field label={label} hint={hint ?? "可貼上圖片網址，或點右側「上傳」直接從電腦選圖（JPEG/PNG/GIF/WebP，上限 20MB）。"}>
-        <div className="flex gap-2">
-          <TextInput value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://… 或點右側上傳" />
-          <label className={`btn btn-secondary shrink-0 ${uploading ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
-            {uploading ? "上傳中…" : "上傳"}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              className="hidden"
-              disabled={uploading}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handleFile(file);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
+        <div className="grid gap-2">
+          <TextInput value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://… 或拖曳圖片上傳" />
+          <AnimatedFileUpload
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            label="拖曳圖片到這裡"
+            hint="支援點擊選取或貼上圖片"
+            onUpload={upload}
+            onUploaded={(result) => {
+              onChange(result.url);
+              toast.success("圖片已上傳");
+            }}
+          />
         </div>
       </Field>
       <div className="grid h-28 place-items-center rounded-lg" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
@@ -449,7 +434,6 @@ export default function PublicSiteAdminPage() {
   const [applicationSettings, setApplicationSettings] = useState<PartnerApplicationSettingsOut | null>(null);
   const [applicationFields, setApplicationFields] = useState<PartnerApplicationFieldConfig[]>([]);
   const [savingApplicationSettings, setSavingApplicationSettings] = useState(false);
-  const [uploadingSpecialFileId, setUploadingSpecialFileId] = useState<string | null>(null);
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
   const [rosterText, setRosterText] = useState("");
@@ -905,19 +889,6 @@ export default function PublicSiteAdminPage() {
       ...current,
       files: current.files.filter((file) => file.id !== id),
     }));
-  };
-
-  const uploadSpecialFile = async (id: string, file: File) => {
-    setUploadingSpecialFileId(id);
-    try {
-      const uploaded = await siteApi.uploadPublicFile(file);
-      updateSpecialFile(id, { url: uploaded.url, mimeType: uploaded.content_type });
-      toast.success("參考文件已上傳");
-    } catch (error) {
-      displayError(error, "參考文件上傳失敗");
-    } finally {
-      setUploadingSpecialFileId(null);
-    }
   };
 
   const saveApplicationSettings = async () => {
@@ -1377,20 +1348,18 @@ export default function PublicSiteAdminPage() {
                       <Field label="附件網址" hint={file.mimeType ? `檔案類型：${file.mimeType}` : undefined}>
                         <TextInput value={file.url} onChange={(event) => updateSpecialFile(file.id, { url: event.target.value })} placeholder="https://… 或上傳檔案" />
                       </Field>
-                      <label className={`btn btn-secondary min-h-10 shrink-0 ${uploadingSpecialFileId === file.id ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
-                        <Upload size={15} aria-hidden /> {uploadingSpecialFileId === file.id ? "上傳中…" : "上傳替換"}
-                        <input
-                          type="file"
+                      <div className="min-w-0 sm:w-72">
+                        <AnimatedFileUpload
                           accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-                          className="hidden"
-                          disabled={uploadingSpecialFileId !== null}
-                          onChange={(event) => {
-                            const selected = event.target.files?.[0];
-                            if (selected) void uploadSpecialFile(file.id, selected);
-                            event.currentTarget.value = "";
+                          label="拖曳替換檔案到這裡"
+                          hint="支援 PDF、Office 與圖片"
+                          onUpload={(selected, reportProgress) => siteApi.uploadPublicFile(selected, reportProgress)}
+                          onUploaded={(uploaded) => {
+                            updateSpecialFile(file.id, { url: uploaded.url, mimeType: uploaded.content_type });
+                            toast.success("參考文件已上傳");
                           }}
                         />
-                      </label>
+                      </div>
                       <button type="button" className="btn btn-ghost min-h-10 text-[var(--danger)]" onClick={() => removeSpecialFile(file.id)}>
                         <Trash2 size={15} aria-hidden /> 移除
                       </button>

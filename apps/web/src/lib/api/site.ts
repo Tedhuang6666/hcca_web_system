@@ -2,7 +2,7 @@ import type {
   PublicLinkCategoryCreate, PublicLinkCategoryOut, PublicLinkCategoryUpdate, PublicLinkCreate, PublicLinkOut, PublicLinkUpdate, PublicOfficerCandidateOut, PublicOfficerOut, PublicOfficerProfileCreate, PublicOfficerProfileOut, PublicOfficerProfileUpdate, PublicSiteBundleOut, PublicSitePageCreate, PublicSitePageOut, PublicSitePageUpdate, PublicSiteSettingsOut, PublicSiteSettingsUpdate, UploadedImageOut,
 } from "../types";
 import type { UploadedPublicFileOut } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 公開官網 / Linktree ──────────────────────────────────────────────────────
 
@@ -19,16 +19,16 @@ export const siteApi = {
   updateSettings: (body: PublicSiteSettingsUpdate) =>
     patch<PublicSiteSettingsOut>("/site/admin/settings", body),
 
-  uploadImage: async (file: File): Promise<UploadedImageOut> => {
+  uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<UploadedImageOut> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/site/admin/images`, {
+      uploadWithProgress(`${BASE}/site/admin/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();
@@ -40,16 +40,16 @@ export const siteApi = {
     return res.json();
   },
 
-  uploadPublicFile: async (file: File): Promise<UploadedPublicFileOut> => {
+  uploadPublicFile: async (file: File, onProgress?: (progress: number) => void): Promise<UploadedPublicFileOut> => {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      authFetch(`${BASE}/site/admin/files`, {
+      uploadWithProgress(`${BASE}/site/admin/files`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
         body: fd,
-      });
+      }, onProgress);
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();

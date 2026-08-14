@@ -13,12 +13,15 @@ import {
   NetworkRequestError,
   traceHeaders,
   type HccaRequestInit,
+  uploadWithProgress,
+  type UploadProgressHandler,
 } from "./transport";
 
 export { ApiError };
 export { authFetch, csrfHeaders, silentRefresh };
+export { uploadWithProgress };
 export { errorMessageFromResponse, formatErrorDetail };
-export type { HccaRequestInit };
+export type { HccaRequestInit, UploadProgressHandler };
 
 export const BASE = API_BASE;
 

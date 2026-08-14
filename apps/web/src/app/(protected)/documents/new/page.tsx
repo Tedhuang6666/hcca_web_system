@@ -18,6 +18,7 @@ import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/com
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { RecipientSearch } from "@/components/documents/RecipientSearch";
 import ActivitySelect from "@/components/activities/ActivitySelect";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import {
   GovernanceLinkNotice,
   createGovernanceBacklink,
@@ -1218,19 +1219,14 @@ export default function NewDocumentPage() {
             </div>
             <div className="pt-2">
               <Label>檔案附件</Label>
-              <label className="block text-xs px-3 py-2 rounded-lg cursor-pointer"
-                style={{ border: "1px dashed var(--border)", color: "var(--text-muted)" }}>
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={e => {
-                    const files = Array.from(e.target.files ?? []);
-                    if (files.length > 0) setPendingFiles(prev => [...prev, ...files]);
-                    e.target.value = "";
-                  }}
-                />
-                ＋ 選擇附件（建立草稿後自動上傳）
-              </label>
+              <AnimatedFileUpload
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip"
+                label="拖曳附件到這裡"
+                hint="建立草稿後自動上傳；可一次選取多個檔案"
+                onFiles={(files) => setPendingFiles((previous) => [...previous, ...files])}
+                onRemove={(file) => setPendingFiles((previous) => previous.filter((candidate) => candidate !== file))}
+              />
               {pendingFiles.length > 0 && (
                 <ul className="mt-2 space-y-1.5">
                   {pendingFiles.map((file, idx) => (
