@@ -25,6 +25,7 @@ FROM python:3.12-slim@sha256:a39549e211a16149edf74e5fdc9ef03a6767e46cd987c5048b6
 # WeasyPrint needs native text/layout libraries; Noto CJK keeps generated PDFs readable.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        curl \
         fontconfig \
         fonts-noto-cjk \
         gnupg \
@@ -68,6 +69,14 @@ COPY apps/api/gunicorn.conf.py /app/gunicorn.conf.py
 COPY VERSION /app/VERSION
 
 RUN mkdir -p /app/uploads /app/backups && chown -R appuser:appgroup /app/uploads /app/backups
+
+# Production runtime 預先產生 Python bytecode，避免非 root 使用者啟動時
+# 因 PYTHONDONTWRITEBYTECODE=1 每次重新編譯大量模組。
+RUN python -m compileall -q \
+    -x '(^|/)_py2\.py$' \
+    /usr/local/lib/python3.12 \
+    /app/.venv/lib/python3.12/site-packages \
+    /app/src
 
 ENV PATH="/app/.venv/bin:$PATH" \
     HOME="/home/appuser" \

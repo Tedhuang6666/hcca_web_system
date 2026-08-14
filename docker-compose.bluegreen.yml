@@ -60,8 +60,16 @@ x-api-service: &api-service
   healthcheck:
     test:
       [
-        "CMD-SHELL",
-        "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status == 200 else 1)\"",
+        "CMD",
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "5",
+        "--output",
+        "/dev/null",
+        "http://127.0.0.1:8000/ready",
       ]
     interval: 10s
     timeout: 5s
