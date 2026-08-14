@@ -102,11 +102,7 @@ def _font_faces() -> str:
         kai_path,
     )
     xingshu_path = next(
-        (
-            path
-            for path in _bundled_font_candidates(_BUNDLED_XINGSHU_FONT)
-            if path.is_file()
-        ),
+        (path for path in _bundled_font_candidates(_BUNDLED_XINGSHU_FONT) if path.is_file()),
         None,
     )
     xingshu_face = (
@@ -122,11 +118,7 @@ def _font_faces() -> str:
         else ""
     )
     title_path = next(
-        (
-            path
-            for path in _bundled_font_candidates(_BUNDLED_TITLE_FONT)
-            if path.is_file()
-        ),
+        (path for path in _bundled_font_candidates(_BUNDLED_TITLE_FONT) if path.is_file()),
         None,
     )
     title_face = (
@@ -599,9 +591,7 @@ async def render_document_print_html(
     file_number = _esc(getattr(doc, "file_number", "") or "")
     retention_period = _esc(getattr(doc, "retention_period", "") or "")
     classification_number = _esc(getattr(doc, "classification_number", "") or "")
-    source_document_date = _roc_date(
-        getattr(doc, "source_document_date", None), blank=""
-    )
+    source_document_date = _roc_date(getattr(doc, "source_document_date", None), blank="")
     source_document_number = _esc(getattr(doc, "source_document_number", "") or "")
     declassification = _declassification_text(doc)
     copy_mark = copy_mark_override or "影本"
@@ -643,7 +633,9 @@ async def render_document_print_html(
         meta_rows.append(
             _meta_row(
                 "收文日期字號：",
-                "　".join(value for value in (source_document_date, source_document_number) if value),
+                "　".join(
+                    value for value in (source_document_date, source_document_number) if value
+                ),
             )
         )
 
@@ -654,9 +646,7 @@ async def render_document_print_html(
             _meeting_small_row("發文日期：", issue_date),
             _meeting_small_row("發文字號：", serial),
             _meeting_small_row("速別：", urgency),
-            _meeting_small_row(
-                "密等及解密條件或保密期限：", declassification or classification
-            ),
+            _meeting_small_row("密等及解密條件或保密期限：", declassification or classification),
             _meeting_small_row("附件：", attachment_summary),
         ]
         if file_number or retention_period:
@@ -670,9 +660,7 @@ async def render_document_print_html(
                 _meeting_small_row(
                     "收文日期字號：",
                     "　".join(
-                        value
-                        for value in (source_document_date, source_document_number)
-                        if value
+                        value for value in (source_document_date, source_document_number) if value
                     ),
                 )
             )
@@ -686,11 +674,7 @@ async def render_document_print_html(
                 _meeting_large_row("主持人：", _esc(doc.meeting_chairperson or "")),
                 _meeting_large_row(
                     "聯絡人及電話：",
-                    _esc(
-                        "、".join(
-                            value for value in (doc.handler_name, handler_phone) if value
-                        )
-                    ),
+                    _esc("、".join(value for value in (doc.handler_name, handler_phone) if value)),
                 ),
                 _meeting_small_row(
                     "出席者：",
@@ -700,7 +684,9 @@ async def render_document_print_html(
                     "列席者：",
                     _join_names(observer_recipients or copy_recipients),
                 ),
-                _meeting_small_row("副本：", _join_names(copy_recipients) if observer_recipients else ""),
+                _meeting_small_row(
+                    "副本：", _join_names(copy_recipients) if observer_recipients else ""
+                ),
             ]
         )
         meeting_body = "".join(notice_rows)

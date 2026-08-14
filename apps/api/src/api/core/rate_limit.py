@@ -18,6 +18,7 @@ from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
 
+
 class _BoundedMemoryBuckets:
     """Redis 故障時使用的 bounded per-process 固定視窗計數器。"""
 
