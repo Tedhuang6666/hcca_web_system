@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -141,6 +142,9 @@ class RegulationRevisionOut(BaseModel):
     proposal_metadata_snapshot: str | None = None
     resolution_link: str | None
     amended_at: datetime
+    amended_at_precision: Literal["date", "month", "year", "unknown"] = "date"
+    amended_year: int | None = None
+    published_document_id: uuid.UUID | None = None
     amended_by: uuid.UUID
     amended_by_name: str | None = None
     created_at: datetime
@@ -152,6 +156,26 @@ class RegulationRevisionCreate(BaseModel):
     change_brief: str = Field(..., min_length=1, max_length=500, description="修訂摘要")
     is_total_amendment: bool = Field(False, description="是否為全文修訂")
     resolution_link: str | None = Field(None, description="相關決議連結（多個以換行分隔）")
+
+
+class RegulationRevisionUpdate(BaseModel):
+    """補登既有法規的沿革日期、摘要與公布公文。"""
+
+    change_brief: str | None = Field(None, min_length=1, max_length=500, description="修訂摘要")
+    amended_at: date | None = Field(None, description="完整日期（YYYY-MM-DD）")
+    amended_at_precision: Literal["date", "month", "year", "unknown"] | None = Field(
+        None, description="日期精度"
+    )
+    amended_year: int | None = Field(None, ge=1, le=9999, description="僅有年份時填寫，可為民國年")
+    resolution_link: str | None = Field(None, description="相關決議連結（多個以換行分隔）")
+    document_id: uuid.UUID | None = Field(None, description="此沿革對應的公布法律公文")
+
+
+class RegulationMetadataUpdate(BaseModel):
+    """既有法規可修正的公開識別資料，不會改動法規正文版本。"""
+
+    effective_date: datetime | None = Field(None, description="生效日期")
+    legislative_history: str | None = Field(None, description="沿革")
 
 
 # ── 法規主體 ─────────────────────────────────────────────────────────────────

@@ -32,14 +32,16 @@ from api.schemas.regulation import (
     RegulationArticleOut,
     RegulationArticleUpdate,
     RegulationCreate,
+    RegulationMetadataUpdate,
     RegulationPublishRequest,
+    RegulationRevisionUpdate,
     RegulationTimeMachineOut,
     RegulationTreeNodeOut,
     RegulationUpdate,
 )
 from api.services.regulation_import import (
     ImportedRegulationDraft,
-    parse_history_date,
+    parse_history_date_info,
     parse_regulation_text,
     split_history_events,
 )
@@ -75,6 +77,7 @@ def _reg_query_with_relations():
         selectinload(Regulation.creator),
         selectinload(Regulation.articles),
         selectinload(Regulation.revisions).selectinload(RegulationRevision.amender),
+        selectinload(Regulation.revisions).selectinload(RegulationRevision.published_document),
         selectinload(Regulation.workflow_logs),
     )
 
@@ -505,7 +508,8 @@ async def publish_imported_regulation(
     events = split_history_events(reg.legislative_history)
 
     if events:
-        amended_dates = _resolve_history_dates([parse_history_date(event) for event in events], now)
+        history_info = [parse_history_date_info(event) for event in events]
+        amended_dates = _resolve_history_dates([item[0] for item in history_info], now)
         total = len(events)
         for version, (event, amended_at) in enumerate(
             zip(events, amended_dates, strict=True), start=1
@@ -525,6 +529,8 @@ async def publish_imported_regulation(
                     article_snapshot=article_snapshot if is_latest else "[]",
                     proposal_metadata_snapshot=reg.proposal_metadata if is_latest else None,
                     amended_at=amended_at,
+                    amended_at_precision=history_info[version - 1][1],
+                    amended_year=history_info[version - 1][2],
                     amended_by=published_by,
                 )
             )
@@ -636,6 +642,8 @@ async def fork_regulation_draft(
                 proposal_metadata_snapshot=rev.proposal_metadata_snapshot,
                 resolution_link=rev.resolution_link,
                 amended_at=rev.amended_at,
+                amended_at_precision=rev.amended_at_precision,
+                amended_year=rev.amended_year,
                 amended_by=rev.amended_by,
             )
         )
@@ -1007,10 +1015,124 @@ async def list_regulation_revisions(
     """取得法規所有修訂歷程（按版本號排序）"""
     result = await session.execute(
         select(RegulationRevision)
+        .options(selectinload(RegulationRevision.published_document))
         .where(RegulationRevision.regulation_id == reg_id)
         .order_by(RegulationRevision.version)
     )
     return list(result.scalars().all())
+
+
+async def update_regulation_metadata(
+    session: AsyncSession,
+    reg: Regulation,
+    *,
+    data: RegulationMetadataUpdate,
+) -> Regulation:
+    """修正既有法規的沿革與生效日期，不改動正文版本。"""
+    reg.effective_date = data.effective_date
+    reg.legislative_history = data.legislative_history
+    await session.flush()
+    loaded = await get_regulation(session, reg.id)
+    return loaded or reg
+
+
+def _year_to_sort_datetime(year: int) -> datetime:
+    resolved_year = year + 1911 if year < 1911 else year
+    try:
+        return datetime(resolved_year, 1, 1, tzinfo=UTC)
+    except ValueError as exc:
+        raise ValueError("沿革年份格式不正確") from exc
+
+
+async def update_regulation_revision(
+    session: AsyncSession,
+    reg: Regulation,
+    revision_id: uuid.UUID,
+    *,
+    data: RegulationRevisionUpdate,
+) -> RegulationRevision:
+    """手動修正沿革日期精度，並可把公布法律公文掛到該沿革。"""
+    revision = next((item for item in reg.revisions if item.id == revision_id), None)
+    if revision is None:
+        result = await session.execute(
+            select(RegulationRevision)
+            .options(selectinload(RegulationRevision.published_document))
+            .where(
+                RegulationRevision.id == revision_id,
+                RegulationRevision.regulation_id == reg.id,
+            )
+        )
+        revision = result.scalar_one_or_none()
+    if revision is None:
+        raise ValueError("找不到此法規沿革")
+
+    if "change_brief" in data.model_fields_set and data.change_brief is not None:
+        revision.change_brief = data.change_brief.strip()
+    if "resolution_link" in data.model_fields_set:
+        revision.resolution_link = data.resolution_link
+
+    precision = data.amended_at_precision
+    if precision is None:
+        if data.amended_year is not None:
+            precision = "year"
+        elif data.amended_at is not None:
+            precision = "date"
+    if precision == "date":
+        if data.amended_at is None:
+            raise ValueError("完整日期精度需要填寫日期")
+        revision.amended_at = datetime.combine(data.amended_at, datetime.min.time(), tzinfo=UTC)
+        revision.amended_at_precision = "date"
+        revision.amended_year = None
+    elif precision == "month":
+        if data.amended_at is None:
+            raise ValueError("年月精度需要填寫日期")
+        revision.amended_at = datetime.combine(
+            data.amended_at.replace(day=1), datetime.min.time(), tzinfo=UTC
+        )
+        revision.amended_at_precision = "month"
+        revision.amended_year = data.amended_year
+    elif precision == "year":
+        if data.amended_year is None:
+            raise ValueError("年份精度需要填寫年份")
+        revision.amended_at = _year_to_sort_datetime(data.amended_year)
+        revision.amended_at_precision = "year"
+        revision.amended_year = data.amended_year
+    elif precision == "unknown":
+        revision.amended_at_precision = "unknown"
+        revision.amended_year = None
+    elif "amended_at" in data.model_fields_set or "amended_year" in data.model_fields_set:
+        raise ValueError("請選擇沿革日期精度")
+
+    if "document_id" in data.model_fields_set:
+        previous_document = revision.published_document
+        document = None
+        if data.document_id is not None:
+            document = await session.get(Document, data.document_id)
+            if document is None:
+                raise ValueError("找不到指定的公布公文")
+            if document.org_id != reg.org_id:
+                raise ValueError("公布公文必須屬於同一組織")
+            if document.category.value != "decree":
+                raise ValueError("只能連結令類公布公文")
+            if document.regulation_id not in {None, reg.id}:
+                raise ValueError("此公文已連結其他法規")
+            if document.regulation_revision_id not in {None, revision.id}:
+                raise ValueError("此公文已連結其他法規沿革")
+
+        if previous_document is not None and previous_document is not document:
+            previous_document.regulation_revision_id = None
+            revision.published_document = None
+        if document is not None:
+            document.regulation_id = reg.id
+            document.regulation_revision_id = revision.id
+            revision.published_document = document
+            if revision.version == reg.version or reg.published_document_id is None:
+                reg.published_document_id = document.id
+        elif reg.published_document_id == getattr(previous_document, "id", None):
+            reg.published_document_id = None
+
+    await session.flush()
+    return revision
 
 
 # ── 審議流程 ─────────────────────────────────────────────────────────────────
