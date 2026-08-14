@@ -176,9 +176,17 @@ function MaintenanceContent() {
   );
 }
 
+function MaintenanceFallback() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[var(--bg-base)] px-5 text-[var(--text-primary)]">
+      <p className="text-sm text-[var(--text-muted)]">正在載入系統狀態…</p>
+    </main>
+  );
+}
+
 export default function MaintenancePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen" />}>
+    <Suspense fallback={<MaintenanceFallback />}>
       <MaintenanceContent />
     </Suspense>
   );
