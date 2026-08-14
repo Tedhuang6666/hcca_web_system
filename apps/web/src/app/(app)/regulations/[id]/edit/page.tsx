@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ClipboardEvent } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -60,6 +61,13 @@ type RegulationEditDraft = {
   addingEnd: boolean;
   endForm: NewArtForm;
 };
+
+function looksLikeRegulationOutline(value: string): boolean {
+  const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const hasSectionHeading = /(?:^|\n)\s*#{2,6}\s+\S/.test(normalized);
+  const hasArticleMarker = /(?:^|\n)\s*(?:第\s*[一二三四五六七八九十百千0-9０-９-]+\s*條|\d+[.)]\s+|[一二三四五六七八九十百千]+、)/.test(normalized);
+  return normalized.trim().length >= 20 && hasSectionHeading && hasArticleMarker;
+}
 
 export default function EditRegulationPage() {
   const { id } = useParams<{ id: string }>();
@@ -422,6 +430,37 @@ export default function EditRegulationPage() {
       fetchReg();
     } catch (e) { toast.error(apiErrorMessage(e, "更新失敗")); }
   };
+
+  const handleContentPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = event.clipboardData.getData("text/plain");
+    if (!looksLikeRegulationOutline(pastedText)) return;
+
+    const replaceExisting = articles.length > 0;
+    window.setTimeout(() => {
+      void (async () => {
+        setStructuringContent(true);
+        try {
+          const updated = await regulationsApi.structureContent(id, {
+            content: pastedText,
+            replace_existing: replaceExisting,
+          });
+          setReg(updated);
+          setTitle(updated.title);
+          setContent(updated.content ?? pastedText);
+          setArticles(
+            [...updated.articles]
+              .filter(a => !a.is_deleted)
+              .sort((a, b) => a.sort_index - b.sort_index),
+          );
+          toast.success(`已自動解析並匯入 ${updated.articles.filter(a => !a.is_deleted).length} 個條文`);
+        } catch (e) {
+          toast.error(apiErrorMessage(e, "貼上內容解析失敗，請使用下方按鈕重試"));
+        } finally {
+          setStructuringContent(false);
+        }
+      })();
+    }, 0);
+  }, [articles.length, id]);
 
   // ── 條文刪除 ─────────────────────────────────────────────────────────────────
 
@@ -835,11 +874,12 @@ export default function EditRegulationPage() {
                   value={content}
                   onChange={setContent}
                   rows={5}
-                  placeholder="可先貼上完整法規文字，稍後用「從全文解析條文」轉成結構化條文。"
+                  onPaste={handleContentPaste}
+                  placeholder="貼上含 Markdown 標題與清單的完整法規文字，系統會自動解析匯入條文。"
                   style={inputStyle}
                 />
                 <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
-                  支援本機自動保存；內容中出現公文字號或「法規名稱」會在閱讀頁自動轉成查詢連結。
+                  貼上完整法規大綱會自動建立條文結構；也支援本機自動保存。內容中出現公文字號或「法規名稱」會在閱讀頁自動轉成查詢連結。
                 </p>
               </div>
               <div>
