@@ -689,6 +689,29 @@ import type {
   RecipientType,
 } from './api-bridge'
 
+/** 使用者自助帳號維護 API 的回應型別。 */
+export interface LinkedEmailsRead {
+  emails: string[]
+  primary_email: string | null
+}
+
+export interface UserSessionRead {
+  id: string
+  device_label: string
+  ip_address: string | null
+  created_at: string
+  last_seen_at: string
+  expires_at: string
+  is_current: boolean
+}
+
+export interface SecurityEventRead {
+  id: string
+  action: string
+  summary: string | null
+  created_at: string
+}
+
 
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
 

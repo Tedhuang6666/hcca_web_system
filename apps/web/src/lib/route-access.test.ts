@@ -1,6 +1,39 @@
 import { describe, expect, it } from "vitest";
 
-import { isPublicRoute, requiresAuthentication } from "./route-access";
+import {
+  getRoutePolicy,
+  isIndexablePublicPath,
+  isPublicRoute,
+  isSitemapRoute,
+  requiresAuthentication,
+} from "./route-access";
+
+describe("route manifest", () => {
+  it("keeps login dynamic and outside indexing while allowing maintenance access", () => {
+    expect(getRoutePolicy("/login")).toMatchObject({
+      public: true,
+      requiresAuth: false,
+      shell: "bare",
+      indexable: false,
+      sitemap: false,
+      csp: "nonce",
+      maintenanceExempt: true,
+    });
+    expect(isIndexablePublicPath("/login")).toBe(false);
+    expect(isSitemapRoute("/login")).toBe(false);
+  });
+
+  it("keeps protected and operational routes out of search", () => {
+    expect(getRoutePolicy("/admin/system/maintenance")).toMatchObject({
+      public: false,
+      requiresAuth: true,
+      maintenanceExempt: true,
+    });
+    expect(isIndexablePublicPath("/documents/new")).toBe(false);
+    expect(isSitemapRoute("/documents/new")).toBe(false);
+    expect(requiresAuthentication("/documents/new")).toBe(true);
+  });
+});
 
 describe("partner map route access", () => {
   it("allows a shared business detail link without login", () => {

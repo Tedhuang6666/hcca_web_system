@@ -24,6 +24,7 @@
     "validate:share-previews": "node ../../scripts/validate-share-previews.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "check:module-registry": "node ../../scripts/check-module-registry.mjs",
     "generate:types": "openapi-typescript ../../openapi.json -o ./src/lib/api-types.ts",
     "generate:bridge": "node ../../scripts/generate-bridge.mjs"
   },

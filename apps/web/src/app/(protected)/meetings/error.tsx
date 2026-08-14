@@ -1,6 +1,5 @@
 "use client";
-import RouteError from "@/components/ui/RouteError";
-
-export default function MeetingsError(props: { error: Error & { digest?: string }; reset: () => void }) {
-  return <RouteError {...props} scope="會議系統" />;
+import RouteErrorState from "@/components/ui/RouteErrorState";
+export default function MeetingsError({ error, reset }: { error: Error & { digest?: string; status?: number }; reset: () => void }) {
+  return <RouteErrorState error={error} reset={reset} />;
 }

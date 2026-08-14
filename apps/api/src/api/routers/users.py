@@ -1,21 +1,27 @@
 """使用者路由 - /users"""
 
 import uuid
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
+from api.models.audit_log import AuditLog
 from api.models.user import User
+from api.models.user_identity import UserIdentity
+from api.models.user_session import UserSession
 from api.schemas.auth import UserRead
 from api.services import audit as audit_svc
 from api.services import user_email_verification as email_verification_svc
 from api.services import user_registration as user_registration_svc
+from api.services import user_session as user_session_svc
 from api.services.permission import get_user_permission_codes
 from api.services.user_registration import UserRegistrationError
 
@@ -64,6 +70,42 @@ class EmailVerificationConfirm(EmailVerificationRequest):
 
 class LinkedEmailsOut(BaseModel):
     emails: list[str]
+    primary_email: str | None = None
+
+
+class PrimaryEmailUpdate(BaseModel):
+    email: str = Field(..., min_length=5, max_length=255)
+
+
+class UserSessionOut(BaseModel):
+    id: uuid.UUID
+    device_label: str
+    ip_address: str | None
+    created_at: datetime
+    last_seen_at: datetime
+    expires_at: datetime
+    is_current: bool = False
+
+    @classmethod
+    def from_session(
+        cls, session: UserSession, *, current_id: uuid.UUID | None
+    ) -> "UserSessionOut":
+        return cls(
+            id=session.id,
+            device_label=user_session_svc.device_label(session.user_agent),
+            ip_address=session.ip_address,
+            created_at=session.created_at,
+            last_seen_at=session.last_seen_at,
+            expires_at=session.expires_at,
+            is_current=session.id == current_id,
+        )
+
+
+class SecurityEventOut(BaseModel):
+    id: uuid.UUID
+    action: str
+    summary: str | None
+    created_at: datetime
 
 
 @router.get("", response_model=list[UserSummary], summary="搜尋使用者（供下拉選單使用）")
@@ -182,7 +224,161 @@ async def update_me(
 
 @router.get("/me/emails", response_model=LinkedEmailsOut, summary="列出自己的登入 Email")
 async def list_my_emails(db: DbDep, current_user: CurrentUser) -> LinkedEmailsOut:
-    return LinkedEmailsOut(emails=await email_verification_svc.list_user_emails(db, current_user))
+    return LinkedEmailsOut(
+        emails=await email_verification_svc.list_user_emails(db, current_user),
+        primary_email=current_user.email,
+    )
+
+
+@router.post("/me/emails/primary", response_model=LinkedEmailsOut, summary="設定主要登入 Email")
+async def set_primary_email(
+    body: PrimaryEmailUpdate,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> LinkedEmailsOut:
+    normalized = body.email.strip().lower()
+    emails = await email_verification_svc.list_user_emails(db, current_user)
+    if normalized not in emails:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="請先完成此 Email 的驗證與連結"
+        )
+    if normalized != current_user.email:
+        previous_email = current_user.email
+        current_user.email = normalized
+        await audit_svc.record(
+            db,
+            entity_type="user",
+            entity_id=str(current_user.id),
+            action="user.email.primary_changed",
+            actor_id=str(current_user.id),
+            actor_email=normalized,
+            meta={"previous_email": previous_email, "primary_email": normalized},
+            summary="使用者更新主要登入 Email",
+        )
+        await db.commit()
+    return LinkedEmailsOut(
+        emails=await email_verification_svc.list_user_emails(db, current_user),
+        primary_email=current_user.email,
+    )
+
+
+@router.delete("/me/emails", response_model=LinkedEmailsOut, summary="解除次要登入 Email")
+async def unlink_email(
+    db: DbDep,
+    current_user: CurrentUser,
+    email: str = Query(..., min_length=5, max_length=255),
+) -> LinkedEmailsOut:
+    normalized = email.strip().lower()
+    if normalized == current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="主要 Email 不可直接解除，請先設定其他主要 Email",
+        )
+    identity_rows = list(
+        (
+            await db.scalars(
+                select(UserIdentity).where(
+                    UserIdentity.user_id == current_user.id,
+                    UserIdentity.email == normalized,
+                )
+            )
+        ).all()
+    )
+    if not identity_rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="此 Email 尚未連結")
+    for identity in identity_rows:
+        await db.delete(identity)
+    await audit_svc.record(
+        db,
+        entity_type="user",
+        entity_id=str(current_user.id),
+        action="user.email.unlinked",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"email": normalized},
+        summary="使用者解除次要登入 Email",
+    )
+    await db.commit()
+    return LinkedEmailsOut(
+        emails=await email_verification_svc.list_user_emails(db, current_user),
+        primary_email=current_user.email,
+    )
+
+
+@router.get("/me/sessions", response_model=list[UserSessionOut], summary="列出我的登入工作階段")
+async def list_my_sessions(
+    request: Request, db: DbDep, current_user: CurrentUser
+) -> list[UserSessionOut]:
+    current = await user_session_svc.ensure_current(
+        db,
+        user_id=current_user.id,
+        refresh_token=request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    sessions = await user_session_svc.list_active(db, current_user.id)
+    return [
+        UserSessionOut.from_session(session, current_id=current.id if current else None)
+        for session in sessions
+    ]
+
+
+@router.post("/me/sessions/revoke-others", response_model=dict[str, int], summary="登出其他裝置")
+async def revoke_other_sessions(
+    request: Request, db: DbDep, current_user: CurrentUser
+) -> dict[str, int]:
+    current = await user_session_svc.ensure_current(
+        db,
+        user_id=current_user.id,
+        refresh_token=request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+    count = await user_session_svc.revoke_others(
+        db, current_user.id, current.id if current else None
+    )
+    await db.commit()
+    return {"revoked_count": count}
+
+
+@router.post("/me/sessions/revoke-all", response_model=dict[str, int], summary="登出全部裝置")
+async def revoke_all_sessions(
+    request: Request,
+    response: Response,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> dict[str, int]:
+    await user_session_svc.ensure_current(
+        db,
+        user_id=current_user.id,
+        refresh_token=request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+    count = await user_session_svc.revoke_all(db, current_user.id)
+    await db.commit()
+    response.delete_cookie(settings.ACCESS_TOKEN_COOKIE_NAME, path="/")
+    response.delete_cookie(settings.REFRESH_TOKEN_COOKIE_NAME, path="/")
+    return {"revoked_count": count}
+
+
+@router.get(
+    "/me/security-events", response_model=list[SecurityEventOut], summary="列出最近安全活動"
+)
+async def list_security_events(db: DbDep, current_user: CurrentUser) -> list[SecurityEventOut]:
+    rows = await db.scalars(
+        select(AuditLog)
+        .where(AuditLog.actor_id == str(current_user.id), AuditLog.action.like("user.%"))
+        .order_by(AuditLog.created_at.desc())
+        .limit(20)
+    )
+    return [
+        SecurityEventOut(
+            id=row.id, action=row.action, summary=row.summary, created_at=row.created_at
+        )
+        for row in rows
+    ]
 
 
 @router.post(
@@ -233,7 +429,10 @@ async def verify_email(
             except Exception:
                 await db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    return LinkedEmailsOut(emails=await email_verification_svc.list_user_emails(db, current_user))
+    return LinkedEmailsOut(
+        emails=await email_verification_svc.list_user_emails(db, current_user),
+        primary_email=current_user.email,
+    )
 
 
 # ── 自助隱私操作（個資法當事人權利） ────────────────────────────────────────
