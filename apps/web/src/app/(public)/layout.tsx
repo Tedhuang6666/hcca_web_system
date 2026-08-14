@@ -1,6 +1,8 @@
+import AppShell from "@/components/layout/AppShell";
 import PublicEnhancements from "@/components/site/PublicEnhancements";
 import { BRANDING } from "@/lib/branding";
 import { absoluteUrl, JsonLd } from "@/lib/seo";
+import "../design-system.css";
 import "../public-design-system.css";
 import "./public-footer.css";
 
@@ -35,7 +37,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         }}
       />
       <PublicEnhancements />
-      {children}
+      <AppShell>{children}</AppShell>
     </>
   );
 }
