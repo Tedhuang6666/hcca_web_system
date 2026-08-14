@@ -216,6 +216,23 @@ def test_parse_markdown_regulation_outline_imports_pasted_plain_text() -> None:
     assert "---" not in draft.content
 
 
+def test_parse_markdown_outline_handles_long_untrusted_lines() -> None:
+    draft = parse_regulation_text(
+        title="舊法規名稱",
+        content="\n".join(
+            [
+                "# " + "法規名稱" + "x" * 10_000,
+                "## 一、" + "目的" + "x" * 10_000 + " ###",
+                "1. " + "條文內容" + "x" * 10_000,
+                "   * " + "補充內容" + "x" * 10_000,
+            ]
+        ),
+    )
+
+    assert draft.title.startswith("法規名稱")
+    assert any(row.content and row.content.startswith("條文內容") for row in draft.articles)
+
+
 def test_parse_regulation_docx_collects_history_heading_block() -> None:
     raw = _build_docx(
         [
