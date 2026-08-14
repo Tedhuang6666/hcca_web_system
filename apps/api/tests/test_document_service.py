@@ -145,6 +145,17 @@ def test_decree_create_defaults_issuer_title() -> None:
     assert payload.issuer_full_name == "主席"
 
 
+def test_decree_create_allows_no_recipients() -> None:
+    """令沒有傳統受文者欄位時，建立請求仍應通過驗證。"""
+    payload = _make_create_payload(
+        category=DocumentCategory.DECREE,
+        subject=None,
+        doc_description="茲發布學生自治相關規定。",
+    )
+
+    assert payload.recipients == []
+
+
 def test_decree_template_allows_empty_subject() -> None:
     """令範本也可不填主旨。"""
     template = DocumentTemplateCreate(
