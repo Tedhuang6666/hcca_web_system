@@ -699,7 +699,8 @@
   /* 提高選擇器特異度：避免被後面定義的基礎 .public-menu-button 規則蓋過，
      否則桌面寬度下漢堡選單仍會顯示並與「所有公開服務」下拉重疊。 */
   .public-header .public-menu-button,
-  .public-mobile-backdrop {
+  .public-mobile-backdrop,
+  .public-header .public-mobile-nav {
     display: none;
   }
 }
