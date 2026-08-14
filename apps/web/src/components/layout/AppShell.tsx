@@ -229,7 +229,7 @@ function AppShellContent({
     <PermissionProvider can={can}>
       <InboxCountsProvider value={inboxCounts}>
       <ConfirmProvider>
-      <div className="app-shell flex h-screen overflow-hidden">
+      <div className="app-shell flex h-[100dvh] overflow-hidden">
         <a
           href="#main-content"
           className="fixed left-3 top-3 z-[200] -translate-y-20 rounded-md px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
