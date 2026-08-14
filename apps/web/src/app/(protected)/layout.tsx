@@ -8,6 +8,10 @@ import AccessBlockGuard from "@/components/security/AccessBlockGuard";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import "../design-system.css";
 
+// 受保護頁面使用 per-request CSP nonce；禁止 Next 將含有 inline bootstrap
+// script 的 HTML 預先渲染並長期快取，否則回應 header 的 nonce 會與 HTML 不一致。
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   robots: {
     index: false,
