@@ -137,7 +137,8 @@ class RecipientOut(BaseModel):
 
 class RecipientCreate(BaseModel):
     recipient_type: RecipientType = Field(
-        ..., description="受文者類型（main=受文者 / primary=正本 / copy=副本 / attendee=出席者 / observer=列席者）"
+        ...,
+        description="受文者類型（main=受文者 / primary=正本 / copy=副本 / attendee=出席者 / observer=列席者）",
     )
     name: str = Field(..., min_length=1, max_length=200, description="單位或個人名稱")
     email: EmailStr | None = Field(None, description="聯絡信箱（發文後自動寄送）")
@@ -219,7 +220,11 @@ class DocumentTemplateBase(BaseModel):
     @model_validator(mode="after")
     def validate_template_body(self) -> DocumentTemplateBase:
         notice_categories = (DocumentCategory.MEETING_NOTICE, DocumentCategory.INSPECTION_NOTICE)
-        if self.category not in (*notice_categories, DocumentCategory.DECREE, DocumentCategory.RECORD):
+        if self.category not in (
+            *notice_categories,
+            DocumentCategory.DECREE,
+            DocumentCategory.RECORD,
+        ):
             if not self.subject or not self.subject.strip():
                 raise ValueError("此類公文範本需填寫主旨")
             if len(self.subject.strip()) < 8:
