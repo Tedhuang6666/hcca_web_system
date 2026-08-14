@@ -221,7 +221,13 @@ function PublicSiteHeaderContent({
         <div className="public-header-actions">
           <button
             type="button"
-            onClick={toggleTheme}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              toggleTheme({
+                x: event.clientX || rect.left + rect.width / 2,
+                y: event.clientY || rect.top + rect.height / 2,
+              });
+            }}
             className="public-icon-button"
             aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
           >

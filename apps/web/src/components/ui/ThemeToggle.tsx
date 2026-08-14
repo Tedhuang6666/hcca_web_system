@@ -30,9 +30,17 @@ function MoonIcon() {
 export default function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
 
+  const handleToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    toggleTheme({
+      x: event.clientX || rect.left + rect.width / 2,
+      y: event.clientY || rect.top + rect.height / 2,
+    });
+  };
+
   return (
     <button
-      onClick={toggleTheme}
+      onClick={handleToggle}
       className="topbar-icon-btn"
       title={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
       aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}>

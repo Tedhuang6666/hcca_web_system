@@ -1,7 +1,13 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 
 export type Theme = "light" | "dark";
+
+export interface ThemeTransitionOrigin {
+  x: number;
+  y: number;
+}
 
 export interface A11ySettings {
   /** 高對比模式：增強文字與背景對比度 */
@@ -18,8 +24,8 @@ const THEME_STORAGE_KEY = "hcca-theme";
 
 interface ThemeContextValue {
   theme: Theme;
-  setTheme: (t: Theme) => void;
-  toggleTheme: () => void;
+  setTheme: (t: Theme, origin?: ThemeTransitionOrigin) => void;
+  toggleTheme: (origin?: ThemeTransitionOrigin) => void;
   a11y: A11ySettings;
   setA11y: (key: keyof A11ySettings, value: boolean) => void;
 }
@@ -29,6 +35,24 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme);
   localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
+
+type ThemeViewTransition = {
+  finished: Promise<void>;
+};
+
+type DocumentWithViewTransition = Document & {
+  startViewTransition?: (update: () => void) => ThemeViewTransition;
+};
+
+function shouldReduceThemeMotion(a11yMotion: boolean) {
+  return a11yMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function clearThemeTransition(root: HTMLElement) {
+  root.style.removeProperty("--theme-transition-x");
+  root.style.removeProperty("--theme-transition-y");
+  root.style.removeProperty("--theme-transition-radius");
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -74,17 +98,50 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(A11Y_STORAGE_KEY, JSON.stringify(a11y));
   }, [a11y]);
 
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    applyTheme(t);
-  }, []);
+  const setTheme = useCallback((t: Theme, origin?: ThemeTransitionOrigin) => {
+    const root = document.documentElement;
+    const startViewTransition = (document as DocumentWithViewTransition).startViewTransition;
+
+    if (!origin || !startViewTransition || shouldReduceThemeMotion(a11y.motion)) {
+      setThemeState(t);
+      applyTheme(t);
+      return;
+    }
+
+    const x = Math.min(Math.max(origin.x, 0), window.innerWidth);
+    const y = Math.min(Math.max(origin.y, 0), window.innerHeight);
+    const radius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y),
+    );
+
+    root.style.setProperty("--theme-transition-x", `${x}px`);
+    root.style.setProperty("--theme-transition-y", `${y}px`);
+    root.style.setProperty("--theme-transition-radius", `${radius}px`);
+
+    try {
+      const transition = startViewTransition.call(document, () => {
+        flushSync(() => {
+          setThemeState(t);
+          applyTheme(t);
+        });
+      });
+      void transition.finished.then(
+        () => clearThemeTransition(root),
+        () => clearThemeTransition(root),
+      );
+    } catch {
+      clearThemeTransition(root);
+      setThemeState(t);
+      applyTheme(t);
+    }
+  }, [a11y.motion]);
   const toggleTheme = useCallback(
-    () => {
+    (origin?: ThemeTransitionOrigin) => {
       const nextTheme = theme === "dark" ? "light" : "dark";
-      setThemeState(nextTheme);
-      applyTheme(nextTheme);
+      setTheme(nextTheme, origin);
     },
-    [theme],
+    [setTheme, theme],
   );
   const setA11y = useCallback((key: keyof A11ySettings, value: boolean) => {
     setA11yState((prev) => ({ ...prev, [key]: value }));
