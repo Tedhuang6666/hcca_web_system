@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { usersApi, classApi, apiErrorMessage } from "@/lib/api";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
+import SessionManagement from "@/components/profile/SessionManagement";
 import { usePermissions } from "@/hooks/usePermissions";
 import type {
   UserRead,
@@ -135,7 +136,7 @@ export default function ProfilePage() {
         return null;
       }),
       usersApi.myPositions(false).catch(() => []),
-      usersApi.myEmails().catch(() => ({ emails: [] })),
+      usersApi.myEmails().catch(() => ({ emails: [], primary_email: null })),
     ]).then(([u, pos, emailResult]) => {
       if (u) { setUser(u); cacheSet(PROFILE_ME_KEY, u); }
       const posArr = pos as UserPositionRead[];
@@ -143,6 +144,11 @@ export default function ProfilePage() {
       cacheSet(PROFILE_POSITIONS_KEY, posArr);
       setLinkedEmails(emailResult.emails);
       cacheSet(PROFILE_EMAILS_KEY, emailResult.emails);
+      if (u && emailResult.primary_email && emailResult.primary_email !== u.email) {
+        const normalizedUser = { ...u, email: emailResult.primary_email };
+        setUser(normalizedUser);
+        cacheSet(PROFILE_ME_KEY, normalizedUser);
+      }
     }).finally(() => setLoading(false));
 
     classApi.myClass().then((cls) => { setMyClass(cls); cacheSet(PROFILE_CLASS_KEY, cls); }).catch(() => setMyClass(null));
@@ -206,12 +212,49 @@ export default function ProfilePage() {
     try {
       const result = await usersApi.verifyEmail(newEmail.trim(), emailCode);
       setLinkedEmails(result.emails);
+      if (user && result.primary_email && result.primary_email !== user.email) {
+        const updated = { ...user, email: result.primary_email };
+        setUser(updated);
+        cacheSet(PROFILE_ME_KEY, updated);
+      }
       setNewEmail("");
       setEmailCode("");
       setEmailVerificationPending(false);
       toast.success("登入 Email 已連結");
     } catch (e) {
       toast.error(apiErrorMessage(e, "驗證失敗"));
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function setPrimaryEmail(email: string) {
+    setEmailBusy(true);
+    try {
+      const result = await usersApi.setPrimaryEmail(email);
+      setLinkedEmails(result.emails);
+      if (user && result.primary_email) {
+        const updated = { ...user, email: result.primary_email };
+        setUser(updated);
+        cacheSet(PROFILE_ME_KEY, updated);
+      }
+      toast.success("主要登入 Email 已更新");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "更新主要 Email 失敗"));
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function unlinkEmail(email: string) {
+    if (!window.confirm(`確定要解除 ${email} 的登入連結嗎？`)) return;
+    setEmailBusy(true);
+    try {
+      const result = await usersApi.unlinkEmail(email);
+      setLinkedEmails(result.emails);
+      toast.success("Email 連結已解除");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "解除 Email 失敗"));
     } finally {
       setEmailBusy(false);
     }
@@ -379,14 +422,36 @@ export default function ProfilePage() {
             <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>電子郵件</p>
             <div className="space-y-1">
               {(linkedEmails.length > 0 ? linkedEmails : [user?.email ?? "—"]).map((email) => (
-                <p key={email} className="text-sm break-all" style={{ color: "var(--text-primary)" }}>
-                  {email}
-                  {email === user?.email && (
-                    <span className="ml-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
-                      主要
-                    </span>
+                <div key={email} className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>
+                    {email}
+                    {email === user?.email && (
+                      <span className="ml-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        主要
+                      </span>
+                    )}
+                  </p>
+                  {email !== user?.email && email !== "—" && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        onClick={() => void setPrimaryEmail(email)}
+                        disabled={emailBusy}
+                      >
+                        設為主要
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        onClick={() => void unlinkEmail(email)}
+                        disabled={emailBusy}
+                      >
+                        解除
+                      </button>
+                    </>
                   )}
-                </p>
+                </div>
               ))}
             </div>
             <div className="mt-3 space-y-2">
@@ -490,6 +555,8 @@ export default function ProfilePage() {
           </div>
         </div>
       </section>}
+
+      {activeTab === "account" && <SessionManagement />}
 
       {/* 現職職位 */}
       {activeTab === "positions" && <section className="card overflow-hidden" aria-labelledby="positions-heading">

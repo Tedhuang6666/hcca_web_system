@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   CheckCircle2, Circle, Clock, ExternalLink, Loader2, Plus, RefreshCw,
@@ -35,7 +35,7 @@ export default function WorkItemsPage() {
   const [completing, setCompleting] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  function reload(showDone = filter === "all") {
+  const reload = useCallback((showDone = filter === "all") => {
     setLoading(true);
     workItemsApi.list({ include_done: showDone })
       .then((data) => {
@@ -44,12 +44,12 @@ export default function WorkItemsPage() {
       })
       .catch(() => toast.error("無法載入工作項目"))
       .finally(() => setLoading(false));
-  }
+  }, [filter]);
 
   useEffect(() => {
     reload();
     googleTasksApi.status().then(setGtStatus).catch(() => null);
-  }, []);
+  }, [reload]);
 
   const displayed = useMemo(() => {
     if (filter === "open") return items.filter((i) => i.status === "open");

@@ -40,6 +40,7 @@ from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.schemas.auth import GoogleOneTapRequest, RefreshRequest
 from api.services import passkey as passkey_svc
+from api.services import user_session as user_session_svc
 from api.services.discord_bot import (
     get_user_by_discord_id,
 )
@@ -748,6 +749,14 @@ async def refresh_token(
     )
     refresh_token_value = create_refresh_token(subject=str(user.id))
     _set_auth_cookies(response, access_token, refresh_token_value)
+    await user_session_svc.ensure_current(
+        db,
+        user_id=user.id,
+        refresh_token=refresh_token_value,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
 
     return {"message": "ok"}
 

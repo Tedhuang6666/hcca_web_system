@@ -330,6 +330,9 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: Validate frontend/backend module registry
+        run: npm run check:module-registry
+
       - name: TypeScript type-check
         run: npm run type-check
 

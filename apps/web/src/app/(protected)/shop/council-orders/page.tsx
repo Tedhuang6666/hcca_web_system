@@ -94,7 +94,7 @@ export default function CouncilOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [grade, classId, categoryId, isPaid, catalog]);
+  }, [grade, classId, isPaid, catalog]);
 
   const loadQuantities = useCallback(async () => {
     setLoading(true);
@@ -199,12 +199,8 @@ export default function CouncilOrdersPage() {
   );
 
   const gradeOptions = useMemo(() => {
-    const grades = new Set<string>();
-    summary?.rows.forEach((r) => {
-      // rows are classes; try to parse grade from label like "三年甲班"
-    });
     return [1, 2, 3, 4, 5, 6].map((g) => ({ value: String(g), label: `${g} 年級` }));
-  }, [summary]);
+  }, []);
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-5">

@@ -1,6 +1,5 @@
 "use client";
-import RouteError from "@/components/ui/RouteError";
-
-export default function EmailError(props: { error: Error & { digest?: string }; reset: () => void }) {
-  return <RouteError {...props} scope="電子郵件" />;
+import RouteErrorState from "@/components/ui/RouteErrorState";
+export default function EmailError({ error, reset }: { error: Error & { digest?: string; status?: number }; reset: () => void }) {
+  return <RouteErrorState error={error} reset={reset} />;
 }

@@ -10,6 +10,7 @@ export interface ClientErrorInput {
   stack?: string;
   scope?: string;
   pathname?: string;
+  dedupeKey?: string;
 }
 
 export interface ClientErrorReceipt {
@@ -21,6 +22,8 @@ export interface ClientErrorReceipt {
 function limit(value: string | undefined, length: number): string {
   return (value ?? "").slice(0, length);
 }
+
+const recentReports = new Map<string, number>();
 
 function csrfHeader(): Record<string, string> {
   if (typeof document === "undefined") return {};
@@ -35,6 +38,14 @@ function csrfHeader(): Record<string, string> {
 /** 將瀏覽器錯誤送到後端；回報失敗絕不能再製造一個未處理 rejection。 */
 export function reportClientError(input: ClientErrorInput): Promise<ClientErrorReceipt | null> {
   if (typeof window === "undefined") return Promise.resolve(null);
+
+  const fingerprint = `${input.dedupeKey ?? input.message}|${input.pathname ?? window.location.pathname}`;
+  const lastReportedAt = recentReports.get(fingerprint) ?? 0;
+  if (Date.now() - lastReportedAt < 30_000) return Promise.resolve(null);
+  recentReports.set(fingerprint, Date.now());
+  for (const [key, timestamp] of recentReports) {
+    if (Date.now() - timestamp >= 30_000) recentReports.delete(key);
+  }
 
   const payload = JSON.stringify({
     message: limit(input.message || "Unknown client error", MAX_MESSAGE_LENGTH),

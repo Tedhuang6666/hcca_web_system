@@ -5,7 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionEventOut, PetitionStatsOut, PetitionStatus } from "@/lib/types";
-import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
+import { cacheGet, cacheSet, cachePurge } from "@/lib/api-cache";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -100,7 +100,7 @@ export default function PetitionManagePage() {
     const cached = cacheGet<typeof orgs>(PET_ORGS_KEY);
     if (cached) { setOrgs(cached); return; }
     orgsApi.list({ active_only: true }).then((list) => { setOrgs(list); cacheSet(PET_ORGS_KEY, list); }).catch(() => null);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const resetForm = () => {
     setPublicText("");

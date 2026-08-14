@@ -395,6 +395,7 @@ from api.models.user_google_tasks import UserGoogleTasksConfig  # noqa: F401
 
 # 外部身份綁定
 from api.models.user_identity import UserIdentity  # noqa: F401
+from api.models.user_session import UserSession  # noqa: F401
 from api.models.web_push import WebPushSubscription  # noqa: F401
 
 # Webhook 訂閱與投遞紀錄

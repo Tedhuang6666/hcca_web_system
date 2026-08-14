@@ -6,13 +6,14 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any, require_permission
 from api.models.announcement import Announcement, AnnouncementRead
@@ -22,7 +23,7 @@ from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
-from api.schemas.analytics import PageViewCreate, ProductAnalyticsOut
+from api.schemas.analytics import ClientMetricCreate, PageViewCreate, ProductAnalyticsOut
 from api.services.analytics import get_product_analytics, record_page_view
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
@@ -101,6 +102,19 @@ class AnalyticsInsightsOut(BaseModel):
 async def create_page_view(body: PageViewCreate, db: DbDep, current_user: CurrentUser) -> None:
     await record_page_view(db, current_user.id, body.path)
     await db.commit()
+
+
+@router.post("/client-metrics", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
+async def create_client_metric(body: ClientMetricCreate, request: Request) -> dict[str, str]:
+    """接收匿名前端 Web Vitals／API latency，交由產品分析平台聚合。"""
+    posthog = get_posthog_client()
+    if posthog:
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="web_client_metric",
+            properties=body.model_dump(),
+        )
+    return {"status": "accepted"}
 
 
 @router.get("/product", response_model=ProductAnalyticsOut, summary="平台產品使用統計")

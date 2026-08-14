@@ -14070,6 +14070,24 @@ export interface paths {
         get: operations["list_my_emails_users_me_emails_get"];
         put?: never;
         post?: never;
+        /** 解除次要登入 Email */
+        delete: operations["unlink_email_users_me_emails_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/emails/primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 設定主要登入 Email */
+        post: operations["set_primary_email_users_me_emails_primary_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -14161,6 +14179,74 @@ export interface paths {
          * @description 依個資法第 11 條，將你的帳號假名化：顯示名稱、Email 替換為不可逆雜湊值，帳號停用。公文／法規等公共利益資料中的簽核紀錄依法保留不刪除。此操作不可逆，請確認後再送出。
          */
         post: operations["self_request_deletion_users_me_privacy_request_deletion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/security-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出最近安全活動 */
+        get: operations["list_security_events_users_me_security_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出我的登入工作階段 */
+        get: operations["list_my_sessions_users_me_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/sessions/revoke-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登出全部裝置 */
+        post: operations["revoke_all_sessions_users_me_sessions_revoke_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登出其他裝置 */
+        post: operations["revoke_other_sessions_users_me_sessions_revoke_others_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -23110,6 +23196,8 @@ export interface components {
         LinkedEmailsOut: {
             /** Emails */
             emails: string[];
+            /** Primary Email */
+            primary_email?: string | null;
         };
         /** LoadShedBody */
         LoadShedBody: {
@@ -29578,6 +29666,11 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** PrimaryEmailUpdate */
+        PrimaryEmailUpdate: {
+            /** Email */
+            email: string;
+        };
         /** PrivacyRequestCancel */
         PrivacyRequestCancel: {
             /** Reason */
@@ -33480,6 +33573,23 @@ export interface components {
             /** Seats */
             seats?: components["schemas"]["SeatInput"][];
         };
+        /** SecurityEventOut */
+        SecurityEventOut: {
+            /** Action */
+            action: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Summary */
+            summary: string | null;
+        };
         /** SelectedOption */
         SelectedOption: {
             /**
@@ -35513,6 +35623,38 @@ export interface components {
             show_email?: boolean | null;
             /** Student Id */
             student_id?: string | null;
+        };
+        /** UserSessionOut */
+        UserSessionOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Device Label */
+            device_label: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ip Address */
+            ip_address: string | null;
+            /**
+             * Is Current
+             * @default false
+             */
+            is_current: boolean;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
         };
         /** UserSummary */
         UserSummary: {
@@ -45468,6 +45610,8 @@ export interface operations {
                 my_only?: boolean;
                 limit?: number;
                 offset?: number;
+                /** @description 上一頁最後一筆的 opaque cursor */
+                cursor?: string | null;
             };
             header?: never;
             path?: never;
@@ -69117,6 +69261,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SelfAnonymizeRequestOut"];
+                };
+            };
+        };
+    };
+    list_security_events_users_me_security_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityEventOut"][];
+                };
+            };
+        };
+    };
+    list_my_sessions_users_me_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSessionOut"][];
+                };
+            };
+        };
+    };
+    revoke_all_sessions_users_me_sessions_revoke_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    revoke_other_sessions_users_me_sessions_revoke_others_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
         };
