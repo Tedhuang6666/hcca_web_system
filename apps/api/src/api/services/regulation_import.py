@@ -31,9 +31,6 @@ _PARAGRAPH_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*項\s*(
 _SUBPARAGRAPH_LINE_RE = re.compile(rf"^([{_NUMERAL_CHARS}0-9０-９]+)、\s*(.*)$")
 _ITEM_LINE_RE = re.compile(rf"^(?:（([{_NUMERAL_CHARS}0-9０-９]+)）|\((\d+)\))\s*(.*)$")
 _SUBPARAGRAPH_RE = re.compile(rf"(^|[：:。；;\n])([{_NUMERAL_CHARS}0-9０-９]+)、")
-_MARKDOWN_HEADING_RE = re.compile(r"^\s*(#{1,6})\s+(.+?)\s*$")
-_MARKDOWN_ORDERED_LIST_RE = re.compile(r"^(\s*)(\d+)[.)]\s+(.+)$")
-_MARKDOWN_UNORDERED_LIST_RE = re.compile(r"^(\s*)[-*+]\s+(.+)$")
 _MARKDOWN_RULE_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 _MARKDOWN_NUMERIC_HEADING_RE = re.compile(rf"^([{_NUMERAL_CHARS}0-9０-９]+)[、．.]\s*(.*)$")
 _MARKDOWN_PAREN_HEADING_RE = re.compile(rf"^[（(]([{_NUMERAL_CHARS}0-9０-９]+)[）)]\s*(.*)$")
@@ -118,7 +115,7 @@ def parse_regulation_text(
 
 def _looks_like_markdown_outline(content: str) -> bool:
     return any(
-        _MARKDOWN_HEADING_RE.match(line) and len(_MARKDOWN_HEADING_RE.match(line).group(1)) >= 2
+        (heading := _parse_markdown_heading(line)) is not None and heading[0] >= 2
         for line in content.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     )
 
@@ -428,40 +425,88 @@ def _extract_markdown_lines(value: str) -> list[_MarkdownLine]:
     for raw in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
         if not raw.strip() or _MARKDOWN_RULE_RE.match(raw):
             continue
-        heading_match = _MARKDOWN_HEADING_RE.match(raw)
-        if heading_match:
-            heading = re.sub(r"\s+#+\s*$", "", heading_match.group(2)).strip()
-            if heading:
-                lines.append(
-                    _MarkdownLine(
-                        text=heading,
-                        heading_level=len(heading_match.group(1)),
-                    )
-                )
-            continue
-        ordered_match = _MARKDOWN_ORDERED_LIST_RE.match(raw)
-        if ordered_match:
+        heading = _parse_markdown_heading(raw)
+        if heading:
+            heading_level, heading_text = heading
             lines.append(
                 _MarkdownLine(
-                    text=ordered_match.group(3).strip(),
-                    list_kind="ordered",
-                    list_number=ordered_match.group(2),
-                    indent=len(ordered_match.group(1)),
+                    text=heading_text,
+                    heading_level=heading_level,
                 )
             )
             continue
-        unordered_match = _MARKDOWN_UNORDERED_LIST_RE.match(raw)
-        if unordered_match:
+        ordered_item = _parse_markdown_ordered_item(raw)
+        if ordered_item:
+            text, list_number, indent = ordered_item
             lines.append(
                 _MarkdownLine(
-                    text=unordered_match.group(2).strip(),
+                    text=text,
+                    list_kind="ordered",
+                    list_number=list_number,
+                    indent=indent,
+                )
+            )
+            continue
+        unordered_item = _parse_markdown_unordered_item(raw)
+        if unordered_item:
+            text, indent = unordered_item
+            lines.append(
+                _MarkdownLine(
+                    text=text,
                     list_kind="unordered",
-                    indent=len(unordered_match.group(1)),
+                    indent=indent,
                 )
             )
             continue
         lines.append(_MarkdownLine(text=_normalize_spacing(raw)))
     return lines
+
+
+def _parse_markdown_heading(value: str) -> tuple[int, str] | None:
+    stripped = value.lstrip()
+    marker_end = 0
+    while marker_end < len(stripped) and stripped[marker_end] == "#":
+        marker_end += 1
+    if not 1 <= marker_end <= 6 or marker_end == len(stripped):
+        return None
+    if not stripped[marker_end].isspace():
+        return None
+    heading = _strip_markdown_heading_suffix(stripped[marker_end:].strip())
+    return (marker_end, heading) if heading else None
+
+
+def _strip_markdown_heading_suffix(value: str) -> str:
+    heading = value.strip()
+    hash_start = len(heading)
+    while hash_start > 0 and heading[hash_start - 1] == "#":
+        hash_start -= 1
+    if hash_start < len(heading) and hash_start > 0 and heading[hash_start - 1].isspace():
+        heading = heading[:hash_start].rstrip()
+    return heading
+
+
+def _parse_markdown_ordered_item(value: str) -> tuple[str, str, int] | None:
+    indent = len(value) - len(value.lstrip())
+    stripped = value[indent:]
+    number_end = 0
+    while number_end < len(stripped) and stripped[number_end].isdigit():
+        number_end += 1
+    if number_end == 0 or number_end >= len(stripped) or stripped[number_end] not in ".)":
+        return None
+    remainder = stripped[number_end + 1 :]
+    if not remainder or not remainder[0].isspace():
+        return None
+    text = remainder.strip()
+    return (text, stripped[:number_end], indent) if text else None
+
+
+def _parse_markdown_unordered_item(value: str) -> tuple[str, int] | None:
+    indent = len(value) - len(value.lstrip())
+    stripped = value[indent:]
+    if len(stripped) < 2 or stripped[0] not in "-*+" or not stripped[1].isspace():
+        return None
+    text = stripped[1:].strip()
+    return (text, indent) if text else None
 
 
 def _parse_markdown_heading_marker(value: str) -> tuple[str | None, str]:
