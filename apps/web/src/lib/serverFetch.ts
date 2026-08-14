@@ -5,6 +5,7 @@ import type {
   PublicSiteBundleOut,
   PublicSitePageOut,
 } from "./types";
+import type { ModuleStatusPublic } from "./api/system";
 import { serverApiUrl } from "./config";
 
 const REVALIDATE = 30;
@@ -46,6 +47,18 @@ export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut |
     return res.json();
   } catch {
     return null;
+  }
+}
+
+export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]> {
+  try {
+    const res = await fetch(serverApiUrl("/system/module-status"), {
+      next: { revalidate: REVALIDATE },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
   }
 }
 
