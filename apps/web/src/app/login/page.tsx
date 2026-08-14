@@ -102,28 +102,43 @@ export default function LoginPage() {
       <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
         <section
           className="login-aside relative hidden overflow-hidden px-12 py-10 lg:flex lg:flex-col lg:justify-between xl:px-20 xl:py-14"
-          style={{ background: "#173654", color: "#f8f3e5" }}
+          style={{
+            background: "color-mix(in srgb, var(--bg-surface) 86%, var(--primary-dim))",
+            borderRight: "1px solid var(--border)",
+            color: "var(--text-primary)",
+          }}
         >
           <header className="relative z-10 flex items-center gap-3">
             <BrandEmblem size={46} priority />
             <div>
-              <p className="text-sm font-semibold">{BRANDING.orgShortName}</p>
-              <p className="mt-0.5 text-xs text-[#cdd8e0]">{BRANDING.acronym}</p>
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                {BRANDING.orgShortName}
+              </p>
+              <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
+                {BRANDING.acronym}
+              </p>
             </div>
           </header>
 
           <div className="login-brand-stage relative z-10 py-16">
             <BrandEmblem size={172} priority />
-            <p className="mt-8 text-2xl font-semibold text-[#f8f3e5]">校園自治整合平台</p>
-            <p className="mt-2 text-sm text-[#cdd8e0]">公文、會議與校園服務</p>
+            <p className="mt-8 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+              校園自治整合平台
+            </p>
+            <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+              公文、會議與校園服務
+            </p>
           </div>
 
-          <footer className="relative z-10 text-[11px] text-[#91a5b5]">
+          <footer className="relative z-10 text-[11px]" style={{ color: "var(--text-muted)" }}>
             <span>© {new Date().getFullYear()} {BRANDING.orgName}</span>
           </footer>
         </section>
 
-        <section className="relative flex min-h-screen items-center justify-center px-5 py-24 sm:px-10 lg:py-16">
+        <section
+          className="relative flex min-h-screen items-center justify-center px-5 py-24 sm:px-10 lg:py-16"
+          style={{ background: "var(--bg-base)" }}
+        >
           <main className="relative z-10 w-full max-w-md animate-slide-in">
             <div className="mb-12 flex items-center gap-3 lg:hidden">
               <BrandEmblem size={44} priority />
@@ -186,10 +201,10 @@ export default function LoginPage() {
               onClick={(event) => handleOAuthClick(event, "google")}
               className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
-                background: "#ffffff",
-                color: "#173654",
-                border: "1px solid #d9dee3",
-                boxShadow: "0 8px 24px rgba(23, 54, 84, 0.08)",
+                background: "var(--bg-elevated)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-strong)",
+                boxShadow: "var(--shadow-sm)",
                 textDecoration: "none",
               }}
             >
@@ -265,7 +280,7 @@ export default function LoginPage() {
                     background: "var(--bg-surface)",
                     color: "var(--text-primary)",
                     border: "1px solid var(--border-strong)",
-                    boxShadow: "0 8px 24px rgba(23, 54, 84, 0.08)",
+                    boxShadow: "var(--shadow-sm)",
                   }}
                   disabled={passkeyBusy}
                   onClick={handlePasskeyLogin}
