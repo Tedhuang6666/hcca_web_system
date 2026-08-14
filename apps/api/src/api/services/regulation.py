@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -461,6 +461,172 @@ async def create_regulation_from_import(
     return loaded or reg
 
 
+def _history_dates(history: str | None) -> list[datetime]:
+    return [
+        parsed
+        for event in split_history_events(history)
+        if (parsed := parse_history_date_info(event)[0]) is not None
+    ]
+
+
+def _latest_regulation_history_date(reg: Regulation) -> datetime | None:
+    history_dates = _history_dates(reg.legislative_history)
+    if history_dates:
+        return max(history_dates)
+    revision_dates = [revision.amended_at for revision in reg.revisions if revision.amended_at]
+    if revision_dates:
+        return max(revision_dates)
+    return reg.published_at or reg.updated_at
+
+
+async def _find_current_regulation_for_import(
+    session: AsyncSession,
+    *,
+    title: str,
+    org_id: uuid.UUID,
+) -> Regulation | None:
+    result = await session.execute(
+        _reg_query_with_relations()
+        .where(
+            Regulation.title == title,
+            Regulation.org_id == org_id,
+            Regulation.is_active.is_(True),
+            Regulation.workflow_status == RegulationWorkflowStatus.PUBLISHED,
+        )
+        .order_by(Regulation.updated_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _update_existing_regulation_from_import(
+    session: AsyncSession,
+    reg: Regulation,
+    *,
+    data: ImportedRegulationDraft,
+    category: RegulationCategory,
+    updated_by: uuid.UUID,
+) -> Regulation | None:
+    events = split_history_events(data.legislative_history)
+    history_info = [parse_history_date_info(event) for event in events]
+    imported_dates = [info[0] for info in history_info if info[0] is not None]
+    latest_imported_date = max(imported_dates, default=None)
+    latest_existing_date = _latest_regulation_history_date(reg)
+    if (
+        latest_imported_date is None
+        or latest_existing_date is None
+        or latest_imported_date <= latest_existing_date
+    ):
+        return None
+
+    new_events = [
+        (event, info)
+        for event, info in zip(events, history_info, strict=True)
+        if info[0] is not None and info[0] > latest_existing_date
+    ]
+    if not new_events:
+        return None
+
+    existing_history_dates = _history_dates(reg.legislative_history)
+    reg.category = category
+    reg.content = data.content
+    reg.preface = data.preface
+    reg.legislative_history = data.legislative_history
+    reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
+    reg.is_active = True
+    reg.published_at = min(existing_history_dates + imported_dates)
+
+    reg.articles.clear()
+    await session.flush()
+    imported_articles = await _add_imported_articles(session, reg_id=reg.id, data=data)
+    reg.articles.extend(imported_articles)
+    await session.flush()
+
+    base_version = max(
+        [reg.version, *(revision.version for revision in reg.revisions)],
+        default=reg.version,
+    )
+    article_snapshot = _article_snapshot_json(reg.articles)
+    for offset, (event, info) in enumerate(new_events, start=1):
+        version = base_version + offset
+        is_latest = offset == len(new_events)
+        reg.revisions.append(
+            RegulationRevision(
+                regulation_id=reg.id,
+                version=version,
+                change_brief=event[:500],
+                is_total_amendment=is_latest,
+                content_snapshot=data.content if is_latest else "",
+                article_snapshot=article_snapshot if is_latest else "[]",
+                proposal_metadata_snapshot=reg.proposal_metadata,
+                amended_at=info[0],
+                amended_at_precision=info[1],
+                amended_year=info[2],
+                amended_by=updated_by,
+            )
+        )
+    reg.version = base_version + len(new_events)
+    await session.flush()
+    await session.execute(
+        update(Regulation).where(Regulation.id == reg.id).values(updated_at=latest_imported_date)
+    )
+    await session.refresh(reg, attribute_names=["updated_at"])
+    logger.info(
+        "法規 DOCX 匯入更新既有法規 id=%s title=%s version=%d",
+        reg.id,
+        reg.title,
+        reg.version,
+    )
+    loaded = await get_regulation(session, reg.id)
+    return loaded or reg
+
+
+async def import_regulation_document(
+    session: AsyncSession,
+    *,
+    data: ImportedRegulationDraft,
+    category: RegulationCategory,
+    org_id: uuid.UUID,
+    created_by: uuid.UUID,
+    publish_immediately: bool,
+    change_brief: str = "匯入既有現行法規",
+    update_existing: bool = False,
+) -> Regulation:
+    """匯入一份法規；批量立即發布時可依沿革日期更新同名現行法規。"""
+    if update_existing and publish_immediately:
+        existing = await _find_current_regulation_for_import(
+            session,
+            title=data.title,
+            org_id=org_id,
+        )
+        if existing is not None:
+            updated = await _update_existing_regulation_from_import(
+                session,
+                existing,
+                data=data,
+                category=category,
+                updated_by=created_by,
+            )
+            if updated is not None:
+                return updated
+
+    reg = await create_regulation_from_import(
+        session,
+        data=data,
+        category=category,
+        org_id=org_id,
+        created_by=created_by,
+    )
+    if publish_immediately:
+        return await publish_imported_regulation(
+            session,
+            reg,
+            published_by=created_by,
+            change_brief=change_brief,
+        )
+    return reg
+
+
 def _resolve_history_dates(raw_dates: list[datetime | None], now: datetime) -> list[datetime]:
     """將逐筆沿革事件的（可能缺漏的）日期補成單調可排序的具體日期。
 
@@ -500,15 +666,17 @@ async def publish_imported_regulation(
     沿革摘要（因無逐版舊文本）。若文件無沿革，則退回建立單一初始快照。
     """
     now = datetime.now(UTC)
+    events = split_history_events(reg.legislative_history)
+    history_info = [parse_history_date_info(event) for event in events]
+    history_dates = [info[0] for info in history_info if info[0] is not None]
     reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
-    reg.published_at = now
+    reg.published_at = min(history_dates, default=now)
+    reg.updated_at = max(history_dates, default=now)
 
     content_snapshot = reg.content
     article_snapshot = _article_snapshot_json(reg.articles)
-    events = split_history_events(reg.legislative_history)
 
     if events:
-        history_info = [parse_history_date_info(event) for event in events]
         amended_dates = _resolve_history_dates([item[0] for item in history_info], now)
         total = len(events)
         for version, (event, amended_at) in enumerate(

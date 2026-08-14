@@ -1294,6 +1294,77 @@ async def test_import_regulation_docx_creates_regulation_with_articles(
     assert len(body["articles"]) == 1
 
 
+async def test_bulk_import_updates_same_named_current_regulation_from_newer_history(
+    db_session: AsyncSession, authed_client_factory, make_user
+) -> None:
+    org = await _make_org(db_session)
+    user = await make_user(email="import-update-owner@school.edu")
+    await _grant_permission(db_session, user, org, "regulation:create")
+    await _grant_permission(db_session, user, org, "regulation:publish")
+    existing = await _make_regulation(
+        db_session,
+        org,
+        user,
+        title="同名現行法規",
+        content="# 同名現行法規\n\n第一條 舊版內容。",
+        legislative_history="中華民國 112 年 1 月 1 日制定",
+        workflow_status=RegulationWorkflowStatus.PUBLISHED,
+        published_at=datetime(2023, 1, 1, tzinfo=UTC),
+    )
+    db_session.add(
+        RegulationRevision(
+            regulation_id=existing.id,
+            version=1,
+            change_brief="中華民國 112 年 1 月 1 日制定",
+            is_total_amendment=True,
+            content_snapshot=existing.content,
+            article_snapshot="[]",
+            amended_at=datetime(2023, 1, 1, tzinfo=UTC),
+            amended_by=user.id,
+        )
+    )
+    await db_session.flush()
+    raw = _build_docx(
+        [
+            "同名現行法規",
+            "沿革",
+            "中華民國 112 年 1 月 1 日制定",
+            "中華民國 114 年 2 月 3 日修正",
+            "第一條 新版內容。",
+        ]
+    )
+
+    ac = authed_client_factory(user)
+    resp = await ac.post(
+        "/regulations/import-documents",
+        data={
+            "org_id": str(org.id),
+            "category": "ordinance",
+            "publish_immediately": "true",
+        },
+        files=[
+            (
+                "files",
+                (
+                    "同名現行法規.docx",
+                    raw,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+            )
+        ],
+    )
+
+    assert resp.status_code == 200, resp.text
+    item = resp.json()[0]
+    assert item["ok"] is True
+    assert item["regulation"]["id"] == str(existing.id)
+    assert item["regulation"]["version"] == 2
+    assert "新版內容。" in item["regulation"]["content"]
+    assert item["regulation"]["published_at"].startswith("2023-01-01")
+    assert item["regulation"]["updated_at"].startswith("2025-02-03")
+    assert item["regulation"]["revisions"][-1]["amended_at"].startswith("2025-02-03")
+
+
 async def test_import_regulation_docx_without_permission_returns_403(
     db_session: AsyncSession, authed_client_factory, make_user
 ) -> None:
