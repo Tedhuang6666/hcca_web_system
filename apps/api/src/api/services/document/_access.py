@@ -28,7 +28,12 @@ from api.services.permission import active_tenure_filter
 
 REDACTED_CONFIDENTIAL_TEXT = "(此公文為密件)"
 SENSITIVE_DOCUMENT_CLASSIFICATIONS = frozenset(
-    {DocumentClassification.CONFIDENTIAL, DocumentClassification.SECRET}
+    {
+        DocumentClassification.CONFIDENTIAL,
+        DocumentClassification.SECRET,
+        DocumentClassification.HIGHLY_CONFIDENTIAL,
+        DocumentClassification.ABSOLUTELY_CONFIDENTIAL,
+    }
 )
 
 

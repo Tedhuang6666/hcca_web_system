@@ -75,6 +75,8 @@ class DocumentClassification(enum.StrEnum):
     NORMAL = "normal"  # 普通
     CONFIDENTIAL = "confidential"  # 密
     SECRET = "secret"  # 機密
+    HIGHLY_CONFIDENTIAL = "highly_confidential"  # 極機密
+    ABSOLUTELY_CONFIDENTIAL = "absolutely_confidential"  # 絕對機密
 
 
 class DeclassificationCondition(enum.StrEnum):
@@ -91,10 +93,25 @@ class DocumentCategory(enum.StrEnum):
     DECREE = "decree"  # 令
     LETTER = "letter"  # 函
     ANNOUNCEMENT = "announcement"  # 公告
+    PRESENTATION = "presentation"  # 呈
     REPORT = "report"  # 報告
     RECORD = "record"  # 紀錄
     CONSULTATION = "consultation"  # 咨
     MEETING_NOTICE = "meeting_notice"  # 開會通知單
+    INSPECTION_NOTICE = "inspection_notice"  # 會勘通知單
+    PHONE_RECORD = "phone_record"  # 公務電話紀錄
+    BOOK_LETTER = "book_letter"  # 書函
+    DIRECTIVE = "directive"  # 手令／手諭
+    SIGNATURE = "signature"  # 簽
+    MEMO = "memo"  # 箋函／便簽
+    APPOINTMENT = "appointment"  # 聘書
+    CERTIFICATE = "certificate"  # 證明書
+    LICENSE = "license"  # 證書／執照
+    CONTRACT = "contract"  # 契約書
+    PROPOSAL = "proposal"  # 提案
+    SUMMARY = "summary"  # 節略
+    BRIEFING = "briefing"  # 說帖
+    FORM = "form"  # 定型化表單
     OTHER = "other"  # 其他
 
 
@@ -104,6 +121,8 @@ class RecipientType(enum.StrEnum):
     MAIN = "main"  # 受文者（主旨對象）
     PRIMARY = "primary"  # 正本
     COPY = "copy"  # 副本
+    ATTENDEE = "attendee"  # 出席者
+    OBSERVER = "observer"  # 列席者
 
 
 class DeliveryMethod(enum.StrEnum):
@@ -225,6 +244,8 @@ class DocumentTemplate(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
 
     issuer_full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    issuer_postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    issuer_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     urgency: Mapped[DocumentUrgency] = mapped_column(
         Enum(
             DocumentUrgency,
@@ -252,6 +273,9 @@ class DocumentTemplate(Base, TimestampMixin):
         nullable=False,
         default=DeclassificationCondition.NONE,
     )
+    confidentiality_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     category: Mapped[DocumentCategory] = mapped_column(
         Enum(
             DocumentCategory,
@@ -263,6 +287,7 @@ class DocumentTemplate(Base, TimestampMixin):
         index=True,
     )
     subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    basis: Mapped[str | None] = mapped_column(Text, nullable=True)  # 依據（公告等文別使用）
     doc_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     action_required: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -272,7 +297,9 @@ class DocumentTemplate(Base, TimestampMixin):
     meeting_chairperson: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     handler_unit: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    handler_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     file_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    classification_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     retention_period: Mapped[str | None] = mapped_column(String(100), nullable=True)
     visibility_level: Mapped[DocumentVisibility] = mapped_column(
         Enum(
@@ -332,8 +359,10 @@ class Document(Base, TimestampMixin):
     # ── 基本屬性 ────────────────────────────────────────────────────────────
     # title：系統顯示標題（可由主旨自動帶入）
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    # 發文機關全銜
+    # 發文機關全銜、地址與郵遞區號
     issuer_full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    issuer_postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    issuer_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # 速別
     urgency: Mapped[DocumentUrgency] = mapped_column(
         Enum(
@@ -382,6 +411,7 @@ class Document(Base, TimestampMixin):
 
     # ── 公文本文結構 ─────────────────────────────────────────────────────────
     subject: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 主旨
+    basis: Mapped[str | None] = mapped_column(Text, nullable=True)  # 依據（公告等文別使用）
     doc_description: Mapped[str | None] = mapped_column(Text, nullable=True)  # 說明
     action_required: Mapped[str | None] = mapped_column(Text, nullable=True)  # 辦法
     # 整合性文字內容（Markdown 格式）
@@ -399,8 +429,15 @@ class Document(Base, TimestampMixin):
     handler_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     handler_unit: Mapped[str | None] = mapped_column(String(100), nullable=True)
     handler_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    handler_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # 檔號
     file_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # 分類號與收文日期字號
+    classification_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_document_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_document_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # 保存年限
     retention_period: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
@@ -775,6 +812,7 @@ class DocumentAttachment(Base, TimestampMixin):
     )  # 本地路徑 or S3 key
     content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # bytes
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     link_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)  # 外部連結 URL
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

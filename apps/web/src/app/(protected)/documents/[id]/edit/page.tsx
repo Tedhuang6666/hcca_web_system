@@ -29,10 +29,25 @@ const CATEGORY_OPTIONS: Array<[DocumentCategory, string]> = [
   ["letter", "函"],
   ["decree", "令"],
   ["announcement", "公告"],
+  ["presentation", "呈"],
   ["report", "報告"],
   ["record", "紀錄"],
   ["consultation", "咨"],
   ["meeting_notice", "開會通知單"],
+  ["inspection_notice", "會勘通知單"],
+  ["phone_record", "公務電話紀錄"],
+  ["book_letter", "書函"],
+  ["directive", "手令／手諭"],
+  ["signature", "簽"],
+  ["memo", "箋函／便簽"],
+  ["appointment", "聘書"],
+  ["certificate", "證明書"],
+  ["license", "證書／執照"],
+  ["contract", "契約書"],
+  ["proposal", "提案"],
+  ["summary", "節略"],
+  ["briefing", "說帖"],
+  ["form", "定型化表單"],
   ["other", "其他"],
 ];
 
@@ -40,10 +55,25 @@ const CONTENT_LABELS: Record<DocumentCategory, { title: string; subject?: string
   letter: { title: "公文內容（主旨／說明／辦法）", subject: "一、主旨", desc: "二、說明", action: "三、辦法" },
   decree: { title: "令文內容", desc: "正文" },
   announcement: { title: "公告內容", subject: "主旨", desc: "公告事項" },
+  presentation: { title: "呈文內容", subject: "主旨", desc: "說明", action: "擬辦" },
   report: { title: "報告內容", subject: "主旨", desc: "說明／分析", action: "建議事項" },
   record: { title: "討論與決議", desc: "討論事項", action: "決議" },
   consultation: { title: "咨文內容", subject: "主旨", desc: "說明", action: "辦法或事項" },
   meeting_notice: { title: "議事日程", desc: "議事日程" },
+  inspection_notice: { title: "會勘通知", desc: "說明" },
+  phone_record: { title: "公務電話紀錄", subject: "主旨", desc: "紀錄" },
+  book_letter: { title: "書函內容", subject: "主旨", desc: "說明", action: "辦法" },
+  directive: { title: "手令內容", subject: "主旨", desc: "說明", action: "辦法" },
+  signature: { title: "簽辦內容", subject: "主旨", desc: "說明", action: "擬辦" },
+  memo: { title: "箋函／便簽內容", subject: "主旨", desc: "說明", action: "辦法" },
+  appointment: { title: "聘書內容", subject: "主旨", desc: "說明" },
+  certificate: { title: "證明書內容", subject: "主旨", desc: "說明" },
+  license: { title: "證書／執照內容", subject: "主旨", desc: "說明" },
+  contract: { title: "契約書內容", subject: "主旨", desc: "說明" },
+  proposal: { title: "提案內容", subject: "主旨", desc: "說明", action: "辦法" },
+  summary: { title: "節略內容", subject: "主旨", desc: "說明" },
+  briefing: { title: "說帖內容", subject: "主旨", desc: "說明" },
+  form: { title: "定型化表單", subject: "主旨", desc: "說明" },
   other: { title: "公文內容（主旨／說明／辦法）", subject: "一、主旨", desc: "二、說明", action: "三、辦法" },
 };
 
@@ -53,6 +83,11 @@ type DocumentEditDraft = {
   classification: DocumentClassification;
   category: DocumentCategory;
   subject: string;
+  basis: string;
+  declassificationCondition: "none" | "auto_at_date" | "manual_approval";
+  confidentialityExpiresAt: string;
+  issuerPostalCode: string;
+  issuerAddress: string;
   docDescription: string;
   actionRequired: string;
   meetingPurpose: string;
@@ -62,6 +97,12 @@ type DocumentEditDraft = {
   handlerName: string;
   handlerUnit: string;
   handlerEmail: string;
+  handlerPhone: string;
+  classificationNumber: string;
+  fileNumber: string;
+  sourceDocumentDate: string;
+  sourceDocumentNumber: string;
+  retentionPeriod: string;
   dueDate: string;
   changeNote: string;
   recipients: Recipient[];
@@ -81,6 +122,11 @@ export default function EditDocumentPage() {
   const [classification, setClassification] = useState<DocumentClassification>("normal");
   const [category, setCategory] = useState<DocumentCategory>("letter");
   const [subject, setSubject] = useState("");
+  const [basis, setBasis] = useState("");
+  const [declassificationCondition, setDeclassificationCondition] = useState<"none" | "auto_at_date" | "manual_approval">("none");
+  const [confidentialityExpiresAt, setConfidentialityExpiresAt] = useState("");
+  const [issuerPostalCode, setIssuerPostalCode] = useState("");
+  const [issuerAddress, setIssuerAddress] = useState("");
   const [docDescription, setDocDescription] = useState("");
   const [actionRequired, setActionRequired] = useState("");
   const [meetingPurpose, setMeetingPurpose] = useState("");
@@ -91,6 +137,12 @@ export default function EditDocumentPage() {
   const [handlerName, setHandlerName] = useState("");
   const [handlerUnit, setHandlerUnit] = useState("");
   const [handlerEmail, setHandlerEmail] = useState("");
+  const [handlerPhone, setHandlerPhone] = useState("");
+  const [classificationNumber, setClassificationNumber] = useState("");
+  const [fileNumber, setFileNumber] = useState("");
+  const [sourceDocumentDate, setSourceDocumentDate] = useState("");
+  const [sourceDocumentNumber, setSourceDocumentNumber] = useState("");
+  const [retentionPeriod, setRetentionPeriod] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [changeNote, setChangeNote] = useState("");
   const [recipients, setRecipients] = useState<Recipient[]>([]);
@@ -105,6 +157,11 @@ export default function EditDocumentPage() {
     classification,
     category,
     subject,
+    basis,
+    declassificationCondition,
+    confidentialityExpiresAt,
+    issuerPostalCode,
+    issuerAddress,
     docDescription,
     actionRequired,
     meetingPurpose,
@@ -114,6 +171,12 @@ export default function EditDocumentPage() {
     handlerName,
     handlerUnit,
     handlerEmail,
+    handlerPhone,
+    classificationNumber,
+    fileNumber,
+    sourceDocumentDate,
+    sourceDocumentNumber,
+    retentionPeriod,
     dueDate,
     changeNote,
     recipients,
@@ -122,13 +185,21 @@ export default function EditDocumentPage() {
   }), [
     actionRequired,
     category,
+    basis,
     changeNote,
     classification,
+    classificationNumber,
+    fileNumber,
+    confidentialityExpiresAt,
+    declassificationCondition,
     docDescription,
     dueDate,
     handlerEmail,
     handlerName,
+    handlerPhone,
     handlerUnit,
+    issuerAddress,
+    issuerPostalCode,
     meetingChairperson,
     meetingLocation,
     meetingPurpose,
@@ -136,6 +207,9 @@ export default function EditDocumentPage() {
     newRecipient,
     recipients,
     selectedTemplateId,
+    sourceDocumentDate,
+    sourceDocumentNumber,
+    retentionPeriod,
     subject,
     title,
     urgency,
@@ -146,6 +220,11 @@ export default function EditDocumentPage() {
     classification: doc.classification,
     category: doc.category,
       subject: doc.subject ?? "",
+      basis: doc.basis ?? "",
+      declassificationCondition: doc.declassification_condition ?? "none",
+      confidentialityExpiresAt: doc.confidentiality_expires_at ? doc.confidentiality_expires_at.slice(0, 10) : "",
+      issuerPostalCode: doc.issuer_postal_code ?? "",
+      issuerAddress: doc.issuer_address ?? "",
       docDescription: doc.doc_description ?? "",
       actionRequired: doc.action_required ?? "",
       meetingPurpose: doc.meeting_purpose ?? "",
@@ -155,6 +234,12 @@ export default function EditDocumentPage() {
       handlerName: doc.handler_name ?? "",
       handlerUnit: doc.handler_unit ?? "",
       handlerEmail: doc.handler_email ?? "",
+      handlerPhone: doc.handler_phone ?? "",
+      classificationNumber: doc.classification_number ?? "",
+      fileNumber: doc.file_number ?? "",
+      sourceDocumentDate: doc.source_document_date ? doc.source_document_date.slice(0, 10) : "",
+      sourceDocumentNumber: doc.source_document_number ?? "",
+      retentionPeriod: doc.retention_period ?? "",
     dueDate: doc.due_date ? doc.due_date.split("T")[0] : "",
     changeNote: "",
     recipients: doc.recipients.map(r => ({
@@ -175,6 +260,11 @@ export default function EditDocumentPage() {
     setClassification(draft.classification ?? "normal");
     setCategory(draft.category ?? "letter");
     setSubject(draft.subject ?? "");
+    setBasis(draft.basis ?? "");
+    setDeclassificationCondition(draft.declassificationCondition ?? "none");
+    setConfidentialityExpiresAt(draft.confidentialityExpiresAt ?? "");
+    setIssuerPostalCode(draft.issuerPostalCode ?? "");
+    setIssuerAddress(draft.issuerAddress ?? "");
     setDocDescription(draft.docDescription ?? "");
     setActionRequired(draft.actionRequired ?? "");
     setMeetingPurpose(draft.meetingPurpose ?? "");
@@ -184,6 +274,12 @@ export default function EditDocumentPage() {
     setHandlerName(draft.handlerName ?? "");
     setHandlerUnit(draft.handlerUnit ?? "");
     setHandlerEmail(draft.handlerEmail ?? "");
+    setHandlerPhone(draft.handlerPhone ?? "");
+    setClassificationNumber(draft.classificationNumber ?? "");
+    setFileNumber(draft.fileNumber ?? "");
+    setSourceDocumentDate(draft.sourceDocumentDate ?? "");
+    setSourceDocumentNumber(draft.sourceDocumentNumber ?? "");
+    setRetentionPeriod(draft.retentionPeriod ?? "");
     setDueDate(draft.dueDate ?? "");
     setChangeNote(draft.changeNote ?? "");
     setRecipients(draft.recipients ?? []);
@@ -205,35 +301,57 @@ export default function EditDocumentPage() {
 
   const buildUpdatePayload = useCallback((autosave = false) => ({
     title, urgency, classification, category,
+    declassification_condition: classification === "normal" ? "none" : declassificationCondition,
+    confidentiality_expires_at: declassificationCondition === "auto_at_date" ? confidentialityExpiresAt || undefined : null,
     serial_template_id: selectedTemplateId || null,
+    issuer_postal_code: issuerPostalCode || undefined,
+    issuer_address: issuerAddress || undefined,
     subject: category === "decree" ? null : subject || undefined,
+    basis: category === "announcement" ? basis || undefined : undefined,
     doc_description: docDescription || undefined,
     action_required: category === "decree" ? null : actionRequired || undefined,
-    meeting_purpose: category === "meeting_notice" ? meetingPurpose || undefined : undefined,
-    meeting_time: (category === "meeting_notice" || category === "record") && meetingTime ? meetingTime : undefined,
-    meeting_location: (category === "meeting_notice" || category === "record") ? meetingLocation || undefined : undefined,
-    meeting_chairperson: (category === "meeting_notice" || category === "record") ? meetingChairperson || undefined : undefined,
+    meeting_purpose: (category === "meeting_notice" || category === "inspection_notice") ? meetingPurpose || undefined : undefined,
+    meeting_time: (category === "meeting_notice" || category === "inspection_notice" || category === "record") && meetingTime ? meetingTime : undefined,
+    meeting_location: (category === "meeting_notice" || category === "inspection_notice" || category === "record") ? meetingLocation || undefined : undefined,
+    meeting_chairperson: (category === "meeting_notice" || category === "inspection_notice" || category === "record") ? meetingChairperson || undefined : undefined,
     handler_name: handlerName || undefined,
     handler_unit: handlerUnit || undefined,
     handler_email: handlerEmail || undefined,
+    handler_phone: handlerPhone || undefined,
+    classification_number: classificationNumber || undefined,
+    file_number: fileNumber || undefined,
+    source_document_date: sourceDocumentDate || undefined,
+    source_document_number: sourceDocumentNumber || undefined,
+    retention_period: retentionPeriod || undefined,
     due_date: dueDate || undefined,
     change_note: autosave ? undefined : changeNote || undefined,
     autosave,
   }), [
     actionRequired,
+    basis,
     category,
     changeNote,
     classification,
     docDescription,
+    declassificationCondition,
+    confidentialityExpiresAt,
+    classificationNumber,
+    fileNumber,
     dueDate,
     handlerEmail,
     handlerName,
+    handlerPhone,
     handlerUnit,
+    issuerAddress,
+    issuerPostalCode,
     meetingChairperson,
     meetingLocation,
     meetingPurpose,
     meetingTime,
     selectedTemplateId,
+    sourceDocumentDate,
+    sourceDocumentNumber,
+    retentionPeriod,
     subject,
     title,
     urgency,
@@ -273,6 +391,11 @@ export default function EditDocumentPage() {
       setClassification(d.classification);
       setCategory(d.category);
       setSubject(d.subject ?? "");
+      setBasis(d.basis ?? "");
+      setDeclassificationCondition(d.declassification_condition ?? "none");
+      setConfidentialityExpiresAt(d.confidentiality_expires_at ? d.confidentiality_expires_at.slice(0, 10) : "");
+      setIssuerPostalCode(d.issuer_postal_code ?? "");
+      setIssuerAddress(d.issuer_address ?? "");
       setDocDescription(d.doc_description ?? "");
       setActionRequired(d.action_required ?? "");
       setMeetingPurpose(d.meeting_purpose ?? "");
@@ -283,6 +406,12 @@ export default function EditDocumentPage() {
       setHandlerName(d.handler_name ?? "");
       setHandlerUnit(d.handler_unit ?? "");
       setHandlerEmail(d.handler_email ?? "");
+      setHandlerPhone(d.handler_phone ?? "");
+      setClassificationNumber(d.classification_number ?? "");
+      setFileNumber(d.file_number ?? "");
+      setSourceDocumentDate(d.source_document_date ? d.source_document_date.slice(0, 10) : "");
+      setSourceDocumentNumber(d.source_document_number ?? "");
+      setRetentionPeriod(d.retention_period ?? "");
       setDueDate(d.due_date ? d.due_date.split("T")[0] : "");
       setSelectedTemplateId(d.serial_template_id ?? "");
       setRecipients(d.recipients.map(r => ({
@@ -373,6 +502,8 @@ export default function EditDocumentPage() {
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
   const isDecree = category === "decree";
   const isMeetingNotice = category === "meeting_notice";
+  const isInspectionNotice = category === "inspection_notice";
+  const isNotice = isMeetingNotice || isInspectionNotice;
   const isRecord = category === "record";
   const contentLabels = CONTENT_LABELS[category];
 
@@ -427,7 +558,7 @@ export default function EditDocumentPage() {
                 { label: "速別", value: urgency, setter: setUrgency as (v: string) => void,
                   options: [["normal","普通件"],["priority","速件"],["express","最速件"]] },
                 { label: "密等", value: classification, setter: setClassification as (v: string) => void,
-                  options: [["normal","普通"],["confidential","機密"],["secret","秘密"]] },
+                  options: [["normal","普通"],["confidential","密"],["secret","機密"],["highly_confidential","極機密"],["absolutely_confidential","絕對機密"]] },
                 { label: "類別", value: category, setter: setCategory as (v: string) => void,
                   options: CATEGORY_OPTIONS },
               ].map(({ label, value, setter, options }) => (
@@ -440,23 +571,45 @@ export default function EditDocumentPage() {
                 </div>
               ))}
             </div>
+            {classification !== "normal" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>解密條件 *</label>
+                  <select value={declassificationCondition} onChange={e => setDeclassificationCondition(e.target.value as typeof declassificationCondition)}
+                    className="w-full text-xs outline-none rounded px-2 py-1.5" style={selectStyle}>
+                    <option value="none">請選擇</option>
+                    <option value="auto_at_date">至指定日期解密</option>
+                    <option value="manual_approval">經核准後解密</option>
+                  </select>
+                </div>
+                {declassificationCondition === "auto_at_date" && <div>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>保密期限訖日 *</label>
+                  <input type="date" value={confidentialityExpiresAt} onChange={e => setConfidentialityExpiresAt(e.target.value)}
+                    className="w-full text-xs outline-none rounded px-2 py-1.5" style={inputStyle} />
+                </div>}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input value={issuerPostalCode} onChange={e => setIssuerPostalCode(e.target.value)} placeholder="機關郵遞區號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+              <input value={issuerAddress} onChange={e => setIssuerAddress(e.target.value)} placeholder="機關地址" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+            </div>
           </div>
 
-          {(isMeetingNotice || isRecord) && (
+          {(isNotice || isRecord) && (
             <div className="card p-4 space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
                 {isRecord ? "紀錄資訊" : "開會資訊"}
               </h3>
-              {isMeetingNotice && (
-                <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
-                  placeholder="開會事由"
+                {isNotice && (
+                  <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
+                  placeholder={isInspectionNotice ? "會勘事由" : "開會事由"}
                   className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input type="datetime-local" value={meetingTime} onChange={e => setMeetingTime(e.target.value)}
                   className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
                 <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
-                  placeholder={isRecord ? "地點" : "開會地點"}
+                  placeholder={isRecord ? "地點" : isInspectionNotice ? "會勘地點" : "開會地點"}
                   className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
                 <input value={meetingChairperson} onChange={e => setMeetingChairperson(e.target.value)}
                   placeholder={isRecord ? "主席" : "主持人"}
@@ -482,6 +635,12 @@ export default function EditDocumentPage() {
                     wordBreak: "break-word",
                     overflowX: "hidden",
                   }} />
+              </div>
+            )}
+            {category === "announcement" && (
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>依據 *</label>
+                <GongwenEditor value={basis} onChange={setBasis} minRows={3} placeholder="依據法規、會議決議或相關文件。" />
               </div>
             )}
             <div>
@@ -512,7 +671,7 @@ export default function EditDocumentPage() {
               <div key={r.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded"
                 style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                 <span className="px-1.5 py-0.5 rounded" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
-                  {{ main: "受文者", primary: "正本", copy: "副本" }[r.recipient_type]}
+                  {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]}
                 </span>
                 <span className=" flex-1">{r.name}</span>
                 {r.email && <span style={{ color: "var(--text-muted)" }}>{r.email}</span>}
@@ -527,6 +686,10 @@ export default function EditDocumentPage() {
                 <option value="main">受文者</option>
                 <option value="primary">正本</option>
                 <option value="copy">副本</option>
+                {isNotice || isRecord ? <>
+                  <option value="attendee">出席者</option>
+                  <option value="observer">列席者</option>
+                </> : null}
               </select>
               <input placeholder="單位/姓名" value={newRecipient.name}
                 onChange={e => setNewRecipient(p => ({ ...p, name: e.target.value }))}
@@ -551,7 +714,7 @@ export default function EditDocumentPage() {
                   <li key={a.id} className="flex items-center justify-between text-xs px-3 py-2 rounded"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                     <div className="flex items-center gap-2 ">
-                      <span>📎</span><span>{a.filename}</span>
+                      <span>📎</span><span>{a.filename}（{a.quantity ?? 1}份）</span>
                     </div>
                     <button onClick={() => deleteAttachment(a.id)} className=" hover:text-red-400 text-xs">
                       刪除
@@ -593,7 +756,7 @@ export default function EditDocumentPage() {
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-strong)" }}>
                   <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
                   <p className="text-sm font-mono font-semibold" style={{ color: "var(--primary)" }}>
-                    {selectedTemplate?.preview ?? `DOC-${new Date().getFullYear()}-XXXXXX`}
+                    {selectedTemplate?.preview ?? "尚未設定正式字號"}
                   </p>
                 </div>
               </>
@@ -612,6 +775,7 @@ export default function EditDocumentPage() {
                 ph: isDecree ? "例如：主席" : "所屬單位",
               },
               { label: "Email", value: handlerEmail, setter: setHandlerEmail, ph: "電子郵件" },
+              { label: "電話", value: handlerPhone, setter: setHandlerPhone, ph: "聯絡電話" },
             ].map(({ label, value, setter, ph }) => (
               <div key={label} className="flex items-center gap-2">
                 <span className="text-xs w-10 flex-shrink-0" style={{ color: "var(--text-muted)" }}>{label}</span>
@@ -626,6 +790,14 @@ export default function EditDocumentPage() {
             <label className="text-xs mb-2 block" style={{ color: "var(--text-muted)" }}>限辦日期</label>
             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
               className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+          </div>
+          <div className="card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>檔案管理欄位</h3>
+            <input value={fileNumber} onChange={e => setFileNumber(e.target.value)} placeholder="檔號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+            <input value={classificationNumber} onChange={e => setClassificationNumber(e.target.value)} placeholder="分類號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+            <input value={retentionPeriod} onChange={e => setRetentionPeriod(e.target.value)} placeholder="保存年限，例如：5年" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+            <input type="date" value={sourceDocumentDate} onChange={e => setSourceDocumentDate(e.target.value)} className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+            <input value={sourceDocumentNumber} onChange={e => setSourceDocumentNumber(e.target.value)} placeholder="收文文號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
           </div>
 
           {/* 修訂備注 + 儲存 */}

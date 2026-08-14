@@ -59,6 +59,8 @@ COPY apps/api/scripts /app/scripts
 COPY fonts/edukai-5.1_20251208.ttf /app/fonts/edukai-5.1_20251208.ttf
 COPY fonts/LXGWWenKaiTC-Regular.ttf /app/fonts/LXGWWenKaiTC-Regular.ttf
 COPY fonts/MoeLI-3.0.ttf /app/fonts/MoeLI-3.0.ttf
+COPY 朝華標題B.ttf /app/fonts/朝華標題B.ttf
+COPY KouzanGyoushoOTF.otf /app/fonts/KouzanGyoushoOTF.otf
 RUN fc-cache -f
 COPY apps/api/alembic /app/alembic
 COPY apps/api/alembic.ini /app/alembic.ini

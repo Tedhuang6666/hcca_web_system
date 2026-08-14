@@ -37,6 +37,8 @@ const DOC_CLASSIFICATIONS: { key: string; label: string }[] = [
   { key: "normal", label: "普通" },
   { key: "confidential", label: "密" },
   { key: "secret", label: "機密" },
+  { key: "highly_confidential", label: "極機密" },
+  { key: "absolutely_confidential", label: "絕對機密" },
 ];
 
 const DOC_VISIBILITIES: { key: string; label: string }[] = [

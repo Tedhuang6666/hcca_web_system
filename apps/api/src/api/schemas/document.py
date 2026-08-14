@@ -137,7 +137,7 @@ class RecipientOut(BaseModel):
 
 class RecipientCreate(BaseModel):
     recipient_type: RecipientType = Field(
-        ..., description="受文者類型（main=受文者 / primary=正本 / copy=副本）"
+        ..., description="受文者類型（main=受文者 / primary=正本 / copy=副本 / attendee=出席者 / observer=列席者）"
     )
     name: str = Field(..., min_length=1, max_length=200, description="單位或個人名稱")
     email: EmailStr | None = Field(None, description="聯絡信箱（發文後自動寄送）")
@@ -179,11 +179,15 @@ class DocumentTemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     description: str | None = Field(None, max_length=500)
     issuer_full_name: str | None = Field(None, max_length=200)
+    issuer_postal_code: str | None = Field(None, max_length=20)
+    issuer_address: str | None = Field(None, max_length=300)
     urgency: DocumentUrgency = DocumentUrgency.NORMAL
     classification: DocumentClassification = DocumentClassification.NORMAL
     declassification_condition: DeclassificationCondition = DeclassificationCondition.NONE
+    confidentiality_expires_at: datetime | None = None
     category: DocumentCategory = DocumentCategory.LETTER
     subject: str | None = Field(None, max_length=500)
+    basis: str | None = None
     doc_description: str | None = None
     action_required: str | None = None
     content: str = ""
@@ -191,7 +195,9 @@ class DocumentTemplateBase(BaseModel):
     meeting_location: str | None = Field(None, max_length=200)
     meeting_chairperson: str | None = Field(None, max_length=100)
     handler_unit: str | None = Field(None, max_length=100)
+    handler_phone: str | None = Field(None, max_length=50)
     file_number: str | None = Field(None, max_length=100)
+    classification_number: str | None = Field(None, max_length=100)
     retention_period: str | None = Field(None, max_length=100)
     visibility_level: DocumentVisibility = DocumentVisibility.ORG_ONLY
     recipients: list[RecipientCreate] = Field(default_factory=list)
@@ -212,25 +218,44 @@ class DocumentTemplateBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_template_body(self) -> DocumentTemplateBase:
-        if self.category not in (
-            DocumentCategory.MEETING_NOTICE,
-            DocumentCategory.DECREE,
-            DocumentCategory.RECORD,
-        ):
+        notice_categories = (DocumentCategory.MEETING_NOTICE, DocumentCategory.INSPECTION_NOTICE)
+        if self.category not in (*notice_categories, DocumentCategory.DECREE, DocumentCategory.RECORD):
             if not self.subject or not self.subject.strip():
                 raise ValueError("此類公文範本需填寫主旨")
             if len(self.subject.strip()) < 8:
                 raise ValueError("主旨長度過短，請使用正式句式")
-        elif self.category == DocumentCategory.MEETING_NOTICE and (
+        elif self.category in notice_categories and (
             not self.meeting_purpose or not self.meeting_location
         ):
-            raise ValueError("開會通知單範本需填寫開會事由與地點")
+            raise ValueError("通知單範本需填寫事由與地點")
         elif self.category == DocumentCategory.RECORD and (
             not self.doc_description or not self.action_required
         ):
             raise ValueError("紀錄範本需填寫討論事項與決議")
         if self.category == DocumentCategory.DECREE and not (self.issuer_full_name or "").strip():
             self.issuer_full_name = "主席"
+        if self.category == DocumentCategory.ANNOUNCEMENT and not (self.basis or "").strip():
+            raise ValueError("公告範本需填寫依據")
+        if (
+            self.classification == DocumentClassification.NORMAL
+            and self.declassification_condition != DeclassificationCondition.NONE
+        ):
+            raise ValueError("普通公文不可設定解密條件")
+        if self.classification == DocumentClassification.NORMAL and self.confidentiality_expires_at:
+            raise ValueError("普通公文不可設定保密期限")
+        if self.classification != DocumentClassification.NORMAL:
+            if self.declassification_condition == DeclassificationCondition.NONE:
+                raise ValueError("密件必須填寫解密條件或保密期限")
+            if (
+                self.declassification_condition == DeclassificationCondition.AUTO_AT_DATE
+                and not self.confidentiality_expires_at
+            ):
+                raise ValueError("選擇自動解密時必須提供保密期限訖日")
+            if (
+                self.declassification_condition == DeclassificationCondition.MANUAL_APPROVAL
+                and self.confidentiality_expires_at
+            ):
+                raise ValueError("核准後解密不可同時填寫保密期限")
         return self
 
 
@@ -242,11 +267,15 @@ class DocumentTemplateUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=120)
     description: str | None = Field(None, max_length=500)
     issuer_full_name: str | None = Field(None, max_length=200)
+    issuer_postal_code: str | None = Field(None, max_length=20)
+    issuer_address: str | None = Field(None, max_length=300)
     urgency: DocumentUrgency | None = None
     classification: DocumentClassification | None = None
     declassification_condition: DeclassificationCondition | None = None
+    confidentiality_expires_at: datetime | None = None
     category: DocumentCategory | None = None
     subject: str | None = Field(None, max_length=500)
+    basis: str | None = None
     doc_description: str | None = None
     action_required: str | None = None
     content: str | None = None
@@ -254,7 +283,9 @@ class DocumentTemplateUpdate(BaseModel):
     meeting_location: str | None = Field(None, max_length=200)
     meeting_chairperson: str | None = Field(None, max_length=100)
     handler_unit: str | None = Field(None, max_length=100)
+    handler_phone: str | None = Field(None, max_length=50)
     file_number: str | None = Field(None, max_length=100)
+    classification_number: str | None = Field(None, max_length=100)
     retention_period: str | None = Field(None, max_length=100)
     visibility_level: DocumentVisibility | None = None
     recipients: list[RecipientCreate] | None = None
@@ -297,6 +328,7 @@ class AttachmentOut(BaseModel):
     display_name: str | None = None
     content_type: str | None = None
     file_size: int | None = None
+    quantity: int = Field(1, ge=1)
     url: str = ""
     link_url: str | None = None
     uploaded_by: uuid.UUID
@@ -423,6 +455,8 @@ class DocumentOut(BaseModel):
     serial_number: str
     title: str
     issuer_full_name: str | None = None
+    issuer_postal_code: str | None = None
+    issuer_address: str | None = None
     # 公文格式欄位
     urgency: DocumentUrgency
     classification: DocumentClassification
@@ -430,6 +464,7 @@ class DocumentOut(BaseModel):
     confidentiality_expires_at: datetime | None = None
     category: DocumentCategory
     subject: str | None
+    basis: str | None = None
     doc_description: str | None
     action_required: str | None
     content: str
@@ -442,7 +477,11 @@ class DocumentOut(BaseModel):
     handler_name: str | None
     handler_unit: str | None
     handler_email: str | None
+    handler_phone: str | None = None
     file_number: str | None = None
+    classification_number: str | None = None
+    source_document_date: datetime | None = None
+    source_document_number: str | None = None
     retention_period: str | None = None
     # 流程
     status: DocumentStatus
@@ -522,6 +561,8 @@ class DocumentCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200, description="公文標題（系統顯示用）")
     issuer_full_name: str | None = Field(None, max_length=200, description="發文機關全銜")
+    issuer_postal_code: str | None = Field(None, max_length=20, description="機關郵遞區號")
+    issuer_address: str | None = Field(None, max_length=300, description="機關地址")
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
     activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
     # 字號模板（None 則使用通用格式 DOC-YYYY-NNNNNN）
@@ -542,6 +583,7 @@ class DocumentCreate(BaseModel):
     confidentiality_expires_at: datetime | None = Field(None, description="保密期限訖日")
     category: DocumentCategory = Field(DocumentCategory.LETTER, description="公文類別")
     subject: str | None = Field(None, max_length=500, description="主旨")
+    basis: str | None = Field(None, description="依據（公告必填）")
     doc_description: str | None = Field(None, description="說明（詳細事由、依據）")
     action_required: str | None = Field(None, description="辦法（具體行動或執行方式）")
     content: str = Field(default="", description="整合性內容（Markdown）")
@@ -554,7 +596,11 @@ class DocumentCreate(BaseModel):
     handler_name: str | None = Field(None, max_length=50, description="承辦人姓名")
     handler_unit: str | None = Field(None, max_length=100, description="承辦人所屬單位")
     handler_email: EmailStr | None = Field(None, description="承辦人電子郵件")
+    handler_phone: str | None = Field(None, max_length=50, description="承辦人電話")
     file_number: str | None = Field(None, max_length=100, description="檔號")
+    classification_number: str | None = Field(None, max_length=100, description="分類號")
+    source_document_date: datetime | None = Field(None, description="收文日期")
+    source_document_number: str | None = Field(None, max_length=100, description="收文文號")
     retention_period: str | None = Field(None, max_length=100, description="保存年限")
     # 時間
     due_date: datetime | None = Field(None, description="限辦日期")
@@ -591,9 +637,10 @@ class DocumentCreate(BaseModel):
         if self.category == DocumentCategory.DECREE and not (self.issuer_full_name or "").strip():
             self.issuer_full_name = "主席"
 
-        if self.category == DocumentCategory.MEETING_NOTICE:
+        notice_categories = (DocumentCategory.MEETING_NOTICE, DocumentCategory.INSPECTION_NOTICE)
+        if self.category in notice_categories:
             if not self.meeting_purpose or not self.meeting_time or not self.meeting_location:
-                raise ValueError("開會通知單需填寫開會事由、時間與地點")
+                raise ValueError("通知單需填寫事由、時間與地點")
         elif self.category == DocumentCategory.RECORD:
             if not self.meeting_time or not self.meeting_location:
                 raise ValueError("紀錄需填寫時間與地點")
@@ -612,10 +659,18 @@ class DocumentCreate(BaseModel):
                 raise ValueError("主旨為必填且不可為空白")
             if self.subject and len(self.subject.strip()) < 8:
                 raise ValueError("主旨長度過短，請使用正式句式")
+        if self.category == DocumentCategory.ANNOUNCEMENT and not (self.basis or "").strip():
+            raise ValueError("公告需填寫依據")
 
-        if (
-            self.classification != DocumentClassification.NORMAL
-            and self.declassification_condition == DeclassificationCondition.AUTO_AT_DATE
+        if self.classification == DocumentClassification.NORMAL:
+            if self.declassification_condition != DeclassificationCondition.NONE:
+                raise ValueError("普通公文不可設定解密條件")
+            if self.confidentiality_expires_at:
+                raise ValueError("普通公文不可設定保密期限")
+        elif self.declassification_condition == DeclassificationCondition.NONE:
+            raise ValueError("密件必須填寫解密條件或保密期限")
+        elif (
+            self.declassification_condition == DeclassificationCondition.AUTO_AT_DATE
             and not self.confidentiality_expires_at
         ):
             raise ValueError("選擇自動解密時必須提供保密期限訖日")
@@ -625,12 +680,15 @@ class DocumentCreate(BaseModel):
 class DocumentUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=200)
     issuer_full_name: str | None = Field(None, max_length=200)
+    issuer_postal_code: str | None = Field(None, max_length=20)
+    issuer_address: str | None = Field(None, max_length=300)
     urgency: DocumentUrgency | None = None
     classification: DocumentClassification | None = None
     declassification_condition: DeclassificationCondition | None = None
     confidentiality_expires_at: datetime | None = None
     category: DocumentCategory | None = None
     subject: str | None = Field(None, max_length=500)
+    basis: str | None = None
     doc_description: str | None = None
     action_required: str | None = None
     content: str | None = None
@@ -641,7 +699,11 @@ class DocumentUpdate(BaseModel):
     handler_name: str | None = Field(None, max_length=50)
     handler_unit: str | None = Field(None, max_length=100)
     handler_email: EmailStr | None = None
+    handler_phone: str | None = Field(None, max_length=50)
     file_number: str | None = Field(None, max_length=100)
+    classification_number: str | None = Field(None, max_length=100)
+    source_document_date: datetime | None = None
+    source_document_number: str | None = Field(None, max_length=100)
     retention_period: str | None = Field(None, max_length=100)
     due_date: datetime | None = None
     visibility_level: DocumentVisibility | None = None
@@ -655,6 +717,18 @@ class DocumentUpdate(BaseModel):
     def default_decree_issuer(self) -> DocumentUpdate:
         if self.category == DocumentCategory.DECREE and not (self.issuer_full_name or "").strip():
             self.issuer_full_name = "主席"
+        if self.classification == DocumentClassification.NORMAL:
+            if self.declassification_condition not in (None, DeclassificationCondition.NONE):
+                raise ValueError("普通公文不可設定解密條件")
+            if self.confidentiality_expires_at:
+                raise ValueError("普通公文不可設定保密期限")
+        elif self.declassification_condition == DeclassificationCondition.NONE:
+            raise ValueError("密件必須填寫解密條件或保密期限")
+        elif (
+            self.declassification_condition == DeclassificationCondition.AUTO_AT_DATE
+            and self.confidentiality_expires_at is None
+        ):
+            raise ValueError("選擇自動解密時必須提供保密期限訖日")
         return self
 
 

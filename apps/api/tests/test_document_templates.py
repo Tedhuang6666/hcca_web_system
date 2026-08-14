@@ -99,6 +99,7 @@ async def test_inactive_document_template_hidden_by_default(db_session: AsyncSes
             name="公告範本",
             category="announcement",
             subject="為公告校園自治事項，請 查照。",
+            basis="依學生自治相關規定辦理。",
         ),
         created_by=user.id,
     )
