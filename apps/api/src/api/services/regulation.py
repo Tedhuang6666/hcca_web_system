@@ -739,6 +739,8 @@ async def structure_regulation_content(
         content=source_content,
         preface=reg.preface,
     )
+    if parsed.title and parsed.title != reg.title:
+        reg.title = parsed.title
     if replace_existing:
         for article in existing_articles:
             article.is_deleted = True

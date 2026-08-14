@@ -179,6 +179,43 @@ def test_parse_regulation_text_maps_nested_standalone_lines_precisely() -> None:
     assert draft.articles[6].legal_number == "2"
 
 
+def test_parse_markdown_regulation_outline_imports_pasted_plain_text() -> None:
+    draft = parse_regulation_text(
+        title="舊法規名稱",
+        content="""
+# 國立新竹高級中學社團博覽會攤位設置及管理規範（草案）
+
+## 一、目的
+
+為維護社團博覽會現場秩序，特訂定本規範。
+
+---
+
+## 三、攤位使用規定
+
+### （一）攤位範圍
+
+1. 各社團應於主辦單位指定之攤位範圍內設置攤位。
+2. 社團之桌椅不得妨礙公共通道。
+
+### （二）音響及聲音管理
+
+1. 各社團**不得使用任何擴音設備**，包括但不限於：
+
+   * 麥克風
+   * 擴音器
+""",
+    )
+
+    assert draft.title == "國立新竹高級中學社團博覽會攤位設置及管理規範（草案）"
+    assert any(row.article_type == ArticleType.CHAPTER for row in draft.articles)
+    assert any(row.article_type == ArticleType.SECTION for row in draft.articles)
+    assert any(row.article_type == ArticleType.ARTICLE for row in draft.articles)
+    assert any(row.article_type == ArticleType.PARAGRAPH for row in draft.articles)
+    assert any("**不得使用任何擴音設備**" in (row.content or "") for row in draft.articles)
+    assert "---" not in draft.content
+
+
 def test_parse_regulation_docx_collects_history_heading_block() -> None:
     raw = _build_docx(
         [
