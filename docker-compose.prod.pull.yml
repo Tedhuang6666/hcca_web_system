@@ -65,7 +65,7 @@ services:
       retries: 5
 
   pgbouncer:
-    image: edoburu/pgbouncer:1.23.1-p0
+    image: edoburu/pgbouncer:v1.23.1-p3
     restart: unless-stopped
     environment:
       DB_HOST: db
