@@ -663,6 +663,8 @@ async def test_publish_imported_regulation_splits_legislative_history_into_revis
     assert published.version == 2
     assert len(published.revisions) == 2
     assert published.revisions[-1].is_total_amendment is True
+    assert published.published_at == datetime(2011, 1, 1, tzinfo=UTC)
+    assert published.updated_at == datetime(2016, 6, 1, tzinfo=UTC)
 
 
 # ── 一致性巡檢 ───────────────────────────────────────────────────────────
