@@ -49,10 +49,29 @@ function shouldReduceThemeMotion(a11yMotion: boolean) {
   return a11yMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function clearThemeTransition(root: HTMLElement) {
-  root.style.removeProperty("--theme-transition-x");
-  root.style.removeProperty("--theme-transition-y");
-  root.style.removeProperty("--theme-transition-radius");
+function installThemeTransitionStyles(
+  x: number,
+  y: number,
+  radius: number,
+): HTMLStyleElement | null {
+  const nonce = document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce;
+  if (!nonce) return null;
+
+  const style = document.createElement("style");
+  style.setAttribute("nonce", nonce);
+  style.textContent = `
+    :root {
+      --theme-transition-x: ${x}px;
+      --theme-transition-y: ${y}px;
+      --theme-transition-radius: ${radius}px;
+    }
+  `;
+  document.head.appendChild(style);
+  return style;
+}
+
+function clearThemeTransition(style: HTMLStyleElement | null) {
+  style?.remove();
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -99,7 +118,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [a11y]);
 
   const setTheme = useCallback((t: Theme, origin?: ThemeTransitionOrigin) => {
-    const root = document.documentElement;
     const startViewTransition = (document as DocumentWithViewTransition).startViewTransition;
 
     if (!origin || !startViewTransition || shouldReduceThemeMotion(a11y.motion)) {
@@ -114,10 +132,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y),
     );
+    const transitionStyle = installThemeTransitionStyles(x, y, radius);
 
-    root.style.setProperty("--theme-transition-x", `${x}px`);
-    root.style.setProperty("--theme-transition-y", `${y}px`);
-    root.style.setProperty("--theme-transition-radius", `${radius}px`);
+    if (!transitionStyle) {
+      setThemeState(t);
+      applyTheme(t);
+      return;
+    }
 
     try {
       const transition = startViewTransition.call(document, () => {
@@ -127,11 +148,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         });
       });
       void transition.finished.then(
-        () => clearThemeTransition(root),
-        () => clearThemeTransition(root),
+        () => clearThemeTransition(transitionStyle),
+        () => clearThemeTransition(transitionStyle),
       );
     } catch {
-      clearThemeTransition(root);
+      clearThemeTransition(transitionStyle);
       setThemeState(t);
       applyTheme(t);
     }
