@@ -832,10 +832,12 @@ function ReviewRow({
   submission,
   fields,
   onReviewed,
+  canReview,
 }: {
   submission: VotingSubmission;
   fields: SubmissionCustomField[];
   onReviewed: () => void;
+  canReview: boolean;
 }) {
   const [status, setStatus] = useState<
     | "reviewing"
@@ -979,87 +981,100 @@ function ReviewRow({
               <span className="min-w-0 flex-1 truncate font-medium" title={file.filename}>
                 {file.filename}
               </span>
-              <label
-                className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded"
-                style={{ color: "var(--primary-text)" }}
-                title="替換檔案"
-              >
-                <Upload size={14} />
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  className="sr-only"
-                  disabled={uploadingFileId !== null}
-                  onChange={(event) => {
-                    void uploadFiles(event.target.files, file.id);
-                    event.target.value = "";
-                  }}
-                />
-              </label>
+              {canReview && (
+                <label
+                  className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded"
+                  style={{ color: "var(--primary-text)" }}
+                  title="替換檔案"
+                >
+                  <Upload size={14} />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="sr-only"
+                    disabled={uploadingFileId !== null}
+                    onChange={(event) => {
+                      void uploadFiles(event.target.files, file.id);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
             </div>
             <AIEvidencePanel file={file} />
           </div>
         ))}
       </div>
-      <div className="mt-3">
-        <label className="btn btn-ghost min-h-10 cursor-pointer">
-          {uploadingFileId === "new" ? (
-            <LoaderCircle className="animate-spin" size={15} />
-          ) : (
-            <Plus size={15} />
-          )}
-          增加檔案
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            multiple
-            className="sr-only"
-            disabled={uploadingFileId !== null}
-            onChange={(event) => {
-              void uploadFiles(event.target.files);
-              event.target.value = "";
-            }}
-          />
-        </label>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-[11rem_1fr_auto]">
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value as typeof status)}
-          className="input"
-        >
-          <option value="reviewing">審核中</option>
-          <option value="review_completed">審核完成（進入全校投票）</option>
-          <option value="approved">採用</option>
-          <option value="revision_requested">請補件</option>
-          <option value="rejected">未採用</option>
-        </select>
-        <input
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          className="input"
-          placeholder="給學生的審核說明（選填）"
-        />
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void review()}
-          className="btn min-h-11"
-          style={{
-            background: "var(--primary)",
-            color: "var(--primary-fg)",
-            border: "none",
-          }}
-        >
-          {saving ? "儲存中…" : "儲存審核"}
-        </button>
-      </div>
+      {canReview && (
+        <>
+          <div className="mt-3">
+            <label className="btn btn-ghost min-h-10 cursor-pointer">
+              {uploadingFileId === "new" ? (
+                <LoaderCircle className="animate-spin" size={15} />
+              ) : (
+                <Plus size={15} />
+              )}
+              增加檔案
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                multiple
+                className="sr-only"
+                disabled={uploadingFileId !== null}
+                onChange={(event) => {
+                  void uploadFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[11rem_1fr_auto]">
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value as typeof status)}
+              className="input"
+            >
+              <option value="reviewing">審核中</option>
+              <option value="review_completed">審核完成（進入全校投票）</option>
+              <option value="approved">採用</option>
+              <option value="revision_requested">請補件</option>
+              <option value="rejected">未採用</option>
+            </select>
+            <input
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              className="input"
+              placeholder="給學生的審核說明（選填）"
+            />
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void review()}
+              className="btn min-h-11"
+              style={{
+                background: "var(--primary)",
+                color: "var(--primary-fg)",
+                border: "none",
+              }}
+            >
+              {saving ? "儲存中…" : "儲存審核"}
+            </button>
+          </div>
+        </>
+      )}
     </article>
   );
 }
 
 export default function MerchandiseSubmissionsAdminPage() {
   const { can } = usePermissions();
+  const canManageSubmissions =
+    can("merchandise_submission:manage") || can("shop:manage");
+  const canReviewSubmissions =
+    can("merchandise_submission:review") || canManageSubmissions;
+  const canViewSubmissions =
+    can("merchandise_submission:view") || canReviewSubmissions;
+  const canAccessAdmin = canViewSubmissions;
   const [settings, setSettings] =
     useState<MerchandiseSubmissionSettingsOut | null>(null);
   const [items, setItems] = useState<MerchandiseSubmissionItemOut[]>([]);
@@ -1079,13 +1094,19 @@ export default function MerchandiseSubmissionsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const load = useCallback(async () => {
+    if (!canAccessAdmin) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [nextSettings, nextItems, nextSubmissions, nextOrgs] = await Promise.all([
-        merchandiseSubmissionsApi.getSettings(),
-        merchandiseSubmissionsApi.listItems(),
+        canManageSubmissions ? merchandiseSubmissionsApi.getSettings() : Promise.resolve(null),
+        canManageSubmissions ? merchandiseSubmissionsApi.listItems() : Promise.resolve([]),
         merchandiseSubmissionsApi.listSubmissions(),
-        orgsApi.list({ active_only: true, exclude_class_orgs: true }),
+        canReviewSubmissions
+          ? orgsApi.list({ active_only: true, exclude_class_orgs: true })
+          : Promise.resolve([]),
       ]);
       setSettings(nextSettings);
       setItems(nextItems);
@@ -1097,7 +1118,7 @@ export default function MerchandiseSubmissionsAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canAccessAdmin, canManageSubmissions, canReviewSubmissions]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -1160,16 +1181,16 @@ export default function MerchandiseSubmissionsAdminPage() {
       toast.error(apiErrorMessage(error, "無法建立票選問卷草稿"));
     }
   };
-  if (!can("shop:manage"))
+  if (!canAccessAdmin)
     return (
       <main className="p-6">
         <h1 className="text-xl font-bold">無法存取投稿管理</h1>
         <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
-          需要商品管理權限。
+          需要校商投稿查看、管理或審核權限。
         </p>
       </main>
     );
-  if (loading || !settings)
+  if (loading || (canManageSubmissions && !settings))
     return (
       <main className="p-6">
         <div
@@ -1217,8 +1238,9 @@ export default function MerchandiseSubmissionsAdminPage() {
       >
         {[
           ["review", "投稿審核"],
-          ["settings", "全站投稿與公告設定"],
-          ["items", "投稿品項"],
+          ...(canManageSubmissions
+            ? [["settings", "全站投稿與公告設定"], ["items", "投稿品項"]]
+            : []),
         ].map(([value, label]) => (
           <button
             type="button"
@@ -1235,7 +1257,7 @@ export default function MerchandiseSubmissionsAdminPage() {
           </button>
         ))}
       </nav>
-      {tab === "settings" && (
+      {canManageSubmissions && tab === "settings" && settings && (
         <section
           className="rounded-xl border p-5 sm:p-6"
           style={{
@@ -1567,7 +1589,7 @@ export default function MerchandiseSubmissionsAdminPage() {
           </div>
         </section>
       )}
-      {tab === "items" && (
+      {canManageSubmissions && tab === "items" && (
         <div className="grid items-start gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
           <aside
             className="rounded-xl border p-3"
@@ -1649,44 +1671,46 @@ export default function MerchandiseSubmissionsAdminPage() {
               依品項、投稿者與目前狀態篩選，快速處理需要審核的投稿。
             </p>
           </div>
-          <div
-            className="mt-5 rounded-lg border p-4"
-            style={{ background: "var(--primary-dim)", borderColor: "var(--border)" }}
-          >
-            <p className="font-semibold">建立全校票選問卷</p>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-              將所有「審核完成」的品項彙整成同一份問卷，每個品項一題，讓同學選擇一個或多個喜歡的圖案。
-              建立後請先確認題目與圖稿，再到問卷頁發布。
-            </p>
-            <div className="mt-3 flex flex-wrap items-end gap-3">
-              <label className="min-w-60 flex-1">
-                <FieldCaption>問卷所屬組織</FieldCaption>
-                <select
-                  value={votingOrgId}
-                  onChange={(event) => setVotingOrgId(event.target.value)}
-                  className="input w-full"
+          {canReviewSubmissions && (
+            <div
+              className="mt-5 rounded-lg border p-4"
+              style={{ background: "var(--primary-dim)", borderColor: "var(--border)" }}
+            >
+              <p className="font-semibold">建立全校票選問卷</p>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                將所有「審核完成」的品項彙整成同一份問卷，每個品項一題，讓同學選擇一個或多個喜歡的圖案。
+                建立後請先確認題目與圖稿，再到問卷頁發布。
+              </p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="min-w-60 flex-1">
+                  <FieldCaption>問卷所屬組織</FieldCaption>
+                  <select
+                    value={votingOrgId}
+                    onChange={(event) => setVotingOrgId(event.target.value)}
+                    className="input w-full"
+                  >
+                    <option value="">選擇組織…</option>
+                    {orgs.map((org) => (
+                      <option key={org.id} value={org.id}>{org.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void prepareVotingSurvey()}
+                  className="btn min-h-11"
+                  style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
                 >
-                  <option value="">選擇組織…</option>
-                  {orgs.map((org) => (
-                    <option key={org.id} value={org.id}>{org.name}</option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() => void prepareVotingSurvey()}
-                className="btn min-h-11"
-                style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
-              >
-                建立問卷草稿
-              </button>
-              {preparedSurvey && (
-                <Link href={`/surveys/${preparedSurvey.id}`} className="btn btn-ghost min-h-11">
-                  檢視／確認問卷
-                </Link>
-              )}
+                  建立問卷草稿
+                </button>
+                {preparedSurvey && (
+                  <Link href={`/surveys/${preparedSurvey.id}`} className="btn btn-ghost min-h-11">
+                    檢視／確認問卷
+                  </Link>
+                )}
+              </div>
             </div>
-          </div>
+          )}
           <div
             className="mt-5 grid gap-3 rounded-lg border p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(15rem,1.4fr)_minmax(10rem,0.8fr)_auto]"
             style={{
@@ -1769,8 +1793,9 @@ export default function MerchandiseSubmissionsAdminPage() {
                 <ReviewRow
                   key={submission.id}
                   submission={submission}
+                  canReview={canReviewSubmissions}
                   fields={mergeFields(
-                    settings.global_fields,
+                    settings?.global_fields ?? [],
                     items.find((item) => item.id === submission.item_id)?.custom_fields ?? [],
                   )}
                   onReviewed={() => void load()}

@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { NavigationProfileOut } from "./types";
 import {
   NAV_DEF_LOGGED_OUT,
+  NAV_ITEMS,
+  NAVIGATION_PROFILES,
   navItemsFromEntries,
   navProfileFromApi,
+  resolveNavigationProfile,
 } from "./navigation";
 
 describe("navigation visibility", () => {
@@ -42,5 +45,21 @@ describe("navigation visibility", () => {
     const ids = navItemsFromEntries(navProfileFromApi(profile).desktopSections).map((item) => item.id);
 
     expect(ids).toEqual(["publicPetition"]);
+  });
+
+  it("shows校商投稿管理 to its dedicated permissions", () => {
+    const defaultIds = navItemsFromEntries(NAVIGATION_PROFILES.default.desktopSections)
+      .map((item) => item.id);
+    const adminItem = NAV_ITEMS.find((item) => item.id === "merchandiseSubmissionsAdmin");
+
+    expect(defaultIds).toContain("merchandiseSubmissionsAdmin");
+    expect(adminItem?.perms).toEqual(expect.arrayContaining([
+      "merchandise_submission:view",
+      "merchandise_submission:manage",
+      "merchandise_submission:review",
+    ]));
+    expect(resolveNavigationProfile(new Set(["merchandise_submission:manage"]), false))
+      .toBe("default");
+    expect(resolveNavigationProfile(new Set(["shop:manage"]), false)).toBe("default");
   });
 });

@@ -272,6 +272,8 @@ function TemplateGallery({
 
 export default function MerchandiseSubmissionsPage() {
   const { can } = usePermissions();
+  const canManageSubmissions =
+    can("merchandise_submission:manage") || can("shop:manage");
   const [portal, setPortal] = useState<MerchandiseSubmissionPortalOut | null>(
     null,
   );
@@ -415,7 +417,7 @@ export default function MerchandiseSubmissionsPage() {
             依規格上傳圖稿、儲存草稿並送出審核。
           </p>
         </div>
-        {can("shop:manage") && (
+        {canManageSubmissions && (
           <Link
             href="/merchandise-submissions/admin"
             className="btn btn-ghost min-h-11"
@@ -1077,7 +1079,7 @@ export default function MerchandiseSubmissionsPage() {
               >
                 管理員需要先建立投稿品項並設定開放時間，這裡才會出現可投稿的商品。
               </p>
-              {can("shop:manage") && (
+              {canManageSubmissions && (
                 <Link
                   href="/merchandise-submissions/admin"
                   className="btn mt-5 inline-flex min-h-10"

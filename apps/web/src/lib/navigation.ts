@@ -326,7 +326,16 @@ export const NAV_DEF: NavEntry[] = [
     heading: "營運管理",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds(["operations", "publications", "email", "activitiesAdmin", "finance", "receivables", "inventoryAdmin"]),
+    items: byIds([
+      "operations",
+      "publications",
+      "email",
+      "activitiesAdmin",
+      "finance",
+      "receivables",
+      "inventoryAdmin",
+      "merchandiseSubmissionsAdmin",
+    ]),
   },
   {
     id: "workbench",
@@ -608,6 +617,7 @@ export function resolveNavigationProfile(
     "audit:",
     "email:",
     "merchandise_submission:",
+    "shop:",
     "electronic_credential:",
   ].some((entry) => typeof entry === "string" ? hasPrefix(entry) : entry);
 

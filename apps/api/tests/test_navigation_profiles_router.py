@@ -229,3 +229,35 @@ async def test_resolve_matches_by_permission_when_no_position_link(
     body = resp.json()
     assert body["source"] == "permission"
     assert body["profile"]["key"] == "reviewer-view"
+
+
+async def test_resolve_uses_default_for_merchandise_submission_permissions(
+    member_user, authed_client_factory, db_session
+) -> None:
+    """校商投稿權限應優先使用完整導覽，避免自訂視角遺漏管理入口。"""
+    await _seed_profile(db_session, key="default", label="完整平台視角")
+    await _seed_profile(db_session, key="student", label="學生服務視角")
+    await _seed_profile(
+        db_session,
+        key="merchandise-reviewer",
+        priority=1,
+        match_any_permissions=["merchandise_submission:manage"],
+    )
+    org = Org(name=f"校商投稿視角組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="校商投稿管理員")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(Permission(position_id=position.id, code="merchandise_submission:manage"))
+    db_session.add(
+        UserPosition(user_id=member_user.id, position_id=position.id, start_date=date.today())
+    )
+    await db_session.flush()
+
+    ac = authed_client_factory(member_user)
+    resp = await ac.get("/admin/navigation-profiles/me")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source"] == "default"
+    assert body["profile"]["key"] == "default"
