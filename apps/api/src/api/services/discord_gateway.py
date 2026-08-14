@@ -32,6 +32,7 @@ from api.services.discord_bot import (
     get_user_by_discord_id,
 )
 from api.services.discord_inventory import (
+    _INVENTORY_KEY,  # noqa: F401
     inventory_guild,
     inventory_guilds,
     read_inventory,

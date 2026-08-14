@@ -17,6 +17,9 @@ os.environ.setdefault(
 # 在 pytest 連續執行多 test 時，前面 test 故意觸發的 5xx 會污染同進程的滑動視窗，
 # 導致後面 test 全部 503。測試環境一律關閉。
 os.environ.setdefault("LOAD_SHED_ENABLED", "false")
+# 全域 rate limit 的計數器跨測試案例共用，長測試序列會讓無關端點被 429；
+# 需要驗證限流的案例會透過 defense config 明確開啟。
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 # 同理：測試不使用真實 Redis broker，避免事件迴圈跨 test 互鎖。
 os.environ.setdefault("WS_PUBSUB_BACKEND", "memory")
 
