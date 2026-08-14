@@ -177,7 +177,7 @@ async def emit_personal_notification(
     link: str | None = None,
 ) -> None:
     """把平台個人通知轉成統一的 Discord DM outbox 事件。"""
-    from api.services.discord_bot import emit_user_dm
+    from api.services.discord_delivery import emit_user_dm
 
     embed = build_embed(Domain.SYSTEM, Severity.INFO, title=title, body=body, link=link)
     components = default_action_row(open_url=link, domain=Domain.SYSTEM)

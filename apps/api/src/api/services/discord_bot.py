@@ -30,6 +30,7 @@ from api.models.document import Document, DocumentStatus, DocumentVisibility
 from api.models.org import Position, UserPosition
 from api.models.petition import PetitionCase
 from api.models.user import User
+from api.services.discord_delivery import emit_user_dm
 from api.services.discord_embeds import (
     Domain,
     EmbedField,
@@ -38,6 +39,9 @@ from api.services.discord_embeds import (
     default_action_row,
 )
 from api.services.discord_notification_routes import emit_routed_notification
+from api.services.discord_roles import (
+    list_active_role_ids_for_user as list_mapped_role_ids_for_user,
+)
 from api.services.permission import active_tenure_filter
 
 logger = logging.getLogger(__name__)
@@ -154,34 +158,9 @@ async def upsert_user_link(
 async def list_active_role_ids_for_user(
     db: AsyncSession, user_id: uuid.UUID
 ) -> dict[str, set[str]]:
-    today = local_today()
-    result = await db.execute(
-        select(DiscordRoleMapping)
-        .join(
-            Position,
-            or_(
-                and_(
-                    DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.POSITION,
-                    DiscordRoleMapping.position_id == Position.id,
-                ),
-                and_(
-                    DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.ORG,
-                    DiscordRoleMapping.org_id == Position.org_id,
-                ),
-            ),
-        )
-        .join(UserPosition, UserPosition.position_id == Position.id)
-        .where(UserPosition.user_id == user_id)
-        .where(DiscordRoleMapping.is_active.is_(True))
-        .where(*active_tenure_filter(today))
-        .distinct()
-    )
-    rows = result.scalars().all()
-    by_guild: dict[str, set[str]] = {}
-    for row in rows:
-        by_guild.setdefault(row.guild_id, set()).add(row.role_id)
     from api.services.discord_governance import desired_policy_role_ids_for_user
 
+    by_guild = await list_mapped_role_ids_for_user(db, user_id)
     for guild_id, role_ids in (await desired_policy_role_ids_for_user(db, user_id)).items():
         by_guild.setdefault(guild_id, set()).update(role_ids)
     return by_guild
@@ -439,14 +418,14 @@ async def emit_public_document_notice(db: AsyncSession, doc: Document) -> None:
 
     if doc.status != DocumentStatus.APPROVED:
         return
-    if doc.visibility_level not in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}:
+    if doc.visibility_level != DocumentVisibility.PUBLICLY_OPEN and not doc.is_public:
         return
     channel_ids = await _publication_channel_ids_for_orgs(db, {doc.org_id})
     if not channel_ids:
         return
     link = (
         f"/public/documents/{doc.id}"
-        if doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
+        if doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN or doc.is_public
         else f"/documents/{doc.id}"
     )
     fields: list[EmbedField] = []
@@ -544,29 +523,6 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
 
 
 # ── 個人 DM 與額外 domain 推播 ────────────────────────────────────────────────
-
-
-async def emit_user_dm(
-    db: AsyncSession,
-    *,
-    user_id: uuid.UUID,
-    embed: dict[str, Any],
-    components: list[dict[str, Any]] | None = None,
-    category: str | None = None,
-) -> None:
-    """個人 DM 推播。dispatcher 端會檢查 NotificationPreference 與綁定狀態。"""
-    from api.services.outbox import emit
-
-    await emit(
-        db,
-        event_type="discord.user_dm",
-        payload={
-            "user_id": str(user_id),
-            "embed": embed,
-            "components": components,
-            "category": category,
-        },
-    )
 
 
 def _fmt_dt(value: datetime | None) -> str | None:
@@ -1128,7 +1084,7 @@ async def enqueue_petition_private_channel(
 
 
 async def bot_health_snapshot(db: AsyncSession) -> dict[str, Any]:
-    from api.services.discord_gateway import read_inventory
+    from api.services.discord_inventory import read_inventory
 
     inventory = await read_inventory()
     configs = (await db.execute(select(DiscordGuildConfig))).scalars().all()

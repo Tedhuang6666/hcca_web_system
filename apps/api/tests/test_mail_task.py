@@ -48,7 +48,7 @@ def test_enqueue_email_returns_task_id() -> None:
     with (
         patch("api.services.mail.send_email.delay", return_value=mock_task_result) as mock_delay,
         patch(
-            "api.email.sender.render_generic_message",
+            "api.services.mail.render_generic_message",
             return_value="<html>body</html>",
         ),
     ):

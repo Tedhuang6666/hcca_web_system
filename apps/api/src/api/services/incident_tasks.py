@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from api.core.celery_app import celery_app
+from celery import shared_task
+
 from api.core.config import settings
 from api.core.database import task_session
 from api.services.incident import (
@@ -91,7 +92,7 @@ async def _run_auto_recovery(
         await session.commit()
 
 
-@celery_app.task(
+@shared_task(
     name="api.services.incident_tasks.persist_background_incident",
     ignore_result=True,
 )
@@ -118,7 +119,7 @@ def persist_background_incident(
     )
 
 
-@celery_app.task(
+@shared_task(
     name="api.services.incident_tasks.run_auto_recovery",
     ignore_result=True,
 )

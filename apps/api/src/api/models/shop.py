@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -27,7 +27,6 @@ from api.models.types import JSONDict
 if TYPE_CHECKING:
     from api.models.activity import Activity
     from api.models.school_class import SchoolClass
-    from api.models.seating import SeatAssignment, SeatingZone
     from api.models.user import User
 
 
@@ -170,7 +169,7 @@ class Product(Base, TimestampMixin):
         order_by="ProductVariantGroup.sort_order",
     )
     order_items: Mapped[list[OrderItem]] = relationship("OrderItem", back_populates="product")
-    seating_zones: Mapped[list[SeatingZone]] = relationship(
+    seating_zones: Mapped[list[Any]] = relationship(
         "SeatingZone",
         back_populates="product",
         cascade="all, delete-orphan",
@@ -328,7 +327,7 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     items: Mapped[list[OrderItem]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
-    seat_assignments: Mapped[list[SeatAssignment]] = relationship(
+    seat_assignments: Mapped[list[Any]] = relationship(
         "SeatAssignment", back_populates="order", cascade="all, delete-orphan"
     )
 

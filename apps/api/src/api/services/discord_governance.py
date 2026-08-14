@@ -297,9 +297,12 @@ async def observe_member(
     expected_nickname, _ = compose_nickname(select_prefix_labels(policies), state.base_nickname)
     desired: set[str] = set()
     if link is not None:
-        from api.services.discord_bot import list_active_role_ids_for_user
+        from api.services.discord_roles import list_active_role_ids_for_user
 
         desired.update((await list_active_role_ids_for_user(db, link.user_id)).get(guild_id, set()))
+        desired.update(
+            (await desired_policy_role_ids_for_user(db, link.user_id)).get(guild_id, set())
+        )
         desired.update(
             await activity_role_ids_for_user(
                 db,

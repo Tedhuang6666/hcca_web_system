@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -32,6 +31,12 @@ from api.services.discord_bot import (
     enqueue_role_sync,
     get_user_by_discord_id,
 )
+from api.services.discord_inventory import (
+    inventory_guild,
+    inventory_guilds,
+    read_inventory,
+    write_inventory,
+)
 from api.services.notification_pref import normalize_preferences
 
 logger = logging.getLogger(__name__)
@@ -39,8 +44,6 @@ logger = logging.getLogger(__name__)
 _LEASE_PREFIX = "discord:delivery:lease:"
 _LEASE_SECONDS = 60
 _MAX_RETRY = 5
-_INVENTORY_KEY = "discord:bot:inventory"
-_INVENTORY_TTL_SECONDS = 60
 
 
 def _in_quiet_hours(preference: DiscordNotificationPreference | None) -> bool:
@@ -336,37 +339,6 @@ async def handle_member_updated(
             ),
         )
     return state
-
-
-async def write_inventory(payload: dict[str, Any]) -> None:
-    await redis_client.set(
-        _INVENTORY_KEY,
-        json.dumps(payload),
-        ex=_INVENTORY_TTL_SECONDS,
-    )
-
-
-async def read_inventory() -> dict[str, Any] | None:
-    raw = await redis_client.get(_INVENTORY_KEY)
-    if not raw:
-        return None
-    try:
-        value = json.loads(raw)
-    except (TypeError, ValueError):
-        return None
-    return value if isinstance(value, dict) else None
-
-
-async def inventory_guilds() -> list[dict[str, Any]]:
-    inventory = await read_inventory()
-    return list(inventory.get("guilds", [])) if inventory else []
-
-
-async def inventory_guild(guild_id: str) -> dict[str, Any] | None:
-    for guild in await inventory_guilds():
-        if str(guild.get("id")) == guild_id:
-            return guild
-    return None
 
 
 __all__ = [
