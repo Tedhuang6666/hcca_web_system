@@ -44,6 +44,8 @@ def _template_payload(org: Org, **overrides: object) -> DocumentTemplateCreate:
         "content": "範本內容",
     }
     defaults.update(overrides)
+    if defaults.get("category") == DocumentCategory.ANNOUNCEMENT:
+        defaults.setdefault("basis", "依學生自治相關規定及會議決議辦理。")
     return DocumentTemplateCreate(**defaults)
 
 

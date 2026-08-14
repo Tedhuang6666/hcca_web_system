@@ -54,9 +54,20 @@ type DocumentDraft = {
   meetingTime: string;
   meetingLocation: string;
   meetingChairperson: string;
+  basis: string;
+  declassificationCondition: "none" | "auto_at_date" | "manual_approval";
+  confidentialityExpiresAt: string;
+  issuerPostalCode: string;
+  issuerAddress: string;
   handlerName: string;
   handlerUnit: string;
   handlerEmail: string;
+  handlerPhone: string;
+  classificationNumber: string;
+  fileNumber: string;
+  sourceDocumentDate: string;
+  sourceDocumentNumber: string;
+  retentionPeriod: string;
   showEmail: boolean;
   dueDate: string;
   visibilityLevel: DocumentVisibility;
@@ -95,10 +106,25 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "letter",         label: "函"       },
   { value: "decree",         label: "令"       },
   { value: "announcement",   label: "公告"     },
+  { value: "presentation",   label: "呈"       },
   { value: "report",         label: "報告"     },
   { value: "record",         label: "紀錄"     },
   { value: "consultation",   label: "咨"       },
   { value: "meeting_notice", label: "開會通知單" },
+  { value: "inspection_notice", label: "會勘通知單" },
+  { value: "phone_record",   label: "公務電話紀錄" },
+  { value: "book_letter",    label: "書函"     },
+  { value: "directive",      label: "手令／手諭" },
+  { value: "signature",      label: "簽"       },
+  { value: "memo",           label: "箋函／便簽" },
+  { value: "appointment",    label: "聘書"     },
+  { value: "certificate",    label: "證明書"   },
+  { value: "license",        label: "證書／執照" },
+  { value: "contract",       label: "契約書"   },
+  { value: "proposal",       label: "提案"     },
+  { value: "summary",        label: "節略"     },
+  { value: "briefing",       label: "說帖"     },
+  { value: "form",           label: "定型化表單" },
   { value: "other",          label: "其他"     },
 ];
 
@@ -161,6 +187,15 @@ const CONTENT_COPY: Record<DocumentCategory, {
     descriptionLabel: "公告事項",
     descriptionPlaceholder: "一、活動時間：\n二、活動地點：\n三、參與方式：",
   },
+  presentation: {
+    section: "呈文內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "陳報……，請核示。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、事由：\n二、辦理情形：",
+    actionLabel: "擬辦",
+    actionPlaceholder: "一、擬請核示。",
+  },
   report: {
     section: "報告內容",
     subjectLabel: "主旨",
@@ -191,6 +226,112 @@ const CONTENT_COPY: Record<DocumentCategory, {
     descriptionLabel: "議事日程",
     descriptionPlaceholder: "一、審查「…」案。\n二、討論「…」案。\n三、臨時動議。",
   },
+  inspection_notice: {
+    section: "會勘通知",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、會勘目的：\n二、注意事項：",
+  },
+  phone_record: {
+    section: "公務電話紀錄",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "電話聯繫事項。",
+    descriptionLabel: "紀錄",
+    descriptionPlaceholder: "來電／去電者、時間、談話內容及後續事項。",
+  },
+  book_letter: {
+    section: "書函內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "一句話概述目的。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、說明事由：",
+    actionLabel: "辦法",
+    actionPlaceholder: "一、請依說明辦理。",
+  },
+  directive: {
+    section: "手令內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "指示事項。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、說明事由：",
+    actionLabel: "辦法",
+    actionPlaceholder: "一、執行方式：",
+  },
+  signature: {
+    section: "簽辦內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "簽請核示事項。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、事由及依據：",
+    actionLabel: "擬辦",
+    actionPlaceholder: "一、擬請核示。",
+  },
+  memo: {
+    section: "箋函／便簽內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "便簽事項。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、說明：",
+    actionLabel: "辦法",
+    actionPlaceholder: "一、請辦理：",
+  },
+  appointment: {
+    section: "聘書內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "聘任職務及期間。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "聘任事由、職務及期間。",
+  },
+  certificate: {
+    section: "證明書內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "證明事項。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "茲證明：",
+  },
+  license: {
+    section: "證書／執照內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "核發事項。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "核發對象、資格及有效期間。",
+  },
+  contract: {
+    section: "契約書內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "契約目的。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "契約條款及雙方權利義務。",
+  },
+  proposal: {
+    section: "提案內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "提案事項。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、案由：\n二、說明：",
+    actionLabel: "辦法",
+    actionPlaceholder: "一、決議或執行方式：",
+  },
+  summary: {
+    section: "節略內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "節略事項。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "摘要內容：",
+  },
+  briefing: {
+    section: "說帖內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "說帖主題。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "背景、政策及說明內容。",
+  },
+  form: {
+    section: "定型化表單",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "表單用途。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "請依欄位填寫。",
+  },
   other: {
     section: "公文內容",
     subjectLabel: "主旨",
@@ -219,6 +360,8 @@ export default function NewDocumentPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [category, setCategory] = useState<DocumentCategory>("letter");
   const isMeetingNotice = category === "meeting_notice";
+  const isInspectionNotice = category === "inspection_notice";
+  const isNotice = isMeetingNotice || isInspectionNotice;
   const isDecree = category === "decree";
   const isRecord = category === "record";
   const copy = CONTENT_COPY[category];
@@ -242,6 +385,11 @@ export default function NewDocumentPage() {
 
   const [docDescription, setDocDescription] = useState("");
   const [actionRequired, setActionRequired] = useState("");
+  const [basis, setBasis] = useState("");
+  const [declassificationCondition, setDeclassificationCondition] = useState<"none" | "auto_at_date" | "manual_approval">("none");
+  const [confidentialityExpiresAt, setConfidentialityExpiresAt] = useState("");
+  const [issuerPostalCode, setIssuerPostalCode] = useState("");
+  const [issuerAddress, setIssuerAddress] = useState("");
 
   // 開會通知單專屬欄位
   const [meetingPurpose, setMeetingPurpose] = useState("");
@@ -253,6 +401,12 @@ export default function NewDocumentPage() {
   const [handlerName, setHandlerName] = useState("");
   const [handlerUnit, setHandlerUnit] = useState("");
   const [handlerEmail, setHandlerEmail] = useState("");
+  const [handlerPhone, setHandlerPhone] = useState("");
+  const [classificationNumber, setClassificationNumber] = useState("");
+  const [fileNumber, setFileNumber] = useState("");
+  const [sourceDocumentDate, setSourceDocumentDate] = useState("");
+  const [sourceDocumentNumber, setSourceDocumentNumber] = useState("");
+  const [retentionPeriod, setRetentionPeriod] = useState("");
   const [showEmail, setShowEmail] = useState(true);
 
   const [dueDate, setDueDate] = useState("");
@@ -270,12 +424,18 @@ export default function NewDocumentPage() {
       : copy.subjectLabel && subject.trim().length < 8
         ? `${copy.subjectLabel}至少需 8 個字`
         : "",
-    meetingPurpose: isMeetingNotice && !meetingPurpose.trim() ? "開會通知單需填寫開會事由" : "",
-    meetingTime: (isMeetingNotice || isRecord) && !meetingTime
-      ? isRecord ? "紀錄需填寫時間" : "開會通知單需填寫開會時間"
+    basis: category === "announcement" && !basis.trim() ? "公告需填寫依據" : "",
+    declassification: classification !== "normal" && declassificationCondition === "none"
+      ? "密件需填寫解密條件"
+      : declassificationCondition === "auto_at_date" && !confidentialityExpiresAt
+        ? "自動解密需填寫保密期限"
+        : "",
+    meetingPurpose: isNotice && !meetingPurpose.trim() ? `${isInspectionNotice ? "會勘" : "開會"}通知單需填寫事由` : "",
+    meetingTime: (isNotice || isRecord) && !meetingTime
+      ? isRecord ? "紀錄需填寫時間" : `${isInspectionNotice ? "會勘" : "開會"}通知單需填寫時間`
       : "",
-    meetingLocation: (isMeetingNotice || isRecord) && !meetingLocation.trim()
-      ? isRecord ? "紀錄需填寫地點" : "開會通知單需填寫開會地點"
+    meetingLocation: (isNotice || isRecord) && !meetingLocation.trim()
+      ? isRecord ? "紀錄需填寫地點" : `${isInspectionNotice ? "會勘" : "開會"}通知單需填寫地點`
       : "",
     serialTemplate: selectedOrgId && templates.length > 0 && !selectedTemplateId
       ? "請選擇字號前綴"
@@ -313,9 +473,20 @@ export default function NewDocumentPage() {
     meetingTime,
     meetingLocation,
     meetingChairperson,
+    basis,
+    declassificationCondition,
+    confidentialityExpiresAt,
+    issuerPostalCode,
+    issuerAddress,
     handlerName,
     handlerUnit,
     handlerEmail,
+    handlerPhone,
+    classificationNumber,
+    fileNumber,
+    sourceDocumentDate,
+    sourceDocumentNumber,
+    retentionPeriod,
     showEmail,
     dueDate,
     visibilityLevel,
@@ -326,13 +497,21 @@ export default function NewDocumentPage() {
   }), [
     actionRequired,
     activityId,
+    basis,
     category,
+    classificationNumber,
     classification,
+    confidentialityExpiresAt,
+    declassificationCondition,
     docDescription,
     dueDate,
+    fileNumber,
     handlerEmail,
     handlerName,
+    handlerPhone,
     handlerUnit,
+    issuerAddress,
+    issuerPostalCode,
     meetingChairperson,
     meetingLocation,
     meetingPurpose,
@@ -343,6 +522,9 @@ export default function NewDocumentPage() {
     selectedOrgId,
     selectedTemplateId,
     showEmail,
+    sourceDocumentDate,
+    sourceDocumentNumber,
+    retentionPeriod,
     subject,
     title,
     urgency,
@@ -362,9 +544,20 @@ export default function NewDocumentPage() {
     setMeetingTime(draft.meetingTime ?? "");
     setMeetingLocation(draft.meetingLocation ?? "");
     setMeetingChairperson(draft.meetingChairperson ?? "");
+    setBasis(draft.basis ?? "");
+    setDeclassificationCondition(draft.declassificationCondition ?? "none");
+    setConfidentialityExpiresAt(draft.confidentialityExpiresAt ?? "");
+    setIssuerPostalCode(draft.issuerPostalCode ?? "");
+    setIssuerAddress(draft.issuerAddress ?? "");
     setHandlerName(draft.handlerName ?? "");
     setHandlerUnit(draft.handlerUnit ?? "");
     setHandlerEmail(draft.handlerEmail ?? "");
+    setHandlerPhone(draft.handlerPhone ?? "");
+    setClassificationNumber(draft.classificationNumber ?? "");
+    setFileNumber(draft.fileNumber ?? "");
+    setSourceDocumentDate(draft.sourceDocumentDate ?? "");
+    setSourceDocumentNumber(draft.sourceDocumentNumber ?? "");
+    setRetentionPeriod(draft.retentionPeriod ?? "");
     setShowEmail(draft.showEmail ?? true);
     setDueDate(draft.dueDate ?? "");
     setVisibilityLevel(draft.visibilityLevel ?? "org_only");
@@ -449,13 +642,20 @@ export default function NewDocumentPage() {
         setCategory(template.category);
         setUrgency(template.urgency);
         setClassification(template.classification);
+        setDeclassificationCondition(template.declassification_condition);
         setSubject(template.subject ?? "");
+        setBasis(template.basis ?? "");
         setDocDescription(template.doc_description ?? template.content ?? "");
         setActionRequired(template.action_required ?? "");
         setMeetingPurpose(template.meeting_purpose ?? "");
         setMeetingLocation(template.meeting_location ?? "");
         setMeetingChairperson(template.meeting_chairperson ?? "");
         setHandlerUnit(template.handler_unit ?? "");
+        setIssuerPostalCode(template.issuer_postal_code ?? "");
+        setIssuerAddress(template.issuer_address ?? "");
+        setHandlerPhone(template.handler_phone ?? "");
+        setClassificationNumber(template.classification_number ?? "");
+        setFileNumber(template.file_number ?? "");
         setVisibilityLevel(template.visibility_level);
         setRecipients(
           (template.recipients ?? []).map((item) => ({
@@ -479,6 +679,8 @@ export default function NewDocumentPage() {
       org: true,
       title: true,
       subject: true,
+      basis: true,
+      declassification: true,
       meetingPurpose: true,
       meetingTime: true,
       meetingLocation: true,
@@ -493,20 +695,32 @@ export default function NewDocumentPage() {
     try {
       const doc = await documentsApi.create({
         title: title.trim() || autoTitle, urgency, classification, category,
-        declassification_condition: "none",
+        declassification_condition: classification === "normal" ? "none" : declassificationCondition,
+        confidentiality_expires_at: declassificationCondition === "auto_at_date"
+          ? confidentialityExpiresAt || undefined
+          : undefined,
         content: "",
         is_public: false,
         serial_template_id: selectedTemplateId || null,
+        issuer_postal_code: issuerPostalCode || undefined,
+        issuer_address: issuerAddress || undefined,
         subject: copy.subjectLabel ? subject || undefined : undefined,
+        basis: category === "announcement" ? basis || undefined : undefined,
         doc_description: docDescription || undefined,
         action_required: copy.actionLabel ? actionRequired || undefined : undefined,
-        meeting_purpose: category === "meeting_notice" ? (meetingPurpose || undefined) : undefined,
-        meeting_time: (category === "meeting_notice" || isRecord) && meetingTime ? meetingTime : undefined,
-        meeting_location: (category === "meeting_notice" || isRecord) ? (meetingLocation || undefined) : undefined,
-        meeting_chairperson: (category === "meeting_notice" || isRecord) ? (meetingChairperson || undefined) : undefined,
+        meeting_purpose: isNotice ? (meetingPurpose || undefined) : undefined,
+        meeting_time: (isNotice || isRecord) && meetingTime ? meetingTime : undefined,
+        meeting_location: (isNotice || isRecord) ? (meetingLocation || undefined) : undefined,
+        meeting_chairperson: (isNotice || isRecord) ? (meetingChairperson || undefined) : undefined,
         handler_name: handlerName || undefined,
         handler_unit: handlerUnit || undefined,
         handler_email: showEmail ? (handlerEmail || undefined) : undefined,
+        handler_phone: handlerPhone || undefined,
+        classification_number: classificationNumber || undefined,
+        file_number: fileNumber || undefined,
+        source_document_date: sourceDocumentDate || undefined,
+        source_document_number: sourceDocumentNumber || undefined,
+        retention_period: retentionPeriod || undefined,
         due_date: dueDate || undefined,
         visibility_level: visibilityLevel,
         org_id: selectedOrgId,
@@ -552,6 +766,7 @@ export default function NewDocumentPage() {
       setTouched((current) => ({
         ...current,
         org: true,
+        declassification: true,
         meetingPurpose: true,
         meetingTime: true,
         meetingLocation: true,
@@ -559,6 +774,7 @@ export default function NewDocumentPage() {
       }));
       const needsBasicInfo = Boolean(
         fieldError.org
+        || fieldError.declassification
         || fieldError.meetingPurpose
         || fieldError.meetingTime
         || fieldError.meetingLocation
@@ -572,12 +788,14 @@ export default function NewDocumentPage() {
     if (activeStep === 1) {
       const needsContent = Boolean(
         fieldError.subject
+        || fieldError.basis
         || fieldError.recordDiscussion
         || fieldError.recordDecision
       );
       setTouched((current) => ({
         ...current,
         subject: true,
+        basis: true,
         recordDiscussion: true,
         recordDecision: true,
       }));
@@ -708,7 +926,7 @@ export default function NewDocumentPage() {
                 {
                   label: "密等", value: classification,
                   setter: (v: string) => setClassification(v as DocumentClassification),
-                  options: [["normal","普通"],["confidential","機密"],["secret","秘密"]],
+                  options: [["normal","普通"],["confidential","密"],["secret","機密"],["highly_confidential","極機密"],["absolutely_confidential","絕對機密"]],
                 },
               ].map(({ label, value, setter, options }) => (
                 <div key={label}>
@@ -719,18 +937,54 @@ export default function NewDocumentPage() {
                 </div>
               ))}
             </div>
+            {classification !== "normal" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label required>解密條件</Label>
+                  <select
+                    value={declassificationCondition}
+                    onChange={(e) => setDeclassificationCondition(e.target.value as typeof declassificationCondition)}
+                    style={showErr("declassification") ? { ...selectStyle, border: "1px solid var(--danger)" } : selectStyle}
+                  >
+                    <option value="none">請選擇</option>
+                    <option value="auto_at_date">至指定日期解密</option>
+                    <option value="manual_approval">經核准後解密</option>
+                  </select>
+                  {showErr("declassification") && (
+                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
+                      {fieldError.declassification}
+                    </p>
+                  )}
+                </div>
+                {declassificationCondition === "auto_at_date" && (
+                  <div>
+                    <Label required>保密期限訖日</Label>
+                    <input
+                      type="date"
+                      value={confidentialityExpiresAt}
+                      onChange={(e) => setConfidentialityExpiresAt(e.target.value)}
+                      style={showErr("declassification") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div><Label>機關郵遞區號</Label><input value={issuerPostalCode} onChange={(e) => setIssuerPostalCode(e.target.value)} style={inputStyle} /></div>
+              <div className="sm:col-span-2"><Label>機關地址</Label><input value={issuerAddress} onChange={(e) => setIssuerAddress(e.target.value)} style={inputStyle} /></div>
+            </div>
           </FormSection>
 
           {/* 開會通知單 / 紀錄專屬 */}
-          {(isMeetingNotice || isRecord) && (
-            <FormSection title={isRecord ? "紀錄資訊" : "開會資訊"}>
+          {(isNotice || isRecord) && (
+            <FormSection title={isRecord ? "紀錄資訊" : isInspectionNotice ? "會勘資訊" : "開會資訊"}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {isMeetingNotice && (
+                {isNotice && (
                   <div className="sm:col-span-2">
-                    <Label required>開會事由</Label>
+                    <Label required>{isInspectionNotice ? "會勘事由" : "開會事由"}</Label>
                     <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
                       onBlur={() => markTouched("meetingPurpose")}
-                      placeholder="例：班級聯合自治會第1屆學生代表團第3次會議"
+                      placeholder={isInspectionNotice ? "例：校舍安全會勘" : "例：班級聯合自治會第1屆學生代表團第3次會議"}
                       style={showErr("meetingPurpose")
                         ? { ...inputStyle, border: "1px solid var(--danger)" }
                         : inputStyle} />
@@ -740,7 +994,7 @@ export default function NewDocumentPage() {
                   </div>
                 )}
                 <div>
-                  <Label required>{isRecord ? "時間" : "開會時間"}</Label>
+                  <Label required>{isRecord ? "時間" : isInspectionNotice ? "會勘時間" : "開會時間"}</Label>
                   <input type="datetime-local" value={meetingTime}
                     onChange={e => setMeetingTime(e.target.value)}
                     onBlur={() => markTouched("meetingTime")}
@@ -750,7 +1004,7 @@ export default function NewDocumentPage() {
                   )}
                 </div>
                 <div>
-                  <Label required>{isRecord ? "地點" : "開會地點"}</Label>
+                  <Label required>{isRecord ? "地點" : isInspectionNotice ? "會勘地點" : "開會地點"}</Label>
                   <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
                     onBlur={() => markTouched("meetingLocation")}
                     placeholder="例：班聯會辦公室"
@@ -810,6 +1064,19 @@ export default function NewDocumentPage() {
                 )}
               </div>
             )}
+            {category === "announcement" && (
+              <div>
+                <Label required>依據</Label>
+                <GongwenEditor
+                  value={basis}
+                  onChange={setBasis}
+                  onBlur={() => markTouched("basis")}
+                  minRows={3}
+                  placeholder="依據法規、會議決議或相關文件。"
+                />
+                {showErr("basis") && <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.basis}</p>}
+              </div>
+            )}
             <div>
               <Label>
                 {copy.descriptionLabel}
@@ -850,8 +1117,8 @@ export default function NewDocumentPage() {
           <GuidedFormStep step={2} activeStep={activeStep} className="space-y-4">
           {!isDecree && (
           <FormSection title={
-            isMeetingNotice
-              ? "受文者 / 正本（出席） / 副本（列席）"
+            isNotice
+              ? "受文者 / 出席者 / 列席者 / 副本"
               : isRecord
                 ? "出席者 / 列席者"
                 : "受文者"
@@ -864,11 +1131,11 @@ export default function NewDocumentPage() {
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                     <span className="badge text-[10px] flex-shrink-0"
                       style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
-                      {isMeetingNotice
-                        ? { main: "受文者", primary: "正本（出席）", copy: "副本（列席）" }[r.recipient_type] ?? r.recipient_type
+                      {isNotice
+                        ? { main: "受文者", attendee: "出席者", observer: "列席者", primary: "正本（出席）", copy: "副本" }[r.recipient_type] ?? r.recipient_type
                         : isRecord
-                          ? { main: "出席者", primary: "出席者", copy: "列席者" }[r.recipient_type] ?? r.recipient_type
-                          : { main: "受文者", primary: "正本", copy: "副本" }[r.recipient_type] ?? r.recipient_type}
+                          ? { main: "出席者", attendee: "出席者", observer: "列席者", primary: "出席者", copy: "副本" }[r.recipient_type] ?? r.recipient_type
+                          : { main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type] ?? r.recipient_type}
                     </span>
                     <span className="flex-1 truncate" style={{ color: "var(--text-primary)" }}>{r.name}</span>
                     {r.email && (
@@ -892,6 +1159,7 @@ export default function NewDocumentPage() {
               inputStyle={inputStyle}
               selectStyle={selectStyle}
               isMeetingNotice={isMeetingNotice}
+              isInspectionNotice={isInspectionNotice}
               isRecord={isRecord}
               orgs={orgs}
               classes={classes}
@@ -1020,7 +1288,7 @@ export default function NewDocumentPage() {
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                   <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
                   <p className="text-sm font-mono font-bold" style={{ color: "var(--primary)" }}>
-                    {selectedTemplate ? selectedTemplate.preview : `DOC-${new Date().getFullYear()}-XXXXXX`}
+                    {selectedTemplate ? selectedTemplate.preview : "尚未設定正式字號"}
                   </p>
                 </div>
               </>
@@ -1107,12 +1375,19 @@ export default function NewDocumentPage() {
               <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>
                 Email
               </span>
-              <input value={handlerEmail} onChange={(e) => setHandlerEmail(e.target.value)}
+                <input value={handlerEmail} onChange={(e) => setHandlerEmail(e.target.value)}
                 placeholder="電子郵件" type="email"
                 style={{ ...inputStyle, flex: 1, fontSize: "0.75rem" }} />
               <div className="flex-shrink-0" title="顯示於公文上">
                 <Toggle checked={showEmail} onChange={setShowEmail} label="顯示" ariaLabel="顯示 Email" />
               </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>
+                電話
+              </span>
+              <input value={handlerPhone} onChange={(e) => setHandlerPhone(e.target.value)}
+                placeholder="聯絡電話" style={{ ...inputStyle, fontSize: "0.75rem" }} />
             </div>
           </FormSection>
 
@@ -1122,6 +1397,15 @@ export default function NewDocumentPage() {
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
               style={inputStyle} />
           </div>
+          <FormSection title="檔案管理欄位">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><Label>檔號</Label><input value={fileNumber} onChange={(e) => setFileNumber(e.target.value)} placeholder="檔號" style={inputStyle} /></div>
+              <div><Label>分類號</Label><input value={classificationNumber} onChange={(e) => setClassificationNumber(e.target.value)} placeholder="分類號" style={inputStyle} /></div>
+              <div><Label>保存年限</Label><input value={retentionPeriod} onChange={(e) => setRetentionPeriod(e.target.value)} placeholder="例如：5年" style={inputStyle} /></div>
+              <div><Label>收文日期</Label><input type="date" value={sourceDocumentDate} onChange={(e) => setSourceDocumentDate(e.target.value)} style={inputStyle} /></div>
+              <div><Label>收文文號</Label><input value={sourceDocumentNumber} onChange={(e) => setSourceDocumentNumber(e.target.value)} style={inputStyle} /></div>
+            </div>
+          </FormSection>
         </GuidedFormStep>
       </div>
       </GuidedForm>

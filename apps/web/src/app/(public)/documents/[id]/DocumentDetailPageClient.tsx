@@ -47,9 +47,12 @@ function toDateTimeLocal(dateStr: string | null) {
 
 const CAT_LABEL: Record<string, string> = {
   letter: "函", decree: "令", announcement: "公告", report: "報告",
-  record: "紀錄", consultation: "咨", meeting_notice: "開會通知單", other: "其他",
+  record: "紀錄", consultation: "咨", meeting_notice: "開會通知單", inspection_notice: "會勘通知單",
+  presentation: "呈", phone_record: "公務電話紀錄", book_letter: "書函", directive: "手令",
+  signature: "簽", memo: "便簽", appointment: "聘書", certificate: "證明書", license: "證書／執照",
+  contract: "契約書", proposal: "提案", summary: "節略", briefing: "說帖", form: "定型化表單", other: "其他",
 };
-const CLASS_LABEL: Record<string, string> = { normal: "普通", confidential: "密", secret: "機密" };
+const CLASS_LABEL: Record<string, string> = { normal: "普通", confidential: "密", secret: "機密", highly_confidential: "極機密", absolutely_confidential: "絕對機密" };
 const URGENCY_LABEL: Record<string, string> = { normal: "普通件", priority: "速件", express: "最速件" };
 const VISIBILITY_LABEL: Record<DocumentVisibility, string> = {
   subject_only: "密件",
@@ -1141,7 +1144,7 @@ export default function DocumentDetailPageClient({
                   {doc.recipients.map(r => (
                     <span key={r.id} className="text-xs px-2.5 py-1 rounded-full"
                       style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
-                      {{ main: "受文者", primary: "正本", copy: "副本" }[r.recipient_type]} {r.name}
+                      {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]} {r.name}
                     </span>
                   ))}
                 </div>

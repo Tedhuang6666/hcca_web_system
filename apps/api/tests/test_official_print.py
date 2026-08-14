@@ -3,6 +3,7 @@
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import quote
 
 import pytest
 from pypdf import PdfReader
@@ -11,6 +12,8 @@ from api.services import official_print
 from api.services.official_print import (
     _BUNDLED_KAI_FONT,
     _BUNDLED_LISHU_FONT,
+    _BUNDLED_TITLE_FONT,
+    _BUNDLED_XINGSHU_FONT,
     _FALLBACK_KAI_FONT,
     _decree_issuer_title,
     _final_signature_html,
@@ -36,13 +39,17 @@ def test_official_print_uses_distinct_bundled_body_and_signature_fonts() -> None
 
     assert _BUNDLED_KAI_FONT in css
     assert _BUNDLED_LISHU_FONT in css
+    assert quote(_BUNDLED_TITLE_FONT) in css
+    assert quote(_BUNDLED_XINGSHU_FONT) in css
     assert _FALLBACK_KAI_FONT not in css
     assert 'font-family: "OfficialKai"' in css
     assert 'font-family: "OfficialLishu"' in css
+    assert 'font-family: "OfficialTitle"' in css
+    assert 'font-family: "OfficialXingshu"' in css
     assert "file://" in css
 
 
-def test_official_document_title_restores_full_issuer_before_editable_title() -> None:
+def test_official_document_title_uses_formal_issuer_and_document_type() -> None:
     issuer = "國立新竹高級中學班聯會設計部"
 
     assert (
@@ -52,7 +59,7 @@ def test_official_document_title_restores_full_issuer_before_editable_title() ->
             "開會通知單",
             "設計部",
         )
-        == "國立新竹高級中學班聯會設計部籌備會議開會通知單"
+        == "國立新竹高級中學班聯會設計部開會通知單"
     )
 
 
@@ -68,7 +75,9 @@ def test_render_print_pdf_embeds_bundled_body_and_signature_fonts() -> None:
     pdf = render_print_pdf(
         f"<html><head><style>{_font_faces()}</style></head>"
         '<body><span style="font-family: OfficialKai">國立新竹高級中學公文測試</span>'
-        '<span style="font-family: OfficialLishu">主席黃丞廷</span></body></html>'
+        '<span style="font-family: OfficialLishu">主席黃丞廷</span>'
+        '<span style="font-family: OfficialTitle">議長</span>'
+        '<span style="font-family: OfficialXingshu">黃丞廷</span></body></html>'
     )
     reader = PdfReader(BytesIO(pdf))
     embedded_fonts = []
@@ -89,6 +98,8 @@ def test_render_print_pdf_embeds_bundled_body_and_signature_fonts() -> None:
     )
     assert any("OfficialKai" in font_name for font_name in base_fonts)
     assert any("OfficialLishu" in font_name for font_name in base_fonts)
+    assert any("OfficialTitle" in font_name for font_name in base_fonts)
+    assert any("OfficialXingshu" in font_name for font_name in base_fonts)
 
 
 @pytest.mark.asyncio
@@ -220,7 +231,7 @@ async def test_meeting_notice_seal_stays_on_one_page_with_handwritten_font() -> 
     rendered = await render_document_print_html(_OrgSession(council, design), doc)
     pdf = render_print_pdf(rendered)
 
-    assert "國立新竹高級中學班聯會設計部籌備會議開會通知單</header>" in rendered
+    assert "國立新竹高級中學班聯會設計部開會通知單</header>" in rendered
     assert 'font-family: "OfficialLishu"' in rendered
     assert "white-space: nowrap" in rendered
     assert len(PdfReader(BytesIO(pdf)).pages) == 1

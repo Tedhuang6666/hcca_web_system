@@ -13,11 +13,13 @@ from api.core.clock import local_today
 from api.core.prometheus_metrics import record_document_approval
 from api.models.document import (
     ApprovalStepStatus,
+    DeclassificationCondition,
     DelegateSource,
     Document,
     DocumentApproval,
     DocumentApprovalDelegation,
     DocumentCategory,
+    DocumentClassification,
     DocumentRecipient,
     DocumentRevision,
     DocumentStatus,
@@ -129,6 +131,8 @@ async def create_document(
         serial_number=serial,
         title=data.title,
         issuer_full_name=data.issuer_full_name,
+        issuer_postal_code=data.issuer_postal_code,
+        issuer_address=data.issuer_address,
         org_id=data.org_id,
         activity_id=data.activity_id,
         created_by=created_by,
@@ -139,13 +143,18 @@ async def create_document(
         confidentiality_expires_at=data.confidentiality_expires_at,
         category=data.category,
         subject=data.subject,
+        basis=data.basis,
         doc_description=data.doc_description,
         action_required=data.action_required,
         content=data.content,
         handler_name=data.handler_name,
         handler_unit=data.handler_unit,
         handler_email=data.handler_email,
+        handler_phone=data.handler_phone,
         file_number=data.file_number,
+        classification_number=data.classification_number,
+        source_document_date=data.source_document_date,
+        source_document_number=data.source_document_number,
         retention_period=data.retention_period,
         due_date=data.due_date,
         page_info=data.page_info,
@@ -205,6 +214,18 @@ async def update_document(
     )
     if data.is_public and "visibility_level" not in data.model_fields_set:
         update_fields["visibility_level"] = DocumentVisibility.PUBLICLY_OPEN
+    classification = update_fields.get("classification", doc.classification)
+    condition = update_fields.get("declassification_condition", doc.declassification_condition)
+    expires_at = update_fields.get("confidentiality_expires_at", doc.confidentiality_expires_at)
+    if classification == DocumentClassification.NORMAL:
+        if condition != DeclassificationCondition.NONE or expires_at:
+            raise ValueError("普通公文不可設定解密條件或保密期限")
+    elif condition == DeclassificationCondition.NONE:
+        raise ValueError("密件必須填寫解密條件或保密期限")
+    elif condition == DeclassificationCondition.AUTO_AT_DATE and not expires_at:
+        raise ValueError("選擇自動解密時必須提供保密期限訖日")
+    elif condition == DeclassificationCondition.MANUAL_APPROVAL and expires_at:
+        raise ValueError("核准後解密不可同時填寫保密期限")
     for field, value in update_fields.items():
         if getattr(doc, field, None) != value:
             setattr(doc, field, value)

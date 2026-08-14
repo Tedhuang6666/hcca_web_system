@@ -131,6 +131,7 @@ async def upload_attachment(
         storage_key=stored.storage_key,
         content_type=stored.content_type,
         file_size=stored.file_size,
+        quantity=1,
         uploaded_by=current_user.id,
     )
     session.add(attachment)
@@ -161,6 +162,7 @@ async def add_link_attachment(
         document_id=doc.id,
         filename=display,
         link_url=str(body.url),
+        quantity=1,
         uploaded_by=current_user.id,
     )
     session.add(attachment)

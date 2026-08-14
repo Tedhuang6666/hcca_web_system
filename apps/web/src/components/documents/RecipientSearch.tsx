@@ -62,6 +62,7 @@ export function RecipientSearch({
   inputStyle,
   selectStyle,
   isMeetingNotice,
+  isInspectionNotice,
   isRecord,
   orgs,
   classes,
@@ -70,11 +71,13 @@ export function RecipientSearch({
   inputStyle: React.CSSProperties;
   selectStyle: React.CSSProperties;
   isMeetingNotice: boolean;
+  isInspectionNotice?: boolean;
   isRecord: boolean;
   orgs: OrgRead[];
   classes: SchoolClassListItem[];
 }) {
-  const [type, setType] = useState<RecipientType>(isMeetingNotice ? "primary" : "main");
+  const isNotice = isMeetingNotice || Boolean(isInspectionNotice);
+  const [type, setType] = useState<RecipientType>(isNotice || isRecord ? "attendee" : "main");
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -192,17 +195,18 @@ export function RecipientSearch({
         style={{ ...selectStyle, width: "7rem", flexShrink: 0 }}
         aria-label="收件人類型"
       >
-        {isMeetingNotice ? (
+        {isNotice ? (
           <>
             <option value="main">受文者</option>
-            <option value="primary">正本（出席）</option>
-            <option value="copy">副本（列席）</option>
+            <option value="attendee">出席者</option>
+            <option value="observer">列席者</option>
+            <option value="copy">副本</option>
           </>
         ) : isRecord ? (
           <>
-            <option value="main">出席者</option>
-            <option value="primary">出席者</option>
-            <option value="copy">列席者</option>
+            <option value="attendee">出席者</option>
+            <option value="observer">列席者</option>
+            <option value="copy">副本</option>
           </>
         ) : (
           <>

@@ -22,10 +22,25 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "letter", label: "函" },
   { value: "decree", label: "令" },
   { value: "announcement", label: "公告" },
+  { value: "presentation", label: "呈" },
   { value: "report", label: "報告" },
   { value: "record", label: "紀錄" },
   { value: "consultation", label: "咨" },
   { value: "meeting_notice", label: "開會通知單" },
+  { value: "inspection_notice", label: "會勘通知單" },
+  { value: "phone_record", label: "公務電話紀錄" },
+  { value: "book_letter", label: "書函" },
+  { value: "directive", label: "手令／手諭" },
+  { value: "signature", label: "簽" },
+  { value: "memo", label: "箋函／便簽" },
+  { value: "appointment", label: "聘書" },
+  { value: "certificate", label: "證明書" },
+  { value: "license", label: "證書／執照" },
+  { value: "contract", label: "契約書" },
+  { value: "proposal", label: "提案" },
+  { value: "summary", label: "節略" },
+  { value: "briefing", label: "說帖" },
+  { value: "form", label: "定型化表單" },
   { value: "other", label: "其他" },
 ];
 
@@ -34,11 +49,15 @@ const EMPTY_FORM: DocumentTemplateCreate = {
   name: "",
   description: null,
   issuer_full_name: null,
+  issuer_postal_code: null,
+  issuer_address: null,
   urgency: "normal",
   classification: "normal",
   declassification_condition: "none",
+  confidentiality_expires_at: null,
   category: "letter",
   subject: "",
+  basis: "",
   doc_description: "",
   action_required: "",
   content: "",
@@ -46,7 +65,9 @@ const EMPTY_FORM: DocumentTemplateCreate = {
   meeting_location: null,
   meeting_chairperson: null,
   handler_unit: null,
+  handler_phone: null,
   file_number: null,
+  classification_number: null,
   retention_period: null,
   visibility_level: "org_only",
   recipients: [],
@@ -58,7 +79,10 @@ function cleanForm(form: DocumentTemplateCreate): DocumentTemplateCreate {
     name: form.name.trim(),
     description: form.description?.trim() || null,
     issuer_full_name: form.issuer_full_name?.trim() || null,
+    issuer_postal_code: form.issuer_postal_code?.trim() || null,
+    issuer_address: form.issuer_address?.trim() || null,
     subject: form.subject?.trim() || null,
+    basis: form.basis?.trim() || null,
     doc_description: form.doc_description?.trim() || null,
     action_required: form.action_required?.trim() || null,
     content: form.content?.trim() || "",
@@ -66,7 +90,9 @@ function cleanForm(form: DocumentTemplateCreate): DocumentTemplateCreate {
     meeting_location: form.meeting_location?.trim() || null,
     meeting_chairperson: form.meeting_chairperson?.trim() || null,
     handler_unit: form.handler_unit?.trim() || null,
+    handler_phone: form.handler_phone?.trim() || null,
     file_number: form.file_number?.trim() || null,
+    classification_number: form.classification_number?.trim() || null,
     retention_period: form.retention_period?.trim() || null,
   };
 }
@@ -140,11 +166,15 @@ export default function DocumentTemplatesPage() {
       name: item.name,
       description: item.description,
       issuer_full_name: item.issuer_full_name,
+      issuer_postal_code: item.issuer_postal_code,
+      issuer_address: item.issuer_address,
       urgency: item.urgency,
       classification: item.classification,
       declassification_condition: item.declassification_condition,
+      confidentiality_expires_at: item.confidentiality_expires_at,
       category: item.category,
       subject: item.subject,
+      basis: item.basis,
       doc_description: item.doc_description,
       action_required: item.action_required,
       content: item.content,
@@ -152,7 +182,9 @@ export default function DocumentTemplatesPage() {
       meeting_location: item.meeting_location,
       meeting_chairperson: item.meeting_chairperson,
       handler_unit: item.handler_unit,
+      handler_phone: item.handler_phone,
       file_number: item.file_number,
+      classification_number: item.classification_number,
       retention_period: item.retention_period,
       visibility_level: item.visibility_level,
       recipients: item.recipients,
@@ -369,14 +401,41 @@ export default function DocumentTemplatesPage() {
               </select>
               <select
                 value={form.classification}
-                onChange={(e) => setForm((prev) => ({ ...prev, classification: e.target.value as DocumentClassification }))}
+                onChange={(e) => setForm((prev) => ({
+                  ...prev,
+                  classification: e.target.value as DocumentClassification,
+                  declassification_condition: e.target.value === "normal" ? "none" : prev.declassification_condition,
+                  confidentiality_expires_at: e.target.value === "normal" ? null : prev.confidentiality_expires_at,
+                }))}
                 style={inputStyle}
               >
                 <option value="normal">普通</option>
-                <option value="confidential">機密</option>
-                <option value="secret">秘密</option>
+                <option value="confidential">密</option>
+                <option value="secret">機密</option>
+                <option value="highly_confidential">極機密</option>
+                <option value="absolutely_confidential">絕對機密</option>
               </select>
             </div>
+            {form.classification !== "normal" && (
+              <select
+                value={form.declassification_condition}
+                onChange={(e) => setForm((prev) => ({ ...prev, declassification_condition: e.target.value as "none" | "auto_at_date" | "manual_approval" }))}
+                style={inputStyle}
+              >
+                <option value="none">請選擇解密條件</option>
+                <option value="auto_at_date">至指定日期解密</option>
+                <option value="manual_approval">經核准後解密</option>
+              </select>
+            )}
+            {form.category === "announcement" && (
+              <textarea value={form.basis ?? ""} onChange={(e) => setForm((prev) => ({ ...prev, basis: e.target.value }))}
+                placeholder="依據" rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+            )}
+            {form.classification !== "normal" && form.declassification_condition === "auto_at_date" && (
+              <input type="date" value={form.confidentiality_expires_at ? form.confidentiality_expires_at.slice(0, 10) : ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, confidentiality_expires_at: e.target.value || null }))}
+                style={inputStyle} />
+            )}
             {form.category === "meeting_notice" ? (
               <>
                 <textarea
@@ -421,7 +480,7 @@ export default function DocumentTemplatesPage() {
               rows={5}
               style={{ ...inputStyle, resize: "vertical" }}
             />
-            {form.category !== "meeting_notice" && form.category !== "decree" && (
+            {form.category !== "meeting_notice" && form.category !== "inspection_notice" && form.category !== "decree" && (
               <textarea
                 value={form.action_required ?? ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, action_required: e.target.value }))}
@@ -444,6 +503,12 @@ export default function DocumentTemplatesPage() {
               placeholder="預設承辦單位"
               style={inputStyle}
             />
+            <input value={form.file_number ?? ""}
+              onChange={(e) => setForm((prev) => ({ ...prev, file_number: e.target.value }))}
+              placeholder="預設檔號" style={inputStyle} />
+            <input value={form.classification_number ?? ""}
+              onChange={(e) => setForm((prev) => ({ ...prev, classification_number: e.target.value }))}
+              placeholder="預設分類號" style={inputStyle} />
             <select
               value={form.visibility_level}
               onChange={(e) => setForm((prev) => ({ ...prev, visibility_level: e.target.value as DocumentVisibility }))}

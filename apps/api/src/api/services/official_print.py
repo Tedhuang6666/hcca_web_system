@@ -24,12 +24,15 @@ _SCHOOL_SHORT_NAME = "新竹高中"
 _BUNDLED_KAI_FONT = "edukai-5.1_20251208.ttf"
 _FALLBACK_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
 _BUNDLED_LISHU_FONT = "MoeLI-3.0.ttf"
+_BUNDLED_TITLE_FONT = "朝華標題B.ttf"
+_BUNDLED_XINGSHU_FONT = "KouzanGyoushoOTF.otf"
 
 
 def _bundled_font_candidates(filename: str) -> tuple[Path, ...]:
     """Return deterministic font locations for source and container layouts."""
     locations = [Path("/app/fonts") / filename]
     locations.extend(parent / "fonts" / filename for parent in Path(__file__).resolve().parents)
+    locations.extend(parent / filename for parent in Path(__file__).resolve().parents)
     return tuple(dict.fromkeys(locations))
 
 
@@ -98,6 +101,46 @@ def _font_faces() -> str:
         ),
         kai_path,
     )
+    xingshu_path = next(
+        (
+            path
+            for path in _bundled_font_candidates(_BUNDLED_XINGSHU_FONT)
+            if path.is_file()
+        ),
+        None,
+    )
+    xingshu_face = (
+        f"""
+    @font-face {{
+      font-family: "OfficialXingshu";
+      src: url("{xingshu_path.as_uri()}") format("opentype");
+      font-weight: 400;
+      font-style: normal;
+    }}
+    """
+        if xingshu_path is not None
+        else ""
+    )
+    title_path = next(
+        (
+            path
+            for path in _bundled_font_candidates(_BUNDLED_TITLE_FONT)
+            if path.is_file()
+        ),
+        None,
+    )
+    title_face = (
+        f"""
+    @font-face {{
+      font-family: "OfficialTitle";
+      src: url("{title_path.as_uri()}") format("truetype");
+      font-weight: 400;
+      font-style: normal;
+    }}
+    """
+        if title_path is not None
+        else ""
+    )
     return f"""
     @font-face {{
       font-family: "OfficialKai";
@@ -111,6 +154,8 @@ def _font_faces() -> str:
       font-weight: 400;
       font-style: normal;
     }}
+    {xingshu_face}
+    {title_face}
     """
 
 
@@ -120,27 +165,9 @@ def _official_document_title(
     category_label: str,
     org_name: object | None,
 ) -> str:
-    """Prefix editable titles with the complete issuer while avoiding repeated unit names."""
-    title = _compact_official_name(custom_title)
-    if title.startswith(issuer_name):
-        result = title
-    else:
-        while title.startswith(_SCHOOL_FULL_NAME):
-            title = title[len(_SCHOOL_FULL_NAME) :]
-        while title.startswith(_SCHOOL_SHORT_NAME):
-            title = title[len(_SCHOOL_SHORT_NAME) :]
-
-        issuer_body = issuer_name.removeprefix(_SCHOOL_FULL_NAME)
-        leaf_name = _compact_official_name(org_name)
-        if issuer_body and title.startswith(issuer_body):
-            title = title[len(issuer_body) :]
-        elif leaf_name and issuer_name.endswith(leaf_name) and title.startswith(leaf_name):
-            title = title[len(leaf_name) :]
-        result = f"{issuer_name}{title}"
-
-    if not result.endswith(category_label):
-        result += category_label
-    return result
+    """Render the formal header; the editable case title is not part of the header."""
+    del custom_title, org_name
+    return f"{issuer_name}{category_label}"
 
 
 def render_print_pdf(html_content: str) -> bytes:
@@ -239,21 +266,33 @@ def _recipient_names(doc: Document, recipient_type: str) -> list[str]:
 def _attachment_summary(doc: Document) -> str:
     if not doc.attachments:
         return ""
-    names = [a.display_name or a.filename for a in doc.attachments if getattr(a, "filename", None)]
-    return "、".join(_esc(name) for name in names) or "如附件"
+    names = []
+    for attachment in doc.attachments:
+        if not getattr(attachment, "filename", None):
+            continue
+        name = _esc(attachment.display_name or attachment.filename)
+        quantity = max(1, int(getattr(attachment, "quantity", 1) or 1))
+        names.append(f"{name}{quantity}份")
+    return "、".join(names) or "如附件"
 
 
 def _declassification_text(doc: Document) -> str:
     classification = _enum_value(doc.classification)
     condition = _enum_value(getattr(doc, "declassification_condition", "none"))
     expires_at = getattr(doc, "confidentiality_expires_at", None)
+    classification_label = {
+        "confidential": "密",
+        "secret": "機密",
+        "highly_confidential": "極機密",
+        "absolutely_confidential": "絕對機密",
+    }.get(classification, "")
     if classification == "normal":
         return ""
     if condition == "auto_at_date" and expires_at:
-        return f"至{_roc_date(expires_at, blank='')}解密"
+        return f"{classification_label}，至{_roc_date(expires_at, blank='')}解密"
     if condition == "manual_approval":
-        return "經核准後解密"
-    return "一般"
+        return f"{classification_label}，經核准後解密"
+    return f"{classification_label}，未註明解密條件"
 
 
 async def _position_title(
@@ -337,7 +376,10 @@ async def _final_signature_html(
 
 
 _LINE_RE = re.compile(
-    r"^(?P<indent>　*)(?P<mark>[一二三四五六七八九十百零〇]+、|（[一二三四五六七八九十百零〇]+）|\d+\.|\(\d+\))\s*(?P<body>.*)$"
+    r"^(?P<indent>　*)(?P<mark>"
+    r"[一二三四五六七八九十百零〇]+、|[（(][一二三四五六七八九十百零〇]+[）)]|"
+    r"[０-９0-9]+[、.]|[（(][０-９0-9]+[）)]"
+    r")\s*(?P<body>.*)$"
 )
 
 
@@ -498,7 +540,7 @@ async def render_document_print_html(
       在「受文者」欄位顯示該名稱（覆蓋預設彙整文字）。
     """
     cat = _enum_value(doc.category)
-    is_meeting = cat == "meeting_notice"
+    is_notice = cat in {"meeting_notice", "inspection_notice"}
     is_decree = cat == "decree"
     is_record = cat == "record"
     issuer_name = await _full_org_name(session, doc)
@@ -508,10 +550,25 @@ async def render_document_print_html(
         "letter": "函",
         "decree": "令",
         "announcement": "公告",
+        "presentation": "呈",
         "report": "報告",
         "record": "紀錄",
         "consultation": "咨",
         "meeting_notice": "開會通知單",
+        "inspection_notice": "會勘通知單",
+        "phone_record": "公務電話紀錄",
+        "book_letter": "書函",
+        "directive": "手令",
+        "signature": "簽",
+        "memo": "便簽",
+        "appointment": "聘書",
+        "certificate": "證明書",
+        "license": "證書",
+        "contract": "契約書",
+        "proposal": "提案",
+        "summary": "節略",
+        "briefing": "說帖",
+        "form": "表單",
         "other": "書函",
     }.get(cat, "函")
     urgency = {
@@ -523,18 +580,29 @@ async def render_document_print_html(
         "normal": "",
         "confidential": "密",
         "secret": "機密",
+        "highly_confidential": "極機密",
+        "absolutely_confidential": "絕對機密",
     }.get(_enum_value(doc.classification), "")
 
     main_recipients = _recipient_names(doc, "main")
     primary_recipients = _recipient_names(doc, "primary")
+    attendee_recipients = _recipient_names(doc, "attendee")
+    observer_recipients = _recipient_names(doc, "observer")
     copy_recipients = _recipient_names(doc, "copy")
     recipient_text = addressed_recipient_name or _join_names(main_recipients or primary_recipients)
     addressed_to = recipient_text or "（未填）"
     attachment_summary = _attachment_summary(doc)
     issue_date = _roc_date(doc.issued_at or doc.completed_at or doc.created_at)
     serial = _esc(doc.serial_number)
+    if str(doc.serial_number).startswith("DRAFT-"):
+        serial = "（草稿，待正式發文）"
     file_number = _esc(getattr(doc, "file_number", "") or "")
     retention_period = _esc(getattr(doc, "retention_period", "") or "")
+    classification_number = _esc(getattr(doc, "classification_number", "") or "")
+    source_document_date = _roc_date(
+        getattr(doc, "source_document_date", None), blank=""
+    )
+    source_document_number = _esc(getattr(doc, "source_document_number", "") or "")
     declassification = _declassification_text(doc)
     copy_mark = copy_mark_override or "影本"
 
@@ -543,6 +611,16 @@ async def render_document_print_html(
         handler_block += f"<div>承辦人：{_esc(doc.handler_name)}</div>"
     if doc.handler_email:
         handler_block += f"<div>電子信箱：{_esc(doc.handler_email)}</div>"
+    handler_phone = getattr(doc, "handler_phone", None)
+    if handler_phone:
+        handler_block += f"<div>電話：{_esc(handler_phone)}</div>"
+
+    issuer_contact = ""
+    if getattr(doc, "issuer_postal_code", None) or getattr(doc, "issuer_address", None):
+        issuer_contact = (
+            f"<div>{_esc(getattr(doc, 'issuer_postal_code', '') or '')} "
+            f"{_esc(getattr(doc, 'issuer_address', '') or '')}</div>"
+        )
 
     signature = await _final_signature_html(
         session,
@@ -557,28 +635,75 @@ async def render_document_print_html(
         _meta_row("密等及解密條件或保密期限：", declassification or classification),
         _meta_row("附件：", attachment_summary),
     ]
+    if file_number or retention_period:
+        meta_rows.append(_meta_row("檔號／保存年限：", f"{file_number}／{retention_period}"))
+    if classification_number:
+        meta_rows.append(_meta_row("分類號：", classification_number))
+    if source_document_date or source_document_number:
+        meta_rows.append(
+            _meta_row(
+                "收文日期字號：",
+                "　".join(value for value in (source_document_date, source_document_number) if value),
+            )
+        )
 
-    if is_meeting:
-        meeting_body = "".join(
-            [
-                _meeting_large_row("受文者：", addressed_to),
-                _meeting_small_row("發文日期：", issue_date),
-                _meeting_small_row("發文字號：", serial),
-                _meeting_small_row("速別：", urgency),
+    if is_notice:
+        notice_word = "開會" if cat == "meeting_notice" else "會勘"
+        notice_rows = [
+            _meeting_large_row("受文者：", addressed_to),
+            _meeting_small_row("發文日期：", issue_date),
+            _meeting_small_row("發文字號：", serial),
+            _meeting_small_row("速別：", urgency),
+            _meeting_small_row(
+                "密等及解密條件或保密期限：", declassification or classification
+            ),
+            _meeting_small_row("附件：", attachment_summary),
+        ]
+        if file_number or retention_period:
+            notice_rows.append(
+                _meeting_small_row("檔號／保存年限：", f"{file_number}／{retention_period}")
+            )
+        if classification_number:
+            notice_rows.append(_meeting_small_row("分類號：", classification_number))
+        if source_document_date or source_document_number:
+            notice_rows.append(
                 _meeting_small_row(
-                    "密等及解密條件或保密期限：", declassification or classification
+                    "收文日期字號：",
+                    "　".join(
+                        value
+                        for value in (source_document_date, source_document_number)
+                        if value
+                    ),
+                )
+            )
+        notice_rows.extend(
+            [
+                _meeting_large_row(
+                    f"{notice_word}事由：", _esc(doc.meeting_purpose or doc.subject or "")
                 ),
-                _meeting_small_row("附件：", attachment_summary),
-                _meeting_large_row("開會事由：", _esc(doc.meeting_purpose or doc.subject or "")),
-                _meeting_large_row("開會時間：", _esc(_roc_datetime(doc.meeting_time))),
-                _meeting_large_row("開會地點：", _esc(doc.meeting_location or "")),
+                _meeting_large_row(f"{notice_word}時間：", _esc(_roc_datetime(doc.meeting_time))),
+                _meeting_large_row(f"{notice_word}地點：", _esc(doc.meeting_location or "")),
                 _meeting_large_row("主持人：", _esc(doc.meeting_chairperson or "")),
-                _meeting_large_row("聯絡人：", _esc(doc.handler_name or "")),
-                _meeting_small_row("出席者：", _join_names(primary_recipients)),
-                _meeting_small_row("列席者：", _join_names(copy_recipients)),
-                _meeting_small_row("副本：", ""),
+                _meeting_large_row(
+                    "聯絡人及電話：",
+                    _esc(
+                        "、".join(
+                            value for value in (doc.handler_name, handler_phone) if value
+                        )
+                    ),
+                ),
+                _meeting_small_row(
+                    "出席者：",
+                    _join_names(attendee_recipients or primary_recipients),
+                ),
+                _meeting_small_row(
+                    "列席者：",
+                    _join_names(observer_recipients or copy_recipients),
+                ),
+                _meeting_small_row("副本：", _join_names(copy_recipients) if observer_recipients else ""),
             ]
         )
+        meeting_body = "".join(notice_rows)
         if doc.action_required:
             meeting_body += '<div class="meeting-note-label">附註：</div>'
             meeting_body += (
@@ -616,8 +741,8 @@ async def render_document_print_html(
             f"{_meta_row('地點：', _esc(doc.meeting_location or ''))}"
             f"{_meta_row('主席：', _esc(doc.meeting_chairperson or ''))}"
             f"{_meta_row('記錄者：', _esc(doc.handler_name or ''))}"
-            f"{_meta_row('出席者：', _join_names(primary_recipients or main_recipients))}"
-            f"{_meta_row('列席者：', _join_names(copy_recipients))}"
+            f"{_meta_row('出席者：', _join_names(attendee_recipients or primary_recipients or main_recipients))}"
+            f"{_meta_row('列席者：', _join_names(observer_recipients or copy_recipients))}"
             f"{_meta_row('附件：', attachment_summary)}"
             f"</section>"
             f"{_document_section('討論事項：', doc.doc_description)}"
@@ -629,11 +754,13 @@ async def render_document_print_html(
         action_label = {
             "report": "建議事項：",
             "consultation": "辦法或事項：",
+            "signature": "擬辦：",
         }.get(cat, "辦法：")
         body_html = (
             f'<section class="recipient-line">受文者：{addressed_to}</section>'
             f'<section class="meta">{"".join(meta_rows)}</section>'
             f"{_subject_section(doc.subject)}"
+            f"{_document_section('依據：', getattr(doc, 'basis', None))}"
             f"{_document_section(description_label, doc.doc_description)}"
             f"{_document_section(action_label, doc.action_required)}"
         )
@@ -644,7 +771,7 @@ async def render_document_print_html(
             f"<div>正本：{_join_names(primary_recipients) or addressed_to}</div>"
             f"<div>副本：{_join_names(copy_recipients)}</div>"
             "</section>"
-            f"{signature}"
+            f"{'' if cat == 'announcement' and doc.visibility_level in {'public', 'publicly_open'} else signature}"
         )
 
     custom_title = _compact_official_name(getattr(doc, "title", ""))
@@ -688,7 +815,7 @@ async def render_document_print_html(
       font-size: 12pt;
       line-height: 1.25;
       overflow-wrap: anywhere;
-      word-break: break-word;
+      word-break: normal;
     }}
     .no-print {{ margin: 0 0 7mm; text-align: right; font-family: system-ui, sans-serif; }}
     .no-print button {{ padding: 5px 14px; border: 1px solid #777; background: #f6f6f6; cursor: pointer; }}
@@ -739,6 +866,12 @@ async def render_document_print_html(
       letter-spacing: .02em;
       margin: 0 0 20mm;
       white-space: nowrap;
+    }}
+    .issuer-contact {{
+      margin: -15mm 0 5mm;
+      font-size: 10pt;
+      line-height: 1.35;
+      text-align: left;
     }}
     .doc-type {{
       display: inline-block;
@@ -832,7 +965,7 @@ async def render_document_print_html(
       text-align: left;
       vertical-align: top;
       overflow-wrap: anywhere;
-      word-break: break-word;
+      word-break: normal;
     }}
     .amendment-table .amd-status {{ width: 16mm; white-space: nowrap; }}
     .amendment-table .amd-no {{ width: 26mm; white-space: nowrap; }}
@@ -866,23 +999,20 @@ async def render_document_print_html(
     }}
     .copies {{ margin-top: 8mm; font-size: 12pt; line-height: 1.25; }}
     .signature {{
-      width: max-content;
+      display: inline-block;
+      width: auto;
       max-width: 100%;
       margin-top: 10mm;
       break-inside: avoid;
       color: #003aa7;
-      font-family: "OfficialLishu","OfficialKai","OfficialSerifTC","LiSu","STLiti",serif;
+      font-family: "OfficialKai","OfficialLishu","OfficialSerifTC","LiSu","STLiti",serif;
       font-size: 26pt;
       letter-spacing: .03em;
-      font-synthesis: none;
       white-space: nowrap;
-      text-shadow:
-        .2px 0 #003aa7, -.2px 0 #003aa7,
-        0 .2px #003aa7, 0 -.2px #003aa7;
     }}
     .meeting-seal {{
       display: block;
-      width: max-content;
+      width: auto;
       max-width: 100%;
       margin-top: 7mm;
       break-inside: avoid;
@@ -891,20 +1021,18 @@ async def render_document_print_html(
       font-size: 22pt;
       line-height: 1.2;
       letter-spacing: .04em;
-      font-synthesis: none;
       white-space: nowrap;
-      text-shadow:
-        .2px 0 #003aa7, -.2px 0 #003aa7,
-        0 .2px #003aa7, 0 -.2px #003aa7;
     }}
     .signature-title {{
       display: inline-block;
       margin-right: 5mm;
+      font-family: "OfficialTitle","OfficialKai","OfficialLishu","OfficialSerifTC","LiSu","STLiti",serif;
       font-size: 22pt;
       vertical-align: middle;
     }}
     .signature-name {{
       display: inline-block;
+      font-family: "OfficialXingshu","OfficialLishu","OfficialKai","OfficialSerifTC","LiSu","STLiti",serif;
       font-size: 40pt;
       letter-spacing: .01em;
       vertical-align: middle;
@@ -926,7 +1054,8 @@ async def render_document_print_html(
     <div class="copy-mark">{copy_mark}</div>
     <div class="file-box">檔　　號：{file_number}<br>保存年限：{retention_period}</div>
     <header class="title">{document_title}</header>
-    {f'<aside class="handler">{handler_block}</aside>' if handler_block and not is_meeting else ""}
+    {f'<aside class="handler">{handler_block}</aside>' if handler_block and not is_notice else ""}
+    {f'<div class="issuer-contact">{issuer_contact}</div>' if issuer_contact else ""}
     <section class="body">{body_html}</section>
   </main>
 </body>

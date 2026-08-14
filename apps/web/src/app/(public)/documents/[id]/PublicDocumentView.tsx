@@ -8,10 +8,25 @@ const CATEGORY_LABEL: Record<string, string> = {
   letter: "函",
   decree: "令",
   announcement: "公告",
+  presentation: "呈",
   report: "報告",
   record: "紀錄",
   consultation: "咨",
   meeting_notice: "開會通知單",
+  inspection_notice: "會勘通知單",
+  phone_record: "公務電話紀錄",
+  book_letter: "書函",
+  directive: "手令",
+  signature: "簽",
+  memo: "便簽",
+  appointment: "聘書",
+  certificate: "證明書",
+  license: "證書／執照",
+  contract: "契約書",
+  proposal: "提案",
+  summary: "節略",
+  briefing: "說帖",
+  form: "定型化表單",
   other: "其他",
 };
 
@@ -19,6 +34,8 @@ const CLASSIFICATION_LABEL: Record<string, string> = {
   normal: "普通",
   confidential: "密",
   secret: "機密",
+  highly_confidential: "極機密",
+  absolutely_confidential: "絕對機密",
 };
 
 function formatDate(value: string | null | undefined) {
