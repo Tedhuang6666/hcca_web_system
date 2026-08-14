@@ -15,9 +15,10 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, desc, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from api.core.cache import cache_get, cache_set
+from api.core.database import AsyncSessionLocal
 from api.models.announcement import Announcement
 from api.models.calendar import CalendarEvent, CalendarEventChecklistItem, CalendarEventParticipant
 from api.models.document import (
@@ -532,26 +533,88 @@ async def _safe(name: str, fn: Callable[[], Awaitable[list[TaskItem]]]) -> list[
         return []
 
 
+async def _run_source(
+    db: AsyncSession,
+    name: str,
+    builder: Callable[[AsyncSession], Awaitable[list[TaskItem]]],
+) -> list[TaskItem]:
+    """執行一個待辦來源；並行查詢不可共用同一個 AsyncSession。"""
+
+    async def run() -> list[TaskItem]:
+        # 正式 request session 綁定 AsyncEngine，可安全各取一條連線並行。
+        # 測試與外部 transaction 可能綁定 AsyncConnection，改用原 session
+        # 讓測試資料與外層交易一致，並由 gather 的單一連線序列化執行。
+        if isinstance(db.bind, AsyncEngine):
+            async with AsyncSessionLocal() as source_db:
+                return await builder(source_db)
+        return await builder(db)
+
+    return await _safe(name, run)
+
+
 async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
     perms = await get_user_permission_codes(db, user.id)
     is_admin = bool(getattr(user, "is_superuser", False))
 
-    groups = await asyncio.gather(
-        _safe("docs_approve", lambda: _docs_pending_my_approval(db, user, perms, is_admin)),
-        _safe("meetings_upcoming", lambda: _meetings_upcoming(db, user)),
-        _safe("regulations_publish", lambda: _regulations_to_publish(db, user, perms, is_admin)),
-        _safe("regulations_review", lambda: _regulations_to_review(db, user, perms, is_admin)),
-        _safe("petitions_assigned", lambda: _petitions_assigned(db, user, perms, is_admin)),
-        _safe("surveys_fill", lambda: _surveys_to_fill(db, user)),
-        _safe("calendar_prepare", lambda: _calendar_checklist_assigned(db, user)),
-        _safe("calendar_attend", lambda: _calendar_events_to_attend(db, user)),
-        _safe(
-            "announcements_publish", lambda: _announcements_to_publish(db, user, perms, is_admin)
+    source_calls = [
+        _run_source(
+            db,
+            "docs_approve",
+            lambda source_db: _docs_pending_my_approval(source_db, user, perms, is_admin),
         ),
-        _safe("shop_sales", lambda: _shop_sales_to_manage(db, user, perms, is_admin)),
-        _safe("meal_deadlines", lambda: _meal_deadlines_to_manage(db, user, perms, is_admin)),
-        _safe("work_items_assigned", lambda: _work_items_assigned(db, user)),
-    )
+        _run_source(db, "meetings_upcoming", lambda source_db: _meetings_upcoming(source_db, user)),
+        _run_source(
+            db,
+            "regulations_publish",
+            lambda source_db: _regulations_to_publish(source_db, user, perms, is_admin),
+        ),
+        _run_source(
+            db,
+            "regulations_review",
+            lambda source_db: _regulations_to_review(source_db, user, perms, is_admin),
+        ),
+        _run_source(
+            db,
+            "petitions_assigned",
+            lambda source_db: _petitions_assigned(source_db, user, perms, is_admin),
+        ),
+        _run_source(db, "surveys_fill", lambda source_db: _surveys_to_fill(source_db, user)),
+        _run_source(
+            db,
+            "calendar_prepare",
+            lambda source_db: _calendar_checklist_assigned(source_db, user),
+        ),
+        _run_source(
+            db,
+            "calendar_attend",
+            lambda source_db: _calendar_events_to_attend(source_db, user),
+        ),
+        _run_source(
+            db,
+            "announcements_publish",
+            lambda source_db: _announcements_to_publish(source_db, user, perms, is_admin),
+        ),
+        _run_source(
+            db,
+            "shop_sales",
+            lambda source_db: _shop_sales_to_manage(source_db, user, perms, is_admin),
+        ),
+        _run_source(
+            db,
+            "meal_deadlines",
+            lambda source_db: _meal_deadlines_to_manage(source_db, user, perms, is_admin),
+        ),
+        _run_source(
+            db,
+            "work_items_assigned",
+            lambda source_db: _work_items_assigned(source_db, user),
+        ),
+    ]
+    if isinstance(db.bind, AsyncEngine):
+        groups = await asyncio.gather(*source_calls)
+    else:
+        # 外層測試 transaction / savepoint 綁定單一 AsyncConnection，不能併發操作。
+        groups = [await source_call for source_call in source_calls]
     items: list[TaskItem] = [it for g in groups for it in g]
 
     items = prioritize_tasks(items)

@@ -70,6 +70,12 @@ def _normalize_statement(statement: str) -> str:
     return s[:240]
 
 
+def _is_noise_statement(statement: str) -> bool:
+    """排除 readiness 的 SELECT 1，避免把依賴探測當成業務慢查詢。"""
+    normalized = _normalize_statement(statement)
+    return re.fullmatch(r"SELECT\s+(?:1|\?)", normalized, re.IGNORECASE) is not None
+
+
 def _record_slow_sample(statement: str, elapsed_ms: float) -> None:
     template = _normalize_statement(statement)
     with _slow_lock:
@@ -147,7 +153,7 @@ def install_listeners() -> None:
                 _query_counters.set(counters)
             counters.query_count += 1
             counters.total_query_ms += elapsed_ms
-            if elapsed_ms > SLOW_QUERY_MS:
+            if elapsed_ms > SLOW_QUERY_MS and not _is_noise_statement(str(statement)):
                 counters.slow_query_count += 1
                 _record_slow_sample(str(statement), elapsed_ms)
 

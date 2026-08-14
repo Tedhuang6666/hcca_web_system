@@ -102,6 +102,45 @@ async def test_recent_errors_normalize_legacy_client_events(
     assert items[0]["status_code"] == 0
 
 
+async def test_recent_errors_filters_legacy_http_noise(
+    isolated_error_audit,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def legacy_lrange(*_args, **_kwargs) -> list[str]:
+        return [
+            json.dumps(
+                {
+                    "signature": "http:HTTPException:GET:/tasks/count",
+                    "error_id": "legacy-auth-1",
+                    "category": "http",
+                    "exc_type": "HTTPException",
+                    "method": "GET",
+                    "path": "/tasks/count",
+                    "status_code": 401,
+                    "occurred_at": 2,
+                }
+            ),
+            json.dumps(
+                {
+                    "signature": "http:HTTPException:GET:/broken",
+                    "error_id": "real-server-1",
+                    "category": "http",
+                    "exc_type": "HTTPException",
+                    "method": "GET",
+                    "path": "/broken",
+                    "status_code": 500,
+                    "occurred_at": 1,
+                }
+            ),
+        ]
+
+    monkeypatch.setattr(security.redis_client, "lrange", legacy_lrange)
+
+    items = await isolated_error_audit.get_recent_errors()
+
+    assert [item["error_id"] for item in items] == ["real-server-1"]
+
+
 async def test_client_error_endpoint_is_anonymous_and_returns_error_id(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -137,7 +176,7 @@ async def test_validation_errors_are_recorded(
     assert any(item["category"] == "validation" for item in items)
 
 
-async def test_http_errors_are_recorded(
+async def test_expected_http_errors_are_not_recorded(
     client: AsyncClient,
     isolated_error_audit,
 ) -> None:
@@ -145,4 +184,36 @@ async def test_http_errors_are_recorded(
 
     assert response.status_code == 404
     items = await isolated_error_audit.get_recent_errors()
-    assert any(item["category"] == "http" and item["status_code"] == 404 for item in items)
+    assert not any(item["category"] == "http" and item["status_code"] == 404 for item in items)
+
+
+async def test_unauthorized_request_is_not_recorded(
+    client: AsyncClient,
+    isolated_error_audit,
+) -> None:
+    response = await client.get("/tasks/count")
+
+    assert response.status_code == 401
+    assert await isolated_error_audit.get_recent_errors() == []
+
+
+async def test_readiness_503_is_not_recorded_as_application_error(
+    client: AsyncClient,
+    isolated_error_audit,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api import main as api_main
+
+    async def db_ok() -> tuple[bool, str | None]:
+        return True, None
+
+    async def redis_failed() -> tuple[bool, str | None]:
+        return False, "ConnectionError"
+
+    monkeypatch.setattr(api_main, "_check_database", db_ok)
+    monkeypatch.setattr(api_main, "_check_redis", redis_failed)
+
+    response = await client.get("/ready")
+
+    assert response.status_code == 503
+    assert await isolated_error_audit.get_recent_errors() == []
