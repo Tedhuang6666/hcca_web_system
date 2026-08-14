@@ -168,6 +168,8 @@ class PermissionCode(StrEnum):
 
     SITE_MANAGE = "site:manage"
 
+    QR_CODE_MANAGE = "qr_code:manage"
+
     LOAN_MANAGE = "loan:manage"
     LOAN_CHECKOUT = "loan:checkout"
     LOAN_VIEW_ALL = "loan:view_all"
@@ -1193,6 +1195,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.FEATURE_FLAG_ADMIN,
         "label": "Feature Flag 管理",
         "desc": "管理新功能灰度開關、依角色 / 比例切流量",
+    },
+    {
+        "group": "工具",
+        "code": PermissionCode.QR_CODE_MANAGE,
+        "label": "QR Code 產生器",
+        "desc": "使用後台 QR Code 產生器，調整樣式並匯出圖片",
     },
 ]
 

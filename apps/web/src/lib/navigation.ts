@@ -122,6 +122,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: "營運中心",
   },
   {
+    id: "qrCode",
+    href: "/qr-code",
+    iconKey: "settings",
+    label: "QR Code 產生器",
+    perm: "qr_code:manage",
+  },
+  {
     id: "adminDashboard",
     href: "/admin",
     iconKey: "dashboard",
@@ -344,6 +351,7 @@ export const NAV_DEF: NavEntry[] = [
     defaultCollapsed: true,
     items: byIds([
       "operations",
+      "qrCode",
       "moduleBackoffice",
       "adminDashboard",
       "about",
