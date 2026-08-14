@@ -367,9 +367,9 @@ jobs:
             cat /tmp/hcca-next.log
             exit 1
           fi
-    SHARE_PREVIEW_URLS="http://127.0.0.1:3000/,http://127.0.0.1:3000/news" \
-    SHARE_PREVIEW_IMAGE_BASE_URL="http://127.0.0.1:3000" \
-      npm run validate:share-previews
+          SHARE_PREVIEW_URLS="http://127.0.0.1:3000/,http://127.0.0.1:3000/news" \
+          SHARE_PREVIEW_IMAGE_BASE_URL="http://127.0.0.1:3000" \
+            npm run validate:share-previews
 
       - name: Upload build diagnostics
         if: always()
