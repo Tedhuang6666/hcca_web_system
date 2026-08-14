@@ -21,6 +21,7 @@
     "lint": "node ./node_modules/eslint/bin/eslint.js",
     "type-check": "tsc --noEmit",
     "test": "vitest run --coverage",
+    "validate:share-previews": "node ../../scripts/validate-share-previews.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "generate:types": "openapi-typescript ../../openapi.json -o ./src/lib/api-types.ts",

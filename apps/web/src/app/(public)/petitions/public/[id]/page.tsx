@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 
 import { BRANDING } from "@/lib/branding";
 import { fetchPublicPetition } from "@/lib/publicSeoFetch";
+import { contentOgImagePath } from "@/lib/social-metadata";
+import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { absoluteUrl, excerpt, JsonLd, pageMetadata } from "@/lib/seo";
 
 type PublicPetitionPageProps = {
@@ -14,17 +16,21 @@ export async function generateMetadata({ params }: PublicPetitionPageProps): Pro
   const { id } = await params;
   const item = await fetchPublicPetition(id);
   if (!item) {
+    const path = `/petitions/public/${encodeURIComponent(id)}`;
     return pageMetadata({
       title: "公開陳情",
       description: "閱讀經同意公開的校園問題與處理回覆。",
-      path: `/petitions/public/${encodeURIComponent(id)}`,
+      path,
+      imagePath: contentOgImagePath(path),
     });
   }
 
+  const path = `/petitions/public/${item.id}`;
   return pageMetadata({
     title: item.title,
     description: excerpt(item.content, "閱讀這件經同意公開的校園陳情與處理回覆。", 160),
-    path: `/petitions/public/${item.id}`,
+    path,
+    imagePath: contentOgImagePath(path),
   });
 }
 
@@ -50,12 +56,16 @@ export default async function PublicPetitionDetailPage({ params }: PublicPetitio
           dateModified: item.published_at,
           inLanguage: "zh-TW",
           mainEntityOfPage: canonical,
-          publisher: {
-            "@type": "Organization",
-            name: BRANDING.orgName,
-          },
+          author: { "@type": "Organization", name: BRANDING.orgShortName },
+          publisher: organizationJsonLd(),
+          image: absoluteUrl(contentOgImagePath(`/petitions/public/${item.id}`)),
         }}
       />
+      <JsonLd data={breadcrumbJsonLd([
+        { name: "首頁", url: absoluteUrl("/") },
+        { name: "公開陳情", url: absoluteUrl("/petitions/public") },
+        { name: item.title, url: canonical },
+      ])} />
       <article className="max-w-3xl mx-auto space-y-6">
         <Link href="/petitions/public" className="text-sm" style={{ color: "var(--text-muted)" }}>
           ← 返回公開陳情
