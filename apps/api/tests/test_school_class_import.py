@@ -48,6 +48,12 @@ async def test_import_roster_file_creates_classes_people_and_seats(
         display_name="匯入測試管理員",
     )
     db_session.add(actor)
+    linked_user = User(
+        email=f"linked-{uuid.uuid4().hex[:8]}@test.edu",
+        display_name="已註冊學生",
+        student_id="510007",
+    )
+    db_session.add(linked_user)
     await db_session.flush()
 
     result = await import_roster_pdf(
@@ -76,3 +82,49 @@ async def test_import_roster_file_creates_classes_people_and_seats(
         (1, "510001"),
         (2, "510007"),
     ]
+    assert any(member.id == linked_user.id and member.seat_number == 2 for member in members)
+
+    repeated = await import_roster_pdf(
+        db_session,
+        file_bytes=(
+            "display_name,class_code,seat_number,student_id\n"
+            "王○勛,101,1,510001\n"
+            "林○毅,101,2,510007\n"
+        ).encode(),
+        filename="115-1-roster-import.csv",
+        academic_year=None,
+        created_by=actor.id,
+    )
+    assert (repeated.people_created, repeated.affiliations_created) == (0, 0)
+    assert (repeated.roster_created, repeated.roster_updated) == (0, 2)
+
+
+async def test_import_roster_file_handles_full_roster_size(db_session: AsyncSession) -> None:
+    actor = User(
+        email=f"full-import-{uuid.uuid4().hex[:8]}@test.edu",
+        display_name="完整匯入測試管理員",
+    )
+    db_session.add(actor)
+    await db_session.flush()
+
+    lines = ["display_name,class_code,seat_number,student_id"]
+    student_number = 0
+    for class_number in range(101, 119):
+        last_seat = 35 if class_number < 118 else 34
+        for seat_number in range(1, last_seat + 1):
+            student_number += 1
+            lines.append(
+                f"學生○{student_number:03d},{class_number},{seat_number},510{student_number:03d}"
+            )
+
+    result = await import_roster_pdf(
+        db_session,
+        file_bytes=("\n".join(lines) + "\n").encode(),
+        filename="115-1-roster-import.csv",
+        academic_year=None,
+        created_by=actor.id,
+    )
+
+    assert result.total == 629
+    assert result.classes_created == 18
+    assert result.roster_created == 629
