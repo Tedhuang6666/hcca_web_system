@@ -11560,6 +11560,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/regulations/{reg_id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 修正既有法規沿革與生效日期（需 regulation:edit 權限）
+         * @description 允許已公布的歷史法規補登沿革與生效日期，不開放正文內容變更。
+         */
+        patch: operations["update_regulation_metadata_regulations__reg_id__metadata_patch"];
+        trace?: never;
+    };
     "/regulations/{reg_id}/president_publish": {
         parameters: {
             query?: never;
@@ -11716,6 +11736,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/regulations/{reg_id}/revisions/{revision_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 修正法規沿革日期或連結公布公文（需 regulation:edit 權限） */
+        patch: operations["update_regulation_revision_regulations__reg_id__revisions__revision_id__patch"];
         trace?: never;
     };
     "/regulations/{reg_id}/schedule": {
@@ -19279,6 +19316,8 @@ export interface components {
             recipients: components["schemas"]["RecipientOut"][];
             /** Regulation Id */
             regulation_id?: string | null;
+            /** Regulation Revision Id */
+            regulation_revision_id?: string | null;
             /** Retention Period */
             retention_period?: string | null;
             /**
@@ -31982,6 +32021,22 @@ export interface components {
             workflow_status: components["schemas"]["RegulationWorkflowStatus"];
         };
         /**
+         * RegulationMetadataUpdate
+         * @description 既有法規可修正的公開識別資料，不會改動法規正文版本。
+         */
+        RegulationMetadataUpdate: {
+            /**
+             * Effective Date
+             * @description 生效日期
+             */
+            effective_date?: string | null;
+            /**
+             * Legislative History
+             * @description 沿革
+             */
+            legislative_history?: string | null;
+        };
+        /**
          * RegulationOut
          * @description 法規完整資訊（含條文清單、修訂歷程）
          */
@@ -32112,12 +32167,20 @@ export interface components {
              */
             amended_at: string;
             /**
+             * Amended At Precision
+             * @default date
+             * @enum {string}
+             */
+            amended_at_precision: "date" | "month" | "year" | "unknown";
+            /**
              * Amended By
              * Format: uuid
              */
             amended_by: string;
             /** Amended By Name */
             amended_by_name?: string | null;
+            /** Amended Year */
+            amended_year?: number | null;
             /** Article Snapshot */
             article_snapshot?: string | null;
             /** Change Brief */
@@ -32138,6 +32201,8 @@ export interface components {
             is_total_amendment: boolean;
             /** Proposal Metadata Snapshot */
             proposal_metadata_snapshot?: string | null;
+            /** Published Document Id */
+            published_document_id?: string | null;
             /**
              * Regulation Id
              * Format: uuid
@@ -32147,6 +32212,42 @@ export interface components {
             resolution_link: string | null;
             /** Version */
             version: number;
+        };
+        /**
+         * RegulationRevisionUpdate
+         * @description 補登既有法規的沿革日期、摘要與公布公文。
+         */
+        RegulationRevisionUpdate: {
+            /**
+             * Amended At
+             * @description 完整日期（YYYY-MM-DD）
+             */
+            amended_at?: string | null;
+            /**
+             * Amended At Precision
+             * @description 日期精度
+             */
+            amended_at_precision?: ("date" | "month" | "year" | "unknown") | null;
+            /**
+             * Amended Year
+             * @description 僅有年份時填寫，可為民國年
+             */
+            amended_year?: number | null;
+            /**
+             * Change Brief
+             * @description 修訂摘要
+             */
+            change_brief?: string | null;
+            /**
+             * Document Id
+             * @description 此沿革對應的公布法律公文
+             */
+            document_id?: string | null;
+            /**
+             * Resolution Link
+             * @description 相關決議連結（多個以換行分隔）
+             */
+            resolution_link?: string | null;
         };
         /**
          * RegulationSearchResult
@@ -62923,6 +63024,41 @@ export interface operations {
             };
         };
     };
+    update_regulation_metadata_regulations__reg_id__metadata_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reg_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegulationMetadataUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegulationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     president_publish_regulations__reg_id__president_publish_post: {
         parameters: {
             query?: never;
@@ -63204,6 +63340,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegulationRevisionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_regulation_revision_regulations__reg_id__revisions__revision_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reg_id: string;
+                revision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegulationRevisionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegulationRevisionOut"];
                 };
             };
             /** @description Validation Error */

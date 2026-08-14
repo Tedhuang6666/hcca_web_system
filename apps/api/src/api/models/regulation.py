@@ -276,12 +276,29 @@ class RegulationRevision(Base, TimestampMixin):
     # 相關決議連結（JSON 字串，以逗號分隔多個 URL）
     resolution_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     amended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # 日期精度：date / month / year / unknown；amended_at 仍保留可排序的標準化日期
+    amended_at_precision: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="date", server_default="date"
+    )
+    # 僅有年份時保留使用者輸入的原始年份（可為民國年或西元年）
+    amended_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     amended_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
     regulation: Mapped[Regulation] = relationship("Regulation", back_populates="revisions")
     amender: Mapped[User] = relationship("User")
+    published_document: Mapped[Document | None] = relationship(
+        "Document",
+        foreign_keys="Document.regulation_revision_id",
+        back_populates="regulation_revision",
+        uselist=False,
+    )
+
+    @property
+    def published_document_id(self) -> uuid.UUID | None:
+        document = self.__dict__.get("published_document")
+        return document.id if document is not None else None
 
 
 # ── 結構化條文 ────────────────────────────────────────────────────────────────

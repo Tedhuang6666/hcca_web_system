@@ -465,6 +465,7 @@ class DocumentOut(BaseModel):
     created_by: uuid.UUID
     serial_template_id: uuid.UUID | None = None
     regulation_id: uuid.UUID | None = None  # 此令所公布的法規（僅令類公文）
+    regulation_revision_id: uuid.UUID | None = None  # 此令對應的法規修訂沿革
     revisions: list[RevisionOut] = []
     approvals: list[ApprovalStepOut] = []
     attachments: list[AttachmentOut] = []

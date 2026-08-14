@@ -41,14 +41,32 @@ export function splitLegislativeHistory(value: string | null | undefined): strin
     .filter(Boolean);
 }
 
+export function formatRevisionDate(
+  revision: Pick<RegulationRevisionOut, "amended_at" | "amended_at_precision" | "amended_year">,
+): string {
+  if (revision.amended_at_precision === "unknown") return "日期未知";
+  if (revision.amended_at_precision === "year") {
+    return revision.amended_year ? `${revision.amended_year}年` : "年份未知";
+  }
+  if (revision.amended_at_precision === "month") {
+    const date = new Date(revision.amended_at);
+    return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+  }
+  return new Date(revision.amended_at).toLocaleDateString("zh-TW");
+}
+
 export function formatGeneratedHistoryRows(
-  revisions: Pick<RegulationRevisionOut, "amended_at">[],
+  revisions: Pick<RegulationRevisionOut, "amended_at" | "amended_at_precision" | "amended_year">[],
 ): string[] {
   const counters = new Map<string, number>();
 
   return [...revisions]
     .sort((a, b) => new Date(a.amended_at).getTime() - new Date(b.amended_at).getTime())
     .map((revision) => {
+      if (revision.amended_at_precision === "unknown") return "修訂日期不詳";
+      if (revision.amended_at_precision === "year") {
+        return `${revision.amended_year ?? new Date(revision.amended_at).getFullYear()}年修訂`;
+      }
       const amendedAt = new Date(revision.amended_at);
       const term = academicTerm(amendedAt);
       const key = `${term.year}-${term.semester}`;

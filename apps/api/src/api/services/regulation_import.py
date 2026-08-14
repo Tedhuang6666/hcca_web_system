@@ -836,6 +836,38 @@ def parse_history_date(event: str) -> datetime | None:
     return None
 
 
+def parse_history_date_info(event: str) -> tuple[datetime | None, str, int | None]:
+    """解析沿革日期與精度，保留只有年份或日期不詳的語意。"""
+    parsed = parse_history_date(event)
+    if parsed is None:
+        return None, "unknown", None
+
+    full_date = re.search(
+        r"(?:中華民國|民國)?\s*(\d{2,4})\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日",
+        event,
+    )
+    if full_date:
+        return parsed, "date", int(full_date.group(1))
+
+    western_date = re.search(r"(\d{4})[./-]\d{1,2}[./-]\d{1,2}", event)
+    if western_date:
+        return parsed, "date", int(western_date.group(1))
+
+    academic_year = re.search(r"(\d{2,4})\s*學年度", event)
+    if academic_year:
+        return parsed, "year", int(academic_year.group(1))
+
+    month = re.search(r"(?:中華民國|民國)?\s*(\d{2,4})\s*年\s*\d{1,2}\s*月", event)
+    if month:
+        return parsed, "month", int(month.group(1))
+
+    year = re.search(r"(?:中華民國|民國)?\s*(\d{2,4})\s*年", event)
+    if year:
+        return parsed, "year", int(year.group(1))
+
+    return parsed, "date", parsed.year
+
+
 def _roc_year(value: int) -> int:
     return value + 1911 if value < 200 else value
 

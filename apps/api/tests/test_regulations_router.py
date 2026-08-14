@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
+from api.models.document import Document, DocumentCategory
 from api.models.meeting import Meeting, MeetingAgendaItem
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.regulation import (
@@ -16,6 +17,7 @@ from api.models.regulation import (
     Regulation,
     RegulationArticle,
     RegulationCategory,
+    RegulationRevision,
     RegulationWorkflowStatus,
 )
 from api.models.user import User
@@ -258,6 +260,87 @@ async def test_update_regulation_by_creator_increments_version_and_creates_revis
     assert body["version"] == 2
     assert len(body["revisions"]) == 1
     assert body["revisions"][0]["change_brief"] == "初次修訂"
+
+
+async def test_update_published_regulation_metadata_by_creator_succeeds(
+    db_session: AsyncSession, authed_client_factory, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user(email="legacy-metadata-owner@school.edu")
+    await _grant_permission(db_session, creator, org, "regulation:edit")
+    reg = await _make_regulation(
+        db_session,
+        org,
+        creator,
+        workflow_status=RegulationWorkflowStatus.PUBLISHED,
+        published_at=datetime.now(UTC),
+        legislative_history="原沿革",
+    )
+
+    ac = authed_client_factory(creator)
+    resp = await ac.patch(
+        f"/regulations/{reg.id}/metadata",
+        json={
+            "effective_date": "2024-08-01T00:00:00+08:00",
+            "legislative_history": "民國113年8月1日制定",
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["legislative_history"] == "民國113年8月1日制定"
+    assert body["effective_date"].startswith("2024-08-01")
+
+
+async def test_update_regulation_revision_accepts_year_unknown_and_document_link(
+    db_session: AsyncSession, authed_client_factory, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user(email="legacy-revision-owner@school.edu")
+    await _grant_permission(db_session, creator, org, "regulation:edit")
+    reg = await _make_regulation(
+        db_session,
+        org,
+        creator,
+        workflow_status=RegulationWorkflowStatus.PUBLISHED,
+        published_at=datetime.now(UTC),
+    )
+    revision = RegulationRevision(
+        regulation_id=reg.id,
+        version=1,
+        change_brief="既有沿革",
+        content_snapshot="",
+        article_snapshot="[]",
+        amended_at=datetime.now(UTC),
+        amended_by=creator.id,
+    )
+    document = Document(
+        serial_number=f"DOC-{uuid.uuid4().hex[:12]}",
+        title="公布既有法規",
+        category=DocumentCategory.DECREE,
+        org_id=org.id,
+        created_by=creator.id,
+    )
+    db_session.add_all([revision, document])
+    await db_session.flush()
+
+    ac = authed_client_factory(creator)
+    resp = await ac.patch(
+        f"/regulations/{reg.id}/revisions/{revision.id}",
+        json={
+            "amended_at_precision": "year",
+            "amended_year": 114,
+            "document_id": str(document.id),
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["amended_at_precision"] == "year"
+    assert body["amended_year"] == 114
+    assert body["published_document_id"] == str(document.id)
+    await db_session.refresh(document)
+    assert document.regulation_revision_id == revision.id
 
 
 async def test_update_regulation_autosave_does_not_increment_version(

@@ -129,6 +129,10 @@ export const regulationsApi = {
     autosave: boolean;
   }>) =>
     patch<RegulationOut>(regulationPath(id), body),
+  updateMetadata: (id: string, body: {
+    effective_date: string | null;
+    legislative_history: string | null;
+  }) => patch<RegulationOut>(`${regulationPath(id)}/metadata`, body),
   publish: (id: string, body: { change_brief: string; is_total_amendment?: boolean; resolution_link?: string }) =>
     post<RegulationOut>(`${regulationPath(id)}/publish`, body),
   archive: (id: string) => post<RegulationOut>(`${regulationPath(id)}/archive`),
@@ -137,6 +141,14 @@ export const regulationsApi = {
   delete: (id: string) => del<void>(regulationPath(id)),
   // ── 修訂歷程 ──────────────────────────────────────────────────────────────
   listRevisions: (id: string) => get<RegulationRevisionOut[]>(`${regulationPath(id)}/revisions`),
+  updateRevision: (regulationId: string, revisionId: string, body: {
+    change_brief?: string;
+    amended_at?: string | null;
+    amended_at_precision?: "date" | "month" | "year" | "unknown";
+    amended_year?: number | null;
+    resolution_link?: string | null;
+    document_id?: string | null;
+  }) => patch<RegulationRevisionOut>(`${regulationPath(regulationId)}/revisions/${pathSegment(revisionId)}`, body),
   structureContent: (id: string, body?: { content?: string | null; replace_existing?: boolean }) =>
     post<RegulationOut>(`${regulationPath(id)}/structure-content`, body ?? {}),
   // ── 審議流程 ──────────────────────────────────────────────────────────────

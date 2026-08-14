@@ -951,6 +951,13 @@ def _law_revision_rows(reg: Regulation) -> str:
     term_counts: dict[tuple[int, str], int] = {}
     rows: list[str] = []
     for rev in revisions:
+        if rev.amended_at_precision == "unknown":
+            rows.append("<div>修訂日期不詳</div>")
+            continue
+        if rev.amended_at_precision == "year":
+            year = rev.amended_year or rev.amended_at.year
+            rows.append(f"<div>{_esc(str(year))}年修訂</div>")
+            continue
         month = rev.amended_at.month
         if month >= 8:
             academic_year = rev.amended_at.year - 1911

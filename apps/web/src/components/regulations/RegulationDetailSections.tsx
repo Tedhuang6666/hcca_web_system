@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import type {
   ArticleType,
   RegulationArticleOut,
@@ -12,6 +13,7 @@ import {
   ARTICLE_TYPE_LABEL,
   buildArticleDisplayRows as buildDisplayRowsFn,
 } from "@/lib/regulationStructure";
+import { formatRevisionDate } from "@/lib/regulationHistory";
 
 import { LawArticleRow } from "./LawArticleRow";
 
@@ -372,8 +374,17 @@ export function RevisionCard({
             )}
           </div>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            {new Date(rev.amended_at).toLocaleDateString("zh-TW")} · {rev.amended_by_name ?? rev.amended_by}
+            {formatRevisionDate(rev)} · {rev.amended_by_name ?? rev.amended_by}
           </p>
+          {rev.published_document_id && (
+            <Link
+              href={`/documents/${rev.published_document_id}`}
+              className="mt-1 inline-flex text-xs hover:opacity-80"
+              style={{ color: "var(--primary)" }}
+            >
+              查看公布公文 →
+            </Link>
+          )}
           <div className="mt-2 space-y-1 text-xs">
             <p style={{ color: "var(--text-muted)" }}>修正摘要</p>
             <p style={{ color: "var(--text-secondary)" }}>{rev.change_brief || "未留存"}</p>
@@ -496,7 +507,7 @@ export function RevisionCard({
                   v{rev.version} 提案內容
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  {new Date(rev.amended_at).toLocaleDateString("zh-TW")} · {rev.amended_by_name ?? rev.amended_by}
+                  {formatRevisionDate(rev)} · {rev.amended_by_name ?? rev.amended_by}
                 </p>
               </div>
               <button onClick={() => setShowProposal(false)} className="topbar-icon-btn" aria-label="關閉">

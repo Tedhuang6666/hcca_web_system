@@ -33,6 +33,7 @@ from api.models.document import (
     DocumentClassification,
     DocumentSerialTemplate,
     DocumentUrgency,
+    DocumentVisibility,
 )
 from api.models.regulation import (
     ArticleType,
@@ -59,9 +60,11 @@ from api.schemas.regulation import (
     RegulationArticleUpdate,
     RegulationCreate,
     RegulationListItem,
+    RegulationMetadataUpdate,
     RegulationOut,
     RegulationPublishRequest,
     RegulationRevisionOut,
+    RegulationRevisionUpdate,
     RegulationSearchResult,
     RegulationTimeMachineOut,
     RegulationTreeNodeOut,
@@ -786,6 +789,72 @@ async def get_revisions(reg_id: str, session: DbDep, _: OptionalUser) -> list[ob
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     reg = await _get_reg_or_404(reg_id, session)
     return await reg_svc.list_regulation_revisions(session, reg.id)
+
+
+@router.patch(
+    "/{reg_id}/metadata",
+    response_model=RegulationOut,
+    summary="修正既有法規沿革與生效日期（需 regulation:edit 權限）",
+)
+async def update_regulation_metadata(
+    reg_id: str,
+    payload: RegulationMetadataUpdate,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
+) -> Regulation:
+    """允許已公布的歷史法規補登沿革與生效日期，不開放正文內容變更。"""
+    reg = await _get_reg_or_404(reg_id, session)
+    if reg.created_by != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以編輯")
+    updated = await reg_svc.update_regulation_metadata(session, reg, data=payload)
+    await audit_svc.record(
+        session,
+        entity_type="regulation",
+        entity_id=str(reg.id),
+        action="regulation.metadata_update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "effective_date": payload.effective_date.isoformat() if payload.effective_date else None
+        },
+        summary=f"補登法規沿革「{reg.title}」",
+    )
+    return updated
+
+
+@router.patch(
+    "/{reg_id}/revisions/{revision_id}",
+    response_model=RegulationRevisionOut,
+    summary="修正法規沿革日期或連結公布公文（需 regulation:edit 權限）",
+)
+async def update_regulation_revision(
+    reg_id: str,
+    revision_id: uuid.UUID,
+    payload: RegulationRevisionUpdate,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
+) -> RegulationRevision:
+    reg = await _get_reg_or_404(reg_id, session)
+    if reg.created_by != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以編輯")
+    try:
+        revision = await reg_svc.update_regulation_revision(session, reg, revision_id, data=payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await audit_svc.record(
+        session,
+        entity_type="regulation_revision",
+        entity_id=str(revision.id),
+        action="regulation.revision_update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "regulation_id": str(reg.id),
+            "document_id": str(payload.document_id) if payload.document_id else None,
+        },
+        summary=f"修正法規沿革 v{revision.version}「{reg.title}」",
+    )
+    return revision
 
 
 # ── 條文管理 ─────────────────────────────────────────────────────────────────
@@ -1682,6 +1751,7 @@ async def president_publish(
         # 這個已載入的 in-memory collection，會讓本次回應的 RegulationOut.revisions
         # 看不到剛建立的公布快照。
         reg.revisions.append(rev)
+        await session.flush()
 
         # 4. 查詢主席公布專用字號模板；若前端指定模板，優先使用指定模板。
         tmpl_result = await session.execute(
@@ -1761,12 +1831,14 @@ async def president_publish(
             handler_unit="主席",
             serial_template_id=tmpl.id if tmpl else None,
             manual_serial_number=payload.manual_serial_number,
+            visibility_level=DocumentVisibility.PUBLICLY_OPEN,
         )
         pub_doc = await doc_svc.create_document(
             session, data=pub_doc_data, created_by=current_user.id
         )
-        pub_doc.is_public = True
         pub_doc.regulation_id = reg.id
+        pub_doc.regulation_revision_id = rev.id
+        rev.published_document = pub_doc
         pub_doc = await doc_svc.issue_document_directly(
             session,
             pub_doc,
