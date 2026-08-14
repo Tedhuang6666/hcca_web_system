@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Clock, LogOut, ShieldBan } from "lucide-react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
+import { clearAuthCache } from "@/lib/auth-cache";
 
 function BlockedContent() {
   const router = useRouter();
@@ -42,7 +43,7 @@ function BlockedContent() {
         headers: csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {},
       });
     } finally {
-      localStorage.clear();
+      clearAuthCache();
       window.location.href = "/login";
     }
   };

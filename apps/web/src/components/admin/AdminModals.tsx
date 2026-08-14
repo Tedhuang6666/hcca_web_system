@@ -58,30 +58,30 @@ export function PreRegisterModal({
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>學號（擇一）</label>
-            <input value={sid} onChange={e => setSid(e.target.value)} placeholder="例：112040101"
+            <label htmlFor="pre-register-sid" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>學號（擇一）</label>
+            <input id="pre-register-sid" value={sid} onChange={e => setSid(e.target.value)} placeholder="例：112040101"
               className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
               style={{ border: "1px solid var(--border)" }} />
           </div>
           <div>
-            <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>自訂 Email（擇一）</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="例：teacher@example.edu.tw"
+            <label htmlFor="pre-register-email" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>自訂 Email（擇一）</label>
+            <input id="pre-register-email" value={email} onChange={e => setEmail(e.target.value)} placeholder="例：teacher@example.edu.tw"
               className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
               style={{ border: "1px solid var(--border)" }} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>姓名 *</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="例：王小明"
+            <label htmlFor="pre-register-name" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>姓名 *</label>
+            <input id="pre-register-name" value={name} onChange={e => setName(e.target.value)} placeholder="例：王小明"
               className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
               style={{ border: "1px solid var(--border)" }} />
           </div>
           <div />
         </div>
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>立即指派職位（選填）</label>
-          <select value={posId} onChange={e => setPosId(e.target.value)}
+          <label htmlFor="pre-register-position" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>立即指派職位（選填）</label>
+          <select id="pre-register-position" value={posId} onChange={e => setPosId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 outline-none"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
             <option value="">不指派</option>
@@ -91,22 +91,22 @@ export function PreRegisterModal({
         {posId && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>任期開始</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              <label htmlFor="pre-register-start-date" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>任期開始</label>
+              <input id="pre-register-start-date" type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
                 className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
                 style={{ border: "1px solid var(--border)", colorScheme: "dark" }} />
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>任期結束（留空=無限）</label>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+              <label htmlFor="pre-register-end-date" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>任期結束（留空=無限）</label>
+              <input id="pre-register-end-date" type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
                 className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
                 style={{ border: "1px solid var(--border)", colorScheme: "dark" }} />
             </div>
           </div>
         )}
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>自訂權限組織（選填）</label>
-          <select value={permOrgId} onChange={e => setPermOrgId(e.target.value)}
+          <label htmlFor="pre-register-permission-org" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>自訂權限組織（選填）</label>
+          <select id="pre-register-permission-org" value={permOrgId} onChange={e => setPermOrgId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 outline-none"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
             <option value="">不設定自訂權限</option>
@@ -164,20 +164,20 @@ export function NewOrgModal({
     <Modal title="新增組織" onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>組織名稱 *</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="例：班聯會"
+          <label htmlFor="new-org-name" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>組織名稱 *</label>
+          <input id="new-org-name" value={name} onChange={e => setName(e.target.value)} placeholder="例：班聯會"
             className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
             style={{ border: "1px solid var(--border)" }} />
         </div>
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>描述（選填）</label>
-          <input value={description} onChange={e => setDescription(e.target.value)} placeholder="簡短描述"
+          <label htmlFor="new-org-description" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>描述（選填）</label>
+          <input id="new-org-description" value={description} onChange={e => setDescription(e.target.value)} placeholder="簡短描述"
             className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
             style={{ border: "1px solid var(--border)" }} />
         </div>
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>上層組織（選填）</label>
-          <select value={parentId} onChange={e => setParentId(e.target.value)}
+          <label htmlFor="new-org-parent" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>上層組織（選填）</label>
+          <select id="new-org-parent" value={parentId} onChange={e => setParentId(e.target.value)}
             className="w-full text-sm rounded-lg px-3 py-2 outline-none"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
             <option value="">無（頂層組織）</option>
@@ -250,8 +250,8 @@ export function NewPositionModal({
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>所屬組織 *</label>
-            <select value={orgId} onChange={e => setOrgId(e.target.value)}
+            <label htmlFor="new-position-org" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>所屬組織 *</label>
+            <select id="new-position-org" value={orgId} onChange={e => setOrgId(e.target.value)}
               className="w-full text-sm rounded-lg px-3 py-2 outline-none"
               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
               <option value="">選擇組織...</option>
@@ -259,22 +259,22 @@ export function NewPositionModal({
             </select>
           </div>
           <div>
-            <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>職位名稱 *</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="例：公文審核委員"
+            <label htmlFor="new-position-name" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>職位名稱 *</label>
+            <input id="new-position-name" value={name} onChange={e => setName(e.target.value)} placeholder="例：公文審核委員"
               className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
               style={{ border: "1px solid var(--border)" }} />
           </div>
         </div>
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>描述（選填）</label>
-          <input value={description} onChange={e => setDescription(e.target.value)} placeholder="職位描述"
+          <label htmlFor="new-position-description" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>描述（選填）</label>
+          <input id="new-position-description" value={description} onChange={e => setDescription(e.target.value)} placeholder="職位描述"
             className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
             style={{ border: "1px solid var(--border)" }} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>階層關係</label>
-            <select value={relationMode} onChange={e => setRelationMode(e.target.value as "none" | "parent" | "sibling")}
+            <label htmlFor="new-position-relation-mode" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>階層關係</label>
+            <select id="new-position-relation-mode" value={relationMode} onChange={e => setRelationMode(e.target.value as "none" | "parent" | "sibling")}
               className="w-full text-sm rounded-lg px-3 py-2 outline-none"
               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
               <option value="none">無（頂層/平級）</option>
@@ -283,8 +283,9 @@ export function NewPositionModal({
             </select>
           </div>
           <div>
-            <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>關係目標</label>
+            <label htmlFor="new-position-relation-target" className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>關係目標</label>
             <select
+              id="new-position-relation-target"
               value={relationTargetId}
               onChange={e => setRelationTargetId(e.target.value)}
               disabled={relationMode === "none" || !orgId}

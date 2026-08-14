@@ -1,18 +1,134 @@
-const CACHE_NAME = "hcca-shell-v3";
-const SHELL_ASSETS = ["/", "/manifest.webmanifest"];
+const STATIC_CACHE = "hcca-static-v4";
+const PUBLIC_PAGE_CACHE = "hcca-public-pages-v1";
+const CACHE_PREFIX = "hcca-";
+const PRECACHE_URLS = ["/offline.html", "/manifest.webmanifest"];
+
+// These are the only HTML routes that may enter the Service Worker cache. The
+// request must also be an unauthenticated, full-page navigation below.
+const PUBLIC_NAVIGATION_PREFIXES = [
+  "/",
+  "/about",
+  "/contact",
+  "/links",
+  "/news",
+  "/officers",
+  "/pages",
+  "/public",
+  "/system-info",
+  "/live/elections",
+];
+const PUBLIC_NAVIGATION_EXACT_PATHS = new Set([
+  "/announcements",
+  "/documents",
+  "/legal",
+  "/partner-map",
+  "/petitions",
+  "/petitions/new",
+  "/petitions/public",
+  "/petitions/share",
+  "/regulations",
+  "/surveys",
+]);
+
+function isPathInList(pathname, prefixes) {
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function isStaticNextAsset(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith("/_next/static/");
+}
+
+function isPublicNavigation(request, url) {
+  if (request.mode !== "navigate" || url.origin !== self.location.origin || url.search) return false;
+  if (request.headers.get("RSC") === "1" || request.headers.get("Next-Router-Prefetch") === "1") {
+    return false;
+  }
+  // A cookie can represent an authenticated session even when the current
+  // page itself is public. Never cache a response from such a request.
+  if (request.headers.get("cookie") || request.headers.get("authorization")) return false;
+  if (PUBLIC_NAVIGATION_EXACT_PATHS.has(url.pathname)) return true;
+  if (isPathInList(url.pathname, PUBLIC_NAVIGATION_PREFIXES)) return true;
+  if (url.pathname.startsWith("/announcements/")
+    && !url.pathname.endsWith("/new")
+    && !url.pathname.includes("/edit")) return true;
+  if (url.pathname.startsWith("/documents/")
+    && !url.pathname.endsWith("/new")
+    && !url.pathname.includes("/delegations")
+    && !url.pathname.includes("/edit")) return true;
+  if (url.pathname.startsWith("/regulations/")
+    && !["/new", "/pending", "/archived"].some((suffix) => url.pathname.endsWith(suffix))
+    && !url.pathname.includes("/edit")
+    && !url.pathname.includes("/amendment")) return true;
+  if (url.pathname.startsWith("/surveys/")
+    && !url.pathname.endsWith("/new")
+    && !url.pathname.includes("/edit")) return true;
+  if (url.pathname.startsWith("/petitions/public/")) return true;
+  return url.pathname.startsWith("/partner-map/")
+    && !url.pathname.startsWith("/partner-map/admin")
+    && !url.pathname.startsWith("/partner-map/my-businesses");
+}
+
+function isCacheableResponse(response) {
+  const cacheControl = response.headers.get("Cache-Control") || "";
+  const contentType = response.headers.get("Content-Type") || "";
+  return response.ok
+    && response.type === "basic"
+    && contentType.includes("text/html")
+    && !/(?:private|no-store)/i.test(cacheControl);
+}
+
+function isCacheableStaticAsset(response) {
+  const cacheControl = response.headers.get("Cache-Control") || "";
+  return response.ok
+    && response.type === "basic"
+    && !/(?:private|no-store)/i.test(cacheControl);
+}
+
+async function cacheResponse(cacheName, request, response) {
+  if (!isCacheableResponse(response)) return;
+  const cache = await caches.open(cacheName);
+  await cache.put(request, response.clone());
+}
+
+async function cacheStaticAsset(request, response) {
+  if (!isCacheableStaticAsset(response)) return;
+  const cache = await caches.open(STATIC_CACHE);
+  await cache.put(request, response.clone());
+}
+
+async function clearPrivateCaches() {
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith(CACHE_PREFIX) && ![STATIC_CACHE, PUBLIC_PAGE_CACHE].includes(key))
+      .map((key) => caches.delete(key)),
+  );
+}
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)));
+  event.waitUntil(
+    caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)),
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
+      Promise.all(
+        keys
+          .filter((key) => key.startsWith(CACHE_PREFIX) && ![STATIC_CACHE, PUBLIC_PAGE_CACHE].includes(key))
+          .map((key) => caches.delete(key)),
+      ),
     ),
   );
   self.clients.claim();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEAR_PRIVATE_CACHES") {
+    event.waitUntil(clearPrivateCaches());
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -20,21 +136,43 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  // 只攔同源請求。跨來源資源（Google Fonts、頭像、analytics）放給瀏覽器自己依
-  // 各自的 CSP 指令（style-src/img-src/script-src）載入；若在 SW 內用 fetch() 重發，
-  // 會被歸類成 connect-src 而被 CSP 擋下（connect-src 不含這些網域，也不該含）。
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/api/")) return;
 
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+  if (isStaticNextAsset(url)) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const response = await fetch(request);
+        await cacheStaticAsset(request, response);
         return response;
-      })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/"))),
-  );
+      }),
+    );
+    return;
+  }
+
+  if (isPublicNavigation(request, url)) {
+    event.respondWith(
+      fetch(request)
+        .then(async (response) => {
+          await cacheResponse(PUBLIC_PAGE_CACHE, request, response);
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(PUBLIC_PAGE_CACHE);
+          const cached = await cache.match(request);
+          return cached || caches.match("/offline.html");
+        }),
+    );
+    return;
+  }
+
+  // Navigations outside the explicit public allow-list are never read from or
+  // written to a cache. When offline, show a dedicated static page instead of
+  // leaking a previously rendered authenticated HTML/RSC response.
+  if (request.mode === "navigate") {
+    event.respondWith(fetch(request).catch(() => caches.match("/offline.html")));
+  }
 });
 
 self.addEventListener("push", (event) => {

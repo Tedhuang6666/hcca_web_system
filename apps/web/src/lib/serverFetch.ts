@@ -5,17 +5,14 @@ import type {
   PublicSiteBundleOut,
   PublicSitePageOut,
 } from "./types";
-import { cookies } from "next/headers";
-
 import { serverApiUrl } from "./config";
 
 const REVALIDATE = 30;
 
-async function announcementFetchOptions(): Promise<RequestInit & { next?: { revalidate: number } }> {
-  const cookie = (await cookies()).toString();
-  return cookie
-    ? { headers: { Cookie: cookie }, cache: "no-store" }
-    : { next: { revalidate: REVALIDATE } };
+function announcementFetchOptions(): RequestInit & { next?: { revalidate: number } } {
+  // Public pages must not forward a visitor's session cookie into a cacheable
+  // response. Authenticated announcement management uses the client API layer.
+  return { next: { revalidate: REVALIDATE } };
 }
 
 export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
@@ -31,7 +28,7 @@ export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
 export async function fetchAnnouncements(limit = 100): Promise<AnnouncementListItem[]> {
   try {
     const res = await fetch(serverApiUrl(`/announcements?limit=${limit}`), {
-      ...(await announcementFetchOptions()),
+      ...announcementFetchOptions(),
     });
     if (!res.ok) return [];
     return res.json();
@@ -43,7 +40,7 @@ export async function fetchAnnouncements(limit = 100): Promise<AnnouncementListI
 export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut | null> {
   try {
     const res = await fetch(serverApiUrl("/announcements/active-urgent"), {
-      ...(await announcementFetchOptions()),
+      ...announcementFetchOptions(),
     });
     if (!res.ok) return null;
     return res.json();
@@ -79,7 +76,7 @@ export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut |
 export async function fetchAnnouncement(id: string): Promise<import("./types").AnnouncementOut | null> {
   try {
     const res = await fetch(serverApiUrl(`/announcements/${encodeURIComponent(id)}`), {
-      ...(await announcementFetchOptions()),
+      ...announcementFetchOptions(),
     });
     if (!res.ok) return null;
     return res.json();

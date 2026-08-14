@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>目前離線｜HCCA</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f8fa; color: #1f2937; }
+      main { max-width: 32rem; padding: 2rem; text-align: center; }
+      h1 { margin-bottom: .75rem; font-size: 1.5rem; }
+      p { line-height: 1.7; color: #5b6472; }
+      button { min-height: 44px; padding: .7rem 1rem; border: 0; border-radius: .75rem; background: #1f3a5f; color: white; font: inherit; cursor: pointer; }
+      @media (prefers-color-scheme: dark) { body { background: #111827; color: #f3f4f6; } p { color: #c4cad4; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>目前沒有網路連線</h1>
+      <p>公開頁面會在恢復連線後重新載入。為保護帳號資料，登入後的頁面不會離線快取。</p>
+      <button type="button" onclick="location.reload()">重新嘗試</button>
+    </main>
+  </body>
+</html>

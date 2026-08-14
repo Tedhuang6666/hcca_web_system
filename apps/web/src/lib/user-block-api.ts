@@ -1,4 +1,4 @@
-import type { DefenseRule } from "@/lib/api";
+import { authFetch, type DefenseRule } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 
 export interface UserBlockPreview {
@@ -37,7 +37,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export async function previewUserBlock(identifier: string): Promise<UserBlockPreview> {
-  const response = await fetch(
+  const response = await authFetch(
     apiUrl(`/admin/system/defense/users/${encodeURIComponent(identifier)}`),
     { credentials: "include", cache: "no-store" },
   );
@@ -51,7 +51,7 @@ export async function blockUserAccount(body: {
   include_emails?: boolean;
   include_ips?: boolean;
 }): Promise<UserBlockResult> {
-  const response = await fetch(apiUrl("/admin/system/defense/user-blocks"), {
+  const response = await authFetch(apiUrl("/admin/system/defense/user-blocks"), {
     method: "POST",
     credentials: "include",
     headers: {

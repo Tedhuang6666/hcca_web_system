@@ -63,14 +63,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 className="btn"
-                onClick={() => handleClose(false)}>
+                onClick={() => handleClose(false)}
+                data-autofocus>
                 {state.cancelLabel ?? "取消"}
               </button>
               <button
                 type="button"
                 className={`btn ${state.danger ? "btn-danger" : "btn-primary"}`}
                 onClick={() => handleClose(true)}
-                autoFocus
                 style={state.danger ? {
                   background: "var(--danger)",
                   color: "#fff",

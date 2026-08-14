@@ -325,9 +325,12 @@ function redirectToLoginAfterExpiry(): void {
 export function authFetch(input: RequestInfo | URL, init: HccaRequestInit = {}): Promise<Response> {
   const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
   const impersonation = _skipImpersonation ? null : getImpersonationSession();
-  const headers = new Headers(requestInit.headers);
+  const headers = new Headers(
+    typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
+  );
+  new Headers(requestInit.headers).forEach((value, key) => headers.set(key, value));
   if (impersonation) headers.set("Authorization", `Bearer ${impersonation.token}`);
-  return fetch(input, { ...requestInit, headers });
+  return fetch(input, { credentials: "include", ...requestInit, headers });
 }
 
 // GET 在網路錯誤時最多重試 N 次，間隔逐步加長

@@ -15,6 +15,7 @@ interface MultiComboboxProps {
   disabled?: boolean;
   emptyText?: string;
   maxHeight?: string;
+  ariaLabel?: string;
 }
 
 /**
@@ -30,6 +31,7 @@ export default function MultiCombobox({
   disabled = false,
   emptyText = "無相符選項",
   maxHeight = "15rem",
+  ariaLabel,
 }: MultiComboboxProps) {
   const [keyword, setKeyword] = useState("");
   const [open, setOpen] = useState(false);
@@ -55,6 +57,10 @@ export default function MultiCombobox({
   useEffect(() => {
     setActiveIndex(0);
   }, [candidates.length, open]);
+
+  const activeOptionId = open && candidates[activeIndex]
+    ? `${listboxId}-option-${activeIndex}`
+    : undefined;
 
   const add = (opt: ComboboxOption) => {
     onChange([...selected, opt]);
@@ -86,7 +92,7 @@ export default function MultiCombobox({
                   e.preventDefault();
                   remove(s.value);
                 }}
-                className="text-sm leading-none hover:opacity-60"
+                className="flex h-11 w-11 items-center justify-center text-base leading-none hover:opacity-60"
               >
                 ×
               </button>
@@ -101,7 +107,9 @@ export default function MultiCombobox({
         role="combobox"
         aria-expanded={open}
         aria-controls={listboxId}
+        aria-activedescendant={activeOptionId}
         aria-autocomplete="list"
+        aria-label={ariaLabel ?? placeholder}
         disabled={disabled}
         value={keyword}
         placeholder={placeholder}
@@ -145,7 +153,12 @@ export default function MultiCombobox({
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", maxHeight }}
         >
           {candidates.map((opt, idx) => (
-            <li key={opt.value} role="option" aria-selected={false}>
+            <li
+              id={`${listboxId}-option-${idx}`}
+              key={opt.value}
+              role="option"
+              aria-selected={false}
+            >
               <button
                 type="button"
                 onMouseEnter={() => setActiveIndex(idx)}

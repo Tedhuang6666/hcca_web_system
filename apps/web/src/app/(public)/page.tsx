@@ -1,5 +1,6 @@
 import "./public-home.css";
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { preload } from "react-dom";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import {
@@ -8,6 +9,10 @@ import {
 } from "@/lib/serverFetch";
 import DeferredHomeContent from "./DeferredHomeContent";
 import HomeHero from "./HomeHero";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 function DeferredHomeFallback() {
   return <div className="min-h-40" aria-hidden="true" />;

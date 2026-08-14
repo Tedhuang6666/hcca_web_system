@@ -2,17 +2,19 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiErrorMessage } from "@/lib/api-helpers";
-import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { cacheGet, cacheHas, cacheRequest, cacheSet } from "@/lib/api-cache";
 
 // ── 不帶 cacheKey 的原始多載（向後相容） ──────────────────────────────────────
-export function useFetch<T>(fetcher: () => Promise<T>, deps: unknown[], errorFallback: string): [T | undefined, boolean];
-export function useFetch<T>(fetcher: () => Promise<T>, deps: unknown[], errorFallback: string, initialValue: T): [T, boolean];
+type Fetcher<T> = (signal?: AbortSignal) => Promise<T>;
+
+export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string): [T | undefined, boolean];
+export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue: T): [T, boolean];
 // ── 帶 cacheKey：stale-while-revalidate ─────────────────────────────────────
-export function useFetch<T>(fetcher: () => Promise<T>, deps: unknown[], errorFallback: string, initialValue: T, cacheKey: string): [T, boolean];
-export function useFetch<T>(fetcher: () => Promise<T>, deps: unknown[], errorFallback: string, initialValue?: T, cacheKey?: string): [T | undefined, boolean];
+export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue: T, cacheKey: string): [T, boolean];
+export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue?: T, cacheKey?: string): [T | undefined, boolean];
 
 export function useFetch<T>(
-  fetcher: () => Promise<T>,
+  fetcher: Fetcher<T>,
   deps: unknown[],
   errorFallback: string,
   initialValue?: T,
@@ -42,12 +44,17 @@ export function useFetch<T>(
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     // 有快取時只靜默背景更新，不顯示 loading
     const isStale = resolvedKey ? !cacheHas(resolvedKey) : true;
     if (isStale) setLoading(true);
 
-    fetcherRef.current()
+    const request = resolvedKey
+      ? cacheRequest(resolvedKey, (signal) => fetcherRef.current(signal), controller.signal)
+      : fetcherRef.current(controller.signal);
+
+    request
       .then((result) => {
         if (!cancelled) {
           setData(result);
@@ -60,7 +67,10 @@ export function useFetch<T>(
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
