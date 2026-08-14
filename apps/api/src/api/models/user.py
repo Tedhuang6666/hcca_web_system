@@ -1,7 +1,7 @@
 """User ORM 模型"""
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import Any
 
 from sqlalchemy import Boolean, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -10,9 +10,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from api.core.database import Base
 from api.models.base import TimestampMixin
 from api.models.types import JSONDict
-
-if TYPE_CHECKING:
-    from api.models.notification import Notification
 
 
 class User(Base, TimestampMixin):
@@ -69,7 +66,7 @@ class User(Base, TimestampMixin):
     positions: Mapped[list["UserPosition"]] = relationship(  # noqa: F821
         "UserPosition", back_populates="user", lazy="select"
     )
-    notifications: Mapped[list["Notification"]] = relationship(
+    notifications: Mapped[list[Any]] = relationship(
         "Notification", back_populates="user", lazy="select", cascade="all, delete-orphan"
     )
 

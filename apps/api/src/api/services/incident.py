@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from celery import current_app
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -199,12 +200,13 @@ async def persist_error_incident(
                 result.recovery_action = "clear_cache:app"
             await session.commit()
             if enqueue_auto_recovery:
-                from api.services.incident_tasks import run_auto_recovery
-
-                run_auto_recovery.delay(
-                    incident_id=str(result.id),
-                    action="clear_cache",
-                    target="app",
+                current_app.send_task(
+                    "api.services.incident_tasks.run_auto_recovery",
+                    kwargs={
+                        "incident_id": str(result.id),
+                        "action": "clear_cache",
+                        "target": "app",
+                    },
                 )
             return result
         except Exception:

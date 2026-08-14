@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from api.core.celery_app import celery_app
 from api.core.config import settings
 from api.core.prometheus_metrics import record_email_delivery
+from api.email.generic import render_generic_message
 from api.models.email_message import (
     EmailCampaignRecipient,
     EmailMessage,
@@ -297,8 +298,6 @@ def send_email(
             )
         rendered_body = body
         if format_body:
-            from api.email.sender import render_generic_message
-
             rendered_body = render_generic_message(
                 subject,
                 body,
@@ -427,8 +426,6 @@ def enqueue_email(
     queued_body = body
     queued_subtype = subtype
     if email_message_id is None and not already_rendered:
-        from api.email.sender import render_generic_message
-
         queued_body = render_generic_message(
             subject,
             body,
@@ -467,8 +464,6 @@ async def send_email_now(
         already_rendered=False,
     )
     try:
-        from api.email.sender import render_generic_message
-
         rendered_body = render_generic_message(
             subject,
             body,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     BigInteger,
@@ -30,7 +30,6 @@ from api.models.types import JSONDict
 if TYPE_CHECKING:
     from api.models.activity import Activity
     from api.models.org import Org
-    from api.models.regulation import Regulation
     from api.models.school_class import SchoolClass
     from api.models.user import User
 
@@ -120,10 +119,10 @@ class DeliveryMethod(enum.StrEnum):
 class DocumentVisibility(enum.StrEnum):
     """公文可見度"""
 
-    SUBJECT_ONLY = "subject_only"  # 僅當事人（受文者 + 建立者 + 審核人）可見
-    ORG_ONLY = "org_only"  # 僅所屬機關成員可見
-    PUBLIC = "public"  # 全體使用者可見（含未登入）
-    PUBLICLY_OPEN = "publicly_open"  # 舊版公開值，未登入亦可查看
+    SUBJECT_ONLY = "subject_only"  # 密件：建立者、建立機關上層成員與收件者可見
+    ORG_ONLY = "org_only"  # 機關可見：所屬機關全體成員可見
+    PUBLIC = "public"  # 登入後可見
+    PUBLICLY_OPEN = "publicly_open"  # 公開：未登入亦可查看（相容舊版值）
 
 
 class YearMode(enum.StrEnum):
@@ -453,7 +452,7 @@ class Document(Base, TimestampMixin):
         default=DocumentVisibility.ORG_ONLY,
         index=True,
     )
-    # 唯讀欄位（由 service 層在寫入 visibility_level 時同步維持一致）
+    # 唯讀欄位（公開值與舊版 is_public 相容旗標）
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
 
     # ── 關聯鍵 ───────────────────────────────────────────────────────────────
@@ -495,12 +494,29 @@ class Document(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    # 此公文對應的法規修訂沿革（可用於補登既有法規的公布令）
+    regulation_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "regulation_revisions.id",
+            ondelete="SET NULL",
+            name="fk_documents_regulation_revision_id",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
 
     # ── Relationships ────────────────────────────────────────────────────────
     org: Mapped[Org] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
-    regulation: Mapped[Regulation | None] = relationship("Regulation", foreign_keys=[regulation_id])
+    regulation: Mapped[Any] = relationship("Regulation", foreign_keys=[regulation_id])
+    regulation_revision: Mapped[Any] = relationship(
+        "RegulationRevision",
+        foreign_keys=[regulation_revision_id],
+        back_populates="published_document",
+    )
     serial_template: Mapped[DocumentSerialTemplate | None] = relationship(
         "DocumentSerialTemplate", foreign_keys=[serial_template_id]
     )
