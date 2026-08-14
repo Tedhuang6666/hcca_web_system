@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.person import (
+    Person,
     PersonAffiliation,
     PersonAffiliationKind,
     PersonAffiliationSource,
@@ -1095,9 +1096,10 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
     """依手動成員與學號區間列出班級成員，並標示是否為幹部。"""
     cadre_ids = {c.user_id for c in sc.cadres}
     members_by_id: dict[uuid.UUID, ClassMemberOut] = {}
+    member_ids_by_student_id: dict[str, uuid.UUID] = {}
     affiliation_result = await session.execute(
         select(PersonAffiliation)
-        .options(selectinload(PersonAffiliation.person))
+        .options(selectinload(PersonAffiliation.person).selectinload(Person.user))
         .where(
             PersonAffiliation.class_id == sc.id,
             PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
@@ -1109,11 +1111,14 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
         if person is None:
             continue
         member_id = person.user_id or person.id
+        member_ids_by_student_id[person.student_id or ""] = member_id
+        display_name = person.user.display_name if person.user else person.display_name
+        email = person.user.email if person.user else person.email or ""
         members_by_id[member_id] = ClassMemberOut(
             id=member_id,
-            display_name=person.display_name,
+            display_name=display_name,
             student_id=person.student_id,
-            email=person.email or "",
+            email=email,
             is_cadre=person.user_id in cadre_ids if person.user_id else False,
             source="person_affiliation",
         )
@@ -1130,10 +1135,13 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             manual_member_id=member.id,
         )
     for entry in sc.roster_entries:
-        if entry.user is None:
+        member_id = entry.user.id if entry.user else member_ids_by_student_id.get(entry.student_id)
+        if member_id is None:
             continue
-        if entry.user.id in members_by_id:
-            members_by_id[entry.user.id].seat_number = entry.seat_number
+        if member_id in members_by_id:
+            members_by_id[member_id].seat_number = entry.seat_number
+            continue
+        if entry.user is None:
             continue
         members_by_id[entry.user.id] = ClassMemberOut(
             id=entry.user.id,

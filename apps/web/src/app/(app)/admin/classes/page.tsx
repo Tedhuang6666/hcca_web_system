@@ -6,6 +6,7 @@ import {
   BookUser,
   CalendarDays,
   CheckSquare,
+  FileUp,
   GraduationCap,
   ListChecks,
   Plus,
@@ -1207,6 +1208,77 @@ function ClassWorkspace({
   );
 }
 
+function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
+  const [academicYear, setAcademicYear] = useState(String(new Date().getFullYear() - 1911));
+  const [fileName, setFileName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const importFile = async (file: File) => {
+    setFileName(file.name);
+    setBusy(true);
+    try {
+      const result = await classApi.importRosterFile(file, Number(academicYear) || undefined);
+      toast.success(
+        `匯入 ${result.total} 筆，建立 ${result.classes_created} 個班級，新增 ${result.roster_created} 筆座號名冊`,
+      );
+      onImported();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "編班名單匯入失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
+      <div className="flex items-start gap-3">
+        <FileUp size={18} style={{ color: "var(--primary)", marginTop: 2 }} />
+        <div>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            匯入編班名單檔案
+          </h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            支援 PDF 或 UTF-8 CSV；會自動建立缺少的班級、人員主檔與座號名冊。
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-[96px_1fr] gap-2">
+        <input
+          className="input"
+          inputMode="numeric"
+          value={academicYear}
+          onChange={(event) => setAcademicYear(event.target.value)}
+          placeholder="學年度"
+          aria-label="匯入學年度"
+        />
+        <label
+          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold"
+          style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
+        >
+          <FileUp size={15} />
+          {busy ? "匯入中…" : "選擇檔案並匯入"}
+          <input
+            type="file"
+            className="sr-only"
+            accept=".pdf,.csv,application/pdf,text/csv"
+            disabled={busy}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void importFile(file);
+              event.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+      {fileName && (
+        <p className="mt-2 truncate text-xs" style={{ color: "var(--text-muted)" }} title={fileName}>
+          {fileName}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function ClassesAdminPage() {
   const { can } = usePermissions();
   const allowed = can("class:manage");
@@ -1290,6 +1362,7 @@ export default function ClassesAdminPage() {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
         <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
+          <RosterFileImportPanel onImported={loadClasses} />
           <CreateClassPanel onCreated={loadClasses} />
           <ClassList
             classes={classes}

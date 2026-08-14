@@ -71,6 +71,18 @@ class ClassRosterBulkOut(BaseModel):
     entries: list[ClassRosterEntryOut]
 
 
+class ClassRosterPdfImportOut(BaseModel):
+    academic_year: int
+    class_codes: list[str]
+    classes_created: int
+    total: int
+    people_created: int
+    people_updated: int
+    affiliations_created: int
+    roster_created: int
+    roster_updated: int
+
+
 # ── 班級幹部 ──────────────────────────────────────────────────────────────────
 
 
