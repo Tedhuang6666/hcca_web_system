@@ -235,7 +235,7 @@ async def create_document(
 @router.get(
     "",
     response_model=list[DocumentListItem],
-    summary="列出公文（未登入僅顯示 is_public=True 的公文）",
+    summary="列出公文（未登入僅顯示公開公文）",
 )
 async def list_documents(
     session: DbDep,
@@ -324,7 +324,7 @@ async def document_approval_context(
 @router.get(
     "/{doc_id}",
     response_model=DocumentOut,
-    summary="取得公文詳細（未登入僅可查看 is_public=True 的公文）",
+    summary="取得公文詳細（未登入僅可查看公開公文）",
     responses={
         200: {"description": "公文詳細資料"},
         403: {"description": "無查看權限"},
