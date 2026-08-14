@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { emailApi, apiErrorMessage } from "@/lib/api";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type { EmailAnalyticsOut, EmailMessageOut } from "@/lib/types";
 
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
@@ -62,8 +63,8 @@ export default function EmailAnalyticsPage() {
             <div className="flex flex-wrap justify-between gap-2">
               <h2 className="font-semibold">熱門連結</h2>
               <div className="flex gap-2">
-                <a className="btn btn-ghost btn-sm" href={emailApi.exportUrl(selectedId, "csv")}>匯出 CSV</a>
-                <a className="btn btn-ghost btn-sm" href={emailApi.exportUrl(selectedId, "xlsx")}>匯出 XLSX</a>
+                <AnimatedDownloadButton className="btn btn-ghost btn-sm" href={emailApi.exportUrl(selectedId, "csv")} filename="email-analytics.csv" label="匯出 CSV" />
+                <AnimatedDownloadButton className="btn btn-ghost btn-sm" href={emailApi.exportUrl(selectedId, "xlsx")} filename="email-analytics.xlsx" label="匯出 XLSX" />
               </div>
             </div>
             {analytics.top_links.length === 0 ? (

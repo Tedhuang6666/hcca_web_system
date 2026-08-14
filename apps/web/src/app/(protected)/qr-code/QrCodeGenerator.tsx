@@ -6,8 +6,6 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
-  Download,
-  FileImage,
   Link2,
   LockKeyhole,
   Palette,
@@ -19,6 +17,7 @@ import {
   Type,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -149,15 +148,6 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
   return parts.join("");
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 function AccessDenied() {
   return (
     <main className="qr-tool-page">
@@ -210,33 +200,32 @@ export default function QrCodeGenerator() {
     setSettings((previous) => ({ ...previous, [key]: value }));
   };
 
-  const downloadPng = () => {
-    if (!preview || "error" in preview) return;
-    const image = new window.Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = settings.size;
-      canvas.height = settings.size;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      context.fillStyle = validHex(settings.background, DEFAULT_SETTINGS.background);
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((blob) => {
-        if (blob) {
-          downloadBlob(blob, "hcca-qr-code.png");
-          setNotice("PNG 已下載");
+  const createPngBlob = async (): Promise<Blob> => {
+    if (!preview || "error" in preview) throw new Error("目前沒有可下載的 QR Code");
+    return new Promise((resolve, reject) => {
+      const image = new window.Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = settings.size;
+        canvas.height = settings.size;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("瀏覽器不支援圖片匯出"));
+          return;
         }
-      }, "image/png");
-    };
-    image.onerror = () => setNotice("PNG 匯出失敗，請再試一次");
-    image.src = preview.dataUrl;
+        context.fillStyle = validHex(settings.background, DEFAULT_SETTINGS.background);
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("PNG 匯出失敗")), "image/png");
+      };
+      image.onerror = () => reject(new Error("PNG 匯出失敗，請再試一次"));
+      image.src = preview.dataUrl;
+    });
   };
 
-  const downloadSvg = () => {
-    if (!preview || "error" in preview) return;
-    downloadBlob(new Blob([preview.svg], { type: "image/svg+xml;charset=utf-8" }), "hcca-qr-code.svg");
-    setNotice("SVG 已下載");
+  const createSvgBlob = async (): Promise<Blob> => {
+    if (!preview || "error" in preview) throw new Error("目前沒有可下載的 QR Code");
+    return new Blob([preview.svg], { type: "image/svg+xml;charset=utf-8" });
   };
 
   const copyContent = async () => {
@@ -308,12 +297,22 @@ export default function QrCodeGenerator() {
             </div>
 
             <div className="qr-preview-actions">
-              <button type="button" className="qr-button qr-button-primary" onClick={downloadPng} disabled={!hasPreview}>
-                <Download size={17} aria-hidden="true" />下載 PNG
-              </button>
-              <button type="button" className="qr-button qr-button-secondary" onClick={downloadSvg} disabled={!hasPreview}>
-                <FileImage size={17} aria-hidden="true" />下載 SVG
-              </button>
+              <AnimatedDownloadButton
+                className="qr-button qr-button-primary"
+                request={createPngBlob}
+                filename="hcca-qr-code.png"
+                label="下載 PNG"
+                disabled={!hasPreview}
+                onComplete={() => setNotice("PNG 已下載")}
+                onError={(error) => setNotice(error instanceof Error ? error.message : "PNG 匯出失敗")} />
+              <AnimatedDownloadButton
+                className="qr-button qr-button-secondary"
+                request={createSvgBlob}
+                filename="hcca-qr-code.svg"
+                label="下載 SVG"
+                disabled={!hasPreview}
+                onComplete={() => setNotice("SVG 已下載")}
+                onError={(error) => setNotice(error instanceof Error ? error.message : "SVG 匯出失敗")} />
             </div>
             <p className="qr-export-note"><CircleHelp size={14} aria-hidden="true" />PNG 適合直接發佈，SVG 適合海報排版與印刷放大。</p>
           </section>

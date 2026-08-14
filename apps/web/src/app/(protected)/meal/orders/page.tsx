@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { mealApi, apiErrorMessage } from "@/lib/api";
 import type { MealOrderListItem, MealOrderOut, MealOrderStatus, MenuScheduleListItem, MealVendorOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -288,19 +289,6 @@ function VendorDashboard() {
     revenue:   orders.filter(o => o.status !== "cancelled").reduce((s, o) => s + o.total_price, 0),
   };
 
-  const downloadReport = async (format: "xlsx" | "csv") => {
-    try {
-      const res = await mealApi.downloadReport(format, { schedule_id: selectedSchedule || undefined });
-      if (!res.ok) { toast.error("匯出失敗"); return; }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `meal_orders.${format}`; a.click();
-      URL.revokeObjectURL(url);
-      toast.success(`已匯出 ${format.toUpperCase()}`);
-    } catch { toast.error("匯出失敗"); }
-  };
-
   const selectedScheduleInfo = schedules.find(s => s.id === selectedSchedule);
 
   return (
@@ -349,14 +337,20 @@ function VendorDashboard() {
               截單時間：{new Date(selectedScheduleInfo.order_deadline).toLocaleString("zh-TW")}
             </p>
             <div className="flex gap-2">
-              <button onClick={() => downloadReport("xlsx")}
-                className="btn btn-ghost text-xs px-3 py-1.5">
-                匯出 Excel
-              </button>
-              <button onClick={() => downloadReport("csv")}
-                className="btn btn-ghost text-xs px-3 py-1.5">
-                匯出 CSV
-              </button>
+              <AnimatedDownloadButton
+                className="btn btn-ghost text-xs px-3 py-1.5"
+                request={() => mealApi.downloadReport("xlsx", { schedule_id: selectedSchedule || undefined })}
+                filename="meal_orders.xlsx"
+                label="匯出 Excel"
+                onComplete={() => toast.success("已匯出 XLSX")}
+                onError={() => toast.error("匯出失敗")} />
+              <AnimatedDownloadButton
+                className="btn btn-ghost text-xs px-3 py-1.5"
+                request={() => mealApi.downloadReport("csv", { schedule_id: selectedSchedule || undefined })}
+                filename="meal_orders.csv"
+                label="匯出 CSV"
+                onComplete={() => toast.success("已匯出 CSV")}
+                onError={() => toast.error("匯出失敗")} />
             </div>
           </div>
         )}

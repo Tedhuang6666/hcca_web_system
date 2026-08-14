@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import ActivitySelect from "@/components/activities/ActivitySelect";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 
 export default function OrdersPage() {
   const { can } = usePermissions();
@@ -19,7 +20,6 @@ export default function OrdersPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityId, setActivityId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState(false);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
   const canManageOrders = isAdmin || activities.length > 0;
 
@@ -51,24 +51,6 @@ export default function OrdersPage() {
   useEffect(() => {
     activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
   }, []);
-
-  const downloadReport = async (format: "xlsx" | "csv") => {
-    setDownloading(true);
-    try {
-      const res = await shopApi.downloadReport(format, activityId ? { activity_id: activityId } : undefined);
-      if (!res.ok) { toast.error("匯出失敗"); return; }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `orders.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success(`已匯出 ${format.toUpperCase()}`);
-    } catch {
-      toast.error("匯出失敗");
-    } finally { setDownloading(false); }
-  };
 
   const confirmedOrders = orders.filter(o => o.status === "confirmed");
   const totalAmount = confirmedOrders.reduce((s, o) => s + o.total_price, 0);
@@ -102,16 +84,22 @@ export default function OrdersPage() {
 
         {canManageOrders && (
           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-            <button onClick={() => downloadReport("xlsx")} disabled={downloading}
-              className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 sm:flex-none"
-              style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.3)" }}>
-              匯出 Excel
-            </button>
-            <button onClick={() => downloadReport("csv")} disabled={downloading}
-              className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 sm:flex-none"
-              style={{ background: "rgba(34,211,238,0.05)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>
-              匯出 CSV
-            </button>
+            <AnimatedDownloadButton
+              className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:flex-none"
+              style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.3)" }}
+              request={() => shopApi.downloadReport("xlsx", activityId ? { activity_id: activityId } : undefined)}
+              filename="orders.xlsx"
+              label="匯出 Excel"
+              onComplete={() => toast.success("已匯出 XLSX")}
+              onError={() => toast.error("匯出失敗")} />
+            <AnimatedDownloadButton
+              className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:flex-none"
+              style={{ background: "rgba(34,211,238,0.05)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}
+              request={() => shopApi.downloadReport("csv", activityId ? { activity_id: activityId } : undefined)}
+              filename="orders.csv"
+              label="匯出 CSV"
+              onComplete={() => toast.success("已匯出 CSV")}
+              onError={() => toast.error("匯出失敗")} />
             <Link href="/shop/admin" className="flex-1 rounded-lg px-3 py-2 text-center text-xs font-medium sm:flex-none"
               style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>
               商品與統計

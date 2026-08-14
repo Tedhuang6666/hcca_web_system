@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart2, Download, Lock, LockOpen, RefreshCw } from "lucide-react";
+import { BarChart2, Lock, LockOpen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { shopApi, apiErrorMessage } from "@/lib/api";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type {
   CatalogCategoryOut,
   CloseStatusItem,
@@ -360,11 +361,12 @@ export default function CouncilOrdersPage() {
       {tab === "quantities" && (
         <section>
           <div className="mb-3 flex justify-end">
-            <a href={`/api/shop/reports/orders.xlsx${grade ? `?grade=${encodeURIComponent(grade)}` : ""}`}
+            <AnimatedDownloadButton
+              href={`/api/shop/reports/orders.xlsx${grade ? `?grade=${encodeURIComponent(grade)}` : ""}`}
               className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
-              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-              <Download size={13} /> 匯出 Excel
-            </a>
+              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+              filename="orders.xlsx"
+              label="匯出 Excel" />
           </div>
           <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
             {loading ? (

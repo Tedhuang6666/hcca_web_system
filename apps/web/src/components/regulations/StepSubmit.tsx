@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { regulationsApi, apiErrorMessage } from "@/lib/api";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type { RegulationOut } from "@/lib/types";
 import {
   ARTICLE_TYPE_LABEL,
@@ -59,47 +60,6 @@ export function StepSubmit({
     }
     return rows;
   }, [draft]);
-
-  const handleExport = () => {
-    const payload = { draft, regulationId: reg.id, regulationTitle: reg.title, exportedAt: new Date().toISOString() };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${reg.title}_${draft.name}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("草案已匯出");
-  };
-
-  const handleExportPdf = async () => {
-    if (comparisonRows.length === 0) {
-      toast.error("目前沒有可匯出的條文異動");
-      return;
-    }
-    try {
-      const blob = await regulationsApi.exportAmendmentComparisonPdf(reg.id, {
-        proposal_title: `${reg.title}部分條文修正草案對照表`,
-        rationale: rationale.trim() || null,
-        rows: comparisonRows.map(row => ({
-          article_key: row.article_key,
-          status: row.status,
-          revised_text: row.revised_text,
-          current_text: row.current_text,
-          note: row.note?.trim() || row.status,
-        })),
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${reg.title}_${draft.name}_修正條文對照表.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("修正條文對照表已匯出");
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "匯出 PDF 失敗"));
-    }
-  };
 
   const handleSubmit = async () => {
     if (!brief.trim()) { toast.error("請填寫提案標題"); return; }
@@ -359,24 +319,37 @@ export function StepSubmit({
       {/* 操作按鈕 */}
       <div className="flex flex-wrap items-center gap-3">
         <button onClick={onBack} className="btn btn-ghost text-sm px-4">← 返回編輯</button>
-        <button onClick={handleExport}
+        <AnimatedDownloadButton
           className="text-sm px-4 py-2 rounded-lg hover:opacity-80 inline-flex items-center gap-1.5"
-          style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/>
-            <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
-          </svg>
-          匯出草案 (.json)
-        </button>
-        <button onClick={handleExportPdf}
+          style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+          request={async () => {
+            const payload = { draft, regulationId: reg.id, regulationTitle: reg.title, exportedAt: new Date().toISOString() };
+            return new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+          }}
+          filename={`${reg.title}_${draft.name}.json`}
+          label="匯出草案 (.json)"
+          onComplete={() => toast.success("草案已匯出")} />
+        <AnimatedDownloadButton
           className="text-sm px-4 py-2 rounded-lg hover:opacity-80 inline-flex items-center gap-1.5"
-          style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/>
-          </svg>
-          匯出對照表 PDF
-        </button>
+          style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+          request={async () => {
+            if (comparisonRows.length === 0) throw new Error("目前沒有可匯出的條文異動");
+            return regulationsApi.exportAmendmentComparisonPdf(reg.id, {
+              proposal_title: `${reg.title}部分條文修正草案對照表`,
+              rationale: rationale.trim() || null,
+              rows: comparisonRows.map(row => ({
+                article_key: row.article_key,
+                status: row.status,
+                revised_text: row.revised_text,
+                current_text: row.current_text,
+                note: row.note?.trim() || row.status,
+              })),
+            });
+          }}
+          filename={`${reg.title}_${draft.name}_修正條文對照表.pdf`}
+          label="匯出對照表 PDF"
+          onComplete={() => toast.success("修正條文對照表已匯出")}
+          onError={(error) => toast.error(apiErrorMessage(error, "匯出 PDF 失敗"))} />
         <button onClick={handleSubmit} disabled={submitting || !brief.trim() || !rationale.trim()}
           className="btn btn-primary text-sm px-5 ml-auto disabled:opacity-40">
           {submitting ? "送審中…" : "直接送法規審核 →"}

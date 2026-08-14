@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { receivablesApi } from "@/lib/api";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type { ReceivableOut, ReceivableSummaryOut } from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 
@@ -68,9 +69,11 @@ export default function ReceivablesPage() {
             管理班級訂購、校商交易與活動費用的收款狀態；這裡不是複式財務總帳。
           </p>
         </div>
-        <a className="btn btn-ghost" href={receivablesApi.exportUrl({ activity_id: activityId })}>
-          匯出 CSV
-        </a>
+        <AnimatedDownloadButton
+          className="btn btn-ghost"
+          href={receivablesApi.exportUrl({ activity_id: activityId })}
+          filename="receivables.csv"
+          label="匯出 CSV" />
       </header>
 
       <section className="grid gap-3 md:grid-cols-4">

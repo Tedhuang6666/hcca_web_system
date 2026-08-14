@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   privacyApi,
   privacyRequestsApi,
@@ -225,13 +226,11 @@ export default function PrivacyPage() {
                     {new Date(f.modified_at).toLocaleString()}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <a
+                    <AnimatedDownloadButton
                       href={privacyApi.exportDownloadUrl(f.filename)}
                       className="btn-sm btn-primary inline-flex"
-                      download>
-                      <Download size={12} aria-hidden />
-                      下載
-                    </a>
+                      filename={f.filename}
+                      label="下載" />
                   </td>
                 </tr>
               ))}

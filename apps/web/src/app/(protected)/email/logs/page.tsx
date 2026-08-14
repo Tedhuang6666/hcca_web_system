@@ -14,6 +14,7 @@ import type {
   EmailTemplateOut,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import Modal from "@/components/ui/Modal";
 import { useOrgOptions } from "@/components/ui/targeting";
@@ -502,8 +503,8 @@ export default function EmailLogsPage() {
                     <option value="">全部狀態</option>
                     {Object.entries(RECIPIENT_STATUS_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
                   </select>
-                  <a className="btn btn-ghost btn-sm" href={emailApi.exportUrl(detail.id, "csv")}>CSV</a>
-                  <a className="btn btn-ghost btn-sm" href={emailApi.exportUrl(detail.id, "xlsx")}>XLSX</a>
+                  <AnimatedDownloadButton className="btn btn-ghost btn-sm" href={emailApi.exportUrl(detail.id, "csv")} filename="email-log.csv" label="CSV" />
+                  <AnimatedDownloadButton className="btn btn-ghost btn-sm" href={emailApi.exportUrl(detail.id, "xlsx")} filename="email-log.xlsx" label="XLSX" />
                 </div>
               </div>
               {detailRecipients.length > 0 ? (

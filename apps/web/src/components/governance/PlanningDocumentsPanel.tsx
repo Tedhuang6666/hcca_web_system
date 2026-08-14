@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   ChevronDown,
-  Download,
   ExternalLink,
   File,
   FileImage,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { governanceApi } from "@/lib/api";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type {
   PlanningDocumentAttachmentOut,
   PlanningDocumentOut,
@@ -306,9 +306,12 @@ function PlanningDocumentCard({
                     <div key={attachment.id} className="flex min-h-12 items-center gap-2 rounded-lg p-2" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
                       {attachment.content_type.startsWith("image/") ? <FileImage size={15} /> : <File size={15} />}
                       <span className="min-w-0 flex-1 truncate text-xs">{attachment.display_name || attachment.filename}</span>
-                      <a href={governanceApi.planningAttachmentDownloadUrl(document.id, attachment.id)} className="topbar-icon-btn" aria-label="下載">
-                        <Download size={13} />
-                      </a>
+                      <AnimatedDownloadButton
+                        className="topbar-icon-btn animated-download-button--icon-only"
+                        href={governanceApi.planningAttachmentDownloadUrl(document.id, attachment.id)}
+                        filename={attachment.display_name || attachment.filename}
+                        iconOnly
+                        aria-label={`下載 ${attachment.display_name || attachment.filename}`} />
                       <button type="button" className="topbar-icon-btn" aria-label="改名" onClick={() => void rename(attachment)}>
                         <Pencil size={13} />
                       </button>
@@ -359,15 +362,13 @@ function DocumentPreview({
     return (
       <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)" }}>
         <object data={previewUrl} type="application/pdf" className="hidden h-[520px] w-full sm:block">
-          <a href={downloadUrl}>下載 PDF</a>
+          <AnimatedDownloadButton href={downloadUrl} filename={attachment.filename} label="下載 PDF" />
         </object>
         <div className="flex min-h-32 items-center justify-center gap-2 p-4 sm:hidden">
           <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary min-h-11">
             <ExternalLink size={14} /> 開啟 PDF
           </a>
-          <a href={downloadUrl} className="btn btn-secondary min-h-11">
-            <Download size={14} /> 下載
-          </a>
+          <AnimatedDownloadButton href={downloadUrl} filename={attachment.filename} className="btn btn-secondary min-h-11" label="下載" />
         </div>
       </div>
     );
@@ -376,9 +377,7 @@ function DocumentPreview({
     <div className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
       <p className="text-sm font-medium">{attachment.display_name || attachment.filename}</p>
       <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>此 Office 文件不支援瀏覽器內嵌預覽。</p>
-      <a href={downloadUrl} className="btn btn-secondary mt-3 min-h-11">
-        <Download size={14} /> 下載文件
-      </a>
+      <AnimatedDownloadButton href={downloadUrl} filename={attachment.filename} className="btn btn-secondary mt-3 min-h-11" label="下載文件" />
     </div>
   );
 }

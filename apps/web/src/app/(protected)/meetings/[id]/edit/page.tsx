@@ -17,6 +17,7 @@ import {
 import { adminApi, classApi, meetingsApi, orgsApi, serialTemplatesApi } from "@/lib/api";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type {
   AttendanceRole,
   AttendanceSourceType,
@@ -898,13 +899,11 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
                             key={attachment.id}
                             className="inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-xs">
                             <Paperclip size={12} aria-hidden="true" />
-                            <a
+                            <AnimatedDownloadButton
                               href={href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="truncate hover:underline">
-                              {attachment.display_name || attachment.filename}
-                            </a>
+                              className="min-w-0 truncate hover:underline"
+                              filename={attachment.display_name || attachment.filename}
+                              label={attachment.display_name || attachment.filename} />
                             {isDraft && (
                               <button
                                 onClick={() => removeAgendaAttachment(item.id, attachment.id)}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import QRCode from "qrcode";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   DndContext,
   KeyboardSensor,
@@ -513,14 +514,6 @@ function ShareModal({ title, onClose }: { title: string; onClose: () => void }) 
     }
   };
 
-  const downloadQr = () => {
-    if (!qr) return;
-    const a = document.createElement("a");
-    a.href = qr;
-    a.download = `${title}-QRcode.png`;
-    a.click();
-  };
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -554,9 +547,13 @@ function ShareModal({ title, onClose }: { title: string; onClose: () => void }) 
             onFocus={e => e.target.select()} aria-label="填答連結" />
           <button onClick={copy} className="btn btn-primary flex-shrink-0 text-xs">複製連結</button>
         </div>
-        <button onClick={downloadQr} disabled={!qr} className="btn btn-ghost w-full text-xs">
-          下載 QR code 圖片
-        </button>
+        <AnimatedDownloadButton
+          disabled={!qr}
+          className="btn btn-ghost w-full text-xs"
+          request={() => fetch(qr!).then((response) => response.blob())}
+          filename={`${title}-QRcode.png`}
+          label="下載 QR code 圖片"
+          onError={() => toast.error("QR code 下載失敗")} />
       </div>
     </div>
   );
@@ -568,7 +565,6 @@ function StatsView({ surveyId }: { surveyId: string }) {
   const [responses, setResponses] = useState<SurveyResponseAdminItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartTypes, setChartTypes] = useState<Record<string, string>>({});
-  const [exporting, setExporting] = useState(false);
   const [view, setView] = useState<"charts" | "responses">("charts");
 
   useEffect(() => {
@@ -577,24 +573,6 @@ function StatsView({ surveyId }: { surveyId: string }) {
       .catch(() => toast.error("載入統計失敗"))
       .finally(() => setLoading(false));
   }, [surveyId]);
-
-  const exportXlsx = async () => {
-    setExporting(true);
-    try {
-      const blob = await surveysApi.exportSpreadsheet(surveyId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${stats?.title ?? "問卷回應"}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("試算表已開始下載");
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "匯出失敗"));
-    } finally {
-      setExporting(false);
-    }
-  };
 
   if (loading) return <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>統計載入中…</div>;
   if (!stats) return null;
@@ -665,18 +643,13 @@ function StatsView({ surveyId }: { surveyId: string }) {
             </button>
           ))}
         </div>
-        <button
-          onClick={exportXlsx}
-          disabled={exporting}
+        <AnimatedDownloadButton
           className="btn btn-ghost text-xs flex-shrink-0"
-          aria-busy={exporting}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          {exporting ? "匯出中…" : "匯出試算表"}
-        </button>
+          request={() => surveysApi.exportSpreadsheet(surveyId)}
+          filename={`${stats.title ?? "問卷回應"}.xlsx`}
+          label="匯出試算表"
+          onComplete={() => toast.success("試算表已開始下載")}
+          onError={(error) => toast.error(apiErrorMessage(error, "匯出失敗"))} />
       </div>
 
       {view === "charts" && stats.total_responses === 0 && (

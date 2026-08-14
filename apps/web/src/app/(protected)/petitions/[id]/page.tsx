@@ -10,6 +10,7 @@ import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
 import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 
 function fmt(iso: string | null) {
   if (!iso) return "未設定";
@@ -119,9 +120,13 @@ export default function PetitionDetailPage() {
           <section className="card p-5 space-y-3">
             <h2 className="font-semibold">附件</h2>
             {item.attachments.length === 0 ? <p className="text-sm text-muted">尚無附件</p> : item.attachments.map((att) => (
-              <a key={att.id} className="block rounded-lg p-3 text-sm" style={{ border: "1px solid var(--border)", textDecoration: "none" }} href={petitionsApi.attachmentDownloadUrl(item.id, att.id)} target="_blank">
-                {att.display_name || att.filename}
-              </a>
+              <AnimatedDownloadButton
+                key={att.id}
+                className="block w-full rounded-lg p-3 text-left text-sm"
+                style={{ border: "1px solid var(--border)" }}
+                href={petitionsApi.attachmentDownloadUrl(item.id, att.id)}
+                filename={att.display_name || att.filename}
+                label={att.display_name || att.filename} />
             ))}
           </section>
 

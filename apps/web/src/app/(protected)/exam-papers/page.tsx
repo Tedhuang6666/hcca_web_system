@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Filter } from "lucide-react";
+import { Filter } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError, authFetch, examPapersApi } from "@/lib/api";
 import type { ExamGradeTrack, ExamPaperListItem } from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 
 const TRACK_LABEL: Record<ExamGradeTrack, string> = {
   first: "一類",
@@ -124,22 +125,6 @@ export default function ExamPapersPage() {
     });
   };
 
-  const download = async (paper: ExamPaperListItem) => {
-    try {
-      const res = await authFetch(examPapersApi.downloadUrl(paper.id));
-      if (!res.ok) throw new Error("download failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${paper.title}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error("下載失敗，請確認帳號具校內成員資格");
-    }
-  };
-
   return (
     <main className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 text-[var(--text-primary)] sm:px-5 sm:py-6">
       <header>
@@ -238,11 +223,12 @@ export default function ExamPapersPage() {
                   {gradeLabel(paper)} · 第 {paper.exam_number} 次段考 · {fileSize(paper.file_size)}
                 </p>
               </div>
-              <button
+              <AnimatedDownloadButton
                 className="btn btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto"
-                onClick={() => download(paper)}>
-                <Download size={16} /> 下載
-              </button>
+                request={() => authFetch(examPapersApi.downloadUrl(paper.id))}
+                filename={`${paper.title}.pdf`}
+                label="下載"
+                onError={() => toast.error("下載失敗，請確認帳號具校內成員資格")} />
             </div>
           </article>
         ))}

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Archive,
-  Download,
   Eye,
   FileArchive,
   Lock,
@@ -14,6 +13,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   lifecycleApi,
   type LifecycleAction,
@@ -365,13 +365,11 @@ export default function DataLifecyclePage() {
                       <Eye size={12} aria-hidden />
                       預覽
                     </button>
-                    <a
+                    <AnimatedDownloadButton
                       href={lifecycleApi.archiveDownloadUrl(a.path)}
                       className="btn-sm btn-primary inline-flex"
-                      download>
-                      <Download size={12} aria-hidden />
-                      下載
-                    </a>
+                      filename={a.path.split("/").pop() ?? "archive"}
+                      label="下載" />
                   </td>
                 </tr>
               ))}

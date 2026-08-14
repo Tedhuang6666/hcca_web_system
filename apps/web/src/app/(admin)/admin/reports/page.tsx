@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, Download, Eye, Lock, RefreshCcw } from "lucide-react";
+import { BarChart3, Eye, Lock, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   reportsApi,
   type ReportResult,
@@ -116,13 +117,11 @@ export default function ReportsPage() {
                     ({active.row_count} 筆)
                   </span>
                 </h2>
-                <a
+                <AnimatedDownloadButton
                   href={reportsApi.csvUrl(active.id)}
                   className="btn-sm btn-primary inline-flex"
-                  download>
-                  <Download size={12} aria-hidden />
-                  下載 CSV
-                </a>
+                  filename={`${active.id}.csv`}
+                  label="下載 CSV" />
               </div>
               {active.rows.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">無資料。</p>
