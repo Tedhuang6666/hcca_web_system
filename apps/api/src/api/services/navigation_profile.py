@@ -150,6 +150,13 @@ async def resolve_for_user(db: AsyncSession, user: User) -> NavigationProfileRes
         (profile for profile in profiles if profile.key == "default"), profiles[-1]
     )
     student_profile = next((profile for profile in profiles if profile.key == "student"), None)
+
+    if any(
+        permission.startswith(("merchandise_submission:", "shop:"))
+        for permission in permissions
+    ):
+        return NavigationProfileResolveOut(profile=_profile_out(default_profile), source="default")
+
     for profile in profiles:
         if profile.key in {"default", "public", "student"}:
             continue
