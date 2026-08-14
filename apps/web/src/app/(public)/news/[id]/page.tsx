@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { uploadUrl } from "@/lib/config";
+import { BRANDING } from "@/lib/branding";
 import { fetchAnnouncement, fetchPublicBundle } from "@/lib/serverFetch";
+import { contentOgImagePath } from "@/lib/social-metadata";
+import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
 
 function markdownFromContent(content: Record<string, unknown> | null | undefined) {
@@ -22,9 +24,8 @@ export async function generateMetadata(
   const title = item?.title ?? "公告";
   const description = excerpt(markdownFromContent(item?.content), "新竹高中班聯會公開公告。");
   const path = "/news/" + encodeURIComponent(id);
-  const imagePath = item?.media?.[0]?.url ? uploadUrl(item.media[0].url) : undefined;
 
-  return pageMetadata({ title, description, path, imagePath });
+  return pageMetadata({ title, description, path, imagePath: contentOgImagePath(path) });
 }
 
 export default async function PublicNewsDetailPage({
@@ -40,38 +41,33 @@ export default async function PublicNewsDetailPage({
 
   if (!item) notFound();
 
+  const path = "/news/" + encodeURIComponent(id);
+  const canonical = absoluteUrl(path);
+  const description = excerpt(markdownFromContent(item.content), "新竹高中班聯會公開公告。");
+
   return (
     <>
       <JsonLd
         data={{
           "@context": "https://schema.org",
-          "@type": "Article",
+          "@type": "NewsArticle",
+          "@id": canonical,
           headline: item.title,
-          description: excerpt(markdownFromContent(item.content), "新竹高中班聯會公開公告。"),
+          description,
+          articleSection: item.is_urgent ? "重要公告" : "公告",
           datePublished: item.published_at ?? item.created_at,
           dateModified: item.updated_at,
-          author: { "@type": "Person", name: item.author_name || "新竹高中班聯會" },
-          publisher: { "@type": "Organization", name: "新竹高中班聯會" },
-          mainEntityOfPage: absoluteUrl("/news/" + encodeURIComponent(id)),
-          image: item.media.map((media) => uploadUrl(media.url)).filter(Boolean),
+          author: { "@type": "Person", name: item.author_name || BRANDING.orgShortName },
+          publisher: organizationJsonLd(),
+          mainEntityOfPage: canonical,
+          image: absoluteUrl(contentOgImagePath(path)),
         }}
       />
-      <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "BreadcrumbList",
-          itemListElement: [
-            { "@type": "ListItem", position: 1, name: "首頁", item: absoluteUrl("/") },
-            { "@type": "ListItem", position: 2, name: "最新公告", item: absoluteUrl("/news") },
-            {
-              "@type": "ListItem",
-              position: 3,
-              name: item.title,
-              item: absoluteUrl("/news/" + encodeURIComponent(id)),
-            },
-          ],
-        }}
-      />
+      <JsonLd data={breadcrumbJsonLd([
+        { name: "首頁", url: absoluteUrl("/") },
+        { name: "最新公告", url: absoluteUrl("/news") },
+        { name: item.title, url: canonical },
+      ])} />
       <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <article className="space-y-5">

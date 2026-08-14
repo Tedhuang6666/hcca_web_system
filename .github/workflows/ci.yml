@@ -350,6 +350,27 @@ jobs:
           NEXT_PUBLIC_API_URL: ""
           NEXT_PUBLIC_WS_URL: "ws://localhost:8000"
 
+      - name: Validate social share previews
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/hcca-next.log 2>&1 &
+          next_pid=$!
+          trap 'kill "$next_pid"' EXIT
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/hcca-next.log
+            exit 1
+          fi
+    SHARE_PREVIEW_URLS="http://127.0.0.1:3000/,http://127.0.0.1:3000/news" \
+    SHARE_PREVIEW_IMAGE_BASE_URL="http://127.0.0.1:3000" \
+      npm run validate:share-previews
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

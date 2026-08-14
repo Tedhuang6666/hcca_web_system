@@ -10,6 +10,10 @@ export const SOCIAL_IMAGE = {
   type: "image/png",
 };
 
+export function contentOgImagePath(path: string) {
+  return `/og/${path.replace(/^\/+|\/+$/g, "")}`;
+}
+
 export function socialDescription(kind: string, detail: string | null | undefined, fallback: string) {
   const value = detail?.trim();
   return value ? `${kind}：${value}` : fallback;
