@@ -222,9 +222,9 @@ export default function RegulationsClient({
             return (
               <button key={key} type="button" aria-pressed={active}
                 onClick={() => setCategory(key)}
-                className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap cursor-pointer hover:opacity-80"
+                className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,transform] whitespace-nowrap cursor-pointer hover:opacity-80"
                 style={active
-                  ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                  ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                   : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
                 {label}
               </button>
@@ -241,9 +241,9 @@ export default function RegulationsClient({
                   type="button"
                   aria-pressed={active}
                   onClick={() => setWorkflow(key)}
-                  className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap cursor-pointer hover:opacity-80"
+                  className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,transform] whitespace-nowrap cursor-pointer hover:opacity-80"
                   style={active
-                    ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                    ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}
                 >
                   {label}
@@ -278,7 +278,7 @@ export default function RegulationsClient({
         />
       ) : (
         <div
-          className="data-reveal grid gap-3"
+          className="regulations-results grid gap-3"
           style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}
         >
           {sorted.map((reg) => (
@@ -305,7 +305,6 @@ function RegCard({
       className="flex flex-col gap-3 flex-1"
       style={{
         textDecoration: "none",
-        transition: "box-shadow var(--transition), border-color var(--transition)",
       }}>
       <div className="flex items-start justify-between gap-2">
         <h2 className="font-semibold text-sm leading-snug flex-1 reg-card-title"
@@ -358,7 +357,7 @@ function RegCard({
             href={`${regulationHref(reg)}#a-${article.id}`}
             className="block rounded px-1.5 py-1 leading-snug hover:opacity-80"
           >
-            <span className="text-[11px] font-medium" style={{ color: "var(--primary)" }}>
+            <span className="text-[11px] font-medium" style={{ color: "var(--primary-text)" }}>
               {articleLabel(article)}
             </span>
             <span className="ml-1.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
