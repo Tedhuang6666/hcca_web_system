@@ -16,17 +16,19 @@ import type { UnifiedMapItem } from "./partner-map-types";
 import type { ModuleStatusPublic } from "./api/system";
 import { serverApiUrl } from "./config";
 
-const REVALIDATE = 30;
+export const PUBLIC_REVALIDATE_SECONDS = 60;
 
 function announcementFetchOptions(): RequestInit & { next?: { revalidate: number } } {
   // Public pages must not forward a visitor's session cookie into a cacheable
   // response. Authenticated announcement management uses the client API layer.
-  return { next: { revalidate: REVALIDATE } };
+  return { next: { revalidate: PUBLIC_REVALIDATE_SECONDS } };
 }
 
 export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
   try {
-    const res = await fetch(serverApiUrl("/site/public"), { next: { revalidate: REVALIDATE } });
+    const res = await fetch(serverApiUrl("/site/public"), {
+      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
+    });
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -55,7 +57,7 @@ export async function fetchPublicDocuments(
 
   try {
     const res = await fetch(serverApiUrl(`/documents?${search.toString()}`), {
-      next: { revalidate: REVALIDATE },
+      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return null;
     return res.json();
@@ -67,7 +69,7 @@ export async function fetchPublicDocuments(
 export async function fetchPublicRegulations(): Promise<RegulationListItem[]> {
   try {
     const res = await fetch(serverApiUrl("/regulations"), {
-      next: { revalidate: REVALIDATE },
+      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
     return res.json();
@@ -81,7 +83,7 @@ export async function fetchPublicSurveys(status?: string): Promise<SurveyListIte
 
   try {
     const res = await fetch(serverApiUrl(`/surveys/public${query}`), {
-      next: { revalidate: REVALIDATE },
+      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
     return res.json();
@@ -94,7 +96,7 @@ export async function fetchPublicSurvey(id: string): Promise<SurveyOut | null> {
   try {
     const res = await fetch(
       serverApiUrl(`/surveys/public/${encodeURIComponent(id)}`),
-      { next: { revalidate: REVALIDATE } },
+      { next: { revalidate: PUBLIC_REVALIDATE_SECONDS } },
     );
     if (!res.ok) return null;
     return res.json();
@@ -111,7 +113,9 @@ export async function fetchPublicPartnerMapData(): Promise<{
 }> {
   const fetchJson = async <T>(path: string): Promise<T> => {
     try {
-      const res = await fetch(serverApiUrl(path), { next: { revalidate: REVALIDATE } });
+      const res = await fetch(serverApiUrl(path), {
+        next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
+      });
       if (!res.ok) return [] as T;
       return res.json();
     } catch {
@@ -144,7 +148,7 @@ export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut |
 export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]> {
   try {
     const res = await fetch(serverApiUrl("/system/module-status"), {
-      next: { revalidate: REVALIDATE },
+      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
     return res.json();
@@ -156,7 +160,7 @@ export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]>
 export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {
   try {
     const res = await fetch(serverApiUrl("/site/officers?active_only=true"), {
-      next: { revalidate: REVALIDATE },
+      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
     return res.json();
@@ -168,7 +172,7 @@ export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {
 export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut | null> {
   try {
     const res = await fetch(serverApiUrl(`/site/pages/${encodeURIComponent(slug)}`), {
-      next: { revalidate: REVALIDATE },
+      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return null;
     return res.json();

@@ -1,31 +1,31 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 
-import { serverApiUrl } from "@/lib/config";
 import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { privateServerData, serverRequest } from "@/lib/server/request";
 import type { MeetingMinutesOut, MeetingOut } from "@/lib/types";
 
 import MeetingDetailPageClient from "./MeetingDetailPageClient";
 
-async function authHeaders() {
-  const cookie = (await cookies()).toString();
-  return cookie ? { Cookie: cookie } : undefined;
-}
-
 async function fetchMeeting(id: string): Promise<MeetingOut | null> {
-  const res = await fetch(serverApiUrl(`/meetings/${encodeURIComponent(id)}`), {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await serverRequest<MeetingOut>(
+      `/meetings/${encodeURIComponent(id)}`,
+      privateServerData,
+    );
+  } catch {
+    return null;
+  }
 }
 
 async function fetchMinutes(id: string): Promise<MeetingMinutesOut | null> {
-  const res = await fetch(serverApiUrl(`/meetings/${encodeURIComponent(id)}/minutes`), {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await serverRequest<MeetingMinutesOut>(
+      `/meetings/${encodeURIComponent(id)}/minutes`,
+      privateServerData,
+    );
+  } catch {
+    return null;
+  }
 }
 
 export async function generateMetadata(

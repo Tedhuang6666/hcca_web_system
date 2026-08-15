@@ -11,7 +11,8 @@ export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback:
 export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue: T): [T, boolean];
 // ── 帶 cacheKey：stale-while-revalidate ─────────────────────────────────────
 export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue: T, cacheKey: string): [T, boolean];
-export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue?: T, cacheKey?: string): [T | undefined, boolean];
+export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue: T, cacheKey: string, skipInitialFetch: boolean): [T, boolean];
+export function useFetch<T>(fetcher: Fetcher<T>, deps: unknown[], errorFallback: string, initialValue?: T, cacheKey?: string, skipInitialFetch?: boolean): [T | undefined, boolean];
 
 export function useFetch<T>(
   fetcher: Fetcher<T>,
@@ -19,6 +20,7 @@ export function useFetch<T>(
   errorFallback: string,
   initialValue?: T,
   cacheKey?: string,
+  skipInitialFetch = false,
 ): [T | undefined, boolean] {
   // 若有 cacheKey，以 deps 加入 key（同一頁面不同篩選條件各自快取）
   const resolvedKey = cacheKey
@@ -33,7 +35,7 @@ export function useFetch<T>(
     return initialValue;
   });
   // 有快取時跳過 loading，直接顯示舊資料；背景靜默更新
-  const [loading, setLoading] = useState(!hasCached);
+  const [loading, setLoading] = useState(!hasCached && !skipInitialFetch);
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
@@ -41,8 +43,13 @@ export function useFetch<T>(
   errorRef.current = errorFallback;
   const keyRef = useRef(resolvedKey);
   keyRef.current = resolvedKey;
+  const skipInitialFetchRef = useRef(skipInitialFetch);
 
   useEffect(() => {
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false;
+      return;
+    }
     let cancelled = false;
     const controller = new AbortController();
 

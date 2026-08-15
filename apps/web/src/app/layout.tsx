@@ -1,6 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
-import Script from "next/script";
 import "./globals.css";
 import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -11,10 +9,6 @@ import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social
 import { SITE_URL } from "@/lib/seo";
 
 const DEFAULT_DESCRIPTION = BRANDING.description;
-
-// CSP nonce is generated per request by proxy.ts. Dynamic rendering lets Next.js
-// propagate that nonce to inline runtime, JSON-LD and beforeInteractive scripts.
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -73,17 +67,17 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-function ThemeScript({ nonce }: { nonce?: string }) {
-  return <Script src="/theme.js" strategy="beforeInteractive" nonce={nonce} />;
+function ThemeScript() {
+  // Native script avoids Next's inline beforeInteractive bootstrap, which would
+  // require a nonce and make otherwise cacheable public HTML dynamic.
+  return <script src="/theme.js" defer />;
 }
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-TW" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
-        <ThemeScript nonce={nonce} />
+        <ThemeScript />
       </head>
       <body className="antialiased">
         <ClientErrorReporter />

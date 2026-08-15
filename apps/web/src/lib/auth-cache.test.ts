@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { cacheCurrentUser, clearAuthCache } from "./auth-cache";
+import {
+  cacheCurrentUser,
+  clearAuthCache,
+  clearImpersonationSession,
+  saveImpersonationSession,
+} from "./auth-cache";
 
 describe("auth cache", () => {
   it("stores identification data in localStorage and sensitive data in sessionStorage", () => {
@@ -32,5 +37,23 @@ describe("auth cache", () => {
     expect(localStorage.getItem("user_id")).toBeNull();
     expect(sessionStorage.getItem("is_owner")).toBeNull();
     expect(sessionStorage.getItem("permissions")).toBeNull();
+  });
+
+  it("only exposes a non-sensitive SSR flag while impersonating", () => {
+    saveImpersonationSession({
+      token: "secret-token-must-not-appear-in-cookie",
+      target_user_id: "target-1",
+      target_email: "target@example.com",
+      target_display_name: "目標使用者",
+      actor_email: "admin@example.com",
+      actor_display_name: "管理員",
+      expires_at: Date.now() + 60_000,
+    });
+
+    expect(document.cookie).toContain("hcca_impersonating=1");
+    expect(document.cookie).not.toContain("secret-token-must-not-appear-in-cookie");
+
+    clearImpersonationSession();
+    expect(document.cookie).not.toContain("hcca_impersonating=1");
   });
 });

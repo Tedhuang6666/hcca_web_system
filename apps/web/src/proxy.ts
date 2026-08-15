@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  getRoutePolicy,
   isIndexablePublicPath,
   isMaintenanceExempt,
 } from "@/lib/route-access";
@@ -80,7 +81,7 @@ function generateNonce(): string {
 /**
  * 前端 HTML 的 Content-Security-Policy。
  *
- * script-src 採 nonce + 'strict-dynamic'，不含 'unsafe-inline'：
+ * 私有頁 script-src 採 nonce + 'strict-dynamic'；公開頁則採 SRI 相容的靜態 CSP。
  *   - Next.js 會自動把此 nonce 套到框架腳本與 <Script> 元件（含 Google One Tap）。
  *   - 'strict-dynamic' 讓已信任（帶 nonce）的腳本可載入其子腳本（GSI、PostHog 錄製）。
  *   - 明列的 https 來源是給支援 nonce 但不支援 strict-dynamic 的舊瀏覽器的後備。
@@ -126,11 +127,13 @@ function postHogSources(): string[] {
   return [...sources];
 }
 
-function buildCsp(nonce: string): string {
+function buildCsp(nonce?: string): string {
   // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
   const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  const scriptNonce = nonce ? ` 'nonce-${nonce}'` : "";
+  const strictDynamic = nonce ? " 'strict-dynamic'" : "";
   // Turbopack 開發模式會注入無 nonce 的 <style>；正式環境仍要求 nonce。
-  const styleNonce = process.env.NODE_ENV === "production" ? ` 'nonce-${nonce}'` : "";
+  const styleNonce = nonce && process.env.NODE_ENV === "production" ? ` 'nonce-${nonce}'` : "";
   // Turbopack 在開發模式會以 <style> 注入 HMR CSS；正式環境仍只接受 nonce。
   const devStyle = process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'";
   return [
@@ -139,8 +142,8 @@ function buildCsp(nonce: string): string {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com${devEval}`,
-    `script-src-elem 'self' 'nonce-${nonce}' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com`,
+    `script-src 'self'${scriptNonce}${strictDynamic} https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com${devEval}`,
+    `script-src-elem 'self'${scriptNonce} https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com`,
     `style-src 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
     `style-src-elem 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
     "style-src-attr 'unsafe-inline'",
@@ -154,15 +157,17 @@ function buildCsp(nonce: string): string {
 }
 
 /**
- * 套用 CSP：把 nonce 經 x-nonce 與請求端 CSP 標頭傳給 Next（讓框架腳本帶 nonce），
- * 同時把 CSP 寫到回應標頭交給瀏覽器強制執行。
+ * 私有頁把 nonce 經 request header 傳給 Next；公開 SRI 頁不注入 nonce，
+ * 因此能維持可預渲染與 CDN/ISR 快取的輸出。
  */
-function withCsp(req: NextRequest): NextResponse {
-  const nonce = generateNonce();
+function withCsp(req: NextRequest, strategy: "nonce" | "sri"): NextResponse {
+  const nonce = strategy === "nonce" ? generateNonce() : undefined;
   const csp = buildCsp(nonce);
   const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("content-security-policy", csp);
+  if (nonce) {
+    requestHeaders.set("x-nonce", nonce);
+    requestHeaders.set("content-security-policy", csp);
+  }
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("content-security-policy", csp);
   return res;
@@ -413,6 +418,7 @@ function notModifiedResponse(lastModified: Date) {
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const routePolicy = getRoutePolicy(pathname);
 
   const forwardedHost = req.headers.get("x-forwarded-host");
   const host = (forwardedHost ?? req.headers.get("host") ?? "").split(":")[0].toLowerCase();
@@ -456,7 +462,12 @@ export default async function proxy(req: NextRequest) {
     return notModifiedResponse(lastModified);
   }
 
-  const response = withCsp(req);
+  // Turbopack dev server 尚未支援 SRI；開發時一律使用 nonce CSP。
+  const cspStrategy = process.env.NODE_ENV === "production" ? routePolicy.csp : "nonce";
+  const response = withCsp(req, cspStrategy);
+  if (!routePolicy.public || routePolicy.csp === "nonce") {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
   if (!isIndexablePublicPath(pathname)) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }

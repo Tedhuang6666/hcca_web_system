@@ -69,6 +69,7 @@ export default function AnnouncementsClient({
     "載入公告失敗",
     initialItems,
     "announcements/list",
+    true,
   );
 
   const activityNameById = useMemo(
