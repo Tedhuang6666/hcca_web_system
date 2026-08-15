@@ -471,6 +471,6 @@ async def get_config_for_org(
             OrgGoogleCalendarConfig.org_id == org_id,
             OrgGoogleCalendarConfig.is_active.is_(True),
             OrgGoogleCalendarConfig.sync_enabled.is_(True),
-            OrgGoogleCalendarConfig.refresh_token_enc.isnot(None),
+            OrgGoogleCalendarConfig._refresh_token_enc.isnot(None),
         )
     )

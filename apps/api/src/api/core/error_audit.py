@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from api.core.config import settings
+from api.core.modules import match_module
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,11 @@ _TIMEOUT_KEYWORDS = ("timeouterror", "timed out", "asyncio.timeout")
 def is_suppressed_error(*, category: str, path: str, status_code: int) -> bool:
     """判斷是否為預期 HTTP 回應或合成探測，不進入錯誤稽核。"""
     if category == "http":
-        # 4xx 是客戶端/權限/資源狀態，不代表伺服器故障；健康檢查的 503
-        # 也應由 readiness logger 回報依賴狀態，不能污染錯誤事件清單。
-        return status_code < 500 or path in _READINESS_PATHS
+        # 4xx 是客戶端/權限/資源狀態，不代表伺服器故障；模組維護與健康檢查
+        # 的 503 是保護性回應，不能污染錯誤事件清單。
+        if status_code < 500 or path in _READINESS_PATHS:
+            return True
+        return status_code == 503 and match_module(path) is not None
     if category == "validation":
         normalized_path = path.lower()
         return any(marker in normalized_path for marker in _SYNTHETIC_PROBE_MARKERS)

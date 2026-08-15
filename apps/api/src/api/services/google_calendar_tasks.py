@@ -118,7 +118,7 @@ def pull_all_orgs(self) -> dict:  # noqa: ANN001
                     select(OrgGoogleCalendarConfig).where(
                         OrgGoogleCalendarConfig.is_active.is_(True),
                         OrgGoogleCalendarConfig.sync_enabled.is_(True),
-                        OrgGoogleCalendarConfig.refresh_token_enc.isnot(None),
+                        OrgGoogleCalendarConfig._refresh_token_enc.isnot(None),
                     )
                 )
             ).all()
