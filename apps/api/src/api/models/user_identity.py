@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +32,12 @@ class UserIdentity(Base, TimestampMixin):
         ),
         Index("ix_user_identities_user", "user_id"),
         Index("ix_user_identities_provider_email", "provider", "email"),
+        Index(
+            "ix_user_identities_user_email",
+            "user_id",
+            "email",
+            postgresql_where=text("email IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

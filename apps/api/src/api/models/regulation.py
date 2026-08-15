@@ -94,6 +94,11 @@ class Regulation(Base, TimestampMixin):
         Index("ix_regulations_is_active", "is_active"),
         Index("ix_regulations_is_active_workflow", "is_active", "workflow_status"),
         Index(
+            "ix_regulations_active_published_updated",
+            text("updated_at DESC"),
+            postgresql_where=text("is_active = TRUE AND published_at IS NOT NULL"),
+        ),
+        Index(
             "ix_regulations_workflow_pub",
             "workflow_status",
             text("updated_at DESC"),
