@@ -477,58 +477,45 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       onPointerUp={finishPointer}
       onPointerCancel={cancelPointer}
       style={{
-        height: "calc(72px + env(safe-area-inset-bottom))",
+        height: "calc(76px + env(safe-area-inset-bottom))",
         boxSizing: "border-box",
         alignItems: "flex-start",
         justifyContent: "center",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        padding: "0 0.75rem max(0.5rem, env(safe-area-inset-bottom))",
         touchAction: "none",
         userSelect: "none",
       }}>
       <div
         ref={dockRef}
-        className="relative flex h-[60px] w-[calc(100%-1.25rem)] overflow-visible"
+        className="bottom-tab-bar__dock relative flex h-[60px] w-full max-w-2xl overflow-visible"
         style={{
           isolation: "isolate",
           cursor: dragging ? "grabbing" : "grab",
-          borderRadius: 22,
-          background: "color-mix(in srgb, var(--bg-elevated) 74%, transparent)",
-          backdropFilter: "blur(16px) saturate(1.2)",
-          WebkitBackdropFilter: "blur(16px) saturate(1.2)",
         }}>
         <svg
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+          className="bottom-tab-bar__shape pointer-events-none absolute inset-0 h-full w-full overflow-visible"
           viewBox={`0 0 ${Math.max(dockWidth, 1)} ${LIQUID_DOCK_HEIGHT}`}
           preserveAspectRatio="none">
           <path
+            className="bottom-tab-bar__shape-fill"
             d={dockPath}
-            fill="var(--bg-elevated)"
-            fillOpacity="0.9"
-            stroke="var(--border)"
-            strokeOpacity="0.82"
             strokeWidth="1" />
           <path
+            className="bottom-tab-bar__shape-highlight"
             d={dockPath}
-            fill="none"
-            stroke="color-mix(in srgb, var(--primary) 32%, transparent)"
             strokeLinecap="round"
-            strokeWidth="1.5"
-            opacity="0.72" />
+            strokeWidth="1.5" />
         </svg>
 
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute"
+          className="bottom-tab-bar__bead pointer-events-none absolute"
           style={{
             left: motion.x,
             top: 14,
-            zIndex: 1,
             width: LIQUID_BEAD_RADIUS * 2,
             height: LIQUID_BEAD_RADIUS * 2,
-            borderRadius: "50%",
-            background: "var(--primary)",
-            boxShadow: "0 8px 18px color-mix(in srgb, var(--primary) 34%, transparent)",
             opacity: dockWidth ? 1 : 0,
             transform: `translate(-50%, -50%) scale(${beadScaleX}, ${beadScaleY})`,
             transformOrigin: "center",
@@ -541,30 +528,25 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
           const badge =
             t.badgeKey === "tasks" ? taskCount :
             t.badgeKey === "notifs" ? notifCount : 0;
-        const Icon = t.icon;
+          const Icon = t.icon;
 
           const inner = (
-            <div className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full"
-              style={{
-                color: visualActive ? "var(--primary-fg)" : "var(--text-primary)",
-                fontWeight: visualActive ? 650 : 500,
-                transform: visualActive ? "translateY(-1px)" : undefined,
-                transition: reducedMotion ? "none" : "color 180ms ease, transform 180ms ease",
-              }}>
-            <span className="relative">
-              {t.iconKey ? <NavIcon iconKey={t.iconKey} size={20} /> : Icon?.({ size: 20, "aria-hidden": true })}
-              {badge > 0 && (
-                <span
-                  className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
-                  style={{ background: "var(--danger)", color: "#fff" }}
-                  aria-hidden="true">
-                  {badge > 99 ? "99+" : badge}
-                </span>
-              )}
-            </span>
-            <span className="text-[11px] font-medium" style={{ letterSpacing: 0 }}>
-              {t.label}
-            </span>
+            <div
+              className="bottom-tab-bar__item relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full"
+              data-visual-active={visualActive}>
+              <span className="relative">
+                {t.iconKey ? <NavIcon iconKey={t.iconKey} size={22} /> : Icon?.({ size: 22, "aria-hidden": true })}
+                {badge > 0 && (
+                  <span
+                    className="bottom-tab-bar__badge absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
+                    aria-hidden="true">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </span>
+              <span className="bottom-tab-bar__label text-[11px] font-medium">
+                {t.label}
+              </span>
           </div>
         );
 
@@ -573,9 +555,8 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
             <Link
               key={t.label}
               href={t.href}
-              className="relative z-[2] flex min-h-[44px] flex-1"
+              className="bottom-tab-bar__link relative z-[2] flex min-h-[44px] flex-1"
               onClick={(event) => handleItemClick(event, index)}
-              style={{ textDecoration: "none" }}
               aria-current={active ? "page" : undefined}
               aria-label={`${t.label}${badge > 0 ? `（${badge}）` : ""}`}>
               {inner}
@@ -590,7 +571,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
               handleItemClick(event, index);
               if (!event.defaultPrevented) t.onClick?.();
             }}
-            className="relative z-[2] flex min-h-[44px] flex-1 border-0 bg-transparent p-0"
+            className="bottom-tab-bar__button relative z-[2] flex min-h-[44px] flex-1 border-0 bg-transparent p-0"
             aria-label={t.label}>
             {inner}
           </button>

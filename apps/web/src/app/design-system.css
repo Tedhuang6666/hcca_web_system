@@ -509,9 +509,10 @@ details[open] > :not(summary) {
 }
 
 nav[aria-label="底部主選單"] {
-  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent) !important;
-  box-shadow: 0 -1px 6px rgba(16, 35, 39, 0.06) !important;
-  backdrop-filter: blur(14px);
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 nav[aria-label="底部主選單"] a,
@@ -520,15 +521,115 @@ nav[aria-label="底部主選單"] button {
 }
 
 nav[aria-label="底部主選單"] a[aria-current="page"]::before {
+  display: none;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__dock {
+  isolation: isolate;
+  border-radius: 20px;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__shape {
+  z-index: 0;
+  overflow: visible;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__shape-fill {
+  fill: var(--bg-elevated);
+  stroke: var(--border-strong);
+  stroke-opacity: 0.9;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__shape-highlight {
+  fill: none;
+  stroke: var(--primary);
+  stroke-opacity: 0.36;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__bead {
+  z-index: 1;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 6px 12px color-mix(in srgb, var(--primary) 34%, transparent);
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__bead::after {
   position: absolute;
-  top: 0;
-  left: 50%;
-  width: 24px;
-  height: 2px;
-  border-radius: 0 0 2px 2px;
-  background: var(--primary-text);
+  top: 6px;
+  left: 7px;
+  width: 7px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #fff 46%, transparent);
   content: "";
-  transform: translateX(-50%);
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__item {
+  z-index: 2;
+  color: var(--text-primary);
+  font-weight: 550;
+  letter-spacing: 0;
+  transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__item[data-visual-active="true"] {
+  color: var(--primary-fg);
+  font-weight: 700;
+  transform: translateY(-1px);
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__link,
+nav[aria-label="底部主選單"] .bottom-tab-bar__button {
+  -webkit-tap-highlight-color: transparent;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__link:focus-visible,
+nav[aria-label="底部主選單"] .bottom-tab-bar__button:focus-visible {
+  border-radius: 16px;
+  outline: 2px solid var(--border-focus);
+  outline-offset: -3px;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__link:active .bottom-tab-bar__item,
+nav[aria-label="底部主選單"] .bottom-tab-bar__button:active .bottom-tab-bar__item {
+  transform: translateY(-1px) scale(0.96);
+  transition-duration: 100ms;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__label {
+  color: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
+  background: var(--danger);
+  color: #fff;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--bg-elevated);
+}
+
+@media (hover: hover) {
+  nav[aria-label="底部主選單"] .bottom-tab-bar__link:hover .bottom-tab-bar__item,
+  nav[aria-label="底部主選單"] .bottom-tab-bar__button:hover .bottom-tab-bar__item {
+    color: var(--primary-text);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  nav[aria-label="底部主選單"] .bottom-tab-bar__bead,
+  nav[aria-label="底部主選單"] .bottom-tab-bar__item {
+    transition: none;
+  }
+
+  nav[aria-label="底部主選單"] .bottom-tab-bar__link:active .bottom-tab-bar__item,
+  nav[aria-label="底部主選單"] .bottom-tab-bar__button:active .bottom-tab-bar__item {
+    transform: none;
+  }
 }
 
 /* Dashboard: compact task header and two deliberate work surfaces. */
