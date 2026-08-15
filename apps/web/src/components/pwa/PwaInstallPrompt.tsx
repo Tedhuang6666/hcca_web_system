@@ -50,9 +50,17 @@ export default function PwaInstallPrompt() {
   if (!installPrompt || dismissed) return null;
 
   const install = async () => {
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    setInstallPrompt(null);
+    try {
+      // prompt() must run from this user gesture; calling it while handling
+      // beforeinstallprompt would be rejected by browsers.
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+    } catch {
+      // The event can expire while the banner is tucked away or the tab is
+      // backgrounded. Remove the stale event so a later event can be used.
+    } finally {
+      setInstallPrompt(null);
+    }
   };
 
   const dismiss = () => {

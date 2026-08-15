@@ -1,5 +1,6 @@
 "use client";
-import { useTheme } from "@/components/providers/ThemeProvider";
+import { useRef } from "react";
+import { useTheme, type ThemeTransitionOrigin } from "@/components/providers/ThemeProvider";
 
 function SunIcon() {
   return (
@@ -29,18 +30,31 @@ function MoonIcon() {
 
 export default function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
+  const pointerOrigin = useRef<ThemeTransitionOrigin | null>(null);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "mouse" || event.button === 0) {
+      pointerOrigin.current = { x: event.clientX, y: event.clientY };
+    }
+  };
 
   const handleToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
+    const origin = pointerOrigin.current ?? {
+      x: event.detail === 0 ? rect.left + rect.width / 2 : event.clientX,
+      y: event.detail === 0 ? rect.top + rect.height / 2 : event.clientY,
+    };
+    pointerOrigin.current = null;
     toggleTheme({
-      x: event.clientX || rect.left + rect.width / 2,
-      y: event.clientY || rect.top + rect.height / 2,
+      x: origin.x,
+      y: origin.y,
     });
   };
 
   return (
     <button
       onClick={handleToggle}
+      onPointerDown={handlePointerDown}
       className="topbar-icon-btn"
       title={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
       aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}>

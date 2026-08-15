@@ -25,17 +25,23 @@ export default function AppEnhancements() {
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  if (!ready) return null;
-
   return (
     <>
-      <Suspense fallback={null}>
-        <TelemetryProvider />
-      </Suspense>
-      {!isPetitionsRoute && <PwaInstallPrompt />}
-      <Suspense fallback={null}>
-        {!isPetitionsRoute && <GoogleOneTap />}
-      </Suspense>
+      {!isPetitionsRoute && (
+        <Suspense fallback={null}>
+          <PwaInstallPrompt />
+        </Suspense>
+      )}
+      {!ready ? null : (
+        <>
+          <Suspense fallback={null}>
+            <TelemetryProvider />
+          </Suspense>
+          <Suspense fallback={null}>
+            {!isPetitionsRoute && <GoogleOneTap />}
+          </Suspense>
+        </>
+      )}
     </>
   );
 }

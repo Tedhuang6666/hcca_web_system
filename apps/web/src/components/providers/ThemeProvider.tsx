@@ -49,29 +49,37 @@ function shouldReduceThemeMotion(a11yMotion: boolean) {
   return a11yMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+interface ThemeTransitionStyle {
+  root: HTMLElement;
+  previous: Record<string, string>;
+}
+
 function installThemeTransitionStyles(
   x: number,
   y: number,
   radius: number,
-): HTMLStyleElement | null {
-  const nonce = document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce;
-  if (!nonce) return null;
+): ThemeTransitionStyle {
+  const root = document.documentElement;
+  const properties = {
+    "--theme-transition-x": `${x}px`,
+    "--theme-transition-y": `${y}px`,
+    "--theme-transition-radius": `${radius}px`,
+  };
+  const previous = Object.fromEntries(
+    Object.keys(properties).map((property) => [property, root.style.getPropertyValue(property)]),
+  );
 
-  const style = document.createElement("style");
-  style.setAttribute("nonce", nonce);
-  style.textContent = `
-    :root {
-      --theme-transition-x: ${x}px;
-      --theme-transition-y: ${y}px;
-      --theme-transition-radius: ${radius}px;
-    }
-  `;
-  document.head.appendChild(style);
-  return style;
+  for (const [property, value] of Object.entries(properties)) {
+    root.style.setProperty(property, value);
+  }
+  return { root, previous };
 }
 
-function clearThemeTransition(style: HTMLStyleElement | null) {
-  style?.remove();
+function clearThemeTransition(style: ThemeTransitionStyle) {
+  for (const [property, value] of Object.entries(style.previous)) {
+    if (value) style.root.style.setProperty(property, value);
+    else style.root.style.removeProperty(property);
+  }
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -133,12 +141,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       Math.max(y, window.innerHeight - y),
     );
     const transitionStyle = installThemeTransitionStyles(x, y, radius);
-
-    if (!transitionStyle) {
-      setThemeState(t);
-      applyTheme(t);
-      return;
-    }
 
     try {
       const transition = startViewTransition.call(document, () => {

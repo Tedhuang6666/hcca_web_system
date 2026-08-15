@@ -30,6 +30,23 @@ import { authApi } from "@/lib/api/auth";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
 import type { ServerSessionUser } from "@/lib/server/session";
 
+const AUTH_CHECK_TIMEOUT_MS = 8_000;
+
+async function withAuthCheckTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new ApiError(0, "登入服務回應逾時"));
+    }, AUTH_CHECK_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
+}
+
 function SessionGate({
   children,
   initialUser,
@@ -77,7 +94,7 @@ function SessionGate({
       }
 
       try {
-        const me = await authApi.me();
+        const me = await withAuthCheckTimeout(authApi.me());
         if (cancelled) return;
         cacheCurrentUser(me);
         setIsLoggedIn(true);
