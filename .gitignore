@@ -116,3 +116,5 @@ apps/web/public/brand/hcca-emblem.pngZone.Identifier
 hcca-discord-bot.zip
 apps/discord-bot/env.example
 apps/discord-bot/env.example
+
+ssh/
