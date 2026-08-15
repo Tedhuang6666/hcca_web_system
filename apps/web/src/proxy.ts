@@ -327,6 +327,17 @@ async function blockedRedirect(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
+function publicAssetCacheControl(pathname: string): string | null {
+  if (pathname === "/sw.js") return "public, max-age=0, must-revalidate";
+  if (pathname === "/theme.js" || pathname === "/manifest.webmanifest" || pathname === "/llms.txt") {
+    return "public, max-age=86400, stale-while-revalidate=86400";
+  }
+  if (pathname.startsWith("/brand/") || pathname.startsWith("/fonts/")) {
+    return "public, max-age=2592000, stale-while-revalidate=86400";
+  }
+  return null;
+}
+
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -369,7 +380,10 @@ export default async function proxy(req: NextRequest) {
 
   // nonce 會隨每個 request 改變；不能讓 CDN、瀏覽器或 304 重用舊 HTML。
   const response = withCsp(req);
-  response.headers.set("Cache-Control", "private, no-store");
+  response.headers.set(
+    "Cache-Control",
+    publicAssetCacheControl(pathname) ?? "private, no-store",
+  );
   if (!isIndexablePublicPath(pathname)) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
