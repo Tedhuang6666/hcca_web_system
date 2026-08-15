@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core import maintenance as maint
 from api.core import module_health, module_recovery
 from api.core.config import settings
-from api.core.load_shed import _can_bypass_protection
+from api.core.load_shed import _can_bypass_protection, _is_path_exempt
 from api.core.modules import MODULE_IDS, match_module
 from api.core.security import create_access_token, redis_client
 from api.dependencies.auth import get_current_active_user
@@ -88,6 +88,22 @@ def test_match_module_respects_segment_boundary() -> None:
     # 核心通道不屬於任何可維護模組
     assert match_module("/auth/me") is None
     assert match_module("/admin/system/status") is None
+
+
+def test_authentication_paths_are_exempt_from_protective_503() -> None:
+    for path in (
+        "/auth/google/login",
+        "/auth/discord/callback",
+        "/auth/google/one-tap",
+        "/auth/mfa/exchange-challenge",
+        "/auth/mfa/login/verify",
+        "/auth/mfa/passkeys/authentication/options",
+        "/auth/mfa/passkeys/authentication/verify",
+    ):
+        assert _is_path_exempt(path)
+
+    assert _is_path_exempt("/auth/mfa/status")
+    assert not _is_path_exempt("/authentic")
 
 
 async def test_module_maintenance_blocks_target_module_returns_503(

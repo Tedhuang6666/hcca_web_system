@@ -59,6 +59,10 @@ ALWAYS_ALLOWED_PATHS = frozenset(
     }
 )
 ALWAYS_ALLOWED_PREFIXES = (
+    # 認證流程（OAuth、MFA、Passkey）必須在維護模式中保持可用，否則管理員
+    # 無法建立 bypass token 來解除維護。各端點仍由自己的 auth/CSRF/RBAC
+    # 依賴負責驗證，這裡只略過保護性 503。
+    "/auth/",
     "/admin/",
     "/docs",
     "/redoc",
