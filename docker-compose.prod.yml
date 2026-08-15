@@ -471,6 +471,9 @@ services:
       DB_USER: ${POSTGRES_USER:?set POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB:?set POSTGRES_DB}
+      # edoburu entrypoint 只有在 plain/scram-sha-256 下才會把 DB_PASSWORD
+      # 寫入 userlist；避免只生成 MD5 hash，導致 PostgreSQL SCRAM backend login 失敗。
+      AUTH_TYPE: scram-sha-256
       LISTEN_PORT: "6432"
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
