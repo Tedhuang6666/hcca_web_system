@@ -6,6 +6,9 @@ import contextlib
 import os
 import uuid
 
+# 測試故意觸發的例外不應送到正式 Sentry 專案，避免污染 production issue。
+os.environ["SENTRY_DSN"] = ""
+
 # 測試用 HTTP client 以 base_url="http://test" 發送請求；
 # 確保 TrustedHostMiddleware 不會在使用者本機 .env 限縮 ALLOWED_HOSTS 時
 # 把所有測試 status 變 400 Invalid host header。必須在 `from api.main import app` 之前設定。

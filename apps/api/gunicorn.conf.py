@@ -1,6 +1,5 @@
 """Gunicorn 生產設定 — UvicornWorker + 效能調優"""
 
-import multiprocessing
 import os
 
 # ── Worker 設定 ───────────────────────────────────────────────────────────────
@@ -8,8 +7,8 @@ import os
 # UvicornWorker：支援 asyncio（ASGI），搭配 Gunicorn 提供多 worker 穩定性
 worker_class = "uvicorn.workers.UvicornWorker"
 
-# worker 數量：2 × CPU 核數 + 1（通用公式；I/O 密集應用可適度提高）
-workers = int(os.getenv("GUNICORN_WORKERS", multiprocessing.cpu_count() * 2 + 1))
+# worker 數量：受容器記憶體上限約束，部署環境可用 GUNICORN_WORKERS 覆寫
+workers = int(os.getenv("GUNICORN_WORKERS", "2"))
 
 # 每個 worker 的執行緒數（UvicornWorker 下無效，留 1 即可）
 threads = 1
@@ -45,6 +44,6 @@ max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "100"))
 # ── 日誌 ─────────────────────────────────────────────────────────────────────
 
 loglevel = os.getenv("LOG_LEVEL", "info")
-accesslog = "-"   # stdout
-errorlog = "-"    # stderr
+accesslog = "-"  # stdout
+errorlog = "-"  # stderr
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)sµs'
