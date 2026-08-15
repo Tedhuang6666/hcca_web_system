@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -76,10 +77,29 @@ function ThemeScript() {
   return <script src="/theme.js" defer />;
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+function StyleNonceBridge({ nonce }: { nonce: string | null }) {
+  if (!nonce) return null;
+
+  const script = `(() => {
+    const nonce = ${JSON.stringify(nonce)};
+    const createElement = document.createElement.bind(document);
+    document.createElement = function(name, options) {
+      const element = createElement(name, options);
+      if (name.toLowerCase() === "style") element.setAttribute("nonce", nonce);
+      return element;
+    };
+  })();`;
+
+  return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} />;
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce");
+
   return (
     <html lang="zh-TW" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
+        <StyleNonceBridge nonce={nonce} />
         <ThemeScript />
       </head>
       <body className="antialiased">
