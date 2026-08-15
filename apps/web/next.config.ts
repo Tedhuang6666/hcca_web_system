@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
   // Webpack production 對外部 script 加上 SRI integrity；CSP 仍使用 per-request nonce，
   // 因為 Next.js App Router 會輸出必須由 nonce 授權的 inline bootstrap script。
   experimental: {
+    optimizePackageImports: ["lucide-react"],
     sri: {
       algorithm: "sha384",
     },

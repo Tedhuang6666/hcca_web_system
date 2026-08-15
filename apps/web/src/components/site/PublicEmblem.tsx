@@ -15,6 +15,18 @@ const STATIC_EMBLEM_ASSETS = {
   },
 } as const;
 
+function getStaticAsset(src: string, variant: "default" | "small") {
+  const size = STATIC_EMBLEM_ASSETS[variant].size;
+  const staticPaths = new Set([
+    `/brand/hcca-emblem-${size}.avif`,
+    `/brand/hcca-emblem-${size}.webp`,
+  ]);
+  if (staticPaths.has(src) || src === "/brand/hcca-emblem-512.png") {
+    return STATIC_EMBLEM_ASSETS[variant];
+  }
+  return null;
+}
+
 function canOptimize(src: string) {
   if (src.startsWith("/")) return true;
 
@@ -43,9 +55,7 @@ export default function PublicEmblem({
   const resolvedSrc = variant === "small" && src === "/brand/hcca-emblem-512.png"
     ? "/brand/hcca-emblem-192.png"
     : src;
-  const staticAsset = src === "/brand/hcca-emblem-512.png"
-    ? STATIC_EMBLEM_ASSETS[variant]
-    : null;
+  const staticAsset = getStaticAsset(src, variant);
   const sourceSize = staticAsset?.size ?? (variant === "small" ? 192 : 512);
 
   if (staticAsset) {
