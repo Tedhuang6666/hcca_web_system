@@ -254,8 +254,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         await shutdown_broker()
         shutdown_posthog()
+        from api.core.cache import cache_client
         from api.core.security import redis_client
 
+        await cache_client.aclose()
         await redis_client.aclose()
 
 
@@ -338,10 +340,11 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(
         SessionMiddleware,
-        secret_key=settings.SECRET_KEY,
+        secret_key=settings.OAUTH_SESSION_SECRET or settings.SECRET_KEY,
         session_cookie=settings.SESSION_COOKIE_NAME,
         same_site=settings.COOKIE_SAMESITE,
         https_only=settings.COOKIE_SECURE,
+        max_age=settings.OAUTH_SESSION_MAX_AGE_SECONDS,
     )
     # Payload 大小上限：在 host / proxy 檢查通過後第一個粗篩
     app.add_middleware(

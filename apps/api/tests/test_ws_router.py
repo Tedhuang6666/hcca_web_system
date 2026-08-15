@@ -95,8 +95,10 @@ async def test_authenticate_ws_missing_token_closes_with_auth_error() -> None:
 async def test_authenticate_ws_valid_token_returns_subject(member_user: User) -> None:
     token = create_access_token(str(member_user.id))
     ws = FakeWebSocket(header_token=token)
-    user_id = await _authenticate_ws(ws)  # type: ignore[arg-type]
-    assert user_id == str(member_user.id)
+    auth = await _authenticate_ws(ws)  # type: ignore[arg-type]
+    assert auth is not None
+    assert auth[0] == str(member_user.id)
+    assert auth[2] is not None
     assert ws.closed_with is None
 
 

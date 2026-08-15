@@ -9,9 +9,9 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
-# 非同步 DB 連線位址：預設直連 db:5432；要啟用 PgBouncer（Phase D）時，
-# 在 .env.production 設 DB_HOST=pgbouncer DB_PORT=6432 DB_USE_PGBOUNCER=true 即可，
-# 不需改本檔。⚠️ DATABASE_URL_SYNC（Alembic / 同步）永遠直連 db:5432，繞過 PgBouncer。
+# 非同步 DB 連線位址：預設經 PgBouncer transaction pool。若需緊急回退，可在
+# .env.production 設 DB_HOST=db、DB_PORT=5432、DB_USE_PGBOUNCER=false。
+# DATABASE_URL_SYNC（Alembic / 同步備份）永遠直連 db:5432，繞過 PgBouncer。
 
 x-api-common: &api-common
   logging: *default-logging
@@ -31,8 +31,9 @@ x-api-common: &api-common
     DEBUG: "false"
     ENABLE_API_DOCS: "false"
     COOKIE_SECURE: "true"
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-pgbouncer}:${DB_PORT:-6432}/${POSTGRES_DB:?set POSTGRES_DB}
     DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    DB_USE_PGBOUNCER: ${DB_USE_PGBOUNCER:-true}
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
     DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
     DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
@@ -61,6 +62,8 @@ x-api-common: &api-common
       condition: service_healthy
     redis-realtime:
       condition: service_healthy
+    pgbouncer:
+      condition: service_healthy
   volumes:
     - uploads:/app/uploads
     - backups:/app/backups
@@ -77,12 +80,15 @@ services:
       autoheal: "true"
     command: >
       postgres
-      -c max_connections=200
+      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-100}
       -c shared_buffers=256MB
       -c effective_cache_size=512MB
       -c work_mem=16MB
       -c maintenance_work_mem=64MB
       -c log_min_duration_statement=1000
+      -c statement_timeout=${POSTGRES_STATEMENT_TIMEOUT_MS:-5000}
+      -c lock_timeout=${POSTGRES_LOCK_TIMEOUT_MS:-2000}
+      -c idle_in_transaction_session_timeout=${POSTGRES_IDLE_IN_TRANSACTION_TIMEOUT_MS:-10000}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
@@ -166,6 +172,20 @@ services:
     <<: *api-common
     restart: "no"
     profiles: ["migrate"]
+    environment:
+      ENVIRONMENT: production
+      HOME: /tmp
+      DEBUG: "false"
+      ENABLE_API_DOCS: "false"
+      COOKIE_SECURE: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_USE_PGBOUNCER: "false"
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      REDIS_CACHE_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-cache:6379/0
+      REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
+      CELERY_RESULT_BACKEND: ""
     command: python -m alembic -c /app/alembic.ini upgrade head
 
   api:
@@ -182,8 +202,9 @@ services:
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
       COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-pgbouncer}:${DB_PORT:-6432}/${POSTGRES_DB:?set POSTGRES_DB}
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_USE_PGBOUNCER: ${DB_USE_PGBOUNCER:-true}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
@@ -251,8 +272,9 @@ services:
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
       COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-pgbouncer}:${DB_PORT:-6432}/${POSTGRES_DB:?set POSTGRES_DB}
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_USE_PGBOUNCER: ${DB_USE_PGBOUNCER:-true}
       DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-10}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
@@ -302,8 +324,9 @@ services:
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
       COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-pgbouncer}:${DB_PORT:-6432}/${POSTGRES_DB:?set POSTGRES_DB}
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_USE_PGBOUNCER: ${DB_USE_PGBOUNCER:-true}
       DB_POOL_SIZE: ${EMAIL_WORKER_DB_POOL_SIZE:-3}
       DB_MAX_OVERFLOW: ${EMAIL_WORKER_DB_MAX_OVERFLOW:-5}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
@@ -356,8 +379,9 @@ services:
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
       COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-pgbouncer}:${DB_PORT:-6432}/${POSTGRES_DB:?set POSTGRES_DB}
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_USE_PGBOUNCER: ${DB_USE_PGBOUNCER:-true}
       DB_POOL_SIZE: ${CELERY_BEAT_DB_POOL_SIZE:-2}
       DB_MAX_OVERFLOW: ${CELERY_BEAT_DB_MAX_OVERFLOW:-2}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
@@ -452,13 +476,10 @@ services:
       retries: 3
       start_period: 20s
 
-  # ── PgBouncer 連線池（Phase D，預設不啟用）────────────────────────────────
-  # 啟用方式：在 .env.production 設 DB_HOST=pgbouncer DB_PORT=6432，並以
-  # `--profile pgbouncer` 啟動。⚠️ 上線前務必驗證 auth 與 migration（migration 仍直連 db）。
+  # ── PgBouncer transaction 連線池（正式環境預設）──────────────────────────
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    image: edoburu/pgbouncer:v1.25.2-p0
     restart: unless-stopped
-    profiles: ["pgbouncer"]
     mem_limit: ${PGBOUNCER_MEM_LIMIT:-64m}
     mem_reservation: 16m
     cpus: ${PGBOUNCER_CPUS:-0.25}
@@ -480,6 +501,8 @@ services:
       DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
       MIN_POOL_SIZE: "5"
       RESERVE_POOL_SIZE: "5"
+      # 讓 exporter 僅能執行 read-only SHOW 指令，不能操作 PgBouncer admin console。
+      STATS_USERS: ${POSTGRES_USER:?set POSTGRES_USER}
       # transaction 模式下每筆交易結束清狀態；配合 app 端關 prepared statement cache。
       SERVER_RESET_QUERY: DISCARD ALL
       # asyncpg 會送 extra_float_digits 等啟動參數，PgBouncer 需放行避免報錯。
@@ -649,6 +672,19 @@ services:
       DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}?sslmode=disable
     depends_on:
       db:
+        condition: service_healthy
+
+  pgbouncer-exporter:
+    image: prometheuscommunity/pgbouncer-exporter:v0.12.1
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    mem_limit: 64m
+    mem_reservation: 16m
+    logging: *default-logging
+    environment:
+      PGBOUNCER_EXPORTER_CONNECTION_STRING: postgresql://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@pgbouncer:6432/pgbouncer?sslmode=disable
+    depends_on:
+      pgbouncer:
         condition: service_healthy
 
   meilisearch:

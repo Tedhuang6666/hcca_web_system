@@ -7,6 +7,7 @@ from typing import Any
 import redis.asyncio as aioredis
 
 from api.core.config import settings
+from api.core.prometheus_metrics import set_redis_client_healthy
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ cache_client: aioredis.Redis = aioredis.from_url(
     str(settings.REDIS_CACHE_URL or settings.REDIS_URL),
     encoding="utf-8",
     decode_responses=True,
-    max_connections=settings.REDIS_MAX_CONNECTIONS,
+    max_connections=settings.REDIS_CACHE_MAX_CONNECTIONS,
     socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
     socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
     health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
@@ -25,10 +26,12 @@ async def cache_get(key: str) -> Any | None:
     """從 Redis 快取取得值；Redis 異常時 fallback 為 cache miss 並記錄。"""
     try:
         value = await cache_client.get(key)
+        set_redis_client_healthy("cache", True)
         if value is None:
             return None
         return json.loads(value)
     except Exception:
+        set_redis_client_healthy("cache", False)
         logger.warning("cache_get failed (fallback to miss) key=%s", key, exc_info=True)
         return None
 

@@ -80,6 +80,7 @@ from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import defense as defense_svc
 from api.services import mfa as mfa_svc
+from api.services import user_session as user_session_svc
 from api.services import version as version_svc
 from api.services.discord_bot import emit_security_alert
 from api.services.incident import (
@@ -1273,7 +1274,10 @@ async def block_user(
         )
         for rule_type, target in targets
     ]
-    revoked_count = await revoke_user(str(user.id))
+    legacy_revoked_count = await revoke_user(str(user.id))
+    revoked_count = legacy_revoked_count + await user_session_svc.revoke_all(
+        session, user.id, reason="account_blocked"
+    )
     await emit_security_alert(
         session,
         title="封鎖使用者",
@@ -1368,7 +1372,10 @@ async def remove_ip_block(ip: str, session: DbDep, _admin: AdminUser) -> dict:
 
 @router.post("/revoke-user-tokens", response_model=dict)
 async def force_logout_user(body: RevokeUserBody, session: DbDep, _admin: AdminUser) -> dict:
-    count = await revoke_user(str(body.user_id))
+    legacy_count = await revoke_user(str(body.user_id))
+    count = legacy_count + await user_session_svc.revoke_all(
+        session, body.user_id, reason="admin_revoke_all"
+    )
     await audit_svc.record(
         session,
         entity_type="defense_rule",

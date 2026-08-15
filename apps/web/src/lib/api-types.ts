@@ -32123,14 +32123,6 @@ export interface components {
             source_title: string;
         };
         /**
-         * RefreshRequest
-         * @description 換發 Access Token 的請求
-         */
-        RefreshRequest: {
-            /** Refresh Token */
-            refresh_token?: string | null;
-        };
-        /**
          * RegulationAmendmentType
          * @enum {string}
          */
@@ -35627,6 +35619,13 @@ export interface components {
         /** UserSessionOut */
         UserSessionOut: {
             /**
+             * Absolute Expires At
+             * Format: date-time
+             */
+            absolute_expires_at: string;
+            /** Auth Method */
+            auth_method: string;
+            /**
              * Created At
              * Format: date-time
              */
@@ -35651,10 +35650,24 @@ export interface components {
              */
             is_current: boolean;
             /**
+             * Is Revoked
+             * @default false
+             */
+            is_revoked: boolean;
+            /**
              * Last Seen At
              * Format: date-time
              */
             last_seen_at: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Revoked Reason */
+            revoked_reason?: string | null;
+            /**
+             * Rotated At
+             * Format: date-time
+             */
+            rotated_at: string;
         };
         /** UserSummary */
         UserSummary: {
@@ -42346,11 +42359,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["RefreshRequest"] | null;
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -42361,15 +42370,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

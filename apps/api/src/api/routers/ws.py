@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 
+from api.core.auth_cookies import access_token_from_cookies
 from api.core.config import settings
 from api.core.database import AsyncSessionLocal
-from api.core.security import decode_token, is_blacklisted
+from api.core.security import decode_token, is_blacklisted, is_session_revoked
 from api.core.ws_manager import WSCapacityError, manager
 from api.dependencies.permissions import require_permission
 from api.services.permission import get_user_permission_codes
@@ -55,7 +56,7 @@ def _ws_token_from_websocket(websocket: WebSocket) -> str | None:
     auth = websocket.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:]
-    return websocket.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+    return access_token_from_cookies(websocket.cookies)
 
 
 async def _validate_ws_origin(websocket: WebSocket) -> bool:
@@ -72,7 +73,7 @@ def _client_ip(websocket: WebSocket) -> str:
     return websocket.client.host if websocket.client else "unknown"
 
 
-async def _authenticate_ws(websocket: WebSocket) -> str | None:
+async def _authenticate_ws(websocket: WebSocket) -> tuple[str, str | None, int | None] | None:
     """
     驗證 WebSocket 連線的 JWT Token（優先使用 Authorization header，否則使用 HttpOnly cookie）。
     回傳 user_id 字串；若驗證失敗則關閉連線並回傳 None。
@@ -92,7 +93,20 @@ async def _authenticate_ws(websocket: WebSocket) -> str | None:
             await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token 類型")
             return None
 
-        return payload.get("sub")
+        user_id = payload.get("sub")
+        if not isinstance(user_id, str):
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token 使用者")
+            return None
+        session_id = payload.get("sid")
+        if session_id is not None and await is_session_revoked(str(session_id)):
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="工作階段已撤銷")
+            return None
+        expires_at = payload.get("exp")
+        return (
+            user_id,
+            str(session_id) if session_id is not None else None,
+            expires_at if isinstance(expires_at, int) else None,
+        )
 
     except ExpiredSignatureError:
         await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="Token 已過期")
@@ -190,9 +204,10 @@ async def websocket_room(
     """
     if not await _validate_ws_origin(websocket):
         return
-    user_id = await _authenticate_ws(websocket)
-    if user_id is None:
+    auth = await _authenticate_ws(websocket)
+    if auth is None:
         return
+    user_id, session_id, access_expires_at = auth
 
     try:
         await _assert_room_access(room, user_id)
@@ -202,7 +217,13 @@ async def websocket_room(
 
     client_ip = _client_ip(websocket)
     try:
-        await manager.connect(websocket, room, client_ip)
+        await manager.connect(
+            websocket,
+            room,
+            client_ip,
+            session_id=session_id,
+            access_expires_at=access_expires_at,
+        )
     except WSCapacityError as exc:
         logger.warning(
             "WS capacity hit scope=%s room=%s ip=%s reason=%s",

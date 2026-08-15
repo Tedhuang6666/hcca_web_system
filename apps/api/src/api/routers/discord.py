@@ -15,12 +15,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.auth_cookies import set_auth_cookies
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.oauth import discord
 from api.core.permission_codes import PermissionCode
 from api.core.redirects import safe_next_path
-from api.core.security import create_access_token, create_mfa_challenge_token, create_refresh_token
+from api.core.security import create_mfa_challenge_token
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.discord_account import (
@@ -38,6 +39,7 @@ from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import discord_gateway, discord_governance
 from api.services import passkey as passkey_svc
+from api.services import user_session as user_session_svc
 from api.services.discord_bot import (
     bot_health_snapshot,
     consume_open_token,
@@ -377,25 +379,16 @@ async def open_from_discord(
         qs = urlencode({"next": path})
         return RedirectResponse(url=f"{frontend}/auth/mfa?{qs}")
 
+    tokens = await user_session_svc.issue_session_tokens(
+        db,
+        user_id=user.id,
+        extra_claims={"source": "discord"},
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+        auth_method="discord_open",
+    )
     response = RedirectResponse(url=f"{frontend}{path}")
-    response.set_cookie(
-        settings.ACCESS_TOKEN_COOKIE_NAME,
-        create_access_token(subject=str(user_id), extra_claims={"source": "discord"}),
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
-    )
-    response.set_cookie(
-        settings.REFRESH_TOKEN_COOKIE_NAME,
-        create_refresh_token(subject=str(user_id)),
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
-    )
+    set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
     return response
 
 

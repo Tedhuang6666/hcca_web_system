@@ -10,7 +10,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
+from api.core.auth_cookies import (
+    delete_auth_cookies,
+    refresh_token_from_cookies,
+)
 from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
 from api.models.audit_log import AuditLog
@@ -83,7 +86,13 @@ class UserSessionOut(BaseModel):
     ip_address: str | None
     created_at: datetime
     last_seen_at: datetime
+    auth_method: str
+    rotated_at: datetime
     expires_at: datetime
+    absolute_expires_at: datetime
+    revoked_at: datetime | None = None
+    revoked_reason: str | None = None
+    is_revoked: bool = False
     is_current: bool = False
 
     @classmethod
@@ -96,7 +105,13 @@ class UserSessionOut(BaseModel):
             ip_address=session.ip_address,
             created_at=session.created_at,
             last_seen_at=session.last_seen_at,
+            auth_method=session.auth_method,
+            rotated_at=session.rotated_at,
             expires_at=session.expires_at,
+            absolute_expires_at=session.absolute_expires_at,
+            revoked_at=session.revoked_at,
+            revoked_reason=session.revoked_reason,
+            is_revoked=session.revoked_at is not None,
             is_current=session.id == current_id,
         )
 
@@ -312,12 +327,12 @@ async def list_my_sessions(
     current = await user_session_svc.ensure_current(
         db,
         user_id=current_user.id,
-        refresh_token=request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME),
+        refresh_token=refresh_token_from_cookies(request.cookies),
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
-    sessions = await user_session_svc.list_active(db, current_user.id)
+    sessions = await user_session_svc.list_recent(db, current_user.id)
     return [
         UserSessionOut.from_session(session, current_id=current.id if current else None)
         for session in sessions
@@ -331,7 +346,7 @@ async def revoke_other_sessions(
     current = await user_session_svc.ensure_current(
         db,
         user_id=current_user.id,
-        refresh_token=request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME),
+        refresh_token=refresh_token_from_cookies(request.cookies),
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
     )
@@ -352,14 +367,13 @@ async def revoke_all_sessions(
     await user_session_svc.ensure_current(
         db,
         user_id=current_user.id,
-        refresh_token=request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME),
+        refresh_token=refresh_token_from_cookies(request.cookies),
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
     )
     count = await user_session_svc.revoke_all(db, current_user.id)
     await db.commit()
-    response.delete_cookie(settings.ACCESS_TOKEN_COOKIE_NAME, path="/")
-    response.delete_cookie(settings.REFRESH_TOKEN_COOKIE_NAME, path="/")
+    delete_auth_cookies(response)
     return {"revoked_count": count}
 
 

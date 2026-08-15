@@ -18,6 +18,9 @@ def test_create_and_decode_access_token() -> None:
     assert payload["type"] == "access"
     assert "exp" in payload
     assert "iat" in payload
+    assert payload["iss"] == security.settings.JWT_ISSUER
+    assert payload["aud"] == security.settings.JWT_AUDIENCE
+    assert payload["ver"] == 2
 
 
 def test_create_and_decode_refresh_token() -> None:

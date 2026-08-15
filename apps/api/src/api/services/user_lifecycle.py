@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.clock import local_today
 from api.models.org import UserPosition
 from api.models.user import User
+from api.services import user_session as user_session_svc
 
 _ALUMNI_SUFFIX = "（校友）"
 
@@ -91,6 +92,7 @@ async def freeze(session: AsyncSession, *, user_id: uuid.UUID, reason: str = "")
 
     was_active = user.is_active
     user.is_active = False
+    await user_session_svc.revoke_all(session, user.id)
     await session.flush()
 
     return LifecycleResult(
@@ -121,6 +123,7 @@ async def archive_alumni(
     if not user.display_name.endswith(_ALUMNI_SUFFIX):
         user.display_name = f"{user.display_name}{_ALUMNI_SUFFIX}"
     user.is_active = False
+    await user_session_svc.revoke_all(session, user.id)
     await session.flush()
 
     return LifecycleResult(

@@ -1,6 +1,5 @@
 """FastAPI 依賴注入 - 身份驗證相關"""
 
-import asyncio
 import uuid
 from typing import TYPE_CHECKING
 
@@ -10,10 +9,11 @@ from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.auth_cookies import access_token_from_cookies
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.defense import find_identity_block
-from api.core.security import decode_token, is_blacklisted, register_active_token
+from api.core.security import decode_token, is_blacklisted, is_session_revoked
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 
@@ -27,9 +27,18 @@ def _token_from_request(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None,
 ) -> str | None:
+    # 瀏覽器一般登入只接受 HttpOnly cookie；唯一保留的 Bearer 例外是既有的
+    # 管理員 impersonation token。它必須優先於 cookie，否則管理員無法在自己的
+    # cookie 仍有效時代行目標使用者。
     if credentials is not None:
-        return credentials.credentials
-    return request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+        try:
+            payload = decode_token(credentials.credentials)
+        except (ExpiredSignatureError, InvalidTokenError):
+            pass
+        else:
+            if payload.get("type") == "impersonation":
+                return credentials.credentials
+    return access_token_from_cookies(request.cookies)
 
 
 async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
@@ -45,17 +54,13 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     raw_user_id: str | None = payload.get("sub")
     if not raw_user_id:
         return None
+    if await is_session_revoked(payload.get("sid")):
+        return None
     try:
         user_id = uuid.UUID(raw_user_id)
     except (TypeError, ValueError):
         return None
-    # register_active_token 只寫 Redis、不碰 db session，可與 DB 查詢並行以省一趟往返延遲。
-    result, _ = await asyncio.gather(
-        db.execute(select(User).where(User.id == user_id)),
-        register_active_token(
-            str(user_id), payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        ),
-    )
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         return None

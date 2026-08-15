@@ -24,6 +24,7 @@ from api.schemas.org import (
 from api.services import audit as audit_svc
 from api.services import org as org_svc
 from api.services import person as person_svc
+from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
 
 router = APIRouter(tags=["職位與權限"])
@@ -175,6 +176,7 @@ async def delete_position(position_id: uuid.UUID, db: DbDep, current_user: Curre
     await org_svc.delete_position(db, position)
     for user_id in holder_ids:
         await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
         await enqueue_role_sync(db, user_id)
 
 
@@ -197,6 +199,11 @@ async def add_permission(
     position = await org_svc.get_position(db, position_id)
     if not position:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
+    holder_ids = (
+        await db.scalars(
+            select(UserPosition.user_id).where(UserPosition.position_id == position_id).distinct()
+        )
+    ).all()
     permission = await org_svc.add_permission(db, position_id, data)
     await audit_svc.record(
         db,
@@ -208,6 +215,9 @@ async def add_permission(
         meta={"permission_id": str(permission.id), "code": data.code},
         summary=f"新增權限「{data.code}」至職位「{position.name}」",
     )
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     return permission
 
 
@@ -226,6 +236,13 @@ async def remove_permission(
     perm = result.scalar_one_or_none()
     if not perm:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="權限碼不存在")
+    holder_ids = (
+        await db.scalars(
+            select(UserPosition.user_id)
+            .where(UserPosition.position_id == perm.position_id)
+            .distinct()
+        )
+    ).all()
     await audit_svc.record(
         db,
         entity_type="position",
@@ -237,3 +254,6 @@ async def remove_permission(
         summary=f"移除職位權限「{perm.code}」",
     )
     await org_svc.remove_permission(db, perm)
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
