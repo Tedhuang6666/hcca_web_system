@@ -33,6 +33,7 @@ from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import person as person_svc
+from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
 
 SCHOOL_EMAIL_DOMAIN = "hchs.hc.edu.tw"
@@ -1319,6 +1320,8 @@ async def _merge_login_identities(
     await _merge_person_profiles(db, target_user=user, source_user=other_user)
     other_user.email = f"merged-{other_user.id}@deleted.local"
     other_user.is_active = False
+    await user_session_svc.revoke_all(db, other_user.id, reason="account_merged")
+    await user_session_svc.revoke_all(db, user.id, reason="permission_changed")
     await db.flush()
     await cache_invalidate_user_permissions(str(user.id))
     await cache_invalidate_user_permissions(str(other_user.id))

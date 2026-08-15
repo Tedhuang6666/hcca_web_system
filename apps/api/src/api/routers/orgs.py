@@ -23,6 +23,7 @@ from api.models.user import User
 from api.schemas.org import OrgCreate, OrgRead, OrgTree, OrgUpdate
 from api.services import audit as audit_svc
 from api.services import org as org_svc
+from api.services import user_session as user_session_svc
 from api.services.permission import (
     get_user_org_ids_with_any_permission,
     get_user_org_ids_with_permission,
@@ -269,6 +270,7 @@ async def update_org(
         ).all()
         for user_id in holder_ids:
             await cache_invalidate_user_permissions(str(user_id))
+            await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     return org
 
 

@@ -14,10 +14,21 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from httpx import ConnectTimeout
 from jwt.exceptions import InvalidTokenError
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.anomaly_detection import check_suspicious_login, record_login
+from api.core.auth_cookies import (
+    access_token_from_cookies,
+    refresh_token_from_cookies,
+)
+from api.core.auth_cookies import (
+    delete_auth_cookies as _delete_auth_cookies_impl,
+)
+from api.core.auth_cookies import (
+    set_auth_cookies as _set_auth_cookies_impl,
+)
 from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import get_db
@@ -25,20 +36,21 @@ from api.core.defense import find_identity_block
 from api.core.oauth import discord, google
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
+from api.core.prometheus_metrics import record_auth_refresh
 from api.core.redirects import safe_next_path
 from api.core.security import (
     RedisUnavailableError,
     add_to_blacklist,
-    create_access_token,
     create_mfa_challenge_token,
-    create_refresh_token,
     decode_token,
     is_blacklisted,
 )
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.models.user_identity import UserIdentity
-from api.schemas.auth import GoogleOneTapRequest, RefreshRequest
+from api.models.user_session import UserSession
+from api.schemas.auth import GoogleOneTapRequest
+from api.services import audit as audit_svc
 from api.services import passkey as passkey_svc
 from api.services import user_session as user_session_svc
 from api.services.discord_bot import (
@@ -334,29 +346,28 @@ async def _upsert_google_user(
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
-    response.set_cookie(
-        settings.ACCESS_TOKEN_COOKIE_NAME,
-        access_token,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
-    )
-    response.set_cookie(
-        settings.REFRESH_TOKEN_COOKIE_NAME,
-        refresh_token,
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
-    )
+    _set_auth_cookies_impl(response, access_token, refresh_token)
 
 
 def _delete_auth_cookies(response: Response) -> None:
-    response.delete_cookie(settings.ACCESS_TOKEN_COOKIE_NAME, path="/")
-    response.delete_cookie(settings.REFRESH_TOKEN_COOKIE_NAME, path="/")
+    _delete_auth_cookies_impl(response)
+
+
+async def _issue_auth_tokens(
+    db: AsyncSession,
+    user: User,
+    request: Request,
+    *,
+    auth_method: str,
+) -> user_session_svc.SessionTokenPair:
+    return await user_session_svc.issue_session_tokens(
+        db,
+        user_id=user.id,
+        extra_claims=await _access_token_claims(db, user),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+        auth_method=auth_method,
+    )
 
 
 @router.get("/google/login", summary="發起 Google OAuth2 登入")
@@ -485,15 +496,11 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         challenge_qs = urlencode({"next": login_next})
         return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
 
-    access_token = create_access_token(
-        subject=str(user.id),
-        extra_claims=await _access_token_claims(db, user),
-    )
-    refresh_token = create_refresh_token(subject=str(user.id))
+    tokens = await _issue_auth_tokens(db, user, request, auth_method="google_oauth")
 
     callback_qs = urlencode({"next": login_next})
     response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")
-    _set_auth_cookies(response, access_token, refresh_token)
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
 
     _ph = get_posthog_client()
     if _ph:
@@ -588,14 +595,10 @@ async def discord_callback(
         challenge_qs = urlencode({"next": login_next})
         return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
 
-    access_token = create_access_token(
-        subject=str(user.id),
-        extra_claims=await _access_token_claims(db, user),
-    )
-    refresh_token = create_refresh_token(subject=str(user.id))
+    tokens = await _issue_auth_tokens(db, user, request, auth_method="discord_oauth")
     callback_qs = urlencode({"next": login_next})
     response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")
-    _set_auth_cookies(response, access_token, refresh_token)
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
 
     posthog = get_posthog_client()
     if posthog:
@@ -657,12 +660,8 @@ async def google_one_tap(
         request.session["mfa_challenge"] = challenge_token
         return {"mfa_required": True, "next": login_next}
 
-    access_token = create_access_token(
-        subject=str(user.id),
-        extra_claims=await _access_token_claims(db, user),
-    )
-    refresh_token = create_refresh_token(subject=str(user.id))
-    _set_auth_cookies(response, access_token, refresh_token)
+    tokens = await _issue_auth_tokens(db, user, request, auth_method="google_one_tap")
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
 
     _ph = get_posthog_client()
     if _ph:
@@ -684,7 +683,6 @@ async def google_one_tap(
 async def refresh_token(
     request: Request,
     response: Response,
-    body: RefreshRequest | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """驗證 Refresh Token 並發行新的 Token Pair"""
@@ -692,22 +690,18 @@ async def refresh_token(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="無效的 Refresh Token"
     )
 
-    token = (body.refresh_token if body else None) or request.cookies.get(
-        settings.REFRESH_TOKEN_COOKIE_NAME
-    )
+    token = refresh_token_from_cookies(request.cookies)
     if not token:
         raise credentials_exception
     try:
         blacklisted = await is_blacklisted(token, fail_closed=True, raise_on_unavailable=True)
     except RedisUnavailableError as exc:
+        record_auth_refresh("redis_unavailable")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="登入服務暫時不可用，請稍後再試",
             headers={"Retry-After": "3"},
         ) from exc
-    if blacklisted:
-        raise credentials_exception
-
     try:
         payload = decode_token(token)
     except InvalidTokenError as e:
@@ -740,23 +734,97 @@ async def refresh_token(
             },
         )
 
-    # 舊 Refresh Token 加入黑名單（Token Rotation）
-    await add_to_blacklist(token)
+    try:
+        tokens = await user_session_svc.rotate_session_tokens(
+            db,
+            refresh_token=token,
+            user_id=user.id,
+            extra_claims=await _access_token_claims(db, user),
+            user_agent=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+        )
+    except RedisUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="登入服務暫時不可用，請稍後再試",
+            headers={"Retry-After": "3"},
+        ) from exc
+    except user_session_svc.RefreshTokenReuseError as exc:
+        record_auth_refresh("reuse")
+        await audit_svc.record(
+            db,
+            entity_type="user_session",
+            entity_id=str(payload.get("sid") or "legacy"),
+            action="auth.refresh_reuse",
+            actor_id=str(user_id),
+            actor_email=user.email,
+            meta={"ip_address": request.client.host if request.client else None},
+            summary="偵測到已輪替 refresh token 重用，已撤銷工作階段",
+        )
+        _delete_auth_cookies(response)
+        await db.commit()
+        raise credentials_exception from exc
+    except user_session_svc.SessionTokenError as exc:
+        # 尚未有 UserSession 的 v1 refresh 在第一次換發時建立 v2 session；
+        # 帶 sid 的 token 則必須已存在於 session store，不能降級放行。
+        if payload.get("sid") is not None:
+            if blacklisted:
+                try:
+                    session_id = uuid.UUID(str(payload["sid"]))
+                except (TypeError, ValueError):
+                    session_id = None
+                if session_id is not None:
+                    session = await db.get(UserSession, session_id)
+                    if session is not None:
+                        await user_session_svc.revoke(db, session, reason="refresh_reuse")
+                await audit_svc.record(
+                    db,
+                    entity_type="user_session",
+                    entity_id=str(payload["sid"]),
+                    action="auth.refresh_reuse",
+                    actor_id=str(user_id),
+                    actor_email=user.email,
+                    meta={"ip_address": request.client.host if request.client else None},
+                    summary="偵測到已失效 refresh token 重用，已撤銷工作階段",
+                )
+                record_auth_refresh("reuse")
+                _delete_auth_cookies(response)
+                await db.commit()
+                raise credentials_exception from exc
+            record_auth_refresh("invalid")
+            raise credentials_exception from exc
+        if blacklisted:
+            record_auth_refresh("invalid")
+            raise credentials_exception from exc
+        tokens = await _issue_auth_tokens(db, user, request, auth_method="legacy_refresh")
+        legacy_jti = payload.get("jti")
+        if isinstance(legacy_jti, str):
+            tokens.session.previous_refresh_jti_hash = user_session_svc.token_jti_hash(legacy_jti)
+    else:
+        # 已加入 blacklist 的 token 仍嘗試輪替，代表它是已送出的前一張 token。
+        # 正常 v2 流程會在 service 的 row lock 分支先命中 previous_jti 並進入上方 reuse；
+        # 這個防線涵蓋 migration 前資料不完整時仍意外命中 current_jti 的情境。
+        if blacklisted:
+            await user_session_svc.revoke(db, tokens.session, reason="refresh_reuse")
+            record_auth_refresh("reuse")
+            _delete_auth_cookies(response)
+            await db.commit()
+            raise credentials_exception
 
-    access_token = create_access_token(
-        subject=str(user.id),
-        extra_claims=await _access_token_claims(db, user),
-    )
-    refresh_token_value = create_refresh_token(subject=str(user.id))
-    _set_auth_cookies(response, access_token, refresh_token_value)
-    await user_session_svc.ensure_current(
-        db,
-        user_id=user.id,
-        refresh_token=refresh_token_value,
-        user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
-    )
+    # 舊 refresh 必須在同一 transaction 中失效，避免可重放的 rotation 分支。
+    try:
+        await add_to_blacklist(token)
+    except (RedisError, TimeoutError) as exc:
+        record_auth_refresh("redis_unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="登入服務暫時不可用，請稍後再試",
+            headers={"Retry-After": "3"},
+        ) from exc
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
     await db.commit()
+
+    record_auth_refresh("success")
 
     return {"message": "ok"}
 
@@ -774,30 +842,33 @@ async def get_me(
 async def logout(
     request: Request,
     response: Response,
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """將 Access/Refresh Token 加入黑名單實現登出"""
-    auth = request.headers.get("authorization", "")
-    if auth.lower().startswith("bearer "):
-        token = auth[7:]
-        await add_to_blacklist(token)
-    access_cookie = request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
-    refresh_cookie = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    access_cookie = access_token_from_cookies(request.cookies)
+    refresh_cookie = refresh_token_from_cookies(request.cookies)
     if access_cookie:
         await add_to_blacklist(access_cookie)
     if refresh_cookie:
         await add_to_blacklist(refresh_cookie)
+        try:
+            refresh_payload = decode_token(refresh_cookie)
+            session_id = uuid.UUID(str(refresh_payload.get("sid")))
+        except (InvalidTokenError, TypeError, ValueError):
+            session_id = None
+        if session_id is not None:
+            session = await db.get(UserSession, session_id)
+            if session is not None:
+                await user_session_svc.revoke(db, session, reason="logout")
+    await db.commit()
     _delete_auth_cookies(response)
 
     _ph = get_posthog_client()
-    if _ph:
-        _raw_token = access_cookie or (auth[7:] if auth.lower().startswith("bearer ") else None)
-        if _raw_token:
-            try:
-                _tok_payload = decode_token(_raw_token)
-                _ph.capture(
-                    distinct_id=_tok_payload.get("sub", "anonymous"), event="user_logged_out"
-                )
-            except Exception:
-                logger.debug("PostHog logout 事件發送失敗（non-critical）", exc_info=True)
+    if _ph and access_cookie:
+        try:
+            _tok_payload = decode_token(access_cookie)
+            _ph.capture(distinct_id=_tok_payload.get("sub", "anonymous"), event="user_logged_out")
+        except Exception:
+            logger.debug("PostHog logout 事件發送失敗（non-critical）", exc_info=True)
 
     return {"message": "已成功登出"}

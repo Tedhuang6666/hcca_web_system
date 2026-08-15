@@ -34,6 +34,7 @@ from api.core.config import settings
 from api.models.audit_log import AuditLog
 from api.models.notification import Notification
 from api.models.user import User
+from api.services import user_session as user_session_svc
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +299,7 @@ async def anonymize_user(
         user.is_active = False  # type: ignore[attr-defined]
         updated.append("is_active")
 
+    await user_session_svc.revoke_all(session, user.id)
     await session.flush()
     now = datetime.now(UTC)
     logger.info("User anonymized id=%s by=%s fields=%s", user.id, requested_by_email, updated)

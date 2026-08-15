@@ -60,8 +60,13 @@ def _emit_backup_alert_sync(title: str, body: str) -> None:
 
 def _parse_database_url() -> tuple[str, str, str, int, str]:
     """從 SQLAlchemy URL 抽出 pg_dump 所需參數 (user, password, host, port, db)。"""
-    raw = str(settings.DATABASE_URL)
-    parsed = urlparse(raw.replace("postgresql+asyncpg://", "postgresql://"))
+    # 備份必須直接連 PostgreSQL，不能經 transaction-pooling 的 PgBouncer。
+    raw = str(settings.DATABASE_URL_SYNC)
+    parsed = urlparse(
+        raw.replace("postgresql+psycopg2://", "postgresql://").replace(
+            "postgresql+asyncpg://", "postgresql://"
+        )
+    )
     return (
         parsed.username or "postgres",
         parsed.password or "",

@@ -95,6 +95,19 @@ export function useWS(
       if (mySession !== sessionId.current) return;
       if (e.code === 1000 || e.code === 1001) return;
 
+      // 4002 僅表示 access token 到期：先靜默換發，再以同一 room 重連。
+      if (e.code === 4002) {
+        const ok = await silentRefresh();
+        if (mySession !== sessionId.current) return;
+        if (!ok) {
+          stableAuthError.current?.();
+          return;
+        }
+        retries.current = 0;
+        connect();
+        return;
+      }
+
       // 4001/4003 = 後端因驗證/授權失敗主動關閉；1008 兼容舊版 policy close。
       if (e.code === 4001 || e.code === 4003 || e.code === 1008) {
         stableAuthError.current?.();

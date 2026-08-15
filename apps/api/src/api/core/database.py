@@ -66,7 +66,13 @@ async def task_session() -> AsyncIterator[AsyncSession]:
     """
     last_error: Exception | None = None
     for attempt in range(1, _TASK_DB_CONNECT_MAX_ATTEMPTS + 1):
-        task_engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
+        task_engine_kwargs: dict = {"poolclass": NullPool}
+        if settings.DB_USE_PGBOUNCER:
+            task_engine_kwargs["connect_args"] = {
+                "statement_cache_size": 0,
+                "prepared_statement_cache_size": 0,
+            }
+        task_engine = create_async_engine(str(settings.DATABASE_URL), **task_engine_kwargs)
         factory = async_sessionmaker(
             task_engine,
             class_=AsyncSession,

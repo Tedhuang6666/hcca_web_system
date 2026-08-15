@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -13,6 +15,7 @@ from jwt.exceptions import InvalidTokenError
 from redis.exceptions import RedisError
 
 from api.core.config import settings
+from api.core.prometheus_metrics import set_redis_client_healthy
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ redis_client: aioredis.Redis = aioredis.from_url(
     str(settings.REDIS_URL),
     encoding="utf-8",
     decode_responses=True,
-    max_connections=settings.REDIS_MAX_CONNECTIONS,
+    max_connections=settings.REDIS_STATE_MAX_CONNECTIONS,
     socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
     socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
     health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
@@ -35,6 +38,7 @@ redis_client: aioredis.Redis = aioredis.from_url(
 BLACKLIST_JTI_PREFIX = "blacklist_jti:"
 # 每 user 持有的所有 jti（refresh token 期限內）
 USER_TOKENS_PREFIX = "user_tokens:"
+SESSION_REVOKED_PREFIX = "session_revoked:"
 _TOKEN_TRACKING_TIMEOUT_SECONDS = 0.8
 
 
@@ -50,26 +54,76 @@ def _new_jti() -> str:
     return uuid.uuid4().hex
 
 
+def _active_signing_key() -> str:
+    return settings.JWT_SIGNING_KEY or settings.SECRET_KEY
+
+
+def _signing_keys() -> dict[str, str]:
+    keys = {settings.JWT_ACTIVE_KID: _active_signing_key()}
+    for item in settings.JWT_PREVIOUS_SIGNING_KEYS:
+        kid, separator, key = item.partition(":")
+        if kid and separator and key:
+            keys[kid] = key
+    return keys
+
+
+def token_jti_hash(jti: str) -> str:
+    """雜湊 refresh jti，避免資料庫保存可直接關聯的 session identifier。"""
+    key = settings.JWT_SESSION_HASH_KEY or _active_signing_key()
+    return hmac.new(key.encode("utf-8"), jti.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 def _create_token(data: dict, expire_delta: timedelta) -> str:
     """建立 JWT Token 的底層函式"""
     payload = data.copy()
     expire = datetime.now(UTC) + expire_delta
-    payload.update({"exp": expire, "iat": datetime.now(UTC)})
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    payload.update(
+        {
+            "exp": expire,
+            "iat": datetime.now(UTC),
+            "iss": settings.JWT_ISSUER,
+            "aud": settings.JWT_AUDIENCE,
+            "ver": 2,
+        }
+    )
+    return jwt.encode(
+        payload,
+        _active_signing_key(),
+        algorithm=settings.ALGORITHM,
+        headers={"kid": settings.JWT_ACTIVE_KID},
+    )
 
 
-def create_access_token(subject: str, extra_claims: dict | None = None) -> str:
+def create_access_token(
+    subject: str,
+    extra_claims: dict | None = None,
+    *,
+    session_id: str | None = None,
+    auth_time: int | None = None,
+    amr: list[str] | None = None,
+) -> str:
     """建立短效期 Access Token (預設 30 分鐘)，內含 jti 以支援 user-level revoke。
 
     若 `extra_claims` 包含 `is_admin: True`，load_shed middleware 會優先放行此請求。
     """
-    data: dict = {"sub": subject, "type": "access", "jti": _new_jti(), **(extra_claims or {})}
+    data: dict = {
+        "sub": subject,
+        "type": "access",
+        "jti": _new_jti(),
+        "auth_time": auth_time if auth_time is not None else _now_ts(),
+        "amr": amr or ["oauth"],
+        **(extra_claims or {}),
+    }
+    if session_id:
+        data["sid"] = session_id
     return _create_token(data, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
 
 
-def create_refresh_token(subject: str) -> str:
+def create_refresh_token(subject: str, *, session_id: str | None = None) -> str:
     """建立長效期 Refresh Token (預設 7 天)"""
-    data = {"sub": subject, "type": "refresh", "jti": _new_jti()}
+    data: dict = {"sub": subject, "type": "refresh", "jti": _new_jti()}
+    if session_id:
+        data["sid"] = session_id
     return _create_token(data, timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
 
 
@@ -81,7 +135,39 @@ def create_mfa_challenge_token(subject: str) -> str:
 
 def decode_token(token: str) -> dict:
     """解碼並驗證 JWT Token，失敗時拋出 InvalidTokenError"""
-    return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    try:
+        header = jwt.get_unverified_header(token)
+    except InvalidTokenError:
+        raise
+
+    kid = header.get("kid")
+    if isinstance(kid, str):
+        key = _signing_keys().get(kid)
+        if key is None:
+            raise InvalidTokenError("未知的 JWT kid")
+        return jwt.decode(
+            token,
+            key,
+            algorithms=[settings.ALGORITHM],
+            audience=settings.JWT_AUDIENCE,
+            issuer=settings.JWT_ISSUER,
+            options={"require": ["exp", "iat", "sub", "jti", "iss", "aud"]},
+        )
+
+    if not settings.AUTH_LEGACY_TOKEN_COMPAT_ENABLED:
+        raise InvalidTokenError("不再接受沒有 kid 的舊版 JWT")
+    legacy_keys = [_active_signing_key(), *_signing_keys().values(), settings.SECRET_KEY]
+    seen: set[str] = set()
+    last_error: InvalidTokenError | None = None
+    for key in legacy_keys:
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            return jwt.decode(token, key, algorithms=[settings.ALGORITHM])
+        except InvalidTokenError as exc:
+            last_error = exc
+    raise last_error or InvalidTokenError("無效的舊版 JWT")
 
 
 # ── 黑名單 ────────────────────────────────────────────────────────────────────
@@ -121,8 +207,11 @@ async def is_blacklisted(
     if not jti:
         return False
     try:
-        return bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
+        result = bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
+        set_redis_client_healthy("state", True)
+        return result
     except (RedisError, TimeoutError) as exc:
+        set_redis_client_healthy("state", False)
         logger.error(
             "黑名單檢查 Redis 不可用，模式=%s",
             "fail-closed 拒絕" if fail_closed else "fail-open 放行",
@@ -181,3 +270,24 @@ async def revoke_user(user_id: str, *, ttl_seconds: int | None = None) -> int:
     await pipe.execute()
     logger.info("已撤銷 %d 個 jti uid=%s", len(jtis), user_id)
     return len(jtis)
+
+
+async def revoke_session(session_id: str, ttl_seconds: int) -> None:
+    """標記 session 為撤銷；access token 在 Redis 可用時立即失效。"""
+    if ttl_seconds <= 0:
+        return
+    await redis_client.setex(f"{SESSION_REVOKED_PREFIX}{session_id}", ttl_seconds, "1")
+
+
+async def is_session_revoked(session_id: str | None, *, fail_closed: bool = False) -> bool:
+    if not session_id:
+        return False
+    try:
+        return bool(await redis_client.exists(f"{SESSION_REVOKED_PREFIX}{session_id}"))
+    except (RedisError, TimeoutError) as exc:
+        logger.error("session 撤銷狀態 Redis 不可用", exc_info=True)
+        if fail_closed:
+            raise RedisUnavailableError(
+                "Redis unavailable while checking session revocation"
+            ) from exc
+        return False

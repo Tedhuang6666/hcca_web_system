@@ -11,13 +11,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
+from api.core.auth_cookies import set_auth_cookies as _set_auth_cookies_impl
 from api.core.database import get_db
 from api.core.login_lockout import is_locked, record_failure, record_success
 from api.core.security import (
     add_to_blacklist,
-    create_access_token,
-    create_refresh_token,
     decode_token,
     is_blacklisted,
 )
@@ -26,6 +24,7 @@ from api.models.user import User
 from api.routers.auth import _access_token_claims
 from api.services import mfa as mfa_svc
 from api.services import passkey as passkey_svc
+from api.services import user_session as user_session_svc
 
 router = APIRouter(prefix="/auth/mfa", tags=["多因素認證"])
 
@@ -103,24 +102,7 @@ class PasskeyOut(BaseModel):
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
-    response.set_cookie(
-        settings.ACCESS_TOKEN_COOKIE_NAME,
-        access_token,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
-    )
-    response.set_cookie(
-        settings.REFRESH_TOKEN_COOKIE_NAME,
-        refresh_token,
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
-    )
+    _set_auth_cookies_impl(response, access_token, refresh_token)
 
 
 @router.get("/status", response_model=MFAStatusOut, summary="查詢 2FA 狀態")
@@ -194,6 +176,7 @@ async def exchange_mfa_challenge(request: Request, db: DbDep) -> dict[str, str |
 @router.post("/login/verify", summary="完成登入 2FA 挑戰")
 async def verify_mfa_login(
     payload: MFALoginVerifyIn,
+    request: Request,
     response: Response,
     db: DbDep,
 ) -> dict[str, str]:
@@ -237,13 +220,16 @@ async def verify_mfa_login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
 
     await record_success(lockout_key)
-    access_token = create_access_token(
-        subject=str(user.id),
+    tokens = await user_session_svc.issue_session_tokens(
+        db,
+        user_id=user.id,
         extra_claims=await _access_token_claims(db, user),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+        auth_method="totp",
     )
-    refresh_token = create_refresh_token(subject=str(user.id))
     await add_to_blacklist(payload.challenge_token)
-    _set_auth_cookies(response, access_token, refresh_token)
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
     return {"message": "ok"}
 
 
@@ -385,10 +371,13 @@ async def passkey_authentication_verify(
     if challenge_token:
         await add_to_blacklist(challenge_token)
         request.session.pop("mfa_challenge", None)
-    access_token = create_access_token(
-        subject=str(verified_user.id),
+    tokens = await user_session_svc.issue_session_tokens(
+        db,
+        user_id=verified_user.id,
         extra_claims=await _access_token_claims(db, verified_user),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+        auth_method="passkey",
     )
-    refresh_token = create_refresh_token(subject=str(verified_user.id))
-    _set_auth_cookies(response, access_token, refresh_token)
+    _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
     return {"message": "ok"}

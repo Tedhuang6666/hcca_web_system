@@ -40,6 +40,7 @@ from api.services import mfa as mfa_svc
 from api.services import org as org_svc
 from api.services import person as person_svc
 from api.services import user_registration as user_registration_svc
+from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
 from api.services.notification_pref import (
     DIGEST_FREQUENCIES,
@@ -879,6 +880,10 @@ async def update_user(
         meta={"before": before, "after": after},
         summary=f"更新使用者「{user.display_name}」資料",
     )
+    if before["is_active"] and not user.is_active:
+        await user_session_svc.revoke_all(db, user.id, reason="account_disabled")
+    elif before["is_superuser"] != user.is_superuser:
+        await user_session_svc.revoke_all(db, user.id, reason="permission_changed")
     return await _enrich_user(db, user)
 
 
@@ -895,7 +900,10 @@ async def revoke_user_sessions(
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
-    revoked_count = await revoke_user(str(user.id))
+    legacy_revoked_count = await revoke_user(str(user.id))
+    revoked_count = legacy_revoked_count + await user_session_svc.revoke_all(
+        db, user.id, reason="admin_revoke_all"
+    )
     await audit_svc.record(
         db,
         entity_type="user",
@@ -975,6 +983,7 @@ async def add_user_position(
     )
     await enqueue_role_sync(db, user_id)
     await cache_invalidate_user_permissions(str(user_id))
+    await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     return await _enrich_user(db, user)
 
 
@@ -1021,6 +1030,7 @@ async def remove_user_position(
     await db.flush()
     await enqueue_role_sync(db, user_id)
     await cache_invalidate_user_permissions(str(user_id))
+    await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
 
 
 @router.patch(
@@ -1087,6 +1097,7 @@ async def update_user_position(
     )
     await enqueue_role_sync(db, up.user_id)
     await cache_invalidate_user_permissions(str(up.user_id))
+    await user_session_svc.revoke_all(db, up.user_id, reason="permission_changed")
     if up.user is None:
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one()
@@ -1336,6 +1347,7 @@ async def replace_position_permissions(
     await db.flush()
     for user_id in holder_ids:
         await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     await audit_svc.record(
         db,
         entity_type="position",
@@ -1418,6 +1430,7 @@ async def copy_position_permissions(
     await db.flush()
     for user_id in holder_ids:
         await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     await audit_svc.record(
         db,
         entity_type="position",
@@ -1495,6 +1508,7 @@ async def delete_position(
     await org_svc.delete_position(db, position)
     for user_id in holder_ids:
         await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
         await enqueue_role_sync(db, user_id)
 
 

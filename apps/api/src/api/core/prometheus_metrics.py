@@ -59,6 +59,11 @@ _backup_runs_total = None
 _backup_last_success = None
 _websocket_connections = None
 _rate_limit_blocked_total = None
+_auth_refresh_total = None
+_auth_refresh_reuse_total = None
+_websocket_broker_healthy = None
+_redis_client_healthy = None
+_websocket_reconnect_total = None
 _metrics_server_started = False
 
 
@@ -69,6 +74,9 @@ def init_metrics() -> None:
     global _celery_tasks_total, _document_approval_total, _email_delivery_total
     global _webhook_delivery_total, _outbox_delivery_total, _backup_runs_total
     global _backup_last_success, _websocket_connections, _rate_limit_blocked_total
+    global _auth_refresh_total, _auth_refresh_reuse_total, _websocket_broker_healthy
+    global _redis_client_healthy
+    global _websocket_reconnect_total
 
     if _registry is not None:
         return
@@ -96,7 +104,7 @@ def init_metrics() -> None:
     _db_query_count = Histogram(
         "hcca_db_query_count_per_request",
         "Number of DB queries per HTTP request",
-        labelnames=["method"],
+        labelnames=["method", "path_template"],
         buckets=(1, 2, 4, 8, 16, 32, 64, 128),
         registry=_registry,
     )
@@ -157,6 +165,33 @@ def init_metrics() -> None:
         "hcca_rate_limit_blocked_total",
         "Requests blocked by rate limiter",
         labelnames=["source"],
+        registry=_registry,
+    )
+    _auth_refresh_total = Counter(
+        "hcca_auth_refresh_total",
+        "Refresh token rotation outcomes",
+        labelnames=["status"],
+        registry=_registry,
+    )
+    _auth_refresh_reuse_total = Counter(
+        "hcca_auth_refresh_reuse_total",
+        "Detected refresh token reuse attempts",
+        registry=_registry,
+    )
+    _websocket_broker_healthy = Gauge(
+        "hcca_websocket_broker_healthy",
+        "Whether the Redis WebSocket broker is connected (1 healthy, 0 degraded)",
+        registry=_registry,
+    )
+    _redis_client_healthy = Gauge(
+        "hcca_redis_client_healthy",
+        "Whether a Redis client can complete its latest operation (1 healthy, 0 degraded)",
+        labelnames=["domain"],
+        registry=_registry,
+    )
+    _websocket_reconnect_total = Counter(
+        "hcca_websocket_reconnect_total",
+        "WebSocket reconnects observed for the same session and room in this API process",
         registry=_registry,
     )
 
@@ -234,9 +269,31 @@ def set_websocket_connections(count: int) -> None:
         _websocket_connections.set(count)
 
 
+def set_redis_client_healthy(domain: str, healthy: bool) -> None:
+    if _redis_client_healthy is not None:
+        _redis_client_healthy.labels(domain=domain).set(1 if healthy else 0)
+
+
+def record_websocket_reconnect() -> None:
+    if _websocket_reconnect_total is not None:
+        _websocket_reconnect_total.inc()
+
+
 def record_rate_limit_blocked(source: str) -> None:
     if _rate_limit_blocked_total is not None:
         _rate_limit_blocked_total.labels(source=source).inc()
+
+
+def record_auth_refresh(status: str) -> None:
+    if _auth_refresh_total is not None:
+        _auth_refresh_total.labels(status=status).inc()
+    if status == "reuse" and _auth_refresh_reuse_total is not None:
+        _auth_refresh_reuse_total.inc()
+
+
+def set_websocket_broker_healthy(healthy: bool) -> None:
+    if _websocket_broker_healthy is not None:
+        _websocket_broker_healthy.set(1 if healthy else 0)
 
 
 def _route_template(request: Request) -> str:
@@ -294,7 +351,7 @@ class PrometheusMetricsMiddleware:
 
                 query_count, _slow_count, _query_ms = get_request_counters()
                 if _db_query_count is not None:
-                    _db_query_count.labels(method=method).observe(query_count)
+                    _db_query_count.labels(method=method, path_template=tpl).observe(query_count)
             except Exception:
                 logger.debug("Prometheus query counter 更新失敗", exc_info=True)
 
@@ -310,8 +367,10 @@ __all__ = [
     "record_email_delivery",
     "record_outbox_delivery",
     "record_rate_limit_blocked",
+    "record_websocket_reconnect",
     "record_webhook_delivery",
     "render_metrics",
+    "set_redis_client_healthy",
     "set_queue_depth",
     "set_websocket_connections",
     "start_metrics_server_from_env",

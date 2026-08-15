@@ -114,6 +114,9 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = Field(default="")
     CELERY_RESULT_BACKEND: str = Field(default="")
     REDIS_MAX_CONNECTIONS: int = Field(default=50, ge=1)
+    REDIS_STATE_MAX_CONNECTIONS: int = Field(default=20, ge=1)
+    REDIS_CACHE_MAX_CONNECTIONS: int = Field(default=20, ge=1)
+    REDIS_REALTIME_MAX_CONNECTIONS: int = Field(default=8, ge=1)
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0)
     REDIS_HEALTH_CHECK_INTERVAL: int = Field(default=30, ge=1)
 
@@ -207,10 +210,23 @@ class Settings(BaseSettings):
     # --- JWT 設定 ---
     SECRET_KEY: str = Field(default=_FALLBACK_SIGNING_KEY)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_ISSUER: str = "hcca-api"
+    JWT_AUDIENCE: str = "hcca-web"
+    JWT_ACTIVE_KID: str = "v2"
+    # 留空時向下相容既有 SECRET_KEY；正式環境建議使用獨立的隨機 JWT_SIGNING_KEY。
+    JWT_SIGNING_KEY: str = ""
+    JWT_PREVIOUS_SIGNING_KEYS: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    JWT_SESSION_HASH_KEY: str = ""
+    AUTH_LEGACY_TOKEN_COMPAT_ENABLED: bool = True
+    OAUTH_SESSION_SECRET: str = ""
+    OAUTH_SESSION_MAX_AGE_SECONDS: int = Field(default=600, ge=60, le=3600)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REFRESH_TOKEN_ABSOLUTE_DAYS: int = Field(default=30, ge=7, le=90)
     ACCESS_TOKEN_COOKIE_NAME: str = "hcca_access_token"
     REFRESH_TOKEN_COOKIE_NAME: str = "hcca_refresh_token"
+    LEGACY_ACCESS_TOKEN_COOKIE_NAME: str = "hcca_access_token"
+    LEGACY_REFRESH_TOKEN_COOKIE_NAME: str = "hcca_refresh_token"
     SESSION_COOKIE_NAME: str = "hcca_session"
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
@@ -382,7 +398,7 @@ class Settings(BaseSettings):
         default="backups",
         description="本地備份輸出目錄；若搭配 STORAGE_BACKEND=s3 則同步上傳",
     )
-    DB_BACKUP_RETENTION_DAYS: int = Field(default=7)
+    DB_BACKUP_RETENTION_DAYS: int = Field(default=35, ge=1)
 
     # --- 異地備份 ---
     # 對應 docs/DR_OBJECTIVES.md。設定後備份檔會 gpg 加密 + 上傳到指定異地 bucket。
@@ -498,6 +514,17 @@ class Settings(BaseSettings):
             return [str(item).strip() for item in value if str(item).strip()]
         raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
 
+    @field_validator("JWT_PREVIOUS_SIGNING_KEYS", mode="before")
+    @classmethod
+    def parse_jwt_previous_signing_keys(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        raise ValueError("JWT_PREVIOUS_SIGNING_KEYS 必須是 kid:secret 的逗號分隔字串")
+
     @field_validator("RATE_LIMIT_TRUSTED_IPS", mode="before")
     @classmethod
     def parse_trusted_ips(cls, value: object) -> list[str]:
@@ -571,6 +598,25 @@ class Settings(BaseSettings):
             )
         if is_prod and len(self.SECRET_KEY.encode("utf-8")) < 32:
             raise ValueError("生產環境 SECRET_KEY 至少需要 32 bytes 的隨機值")
+        if is_prod and len(self.JWT_SIGNING_KEY.encode("utf-8")) < 32:
+            raise ValueError("生產環境 JWT_SIGNING_KEY 至少需要 32 bytes 的獨立隨機值")
+        if is_prod and len(self.JWT_SESSION_HASH_KEY.encode("utf-8")) < 32:
+            raise ValueError("生產環境 JWT_SESSION_HASH_KEY 至少需要 32 bytes 的獨立隨機值")
+        if is_prod and len(self.OAUTH_SESSION_SECRET.encode("utf-8")) < 32:
+            raise ValueError("生產環境 OAUTH_SESSION_SECRET 至少需要 32 bytes 的獨立隨機值")
+        if (
+            is_prod
+            and len(
+                {
+                    self.SECRET_KEY,
+                    self.JWT_SIGNING_KEY,
+                    self.JWT_SESSION_HASH_KEY,
+                    self.OAUTH_SESSION_SECRET,
+                }
+            )
+            != 4
+        ):
+            raise ValueError("生產環境的 SECRET_KEY、JWT 與 OAuth session 金鑰必須彼此獨立")
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")
         if is_prod and self.ENABLE_API_DOCS:
@@ -579,6 +625,10 @@ class Settings(BaseSettings):
             raise ValueError("生產環境不可使用 SUPERUSER_EMAILS 自動繞過 RBAC")
         if is_prod and not self.COOKIE_SECURE:
             raise ValueError("生產環境必須啟用 COOKIE_SECURE")
+        if self.COOKIE_SECURE:
+            self.ACCESS_TOKEN_COOKIE_NAME = "__Host-hcca_access_token"
+            self.REFRESH_TOKEN_COOKIE_NAME = "__Host-hcca_refresh_token"
+            self.SESSION_COOKIE_NAME = "__Host-hcca_oauth_session"
         if "*" in self.ALLOWED_ORIGINS:
             raise ValueError("ALLOWED_ORIGINS 不可包含 '*'；請明確列出允許來源")
         if is_prod and "*" in self.ALLOWED_HOSTS:

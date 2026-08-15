@@ -86,6 +86,61 @@
           "refId": "C"
         }
       ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Refresh rotation outcomes",
+      "gridPos": {"h": 9, "w": 8, "x": 0, "y": 24},
+      "targets": [{
+        "expr": "sum by (status) (rate(hcca_auth_refresh_total[5m]))",
+        "legendFormat": "{{status}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "PgBouncer waiting clients and max wait",
+      "gridPos": {"h": 9, "w": 8, "x": 8, "y": 24},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [
+        {
+          "expr": "max(pgbouncer_pools_client_maxwait_seconds)",
+          "legendFormat": "max wait",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(pgbouncer_pools_client_waiting_connections)",
+          "legendFormat": "waiting clients",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "WebSocket realtime broker",
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 24},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "degraded", "color": "red"}, "1": {"text": "healthy", "color": "green"}}}]}},
+      "targets": [{
+        "expr": "min(hcca_websocket_broker_healthy)",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis client health and WebSocket reconnects",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 33},
+      "targets": [
+        {
+          "expr": "min by (domain) (hcca_redis_client_healthy)",
+          "legendFormat": "redis {{domain}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(hcca_websocket_reconnect_total[5m]))",
+          "legendFormat": "ws reconnects / s",
+          "refId": "B"
+        }
+      ]
     }
   ],
   "refresh": "30s",

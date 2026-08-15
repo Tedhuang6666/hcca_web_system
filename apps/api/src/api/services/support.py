@@ -43,6 +43,7 @@ from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import mfa as mfa_svc
+from api.services import user_session as user_session_svc
 from api.services.notification_pref import normalize_preferences
 from api.services.permission import get_user_permission_codes
 
@@ -610,7 +611,10 @@ async def revoke_sessions(
     reason: str,
     request: Any | None = None,
 ) -> dict:
-    revoked_count = await revoke_user(str(user.id))
+    legacy_revoked_count = await revoke_user(str(user.id))
+    revoked_count = legacy_revoked_count + await user_session_svc.revoke_all(
+        db, user.id, reason="support_revoke_all"
+    )
     await record_support_audit(
         db,
         actor=actor,
@@ -917,6 +921,7 @@ async def execute_approval(
         await db.flush()
         after = {"position_id": str(position.id), "position_name": position.name}
         await cache_invalidate_user_permissions(str(target.id))
+        await user_session_svc.revoke_all(db, target.id, reason="permission_changed")
     elif approval.action == "user.profile.restore":
         before = {key: getattr(target, key) for key in approval.payload}
         for key, value in approval.payload.items():

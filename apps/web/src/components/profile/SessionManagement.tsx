@@ -14,6 +14,21 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+function authMethodLabel(value: string): string {
+  const labels: Record<string, string> = {
+    oauth: "OAuth 登入",
+    google: "Google 登入",
+    google_one_tap: "Google One Tap",
+    discord: "Discord 登入",
+    discord_open: "Discord 開啟",
+    line_open: "LINE 開啟",
+    passkey: "Passkey",
+    totp: "驗證器 MFA",
+    legacy_refresh: "舊版工作階段轉換",
+  };
+  return labels[value] ?? value;
+}
+
 export default function SessionManagement() {
   const [sessions, setSessions] = useState<UserSessionRead[]>([]);
   const [events, setEvents] = useState<SecurityEventRead[]>([]);
@@ -83,7 +98,7 @@ export default function SessionManagement() {
               登入裝置與工作階段
             </h2>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              檢視仍有效的登入，發現陌生裝置時可立即撤銷。
+              檢視目前登入與最近 30 天的撤銷紀錄；發現陌生裝置時可立即撤銷。
             </p>
           </div>
           <div className="flex gap-2">
@@ -104,9 +119,9 @@ export default function SessionManagement() {
             <button type="button" className="btn btn-ghost mt-2 text-xs" onClick={() => void load()}>重新載入</button>
           </div>
         ) : sessions.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>目前沒有可顯示的有效工作階段。</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>目前沒有可顯示的登入工作階段。</p>
         ) : (
-          <ul className="divide-y" style={{ borderColor: "var(--border)" }} aria-label="有效登入工作階段">
+          <ul className="divide-y" style={{ borderColor: "var(--border)" }} aria-label="登入工作階段">
             {sessions.map((session) => (
               <li key={session.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -117,14 +132,27 @@ export default function SessionManagement() {
                         目前裝置
                       </span>
                     )}
+                    {session.is_revoked && (
+                      <span
+                        className="ml-2 rounded px-1.5 py-0.5 text-[10px]"
+                        style={{ background: "var(--danger-dim)", color: "var(--danger)" }}
+                      >
+                        已撤銷
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    {session.ip_address ?? "未知 IP"} · 最近活動 {formatDate(session.last_seen_at)}
+                    {authMethodLabel(session.auth_method)} · {session.ip_address ?? "未知 IP"} · 最近活動 {formatDate(session.last_seen_at)}
                   </p>
                 </div>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  建立於 {formatDate(session.created_at)}
-                </p>
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p>最近輪替 {formatDate(session.rotated_at)}</p>
+                  {session.is_revoked && session.revoked_at ? (
+                    <p>撤銷於 {formatDate(session.revoked_at)}</p>
+                  ) : (
+                    <p>有效至 {formatDate(session.expires_at)}</p>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

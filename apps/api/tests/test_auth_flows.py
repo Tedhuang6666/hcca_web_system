@@ -47,13 +47,13 @@ async def test_refresh_with_valid_cookie_token_rotates_and_sets_new_cookies(
     assert response.cookies[settings.REFRESH_TOKEN_COOKIE_NAME] != old_refresh
 
 
-async def test_refresh_with_body_token_also_works(client: AsyncClient, member_user: User) -> None:
-    """前端也可能改用 request body 帶 refresh_token（無 cookie 情境）。"""
+async def test_refresh_rejects_request_body_token(client: AsyncClient, member_user: User) -> None:
+    """一般使用者 refresh 僅接受 HttpOnly cookie，不能由 body 帶入。"""
     old_refresh = create_refresh_token(str(member_user.id))
 
     response = await client.post("/auth/refresh", json={"refresh_token": old_refresh})
 
-    assert response.status_code == 200
+    assert response.status_code == 401
 
 
 async def test_refresh_without_any_token_returns_401(client: AsyncClient) -> None:
@@ -90,8 +90,16 @@ async def test_refresh_reused_old_token_returns_401_after_rotation(
     first = await client.post("/auth/refresh")
     assert first.status_code == 200
 
-    # 用同一支舊 token 重放（模擬攻擊者截獲舊 token）
-    replay = await client.post("/auth/refresh", json={"refresh_token": old_refresh})
+    # 用同一支舊 cookie token 重放（模擬攻擊者截獲 cookie）
+    csrf_token = client.cookies.get("csrf_token")
+    replay = await client.post(
+        "/auth/refresh",
+        headers={
+            "Cookie": (
+                f"{settings.REFRESH_TOKEN_COOKIE_NAME}={old_refresh}; csrf_token={csrf_token}"
+            )
+        },
+    )
     assert replay.status_code == 401
 
 
@@ -100,8 +108,9 @@ async def test_refresh_with_access_token_type_returns_401(
 ) -> None:
     """type=access 的 token 不該被 /auth/refresh 接受（型別檢查）。"""
     access = create_access_token(str(member_user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, access)
 
-    response = await client.post("/auth/refresh", json={"refresh_token": access})
+    response = await client.post("/auth/refresh")
 
     assert response.status_code == 401
 
@@ -111,8 +120,9 @@ async def test_refresh_for_inactive_user_returns_401(
 ) -> None:
     user = await make_user(is_active=False)
     refresh = create_refresh_token(str(user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, refresh)
 
-    response = await client.post("/auth/refresh", json={"refresh_token": refresh})
+    response = await client.post("/auth/refresh")
 
     assert response.status_code == 401
 
@@ -130,9 +140,10 @@ async def test_refresh_for_blocked_user_returns_403(client: AsyncClient, member_
         ]
     )
     refresh = create_refresh_token(str(member_user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, refresh)
 
     try:
-        response = await client.post("/auth/refresh", json={"refresh_token": refresh})
+        response = await client.post("/auth/refresh")
         assert response.status_code == 403
         assert response.json()["detail"]["blocked"] is True
     finally:

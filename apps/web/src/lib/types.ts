@@ -701,7 +701,13 @@ export interface UserSessionRead {
   ip_address: string | null
   created_at: string
   last_seen_at: string
+  auth_method: string
+  rotated_at: string
   expires_at: string
+  absolute_expires_at: string
+  revoked_at: string | null
+  revoked_reason: string | null
+  is_revoked: boolean
   is_current: boolean
 }
 

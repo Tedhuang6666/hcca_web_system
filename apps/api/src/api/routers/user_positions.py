@@ -20,6 +20,7 @@ from api.schemas.person import PersonAffiliationUpdate
 from api.services import audit as audit_svc
 from api.services import org as org_svc
 from api.services import person as person_svc
+from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
 from api.services.permission import get_user_permission_codes
 
@@ -105,6 +106,7 @@ async def create_user_position(
         summary="新增使用者任期記錄",
     )
     await cache_invalidate(f"perm:{up.user_id}")
+    await user_session_svc.revoke_all(db, up.user_id, reason="permission_changed")
     await enqueue_role_sync(db, up.user_id)
     ups = await org_svc.get_active_positions_by_date(db, up.user_id)
     matched = next((x for x in ups if x.id == up.id), None)
@@ -163,6 +165,7 @@ async def update_user_position(
         summary="更新使用者任期",
     )
     await cache_invalidate(f"perm:{up.user_id}")
+    await user_session_svc.revoke_all(db, up.user_id, reason="permission_changed")
     await enqueue_role_sync(db, up.user_id)
     return up
 
@@ -199,6 +202,7 @@ async def delete_user_position(
     )
     await cache_invalidate(f"perm:{up.user_id}")
     user_id = up.user_id
+    await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     affiliation = await db.scalar(
         select(PersonAffiliation).where(PersonAffiliation.synced_user_position_id == up.id)
     )
