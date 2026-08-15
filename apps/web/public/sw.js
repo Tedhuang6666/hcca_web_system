@@ -1,7 +1,16 @@
 const STATIC_CACHE = "hcca-static-v4";
 const PUBLIC_PAGE_CACHE = "hcca-public-pages-v1";
+const PRIVATE_API_CACHE = "hcca-private-api-v1";
+const PRIVATE_API_META_CACHE = "hcca-private-api-meta-v1";
 const CACHE_PREFIX = "hcca-";
+const PRIVATE_API_MAX_AGE_MS = 30_000;
 const PRECACHE_URLS = ["/offline.html", "/manifest.webmanifest"];
+const PRIVATE_API_PATHS = new Set([
+  "/api/dashboard/composite",
+  "/api/tasks",
+  "/api/announcements",
+]);
+const clientUserKeys = new Map();
 
 // These are the only HTML routes that may enter the Service Worker cache. The
 // request must also be an unauthenticated, full-page navigation below.
@@ -97,12 +106,39 @@ async function cacheStaticAsset(request, response) {
 }
 
 async function clearPrivateCaches() {
+  clientUserKeys.clear();
   const keys = await caches.keys();
   await Promise.all(
     keys
       .filter((key) => key.startsWith(CACHE_PREFIX) && ![STATIC_CACHE, PUBLIC_PAGE_CACHE].includes(key))
       .map((key) => caches.delete(key)),
   );
+}
+
+function privateApiCacheKey(request, userId) {
+  const headers = new Headers(request.headers);
+  headers.set("X-HCCA-Cache-User", userId);
+  return new Request(request, { headers });
+}
+
+async function networkFirstPrivateApi(request, userId) {
+  const cache = await caches.open(PRIVATE_API_CACHE);
+  const metadata = await caches.open(PRIVATE_API_META_CACHE);
+  const cacheKey = privateApiCacheKey(request, userId);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(cacheKey, response.clone());
+      await metadata.put(cacheKey, new Response(String(Date.now())));
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(cacheKey);
+    const timestamp = await metadata.match(cacheKey);
+    const cachedAt = Number(timestamp ? await timestamp.text() : 0);
+    if (cached && cachedAt && Date.now() - cachedAt <= PRIVATE_API_MAX_AGE_MS) return cached;
+    throw error;
+  }
 }
 
 self.addEventListener("install", (event) => {
@@ -126,6 +162,9 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "SET_CACHE_USER" && event.source?.id && event.data.userId) {
+    clientUserKeys.set(event.source.id, String(event.data.userId));
+  }
   if (event.data?.type === "CLEAR_PRIVATE_CACHES") {
     event.waitUntil(clearPrivateCaches());
   }
@@ -137,6 +176,17 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  if (PRIVATE_API_PATHS.has(url.pathname)) {
+    const userId = clientUserKeys.get(event.clientId);
+    const requestUserId = request.headers.get("X-HCCA-Cache-User");
+    if (userId && requestUserId === userId) {
+      event.respondWith(networkFirstPrivateApi(request, userId));
+    } else {
+      event.respondWith(fetch(request));
+    }
+    return;
+  }
 
   if (isStaticNextAsset(url)) {
     event.respondWith(

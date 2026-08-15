@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate_dashboard
 from api.models.discord_account import DiscordAccountLink
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.work_item import WorkItemCreate, WorkItemUpdate
@@ -23,6 +24,7 @@ async def create_work_item(
     await db.flush()
     await _emit_assignment_notice(db, item)
     await _push_to_google_tasks(db, item)
+    await cache_invalidate_dashboard(item.assigned_to_id and str(item.assigned_to_id))
     return item
 
 
@@ -82,6 +84,7 @@ async def update_work_item(db: AsyncSession, *, item: WorkItem, data: WorkItemUp
     if "assigned_to_id" in payload and item.status == WorkItemStatus.OPEN:
         await _emit_assignment_notice(db, item)
     await _push_to_google_tasks(db, item)
+    await cache_invalidate_dashboard()
     return item
 
 
@@ -90,6 +93,7 @@ async def complete_work_item(db: AsyncSession, *, item: WorkItem) -> WorkItem:
     item.completed_at = datetime.now(UTC)
     await db.flush()
     await _push_to_google_tasks(db, item)
+    await cache_invalidate_dashboard(item.assigned_to_id and str(item.assigned_to_id))
     return item
 
 

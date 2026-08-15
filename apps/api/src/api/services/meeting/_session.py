@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.cache import cache_invalidate_dashboard
 from api.models.email_message import EmailMessage
 from api.models.meeting import (
     Meeting,
@@ -149,6 +150,7 @@ async def create_meeting(
     await session.flush()
     await seed_voter_roster(session, meeting)
     await _sync_calendar_event(session, meeting, actor_id=created_by)
+    await cache_invalidate_dashboard()
     return meeting
 
 
@@ -162,6 +164,7 @@ async def update_meeting(
     apply_updates(meeting, data)
     await session.flush()
     await _sync_calendar_event(session, meeting, actor_id=actor_id or meeting.created_by)
+    await cache_invalidate_dashboard()
     return meeting
 
 
@@ -194,6 +197,7 @@ async def transition_meeting(
         meeting.ends_at = datetime.now(UTC)
     await session.flush()
     await _sync_calendar_event(session, meeting, actor_id=actor_id or meeting.created_by)
+    await cache_invalidate_dashboard()
     return meeting
 
 
@@ -461,4 +465,5 @@ async def confirm_meeting(
     except Exception:
         logger.warning("create meeting notice email draft failed", exc_info=True)
 
+    await cache_invalidate_dashboard()
     return meeting

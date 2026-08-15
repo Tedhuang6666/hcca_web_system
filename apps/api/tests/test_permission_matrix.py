@@ -43,6 +43,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/system/client-errors", "POST"),
     # 匿名 Web Vitals 回報使用 sendBeacon，無法附加登入 session 或 CSRF header。
     ("/analytics/client-metrics", "POST"),
+    # 匿名 React Profiler 回報同樣需支援未登入頁面，且只接受受限數值 schema。
+    ("/analytics/component-metrics", "POST"),
     # 支援平台驗證連結；用於未登入的客服工作階段驗證。
     ("/support/verify-email", "GET"),
     # 模組健康探測（每個 router 一條 __module_health__ 端點）

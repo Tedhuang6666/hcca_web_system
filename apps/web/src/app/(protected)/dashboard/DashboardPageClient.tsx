@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -13,7 +14,6 @@ import {
   governanceApi,
   tasksApi,
   type DashboardResponse,
-  type DashboardWidget,
   type TaskInboxResponse,
   type TaskItem,
   type TaskModule,
@@ -26,28 +26,16 @@ import OnboardingHint from "@/components/ui/OnboardingHint";
 import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation";
 import { riskColor, sortMattersByInsight } from "@/lib/governanceInsights";
 
-type IconProps = { size: number; "aria-hidden": boolean };
-function FallbackWidgetIcon(p: IconProps) { return <FileText {...p} />; }
+const DashboardWidgets = dynamic(() => import("./DashboardWidgets"), { ssr: false });
 
-const WIDGET_ICONS: Record<string, React.ComponentType<IconProps>> = {
-  doc_draft: (p) => <FileText {...p} />,
-  doc_pending_my_approval: (p) => <ListChecks {...p} />,
-  meeting_upcoming: (p) => <Landmark {...p} />,
-  regulation_review: (p) => <Scale {...p} />,
-  regulation_publish: (p) => <Scale {...p} />,
-  announcements_recent: (p) => <Megaphone {...p} />,
-  petition_assigned: (p) => <MessageSquare {...p} />,
-  open_surveys: (p) => <CheckSquare {...p} />,
-  today_meal: (p) => <FileText {...p} />,
-  class_order_collecting: (p) => <ListChecks {...p} />,
-};
+type IconProps = { size?: number; "aria-hidden"?: boolean };
+
+function FallbackWidgetIcon(p: IconProps) {
+  return <FileText {...p} />;
+}
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string }> = {
-  info: {
-    color: "var(--primary)",
-    bg: "var(--primary-dim)",
-    border: "var(--info-border)",
-  },
+  info: { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)" },
   warning: {
     color: "var(--warning)",
     bg: "var(--warning-dim)",
@@ -116,141 +104,13 @@ function formatTaskDue(s?: string | null) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-function WidgetCard({ w, index }: { w: DashboardWidget; index: number }) {
-  const Icon = WIDGET_ICONS[w.key] ?? FallbackWidgetIcon;
-  const sev = SEVERITY_STYLES[w.severity] ?? SEVERITY_STYLES.info;
-
-  return (
-    <section
-      aria-labelledby={`widget-${w.key}`}
-      className="dashboard-widget card overflow-hidden flex flex-col"
-      style={{
-        animationDelay: `${Math.min(index * 55, 330)}ms`,
-      }}>
-      <header className="px-5 py-4 flex items-center justify-between gap-3"
-        style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}
-            aria-hidden="true">
-            <Icon size={16} aria-hidden={true} />
-          </div>
-          <div className="min-w-0">
-            <h2 id={`widget-${w.key}`} className="text-sm font-semibold truncate"
-              style={{ color: "var(--text-primary)" }}>
-              {w.title}
-            </h2>
-            {w.summary && (
-              <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
-                {w.summary}
-              </p>
-            )}
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span
-                className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
-                優先 {w.priority_score}
-              </span>
-              {w.priority_reasons.slice(0, 1).map((reason) => (
-                <span
-                  key={reason}
-                  className="rounded px-1.5 py-0.5 text-[10px]"
-                  style={{ color: "var(--text-secondary)", background: "var(--bg-hover)" }}>
-                  {reason}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-        {w.count !== null && w.count !== undefined && (
-          <span className="text-2xl font-bold leading-none flex-shrink-0"
-            style={{ color: sev.color }}>
-            {w.count > 99 ? "99+" : w.count}
-          </span>
-        )}
-      </header>
-
-      {w.items.length > 0 && (
-        <ul className="flex-1">
-          {w.items.map((it, idx) => (
-            <li key={`${w.key}-${idx}`}
-              style={idx < w.items.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-              {it.href ? (
-                <Link
-                  href={it.href}
-                  className="dashboard-widget-row flex items-center gap-3 px-5 py-3"
-                  style={{ textDecoration: "none" }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
-                      {it.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {it.badge && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                          style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
-                          {it.badge}
-                        </span>
-                      )}
-                      {it.subtitle && (
-                        <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
-                          {it.subtitle}
-                        </span>
-                      )}
-                      {it.timestamp && (
-                        <span className="text-xs flex-shrink-0 ml-auto"
-                          style={{ color: "var(--text-disabled)" }}>
-                          {formatDate(it.timestamp)}
-                        </span>
-                      )}
-                    </div>
-                    {it.recommended_action && (
-                      <p className="mt-1 truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
-                        {it.recommended_action}
-                      </p>
-                    )}
-                  </div>
-                  <ChevronRight size={14} aria-hidden={true}
-                    style={{ color: "var(--text-disabled)" }} />
-                </Link>
-              ) : (
-                <div className="flex items-center gap-3 px-5 py-3">
-                  <p className="text-sm flex-1 truncate" style={{ color: "var(--text-primary)" }}>
-                    {it.title}
-                  </p>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {w.href && (
-        <Link
-          href={w.href}
-          className="dashboard-widget-footer px-5 py-2.5 text-xs font-medium flex items-center justify-end gap-1"
-          style={{
-            color: "var(--primary-text)",
-            borderTop: "1px solid var(--border)",
-            textDecoration: "none",
-          }}>
-          查看全部 <ChevronRight size={12} aria-hidden={true} />
-        </Link>
-      )}
-    </section>
-  );
-}
-
 function SkeletonCard() {
   return (
     <div
       className="rounded-lg p-5 animate-pulse"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-      }}
-      aria-hidden="true">
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+      aria-hidden="true"
+    >
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-lg" style={{ background: "var(--bg-hover)" }} />
         <div className="flex-1">
@@ -268,7 +128,10 @@ function SkeletonCard() {
 
 export type DashboardPageInitialData = {
   userName: string;
+  dashboard: DashboardResponse | null;
   tasks: TaskInboxResponse | null;
+  matters: MatterListItem[] | null;
+  announcements: AnnouncementListItem[] | null;
 };
 
 export default function DashboardPageClient({
@@ -282,25 +145,26 @@ export default function DashboardPageClient({
   const cachedAnnouncements = useRef(
     cacheGet<AnnouncementListItem[]>("dashboard/announcements"),
   ).current;
-  const hasServerTasks = useRef(Boolean(initialData?.tasks));
   const [userName, setUserName] = useState(initialData?.userName ?? "");
   const [greeting, setGreeting] = useState("歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(
-    () => cachedDashboard ?? null,
+    () => initialData?.dashboard ?? cachedDashboard ?? null,
   );
   const [tasks, setTasks] = useState<TaskInboxResponse | null>(
     () => initialData?.tasks ?? cachedTasks ?? null,
   );
   const [matters, setMatters] = useState<MatterListItem[]>(
-    () => cachedMatters ?? [],
+    () => initialData?.matters ?? cachedMatters ?? [],
   );
   const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>(
-    () => cachedAnnouncements ?? [],
+    () => initialData?.announcements ?? cachedAnnouncements ?? [],
   );
   const [priorityLoading, setPriorityLoading] = useState(
     !initialData?.tasks && !cachedTasks,
   );
-  const [secondaryLoading, setSecondaryLoading] = useState(!cachedDashboard);
+  const [secondaryLoading, setSecondaryLoading] = useState(
+    !initialData?.dashboard && !cachedDashboard,
+  );
   const { can, canAny, isAdmin, permissions } = usePermissions();
   const hasTaskAccess = isAdmin
     || permissions.has("admin:all")
@@ -333,35 +197,54 @@ export default function DashboardPageClient({
       setSecondaryLoading(false);
       return;
     }
-    const refreshTasks = !hasServerTasks.current;
-    if (refreshTasks && !cachedTasks) setPriorityLoading(true);
-    if (!cachedDashboard) setSecondaryLoading(true);
+    const refreshDashboard = !initialData?.dashboard && !cachedDashboard;
+    const refreshTasks = !initialData?.tasks && !cachedTasks;
+    const refreshMatters = canViewGovernanceWork && initialData?.matters == null && !cachedMatters;
+    const refreshAnnouncements = initialData?.announcements == null && !cachedAnnouncements;
+    if (refreshTasks) setPriorityLoading(true);
+    if (refreshDashboard || refreshMatters || refreshAnnouncements) setSecondaryLoading(true);
 
-    Promise.allSettled([
-      dashboardApi.get(),
-      refreshTasks ? tasksApi.list() : Promise.resolve(null),
-      canViewGovernanceWork
-        ? governanceApi.listMatters({ status: "active", limit: 6 })
-        : Promise.resolve([]),
-      announcementsApi.list({ limit: 3 }),
-    ])
-      .then(([dashboardRes, tasksRes, mattersRes, announcementsRes]) => {
-        if (dashboardRes.status === "fulfilled") {
-          setData(dashboardRes.value);
-          cacheSet("dashboard/data", dashboardRes.value);
-        } else {
+    const compositePromise = refreshDashboard
+      ? dashboardApi.composite({ includeMatters: canViewGovernanceWork })
+      : null;
+    const tasksPromise = !refreshDashboard && refreshTasks ? tasksApi.list() : null;
+    const mattersPromise = !refreshDashboard && refreshMatters
+      ? governanceApi.listMatters({ status: "active", limit: 6 })
+      : null;
+    const announcementsPromise = !refreshDashboard && refreshAnnouncements
+      ? announcementsApi.list({ limit: 3 })
+      : null;
+
+    Promise.allSettled([compositePromise, tasksPromise, mattersPromise, announcementsPromise])
+      .then(([compositeRes, tasksRes, mattersRes, announcementsRes]) => {
+        if (compositeRes.status === "fulfilled" && compositeRes.value) {
+          setData(compositeRes.value.dashboard);
+          cacheSet("dashboard/data", compositeRes.value.dashboard);
+          if (compositeRes.value.tasks) {
+            setTasks(compositeRes.value.tasks);
+            cacheSet("dashboard/tasks", compositeRes.value.tasks);
+          }
+          if (compositeRes.value.matters) {
+            setMatters(compositeRes.value.matters);
+            cacheSet("dashboard/matters", compositeRes.value.matters);
+          }
+          if (compositeRes.value.announcements) {
+            setAnnouncements(compositeRes.value.announcements);
+            cacheSet("dashboard/announcements", compositeRes.value.announcements);
+          }
+        } else if (refreshDashboard && compositeRes.status === "rejected") {
           toast.error("無法載入儀表板");
-          console.error(dashboardRes.reason);
+          console.error(compositeRes.reason);
         }
         if (tasksRes.status === "fulfilled" && tasksRes.value) {
           setTasks(tasksRes.value);
           cacheSet("dashboard/tasks", tasksRes.value);
         }
-        if (mattersRes.status === "fulfilled") {
+        if (mattersRes.status === "fulfilled" && mattersRes.value) {
           setMatters(mattersRes.value);
           cacheSet("dashboard/matters", mattersRes.value);
         }
-        if (announcementsRes.status === "fulfilled") {
+        if (announcementsRes.status === "fulfilled" && announcementsRes.value) {
           setAnnouncements(announcementsRes.value);
           cacheSet("dashboard/announcements", announcementsRes.value);
         }
@@ -370,7 +253,7 @@ export default function DashboardPageClient({
         if (refreshTasks) setPriorityLoading(false);
         setSecondaryLoading(false);
       });
-  }, [canViewGovernanceWork, cachedDashboard, cachedTasks]);
+  }, [canViewGovernanceWork, cachedAnnouncements, cachedDashboard, cachedMatters, cachedTasks, initialData]);
 
   const widgets = data?.widgets ?? [];
   const layoutHint = data?.layout_hint ?? "student";
@@ -648,9 +531,7 @@ export default function DashboardPageClient({
                 {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
             ) : hasAny ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {widgets.map((w, index) => <WidgetCard key={w.key} w={w} index={index} />)}
-              </div>
+              <DashboardWidgets widgets={widgets} />
             ) : <EmptyState />}
           </div>
         </details>

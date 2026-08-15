@@ -7,6 +7,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.schemas.announcement import AnnouncementListItem
+from api.schemas.governance import MatterListItem
+from api.schemas.task import TaskInboxResponse
+
 WidgetKey = Literal[
     "doc_draft",
     "doc_pending_my_approval",
@@ -64,3 +68,14 @@ class DashboardResponse(BaseModel):
 
     widgets: list[DashboardWidget]
     layout_hint: LayoutHint
+
+
+class DashboardCompositeResponse(BaseModel):
+    """Dashboard 首屏所需資料的單次聚合回應。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    dashboard: DashboardResponse
+    tasks: TaskInboxResponse | None = None
+    matters: list[MatterListItem] | None = None
+    announcements: list[AnnouncementListItem] | None = None

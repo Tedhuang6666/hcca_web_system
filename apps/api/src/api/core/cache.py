@@ -75,9 +75,30 @@ async def cache_invalidate_org(org_id: str) -> None:
 async def cache_invalidate_user_permissions(user_id: str) -> None:
     """清除使用者權限快取"""
     await cache_invalidate(f"perm:{user_id}*")
+    await cache_invalidate_dashboard(user_id)
 
 
 async def cache_invalidate_doc_list(org_id: str | None = None) -> None:
     """清除公文列表快取；指定 org_id 只清該組織的，否則清全部。"""
     pattern = f"doc:list:{org_id}:*" if org_id else "doc:list:*"
     await cache_invalidate(pattern)
+
+
+async def cache_invalidate_dashboard(user_id: str | None = None) -> None:
+    """清除 dashboard composite 使用的所有使用者範圍快取。"""
+    if user_id:
+        patterns = (
+            f"dashboard:{user_id}*",
+            f"task_inbox:{user_id}",
+            f"dashboard:matters:{user_id}",
+            f"dashboard:announcements:{user_id}",
+        )
+    else:
+        patterns = (
+            "dashboard:*",
+            "task_inbox:*",
+            "dashboard:matters:*",
+            "dashboard:announcements:*",
+        )
+    for pattern in patterns:
+        await cache_invalidate(pattern)

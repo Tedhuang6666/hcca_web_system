@@ -39,6 +39,7 @@ from api.schemas.regulation import (
     RegulationTreeNodeOut,
     RegulationUpdate,
 )
+from api.services.dashboard import invalidate_dashboard_cache
 from api.services.regulation_import import (
     ImportedRegulationDraft,
     parse_history_date_info,
@@ -438,6 +439,7 @@ async def create_regulation(
     logger.info("法規建立 id=%s title=%s", reg.id, reg.title)
     # 重新查詢以載入所有關聯（避免 async 環境下的 MissingGreenlet）
     loaded = await get_regulation(session, reg.id)
+    await invalidate_dashboard_cache()
     return loaded or reg
 
 
@@ -738,6 +740,7 @@ async def publish_imported_regulation(
 
     await session.flush()
     loaded = await get_regulation(session, reg.id)
+    await invalidate_dashboard_cache()
     return loaded or reg
 
 
@@ -1001,6 +1004,7 @@ async def publish_regulation(
     await session.flush()
     logger.info("辦法直接制定 id=%s title=%s", reg.id, reg.title)
     loaded = await get_regulation(session, reg.id)
+    await invalidate_dashboard_cache()
     return loaded or reg
 
 
@@ -1019,6 +1023,7 @@ async def archive_regulation(
     reg.workflow_status = RegulationWorkflowStatus.ARCHIVED
     await session.flush()
     logger.info("法規停用 id=%s", reg.id)
+    await invalidate_dashboard_cache()
     return reg
 
 
@@ -1045,6 +1050,7 @@ async def repeal_regulation(
 
     await session.flush()
     logger.info("法規廢止 id=%s reason=%s", reg.id, reason)
+    await invalidate_dashboard_cache()
     return reg
 
 
@@ -1061,6 +1067,7 @@ async def delete_regulation(
         raise ValueError(msg)
     await session.delete(reg)
     await session.flush()
+    await invalidate_dashboard_cache()
 
 
 # ── 條文管理 ─────────────────────────────────────────────────────────────────
@@ -1386,6 +1393,7 @@ async def transition_workflow(
     reg.workflow_note = note
     await session.flush()
     logger.info("法規流程轉移 id=%s %s→%s", reg.id, log.from_status, to_status)
+    await invalidate_dashboard_cache()
     return reg
 
 
