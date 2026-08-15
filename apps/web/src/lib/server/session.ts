@@ -3,6 +3,8 @@ import { cache } from "react";
 
 import { serverApiUrl } from "@/lib/config";
 
+const SERVER_SESSION_TIMEOUT_MS = 2_000;
+
 export type ServerSessionUser = {
   id: string;
   display_name: string;
@@ -25,15 +27,20 @@ export const getServerSession = cache(async (): Promise<ServerSessionUser | null
   const cookieHeader = cookieStore.toString();
   if (!cookieHeader) return null;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SERVER_SESSION_TIMEOUT_MS);
   try {
     const response = await fetch(serverApiUrl("/auth/me"), {
       headers: { cookie: cookieHeader },
       cache: "no-store",
+      signal: controller.signal,
     });
     if (!response.ok) return null;
     return (await response.json()) as ServerSessionUser;
   } catch {
     // API 短暫不可用時保留頁面輸出，讓瀏覽器端 gate 顯示可恢復的錯誤狀態。
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 });
