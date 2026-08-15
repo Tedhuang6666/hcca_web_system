@@ -29,6 +29,16 @@ describe("route manifest", () => {
       requiresAuth: true,
       maintenanceExempt: true,
     });
+    expect(getRoutePolicy("/admin")).toMatchObject({
+      public: false,
+      requiresAuth: true,
+      maintenanceExempt: true,
+    });
+    expect(getRoutePolicy("/admin/modules")).toMatchObject({
+      public: false,
+      requiresAuth: true,
+      maintenanceExempt: true,
+    });
     expect(isIndexablePublicPath("/documents/new")).toBe(false);
     expect(isSitemapRoute("/documents/new")).toBe(false);
     expect(requiresAuthentication("/documents/new")).toBe(true);

@@ -91,6 +91,7 @@ const MAINTENANCE_EXEMPT_PATHS = new Set([
 ]);
 
 const MAINTENANCE_EXEMPT_PREFIXES = [
+  "/admin",
   "/admin/system",
   "/auth",
   "/blocked",
