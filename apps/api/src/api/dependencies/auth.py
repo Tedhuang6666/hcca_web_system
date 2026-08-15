@@ -41,6 +41,31 @@ def _token_from_request(
     return access_token_from_cookies(request.cookies)
 
 
+def _user_from_snapshot(payload: dict, user_id: uuid.UUID) -> User | None:
+    snapshot = payload.get("user")
+    if not isinstance(snapshot, dict):
+        return None
+    email = snapshot.get("email")
+    display_name = snapshot.get("display_name")
+    if not isinstance(email, str) or not isinstance(display_name, str):
+        return None
+    notification_preferences = snapshot.get("notification_preferences")
+    return User(
+        id=user_id,
+        email=email,
+        display_name=display_name,
+        avatar_url=snapshot.get("avatar_url") if isinstance(snapshot.get("avatar_url"), str) else None,
+        student_id=snapshot.get("student_id") if isinstance(snapshot.get("student_id"), str) else None,
+        show_email=bool(snapshot.get("show_email", True)),
+        is_active=bool(snapshot.get("is_active", True)),
+        is_verified=bool(snapshot.get("is_verified", False)),
+        is_superuser=bool(snapshot.get("is_superuser", False)),
+        notification_preferences=(notification_preferences if isinstance(notification_preferences, dict) else {}),
+        ui_theme=snapshot.get("ui_theme") if isinstance(snapshot.get("ui_theme"), str) else "auto",
+        ui_locale=snapshot.get("ui_locale") if isinstance(snapshot.get("ui_locale"), str) else "zh-TW",
+    )
+
+
 async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     if await is_blacklisted(token):
         return None
@@ -60,6 +85,15 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
         user_id = uuid.UUID(raw_user_id)
     except (TypeError, ValueError):
         return None
+
+    # JWT v2 在登入／refresh 時放入最小使用者快照。帳號停用、權限異動及全裝置
+    # 登出會撤銷 session，因此一般 access 驗證不必為了載入 User 再打一次 DB。
+    # impersonation 與 migration 期間的無快照舊 token 仍走原本的 DB 驗證流程。
+    if token_type == "access":
+        snapshot_user = _user_from_snapshot(payload, user_id)
+        if snapshot_user is not None:
+            return snapshot_user
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
@@ -135,15 +169,18 @@ async def get_current_user(
     if user is None:
         raise _CREDENTIALS_EXCEPTION
 
-    identity_emails = await db.scalars(
-        select(UserIdentity.email).where(
-            UserIdentity.user_id == user.id,
-            UserIdentity.email.is_not(None),
+    identity_emails = {user.email}
+    if not isinstance(payload.get("user"), dict):
+        rows = await db.scalars(
+            select(UserIdentity.email).where(
+                UserIdentity.user_id == user.id,
+                UserIdentity.email.is_not(None),
+            )
         )
-    )
+        identity_emails.update(email for email in rows.all() if email)
     block = await find_identity_block(
         user_id=str(user.id),
-        emails={user.email, *(email for email in identity_emails.all() if email)},
+        emails=identity_emails,
     )
     if block:
         raise HTTPException(
