@@ -327,6 +327,56 @@ async def test_component_metrics_accepts_profiler_payload(
     assert resp.json() == {"status": "accepted"}
 
 
+async def test_client_metric_batch_accepts_multiple_metrics(
+    member_user, authed_client_factory
+) -> None:
+    resp = await authed_client_factory(member_user).post(
+        "/analytics/client-metrics/batch",
+        json={
+            "items": [
+                {"metric": "fcp", "value": 1200, "path": "/login"},
+                {"metric": "api_latency", "value": 80, "path": "/login", "status": 200},
+            ]
+        },
+    )
+
+    assert resp.status_code == 202
+    assert resp.json() == {"status": "accepted", "accepted": 2}
+
+
+async def test_component_metric_batch_accepts_multiple_metrics(
+    member_user, authed_client_factory
+) -> None:
+    resp = await authed_client_factory(member_user).post(
+        "/analytics/component-metrics/batch",
+        json={
+            "items": [
+                {
+                    "component_name": "AnalyticsPage",
+                    "path": "/analytics",
+                    "render_count": 3,
+                    "total_render_time_ms": 24.0,
+                    "avg_render_time_ms": 8.0,
+                    "max_render_time_ms": 12.0,
+                    "last_render_time_ms": 7.0,
+                },
+                {
+                    "component_name": "Navigation",
+                    "path": "/analytics",
+                    "render_count": 1,
+                    "total_render_time_ms": 2.0,
+                    "avg_render_time_ms": 2.0,
+                    "max_render_time_ms": 2.0,
+                    "last_render_time_ms": 2.0,
+                },
+            ]
+        },
+    )
+
+    assert resp.status_code == 202
+    assert resp.json() == {"status": "accepted", "accepted": 2}
+
+
 async def test_product_analytics_returns_daily_users_and_page_metrics(
     db_session, member_user, authed_client_factory
 ) -> None:

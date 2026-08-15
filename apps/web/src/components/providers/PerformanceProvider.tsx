@@ -47,7 +47,7 @@ export default function PerformanceProvider({
     monitor.setEnabled(true);
     monitor.setSampleRate(profilerSampleRate);
 
-    const handleBeforeUnload = () => void monitor.flush();
+    const handleBeforeUnload = () => monitor.flush({ unload: true });
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [monitor, profilerSampleRate]);
