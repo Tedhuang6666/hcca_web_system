@@ -105,6 +105,24 @@ function SessionGate({
       }
     };
 
+    // 伺服器已在受保護 layout 驗證並傳入 session；首屏 hydration 不再重複
+    // 呼叫 /auth/me。仍在視窗重新取得焦點時驗證，確保長時間停留後可收斂狀態。
+    if (initialUser) {
+      setIsLoggedIn(true);
+      setRedirecting(false);
+      setAuthReady(true);
+      const revalidate = () => {
+        if (document.visibilityState === "visible") void verifySession();
+      };
+      window.addEventListener("focus", revalidate);
+      document.addEventListener("visibilitychange", revalidate);
+      return () => {
+        cancelled = true;
+        window.removeEventListener("focus", revalidate);
+        document.removeEventListener("visibilitychange", revalidate);
+      };
+    }
+
     void verifySession();
     const revalidate = () => {
       if (document.visibilityState === "visible") void verifySession();

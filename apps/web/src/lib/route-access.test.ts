@@ -6,10 +6,11 @@ import {
   isPublicRoute,
   isSitemapRoute,
   requiresAuthentication,
+  usesSriCsp,
 } from "./route-access";
 
 describe("route manifest", () => {
-  it("keeps login dynamic and outside indexing while allowing maintenance access", () => {
+  it("keeps login outside indexing with a nonce CSP shell", () => {
     expect(getRoutePolicy("/login")).toMatchObject({
       public: true,
       requiresAuth: false,
@@ -21,6 +22,13 @@ describe("route manifest", () => {
     });
     expect(isIndexablePublicPath("/login")).toBe(false);
     expect(isSitemapRoute("/login")).toBe(false);
+  });
+
+  it("uses SRI only for cacheable public content", () => {
+    expect(usesSriCsp("/announcements")).toBe(true);
+    expect(usesSriCsp("/login")).toBe(false);
+    expect(usesSriCsp("/meetings/join/token")).toBe(false);
+    expect(usesSriCsp("/admin")).toBe(false);
   });
 
   it("keeps protected and operational routes out of search", () => {

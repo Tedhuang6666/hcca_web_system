@@ -16,6 +16,13 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: webRoot,
   },
+  // 公開頁使用 SRI 取代 per-request nonce，才能同時維持嚴格 CSP 與 ISR。
+  // Next.js 目前僅在 Webpack production build 支援此功能；開發模式仍使用 Turbopack。
+  experimental: {
+    sri: {
+      algorithm: "sha384",
+    },
+  },
   // 圖片優化：自動轉 WebP/AVIF、長 CDN 快取（30 天）；
   // remotePatterns 允許後端 /uploads 路徑與 Cloudflare 隧道測試環境。
   images: {
