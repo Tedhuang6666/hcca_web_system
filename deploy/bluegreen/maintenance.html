@@ -151,7 +151,12 @@
         color: var(--muted);
         font-size: clamp(1rem, 1.8vw, 1.18rem);
         line-height: 1.9;
-        text-wrap: pretty;
+      }
+
+      @supports (text-wrap: pretty) {
+        .lead {
+          text-wrap: pretty;
+        }
       }
 
       .gold-rule {
