@@ -1,0 +1,61 @@
+/* Login-only styles stay out of the shared application stylesheet. */
+.login-aside {
+  position: relative;
+  isolation: isolate;
+}
+
+.login-aside::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(36rem 26rem at 12% 8%, rgba(201, 168, 76, 0.22), transparent 64%),
+    radial-gradient(30rem 24rem at 92% 90%, rgba(99, 140, 196, 0.18), transparent 66%);
+}
+
+.login-brand-stage {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.login-brand-stage > :first-child {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.login-brand-stage:hover > :first-child {
+  transform: scale(1.025);
+}
+
+.login-oauth {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-oauth::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -85%;
+  width: 55%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-20deg);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+}
+
+.login-oauth:hover::after {
+  animation: btn-sheen 760ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-brand-stage > :first-child {
+    transition: none;
+  }
+
+  .login-oauth:hover::after {
+    animation: none;
+  }
+}

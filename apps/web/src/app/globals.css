@@ -3447,7 +3447,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .animate-pulse-slow { animation: pulse-slow 2.5s ease-in-out infinite; }
 
 @keyframes slide-in-up {
-  from { opacity: 0; transform: translateY(8px); }
+  from { transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .animate-slide-in { animation: slide-in-up 0.24s ease-out both; }
@@ -4436,6 +4436,7 @@ details[open] > :not(summary) {
   .tab-panel-transition,
   .motion-enter,
   .motion-fade,
+  .animate-slide-in,
   .motion-stagger > *,
   .data-reveal,
   .loading-state,
@@ -4956,90 +4957,6 @@ details[open] > :not(summary) {
 }
 .card-hover:hover::before {
   opacity: 0.9;
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
-   登入頁動態
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/* 左側治理敘事面板：極光光暈 */
-.login-aside {
-  position: relative;
-  isolation: isolate;
-}
-.login-aside::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(36rem 26rem at 12% 8%, rgba(201, 168, 76, 0.22), transparent 64%),
-    radial-gradient(30rem 24rem at 92% 90%, rgba(99, 140, 196, 0.18), transparent 66%);
-  animation: public-aurora 20s ease-in-out infinite alternate;
-}
-
-/* 裝飾同心圓：緩慢呼吸 */
-.login-ring {
-  animation: login-ring-breathe 9s ease-in-out infinite;
-}
-.login-ring-2 {
-  animation: login-ring-breathe 9s ease-in-out 1.4s infinite;
-}
-.login-orb {
-  animation: login-orb-drift 14s ease-in-out infinite alternate;
-}
-
-@keyframes login-ring-breathe {
-  0%, 100% { transform: scale(1);    opacity: 0.85; }
-  50%      { transform: scale(1.06); opacity: 1; }
-}
-@keyframes login-orb-drift {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(-2.5rem, 1.5rem, 0) scale(1.12); }
-}
-
-/* 左側內容依序浮現 */
-.login-rise > * {
-  animation: public-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.login-rise > *:nth-child(1) { animation-delay: 80ms; }
-.login-rise > *:nth-child(2) { animation-delay: 200ms; }
-.login-rise > *:nth-child(3) { animation-delay: 320ms; }
-.login-rise > *:nth-child(4) { animation-delay: 440ms; }
-
-/* 金色短線流光 */
-.login-rule {
-  position: relative;
-  overflow: hidden;
-}
-.login-rule::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
-  background-size: 220% 100%;
-  animation: public-shimmer-x 3s linear infinite;
-}
-
-/* 登入表單按鈕：光掃（沿用 btn-sheen 的視覺，套在 group） */
-.login-oauth {
-  position: relative;
-  overflow: hidden;
-}
-.login-oauth::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -85%;
-  width: 55%;
-  height: 100%;
-  pointer-events: none;
-  transform: skewX(-20deg);
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-}
-.login-oauth:hover::after {
-  animation: btn-sheen 760ms ease;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
