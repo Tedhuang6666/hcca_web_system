@@ -10,7 +10,7 @@ from typing import Any, Literal
 import httpx
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import local_today
 from api.core.config import settings
@@ -232,10 +232,14 @@ async def _sql_fallback(
         for doc in docs
     )
 
-    reg_q = select(Regulation).where(
-        or_(
-            Regulation.title.ilike(pattern, escape="\\"),
-            Regulation.content.ilike(pattern, escape="\\"),
+    reg_q = (
+        select(Regulation)
+        .options(load_only(Regulation.id, Regulation.title, Regulation.content))
+        .where(
+            or_(
+                Regulation.title.ilike(pattern, escape="\\"),
+                Regulation.content.ilike(pattern, escape="\\"),
+            )
         )
     )
     if not is_superuser:
