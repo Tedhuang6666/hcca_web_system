@@ -17,6 +17,20 @@ import type { ModuleStatusPublic } from "./api/system";
 import { serverApiUrl } from "./config";
 
 export const PUBLIC_REVALIDATE_SECONDS = 60;
+const PUBLIC_FETCH_TIMEOUT_MS = 2_000;
+
+type PublicFetchInit = RequestInit & { next?: { revalidate: number } };
+
+async function fetchPublicApi(input: string, init: PublicFetchInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PUBLIC_FETCH_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function announcementFetchOptions(): RequestInit & { next?: { revalidate: number } } {
   // Public pages must not forward a visitor's session cookie into a cacheable
@@ -26,7 +40,7 @@ function announcementFetchOptions(): RequestInit & { next?: { revalidate: number
 
 export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
   try {
-    const res = await fetch(serverApiUrl("/site/public"), {
+    const res = await fetchPublicApi(serverApiUrl("/site/public"), {
       next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return null;
@@ -38,7 +52,7 @@ export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
 
 export async function fetchAnnouncements(limit = 100): Promise<AnnouncementListItem[]> {
   try {
-    const res = await fetch(serverApiUrl(`/announcements?limit=${limit}`), {
+    const res = await fetchPublicApi(serverApiUrl(`/announcements?limit=${limit}`), {
       ...announcementFetchOptions(),
     });
     if (!res.ok) return [];
@@ -56,7 +70,7 @@ export async function fetchPublicDocuments(
   if (params.offset !== undefined) search.set("offset", String(params.offset));
 
   try {
-    const res = await fetch(serverApiUrl(`/documents?${search.toString()}`), {
+    const res = await fetchPublicApi(serverApiUrl(`/documents?${search.toString()}`), {
       next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return null;
@@ -68,7 +82,7 @@ export async function fetchPublicDocuments(
 
 export async function fetchPublicRegulations(): Promise<RegulationListItem[]> {
   try {
-    const res = await fetch(serverApiUrl("/regulations"), {
+    const res = await fetchPublicApi(serverApiUrl("/regulations"), {
       next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
@@ -82,7 +96,7 @@ export async function fetchPublicSurveys(status?: string): Promise<SurveyListIte
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
 
   try {
-    const res = await fetch(serverApiUrl(`/surveys/public${query}`), {
+    const res = await fetchPublicApi(serverApiUrl(`/surveys/public${query}`), {
       next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
@@ -94,7 +108,7 @@ export async function fetchPublicSurveys(status?: string): Promise<SurveyListIte
 
 export async function fetchPublicSurvey(id: string): Promise<SurveyOut | null> {
   try {
-    const res = await fetch(
+    const res = await fetchPublicApi(
       serverApiUrl(`/surveys/public/${encodeURIComponent(id)}`),
       { next: { revalidate: PUBLIC_REVALIDATE_SECONDS } },
     );
@@ -113,7 +127,7 @@ export async function fetchPublicPartnerMapData(): Promise<{
 }> {
   const fetchJson = async <T>(path: string): Promise<T> => {
     try {
-      const res = await fetch(serverApiUrl(path), {
+      const res = await fetchPublicApi(serverApiUrl(path), {
         next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
       });
       if (!res.ok) return [] as T;
@@ -135,7 +149,7 @@ export async function fetchPublicPartnerMapData(): Promise<{
 
 export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut | null> {
   try {
-    const res = await fetch(serverApiUrl("/announcements/active-urgent"), {
+    const res = await fetchPublicApi(serverApiUrl("/announcements/active-urgent"), {
       ...announcementFetchOptions(),
     });
     if (!res.ok) return null;
@@ -147,7 +161,7 @@ export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut |
 
 export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]> {
   try {
-    const res = await fetch(serverApiUrl("/system/module-status"), {
+    const res = await fetchPublicApi(serverApiUrl("/system/module-status"), {
       next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
@@ -159,7 +173,7 @@ export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]>
 
 export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {
   try {
-    const res = await fetch(serverApiUrl("/site/officers?active_only=true"), {
+    const res = await fetchPublicApi(serverApiUrl("/site/officers?active_only=true"), {
       next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return [];
@@ -171,7 +185,7 @@ export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {
 
 export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut | null> {
   try {
-    const res = await fetch(serverApiUrl(`/site/pages/${encodeURIComponent(slug)}`), {
+    const res = await fetchPublicApi(serverApiUrl(`/site/pages/${encodeURIComponent(slug)}`), {
       next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
     });
     if (!res.ok) return null;
@@ -183,7 +197,7 @@ export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut |
 
 export async function fetchAnnouncement(id: string): Promise<import("./types").AnnouncementOut | null> {
   try {
-    const res = await fetch(serverApiUrl(`/announcements/${encodeURIComponent(id)}`), {
+    const res = await fetchPublicApi(serverApiUrl(`/announcements/${encodeURIComponent(id)}`), {
       ...announcementFetchOptions(),
     });
     if (!res.ok) return null;
