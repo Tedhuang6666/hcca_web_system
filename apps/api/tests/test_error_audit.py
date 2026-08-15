@@ -217,3 +217,51 @@ async def test_readiness_503_is_not_recorded_as_application_error(
 
     assert response.status_code == 503
     assert await isolated_error_audit.get_recent_errors() == []
+
+
+def test_module_maintenance_503_is_suppressed_but_other_503_is_retained() -> None:
+    assert error_audit.is_suppressed_error(
+        category="http", path="/elections/public", status_code=503
+    )
+    assert not error_audit.is_suppressed_error(
+        category="http", path="/auth/google/login", status_code=503
+    )
+
+
+async def test_recent_errors_filters_module_maintenance_503(
+    isolated_error_audit,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def legacy_lrange(*_args, **_kwargs) -> list[str]:
+        return [
+            json.dumps(
+                {
+                    "signature": "http:HTTPException:GET:/elections/public",
+                    "error_id": "module-maintenance-503",
+                    "category": "http",
+                    "exc_type": "HTTPException",
+                    "method": "GET",
+                    "path": "/elections/public",
+                    "status_code": 503,
+                    "occurred_at": 2,
+                }
+            ),
+            json.dumps(
+                {
+                    "signature": "http:HTTPException:GET:/auth/google/login",
+                    "error_id": "real-503",
+                    "category": "http",
+                    "exc_type": "HTTPException",
+                    "method": "GET",
+                    "path": "/auth/google/login",
+                    "status_code": 503,
+                    "occurred_at": 1,
+                }
+            ),
+        ]
+
+    monkeypatch.setattr(security.redis_client, "lrange", legacy_lrange)
+
+    items = await isolated_error_audit.get_recent_errors()
+
+    assert [item["error_id"] for item in items] == ["real-503"]
