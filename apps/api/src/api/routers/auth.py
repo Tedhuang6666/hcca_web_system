@@ -197,6 +197,19 @@ async def _access_token_claims(db: AsyncSession, user: User) -> dict:
     return {
         "is_admin": user.is_superuser or PermissionCode.ADMIN_ALL in codes,
         "permissions": sorted(codes),
+        "user": {
+            "email": user.email,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "student_id": user.student_id,
+            "show_email": user.show_email,
+            "is_active": user.is_active,
+            "is_verified": user.is_verified,
+            "is_superuser": user.is_superuser,
+            "notification_preferences": user.notification_preferences or {},
+            "ui_theme": user.ui_theme,
+            "ui_locale": user.ui_locale,
+        },
     }
 
 

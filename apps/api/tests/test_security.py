@@ -1,12 +1,15 @@
 """JWT 安全機制單元測試"""
 
 import asyncio
+import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from jwt.exceptions import InvalidTokenError
 
 from api.core import security
 from api.core.security import create_access_token, create_refresh_token, decode_token
+from api.dependencies import auth as auth_dependency
 
 
 def test_create_and_decode_access_token() -> None:
@@ -45,6 +48,35 @@ def test_access_token_has_extra_claims() -> None:
 
     assert payload["role"] == "admin"
     assert payload["sub"] == "user-789"
+
+
+async def test_v2_access_token_snapshot_does_not_query_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid.uuid4()
+    token = create_access_token(
+        str(user_id),
+        extra_claims={
+            "user": {
+                "email": "member@school.edu",
+                "display_name": "成員",
+                "is_active": True,
+                "is_verified": True,
+                "is_superuser": False,
+            }
+        },
+        session_id=str(uuid.uuid4()),
+    )
+    db = AsyncMock()
+    monkeypatch.setattr(auth_dependency, "is_blacklisted", AsyncMock(return_value=False))
+    monkeypatch.setattr(auth_dependency, "is_session_revoked", AsyncMock(return_value=False))
+
+    user = await auth_dependency._user_from_access_token(token, db)
+
+    assert user is not None
+    assert user.id == user_id
+    assert user.email == "member@school.edu"
+    db.execute.assert_not_awaited()
 
 
 async def test_register_active_token_does_not_wait_for_stalled_redis(
