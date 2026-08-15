@@ -21,6 +21,26 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
   "/system-info",
 ]);
 
+// 公開官網與登入流程使用自己的頁面版型；公開資料模組仍需要 AppShell，
+// 讓訪客可以透過側邊欄在法規、公文等公開區域間切換。
+const BARE_ROUTE_PATHS = [
+  "/",
+  "/about",
+  "/system-info",
+  "/links",
+  "/news",
+  "/officers",
+  "/pages",
+  "/login",
+  "/auth",
+  "/maintenance",
+  "/module-status",
+  "/profile/complete",
+  "/public",
+  "/live",
+  "/unsubscribe",
+];
+
 const INDEXABLE_EXACT_PATHS = new Set([
   "/",
   "/about",
@@ -148,7 +168,7 @@ export function requiresAuthentication(pathname: string): boolean {
 }
 
 export function isBareRoute(pathname: string): boolean {
-  return pathname === "/system-info" || isPublicRoute(pathname);
+  return BARE_ROUTE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 export function isIndexablePublicPath(pathname: string): boolean {

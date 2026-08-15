@@ -50,6 +50,15 @@ describe("route manifest", () => {
     expect(isSitemapRoute("/documents/new")).toBe(false);
     expect(requiresAuthentication("/documents/new")).toBe(true);
   });
+
+  it("keeps public document and regulation pages inside the app shell", () => {
+    expect(getRoutePolicy("/documents").shell).toBe("app");
+    expect(getRoutePolicy("/documents/public-id").shell).toBe("app");
+    expect(getRoutePolicy("/regulations").shell).toBe("app");
+    expect(getRoutePolicy("/regulations/public-id").shell).toBe("app");
+    expect(getRoutePolicy("/").shell).toBe("bare");
+    expect(getRoutePolicy("/about").shell).toBe("bare");
+  });
 });
 
 describe("partner map route access", () => {
