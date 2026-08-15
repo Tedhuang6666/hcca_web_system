@@ -1,5 +1,6 @@
 import PublicEnhancements from "@/components/site/PublicEnhancements";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
+import PerformanceProvider from "@/components/providers/PerformanceProvider";
 import { BRANDING } from "@/lib/branding";
 import { absoluteUrl, JsonLd } from "@/lib/seo";
 import "../design-system.css";
@@ -37,7 +38,9 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         }}
       />
       <PublicEnhancements />
-      <PublicModuleStatusProvider>{children}</PublicModuleStatusProvider>
+      <PerformanceProvider>
+        <PublicModuleStatusProvider>{children}</PublicModuleStatusProvider>
+      </PerformanceProvider>
     </>
   );
 }

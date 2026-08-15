@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import PerformanceProvider from "@/components/providers/PerformanceProvider";
 
 // Login consumes the per-request CSP nonce from proxy.ts; never emit it as a
 // build-time static page.
@@ -16,5 +17,5 @@ export const metadata: Metadata = {
 import "../login.css";
 
 export default function LoginLayout({ children }: { children: React.ReactNode }) {
-  return <div>{children}</div>;
+  return <PerformanceProvider><div>{children}</div></PerformanceProvider>;
 }
