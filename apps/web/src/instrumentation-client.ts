@@ -1,5 +1,23 @@
 import { getPublicSentryDsn } from "./lib/sentry-config";
 
+function installNonceStyleGuard(): void {
+  if (typeof document === "undefined") return;
+
+  const nonce = document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce;
+  if (!nonce) return;
+
+  const createElement = document.createElement.bind(document);
+  document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
+    const element = createElement(tagName, options);
+    if (tagName.toLowerCase() === "style") element.setAttribute("nonce", nonce);
+    return element;
+  }) as typeof document.createElement;
+}
+
+// Third-party clients such as Sonner inject a runtime <style>. Attach the
+// request nonce before async route chunks can evaluate, without weakening CSP.
+installNonceStyleGuard();
+
 const dsn = getPublicSentryDsn();
 type SentryClient = typeof import("@sentry/nextjs");
 type RouterTransitionArgs = Parameters<SentryClient["captureRouterTransitionStart"]>;
