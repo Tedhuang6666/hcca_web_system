@@ -10,7 +10,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, noload, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from api.models.announcement import (
@@ -172,8 +172,26 @@ async def list_announcements(
     scope: ViewerScope | None = None,
 ) -> list[Announcement]:
     """列出公告；傳入 scope 時依公告對象過濾可見範圍（None = 不過濾，管理端用）。"""
+    # 列表只需要摘要欄位；content 是可能很大的 Tiptap JSON，audience/media
+    # 也不會由 AnnouncementListItem 使用。避免列表端點把詳情資料一併載入。
     q = select(Announcement).options(
-        selectinload(Announcement.media), selectinload(Announcement.author)
+        load_only(
+            Announcement.id,
+            Announcement.title,
+            Announcement.is_urgent,
+            Announcement.is_published,
+            Announcement.published_at,
+            Announcement.org_id,
+            Announcement.activity_id,
+            Announcement.author_id,
+            Announcement.created_at,
+            Announcement.updated_at,
+            Announcement.audience_type,
+        ),
+        selectinload(Announcement.author).load_only(User.id, User.display_name),
+        noload(Announcement.media),
+        noload(Announcement.audience_orgs),
+        noload(Announcement.audience_users),
     )
     if published_only:
         q = q.where(Announcement.is_published == True)  # noqa: E712

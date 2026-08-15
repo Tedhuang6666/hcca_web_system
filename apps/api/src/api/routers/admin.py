@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from collections import defaultdict
 from datetime import date
@@ -19,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.core.cache import cache_invalidate_user_permissions
 from api.core.clock import local_today
@@ -52,7 +51,7 @@ from api.services.notification_pref import (
     set_digest_frequency,
     set_muted_modules,
 )
-from api.services.permission import get_user_permission_codes
+from api.services.permission import get_user_permission_codes, get_user_permission_codes_batch
 from api.services.user_registration import UserRegistrationError
 
 router = APIRouter(
@@ -329,7 +328,7 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
 
 
 async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserDetail]:
-    """批量組裝 UserDetail，避免 N+1：UserPosition/UserIdentity 各一次查詢，permission codes 並行。"""
+    """批量組裝 UserDetail，避免 N+1：UserPosition/UserIdentity/權限各一次查詢。"""
     if not users:
         return []
 
@@ -360,11 +359,12 @@ async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserD
         if email:
             emails_by_user[uid].add(email)
 
-    # 並行取 permission codes（大多命中 Redis 快取，剩餘也只是 SELECT）
-    perm_results = await asyncio.gather(*[get_user_permission_codes(db, u.id) for u in users])
+    # 一次查所有人的 permission codes，避免同一 AsyncSession 上並行 N+1 查詢。
+    permissions_by_user = await get_user_permission_codes_batch(db, user_ids)
 
     details: list[UserDetail] = []
-    for user, effective in zip(users, perm_results, strict=False):
+    for user in users:
+        effective = permissions_by_user.get(user.id, frozenset())
         user_ups = ups_by_user.get(user.id, [])
         positions = []
         for up in user_ups:
@@ -422,7 +422,30 @@ async def list_users(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[UserDetail]:
-    q = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    q = (
+        select(User)
+        .options(
+            load_only(
+                User.id,
+                User.email,
+                User.display_name,
+                User.student_id,
+                User.avatar_url,
+                User.is_active,
+                User.is_verified,
+                User.show_email,
+                User.ui_theme,
+                User.ui_locale,
+                User.notification_preferences,
+                User.mfa_enabled,
+                User.is_superuser,
+                User.created_at,
+            )
+        )
+        .order_by(User.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     if active_only:
         q = q.where(User.is_active == True)  # noqa: E712
     if keyword:

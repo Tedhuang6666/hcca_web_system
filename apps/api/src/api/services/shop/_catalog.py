@@ -7,7 +7,7 @@ import uuid
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import now_local
 from api.models.shop import (
@@ -188,7 +188,26 @@ async def list_products(
     offset: int = 0,
 ) -> list[Product]:
     q = select(Product).options(
-        selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options)
+        load_only(
+            Product.id,
+            Product.name,
+            Product.description,
+            Product.image_url,
+            Product.price,
+            Product.stock_quantity,
+            Product.is_unlimited,
+            Product.status,
+            Product.version,
+            Product.series_id,
+            Product.created_by,
+            Product.sale_start,
+            Product.sale_end,
+            Product.requires_seating,
+            Product.seating_mode,
+            Product.created_at,
+            Product.updated_at,
+        ),
+        selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
     )
     if activity_id:
         q = q.join(ProductSeries, Product.series_id == ProductSeries.id).join(

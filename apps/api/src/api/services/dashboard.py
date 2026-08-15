@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.models.announcement import Announcement
 from api.models.document import (
@@ -123,6 +124,14 @@ async def _w_doc_draft(db: AsyncSession, user: User) -> DashboardWidget | None:
         (
             await db.execute(
                 select(Document)
+                .options(
+                    load_only(
+                        Document.id,
+                        Document.title,
+                        Document.serial_number,
+                        Document.updated_at,
+                    )
+                )
                 .where(Document.created_by == user.id)
                 .where(Document.status == DocumentStatus.DRAFT)
                 .order_by(desc(Document.updated_at))
@@ -176,6 +185,14 @@ async def _w_doc_pending_my_approval(
     )
     stmt = (
         select(Document, DocumentApproval)
+        .options(
+            load_only(
+                Document.id,
+                Document.title,
+                Document.serial_number,
+                Document.updated_at,
+            )
+        )
         .join(DocumentApproval, DocumentApproval.document_id == Document.id)
         .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
         .where(
@@ -250,6 +267,7 @@ async def _w_meeting_upcoming(db: AsyncSession, user: User) -> DashboardWidget |
     cutoff = now + timedelta(hours=72)
     stmt = (
         select(Meeting)
+        .options(load_only(Meeting.id, Meeting.title, Meeting.location, Meeting.starts_at))
         .join(MeetingAttendance, MeetingAttendance.meeting_id == Meeting.id)
         .where(MeetingAttendance.user_id == user.id)
         .where(MeetingAttendance.status != AttendanceStatus.ABSENT)
@@ -318,6 +336,15 @@ async def _w_regulation_review(
         return None
     stmt = (
         select(Regulation)
+        .options(
+            load_only(
+                Regulation.id,
+                Regulation.title,
+                Regulation.version,
+                Regulation.workflow_status,
+                Regulation.updated_at,
+            )
+        )
         .where(
             Regulation.workflow_status.in_(
                 [
@@ -371,6 +398,15 @@ async def _w_regulation_publish(
         return None
     stmt = (
         select(Regulation)
+        .options(
+            load_only(
+                Regulation.id,
+                Regulation.title,
+                Regulation.version,
+                Regulation.workflow_status,
+                Regulation.updated_at,
+            )
+        )
         .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED)
         .order_by(desc(Regulation.updated_at))
         .limit(10)
@@ -410,6 +446,15 @@ async def _w_petition_assigned(
         return None
     stmt = (
         select(PetitionCase)
+        .options(
+            load_only(
+                PetitionCase.id,
+                PetitionCase.title,
+                PetitionCase.case_number,
+                PetitionCase.status,
+                PetitionCase.submitted_at,
+            )
+        )
         .where(PetitionCase.assigned_to_id == user.id)
         .where(
             PetitionCase.status.in_(
@@ -454,6 +499,7 @@ async def _w_petition_assigned(
 async def _w_open_surveys(db: AsyncSession, user: User) -> DashboardWidget | None:
     stmt = (
         select(Survey)
+        .options(load_only(Survey.id, Survey.title, Survey.updated_at))
         .where(Survey.status == SurveyStatus.OPEN)
         .order_by(desc(Survey.updated_at))
         .limit(5)
@@ -490,6 +536,7 @@ async def _w_announcements_recent(db: AsyncSession, user: User) -> DashboardWidg
     week_ago = now - timedelta(days=7)
     stmt = (
         select(Announcement)
+        .options(load_only(Announcement.id, Announcement.title, Announcement.created_at))
         .where(Announcement.created_at >= week_ago)
         .order_by(desc(Announcement.created_at))
         .limit(5)

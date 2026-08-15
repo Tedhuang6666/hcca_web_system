@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import local_today, roc_year
 from api.core.config import settings
@@ -366,6 +366,22 @@ async def list_cases(
     stmt = (
         select(PetitionCase)
         .options(
+            load_only(
+                PetitionCase.id,
+                PetitionCase.case_number,
+                PetitionCase.type_id,
+                PetitionCase.status,
+                PetitionCase.public_status,
+                PetitionCase.is_named,
+                PetitionCase.title,
+                PetitionCase.current_org_id,
+                PetitionCase.assigned_to_id,
+                PetitionCase.discord_guild_id,
+                PetitionCase.discord_channel_id,
+                PetitionCase.discord_channel_created_at,
+                PetitionCase.submitted_at,
+                PetitionCase.updated_at,
+            ),
             selectinload(PetitionCase.type),
             selectinload(PetitionCase.current_org),
             selectinload(PetitionCase.assigned_to),
