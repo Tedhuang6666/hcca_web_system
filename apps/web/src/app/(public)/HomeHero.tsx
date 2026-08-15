@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { headers } from "next/headers";
 
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { PublicSiteBundleOut } from "@/lib/types";
 
-export default function HomeHero({ bundle }: { bundle: PublicSiteBundleOut | null }) {
+export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut | null }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const settings = bundle?.settings;
   const siteTitle = settings?.site_title?.trim() || "新竹高中班聯會";
   const heroTitle = settings?.hero_title?.trim() || siteTitle;
@@ -20,7 +22,7 @@ export default function HomeHero({ bundle }: { bundle: PublicSiteBundleOut | nul
   return (
     <>
       {settings?.custom_css && (
-        <style dangerouslySetInnerHTML={{ __html: sanitizeCustomCss(settings.custom_css) }} />
+        <style nonce={nonce} dangerouslySetInnerHTML={{ __html: sanitizeCustomCss(settings.custom_css) }} />
       )}
       <section className="public-hero">
         <div className="public-hero-inner">

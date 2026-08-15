@@ -4,7 +4,6 @@ import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import ClientErrorReporter from "@/components/providers/ClientErrorReporter";
 import WebVitalsReporter from "@/components/providers/WebVitalsReporter";
-import PerformanceProvider from "@/components/providers/PerformanceProvider";
 import { BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 import { SITE_URL } from "@/lib/seo";
@@ -86,9 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased">
         <ClientErrorReporter />
         <WebVitalsReporter />
-        <ThemeProvider>
-          <PerformanceProvider>{children}</PerformanceProvider>
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
