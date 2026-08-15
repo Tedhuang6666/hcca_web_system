@@ -83,6 +83,15 @@ function imageUrlForValidation(imageUrl, pageUrl) {
   return new URL(`${resolvedUrl.pathname}${resolvedUrl.search}`, new URL(localBase));
 }
 
+function normalizedMetadataImageUrl(imageUrl, pageUrl) {
+  const url = new URL(imageUrl, pageUrl);
+  // Next.js appends this content hash to its generated metadata-image route.
+  if (url.pathname === "/opengraph-image" && /^[a-f0-9]{16}$/i.test(url.search.slice(1))) {
+    url.search = "";
+  }
+  return url.href;
+}
+
 async function validateUrl(pageUrl) {
   const response = await fetch(pageUrl, {
     headers: { "user-agent": "HCCA-share-preview-validator/1.0" },
@@ -104,7 +113,12 @@ async function validateUrl(pageUrl) {
 
   const imageUrl = metadata.get("og:image");
   const twitterImageUrl = metadata.get("twitter:image");
-  if (imageUrl && twitterImageUrl && new URL(twitterImageUrl, pageUrl).href !== new URL(imageUrl, pageUrl).href) {
+  if (
+    imageUrl &&
+    twitterImageUrl &&
+    normalizedMetadataImageUrl(twitterImageUrl, pageUrl) !==
+      normalizedMetadataImageUrl(imageUrl, pageUrl)
+  ) {
     failures.push("og:image 與 twitter:image 指向不同圖片");
   }
 
