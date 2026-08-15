@@ -120,7 +120,7 @@ export default function LoginPage() {
             </div>
           </header>
 
-          <div className="login-brand-stage relative z-10 py-16">
+          <div className="login-brand-stage relative z-10 flex w-full flex-col items-center py-16 text-center">
             <BrandEmblem size={172} priority />
             <p className="mt-8 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
               校園自治整合平台
