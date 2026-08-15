@@ -4,16 +4,12 @@ import { useEffect, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { startAuthentication } from "@simplewebauthn/browser";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { BRANDING } from "@/lib/branding";
 import { apiUrl } from "@/lib/config";
-import { useModuleStatus } from "@/contexts/ModuleStatusContext";
-import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
-import { cacheCurrentUser } from "@/lib/auth-cache";
-import { safeNextPath } from "@/lib/safe-redirect";
+import { apiErrorMessage } from "@/lib/api-helpers";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -22,8 +18,6 @@ export default function LoginPage() {
   const [discordLoginHref, setDiscordLoginHref] = useState(apiUrl("/auth/discord/login"));
   const [passkeyReady, setPasskeyReady] = useState(false);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
-  const { isModuleClosed } = useModuleStatus();
-  const discordClosed = isModuleClosed("discord");
 
   const oauthHref = (provider: "google" | "discord", next: string) => {
     const params = new URLSearchParams({
@@ -47,9 +41,19 @@ export default function LoginPage() {
   const handlePasskeyLogin = async () => {
     setPasskeyBusy(true);
     try {
+      const [webauthn, { mfaApi }, { authApi }, { cacheCurrentUser }, { safeNextPath }] =
+        await Promise.all([
+          import("@simplewebauthn/browser"),
+          import("@/lib/api/mfa"),
+          import("@/lib/api/auth"),
+          import("@/lib/auth-cache"),
+          import("@/lib/safe-redirect"),
+        ]);
       const optionResult = await mfaApi.authenticationOptions();
-      const assertion = await startAuthentication({
-        optionsJSON: optionResult.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+      const assertion = await webauthn.startAuthentication({
+        optionsJSON: optionResult.options as unknown as Parameters<
+          typeof webauthn.startAuthentication
+        >[0]["optionsJSON"],
       });
       await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
       cacheCurrentUser(await authApi.me());
@@ -109,7 +113,7 @@ export default function LoginPage() {
           }}
         >
           <header className="relative z-10 flex items-center gap-3">
-            <BrandEmblem size={46} priority />
+            <BrandEmblem size={46} />
             <div>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {BRANDING.orgShortName}
@@ -121,7 +125,7 @@ export default function LoginPage() {
           </header>
 
           <div className="login-brand-stage relative z-10 flex w-full flex-col items-center py-16 text-center">
-            <BrandEmblem size={172} priority />
+            <BrandEmblem size={172} />
             <p className="mt-8 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
               校園自治整合平台
             </p>
@@ -224,28 +228,26 @@ export default function LoginPage() {
               />
             </a>
 
-            {!discordClosed && (
-              <>
-                <div className="my-7 flex items-center gap-4">
+            <div className="my-7 flex items-center gap-4">
                   <div className="h-px flex-1" style={{ background: "var(--border)" }} />
                   <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
                     其他登入方式
                   </span>
                   <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-                </div>
+            </div>
 
-                <a
-                  href={discordLoginHref}
-                  data-no-prefetch="true"
-                  data-full-navigation="true"
-                  onClick={(event) => handleOAuthClick(event, "discord")}
-                  className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={{
-                    background: "#5865f2",
-                    boxShadow: "0 8px 24px rgba(88, 101, 242, 0.24)",
-                    textDecoration: "none",
-                  }}
-                >
+            <a
+              href={discordLoginHref}
+              data-no-prefetch="true"
+              data-full-navigation="true"
+              onClick={(event) => handleOAuthClick(event, "discord")}
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{
+                background: "#5865f2",
+                boxShadow: "0 8px 24px rgba(88, 101, 242, 0.24)",
+                textDecoration: "none",
+              }}
+            >
                   <span className="flex items-center gap-3">
                     <svg width="20" height="16" viewBox="0 0 24 18" fill="currentColor" aria-hidden="true">
                       <path d="M20.3 1.5A18.4 18.4 0 0 0 15.8.1l-.6 1.2a16.8 16.8 0 0 0-6.4 0L8.2.1a18.7 18.7 0 0 0-4.5 1.4C.9 5.6.1 9.6.5 13.5a18.2 18.2 0 0 0 5.6 2.8l1.4-1.9a11.8 11.8 0 0 1-2.1-1l.5-.4a13.1 13.1 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l1.4 1.9a18.2 18.2 0 0 0 5.6-2.8c.5-4.5-.8-8.5-3.2-12ZM8.2 11.1c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
@@ -257,12 +259,10 @@ export default function LoginPage() {
                     className="transition-transform duration-200 group-hover:translate-x-0.5"
                     aria-hidden="true"
                   />
-                </a>
-                <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-                  須先在個人資料完成帳號綁定。
-                </p>
-              </>
-            )}
+            </a>
+            <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+              須先在個人資料完成帳號綁定。
+            </p>
 
             {passkeyReady && (
               <>
