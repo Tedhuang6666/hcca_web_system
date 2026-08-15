@@ -10,6 +10,7 @@ import {
   useMemo,
 } from "react";
 import { createProfilerCallback, getPerformanceMonitor } from "@/lib/performance-monitor";
+import { observeWebVitals } from "@/lib/client-metrics";
 
 interface PerformanceContextValue {
   monitor: ReturnType<typeof getPerformanceMonitor>;
@@ -47,9 +48,15 @@ export default function PerformanceProvider({
     monitor.setEnabled(true);
     monitor.setSampleRate(profilerSampleRate);
 
+    // 啟用 Web Vitals 觀察（FCP, LCP, CLS, INP）並自動送至 /analytics/client-metrics/batch
+    const disconnectWebVitals = observeWebVitals();
+
     const handleBeforeUnload = () => monitor.flush({ unload: true });
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      disconnectWebVitals();
+    };
   }, [monitor, profilerSampleRate]);
 
   useEffect(() => {

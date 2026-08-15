@@ -3,6 +3,8 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+import PerformanceProvider from "@/components/providers/PerformanceProvider";
+
 export default function MaintenanceLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <PerformanceProvider>{children}</PerformanceProvider>;
 }

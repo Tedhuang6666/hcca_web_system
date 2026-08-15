@@ -3,6 +3,7 @@
     "autoprefixer": "^10.5.0",
     "axios": "^1.16.0",
     "postcss": "^8.5.23",
+    "posthog-js": "^1.417.1",
     "tailwindcss": "^4.2.4"
   },
   "overrides": {
