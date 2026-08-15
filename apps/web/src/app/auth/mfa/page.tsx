@@ -28,10 +28,14 @@ export default function MFALoginPage() {
   const [verificationError, setVerificationError] = useState("");
   const [verified, setVerified] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
+  const challengeExchangeStarted = useRef(false);
   const codeLength = codeMode === "totp" ? 6 : 16;
   const codeComplete = code.length === codeLength;
 
   useEffect(() => {
+    if (challengeExchangeStarted.current) return;
+    challengeExchangeStarted.current = true;
+
     // challenge token 存放在 server session（不暴露在 URL），需 exchange 取出
     mfaApi.exchangeChallenge()
       .then((data) => {
