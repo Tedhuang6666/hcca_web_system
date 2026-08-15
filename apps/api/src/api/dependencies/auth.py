@@ -54,15 +54,23 @@ def _user_from_snapshot(payload: dict, user_id: uuid.UUID) -> User | None:
         id=user_id,
         email=email,
         display_name=display_name,
-        avatar_url=snapshot.get("avatar_url") if isinstance(snapshot.get("avatar_url"), str) else None,
-        student_id=snapshot.get("student_id") if isinstance(snapshot.get("student_id"), str) else None,
+        avatar_url=snapshot.get("avatar_url")
+        if isinstance(snapshot.get("avatar_url"), str)
+        else None,
+        student_id=snapshot.get("student_id")
+        if isinstance(snapshot.get("student_id"), str)
+        else None,
         show_email=bool(snapshot.get("show_email", True)),
         is_active=bool(snapshot.get("is_active", True)),
         is_verified=bool(snapshot.get("is_verified", False)),
         is_superuser=bool(snapshot.get("is_superuser", False)),
-        notification_preferences=(notification_preferences if isinstance(notification_preferences, dict) else {}),
+        notification_preferences=(
+            notification_preferences if isinstance(notification_preferences, dict) else {}
+        ),
         ui_theme=snapshot.get("ui_theme") if isinstance(snapshot.get("ui_theme"), str) else "auto",
-        ui_locale=snapshot.get("ui_locale") if isinstance(snapshot.get("ui_locale"), str) else "zh-TW",
+        ui_locale=snapshot.get("ui_locale")
+        if isinstance(snapshot.get("ui_locale"), str)
+        else "zh-TW",
     )
 
 
