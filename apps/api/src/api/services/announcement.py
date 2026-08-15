@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, noload, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
+from api.core.config import settings
 from api.models.announcement import (
     Announcement,
     AnnouncementAudience,
@@ -24,6 +25,7 @@ from api.models.announcement import (
 from api.models.org import Org
 from api.models.user import User
 from api.schemas.announcement import AnnouncementCreate, AnnouncementStatsOut, AnnouncementUpdate
+from api.services.permission import get_user_org_ids
 from api.services.storage import StorageBackend
 
 _MEDIA_ALLOWED_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
@@ -32,11 +34,28 @@ _MEDIA_MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
 @dataclass(frozen=True)
 class ViewerScope:
-    """檢視者的可見範圍判定依據（由 router 層組裝）。"""
+    """檢視者的可見範圍判定依據。"""
 
     user_id: uuid.UUID | None = None
     org_ids: frozenset[uuid.UUID] = field(default_factory=frozenset)
     is_school: bool = False
+
+
+def _is_school_email(email: str) -> bool:
+    domain = email.strip().lower().rsplit("@", maxsplit=1)[-1]
+    return domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS
+
+
+async def get_viewer_scope(db: AsyncSession, user: User | None) -> ViewerScope:
+    """建立公告列表與詳情共用的檢視範圍。"""
+    if user is None:
+        return ViewerScope()
+    org_ids = await get_user_org_ids(db, user.id)
+    return ViewerScope(
+        user_id=user.id,
+        org_ids=frozenset(org_ids),
+        is_school=_is_school_email(user.email),
+    )
 
 
 def _audience_clause(scope: ViewerScope) -> ColumnElement[bool]:

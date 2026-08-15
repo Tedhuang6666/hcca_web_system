@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate_dashboard
 from api.models.governance import (
     EntityRelation,
     GovernanceEventType,
@@ -53,13 +54,17 @@ async def get_matter(db: AsyncSession, matter_id: uuid.UUID) -> Matter | None:
 
 
 async def create_matter(db: AsyncSession, *, data: MatterCreate, user: User) -> Matter:
-    return await governance_svc.create_matter(db, data=data, user=user)
+    matter = await governance_svc.create_matter(db, data=data, user=user)
+    await cache_invalidate_dashboard()
+    return matter
 
 
 async def update_matter(
     db: AsyncSession, *, matter: Matter, data: MatterUpdate, user: User
 ) -> Matter:
-    return await governance_svc.update_matter(db, matter=matter, data=data, user=user)
+    updated = await governance_svc.update_matter(db, matter=matter, data=data, user=user)
+    await cache_invalidate_dashboard()
+    return updated
 
 
 async def list_timeline(db: AsyncSession, matter_id: uuid.UUID) -> list[TimelineEvent]:
@@ -74,7 +79,9 @@ async def list_timeline(db: AsyncSession, matter_id: uuid.UUID) -> list[Timeline
 async def create_relation(
     db: AsyncSession, *, matter: Matter, data: EntityRelationCreate, user: User
 ) -> EntityRelation:
-    return await governance_svc.create_relation(db, matter=matter, data=data, user=user)
+    relation = await governance_svc.create_relation(db, matter=matter, data=data, user=user)
+    await cache_invalidate_dashboard()
+    return relation
 
 
 async def get_relation(db: AsyncSession, relation_id: uuid.UUID) -> EntityRelation | None:
@@ -83,6 +90,7 @@ async def get_relation(db: AsyncSession, relation_id: uuid.UUID) -> EntityRelati
 
 async def delete_relation(db: AsyncSession, *, relation: EntityRelation, user: User) -> None:
     await governance_svc.delete_relation(db, relation=relation, user=user)
+    await cache_invalidate_dashboard()
 
 
 async def list_resources(db: AsyncSession, matter_id: uuid.UUID) -> list[MatterResource]:
@@ -121,6 +129,7 @@ async def create_resource(
         },
     )
     await db.refresh(resource)
+    await cache_invalidate_dashboard()
     return resource
 
 
@@ -147,6 +156,7 @@ async def update_resource(
         )
     await db.flush()
     await db.refresh(resource)
+    await cache_invalidate_dashboard()
     return resource
 
 
@@ -163,3 +173,4 @@ async def delete_resource(db: AsyncSession, *, resource: MatterResource, user: U
         payload={"resource_id": str(resource.id)},
     )
     await db.flush()
+    await cache_invalidate_dashboard()

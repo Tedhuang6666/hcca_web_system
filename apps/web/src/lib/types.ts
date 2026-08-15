@@ -12,7 +12,12 @@
  */
 
 // ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
-import type { ExpenseClaimCreate, JournalOut } from './api-bridge'
+import type {
+  AnnouncementListItem,
+  ExpenseClaimCreate,
+  JournalOut,
+  MatterListItem,
+} from './api-bridge'
 
 export type {
   DiscordNotificationRouteIn,
@@ -860,6 +865,12 @@ export type MeetingVoteRosterStatus =
 
 // ── 跨模組工作流 ──────────────────────────────────────────────────────────────
 
+export interface DashboardCompositeResponse {
+  dashboard: import("./api/dashboard").DashboardResponse;
+  tasks: import("./api/tasks").TaskInboxResponse | null;
+  matters: MatterListItem[] | null;
+  announcements: AnnouncementListItem[] | null;
+}
 
 export interface ActivityWorkspaceItem {
   id: string;

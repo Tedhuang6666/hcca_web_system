@@ -36,6 +36,7 @@ from api.schemas.document import (
     DocumentUpdate,
     RecipientCreate,
 )
+from api.services.dashboard import invalidate_dashboard_cache
 from api.services.document._access import (
     _apply_assignment_delegate_to_approval,
     _delegation_query_with_relations,
@@ -301,6 +302,7 @@ async def submit_document(
 
     await session.flush()
     logger.info("公文送審 serial=%s approvers=%d", doc.serial_number, len(approver_ids))
+    await invalidate_dashboard_cache()
     return doc
 
 
@@ -332,6 +334,7 @@ async def issue_document_directly(
 
     await session.flush()
     logger.info("公文直接發文 serial=%s by=%s", doc.serial_number, issued_by)
+    await invalidate_dashboard_cache()
     return doc
 
 
@@ -405,6 +408,7 @@ async def approve_step(
         logger.info("公文核准完成 serial=%s", doc.serial_number)
 
     await session.flush()
+    await invalidate_dashboard_cache()
     return doc
 
 
@@ -443,6 +447,7 @@ async def reject_step(
     await session.flush()
     record_document_approval("rejected")
     logger.info("公文退件至承辦人 serial=%s by=%s", doc.serial_number, approver_id)
+    await invalidate_dashboard_cache()
     return doc
 
 
@@ -491,6 +496,7 @@ async def reject_to_previous_step(
         doc.current_step,
         approver_id,
     )
+    await invalidate_dashboard_cache()
     return doc
 
 
@@ -561,6 +567,7 @@ async def recall_document(
     doc.current_step = 0
     await session.flush()
     logger.info("公文撤回 serial=%s by=%s", doc.serial_number, requested_by)
+    await invalidate_dashboard_cache()
     return doc
 
 
@@ -580,6 +587,7 @@ async def archive_document(
     doc.completed_at = doc.completed_at or now
     await session.flush()
     logger.info("公文封存 serial=%s by=%s", doc.serial_number, requested_by)
+    await invalidate_dashboard_cache()
     return doc
 
 
@@ -616,6 +624,7 @@ async def delete_document(
         raise ValueError(f"公文 {doc.serial_number} 非草稿狀態，無法刪除")
     await session.delete(doc)
     await session.flush()
+    await invalidate_dashboard_cache()
 
 
 async def list_approval_delegations(

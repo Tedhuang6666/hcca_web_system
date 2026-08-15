@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
+from api.core.cache import cache_invalidate_dashboard
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
@@ -26,7 +26,7 @@ from api.services import activity as activity_svc
 from api.services import announcement as ann_svc
 from api.services import audit as audit_svc
 from api.services.discord_bot import emit_announcement_notice
-from api.services.permission import get_user_org_ids, get_user_permission_codes
+from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/announcements", tags=["公告系統"])
@@ -52,21 +52,9 @@ _MANAGE_CODES = frozenset(
 )
 
 
-def _is_school_email(email: str) -> bool:
-    domain = email.strip().lower().rsplit("@", maxsplit=1)[-1]
-    return domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS
-
-
 async def _viewer_scope(db: AsyncSession, user: User | None) -> ann_svc.ViewerScope:
     """組裝檢視者的公告可見範圍。"""
-    if user is None:
-        return ann_svc.ViewerScope()
-    org_ids = await get_user_org_ids(db, user.id)
-    return ann_svc.ViewerScope(
-        user_id=user.id,
-        org_ids=frozenset(org_ids),
-        is_school=_is_school_email(user.email),
-    )
+    return await ann_svc.get_viewer_scope(db, user)
 
 
 async def _can_manage(db: AsyncSession, user: User | None) -> bool:
@@ -258,6 +246,7 @@ async def create_announcement(
         summary=f"建立公告「{ann.title}」",
     )
     await emit_announcement_notice(db, ann)
+    await cache_invalidate_dashboard()
     return _enrich(ann)
 
 
@@ -304,6 +293,7 @@ async def update_announcement(
         },
         summary=f"更新公告「{ann.title}」",
     )
+    await cache_invalidate_dashboard()
     return _enrich(ann)
 
 
@@ -333,6 +323,7 @@ async def publish_announcement(
         summary=f"發布公告「{ann.title}」",
     )
     await emit_announcement_notice(db, ann)
+    await cache_invalidate_dashboard()
     try:
         from api.services.outbox import emit as outbox_emit
 
@@ -378,6 +369,7 @@ async def unpublish_announcement(
         meta={"published_at": ann.published_at.isoformat() if ann.published_at else None},
         summary=f"取消發布公告「{ann.title}」",
     )
+    await cache_invalidate_dashboard()
     return _enrich(ann)
 
 
@@ -417,6 +409,7 @@ async def set_urgent(
         },
         summary=f"設定公告「{ann.title}」重要狀態",
     )
+    await cache_invalidate_dashboard()
     return _enrich(ann)
 
 
@@ -443,6 +436,7 @@ async def delete_announcement(
         summary=f"刪除公告「{ann.title}」",
     )
     await ann_svc.delete(db, ann_id)
+    await cache_invalidate_dashboard()
 
 
 # ── 媒體管理 ───────────────────────────────────────────────────────────────────

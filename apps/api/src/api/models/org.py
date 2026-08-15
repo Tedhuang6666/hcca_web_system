@@ -121,7 +121,16 @@ class UserPosition(Base, TimestampMixin):
     """使用者擔任職位的任期記錄"""
 
     __tablename__ = "user_positions"
-    __table_args__ = (Index("ix_user_positions_user_end_date", "user_id", "end_date"),)
+    __table_args__ = (
+        Index("ix_user_positions_user_end_date", "user_id", "end_date"),
+        Index(
+            "ix_user_positions_user_tenure_position",
+            "user_id",
+            "start_date",
+            "end_date",
+            "position_id",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(

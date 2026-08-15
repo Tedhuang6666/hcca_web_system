@@ -327,6 +327,7 @@ def create_app() -> FastAPI:
             "X-API-Key",
             "X-Request-ID",
             "X-Trace-ID",
+            "X-HCCA-Cache-User",
             "traceparent",
         ],
         expose_headers=[

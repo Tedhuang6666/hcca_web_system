@@ -71,6 +71,15 @@ function clearServiceWorkerPrivateCaches(): void {
   });
 }
 
+function setServiceWorkerCacheUser(userId: string): void {
+  if (typeof navigator === "undefined" || !userId || !("serviceWorker" in navigator)) return;
+  void navigator.serviceWorker.ready.then((registration) => {
+    registration.active?.postMessage({ type: "SET_CACHE_USER", userId });
+  }).catch(() => {
+    // Service Worker is optional; auth state remains authoritative.
+  });
+}
+
 export function saveImpersonationSession(session: ImpersonationSession): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(IMPERSONATION_STORAGE_KEY, JSON.stringify(session));
@@ -118,6 +127,7 @@ export function cacheCurrentUser(me: CurrentUserCache): void {
   ls()?.removeItem("is_superuser");
   ls()?.removeItem("is_owner");
   ls()?.removeItem("permissions");
+  setServiceWorkerCacheUser(me.id);
   notifyAuthCacheUpdated();
 }
 

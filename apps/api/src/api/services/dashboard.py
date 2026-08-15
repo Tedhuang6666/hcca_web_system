@@ -5,6 +5,7 @@
 - 單一 builder 失敗只記 warning，不影響其他 widget。
 - 每個 builder 回傳 DashboardWidget 或 None（None 表示不顯示）。
 - 不寫業務邏輯，只是「拿既有資料彙整成 widget 卡片」。
+- Redis 快取：整個儀表板回應快取 60 秒，權限/資料變更時失效。
 """
 
 from __future__ import annotations
@@ -15,9 +16,11 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, desc, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import load_only
 
+from api.core.cache import cache_get, cache_invalidate_dashboard, cache_set
+from api.core.database import AsyncSessionLocal
 from api.models.announcement import Announcement
 from api.models.document import (
     ApprovalStepStatus,
@@ -37,16 +40,31 @@ from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
+from api.schemas.announcement import AnnouncementListItem
 from api.schemas.dashboard import (
+    DashboardCompositeResponse,
     DashboardResponse,
     DashboardWidget,
     DashboardWidgetItem,
     LayoutHint,
 )
+from api.schemas.governance import MatterListItem
+from api.schemas.task import TaskInboxResponse
+from api.services import announcement as announcement_service
+from api.services import matter as matter_service
 from api.services.permission import get_user_permission_codes
+from api.services.task_inbox import build_task_inbox_cached
 from api.services.task_priority import prioritize_dashboard_widgets
 
 logger = logging.getLogger(__name__)
+
+# 快取設定
+DASHBOARD_CACHE_TTL_SECONDS = 60
+
+
+def _dashboard_cache_key(user_id: str) -> str:
+    """儀表板快取鍵：含用戶 ID"""
+    return f"dashboard:{user_id}"
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -587,23 +605,57 @@ async def _safe_run(
         return None
 
 
-async def build_dashboard(db: AsyncSession, user: User) -> DashboardResponse:
-    """聚合當前使用者的儀表板 widgets。"""
+async def _run_widget(
+    db: AsyncSession,
+    name: str,
+    builder: Callable[[AsyncSession], Awaitable[DashboardWidget | None]],
+) -> DashboardWidget | None:
+    """在獨立 session 執行 widget，避免並行共用 AsyncSession。"""
+
+    async def run() -> DashboardWidget | None:
+        if isinstance(db.bind, AsyncEngine):
+            async with AsyncSessionLocal() as widget_db:
+                return await builder(widget_db)
+        return await builder(db)
+
+    return await _safe_run(run, name)
+
+
+async def _build_dashboard_uncached(db: AsyncSession, user: User) -> DashboardResponse:
+    """聚合當前使用者的儀表板 widgets（不含快取邏輯）。"""
     perms = await get_user_permission_codes(db, user.id)
     is_admin = bool(getattr(user, "is_superuser", False))
     hint = _layout_hint(perms, is_admin)
 
     results = await asyncio.gather(
-        _safe_run(
-            lambda: _w_doc_pending_my_approval(db, user, perms, is_admin), "doc_pending_my_approval"
+        _run_widget(
+            db,
+            "doc_pending_my_approval",
+            lambda widget_db: _w_doc_pending_my_approval(widget_db, user, perms, is_admin),
         ),
-        _safe_run(lambda: _w_meeting_upcoming(db, user), "meeting_upcoming"),
-        _safe_run(lambda: _w_regulation_publish(db, user, perms, is_admin), "regulation_publish"),
-        _safe_run(lambda: _w_regulation_review(db, user, perms, is_admin), "regulation_review"),
-        _safe_run(lambda: _w_petition_assigned(db, user, perms, is_admin), "petition_assigned"),
-        _safe_run(lambda: _w_doc_draft(db, user), "doc_draft"),
-        _safe_run(lambda: _w_open_surveys(db, user), "open_surveys"),
-        _safe_run(lambda: _w_announcements_recent(db, user), "announcements_recent"),
+        _run_widget(db, "meeting_upcoming", lambda widget_db: _w_meeting_upcoming(widget_db, user)),
+        _run_widget(
+            db,
+            "regulation_publish",
+            lambda widget_db: _w_regulation_publish(widget_db, user, perms, is_admin),
+        ),
+        _run_widget(
+            db,
+            "regulation_review",
+            lambda widget_db: _w_regulation_review(widget_db, user, perms, is_admin),
+        ),
+        _run_widget(
+            db,
+            "petition_assigned",
+            lambda widget_db: _w_petition_assigned(widget_db, user, perms, is_admin),
+        ),
+        _run_widget(db, "doc_draft", lambda widget_db: _w_doc_draft(widget_db, user)),
+        _run_widget(db, "open_surveys", lambda widget_db: _w_open_surveys(widget_db, user)),
+        _run_widget(
+            db,
+            "announcements_recent",
+            lambda widget_db: _w_announcements_recent(widget_db, user),
+        ),
     )
     widgets = [w for w in results if w is not None]
 
@@ -616,3 +668,166 @@ async def build_dashboard(db: AsyncSession, user: User) -> DashboardResponse:
     widgets = prioritize_dashboard_widgets(widgets, preferred_keys=preferred_keys)
 
     return DashboardResponse(widgets=widgets, layout_hint=hint)
+
+
+async def build_dashboard(db: AsyncSession, user: User) -> DashboardResponse:
+    """聚合當前使用者的儀表板 widgets（含 Redis 快取 60s）。"""
+    cache_key = _dashboard_cache_key(str(user.id))
+
+    # 嘗試從快取讀取
+    cached = await cache_get(cache_key)
+    if isinstance(cached, dict):
+        try:
+            return DashboardResponse.model_validate(cached)
+        except Exception:
+            logger.debug("dashboard cache payload invalid user=%s", user.id, exc_info=True)
+
+    # 快取未命中：重新建構
+    response = await _build_dashboard_uncached(db, user)
+
+    # 寫入快取（排除 SQLAlchemy 模型物件，僅序列化 Pydantic）
+    cache_data = response.model_dump(mode="json")
+    await cache_set(cache_key, cache_data, DASHBOARD_CACHE_TTL_SECONDS)
+
+    return response
+
+
+async def invalidate_dashboard_cache(user_id: str | None = None) -> None:
+    """失效儀表板快取。
+
+    Args:
+        user_id: 指定用戶時只清該用戶；None 則清全部儀表板快取。
+    """
+    await cache_invalidate_dashboard(user_id)
+
+
+async def _with_component_session(
+    db: AsyncSession,
+    builder: Callable[[AsyncSession], Awaitable[object]],
+) -> object:
+    if isinstance(db.bind, AsyncEngine):
+        async with AsyncSessionLocal() as component_db:
+            return await builder(component_db)
+    return await builder(db)
+
+
+async def _dashboard_matters(db: AsyncSession, user: User) -> list[MatterListItem]:
+    cache_key = f"dashboard:matters:{user.id}"
+    cached = await cache_get(cache_key)
+    if isinstance(cached, list):
+        try:
+            return [MatterListItem.model_validate(item) for item in cached]
+        except Exception:
+            logger.debug("dashboard matters cache payload invalid user=%s", user.id, exc_info=True)
+
+    items = await matter_service.list_matters(
+        db,
+        user=user,
+        status="active",
+        limit=6,
+    )
+    await cache_set(
+        cache_key,
+        [item.model_dump(mode="json") for item in items],
+        ttl=30,
+    )
+    return items
+
+
+async def _dashboard_announcements(db: AsyncSession, user: User) -> list[AnnouncementListItem]:
+    cache_key = f"dashboard:announcements:{user.id}"
+    cached = await cache_get(cache_key)
+    if isinstance(cached, list):
+        try:
+            return [AnnouncementListItem.model_validate(item) for item in cached]
+        except Exception:
+            logger.debug(
+                "dashboard announcements cache payload invalid user=%s",
+                user.id,
+                exc_info=True,
+            )
+
+    scope = await announcement_service.get_viewer_scope(db, user)
+    announcements = await announcement_service.list_announcements(
+        db,
+        published_only=True,
+        limit=3,
+        scope=scope,
+    )
+    items: list[AnnouncementListItem] = []
+    for announcement in announcements:
+        item = AnnouncementListItem.model_validate(announcement)
+        author = getattr(announcement, "author", None)
+        if author:
+            item.author_name = getattr(author, "display_name", "")
+        items.append(item)
+    await cache_set(
+        cache_key,
+        [item.model_dump(mode="json") for item in items],
+        ttl=30,
+    )
+    return items
+
+
+async def build_dashboard_composite(
+    db: AsyncSession,
+    user: User,
+    *,
+    include_tasks: bool = True,
+    include_matters: bool = True,
+    include_announcements: bool = True,
+) -> DashboardCompositeResponse:
+    """一次組裝 dashboard 首屏資料，降低前端 round trips。"""
+
+    async def dashboard_component() -> DashboardResponse:
+        result = await _with_component_session(
+            db, lambda source_db: build_dashboard(source_db, user)
+        )
+        return result  # type: ignore[return-value]
+
+    async def tasks_component() -> TaskInboxResponse:
+        result = await _with_component_session(
+            db, lambda source_db: build_task_inbox_cached(source_db, user)
+        )
+        return result  # type: ignore[return-value]
+
+    async def matters_component() -> list[MatterListItem]:
+        result = await _with_component_session(
+            db, lambda source_db: _dashboard_matters(source_db, user)
+        )
+        return result  # type: ignore[return-value]
+
+    async def announcements_component() -> list[AnnouncementListItem]:
+        result = await _with_component_session(
+            db, lambda source_db: _dashboard_announcements(source_db, user)
+        )
+        return result  # type: ignore[return-value]
+
+    components: list[Awaitable[object]] = [dashboard_component()]
+    if include_tasks:
+        components.append(tasks_component())
+    if include_matters:
+        components.append(matters_component())
+    if include_announcements:
+        components.append(announcements_component())
+
+    if isinstance(db.bind, AsyncEngine):
+        values = await asyncio.gather(*components)
+    else:
+        values = [await component for component in components]
+
+    index = 0
+    dashboard = values[index]
+    index += 1
+    tasks = values[index] if include_tasks else None
+    index += int(include_tasks)
+    matters = values[index] if include_matters else None
+    index += int(include_matters)
+    announcements = values[index] if include_announcements else None
+
+    return DashboardCompositeResponse(
+        dashboard=dashboard,  # type: ignore[arg-type]
+        tasks=tasks,  # type: ignore[arg-type]
+        matters=matters,  # type: ignore[arg-type]
+        announcements=announcements,  # type: ignore[arg-type]
+    )

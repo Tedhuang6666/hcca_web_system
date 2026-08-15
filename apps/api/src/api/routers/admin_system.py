@@ -20,7 +20,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy import func, select, text
@@ -1409,16 +1409,55 @@ async def ws_rooms_overview(_admin: AdminUser) -> dict:
 # ── 慢查詢監控（query_audit ring buffer） ───────────────────────────────────
 
 
-@router.get("/metrics/slow-queries", response_model=dict, summary="近期慢查詢樣本")
+@router.get(
+    "/metrics/slow-queries",
+    response_model=dict,
+    summary="近期慢查詢樣本",
+)
+@router.get("/slow-queries", response_model=dict, include_in_schema=False)
 async def metrics_slow_queries(
     _admin: AdminUser,
-    top: int = 10,
+    top: int = Query(10, ge=1, le=100),
 ) -> dict:
     """
     回傳記憶體 ring buffer 中聚合過的慢查詢樣本（>50ms）。
     template 已去除字面值，只看 SQL 結構；不會洩漏實際資料內容。
     """
     return {"top": top, "items": get_slow_queries(top=top)}
+
+
+@router.get("/metrics/pg-stat-statements", response_model=dict, summary="PostgreSQL 慢查詢統計")
+async def metrics_pg_stat_statements(
+    db: DbDep,
+    _admin: AdminUser,
+    limit: int = Query(20, ge=1, le=100),
+) -> dict:
+    """讀取 pg_stat_statements；未啟用 extension 時回傳可診斷結果。"""
+    try:
+        result = await db.execute(
+            text(
+                """
+                SELECT query, calls, mean_exec_time, total_exec_time, rows
+                FROM pg_stat_statements
+                WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+                ORDER BY mean_exec_time DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        )
+    except Exception:
+        logger.warning("pg_stat_statements is unavailable", exc_info=True)
+        return {
+            "available": False,
+            "reason": "pg_stat_statements 未啟用或目前資料庫帳號無權限",
+            "items": [],
+        }
+
+    return {
+        "available": True,
+        "items": [dict(row) for row in result.mappings().all()],
+    }
 
 
 # ── 近期錯誤（error_audit ring buffer） ──────────────────────────────────────

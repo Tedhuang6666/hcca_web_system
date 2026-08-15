@@ -54,6 +54,15 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/api/dashboard/composite",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, max-age=30, stale-while-revalidate=60",
+          },
+        ],
+      },
     ];
   },
   async rewrites() {

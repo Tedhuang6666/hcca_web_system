@@ -1,4 +1,7 @@
-import { get } from "./core";
+import type { DashboardCompositeResponse } from "../types";
+import { get, request } from "./core";
+
+export type { DashboardCompositeResponse } from "../types";
 
 // ── 儀表板 / 待辦中心 ─────────────────────────────────────────────────────────
 
@@ -38,4 +41,20 @@ export interface DashboardResponse {
 
 export const dashboardApi = {
   get: () => get<DashboardResponse>("/dashboard"),
+  composite: (options?: {
+    includeTasks?: boolean;
+    includeMatters?: boolean;
+    includeAnnouncements?: boolean;
+  }) => {
+    const query = new URLSearchParams();
+    if (options?.includeTasks === false) query.set("include_tasks", "false");
+    if (options?.includeMatters === false) query.set("include_matters", "false");
+    if (options?.includeAnnouncements === false) query.set("include_announcements", "false");
+    const queryString = query.toString();
+    const userId = typeof window === "undefined" ? null : localStorage.getItem("user_id");
+    return request<DashboardCompositeResponse>(
+      `/dashboard/composite${queryString ? `?${queryString}` : ""}`,
+      userId ? { headers: { "X-HCCA-Cache-User": userId } } : undefined,
+    );
+  },
 };
