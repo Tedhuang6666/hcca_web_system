@@ -12,10 +12,12 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -74,6 +76,14 @@ class Survey(Base, TimestampMixin):
     """
 
     __tablename__ = "surveys"
+    __table_args__ = (
+        Index(
+            "ix_surveys_open",
+            "status",
+            text("updated_at DESC"),
+            postgresql_where=text("status = 'open'"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(300), nullable=False, index=True)

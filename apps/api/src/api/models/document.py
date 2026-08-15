@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -621,6 +622,12 @@ class DocumentApproval(Base, TimestampMixin):
         Index("ix_document_approvals_status", "status"),
         Index("ix_document_approvals_status_approver", "status", "approver_id"),
         Index("ix_document_approvals_status_delegate", "status", "delegate_id"),
+        Index(
+            "ix_doc_approvals_pending_approver",
+            "status",
+            "approver_id",
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,6 +35,13 @@ class WorkItem(Base, TimestampMixin):
             "status",
             "is_active",
             "due_at",
+        ),
+        Index(
+            "ix_work_items_assigned_open",
+            "assigned_to_id",
+            "status",
+            "is_active",
+            postgresql_where=text("status = 'open' AND is_active = TRUE"),
         ),
     )
 

@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -227,6 +228,12 @@ class Meeting(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_meetings_status_starts_at", "status", "starts_at"),
         Index("ix_meetings_org_status", "org_id", "status"),
+        Index(
+            "ix_meetings_upcoming",
+            "starts_at",
+            "status",
+            postgresql_where=text("status IN ('draft', 'active', 'paused')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

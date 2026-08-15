@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -188,7 +188,16 @@ class CalendarEventChecklistItem(Base, TimestampMixin):
     """活動準備事項與彩排檢核。"""
 
     __tablename__ = "calendar_event_checklist_items"
-    __table_args__ = (Index("ix_calendar_event_checklist_event_done", "event_id", "is_done"),)
+    __table_args__ = (
+        Index("ix_calendar_event_checklist_event_done", "event_id", "is_done"),
+        Index(
+            "ix_calendar_checklist_assignee_due",
+            "assignee_id",
+            "is_done",
+            "due_at",
+            postgresql_where=text("is_done = FALSE"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id: Mapped[uuid.UUID] = mapped_column(
