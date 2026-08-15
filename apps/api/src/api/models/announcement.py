@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -57,6 +58,7 @@ announcement_audience_orgs = Table(
         ForeignKey("orgs.id", ondelete="CASCADE"),
         primary_key=True,
     ),
+    Index("ix_announcement_audience_orgs_org_announcement", "org_id", "announcement_id"),
 )
 
 announcement_audience_users = Table(
@@ -74,6 +76,7 @@ announcement_audience_users = Table(
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     ),
+    Index("ix_announcement_audience_users_user_announcement", "user_id", "announcement_id"),
 )
 
 
@@ -88,6 +91,19 @@ class Announcement(Base, TimestampMixin):
     __tablename__ = "announcements"
     __table_args__ = (
         Index("ix_announcements_org_published", "org_id", "is_published", "published_at"),
+        Index(
+            "ix_announcements_published_created",
+            "is_published",
+            text("published_at DESC NULLS LAST"),
+            text("created_at DESC"),
+        ).ddl_if(dialect="postgresql"),
+        Index("ix_announcements_created_at_desc", text("created_at DESC")),
+        Index(
+            "ix_announcements_activity_published",
+            "activity_id",
+            "is_published",
+            text("published_at DESC NULLS LAST"),
+        ).ddl_if(dialect="postgresql"),
         # 全文搜尋 GIN 索引（PostgreSQL tsvector，generated column 由 migration 建立）
         Index("ix_announcements_search_vector", "search_vector", postgresql_using="gin"),
     )

@@ -12,9 +12,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -114,6 +116,14 @@ class Product(Base, TimestampMixin):
     """
 
     __tablename__ = "products"
+    __table_args__ = (
+        Index(
+            "ix_products_series_status_created",
+            "series_id",
+            "status",
+            text("created_at DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # ── 樂觀鎖版本欄位（必須在 __mapper_args__ 之前宣告）──────────────────────

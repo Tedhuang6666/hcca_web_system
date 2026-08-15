@@ -83,6 +83,8 @@ class Survey(Base, TimestampMixin):
             text("updated_at DESC"),
             postgresql_where=text("status = 'open'"),
         ),
+        Index("ix_surveys_status_updated_at", "status", text("updated_at DESC")),
+        Index("ix_surveys_created_at_desc", text("created_at DESC")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
