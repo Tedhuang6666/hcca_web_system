@@ -427,7 +427,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
                     "oauth_retry": "1",
                 }
             )
-            return RedirectResponse(url=f"{request.url_for('google_login')}?{retry_qs}")
+            return RedirectResponse(url=f"{frontend_origin}/auth/google/login?{retry_qs}")
         error_qs = urlencode({"error": "OAuth2 授權失敗，請重新登入"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
     except OAuthError as e:
@@ -451,7 +451,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
                     "oauth_retry": "1",
                 }
             )
-            return RedirectResponse(url=f"{request.url_for('google_login')}?{retry_qs}")
+            return RedirectResponse(url=f"{frontend_origin}/auth/google/login?{retry_qs}")
         error_qs = urlencode({"error": "OAuth2 授權失敗，請重新登入"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
     except ConnectTimeout:

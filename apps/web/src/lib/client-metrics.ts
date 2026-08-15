@@ -15,8 +15,41 @@ type ClientMetric = {
   response_end_ms?: number;
 };
 
+const METRIC_WINDOW_MS = 60_000;
+const MAX_METRIC_REQUESTS_PER_WINDOW = 20;
+const API_METRIC_DEDUP_MS = 10_000;
+let metricWindowStartedAt = 0;
+let metricRequestsSent = 0;
+const recentApiMetrics = new Map<string, number>();
+
+function canSendMetric(): boolean {
+  const now = Date.now();
+  if (now - metricWindowStartedAt >= METRIC_WINDOW_MS) {
+    metricWindowStartedAt = now;
+    metricRequestsSent = 0;
+  }
+  if (metricRequestsSent >= MAX_METRIC_REQUESTS_PER_WINDOW) return false;
+  metricRequestsSent += 1;
+  return true;
+}
+
+function shouldSkipApiMetric(metric: Omit<ClientMetric, "metric" | "value">): boolean {
+  const path = (metric.path ?? window.location.pathname).split("?")[0].slice(0, 255);
+  const key = `${path}:${metric.status ?? "network"}`;
+  const now = Date.now();
+  const previous = recentApiMetrics.get(key);
+  if (previous && now - previous < API_METRIC_DEDUP_MS) return true;
+  recentApiMetrics.set(key, now);
+  if (recentApiMetrics.size > 128) {
+    const oldestKey = recentApiMetrics.keys().next().value;
+    if (oldestKey) recentApiMetrics.delete(oldestKey);
+  }
+  return false;
+}
+
 function send(endpoint: string, metric: ClientMetric): void {
   if (typeof window === "undefined" || !Number.isFinite(metric.value)) return;
+  if (!canSendMetric()) return;
   const body = JSON.stringify({
     ...metric,
     path: (metric.path ?? window.location.pathname).split("?")[0].slice(0, 255),
@@ -38,6 +71,7 @@ function send(endpoint: string, metric: ClientMetric): void {
 }
 
 export function recordApiMetric(metric: Omit<ClientMetric, "metric" | "value"> & { duration_ms: number }): void {
+  if (typeof window === "undefined" || shouldSkipApiMetric(metric)) return;
   send("/analytics/client-metrics", { metric: "api_latency", value: metric.duration_ms, ...metric });
 }
 
