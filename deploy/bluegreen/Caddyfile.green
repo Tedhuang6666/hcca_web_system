@@ -15,7 +15,7 @@
 
 	handle_path /api/* {
 		reverse_proxy api-green:8000 {
-			health_uri /ready
+			health_uri /live
 			health_interval 10s
 			health_timeout 3s
 		}

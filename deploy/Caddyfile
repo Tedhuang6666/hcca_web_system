@@ -26,7 +26,7 @@
 	handle_path /api/* {
 		reverse_proxy api:8000 {
 			header_up CF-Connecting-IP {client_ip}
-			health_uri /ready
+			health_uri /live
 			health_interval 15s
 			health_timeout 3s
 		}
@@ -37,7 +37,7 @@
 	handle /internal/discord/* {
 		reverse_proxy api:8000 {
 			header_up CF-Connecting-IP {client_ip}
-			health_uri /ready
+			health_uri /live
 			health_interval 15s
 			health_timeout 3s
 		}
