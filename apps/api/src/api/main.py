@@ -575,7 +575,7 @@ def create_app() -> FastAPI:
     ) -> Response:
         start = time.perf_counter()
         inc_active()
-        reset_request_counters()
+        reset_request_counters(request.url.path)
         status_code = 500
         protective_response = False
         try:

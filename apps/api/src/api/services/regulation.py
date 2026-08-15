@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.models.document import Document, DocumentStatus
 from api.models.regulation import (
@@ -266,7 +266,24 @@ async def list_regulations(
     offset: int = 0,
 ) -> list[Regulation]:
     """列表查詢，支援多條件過濾與關鍵字搜尋（全文搜尋）"""
-    q = select(Regulation)
+    q = select(Regulation).options(
+        load_only(
+            Regulation.id,
+            Regulation.title,
+            Regulation.category,
+            Regulation.version,
+            Regulation.is_active,
+            Regulation.is_repealed,
+            Regulation.workflow_status,
+            Regulation.org_id,
+            Regulation.published_at,
+            Regulation.repealed_date,
+            Regulation.freeze_reason,
+            Regulation.freeze_at,
+            Regulation.created_at,
+            Regulation.updated_at,
+        )
+    )
     if org_id is not None:
         q = q.where(Regulation.org_id == org_id)
     if category is not None:

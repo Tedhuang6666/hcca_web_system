@@ -31,6 +31,7 @@ class _RequestQueryCounters:
     query_count: int = 0
     slow_query_count: int = 0
     total_query_ms: float = 0.0
+    request_path: str | None = None
 
 
 _query_counters: ContextVar[_RequestQueryCounters | None] = ContextVar(
@@ -49,11 +50,14 @@ class SlowQuerySample:
     occurrences: int = 1
     last_seen: float = field(default_factory=time.time)
     max_ms: float = 0.0
+    paths: dict[str, int] = field(default_factory=dict)
 
-    def update(self, elapsed_ms: float) -> None:
+    def update(self, elapsed_ms: float, request_path: str | None = None) -> None:
         self.occurrences += 1
         self.last_seen = time.time()
         self.max_ms = max(self.max_ms, elapsed_ms)
+        if request_path:
+            self.paths[request_path] = self.paths.get(request_path, 0) + 1
 
 
 _slow_samples: deque[SlowQuerySample] = deque(maxlen=_SLOW_RING_MAX)
@@ -76,14 +80,16 @@ def _is_noise_statement(statement: str) -> bool:
     return re.fullmatch(r"SELECT\s+(?:1|\?)", normalized, re.IGNORECASE) is not None
 
 
-def _record_slow_sample(statement: str, elapsed_ms: float) -> None:
+def _record_slow_sample(statement: str, elapsed_ms: float, request_path: str | None = None) -> None:
     template = _normalize_statement(statement)
     with _slow_lock:
         sample = _slow_index.get(template)
         if sample:
-            sample.update(elapsed_ms)
+            sample.update(elapsed_ms, request_path)
             return
         sample = SlowQuerySample(template=template, elapsed_ms=elapsed_ms, max_ms=elapsed_ms)
+        if request_path:
+            sample.paths[request_path] = 1
         _slow_samples.append(sample)
         _slow_index[template] = sample
         # 維持 index 與 ring buffer 一致：被擠出的元素也要從 index 移除
@@ -106,13 +112,19 @@ def get_slow_queries(top: int = 10) -> list[dict[str, object]]:
             "max_ms": round(s.max_ms, 1),
             "occurrences": s.occurrences,
             "last_seen": s.last_seen,
+            "paths": [
+                {"path": path, "occurrences": occurrences}
+                for path, occurrences in sorted(
+                    s.paths.items(), key=lambda item: item[1], reverse=True
+                )[:5]
+            ],
         }
         for s in snapshot[:top]
     ]
 
 
-def reset_request_counters() -> None:
-    _query_counters.set(_RequestQueryCounters())
+def reset_request_counters(request_path: str | None = None) -> None:
+    _query_counters.set(_RequestQueryCounters(request_path=request_path))
 
 
 def get_request_counters() -> tuple[int, int, float]:
@@ -155,6 +167,6 @@ def install_listeners() -> None:
             counters.total_query_ms += elapsed_ms
             if elapsed_ms > SLOW_QUERY_MS and not _is_noise_statement(str(statement)):
                 counters.slow_query_count += 1
-                _record_slow_sample(str(statement), elapsed_ms)
+                _record_slow_sample(str(statement), elapsed_ms, counters.request_path)
 
         _listeners_installed = True

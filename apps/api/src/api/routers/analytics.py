@@ -359,13 +359,13 @@ async def governance_insights(
 
     delayed_regs = (
         await db.execute(
-            select(Regulation)
+            select(Regulation.id, Regulation.title)
             .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED)
             .where(Regulation.updated_at < now - timedelta(hours=72))
             .order_by(Regulation.updated_at.asc())
             .limit(5)
         )
-    ).scalars()
+    ).all()
     for reg in delayed_regs:
         items.append(
             InsightItem(
@@ -384,13 +384,13 @@ async def governance_insights(
 
     stale_petitions = (
         await db.execute(
-            select(PetitionCase)
+            select(PetitionCase.id, PetitionCase.title, PetitionCase.case_number)
             .where(PetitionCase.status == PetitionStatus.NEEDS_INFO)
             .where(PetitionCase.updated_at < now - timedelta(hours=72))
             .order_by(PetitionCase.updated_at.asc())
             .limit(5)
         )
-    ).scalars()
+    ).all()
     for petition in stale_petitions:
         items.append(
             InsightItem(

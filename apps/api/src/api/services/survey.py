@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.models.org import Position, UserPosition
 from api.models.survey import (
@@ -109,10 +109,30 @@ async def list_surveys(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Survey]:
+    # 先取列表需要的欄位，再用每筆問卷的 survey_id 索引計數；避免先把整張
+    # survey_responses 聚合完才套用 LIMIT/OFFSET。
+    response_count = (
+        select(func.count(SurveyResponse.id))
+        .where(SurveyResponse.survey_id == Survey.id)
+        .correlate(Survey)
+        .scalar_subquery()
+    )
     q = (
-        select(Survey, func.count(SurveyResponse.id))
-        .outerjoin(SurveyResponse, SurveyResponse.survey_id == Survey.id)
-        .group_by(Survey.id)
+        select(Survey, response_count.label("response_count"))
+        .options(
+            load_only(
+                Survey.id,
+                Survey.title,
+                Survey.status,
+                Survey.is_anonymous,
+                Survey.opens_at,
+                Survey.closes_at,
+                Survey.org_id,
+                Survey.activity_id,
+                Survey.created_by,
+                Survey.created_at,
+            )
+        )
         .order_by(Survey.created_at.desc())
         .limit(limit)
         .offset(offset)

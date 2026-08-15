@@ -74,6 +74,36 @@ async def get_user_permission_codes(
     return frozenset(codes)
 
 
+async def get_user_permission_codes_batch(
+    db: AsyncSession,
+    user_ids: list[uuid.UUID],
+    on_date: date | None = None,
+) -> dict[uuid.UUID, frozenset[str]]:
+    """一次查詢多位使用者的有效權限碼，供管理列表避免 N+1。"""
+    unique_ids = list(dict.fromkeys(user_ids))
+    if not unique_ids:
+        return {}
+
+    check_date = on_date or local_today()
+    result = await db.execute(
+        select(UserPosition.user_id, Permission.code, Org.default_permission_codes)
+        .select_from(UserPosition)
+        .join(Position, UserPosition.position_id == Position.id)
+        .join(Org, Org.id == Position.org_id)
+        .outerjoin(Permission, Permission.position_id == Position.id)
+        .where(
+            UserPosition.user_id.in_(unique_ids),
+            *active_tenure_filter(check_date),
+        )
+    )
+    codes_by_user: dict[uuid.UUID, set[str]] = {user_id: set() for user_id in unique_ids}
+    for user_id, position_code, default_codes in result.all():
+        if position_code:
+            codes_by_user[user_id].add(position_code)
+        codes_by_user[user_id].update(default_codes or [])
+    return {user_id: frozenset(codes) for user_id, codes in codes_by_user.items()}
+
+
 async def get_user_permission_codes_for_org(
     db: AsyncSession,
     user_id: uuid.UUID,
