@@ -61,6 +61,7 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: ""
           NEXT_PUBLIC_WS_URL: "ws://localhost:8000"
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
 
       - name: Start Next.js (background)
         working-directory: apps/web
@@ -70,7 +71,7 @@ jobs:
           # ——next build 不會自動把它們放進 .next/standalone。
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
-          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
+          API_INTERNAL_URL=http://127.0.0.1:8000 HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
           NEXT_PID=$!
           for i in $(seq 1 30); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
@@ -145,6 +146,10 @@ jobs:
       - name: Build web (production)
         working-directory: apps/web
         run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ""
+          NEXT_PUBLIC_WS_URL: "ws://localhost:8000"
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
 
       - name: Start Next.js (background)
         working-directory: apps/web
@@ -153,7 +158,7 @@ jobs:
           # Lighthouse CLI 不負責啟動網站，因此先自行啟動 standalone server。
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
-          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
+          API_INTERNAL_URL=http://127.0.0.1:8000 HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
           NEXT_PID=$!
           for i in $(seq 1 30); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
