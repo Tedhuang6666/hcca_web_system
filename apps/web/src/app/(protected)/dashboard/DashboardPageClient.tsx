@@ -19,7 +19,7 @@ import {
   type TaskModule,
 } from "@/lib/api";
 import type { AnnouncementListItem, MatterListItem } from "@/lib/types";
-import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { cacheGet, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import OnboardingHint from "@/components/ui/OnboardingHint";
@@ -268,10 +268,7 @@ function SkeletonCard() {
 
 export type DashboardPageInitialData = {
   userName: string;
-  dashboard: DashboardResponse | null;
   tasks: TaskInboxResponse | null;
-  matters: MatterListItem[];
-  announcements: AnnouncementListItem[];
 };
 
 export default function DashboardPageClient({
@@ -279,22 +276,31 @@ export default function DashboardPageClient({
 }: {
   initialData: DashboardPageInitialData | null;
 }) {
+  const cachedDashboard = useRef(cacheGet<DashboardResponse>("dashboard/data")).current;
+  const cachedTasks = useRef(cacheGet<TaskInboxResponse>("dashboard/tasks")).current;
+  const cachedMatters = useRef(cacheGet<MatterListItem[]>("dashboard/matters")).current;
+  const cachedAnnouncements = useRef(
+    cacheGet<AnnouncementListItem[]>("dashboard/announcements"),
+  ).current;
+  const hasServerTasks = useRef(Boolean(initialData?.tasks));
   const [userName, setUserName] = useState(initialData?.userName ?? "");
   const [greeting, setGreeting] = useState("歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(
-    () => initialData?.dashboard ?? cacheGet("dashboard/data") ?? null,
+    () => cachedDashboard ?? null,
   );
   const [tasks, setTasks] = useState<TaskInboxResponse | null>(
-    () => initialData?.tasks ?? cacheGet("dashboard/tasks") ?? null,
+    () => initialData?.tasks ?? cachedTasks ?? null,
   );
   const [matters, setMatters] = useState<MatterListItem[]>(
-    () => initialData?.matters ?? cacheGet("dashboard/matters") ?? [],
+    () => cachedMatters ?? [],
   );
   const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>(
-    () => initialData?.announcements ?? cacheGet("dashboard/announcements") ?? [],
+    () => cachedAnnouncements ?? [],
   );
-  const [loading, setLoading] = useState(!initialData && !cacheHas("dashboard/data"));
-  const hasServerInitialData = useRef(Boolean(initialData));
+  const [priorityLoading, setPriorityLoading] = useState(
+    !initialData?.tasks && !cachedTasks,
+  );
+  const [secondaryLoading, setSecondaryLoading] = useState(!cachedDashboard);
   const { can, canAny, isAdmin, permissions } = usePermissions();
   const hasTaskAccess = isAdmin
     || permissions.has("admin:all")
@@ -321,23 +327,19 @@ export default function DashboardPageClient({
   }, [initialData?.userName]);
 
   useEffect(() => {
-    if (!initialData) return;
-    setData(initialData.dashboard);
-    setTasks(initialData.tasks);
-    setMatters(initialData.matters);
-    setAnnouncements(initialData.announcements);
-    setLoading(false);
-  }, [initialData]);
-
-  useEffect(() => {
-    if (hasServerInitialData.current) return;
     const userId = localStorage.getItem("user_id");
-    if (!userId) { setLoading(false); return; }
-    // 有快取時背景靜默更新，不顯示 loading
-    if (!cacheHas("dashboard/data")) setLoading(true);
+    if (!userId) {
+      setPriorityLoading(false);
+      setSecondaryLoading(false);
+      return;
+    }
+    const refreshTasks = !hasServerTasks.current;
+    if (refreshTasks && !cachedTasks) setPriorityLoading(true);
+    if (!cachedDashboard) setSecondaryLoading(true);
+
     Promise.allSettled([
       dashboardApi.get(),
-      tasksApi.list(),
+      refreshTasks ? tasksApi.list() : Promise.resolve(null),
       canViewGovernanceWork
         ? governanceApi.listMatters({ status: "active", limit: 6 })
         : Promise.resolve([]),
@@ -347,8 +349,11 @@ export default function DashboardPageClient({
         if (dashboardRes.status === "fulfilled") {
           setData(dashboardRes.value);
           cacheSet("dashboard/data", dashboardRes.value);
-        } else throw dashboardRes.reason;
-        if (tasksRes.status === "fulfilled") {
+        } else {
+          toast.error("無法載入儀表板");
+          console.error(dashboardRes.reason);
+        }
+        if (tasksRes.status === "fulfilled" && tasksRes.value) {
           setTasks(tasksRes.value);
           cacheSet("dashboard/tasks", tasksRes.value);
         }
@@ -361,12 +366,11 @@ export default function DashboardPageClient({
           cacheSet("dashboard/announcements", announcementsRes.value);
         }
       })
-      .catch((e) => {
-        toast.error("無法載入儀表板");
-        console.error(e);
-      })
-      .finally(() => setLoading(false));
-  }, [canViewGovernanceWork]);
+      .finally(() => {
+        if (refreshTasks) setPriorityLoading(false);
+        setSecondaryLoading(false);
+      });
+  }, [canViewGovernanceWork, cachedDashboard, cachedTasks]);
 
   const widgets = data?.widgets ?? [];
   const layoutHint = data?.layout_hint ?? "student";
@@ -461,7 +465,7 @@ export default function DashboardPageClient({
               </Link>
             )}
           </div>
-          {loading ? (
+          {priorityLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => <TaskSkeleton key={i} />)}
             </div>
@@ -639,7 +643,7 @@ export default function DashboardPageClient({
             <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
           </summary>
           <div className="mt-4">
-            {loading ? (
+            {secondaryLoading ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
@@ -652,7 +656,7 @@ export default function DashboardPageClient({
         </details>
       )}
 
-      {loading && (
+      {secondaryLoading && (
         <p className="flex items-center justify-center gap-2 text-xs"
           style={{ color: "var(--text-muted)" }}>
           <Loader2 size={12} className="animate-spin" aria-hidden={true} />

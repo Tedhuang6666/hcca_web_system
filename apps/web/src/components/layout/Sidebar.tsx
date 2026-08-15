@@ -126,7 +126,6 @@ export default function Sidebar() {
   const [hydrated, setHydrated] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const [publicProfile, setPublicProfile] = useState<NavigationProfileConfig | null>(null);
-  const [resolvedLoginState, setResolvedLoginState] = useState<boolean | null>(null);
   const [authVersion, setAuthVersion] = useState(0);
   const navigationProfile = useMemo(
     () => resolveNavigationProfile(permissions, isAdmin),
@@ -152,12 +151,10 @@ export default function Sidebar() {
         .then((profile) => {
           if (!alive) return;
           setPublicProfile(navProfileFromApi(profile));
-          setResolvedLoginState(false);
         })
         .catch(() => {
           if (!alive) return;
           setPublicProfile(null);
-          setResolvedLoginState(false);
         });
       return () => {
         alive = false;
@@ -172,12 +169,10 @@ export default function Sidebar() {
             ? null
             : navProfileFromApi(result.profile),
         );
-        setResolvedLoginState(true);
       })
       .catch(() => {
         if (!alive) return;
         setServerProfile(null);
-        setResolvedLoginState(true);
       });
     return () => {
       alive = false;
@@ -320,7 +315,9 @@ export default function Sidebar() {
     ],
   );
 
-  const navigationReady = hydrated && resolvedLoginState === isLoggedIn;
+  // 本機已保存的登入身分、權限與預設視角足以安全繪製導覽；個人化設定僅在
+  // 回應抵達後覆寫。不可讓一個非關鍵的設定請求阻塞整個側欄。
+  const navigationReady = hydrated;
 
   const initials = userName.charAt(0).toUpperCase();
 
