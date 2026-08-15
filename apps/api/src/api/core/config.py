@@ -633,6 +633,19 @@ class Settings(BaseSettings):
             raise ValueError("ALLOWED_ORIGINS 不可包含 '*'；請明確列出允許來源")
         if is_prod and "*" in self.ALLOWED_HOSTS:
             raise ValueError("生產環境 ALLOWED_HOSTS 不可包含 '*'；請明確列出允許 Host")
+        if is_prod:
+            service_urls = (
+                ("DATABASE_URL", self.DATABASE_URL),
+                ("REDIS_URL", self.REDIS_URL),
+                ("REDIS_CACHE_URL", self.REDIS_CACHE_URL or self.REDIS_URL),
+                ("REDIS_REALTIME_URL", self.REDIS_REALTIME_URL or self.REDIS_URL),
+                ("CELERY_BROKER_URL", self.CELERY_BROKER_URL or self.REDIS_URL),
+            )
+            if self.CELERY_RESULT_BACKEND:
+                service_urls += (("CELERY_RESULT_BACKEND", self.CELERY_RESULT_BACKEND),)
+            for name, url in service_urls:
+                if _is_local_url(url):
+                    raise ValueError(f"生產環境 {name} 不可使用 localhost 或 loopback 位址")
         if is_prod and self.VAPID_PRIVATE_KEY and len(self.VAPID_PRIVATE_KEY) > 20:
             import logging as _logging
 

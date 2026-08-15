@@ -83,6 +83,25 @@ def test_production_allowed_hosts_wildcard_rejected() -> None:
         _make(ENVIRONMENT="production", COOKIE_SECURE=True, ALLOWED_HOSTS=["*"])
 
 
+@pytest.mark.parametrize(
+    ("field_name", "local_url"),
+    (
+        ("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/campus"),
+        ("REDIS_URL", "redis://127.0.0.1:6379/0"),
+    ),
+)
+def test_production_rejects_local_service_urls(field_name: str, local_url: str) -> None:
+    with pytest.raises(ValidationError, match=field_name):
+        overrides: dict[str, object] = {
+            "ENVIRONMENT": "production",
+            "COOKIE_SECURE": True,
+            "DATABASE_URL": "postgresql+asyncpg://user:pass@db:5432/campus",
+            "REDIS_URL": "redis://redis:6379/0",
+        }
+        overrides[field_name] = local_url
+        _make(**overrides)
+
+
 def test_email_lists_are_lowercased_and_stripped() -> None:
     s = _make(SUPERUSER_EMAILS=["  Admin@Example.com  ", "", "@user@x.com"])
     assert s.SUPERUSER_EMAILS == ["admin@example.com", "user@x.com"]
