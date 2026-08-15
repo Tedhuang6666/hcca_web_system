@@ -1,7 +1,7 @@
 import { PUBLIC_ROUTE_MANIFEST } from "./route-manifest";
 
 export type RouteShell = "bare" | "app";
-export type RouteCspStrategy = "nonce" | "sri";
+export type RouteCspStrategy = "nonce";
 
 export type RoutePolicy = {
   public: boolean;
@@ -79,22 +79,6 @@ const NON_INDEXABLE_PATHS = [
   "/regulations/new",
   "/regulations/pending",
   "/surveys/new",
-];
-
-// 這些公開路由包含 OAuth、短效 token、即時狀態或使用者輸入流程；保留 nonce CSP
-// 與動態 SSR。其餘公開內容頁使用 Webpack SRI，才能安全地進行 static/ISR 快取。
-const NON_SRI_CSP_EXACT_PATHS = new Set([
-  "/auth/callback",
-  "/auth/mfa",
-  "/login",
-  "/maintenance",
-]);
-
-const NON_SRI_CSP_PREFIXES = [
-  "/auth",
-  "/live/elections",
-  "/meetings/join",
-  "/meetings/screen",
 ];
 
 const MAINTENANCE_EXEMPT_PATHS = new Set([
@@ -183,13 +167,6 @@ export function isMaintenanceExempt(pathname: string): boolean {
   return MAINTENANCE_EXEMPT_PATHS.has(pathname) || matchesPrefix(pathname, MAINTENANCE_EXEMPT_PREFIXES);
 }
 
-export function usesSriCsp(pathname: string): boolean {
-  if (!isPublicRoute(pathname)) return false;
-  if (NON_SRI_CSP_EXACT_PATHS.has(pathname)) return false;
-  if (matchesPrefix(pathname, NON_SRI_CSP_PREFIXES)) return false;
-  return !INDEXABLE_PETITION_CASE.test(pathname);
-}
-
 export function robotsAllowPaths(): string[] {
   return [...ROBOTS_ALLOW_PATHS];
 }
@@ -207,7 +184,7 @@ export function getRoutePolicy(pathname: string): RoutePolicy {
     shell: isBareRoute(pathname) ? "bare" : "app",
     indexable,
     sitemap: indexable,
-    csp: usesSriCsp(pathname) ? "sri" : "nonce",
+    csp: "nonce",
     maintenanceExempt: isMaintenanceExempt(pathname),
   };
 }

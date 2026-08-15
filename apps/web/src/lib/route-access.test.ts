@@ -6,7 +6,6 @@ import {
   isPublicRoute,
   isSitemapRoute,
   requiresAuthentication,
-  usesSriCsp,
 } from "./route-access";
 
 describe("route manifest", () => {
@@ -24,11 +23,11 @@ describe("route manifest", () => {
     expect(isSitemapRoute("/login")).toBe(false);
   });
 
-  it("uses SRI only for cacheable public content", () => {
-    expect(usesSriCsp("/announcements")).toBe(true);
-    expect(usesSriCsp("/login")).toBe(false);
-    expect(usesSriCsp("/meetings/join/token")).toBe(false);
-    expect(usesSriCsp("/admin")).toBe(false);
+  it("uses a nonce CSP for every page rendered by Next.js", () => {
+    expect(getRoutePolicy("/").csp).toBe("nonce");
+    expect(getRoutePolicy("/announcements").csp).toBe("nonce");
+    expect(getRoutePolicy("/login").csp).toBe("nonce");
+    expect(getRoutePolicy("/admin").csp).toBe("nonce");
   });
 
   it("keeps protected and operational routes out of search", () => {

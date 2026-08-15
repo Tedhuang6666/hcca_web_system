@@ -11,6 +11,10 @@ import { SITE_URL } from "@/lib/seo";
 
 const DEFAULT_DESCRIPTION = BRANDING.description;
 
+// CSP nonce is generated per request by proxy.ts. Dynamic rendering keeps the
+// nonce in the response header synchronized with Next.js inline bootstrap scripts.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: SOCIAL_SITE_NAME,
@@ -69,8 +73,7 @@ export const viewport: Viewport = {
 };
 
 function ThemeScript() {
-  // Native script avoids Next's inline beforeInteractive bootstrap, which would
-  // require a nonce and make otherwise cacheable public HTML dynamic.
+  // Native script avoids an extra inline beforeInteractive bootstrap.
   return <script src="/theme.js" defer />;
 }
 
