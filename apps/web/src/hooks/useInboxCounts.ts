@@ -7,6 +7,7 @@ import { useLowDataMode } from "@/hooks/useLowDataMode";
 
 const BASE_POLL_MS = 60_000;
 const LOW_DATA_POLL_MS = 300_000;
+const INITIAL_POLL_DELAY_MS = 1_500;
 
 /**
  * 共用的「待辦 + 未讀通知」計數輪詢，供 Topbar 與 BottomTabBar 使用。
@@ -40,6 +41,7 @@ export function useInboxCounts(enabled: boolean) {
 
   useResilientPoll(poll, {
     enabled,
+    initialDelayMs: INITIAL_POLL_DELAY_MS,
     intervalMs: lowDataMode ? LOW_DATA_POLL_MS : BASE_POLL_MS,
   });
 
