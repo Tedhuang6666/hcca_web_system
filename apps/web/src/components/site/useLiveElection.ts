@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { usePublicModuleStatus } from "@/contexts/PublicModuleStatusContext";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
 import { electionsApi } from "@/lib/api/elections";
 import { apiUrl } from "@/lib/config";
@@ -22,26 +23,57 @@ export interface ActiveLiveElection {
   summary: ElectionLiveSummary | null;
 }
 
+const SHARED_CACHE_MS = 5_000;
+let sharedActive: ActiveLiveElection | null = null;
+let sharedCheckedAt = 0;
+let sharedRequest: Promise<ActiveLiveElection | null> | null = null;
+
 async function fetchPublicElections(): Promise<PublicElectionItem[]> {
   try {
-    const moduleStatus = await fetch(apiUrl("/system/module-status"), {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (moduleStatus.ok) {
-      const statuses = (await moduleStatus.json()) as Array<{
-        id: string;
-        on: boolean;
-      }>;
-      if (statuses.some((item) => item.id === "elections" && item.on)) return [];
-    }
-
     const res = await fetch(apiUrl("/elections/public"), { credentials: "include" });
     if (!res.ok) return [];
     return (await res.json()) as PublicElectionItem[];
   } catch {
     return [];
   }
+}
+
+async function fetchSharedLiveElection(): Promise<ActiveLiveElection | null> {
+  const now = Date.now();
+  if (now - sharedCheckedAt < SHARED_CACHE_MS) return sharedActive;
+  if (sharedRequest) return sharedRequest;
+
+  sharedRequest = (async () => {
+    const elections = await fetchPublicElections();
+    const current =
+      elections.find((item) => item.status === "live") ??
+      elections.find((item) => item.status === "paused") ??
+      null;
+    if (!current) {
+      sharedActive = null;
+      sharedCheckedAt = Date.now();
+      return null;
+    }
+
+    let summary: ElectionLiveSummary | null = null;
+    try {
+      summary = await electionsApi.live(current.id);
+    } catch {
+      summary = null;
+    }
+    sharedActive = {
+      id: current.id,
+      title: current.title,
+      status: current.status,
+      summary,
+    };
+    sharedCheckedAt = Date.now();
+    return sharedActive;
+  })().finally(() => {
+    sharedRequest = null;
+  });
+
+  return sharedRequest;
 }
 
 /**
@@ -51,6 +83,8 @@ async function fetchPublicElections(): Promise<PublicElectionItem[]> {
  */
 export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElection | null {
   const [active, setActive] = useState<ActiveLiveElection | null>(null);
+  const { isModuleDown } = usePublicModuleStatus();
+  const electionsModuleDown = isModuleDown("elections");
 
   useEffect(() => {
     if (!enabled) setActive(null);
@@ -58,27 +92,11 @@ export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElec
 
   useResilientPoll(
     async () => {
-      const elections = await fetchPublicElections();
-      const current =
-        elections.find((item) => item.status === "live") ??
-        elections.find((item) => item.status === "paused") ??
-        null;
-      if (!current) {
+      if (electionsModuleDown) {
         setActive(null);
         return "ok";
       }
-      let summary: ElectionLiveSummary | null = null;
-      try {
-        summary = await electionsApi.live(current.id);
-      } catch {
-        summary = null;
-      }
-      setActive({
-        id: current.id,
-        title: current.title,
-        status: current.status,
-        summary,
-      });
+      setActive(await fetchSharedLiveElection());
       return "ok";
     },
     { enabled, intervalMs: pollMs },

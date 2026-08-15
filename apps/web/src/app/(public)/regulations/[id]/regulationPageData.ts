@@ -1,5 +1,5 @@
-import { serverApiUrl } from "@/lib/config";
 import { decodeRouteSegment } from "@/lib/regulationLawRefs";
+import { fetchPublicJson } from "@/lib/serverFetch";
 
 export type RegulationDetailSearchParams = Record<string, string | string[] | undefined>;
 export type RegulationDetailMeta = { title: string };
@@ -13,15 +13,8 @@ export function firstSearchParam(
 }
 
 export async function fetchRegulationMeta(id: string): Promise<RegulationDetailMeta | null> {
-  try {
-    const response = await fetch(
-      serverApiUrl(`/regulations/${encodeURIComponent(decodeRouteSegment(id))}`),
-      { next: { revalidate: 60 } },
-    );
-    if (!response.ok) return null;
-    const data = await response.json() as { title?: unknown };
-    return typeof data.title === "string" ? { title: data.title } : null;
-  } catch {
-    return null;
-  }
+  const data = await fetchPublicJson<{ title?: unknown }>(
+    `/regulations/${encodeURIComponent(decodeRouteSegment(id))}`,
+  );
+  return typeof data?.title === "string" ? { title: data.title } : null;
 }

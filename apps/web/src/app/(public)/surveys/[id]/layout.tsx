@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { serverApiUrl } from "@/lib/config";
+import { fetchPublicJson } from "@/lib/serverFetch";
 import { socialDescription } from "@/lib/social-metadata";
 import { pageMetadata } from "@/lib/seo";
 
@@ -12,11 +12,7 @@ type SurveyMeta = {
 };
 
 async function fetchSurvey(id: string): Promise<SurveyMeta | null> {
-  const res = await fetch(serverApiUrl(`/surveys/public/${encodeURIComponent(id)}`), {
-    next: { revalidate: 60 },
-  });
-  if (!res.ok) return null;
-  return res.json();
+  return fetchPublicJson<SurveyMeta>(`/surveys/public/${encodeURIComponent(id)}`);
 }
 
 export async function generateMetadata(

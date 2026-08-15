@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 
-import { ModuleStatusProvider } from "@/contexts/ModuleStatusContext";
+import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import { useLiveElection, type ActiveLiveElection } from "./useLiveElection";
 
 const PublicLiveElectionContext = createContext<ActiveLiveElection | null>(null);
@@ -30,9 +30,9 @@ function PublicLiveElectionContent({ children }: { children: React.ReactNode }) 
 
 export default function PublicSiteRuntime({ children }: { children: React.ReactNode }) {
   return (
-    <ModuleStatusProvider authenticated={false}>
+    <PublicModuleStatusProvider>
       <PublicLiveElectionContent>{children}</PublicLiveElectionContent>
-    </ModuleStatusProvider>
+    </PublicModuleStatusProvider>
   );
 }
 

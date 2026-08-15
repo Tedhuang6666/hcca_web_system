@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
 
 import { BRANDING } from "@/lib/branding";
-import { serverApiUrl } from "@/lib/config";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { fetchPublicJson } from "@/lib/serverFetch";
 import type { AnnouncementOut } from "@/lib/types";
 
 import AnnouncementDetailPageClient from "./AnnouncementDetailPageClient";
 
 async function fetchAnnouncement(id: string): Promise<AnnouncementOut | null> {
-  const res = await fetch(serverApiUrl(`/announcements/${encodeURIComponent(id)}`), {
-    next: { revalidate: 60 },
-  });
-  if (!res.ok) return null;
-  return res.json();
+  return fetchPublicJson<AnnouncementOut>(`/announcements/${encodeURIComponent(id)}`);
 }
 
 function markdownFromContent(content: Record<string, unknown> | null | undefined) {
