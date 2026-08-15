@@ -305,6 +305,28 @@ async def test_page_view_tracking_does_not_require_analytics_permission(
     assert result.scalar_one().path == "/documents/:id"
 
 
+async def test_component_metrics_accepts_profiler_payload(
+    member_user, authed_client_factory
+) -> None:
+    resp = await authed_client_factory(member_user).post(
+        "/analytics/component-metrics",
+        json={
+            "component_name": "AnalyticsPage",
+            "path": "/analytics",
+            "render_count": 3,
+            "total_render_time_ms": 24.0,
+            "avg_render_time_ms": 8.0,
+            "max_render_time_ms": 12.0,
+            "last_render_time_ms": 7.0,
+            "phase": "update",
+            "tags": {"surface": "analytics"},
+        },
+    )
+
+    assert resp.status_code == 202
+    assert resp.json() == {"status": "accepted"}
+
+
 async def test_product_analytics_returns_daily_users_and_page_metrics(
     db_session, member_user, authed_client_factory
 ) -> None:

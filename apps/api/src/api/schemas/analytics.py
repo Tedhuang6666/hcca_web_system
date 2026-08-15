@@ -1,6 +1,7 @@
 """平台產品統計 API schema。"""
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -17,6 +18,25 @@ class ClientMetricCreate(BaseModel):
     duration_ms: float | None = Field(default=None, ge=0, le=86_400_000)
     attempts: int | None = Field(default=None, ge=0, le=10)
     circuit_open: bool = False
+    component_name: str | None = Field(default=None, min_length=1, max_length=150)
+    resource_name: str | None = Field(default=None, min_length=1, max_length=500)
+    initiator_type: str | None = Field(default=None, min_length=1, max_length=50)
+    start_time_ms: float | None = Field(default=None, ge=0, le=86_400_000)
+    response_end_ms: float | None = Field(default=None, ge=0, le=86_400_000)
+
+
+class ComponentMetricCreate(BaseModel):
+    component_name: str = Field(min_length=1, max_length=150)
+    path: str = Field(min_length=1, max_length=255)
+    render_count: int = Field(ge=1, le=1_000_000)
+    total_render_time_ms: float = Field(ge=0, le=86_400_000)
+    avg_render_time_ms: float = Field(ge=0, le=86_400_000)
+    max_render_time_ms: float = Field(ge=0, le=86_400_000)
+    last_render_time_ms: float = Field(ge=0, le=86_400_000)
+    actual_duration_ms: float | None = Field(default=None, ge=0, le=86_400_000)
+    base_duration_ms: float | None = Field(default=None, ge=0, le=86_400_000)
+    phase: Literal["mount", "update", "nested-update", "unmount"] | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
 
 
 class DailyRegistrationItem(BaseModel):
