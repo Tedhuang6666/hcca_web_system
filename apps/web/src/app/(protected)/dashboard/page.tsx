@@ -1,16 +1,8 @@
-import type { DashboardResponse } from "@/lib/api/dashboard";
 import type { TaskInboxResponse } from "@/lib/api/tasks";
 import { privateServerData, serverRequest } from "@/lib/server/request";
 import { getServerSession } from "@/lib/server/session";
-import type { AnnouncementListItem, MatterListItem } from "@/lib/types";
 
 import DashboardPageClient, { type DashboardPageInitialData } from "./DashboardPageClient";
-
-function canViewGovernanceWork(permissions: readonly string[], isAdmin: boolean): boolean {
-  if (isAdmin || permissions.includes("admin:all")) return true;
-  return ["governance:manage", "meeting:manage", "activity:manage", "document:admin"]
-    .some((permission) => permissions.includes(permission));
-}
 
 async function fetchOptional<T>(path: string): Promise<T | null> {
   try {
@@ -24,24 +16,13 @@ export default async function DashboardPage() {
   const session = await getServerSession();
   if (!session) return <DashboardPageClient initialData={null} />;
 
-  const governanceEnabled = canViewGovernanceWork(
-    session.permissions,
-    Boolean(session.is_superuser || session.is_owner),
-  );
-  const [dashboard, tasks, matters, announcements] = await Promise.all([
-    fetchOptional<DashboardResponse>("/dashboard"),
-    fetchOptional<TaskInboxResponse>("/tasks"),
-    governanceEnabled
-      ? fetchOptional<MatterListItem[]>("/governance/matters?status=active&limit=6")
-      : Promise.resolve([]),
-    fetchOptional<AnnouncementListItem[]>("/announcements?limit=3"),
-  ]);
+  // 首屏僅等待「優先處理」所需的待辦。跨模組動態、公告與治理摘要都不是
+  // 首屏關鍵資料，改由 Client 在畫面可互動後背景取得，避免最慢的聚合查詢
+  // 延後整個 dashboard（也連帶延後側欄 hydration）。
+  const tasks = await fetchOptional<TaskInboxResponse>("/tasks");
   const initialData: DashboardPageInitialData = {
     userName: session.display_name,
-    dashboard,
     tasks,
-    matters: matters ?? [],
-    announcements: announcements ?? [],
   };
 
   return <DashboardPageClient initialData={initialData} />;
