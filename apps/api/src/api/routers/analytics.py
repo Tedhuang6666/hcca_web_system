@@ -23,7 +23,12 @@ from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
-from api.schemas.analytics import ClientMetricCreate, PageViewCreate, ProductAnalyticsOut
+from api.schemas.analytics import (
+    ClientMetricCreate,
+    ComponentMetricCreate,
+    PageViewCreate,
+    ProductAnalyticsOut,
+)
 from api.services.analytics import get_product_analytics, record_page_view
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
@@ -112,6 +117,19 @@ async def create_client_metric(body: ClientMetricCreate, request: Request) -> di
         posthog.capture(
             distinct_id=request.headers.get("X-Client-ID", "anonymous"),
             event="web_client_metric",
+            properties=body.model_dump(),
+        )
+    return {"status": "accepted"}
+
+
+@router.post("/component-metrics", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
+async def create_component_metric(body: ComponentMetricCreate, request: Request) -> dict[str, str]:
+    """接收元件級 React Profiler 指標，交由產品分析平台聚合。"""
+    posthog = get_posthog_client()
+    if posthog:
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="component_performance",
             properties=body.model_dump(),
         )
     return {"status": "accepted"}

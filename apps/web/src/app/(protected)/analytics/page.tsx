@@ -16,6 +16,7 @@ import type {
 } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import PerformanceDashboard from "@/components/performance/PerformanceDashboard";
 
 function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
   return result.status === "fulfilled" ? result.value : fallback;
@@ -153,6 +154,8 @@ export default function AnalyticsPage() {
           {loading ? "載入中" : "重新整理"}
         </button>
       </header>
+
+      <PerformanceDashboard />
 
       <section className="card p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
