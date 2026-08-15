@@ -1,3 +1,5 @@
+import { unstable_cache } from "next/cache";
+
 import type {
   AnnouncementListItem,
   AnnouncementOut,
@@ -19,47 +21,61 @@ import { serverApiUrl } from "./config";
 export const PUBLIC_REVALIDATE_SECONDS = 60;
 const PUBLIC_FETCH_TIMEOUT_MS = 2_000;
 
-type PublicFetchInit = RequestInit & { next?: { revalidate: number } };
-
-async function fetchPublicApi(input: string, init: PublicFetchInit): Promise<Response> {
+async function fetchPublicApi(input: string): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PUBLIC_FETCH_TIMEOUT_MS);
 
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, { cache: "no-store", signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function announcementFetchOptions(): RequestInit & { next?: { revalidate: number } } {
-  // Public pages must not forward a visitor's session cookie into a cacheable
-  // response. Authenticated announcement management uses the client API layer.
-  return { next: { revalidate: PUBLIC_REVALIDATE_SECONDS } };
-}
+// Root layouts are dynamic because the CSP nonce is generated per request. Keep
+// public API data cacheable independently so dynamic HTML does not force a cold
+// backend request on every page view.
+const fetchCachedPublicJson = unstable_cache(
+  async (path: string): Promise<unknown> => {
+    const response = await fetchPublicApi(serverApiUrl(path));
+    if (!response.ok) throw new Error(`Public API request failed: ${response.status}`);
+    return response.json();
+  },
+  ["hcca-public-api-v1"],
+  { revalidate: PUBLIC_REVALIDATE_SECONDS },
+);
+const fetchCachedLivePublicJson = unstable_cache(
+  async (path: string): Promise<unknown> => {
+    const response = await fetchPublicApi(serverApiUrl(path));
+    if (!response.ok) throw new Error(`Public API request failed: ${response.status}`);
+    return response.json();
+  },
+  ["hcca-public-live-api-v1"],
+  { revalidate: 15 },
+);
 
-export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
+async function getCachedPublicJson<T>(path: string, live = false): Promise<T | null> {
   try {
-    const res = await fetchPublicApi(serverApiUrl("/site/public"), {
-      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return null;
-    return res.json();
+    const fetcher = live ? fetchCachedLivePublicJson : fetchCachedPublicJson;
+    return (await fetcher(path)) as T;
   } catch {
     return null;
   }
 }
 
+export function fetchPublicJson<T>(
+  path: string,
+  options: { revalidate?: number } = {},
+): Promise<T | null> {
+  return getCachedPublicJson<T>(path, options.revalidate === 15);
+}
+
+export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
+  return getCachedPublicJson<PublicSiteBundleOut>("/site/public");
+}
+
 export async function fetchAnnouncements(limit = 100): Promise<AnnouncementListItem[]> {
-  try {
-    const res = await fetchPublicApi(serverApiUrl(`/announcements?limit=${limit}`), {
-      ...announcementFetchOptions(),
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
+  return (await getCachedPublicJson<AnnouncementListItem[]>(`/announcements?limit=${limit}`)) ?? [];
 }
 
 export async function fetchPublicDocuments(
@@ -69,54 +85,21 @@ export async function fetchPublicDocuments(
   if (params.limit !== undefined) search.set("limit", String(params.limit));
   if (params.offset !== undefined) search.set("offset", String(params.offset));
 
-  try {
-    const res = await fetchPublicApi(serverApiUrl(`/documents?${search.toString()}`), {
-      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
+  return getCachedPublicJson<DocumentListItem[]>(`/documents?${search.toString()}`);
 }
 
 export async function fetchPublicRegulations(): Promise<RegulationListItem[]> {
-  try {
-    const res = await fetchPublicApi(serverApiUrl("/regulations"), {
-      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
+  return (await getCachedPublicJson<RegulationListItem[]>("/regulations")) ?? [];
 }
 
 export async function fetchPublicSurveys(status?: string): Promise<SurveyListItem[]> {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
 
-  try {
-    const res = await fetchPublicApi(serverApiUrl(`/surveys/public${query}`), {
-      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
+  return (await getCachedPublicJson<SurveyListItem[]>(`/surveys/public${query}`)) ?? [];
 }
 
 export async function fetchPublicSurvey(id: string): Promise<SurveyOut | null> {
-  try {
-    const res = await fetchPublicApi(
-      serverApiUrl(`/surveys/public/${encodeURIComponent(id)}`),
-      { next: { revalidate: PUBLIC_REVALIDATE_SECONDS } },
-    );
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
+  return getCachedPublicJson<SurveyOut>(`/surveys/public/${encodeURIComponent(id)}`);
 }
 
 export async function fetchPublicPartnerMapData(): Promise<{
@@ -126,15 +109,7 @@ export async function fetchPublicPartnerMapData(): Promise<{
   initialRankings: PartnerRankingItem[];
 }> {
   const fetchJson = async <T>(path: string): Promise<T> => {
-    try {
-      const res = await fetchPublicApi(serverApiUrl(path), {
-        next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-      });
-      if (!res.ok) return [] as T;
-      return res.json();
-    } catch {
-      return [] as T;
-    }
+    return (await getCachedPublicJson<T>(path)) ?? ([] as T);
   };
 
   const [initialItems, initialContactBusinesses, initialTags, initialRankings] = await Promise.all([
@@ -148,61 +123,23 @@ export async function fetchPublicPartnerMapData(): Promise<{
 }
 
 export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut | null> {
-  try {
-    const res = await fetchPublicApi(serverApiUrl("/announcements/active-urgent"), {
-      ...announcementFetchOptions(),
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
+  return getCachedPublicJson<AnnouncementOut | null>("/announcements/active-urgent");
 }
 
 export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]> {
-  try {
-    const res = await fetchPublicApi(serverApiUrl("/system/module-status"), {
-      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
+  return (await getCachedPublicJson<ModuleStatusPublic[]>("/system/module-status")) ?? [];
 }
 
 export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {
-  try {
-    const res = await fetchPublicApi(serverApiUrl("/site/officers?active_only=true"), {
-      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
+  return (await getCachedPublicJson<PublicOfficerOut[]>("/site/officers?active_only=true")) ?? [];
 }
 
 export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut | null> {
-  try {
-    const res = await fetchPublicApi(serverApiUrl(`/site/pages/${encodeURIComponent(slug)}`), {
-      next: { revalidate: PUBLIC_REVALIDATE_SECONDS },
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
+  return getCachedPublicJson<PublicSitePageOut>(`/site/pages/${encodeURIComponent(slug)}`);
 }
 
 export async function fetchAnnouncement(id: string): Promise<import("./types").AnnouncementOut | null> {
-  try {
-    const res = await fetchPublicApi(serverApiUrl(`/announcements/${encodeURIComponent(id)}`), {
-      ...announcementFetchOptions(),
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
+  return getCachedPublicJson<import("./types").AnnouncementOut>(
+    `/announcements/${encodeURIComponent(id)}`,
+  );
 }

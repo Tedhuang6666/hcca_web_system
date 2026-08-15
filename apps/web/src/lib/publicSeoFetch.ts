@@ -4,21 +4,10 @@ import type {
   PetitionPublicOut,
   RegulationOut,
 } from "@/lib/types";
-
-import { serverApiUrl } from "@/lib/config";
-
-const REVALIDATE_SECONDS = 60;
+import { fetchPublicJson as fetchCachedPublicJson } from "@/lib/serverFetch";
 
 async function fetchPublicJson<T>(path: string): Promise<T | null> {
-  try {
-    const response = await fetch(serverApiUrl(path), {
-      next: { revalidate: REVALIDATE_SECONDS },
-    });
-    if (!response.ok) return null;
-    return response.json();
-  } catch {
-    return null;
-  }
+  return fetchCachedPublicJson<T>(path);
 }
 
 export async function fetchPublicRegulation(id: string): Promise<RegulationOut | null> {

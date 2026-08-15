@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import OrderedDict
@@ -17,6 +18,11 @@ from api.core.security import redis_client
 from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
+
+_REDIS_CHECK_TIMEOUT_SECONDS = 0.25
+_REDIS_BACKOFF_POLICY_TIMEOUT_SECONDS = 0.01
+_REDIS_BACKOFF_SECONDS = 5.0
+_redis_backoff_until = 0.0
 
 
 class _BoundedMemoryBuckets:
@@ -128,6 +134,8 @@ class SimpleRateLimitMiddleware:
         return _memory_buckets.check(key, req_limit, win)
 
     async def __call__(self, scope, receive, send) -> None:
+        global _redis_backoff_until
+
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -143,7 +151,24 @@ class SimpleRateLimitMiddleware:
             return
 
         client_host = request.client.host if request.client else "unknown"
-        enabled, req_limit, win = await self._policy_for_path(request.url.path)
+        redis_usable = time.monotonic() >= _redis_backoff_until
+        try:
+            enabled, req_limit, win = await asyncio.wait_for(
+                self._policy_for_path(request.url.path),
+                timeout=(
+                    _REDIS_CHECK_TIMEOUT_SECONDS
+                    if redis_usable
+                    else _REDIS_BACKOFF_POLICY_TIMEOUT_SECONDS
+                ),
+            )
+        except (RedisError, TimeoutError):
+            if redis_usable:
+                # A slow policy read must not block every request. Keep the static
+                # deployment defaults while Redis recovers; the memory counter is
+                # used for the short backoff window below.
+                _redis_backoff_until = time.monotonic() + _REDIS_BACKOFF_SECONDS
+                redis_usable = False
+            enabled, req_limit, win = self.enabled, self.requests, self.window_seconds
         if not enabled:
             await self.app(scope, receive, send)
             return
@@ -152,12 +177,28 @@ class SimpleRateLimitMiddleware:
         route_template = self._route_template(request.url.path)
         key = f"rate_limit:{client_host}:{request.method}:{route_template}:{bucket}"
 
+        if not redis_usable:
+            if self._check_memory_rate_limit(key, req_limit, win):
+                record_rate_limit_blocked("memory")
+                response = JSONResponse(
+                    {"detail": "請求過於頻繁，請稍後再試"},
+                    status_code=429,
+                    headers={"Retry-After": str(win)},
+                )
+                await response(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+            return
+
         try:
             # INCR + EXPIRE：固定視窗計數
             pipe = redis_client.pipeline()
             pipe.incr(key)
             pipe.expire(key, win + 5)
-            count, _ttl_set = await pipe.execute()
+            count, _ttl_set = await asyncio.wait_for(
+                pipe.execute(),
+                timeout=_REDIS_CHECK_TIMEOUT_SECONDS,
+            )
             if int(count) > req_limit:
                 record_rate_limit_blocked("redis")
                 response = JSONResponse(
@@ -167,7 +208,8 @@ class SimpleRateLimitMiddleware:
                 )
                 await response(scope, receive, send)
                 return
-        except RedisError:
+        except (RedisError, TimeoutError):
+            _redis_backoff_until = time.monotonic() + _REDIS_BACKOFF_SECONDS
             logger.error(
                 "Rate limit Redis 不可用，降級至 per-process 內存限流"
                 "（多 worker 環境下有效上限為 N×%d，請立即修復 Redis）",

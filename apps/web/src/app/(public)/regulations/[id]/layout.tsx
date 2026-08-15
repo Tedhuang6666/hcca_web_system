@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { BRANDING } from "@/lib/branding";
-import { serverApiUrl } from "@/lib/config";
 import { contentCategoryLabel, REGULATION_CATEGORY_LABELS } from "@/lib/content-labels";
 import { socialDescription } from "@/lib/social-metadata";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { absoluteUrl, excerpt, JsonLd, pageMetadata } from "@/lib/seo";
+import { fetchPublicJson } from "@/lib/serverFetch";
 
 type RegulationMeta = {
   title: string;
@@ -22,11 +22,7 @@ type RegulationMeta = {
 };
 
 async function fetchReg(id: string): Promise<RegulationMeta | null> {
-  const res = await fetch(serverApiUrl(`/regulations/${encodeURIComponent(id)}`), {
-    next: { revalidate: 60 },
-  });
-  if (!res.ok) return null;
-  return res.json();
+  return fetchPublicJson<RegulationMeta>(`/regulations/${encodeURIComponent(id)}`);
 }
 
 export async function generateMetadata(

@@ -7,8 +7,8 @@ import {
   Radio,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
+import { usePublicModuleStatus } from "@/contexts/PublicModuleStatusContext";
 import type { ModuleId } from "@/lib/modules";
 
 const SERVICES: Array<{
@@ -41,51 +41,19 @@ const SERVICES: Array<{
   },
 ];
 
-const MODULE_STATUS_REFRESH_MS = 30_000;
-
 export default function PublicHomeServices({
   initialClosedModuleIds,
 }: {
   initialClosedModuleIds: ModuleId[];
 }) {
-  const [closedModuleIds, setClosedModuleIds] = useState<Set<string>>(
-    () => new Set(initialClosedModuleIds),
-  );
-
-  useEffect(() => {
-    let active = true;
-
-    const refresh = async () => {
-      try {
-        const response = await fetch("/api/system/module-status", { cache: "no-store" });
-        if (!response.ok) return;
-
-        const statuses = (await response.json()) as Array<{
-          id: string;
-          on: boolean;
-          mode: string;
-        }>;
-        if (active) {
-          setClosedModuleIds(
-            new Set(
-              statuses
-                .filter((status) => status.on && status.mode === "closed")
-                .map((status) => status.id),
-            ),
-          );
-        }
-      } catch {
-        // 維持伺服器端送來的上一份狀態，避免網路暫時中斷時入口消失。
-      }
-    };
-
-    void refresh();
-    const intervalId = window.setInterval(refresh, MODULE_STATUS_REFRESH_MS);
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
-    };
-  }, []);
+  const { statuses } = usePublicModuleStatus();
+  const closedModuleIds = Object.keys(statuses).length > 0
+    ? new Set(
+      Object.values(statuses)
+        .filter((status) => status.on && status.mode === "closed")
+        .map((status) => status.id),
+    )
+    : new Set(initialClosedModuleIds);
 
   const visibleServices = SERVICES.filter((item) => !closedModuleIds.has(item.moduleId));
 

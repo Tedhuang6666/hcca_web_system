@@ -58,6 +58,20 @@ type AccessState = { blocked: false } | { blocked: true; reason?: string; expire
 const maintenanceCache = new BoundedTtlCache<MaintenanceState>(4);
 const accessStatusCache = new BoundedTtlCache<AccessState>(2_048);
 const bypassCache = new BoundedTtlCache<boolean>(2_048);
+const inFlightChecks = new Map<string, Promise<unknown>>();
+
+function dedupeCheck<T>(key: string, check: () => Promise<T>): Promise<T> {
+  const existing = inFlightChecks.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const pending = check();
+  inFlightChecks.set(key, pending);
+  const clear = () => {
+    if (inFlightChecks.get(key) === pending) inFlightChecks.delete(key);
+  };
+  void pending.then(clear, clear);
+  return pending;
+}
 
 /**
  * 識別中文公文字號格式，例如：
@@ -200,37 +214,42 @@ async function canBypassMaintenance(req: NextRequest) {
   const cached = bypassCache.get(cookieKey);
   if (cached !== undefined) return cached;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_BYPASS_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${API_INTERNAL_BASE}/auth/me`, {
-      headers: {
-        ...(cookie ? { cookie } : {}),
-        ...(authorization ? { authorization } : {}),
-      },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!res.ok) { bypassCache.set(cookieKey, false); return false; }
-    const me = (await res.json()) as {
-      is_superuser?: boolean;
-      is_owner?: boolean;
-      permissions?: string[];
-    };
-    const permissions = new Set(me.permissions ?? []);
-    const result = Boolean(
-      me.is_superuser
-      || me.is_owner
-      || permissions.has("admin:all")
-      || permissions.has("system:maintenance_bypass"),
-    );
-    bypassCache.set(cookieKey, result);
-    return result;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return dedupeCheck(`bypass:${cookieKey}`, async () => {
+    const cachedAgain = bypassCache.get(cookieKey);
+    if (cachedAgain !== undefined) return cachedAgain;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MAINTENANCE_BYPASS_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API_INTERNAL_BASE}/auth/me`, {
+        headers: {
+          ...(cookie ? { cookie } : {}),
+          ...(authorization ? { authorization } : {}),
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!res.ok) { bypassCache.set(cookieKey, false); return false; }
+      const me = (await res.json()) as {
+        is_superuser?: boolean;
+        is_owner?: boolean;
+        permissions?: string[];
+      };
+      const permissions = new Set(me.permissions ?? []);
+      const result = Boolean(
+        me.is_superuser
+        || me.is_owner
+        || permissions.has("admin:all")
+        || permissions.has("system:maintenance_bypass"),
+      );
+      bypassCache.set(cookieKey, result);
+      return result;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
 }
 
 async function maintenanceRedirect(req: NextRequest) {
@@ -239,26 +258,34 @@ async function maintenanceRedirect(req: NextRequest) {
 
   let state = maintenanceCache.get("global");
   if (!state) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
-    try {
-      const res = await fetch(`${API_INTERNAL_BASE}/system/maintenance`, {
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      if (!res.ok) return null;
-      const raw = (await res.json()) as { enabled?: boolean; message?: string; until?: number | null };
-      state = raw.enabled
-        ? { enabled: true, message: raw.message, until: raw.until }
-        : { enabled: false };
-      maintenanceCache.set("global", state);
-    } catch {
-      // fail-open：API 不可達時放行。維護模式需要 API 運作才有意義；
-      // API 整體掛掉時不應連帶讓前端對所有人回傳 503。
-      return null;
-    } finally {
-      clearTimeout(timeout);
-    }
+    const loadedState = await dedupeCheck("maintenance", async () => {
+      const cachedAgain = maintenanceCache.get("global");
+      if (cachedAgain) return cachedAgain;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+      try {
+        const res = await fetch(`${API_INTERNAL_BASE}/system/maintenance`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) return null;
+        const raw = (await res.json()) as { enabled?: boolean; message?: string; until?: number | null };
+        const nextState = raw.enabled
+          ? { enabled: true, message: raw.message, until: raw.until }
+          : { enabled: false };
+        maintenanceCache.set("global", nextState);
+        return nextState;
+      } catch {
+        // fail-open：API 不可達時放行。維護模式需要 API 運作才有意義；
+        // API 整體掛掉時不應連帶讓前端對所有人回傳 503。
+        return null;
+      } finally {
+        clearTimeout(timeout);
+      }
+    });
+    if (!loadedState) return null;
+    state = loadedState;
   }
 
   if (!state.enabled || await canBypassMaintenance(req)) return null;
@@ -287,34 +314,42 @@ async function blockedRedirect(req: NextRequest) {
   const ipKey = cacheKey(ip);
   let state = accessStatusCache.get(ipKey);
   if (!state) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
-    try {
-      const fetchHeaders: Record<string, string> = {
-        cookie: req.headers.get("cookie") ?? "",
-      };
-      for (const name of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
-        const value = req.headers.get(name);
-        if (value) fetchHeaders[name] = value;
+    const loadedState = await dedupeCheck(`access:${ipKey}`, async () => {
+      const cachedAgain = accessStatusCache.get(ipKey);
+      if (cachedAgain) return cachedAgain;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+      try {
+        const fetchHeaders: Record<string, string> = {
+          cookie: req.headers.get("cookie") ?? "",
+        };
+        for (const name of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
+          const value = req.headers.get(name);
+          if (value) fetchHeaders[name] = value;
+        }
+        const res = await fetch(`${API_INTERNAL_BASE}/system/access-status`, {
+          headers: fetchHeaders,
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) return null;
+        const raw = (await res.json()) as { blocked?: boolean; reason?: string; expires_at?: number | null };
+        const nextState = raw.blocked
+          ? { blocked: true, reason: raw.reason, expires_at: raw.expires_at }
+          : { blocked: false };
+        accessStatusCache.set(ipKey, nextState);
+        return nextState;
+      } catch {
+        // fail-open：API 不可達時放行。封鎖檢查依賴 API；API 整體掛掉時
+        // 以 503 封鎖所有人（包含正常使用者）的代價高於放行少數被封鎖 IP。
+        return null;
+      } finally {
+        clearTimeout(timeout);
       }
-      const res = await fetch(`${API_INTERNAL_BASE}/system/access-status`, {
-        headers: fetchHeaders,
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      if (!res.ok) return null;
-      const raw = (await res.json()) as { blocked?: boolean; reason?: string; expires_at?: number | null };
-      state = raw.blocked
-        ? { blocked: true, reason: raw.reason, expires_at: raw.expires_at }
-        : { blocked: false };
-      accessStatusCache.set(ipKey, state);
-    } catch {
-      // fail-open：API 不可達時放行。封鎖檢查依賴 API；API 整體掛掉時
-      // 以 503 封鎖所有人（包含正常使用者）的代價高於放行少數被封鎖 IP。
-      return null;
-    } finally {
-      clearTimeout(timeout);
-    }
+    });
+    if (!loadedState) return null;
+    state = loadedState;
   }
 
   if (!state.blocked) return null;

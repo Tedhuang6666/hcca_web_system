@@ -5,6 +5,7 @@ import { ChevronDown, LogIn, Menu, Moon, Sun, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
+import { usePublicModuleStatus } from "@/contexts/PublicModuleStatusContext";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 import PublicEmblem from "@/components/site/PublicEmblem";
@@ -32,14 +33,19 @@ function PublicSiteHeaderContent({
 }) {
   const [open, setOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [moduleStatusReady, setModuleStatusReady] = useState(false);
-  const [closedModuleIds, setClosedModuleIds] = useState<Set<string>>(() => new Set());
   const [liveBannerReady, setLiveBannerReady] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { statuses } = usePublicModuleStatus();
   const pathname = usePathname();
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const menuRef = useRef<HTMLDetailsElement>(null);
   const headerRef = useRef<HTMLElement>(null);
+  const moduleStatusReady = Object.keys(statuses).length > 0;
+  const closedModuleIds = new Set(
+    Object.values(statuses)
+      .filter((status) => status.on && status.mode === "closed")
+      .map((status) => status.id),
+  );
 
   useEffect(() => {
     setOpen(false);
@@ -97,32 +103,6 @@ function PublicSiteHeaderContent({
 
   useEffect(() => {
     setIsLoggedIn(Boolean(window.localStorage.getItem("user_id")));
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadModuleStatus = async () => {
-      try {
-        const response = await fetch("/api/system/module-status", { cache: "no-store" });
-        if (!response.ok) return;
-        const statuses = (await response.json()) as Array<{ id: string; on: boolean; mode: string }>;
-        if (active) {
-          setClosedModuleIds(
-            new Set(statuses.filter((item) => item.on && item.mode === "closed").map((item) => item.id)),
-          );
-        }
-      } catch {
-        // 載入失敗時維持保守預設：只顯示不依賴模組狀態的入口。
-      } finally {
-        if (active) setModuleStatusReady(true);
-      }
-    };
-
-    void loadModuleStatus();
-    return () => {
-      active = false;
-    };
   }, []);
 
   useEffect(() => {

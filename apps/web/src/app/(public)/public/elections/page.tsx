@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, PauseCircle, Radio } from "lucide-react";
 
-import { serverApiUrl } from "@/lib/config";
+import { fetchPublicJson } from "@/lib/serverFetch";
 
 type PublicElection = {
   id: string;
@@ -41,15 +41,7 @@ export const metadata: Metadata = {
 };
 
 async function fetchPublicElections(): Promise<PublicElection[]> {
-  try {
-    const response = await fetch(serverApiUrl("/elections/public"), {
-      next: { revalidate: 15 },
-    });
-    if (!response.ok) return [];
-    return response.json();
-  } catch {
-    return [];
-  }
+  return (await fetchPublicJson<PublicElection[]>("/elections/public", { revalidate: 15 })) ?? [];
 }
 
 export default async function PublicElectionsPage() {
