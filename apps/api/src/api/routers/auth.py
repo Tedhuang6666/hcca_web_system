@@ -175,8 +175,9 @@ def _email_can_login(
 async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
     from api.services.permission import get_user_permission_codes
 
-    # 登入狀態與前端權限快取必須反映最新資料；不要使用 RBAC 的短期 Redis 快取。
-    codes = await get_user_permission_codes(db, user.id, on_date=local_today())
+    # 權限異動流程會主動失效 Redis 快取；正常讀取沿用短期快取，避免每次
+    # /auth/me 都重新查詢 UserPosition/Position/Permission JOIN。
+    codes = await get_user_permission_codes(db, user.id)
     return {
         "id": str(user.id),
         "email": user.email,

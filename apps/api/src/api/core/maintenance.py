@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -282,10 +283,8 @@ async def list_module_maintenance() -> dict[str, dict[str, Any] | None]:
     """回傳所有已登錄模組的維護狀態（給 admin / public 端點）。"""
     from api.core.modules import MODULE_IDS
 
-    out: dict[str, dict[str, Any] | None] = {}
-    for mid in MODULE_IDS:
-        out[mid] = await get_module_maintenance(mid)
-    return out
+    states = await asyncio.gather(*(get_module_maintenance(mid) for mid in MODULE_IDS))
+    return dict(zip(MODULE_IDS, states, strict=True))
 
 
 async def set_module_reset(module_id: str, *, window_seconds: int) -> float:

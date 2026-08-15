@@ -60,6 +60,7 @@ function SessionGate({
   const [redirecting, setRedirecting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(Boolean(initialUser));
   const authCheckStarted = useRef(false);
+  const authVerified = useRef(Boolean(initialUser));
   const redirectedFrom = useRef<string | null>(null);
 
   useEffect(() => {
@@ -79,7 +80,12 @@ function SessionGate({
     const isInitialAuthCheck = !authCheckStarted.current;
     authCheckStarted.current = true;
     if (initialUser) cacheCurrentUser(initialUser);
-    if (isInitialAuthCheck && !initialUser) setAuthReady(false);
+    if (isInitialAuthCheck && !initialUser) {
+      const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
+      // localStorage 只用來避免畫面被驗證請求阻塞；真正授權仍由 API 驗證。
+      setIsLoggedIn(hasLocalLogin);
+      setAuthReady(hasLocalLogin);
+    }
     const verifySession = async () => {
       const loggedIn = Boolean(localStorage.getItem("user_id"));
       if (!loggedIn) {
@@ -97,6 +103,7 @@ function SessionGate({
         const me = await withAuthCheckTimeout(authApi.me());
         if (cancelled) return;
         cacheCurrentUser(me);
+        authVerified.current = true;
         setIsLoggedIn(true);
         redirectedFrom.current = null;
         setRedirecting(false);
@@ -106,6 +113,7 @@ function SessionGate({
         // 暫時性網路/API 失敗不能清除登入快取，否則短暫 503 會被誤判成
         // 登入失效，導致管理權限畫面消失，使用者只能重新登入。
         if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
+          authVerified.current = true;
           setIsLoggedIn(true);
           setRedirecting(false);
           setAuthReady(true);
@@ -125,9 +133,25 @@ function SessionGate({
     // 伺服器已在受保護 layout 驗證並傳入 session；首屏 hydration 不再重複
     // 呼叫 /auth/me。仍在視窗重新取得焦點時驗證，確保長時間停留後可收斂狀態。
     if (initialUser) {
+      authVerified.current = true;
       setIsLoggedIn(true);
       setRedirecting(false);
       setAuthReady(true);
+      const revalidate = () => {
+        if (document.visibilityState === "visible") void verifySession();
+      };
+      window.addEventListener("focus", revalidate);
+      document.addEventListener("visibilitychange", revalidate);
+      return () => {
+        cancelled = true;
+        window.removeEventListener("focus", revalidate);
+        document.removeEventListener("visibilitychange", revalidate);
+      };
+    }
+
+    // server session 暫時失敗時，首次瀏覽器驗證成功後不要在每次 pathname
+    // 變更時再次阻塞頁面；focus/visibility 事件仍會在背景重新驗證。
+    if (!isInitialAuthCheck && authVerified.current) {
       const revalidate = () => {
         if (document.visibilityState === "visible") void verifySession();
       };
