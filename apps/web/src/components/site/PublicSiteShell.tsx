@@ -18,6 +18,31 @@ export default function PublicSiteShell({
   urgentAnnouncement?: AnnouncementOut | null;
 }) {
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
+  // PublicSiteHeader is a client component. Pass only its display fields so the
+  // RSC payload never includes full page bodies, homepage configuration, or
+  // announcement content that the header cannot render.
+  const headerSettings = settings
+    ? {
+        site_logo_url: settings.site_logo_url,
+        site_logo_alt: settings.site_logo_alt,
+        theme_config: settings.theme_config,
+      }
+    : null;
+  const headerNavPages = navPages.map((page) => ({
+    id: page.id,
+    slug: page.slug,
+    title: page.title,
+    nav_label: page.nav_label,
+  }));
+  const headerUrgentAnnouncement = urgentAnnouncement
+    ? {
+        id: urgentAnnouncement.id,
+        updated_at: urgentAnnouncement.updated_at,
+        link_url: urgentAnnouncement.link_url,
+        title: urgentAnnouncement.title,
+        link_label: urgentAnnouncement.link_label,
+      }
+    : null;
 
   return (
     <div className="public-site min-h-screen text-[var(--public-text)]">
@@ -28,9 +53,9 @@ export default function PublicSiteShell({
         跳到主要內容
       </a>
       <PublicSiteHeader
-        navPages={navPages}
-        settings={settings}
-        urgentAnnouncement={urgentAnnouncement}
+        navPages={headerNavPages}
+        settings={headerSettings}
+        urgentAnnouncement={headerUrgentAnnouncement}
       />
       <main id="main-content">
         <PublicSiteBackLink />
