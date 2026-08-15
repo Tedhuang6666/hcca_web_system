@@ -62,16 +62,16 @@ function PublicSiteHeaderContent({
   );
   const groups = {
     primary: resolvedGroups.primary.filter(
-      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
+      (item) => !moduleStatusReady || !item.moduleId || !closedModuleIds.has(item.moduleId),
     ),
     info: resolvedGroups.info.filter(
-      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
+      (item) => !moduleStatusReady || !item.moduleId || !closedModuleIds.has(item.moduleId),
     ),
     data: resolvedGroups.data.filter(
-      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
+      (item) => !moduleStatusReady || !item.moduleId || !closedModuleIds.has(item.moduleId),
     ),
     participation: resolvedGroups.participation.filter(
-      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
+      (item) => !moduleStatusReady || !item.moduleId || !closedModuleIds.has(item.moduleId),
     ),
   };
   const topLevel = [
