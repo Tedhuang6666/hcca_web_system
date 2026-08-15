@@ -89,7 +89,7 @@ export default function OfficerRosterTabs({ tabs }: { tabs: OfficerRosterTab[] }
                   <span className="h-1.5 w-1.5 rounded-full bg-current" />
                 </span>
                 <div className="min-w-0">
-                  <h4 className="text-sm font-bold leading-7">{role.title}</h4>
+                  <h3 className="text-sm font-bold leading-7">{role.title}</h3>
                   <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{role.names.length} 位成員</p>
                 </div>
               </div>
