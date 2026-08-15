@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, Home, RotateCcw, ShieldAlert, Wrench } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
 
@@ -132,6 +133,9 @@ function MaintenanceContent() {
                 返回首頁
               </button>
             </div>
+            <Link href="/admin/system" className="btn btn-ghost mt-3 w-full sm:w-auto">
+              管理員控制台（需管理員權限）
+            </Link>
           </div>
 
           <aside className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">

@@ -7,7 +7,8 @@ import {
 const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const MAINTENANCE_CHECK_TIMEOUT_MS = 450;
-const MAINTENANCE_BYPASS_TIMEOUT_MS = 300;
+// /auth/me 會查 Redis、使用者資料與 RBAC 權限；300ms 在 production 容易把超管誤判成一般使用者。
+const MAINTENANCE_BYPASS_TIMEOUT_MS = 1_500;
 const PUBLIC_CONTENT_LAST_MODIFIED_TIMEOUT_MS = 800;
 
 // 模組級快取：在同一 edge worker 實例內跨 request 共用，避免每次換頁都打 API。
@@ -16,7 +17,8 @@ interface CacheEntry<T> {
   value: T;
   ts: number;
 }
-const CACHE_TTL_MS = 30_000;
+// 維護開關變更後必須很快反映，否則管理員關閉後仍會被舊狀態送回維護頁。
+const CACHE_TTL_MS = 5_000;
 
 class BoundedTtlCache<T> {
   private readonly entries = new Map<string, CacheEntry<T>>();
@@ -191,7 +193,11 @@ function decodePathPart(value: string) {
 }
 
 async function canBypassMaintenance(req: NextRequest) {
-  const cookieKey = cacheKey(req.headers.get("cookie") ?? "anonymous");
+  const cookie = req.headers.get("cookie") ?? "";
+  const authorization = req.headers.get("authorization") ?? "";
+  if (!cookie && !authorization) return false;
+
+  const cookieKey = cacheKey(`${cookie}\n${authorization}`);
   const cached = bypassCache.get(cookieKey);
   if (cached !== undefined) return cached;
 
@@ -199,7 +205,10 @@ async function canBypassMaintenance(req: NextRequest) {
   const timeout = setTimeout(() => controller.abort(), MAINTENANCE_BYPASS_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_INTERNAL_BASE}/auth/me`, {
-      headers: { cookie: req.headers.get("cookie") ?? "" },
+      headers: {
+        ...(cookie ? { cookie } : {}),
+        ...(authorization ? { authorization } : {}),
+      },
       cache: "no-store",
       signal: controller.signal,
     });
