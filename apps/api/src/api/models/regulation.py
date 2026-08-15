@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.ext.compiler import compiles
@@ -92,6 +93,14 @@ class Regulation(Base, TimestampMixin):
         Index("ix_regulations_category", "category"),
         Index("ix_regulations_is_active", "is_active"),
         Index("ix_regulations_is_active_workflow", "is_active", "workflow_status"),
+        Index(
+            "ix_regulations_workflow_pub",
+            "workflow_status",
+            text("updated_at DESC"),
+            postgresql_where=text(
+                "workflow_status IN ('under_review', 'scheduled', 'council_approved')"
+            ),
+        ),
         # 全文搜尋 GIN 索引（PostgreSQL tsvector）
         Index("ix_regulations_search_vector", "search_vector", postgresql_using="gin"),
     )

@@ -7,7 +7,18 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -88,6 +99,14 @@ class PetitionCase(Base, TimestampMixin):
     """陳情案件主表。"""
 
     __tablename__ = "petition_cases"
+    __table_args__ = (
+        Index(
+            "ix_petitions_assigned_status",
+            "assigned_to_id",
+            "status",
+            postgresql_where=text("status IN ('submitted', 'in_progress', 'needs_info')"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     case_number: Mapped[str] = mapped_column(String(7), nullable=False, unique=True, index=True)
