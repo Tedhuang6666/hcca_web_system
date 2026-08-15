@@ -364,8 +364,14 @@ async function blockedRedirect(req: NextRequest) {
 
 function publicAssetCacheControl(pathname: string): string | null {
   if (pathname === "/sw.js") return "public, max-age=0, must-revalidate";
-  if (pathname === "/theme.js" || pathname === "/manifest.webmanifest" || pathname === "/llms.txt") {
-    return "public, max-age=86400, stale-while-revalidate=86400";
+  if (pathname === "/theme.v1.js") return "public, max-age=31536000, immutable";
+  if (
+    pathname === "/robots.txt"
+    || pathname === "/theme.js"
+    || pathname === "/manifest.webmanifest"
+    || pathname === "/llms.txt"
+  ) {
+    return "public, max-age=86400, stale-while-revalidate=604800";
   }
   if (pathname.startsWith("/brand/") || pathname.startsWith("/fonts/")) {
     return "public, max-age=2592000, stale-while-revalidate=86400";
@@ -384,15 +390,31 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
+  // Public assets must not wait for maintenance/access API checks. This is
+  // especially important for robots.txt and the pre-paint theme script.
+  const assetCacheControl = publicAssetCacheControl(pathname);
+  if (assetCacheControl) {
+    const response = NextResponse.next();
+    response.headers.set("Cache-Control", assetCacheControl);
+    return response;
+  }
+
   // Next.js App Router 的客戶端換頁是 RSC payload request（帶 "RSC: 1" header），
   // 不代表新使用者到達網站，不需要每次都打 blocked/maintenance API。
   // 這些檢查在全頁載入（無 RSC header）時仍會執行，封鎖與維護控制不受影響。
   const isRscNav = req.headers.get("RSC") === "1";
 
   if (!isRscNav) {
+    // 匿名登入頁只負責提供 OAuth 入口；IP 封鎖會在 API load-shed 與
+    // OAuth callback 再次驗證，避免首屏為了同一個判斷額外等待一次 API。
+    const skipLoginBlockCheck =
+      pathname === "/login"
+      && !req.headers.get("cookie")
+      && !req.headers.get("authorization");
+
     // 兩個 check 並行，避免串行等待
     const [blocked, redirect] = await Promise.all([
-      blockedRedirect(req),
+      skipLoginBlockCheck ? Promise.resolve(null) : blockedRedirect(req),
       maintenanceRedirect(req),
     ]);
     if (blocked) return blocked;
@@ -417,7 +439,7 @@ export default async function proxy(req: NextRequest) {
   const response = withCsp(req);
   response.headers.set(
     "Cache-Control",
-    publicAssetCacheControl(pathname) ?? "private, no-store",
+    assetCacheControl ?? "private, no-store",
   );
   if (!isIndexablePublicPath(pathname)) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");

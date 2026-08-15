@@ -72,9 +72,22 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-function ThemeScript() {
-  // Native script avoids an extra inline beforeInteractive bootstrap.
-  return <script src="/theme.js" defer />;
+function ThemeScript({ nonce }: { nonce: string | null }) {
+  if (!nonce) return <script src="/theme.v1.js" defer />;
+
+  // Apply the theme before the first paint so the root surface does not wait
+  // for a separate request or flash between light and dark modes.
+  const script = `(() => {
+  try {
+    let theme = localStorage.getItem("hcca-theme");
+    if (!theme) {
+      theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch {}
+})();`;
+
+  return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} />;
 }
 
 function StyleNonceBridge({ nonce }: { nonce: string | null }) {
@@ -100,7 +113,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="zh-TW" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         <StyleNonceBridge nonce={nonce} />
-        <ThemeScript />
+        <ThemeScript nonce={nonce} />
       </head>
       <body className="antialiased">
         <ClientErrorReporter />
