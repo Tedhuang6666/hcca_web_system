@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.core.cache import cache_get, cache_set
 from api.core.database import AsyncSessionLocal
@@ -183,6 +184,14 @@ async def _regulations_to_publish(
         (
             await db.execute(
                 select(Regulation)
+                .options(
+                    load_only(
+                        Regulation.id,
+                        Regulation.title,
+                        Regulation.version,
+                        Regulation.updated_at,
+                    )
+                )
                 .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED)
                 .order_by(desc(Regulation.updated_at))
                 .limit(20)
@@ -219,6 +228,15 @@ async def _regulations_to_review(
         (
             await db.execute(
                 select(Regulation)
+                .options(
+                    load_only(
+                        Regulation.id,
+                        Regulation.title,
+                        Regulation.version,
+                        Regulation.workflow_status,
+                        Regulation.updated_at,
+                    )
+                )
                 .where(
                     Regulation.workflow_status.in_(
                         [
