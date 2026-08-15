@@ -2,14 +2,23 @@ import type {
   MFAChallengeOut, MFASetupOut, MFAStatusOut, PasskeyAuthenticationOptionsOut, PasskeyOut,
   PasskeyRegistrationOptionsOut,
 } from "../types";
-import { get, post, request } from "./core";
+import { apiErrorFromResponse } from "./errors";
+import { BASE, authFetch, get, post, request } from "./core";
+
+async function exchangeChallenge(): Promise<MFAChallengeOut> {
+  // This endpoint consumes a server-side, one-time challenge. Do not use the
+  // shared GET wrapper here because it retries network failures automatically.
+  const response = await authFetch(`${BASE}/auth/mfa/exchange-challenge`);
+  if (!response.ok) throw await apiErrorFromResponse(response);
+  return response.json() as Promise<MFAChallengeOut>;
+}
 
 export const mfaApi = {
   status: () => get<MFAStatusOut>("/auth/mfa/status"),
   setup: () => post<MFASetupOut>("/auth/mfa/setup", {}),
   confirm: (code: string) => post<{ message: string }>("/auth/mfa/confirm", { code }),
   verify: (code: string) => post<{ verified: boolean }>("/auth/mfa/verify", { code }),
-  exchangeChallenge: () => get<MFAChallengeOut>("/auth/mfa/exchange-challenge"),
+  exchangeChallenge,
   verifyLogin: (challenge_token: string, code: string) =>
     post<{ message: string }>("/auth/mfa/login/verify", { challenge_token, code }),
   regenerateBackupCodes: (code: string) =>
