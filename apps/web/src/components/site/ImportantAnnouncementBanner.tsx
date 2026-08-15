@@ -8,11 +8,16 @@ import type { AnnouncementOut } from "@/lib/types";
 
 const DISMISSAL_TTL_MS = 10 * 60 * 1000;
 
-function dismissalKey(item: AnnouncementOut) {
+export type ImportantAnnouncement = Pick<
+  AnnouncementOut,
+  "id" | "updated_at" | "link_url" | "title" | "link_label"
+>;
+
+function dismissalKey(item: ImportantAnnouncement) {
   return `hcca:public-important-announcement:${item.id}:${item.updated_at}`;
 }
 
-function wasRecentlyDismissed(item: AnnouncementOut) {
+function wasRecentlyDismissed(item: ImportantAnnouncement) {
   if (typeof window === "undefined") return false;
 
   try {
@@ -29,7 +34,7 @@ function wasRecentlyDismissed(item: AnnouncementOut) {
   }
 }
 
-function rememberDismissal(item: AnnouncementOut) {
+function rememberDismissal(item: ImportantAnnouncement) {
   if (typeof window === "undefined") return;
 
   try {
@@ -42,9 +47,9 @@ function rememberDismissal(item: AnnouncementOut) {
 export default function ImportantAnnouncementBanner({
   announcement: initialAnnouncement,
 }: {
-  announcement?: AnnouncementOut | null;
+  announcement?: ImportantAnnouncement | null;
 }) {
-  const [announcement, setAnnouncement] = useState<AnnouncementOut | null>(
+  const [announcement, setAnnouncement] = useState<ImportantAnnouncement | null>(
     initialAnnouncement ?? null,
   );
   const [visible, setVisible] = useState(Boolean(initialAnnouncement));

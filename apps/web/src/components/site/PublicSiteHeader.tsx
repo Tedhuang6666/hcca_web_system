@@ -7,7 +7,9 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import { usePublicModuleStatus } from "@/contexts/PublicModuleStatusContext";
 import { useTheme } from "@/components/providers/ThemeProvider";
-import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
+import ImportantAnnouncementBanner, {
+  type ImportantAnnouncement,
+} from "@/components/site/ImportantAnnouncementBanner";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
 import { BRANDING } from "@/lib/branding";
@@ -17,19 +19,25 @@ import {
   groupResolvedNav,
   resolvePublicNav,
 } from "@/lib/publicNav";
-import type { AnnouncementOut, PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
+import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 
 const MENU_GROUP_ORDER: PublicNavGroupId[] = ["info", "data", "participation"];
 const DeferredLiveElectionBanner = lazy(() => import("@/components/site/LiveElectionBanner"));
+
+type PublicHeaderSettings = Pick<
+  PublicSiteSettingsOut,
+  "site_logo_url" | "site_logo_alt" | "theme_config"
+>;
+type PublicHeaderNavPage = Pick<PublicSitePageOut, "id" | "slug" | "title" | "nav_label">;
 
 function PublicSiteHeaderContent({
   navPages,
   settings,
   urgentAnnouncement,
 }: {
-  navPages: PublicSitePageOut[];
-  settings?: PublicSiteSettingsOut | null;
-  urgentAnnouncement?: AnnouncementOut | null;
+  navPages: PublicHeaderNavPage[];
+  settings?: PublicHeaderSettings | null;
+  urgentAnnouncement?: ImportantAnnouncement | null;
 }) {
   const [open, setOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -300,9 +308,9 @@ function PublicSiteHeaderContent({
 }
 
 export default function PublicSiteHeader(props: {
-  navPages?: PublicSitePageOut[];
-  settings?: PublicSiteSettingsOut | null;
-  urgentAnnouncement?: AnnouncementOut | null;
+  navPages?: PublicHeaderNavPage[];
+  settings?: PublicHeaderSettings | null;
+  urgentAnnouncement?: ImportantAnnouncement | null;
 }) {
   return (
     <PublicSiteHeaderContent
