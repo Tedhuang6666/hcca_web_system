@@ -227,9 +227,7 @@ async def count_notifications(db: DbDep, current_user: CurrentUser) -> Notificat
         .where(Notification.user_id == current_user.id)
         .with_only_columns(
             func.count(Notification.id).label("total"),
-            func.count(Notification.id)
-            .filter(Notification.is_read.is_(False))
-            .label("unread"),
+            func.count(Notification.id).filter(Notification.is_read.is_(False)).label("unread"),
         )
     )
     total, unread = counts.one()
