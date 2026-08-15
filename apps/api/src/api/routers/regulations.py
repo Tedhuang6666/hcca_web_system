@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -85,6 +86,39 @@ from api.services import regulation_import as reg_import_svc
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 
 logger = logging.getLogger(__name__)
+
+
+async def _invalidate_public_regulations_cache(org_id: uuid.UUID) -> None:
+    """Helper to invalidate public regulation list cache for an org + cross-org 'all'."""
+    await cache_invalidate(f"reg:public:v1:org:{org_id}:*")
+    await cache_invalidate("reg:public:v1:org:all:*")
+
+
+def build_public_regulations_cache_key(
+    org_id: uuid.UUID | None,
+    category: RegulationCategory | None,
+    active_only: bool,
+    limit: int,
+    offset: int,
+) -> str:
+    """
+    Build canonical cache key for public regulations list.
+
+    Key format: reg:public:v1:org:{org_id}:{digest}
+    Digest contains all parameters affecting the response (category/active_only/limit/offset).
+    org_id is in prefix to enable efficient wildcard invalidation.
+    """
+    org_part = str(org_id) if org_id else "all"
+    cache_params = {
+        "category": category.value if category else "all",
+        "active_only": active_only,
+        "limit": limit,
+        "offset": offset,
+    }
+    serialized = json.dumps(cache_params, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(serialized.encode()).hexdigest()[:16]
+    return f"reg:public:v1:org:{org_part}:{digest}"
+
 
 router = APIRouter(prefix="/regulations", tags=["法規系統"])
 
@@ -240,26 +274,19 @@ async def list_regulations(
 
     cache_key = None
     if is_public_query:
-        # 使用所有影響結果的參數構建 canonical cache key
-        cache_params = {
-            "org_id": str(org_id) if org_id else "all",
-            "category": category.value if category else "all",
-            "active_only": active_only,
-            "published_only": True,  # user is None 保證
-            "limit": limit,
-            "offset": offset,
-        }
-        serialized = json.dumps(cache_params, sort_keys=True, separators=(",", ":"))
-        digest = hashlib.sha256(serialized.encode()).hexdigest()[:16]
-        cache_key = f"reg:public:v1:{digest}"
+        cache_key = build_public_regulations_cache_key(
+            org_id=org_id,
+            category=category,
+            active_only=active_only,
+            limit=limit,
+            offset=offset,
+        )
 
         cached = await cache_get(cache_key)
         if cached is not None:
             return [RegulationListItem.model_validate(item) for item in cached]
 
-    # 計時：測量 DB 層耗時（用於效能診斷）
-    import time
-
+    # 計時：測量 service 層耗時（用於效能診斷）
     t0 = time.perf_counter()
     result = await reg_svc.list_regulations(
         session,
@@ -272,17 +299,21 @@ async def list_regulations(
         limit=limit,
         offset=offset,
     )
-    db_ms = (time.perf_counter() - t0) * 1000
-    if db_ms > 200:  # 只記錄慢查詢
-        logging.getLogger(__name__).warning(
-            "slow regulations list query: %.1fms params=%s",
-            db_ms,
-            cache_params if is_public_query else "non-public",
+    service_ms = (time.perf_counter() - t0) * 1000
+    if service_ms > 200:  # 只記錄慢查詢
+        logger.warning(
+            "slow regulations list service: %.1fms cache_key=%s",
+            service_ms,
+            cache_key if is_public_query else "non-public",
         )
 
     # 只在公共查詢且無錯誤時寫入快取（TTL 60s；法規需一致性，不使用 stale-while-revalidate）
     if is_public_query and result is not None:
-        await cache_set(cache_key, [r.model_dump(mode="json") for r in result], ttl=60)
+        await cache_set(
+            cache_key,
+            [RegulationListItem.model_validate(r).model_dump(mode="json") for r in result],
+            ttl=60,
+        )
 
     return result
 
@@ -352,8 +383,7 @@ async def create_regulation(
         meta={"title": reg.title, "org_id": str(reg.org_id), "category": reg.category.value},
         summary=f"建立法規草稿「{reg.title}」",
     )
-    # 清除公共列表快取（該組織的所有分類）
-    await cache_invalidate(f"reg:public:org:{payload.org_id}:cat:*")
+    await _invalidate_public_regulations_cache(payload.org_id)
     return reg
 
 
@@ -654,8 +684,7 @@ async def update_regulation(
         },
         summary=f"更新法規「{reg.title}」",
     )
-    # 清除公共列表快取（該組織的所有分類）
-    await cache_invalidate(f"reg:public:org:{reg.org_id}:cat:*")
+    await _invalidate_public_regulations_cache(reg.org_id)
     return reg
 
 
@@ -702,8 +731,7 @@ async def publish_regulation(
         actor_email=current_user.email,
         summary=f"發布法規「{reg.title}」v{result.version}",
     )
-    # 清除公共列表快取（該組織的所有分類）
-    await cache_invalidate(f"reg:public:org:{reg.org_id}:cat:*")
+    await _invalidate_public_regulations_cache(reg.org_id)
     return result
 
 
@@ -747,8 +775,7 @@ async def archive_regulation(
         actor_email=current_user.email,
         summary=f"停用法規「{reg.title}」",
     )
-    # 清除公共列表快取（該組織的所有分類）
-    await cache_invalidate(f"reg:public:org:{reg.org_id}:cat:*")
+    await _invalidate_public_regulations_cache(reg.org_id)
     return result
 
 
@@ -792,8 +819,7 @@ async def repeal_regulation(
         actor_email=current_user.email,
         summary=f"廢止法規「{reg.title}」，原因：{body.reason}",
     )
-    # 清除公共列表快取（該組織的所有分類）
-    await cache_invalidate(f"reg:public:org:{reg.org_id}:cat:*")
+    await _invalidate_public_regulations_cache(reg.org_id)
     return result
 
 
@@ -824,8 +850,7 @@ async def delete_regulation(reg_id: str, session: DbDep, current_user: CurrentUs
         await reg_svc.delete_regulation(session, reg)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    # 清除公共列表快取（該組織的所有分類）
-    await cache_invalidate(f"reg:public:org:{reg.org_id}:cat:*")
+    await _invalidate_public_regulations_cache(reg.org_id)
 
 
 # ── 修訂歷程 ─────────────────────────────────────────────────────────────────
@@ -1956,8 +1981,7 @@ async def president_publish(
         )
     except Exception:
         logger.warning("emit regulation.published failed", exc_info=True)
-    # 清除公共列表快取（該組織的所有分類）
-    await cache_invalidate(f"reg:public:org:{reg.org_id}:cat:*")
+    await _invalidate_public_regulations_cache(reg.org_id)
     return reg
 
 
