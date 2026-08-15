@@ -18,7 +18,7 @@ import type { UnifiedMapItem } from "./partner-map-types";
 import type { ModuleStatusPublic } from "./api/system";
 import { serverApiUrl } from "./config";
 
-export const PUBLIC_REVALIDATE_SECONDS = 60;
+export const PUBLIC_REVALIDATE_SECONDS = 300;
 const PUBLIC_FETCH_TIMEOUT_MS = 2_000;
 
 async function fetchPublicApi(input: string): Promise<Response> {
@@ -52,6 +52,15 @@ const fetchCachedLivePublicJson = unstable_cache(
   },
   ["hcca-public-live-api-v1"],
   { revalidate: 15 },
+);
+const fetchCachedPublicRegulations = unstable_cache(
+  async (): Promise<RegulationListItem[]> => {
+    const response = await fetchPublicApi(serverApiUrl("/regulations"));
+    if (!response.ok) throw new Error(`Public API request failed: ${response.status}`);
+    return response.json() as Promise<RegulationListItem[]>;
+  },
+  ["hcca-public-regulations-v1"],
+  { revalidate: 300, tags: ["public-regulations"] },
 );
 
 async function getCachedPublicJson<T>(path: string, live = false): Promise<T | null> {
@@ -89,7 +98,11 @@ export async function fetchPublicDocuments(
 }
 
 export async function fetchPublicRegulations(): Promise<RegulationListItem[]> {
-  return (await getCachedPublicJson<RegulationListItem[]>("/regulations")) ?? [];
+  try {
+    return await fetchCachedPublicRegulations();
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchPublicSurveys(status?: string): Promise<SurveyListItem[]> {
