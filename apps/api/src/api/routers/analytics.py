@@ -24,7 +24,9 @@ from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
 from api.schemas.analytics import (
+    ClientMetricBatchCreate,
     ClientMetricCreate,
+    ComponentMetricBatchCreate,
     ComponentMetricCreate,
     PageViewCreate,
     ProductAnalyticsOut,
@@ -122,6 +124,23 @@ async def create_client_metric(body: ClientMetricCreate, request: Request) -> di
     return {"status": "accepted"}
 
 
+@router.post("/client-metrics/batch", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
+async def create_client_metric_batch(
+    body: ClientMetricBatchCreate, request: Request
+) -> dict[str, str | int]:
+    """批次接收匿名前端 Web Vitals／API latency，避免每筆指標各自發送請求。"""
+    posthog = get_posthog_client()
+    if posthog:
+        distinct_id = request.headers.get("X-Client-ID", "anonymous")
+        for metric in body.items:
+            posthog.capture(
+                distinct_id=distinct_id,
+                event="web_client_metric",
+                properties=metric.model_dump(),
+            )
+    return {"status": "accepted", "accepted": len(body.items)}
+
+
 @router.post("/component-metrics", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
 async def create_component_metric(body: ComponentMetricCreate, request: Request) -> dict[str, str]:
     """接收元件級 React Profiler 指標，交由產品分析平台聚合。"""
@@ -133,6 +152,25 @@ async def create_component_metric(body: ComponentMetricCreate, request: Request)
             properties=body.model_dump(),
         )
     return {"status": "accepted"}
+
+
+@router.post(
+    "/component-metrics/batch", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False
+)
+async def create_component_metric_batch(
+    body: ComponentMetricBatchCreate, request: Request
+) -> dict[str, str | int]:
+    """批次接收元件級 React Profiler 指標，避免每筆指標各自發送請求。"""
+    posthog = get_posthog_client()
+    if posthog:
+        distinct_id = request.headers.get("X-Client-ID", "anonymous")
+        for metric in body.items:
+            posthog.capture(
+                distinct_id=distinct_id,
+                event="component_performance",
+                properties=metric.model_dump(),
+            )
+    return {"status": "accepted", "accepted": len(body.items)}
 
 
 @router.get("/product", response_model=ProductAnalyticsOut, summary="平台產品使用統計")

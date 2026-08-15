@@ -18,9 +18,19 @@ type ClientMetric = {
 const METRIC_WINDOW_MS = 60_000;
 const MAX_METRIC_REQUESTS_PER_WINDOW = 20;
 const API_METRIC_DEDUP_MS = 10_000;
+const METRIC_FLUSH_DELAY_MS = 1_000;
+const CLIENT_METRIC_BATCH_SIZE = 50;
+const COMPONENT_METRIC_BATCH_SIZE = 25;
+const MAX_PENDING_CLIENT_METRICS = 100;
+const MAX_PENDING_COMPONENT_METRICS = 50;
+const CLIENT_METRIC_BATCH_ENDPOINT = "/analytics/client-metrics/batch";
+const COMPONENT_METRIC_BATCH_ENDPOINT = "/analytics/component-metrics/batch";
 let metricWindowStartedAt = 0;
 let metricRequestsSent = 0;
 const recentApiMetrics = new Map<string, number>();
+const pendingClientMetrics: ClientMetric[] = [];
+const pendingComponentMetrics: ComponentMetricPayload[] = [];
+let metricFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function canSendMetric(): boolean {
   const now = Date.now();
@@ -47,20 +57,20 @@ function shouldSkipApiMetric(metric: Omit<ClientMetric, "metric" | "value">): bo
   return false;
 }
 
-function send(endpoint: string, metric: ClientMetric): void {
-  if (typeof window === "undefined" || !Number.isFinite(metric.value)) return;
-  if (!canSendMetric()) return;
-  const body = JSON.stringify({
-    ...metric,
-    path: (metric.path ?? window.location.pathname).split("?")[0].slice(0, 255),
-  });
+function postBatch(endpoint: string, metrics: unknown[], preferBeacon: boolean): boolean {
+  if (metrics.length === 0 || !canSendMetric()) return false;
+  const body = JSON.stringify({ items: metrics });
   const url = apiUrl(endpoint);
-  try {
-    const blob = new Blob([body], { type: "application/json" });
-    if (navigator.sendBeacon?.(url, blob)) return;
-  } catch {
-    // sendBeacon 不可用時改用 keepalive fetch。
+
+  if (preferBeacon) {
+    try {
+      const blob = new Blob([body], { type: "application/json" });
+      if (navigator.sendBeacon?.(url, blob)) return true;
+    } catch {
+      // sendBeacon 不可用時改用 keepalive fetch。
+    }
   }
+
   void fetch(url, {
     method: "POST",
     credentials: "include",
@@ -68,19 +78,35 @@ function send(endpoint: string, metric: ClientMetric): void {
     headers: { "content-type": "application/json" },
     body,
   }).catch(() => undefined);
+  return true;
+}
+
+function scheduleMetricFlush(): void {
+  if (typeof window === "undefined" || metricFlushTimer) return;
+  metricFlushTimer = setTimeout(() => flushClientMetrics(), METRIC_FLUSH_DELAY_MS);
+}
+
+function send(metric: ClientMetric): void {
+  if (typeof window === "undefined" || !Number.isFinite(metric.value)) return;
+  pendingClientMetrics.push({
+    ...metric,
+    path: (metric.path ?? window.location.pathname).split("?")[0].slice(0, 255),
+  });
+  if (pendingClientMetrics.length > MAX_PENDING_CLIENT_METRICS) pendingClientMetrics.shift();
+  scheduleMetricFlush();
 }
 
 export function recordApiMetric(metric: Omit<ClientMetric, "metric" | "value"> & { duration_ms: number }): void {
   if (typeof window === "undefined" || shouldSkipApiMetric(metric)) return;
-  send("/analytics/client-metrics", { metric: "api_latency", value: metric.duration_ms, ...metric });
+  send({ metric: "api_latency", value: metric.duration_ms, ...metric });
 }
 
 export function recordCircuitOpen(path: string): void {
-  send("/analytics/client-metrics", { metric: "api_circuit_open", value: 1, path, circuit_open: true });
+  send({ metric: "api_circuit_open", value: 1, path, circuit_open: true });
 }
 
 export function recordClientMetric(metric: ClientMetric): void {
-  send("/analytics/client-metrics", metric);
+  send(metric);
 }
 
 export interface ComponentMetricPayload {
@@ -98,11 +124,44 @@ export interface ComponentMetricPayload {
 }
 
 export function recordComponentMetric(metric: ComponentMetricPayload): void {
-  send("/analytics/component-metrics", {
-    metric: "component_render",
-    value: metric.avg_render_time_ms,
+  if (typeof window === "undefined" || !Number.isFinite(metric.avg_render_time_ms)) return;
+  pendingComponentMetrics.push({
     ...metric,
+    path: metric.path.split("?")[0].slice(0, 255),
   });
+  if (pendingComponentMetrics.length > MAX_PENDING_COMPONENT_METRICS) {
+    pendingComponentMetrics.shift();
+  }
+  scheduleMetricFlush();
+}
+
+export function flushClientMetrics(preferBeacon = false): void {
+  if (typeof window === "undefined") return;
+  if (metricFlushTimer) {
+    clearTimeout(metricFlushTimer);
+    metricFlushTimer = null;
+  }
+
+  const clientMetrics = pendingClientMetrics.splice(
+    0,
+    preferBeacon ? MAX_PENDING_CLIENT_METRICS : CLIENT_METRIC_BATCH_SIZE,
+  );
+  const componentMetrics = pendingComponentMetrics.splice(
+    0,
+    preferBeacon ? MAX_PENDING_COMPONENT_METRICS : COMPONENT_METRIC_BATCH_SIZE,
+  );
+  const clientSent =
+    clientMetrics.length === 0 || postBatch(CLIENT_METRIC_BATCH_ENDPOINT, clientMetrics, preferBeacon);
+  const componentSent =
+    componentMetrics.length === 0 ||
+    postBatch(COMPONENT_METRIC_BATCH_ENDPOINT, componentMetrics, preferBeacon);
+
+  if (!clientSent || !componentSent) {
+    pendingClientMetrics.length = 0;
+    pendingComponentMetrics.length = 0;
+    return;
+  }
+  if (pendingClientMetrics.length > 0 || pendingComponentMetrics.length > 0) scheduleMetricFlush();
 }
 
 export function observeWebVitals(): () => void {

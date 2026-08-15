@@ -25,6 +25,10 @@ class ClientMetricCreate(BaseModel):
     response_end_ms: float | None = Field(default=None, ge=0, le=86_400_000)
 
 
+class ClientMetricBatchCreate(BaseModel):
+    items: list[ClientMetricCreate] = Field(min_length=1, max_length=100)
+
+
 class ComponentMetricCreate(BaseModel):
     component_name: str = Field(min_length=1, max_length=150)
     path: str = Field(min_length=1, max_length=255)
@@ -37,6 +41,10 @@ class ComponentMetricCreate(BaseModel):
     base_duration_ms: float | None = Field(default=None, ge=0, le=86_400_000)
     phase: Literal["mount", "update", "nested-update", "unmount"] | None = None
     tags: dict[str, str] = Field(default_factory=dict)
+
+
+class ComponentMetricBatchCreate(BaseModel):
+    items: list[ComponentMetricCreate] = Field(min_length=1, max_length=50)
 
 
 class DailyRegistrationItem(BaseModel):

@@ -3,6 +3,7 @@
 import {
   recordClientMetric,
   recordComponentMetric,
+  flushClientMetrics,
   type ComponentMetricPayload,
 } from "./client-metrics";
 
@@ -123,6 +124,20 @@ function safeResourceName(name: string): string {
   }
 }
 
+function isTelemetryResource(name: string): boolean {
+  try {
+    const path = new URL(name, window.location.origin).pathname;
+    return [
+      "/analytics/client-metrics",
+      "/analytics/client-metrics/batch",
+      "/analytics/component-metrics",
+      "/analytics/component-metrics/batch",
+    ].some((endpoint) => path.endsWith(endpoint));
+  } catch {
+    return false;
+  }
+}
+
 function cloneComponentMetric(metric: ComponentMetric): ComponentMetric {
   return { ...metric, tags: metric.tags ? { ...metric.tags } : undefined };
 }
@@ -151,6 +166,7 @@ class PerformanceMonitor {
   private sentCustomMetrics = new Map<string, number>();
   private sentVitals = new Map<string, number>();
   private navigationSent = false;
+  private unloadFlushStarted = false;
 
   private constructor() {
     if (typeof window !== "undefined") this.init();
@@ -183,6 +199,7 @@ class PerformanceMonitor {
     const observer = new PerformanceObserver((list) => {
       list.getEntries().forEach((entry) => {
         const resource = entry as PerformanceResourceTiming;
+        if (isTelemetryResource(resource.name)) return;
         this.recordResource({
           name: safeResourceName(resource.name),
           initiatorType: resource.initiatorType,
@@ -445,8 +462,12 @@ class PerformanceMonitor {
     this.notify();
   }
 
-  async flush(): Promise<void> {
+  flush(options: { unload?: boolean } = {}): void {
     if (typeof window === "undefined") return;
+    if (options.unload) {
+      if (this.unloadFlushStarted) return;
+      this.unloadFlushStarted = true;
+    }
     const path = window.location.pathname;
 
     for (const metric of this.componentMetrics.values()) {
@@ -523,6 +544,8 @@ class PerformanceMonitor {
       recordClientMetric({ metric: "navigation_total", value: this.navigationMetric.total, path });
       this.navigationSent = true;
     }
+
+    flushClientMetrics(Boolean(options.unload));
   }
 
   disconnect(): void {
@@ -542,7 +565,8 @@ class PerformanceMonitor {
 
   private setupVisibilityFlush(): void {
     this.visibilityHandler = () => {
-      if (document.visibilityState === "hidden") void this.flush();
+      if (document.visibilityState === "hidden") this.flush({ unload: true });
+      else this.unloadFlushStarted = false;
     };
     document.addEventListener("visibilitychange", this.visibilityHandler);
   }
