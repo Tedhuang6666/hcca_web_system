@@ -1154,6 +1154,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/system/metrics/pg-stat-statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PostgreSQL 慢查詢統計
+         * @description 讀取 pg_stat_statements；未啟用 extension 時回傳可診斷結果。
+         */
+        get: operations["metrics_pg_stat_statements_admin_system_metrics_pg_stat_statements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/system/metrics/slow-queries": {
         parameters: {
             query?: never;
@@ -3363,6 +3383,26 @@ export interface paths {
          * @description 聚合公文、議事、法規、陳情、問卷、公告等模組的待辦/最新項目。
          */
         get: operations["get_dashboard_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/composite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 取得儀表板首屏聚合資料
+         * @description 以單次 API 回傳 dashboard、待辦、治理摘要與最新公告。
+         */
+        get: operations["get_dashboard_composite_dashboard_composite_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -18059,6 +18099,18 @@ export interface components {
              * Format: date
              */
             date: string;
+        };
+        /**
+         * DashboardCompositeResponse
+         * @description Dashboard 首屏所需資料的單次聚合回應。
+         */
+        DashboardCompositeResponse: {
+            /** Announcements */
+            announcements?: components["schemas"]["AnnouncementListItem"][] | null;
+            dashboard: components["schemas"]["DashboardResponse"];
+            /** Matters */
+            matters?: components["schemas"]["MatterListItem"][] | null;
+            tasks?: components["schemas"]["TaskInboxResponse"] | null;
         };
         /**
          * DashboardResponse
@@ -39643,6 +39695,39 @@ export interface operations {
             };
         };
     };
+    metrics_pg_stat_statements_admin_system_metrics_pg_stat_statements_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     metrics_slow_queries_admin_system_metrics_slow_queries_get: {
         parameters: {
             query?: {
@@ -44134,6 +44219,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardResponse"];
+                };
+            };
+        };
+    };
+    get_dashboard_composite_dashboard_composite_get: {
+        parameters: {
+            query?: {
+                include_tasks?: boolean;
+                include_matters?: boolean;
+                include_announcements?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCompositeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
