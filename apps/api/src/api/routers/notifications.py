@@ -222,15 +222,18 @@ async def list_notifications(
 async def count_notifications(db: DbDep, current_user: CurrentUser) -> NotificationCountOut:
     from sqlalchemy import func
 
-    total_q = await db.scalar(
-        select(func.count(Notification.id)).where(Notification.user_id == current_user.id)
-    )
-    unread_q = await db.scalar(
+    counts = await db.execute(
         select(func.count(Notification.id))
         .where(Notification.user_id == current_user.id)
-        .where(Notification.is_read == False)  # noqa: E712
+        .with_only_columns(
+            func.count(Notification.id).label("total"),
+            func.count(Notification.id)
+            .filter(Notification.is_read.is_(False))
+            .label("unread"),
+        )
     )
-    return NotificationCountOut(unread=int(unread_q or 0), total=int(total_q or 0))
+    total, unread = counts.one()
+    return NotificationCountOut(unread=int(unread or 0), total=int(total or 0))
 
 
 @router.patch(
