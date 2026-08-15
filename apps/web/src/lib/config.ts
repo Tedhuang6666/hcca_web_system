@@ -25,9 +25,10 @@ function isLocalUrl(value: string): boolean {
 
 const configuredInternalApi = [process.env.API_INTERNAL_URL, process.env.NEXT_PUBLIC_API_URL]
   .find(isAbsoluteHttpUrl);
+const allowLocalInternalApi = process.env.NODE_ENV === "development" || process.env.CI === "true";
 
 export const API_INTERNAL_BASE =
-  configuredInternalApi && !(process.env.NODE_ENV !== "development" && isLocalUrl(configuredInternalApi))
+  configuredInternalApi && (allowLocalInternalApi || !isLocalUrl(configuredInternalApi))
     ? configuredInternalApi
     : process.env.NODE_ENV === "development"
       ? "http://localhost:8000"
