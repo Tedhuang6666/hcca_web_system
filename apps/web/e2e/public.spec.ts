@@ -1,7 +1,17 @@
 import { expect, test } from "@playwright/test";
 
 test("public homepage exposes primary navigation", async ({ page }) => {
-  await page.goto("/");
+  const response = await page.goto("/");
+  const csp = response?.headers()["content-security-policy"] ?? "";
+  expect(csp).toMatch(/script-src[^;]*nonce-/);
+
+  const html = await response!.text();
+  const inlineExecutableScriptsWithoutNonce = [...html.matchAll(/<script\b([^>]*)>/gi)]
+    .map((match) => match[1] ?? "")
+    .filter((attributes) => !/\bsrc\s*=/.test(attributes))
+    .filter((attributes) => !/\btype\s*=\s*["']application\/ld\+json["']/i.test(attributes))
+    .filter((attributes) => !/\bnonce\s*=/.test(attributes)).length;
+  expect(inlineExecutableScriptsWithoutNonce).toBe(0);
 
   await expect(
     page.getByRole("heading", { name: /新竹高中班聯會|讓校園自治/ }).first(),

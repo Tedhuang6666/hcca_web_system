@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getRoutePolicy,
   isIndexablePublicPath,
   isMaintenanceExempt,
 } from "@/lib/route-access";
@@ -10,7 +9,6 @@ const API_INTERNAL_BASE =
 const MAINTENANCE_CHECK_TIMEOUT_MS = 450;
 // /auth/me 會查 Redis、使用者資料與 RBAC 權限；300ms 在 production 容易把超管誤判成一般使用者。
 const MAINTENANCE_BYPASS_TIMEOUT_MS = 1_500;
-const PUBLIC_CONTENT_LAST_MODIFIED_TIMEOUT_MS = 800;
 
 // 模組級快取：在同一 edge worker 實例內跨 request 共用，避免每次換頁都打 API。
 // 鍵值：maintenance 用 "global"，access-status 用 IP，bypass 用 cookie 前 64 字元。
@@ -60,7 +58,6 @@ type AccessState = { blocked: false } | { blocked: true; reason?: string; expire
 const maintenanceCache = new BoundedTtlCache<MaintenanceState>(4);
 const accessStatusCache = new BoundedTtlCache<AccessState>(2_048);
 const bypassCache = new BoundedTtlCache<boolean>(2_048);
-const publicContentLastModifiedCache = new BoundedTtlCache<Date | null>(2_048);
 
 /**
  * 識別中文公文字號格式，例如：
@@ -81,7 +78,8 @@ function generateNonce(): string {
 /**
  * 前端 HTML 的 Content-Security-Policy。
  *
- * 私有頁 script-src 採 nonce + 'strict-dynamic'；公開頁則採 SRI 相容的靜態 CSP。
+ * 所有頁面都採 per-request nonce；Next.js App Router 會在 HTML 中輸出
+ * inline bootstrap/RSC script，不能只靠外部 script 的 SRI 保護。
  *   - Next.js 會自動把此 nonce 套到框架腳本與 <Script> 元件（含 Google One Tap）。
  *   - 'strict-dynamic' 讓已信任（帶 nonce）的腳本可載入其子腳本（GSI、PostHog 錄製）。
  *   - 明列的 https 來源是給支援 nonce 但不支援 strict-dynamic 的舊瀏覽器的後備。
@@ -127,13 +125,11 @@ function postHogSources(): string[] {
   return [...sources];
 }
 
-function buildCsp(nonce?: string): string {
+function buildCsp(nonce: string): string {
   // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
   const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
-  const scriptNonce = nonce ? ` 'nonce-${nonce}'` : "";
-  const strictDynamic = nonce ? " 'strict-dynamic'" : "";
   // Turbopack 開發模式會注入無 nonce 的 <style>；正式環境仍要求 nonce。
-  const styleNonce = nonce && process.env.NODE_ENV === "production" ? ` 'nonce-${nonce}'` : "";
+  const styleNonce = process.env.NODE_ENV === "production" ? ` 'nonce-${nonce}'` : "";
   // Turbopack 在開發模式會以 <style> 注入 HMR CSS；正式環境仍只接受 nonce。
   const devStyle = process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'";
   return [
@@ -142,8 +138,8 @@ function buildCsp(nonce?: string): string {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    `script-src 'self'${scriptNonce}${strictDynamic} https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com${devEval}`,
-    `script-src-elem 'self'${scriptNonce} https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com${devEval}`,
+    `script-src-elem 'self' 'nonce-${nonce}' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com`,
     `style-src 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
     `style-src-elem 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
     "style-src-attr 'unsafe-inline'",
@@ -157,17 +153,15 @@ function buildCsp(nonce?: string): string {
 }
 
 /**
- * 私有頁把 nonce 經 request header 傳給 Next；公開 SRI 頁不注入 nonce，
- * 因此能維持可預渲染與 CDN/ISR 快取的輸出。
+ * 把 nonce 經 request header 傳給 Next，讓框架產生的 inline script
+ * 帶上同一個 nonce；回應也必須禁止快取，避免 nonce 與 HTML 脫鉤。
  */
-function withCsp(req: NextRequest, strategy: "nonce" | "sri"): NextResponse {
-  const nonce = strategy === "nonce" ? generateNonce() : undefined;
+function withCsp(req: NextRequest): NextResponse {
+  const nonce = generateNonce();
   const csp = buildCsp(nonce);
   const requestHeaders = new Headers(req.headers);
-  if (nonce) {
-    requestHeaders.set("x-nonce", nonce);
-    requestHeaders.set("content-security-policy", csp);
-  }
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("content-security-policy", csp);
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("content-security-policy", csp);
   return res;
@@ -333,92 +327,8 @@ async function blockedRedirect(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-function publicContentApiPath(req: NextRequest): string | null {
-  const segments = req.nextUrl.pathname.split("/").filter(Boolean);
-  if (segments.length !== 2) return null;
-
-  const [section, rawId] = segments;
-  if (!["announcements", "documents", "news", "regulations"].includes(section)) {
-    return null;
-  }
-
-  const id = decodePathPart(rawId).trim();
-  if (!id) return null;
-  const apiSection = section === "news" ? "announcements" : section;
-  return "/" + apiSection + "/" + encodeURIComponent(id);
-}
-
-async function publicContentLastModified(req: NextRequest): Promise<Date | null> {
-  if (req.method !== "GET" && req.method !== "HEAD") return null;
-  if (req.headers.get("RSC") === "1" || req.headers.get("Next-Router-Prefetch") === "1") {
-    return null;
-  }
-  if (req.headers.get("cookie") || req.headers.get("authorization")) return null;
-
-  const apiPath = publicContentApiPath(req);
-  if (!apiPath) return null;
-
-  const cached = publicContentLastModifiedCache.get(apiPath);
-  if (cached !== undefined) return cached;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    PUBLIC_CONTENT_LAST_MODIFIED_TIMEOUT_MS,
-  );
-  try {
-    const res = await fetch(API_INTERNAL_BASE + apiPath, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      publicContentLastModifiedCache.set(apiPath, null);
-      return null;
-    }
-
-    const raw = (await res.json()) as {
-      updated_at?: string | null;
-      published_at?: string | null;
-      created_at?: string | null;
-    };
-    const value = raw.updated_at ?? raw.published_at ?? raw.created_at;
-    const timestamp = value ? new Date(value).getTime() : Number.NaN;
-    if (!Number.isFinite(timestamp)) {
-      publicContentLastModifiedCache.set(apiPath, null);
-      return null;
-    }
-
-    // HTTP-date 只有秒精度；截斷毫秒避免瀏覽器拿剛收到的 header
-    // 回傳 If-Modified-Since 時永遠比資料庫時間早幾毫秒。
-    const lastModified = new Date(Math.floor(timestamp / 1000) * 1000);
-    publicContentLastModifiedCache.set(apiPath, lastModified);
-    return lastModified;
-  } catch {
-    // SEO header 失敗不應影響公開頁面正常回應。
-    publicContentLastModifiedCache.set(apiPath, null);
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function isNotModified(req: NextRequest, lastModified: Date): boolean {
-  const header = req.headers.get("if-modified-since");
-  if (!header) return false;
-  const since = Date.parse(header);
-  return Number.isFinite(since) && since >= lastModified.getTime();
-}
-
-function notModifiedResponse(lastModified: Date) {
-  return new NextResponse(null, {
-    status: 304,
-    headers: { "Last-Modified": lastModified.toUTCString() },
-  });
-}
-
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const routePolicy = getRoutePolicy(pathname);
 
   const forwardedHost = req.headers.get("x-forwarded-host");
   const host = (forwardedHost ?? req.headers.get("host") ?? "").split(":")[0].toLowerCase();
@@ -457,25 +367,14 @@ export default async function proxy(req: NextRequest) {
     }
   }
 
-  const lastModified = isRscNav ? null : await publicContentLastModified(req);
-  if (lastModified && isNotModified(req, lastModified)) {
-    return notModifiedResponse(lastModified);
-  }
-
-  // Turbopack dev server 尚未支援 SRI；開發時一律使用 nonce CSP。
-  const cspStrategy = process.env.NODE_ENV === "production" ? routePolicy.csp : "nonce";
-  const response = withCsp(req, cspStrategy);
-  if (!routePolicy.public || routePolicy.csp === "nonce") {
-    response.headers.set("Cache-Control", "private, no-store");
-  }
+  // nonce 會隨每個 request 改變；不能讓 CDN、瀏覽器或 304 重用舊 HTML。
+  const response = withCsp(req);
+  response.headers.set("Cache-Control", "private, no-store");
   if (!isIndexablePublicPath(pathname)) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   if (pathname === "/maintenance" || pathname.startsWith("/maintenance/")) {
     response.headers.set("Retry-After", "60");
-  }
-  if (lastModified) {
-    response.headers.set("Last-Modified", lastModified.toUTCString());
   }
   return response;
 }
