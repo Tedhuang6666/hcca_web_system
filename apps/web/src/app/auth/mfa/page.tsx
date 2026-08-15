@@ -1,20 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react";
 import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
-import { BRANDING } from "@/lib/branding";
 import { safeNextPath } from "@/lib/safe-redirect";
 import OtpInput from "@/components/auth/OtpInput";
-
-const MFA_THEME_STYLE = {
-  "--mfa-accent": BRANDING.themeColor,
-  "--mfa-accent-fg": "#ffffff",
-} as CSSProperties;
 
 export default function MFALoginPage() {
   const searchParams = useSearchParams();
@@ -101,7 +95,7 @@ export default function MFALoginPage() {
   return (
     <div
       className="flex min-h-screen items-center justify-center p-4 sm:p-6"
-      style={{ ...MFA_THEME_STYLE, background: "var(--bg-base)" }}
+      style={{ background: "var(--bg-base)" }}
     >
       <main
         className="w-full max-w-md animate-slide-in rounded-2xl p-6 sm:p-8"
@@ -110,12 +104,12 @@ export default function MFALoginPage() {
         <div className="mb-8">
           <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl"
             style={{
-              background: "color-mix(in srgb, var(--mfa-accent) 12%, var(--bg-surface))",
-              color: "var(--mfa-accent)",
+              background: "color-mix(in srgb, var(--primary) 12%, var(--bg-surface))",
+              color: "var(--primary-text)",
             }}>
             <ShieldCheck size={23} aria-hidden="true" />
           </div>
-          <p className="text-xs font-semibold tracking-[0.16em]" style={{ color: "var(--mfa-accent)" }}>
+          <p className="text-xs font-semibold tracking-[0.16em]" style={{ color: "var(--primary-text)" }}>
             TWO-FACTOR AUTH
           </p>
           <h1 className="mt-1 text-xl font-bold" style={{ color: "var(--text-primary)" }}>
@@ -131,8 +125,8 @@ export default function MFALoginPage() {
             className="btn btn-secondary w-full"
             style={{
               background: "transparent",
-              color: "var(--mfa-accent)",
-              borderColor: "var(--mfa-accent)",
+              color: "var(--primary-text)",
+              borderColor: "color-mix(in srgb, var(--primary) 48%, var(--border-strong))",
             }}
             disabled={passkeySubmitting || submitting || !challenge}
             onClick={() => void submitWithPasskey()}>
@@ -200,10 +194,10 @@ export default function MFALoginPage() {
         <button
           className="btn btn-primary mt-5 w-full"
           style={{
-            background: "var(--mfa-accent)",
-            borderColor: "var(--mfa-accent)",
-            color: "var(--mfa-accent-fg)",
-            boxShadow: "0 4px 18px color-mix(in srgb, var(--mfa-accent) 24%, transparent)",
+            background: "var(--primary)",
+            borderColor: "var(--primary)",
+            color: "var(--primary-fg)",
+            boxShadow: "0 4px 18px color-mix(in srgb, var(--primary) 24%, transparent)",
           }}
           disabled={submitting || passkeySubmitting || !challenge || !codeComplete}
           onClick={() => void submit()}>
@@ -213,7 +207,7 @@ export default function MFALoginPage() {
         <button
           type="button"
           className="mx-auto mt-4 block text-xs font-medium underline underline-offset-4"
-          style={{ color: "var(--mfa-accent)" }}
+          style={{ color: "var(--primary-text)" }}
           disabled={submitting || passkeySubmitting}
           onClick={switchCodeMode}
         >
