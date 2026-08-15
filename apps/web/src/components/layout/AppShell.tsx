@@ -180,11 +180,9 @@ function SessionGate({
   // 公開詳情頁不需要等待瀏覽器端驗證；讓伺服器預先輸出的正文直接進入首屏。
   // 受保護路徑仍沿用原本的驗證閘門與登入導向。
   if (isPublicRoute(pathname)) {
-    return (
-      <ModuleStatusProvider authenticated={false}>
-        <AppShellContent isLoggedIn={false}>{children}</AppShellContent>
-      </ModuleStatusProvider>
-    );
+    // 公開 layout 已有 PublicModuleStatusProvider；AppShell 的 authenticated
+    // module endpoint 只服務登入後功能，避免訪客首屏多打一個背景請求。
+    return <AppShellContent isLoggedIn={false}>{children}</AppShellContent>;
   }
 
   if (!authReady || redirecting) {
@@ -199,7 +197,7 @@ function SessionGate({
   }
 
   return (
-    <ModuleStatusProvider authenticated={isLoggedIn}>
+    <ModuleStatusProvider authenticated={isLoggedIn} pollEnabled={isLoggedIn}>
       <AppShellContent isLoggedIn={isLoggedIn}>{children}</AppShellContent>
     </ModuleStatusProvider>
   );

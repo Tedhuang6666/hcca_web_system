@@ -105,6 +105,51 @@ async function cacheStaticAsset(request, response) {
   await cache.put(request, response.clone());
 }
 
+function unavailableStaticAsset() {
+  return new Response("", {
+    status: 503,
+    statusText: "Static asset unavailable",
+    headers: { "Content-Type": "application/javascript" },
+  });
+}
+
+async function handleStaticAsset(request) {
+  let cache;
+  try {
+    cache = await caches.open(STATIC_CACHE);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+  } catch {
+    // Private browsing modes can reject Cache Storage. Network remains usable.
+    try {
+      return await fetch(request);
+    } catch {
+      return unavailableStaticAsset();
+    }
+  }
+
+  let response;
+  try {
+    response = await fetch(request);
+  } catch {
+    try {
+      await cache.delete(request);
+    } catch {
+      // A cache cleanup failure must not reject the FetchEvent.
+    }
+    return unavailableStaticAsset();
+  }
+
+  // Never turn a valid network response into a 503 just because Cache Storage
+  // is unavailable or the response cannot be cached.
+  try {
+    await cacheStaticAsset(request, response);
+  } catch {
+    // The browser can still consume the network response.
+  }
+  return response;
+}
+
 async function clearPrivateCaches() {
   clientUserKeys.clear();
   const keys = await caches.keys();
@@ -189,26 +234,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isStaticNextAsset(url)) {
-    event.respondWith(
-      caches.open(STATIC_CACHE).then(async (cache) => {
-        const cached = await cache.match(request);
-        if (cached) return cached;
-        try {
-          const response = await fetch(request);
-          await cacheStaticAsset(request, response);
-          return response;
-        } catch {
-          // 舊版頁面可能請求已被新部署移除的 chunk。讓 fetch handler
-          // 正常回應，避免 service worker 產生未捕捉的 Failed to fetch。
-          await cache.delete(request);
-          return new Response("", {
-            status: 503,
-            statusText: "Static asset unavailable",
-            headers: { "Content-Type": "application/javascript" },
-          });
-        }
-      }),
-    );
+    event.respondWith(handleStaticAsset(request));
     return;
   }
 

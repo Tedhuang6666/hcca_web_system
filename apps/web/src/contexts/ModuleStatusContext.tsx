@@ -26,6 +26,7 @@ const ModuleStatusContext = createContext<ModuleStatusValue>({
 
 const DEFAULT_POLL_MS = 30_000;
 const LOW_DATA_POLL_MS = 300_000;
+const INITIAL_POLL_DELAY_MS = 2_000;
 const MODULE_STATUS_CACHE_KEY = "hcca:module-status-cache";
 const MODULE_STATUS_CACHE_TTL_MS = 20_000;
 
@@ -63,9 +64,11 @@ function writeStatusCache(statuses: Record<string, ModuleStatusPublic>) {
 export function ModuleStatusProvider({
   children,
   authenticated = true,
+  pollEnabled = true,
 }: {
   children: React.ReactNode;
   authenticated?: boolean;
+  pollEnabled?: boolean;
 }) {
   const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>(
     () => readStatusCache(),
@@ -95,7 +98,8 @@ export function ModuleStatusProvider({
   }, [poll]);
 
   useResilientPoll(poll, {
-    enabled: true,
+    enabled: pollEnabled,
+    initialDelayMs: INITIAL_POLL_DELAY_MS,
     intervalMs: lowDataMode ? LOW_DATA_POLL_MS : DEFAULT_POLL_MS,
   });
 

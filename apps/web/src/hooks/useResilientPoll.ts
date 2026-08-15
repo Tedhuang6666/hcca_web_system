@@ -6,6 +6,8 @@ export type PollOutcome = "ok" | "stop";
 interface Options {
   /** 是否啟用輪詢（例如未登入時傳 false，連一次都不打）。 */
   enabled: boolean;
+  /** 首次輪詢延後時間；用來讓非關鍵背景資料避開首屏請求尖峰。 */
+  initialDelayMs?: number;
   /** 正常情況下的輪詢間隔（毫秒）。 */
   intervalMs: number;
   /** 暫時性錯誤的退避起點（毫秒）。 */
@@ -26,7 +28,13 @@ interface Options {
  * enabled 變為 false 或 unmount 時會清掉計時器並移除所有事件監聽。
  */
 export function useResilientPoll(task: () => Promise<PollOutcome>, opts: Options) {
-  const { enabled, intervalMs, backoffStartMs = 5_000, backoffMaxMs = 60_000 } = opts;
+  const {
+    enabled,
+    initialDelayMs = 0,
+    intervalMs,
+    backoffStartMs = 5_000,
+    backoffMaxMs = 60_000,
+  } = opts;
   const taskRef = useRef(task);
   taskRef.current = task;
 
@@ -95,7 +103,10 @@ export function useResilientPoll(task: () => Promise<PollOutcome>, opts: Options
     };
 
     // 啟動時若已隱藏/離線就先不發第一發
-    if (isAwake()) run();
+    if (isAwake()) {
+      if (initialDelayMs > 0) schedule(initialDelayMs);
+      else run();
+    }
     else halted = true;
 
     window.addEventListener("online", resume);
@@ -111,5 +122,5 @@ export function useResilientPoll(task: () => Promise<PollOutcome>, opts: Options
       window.removeEventListener("focus", resume);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [enabled, intervalMs, backoffStartMs, backoffMaxMs]);
+  }, [enabled, initialDelayMs, intervalMs, backoffStartMs, backoffMaxMs]);
 }

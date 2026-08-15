@@ -25,8 +25,10 @@ const MAX_PENDING_CLIENT_METRICS = 100;
 const MAX_PENDING_COMPONENT_METRICS = 50;
 const CLIENT_METRIC_BATCH_ENDPOINT = "/analytics/client-metrics/batch";
 const COMPONENT_METRIC_BATCH_ENDPOINT = "/analytics/component-metrics/batch";
+const METRIC_BACKOFF_MS = 60_000;
 let metricWindowStartedAt = 0;
 let metricRequestsSent = 0;
+let metricBackoffUntil = 0;
 const recentApiMetrics = new Map<string, number>();
 const pendingClientMetrics: ClientMetric[] = [];
 const pendingComponentMetrics: ComponentMetricPayload[] = [];
@@ -59,6 +61,7 @@ function shouldSkipApiMetric(metric: Omit<ClientMetric, "metric" | "value">): bo
 
 function postBatch(endpoint: string, metrics: unknown[], preferBeacon: boolean): boolean {
   if (metrics.length === 0 || !canSendMetric()) return false;
+  if (Date.now() < metricBackoffUntil) return false;
   const body = JSON.stringify({ items: metrics });
   const url = apiUrl(endpoint);
 
@@ -77,7 +80,15 @@ function postBatch(endpoint: string, metrics: unknown[], preferBeacon: boolean):
     keepalive: true,
     headers: { "content-type": "application/json" },
     body,
-  }).catch(() => undefined);
+  }).then((response) => {
+    if (response.status >= 500 || response.status === 429) {
+      // Telemetry is optional. Stop adding traffic while the API is already
+      // unhealthy, otherwise failed metrics amplify the original incident.
+      metricBackoffUntil = Date.now() + METRIC_BACKOFF_MS;
+    }
+  }).catch(() => {
+    metricBackoffUntil = Date.now() + METRIC_BACKOFF_MS;
+  });
   return true;
 }
 

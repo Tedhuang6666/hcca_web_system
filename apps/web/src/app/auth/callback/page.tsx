@@ -3,81 +3,7 @@ import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
-import { cacheCurrentUser } from "@/lib/auth-cache";
-import { apiUrl } from "@/lib/config";
 import { safeNextPath } from "@/lib/safe-redirect";
-
-// Refresh token 會輪替；若 callback 因重新掛載或多個 effect 同時啟動，
-// 只能讓一個請求消耗舊 token，否則後發請求會被視為重放而回 401。
-let refreshFromCookiePromise: Promise<boolean> | null = null;
-let callbackBootstrapPromise: Promise<void> | null = null;
-
-const retryDelays = [100, 250, 500];
-
-const waitBeforeRetry = (attempt: number) =>
-  new Promise<void>((resolve) => window.setTimeout(resolve, retryDelays[attempt] ?? 500));
-
-async function fetchMeFromCookie(): Promise<boolean> {
-  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
-    try {
-      const res = await fetch(apiUrl("/auth/me"), {
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const me = await res.json();
-        if (me?.id) {
-          cacheCurrentUser(me);
-          return true;
-        }
-      }
-    } catch {
-      // OAuth 回呼剛完成時，反向代理或 cookie store 可能尚未穩定；繼續短暫重試。
-    }
-    if (attempt < retryDelays.length) await waitBeforeRetry(attempt);
-  }
-  return false;
-}
-
-async function refreshFromCookie(): Promise<boolean> {
-  if (refreshFromCookiePromise) return refreshFromCookiePromise;
-
-  refreshFromCookiePromise = (async () => {
-    try {
-      const csrfToken = document.cookie
-        .split(";")
-        .map((c) => c.trim())
-        .find((c) => c.startsWith("csrf_token="))
-        ?.slice("csrf_token=".length);
-      const res = await fetch(apiUrl("/auth/refresh"), {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-        headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {},
-      });
-      return res.ok;
-    } catch {
-      return false;
-    } finally {
-      refreshFromCookiePromise = null;
-    }
-  })();
-
-  return refreshFromCookiePromise;
-}
-
-function startCallbackBootstrap(next: string): void {
-  // Next/React 重新掛載 callback 頁面時，必須共用同一個完整流程；只鎖 refresh
-  // 請求仍可能讓其中一個 bootstrap 在另一個完成後把使用者導向錯誤頁。
-  if (callbackBootstrapPromise) return;
-
-  callbackBootstrapPromise = (async () => {
-    const authenticated =
-      (await fetchMeFromCookie()) ||
-      ((await refreshFromCookie()) && (await fetchMeFromCookie()));
-    window.location.replace(authenticated ? next : "/login?error=缺少 Token，請重新登入");
-  })();
-}
 
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
@@ -97,7 +23,10 @@ export default function AuthCallbackPage() {
       return;
     }
 
-    startCallbackBootstrap(next);
+    // Google callback 已在 API response 設定 HttpOnly cookies。這裡不再重複
+    // 呼叫 /auth/me → /auth/refresh → /auth/me；直接進入目標頁，由受保護
+    // layout 的單次 server session check 完成身分驗證。
+    window.location.replace(next);
   }, [searchParams]);
 
   return (
