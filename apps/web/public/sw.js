@@ -1,5 +1,5 @@
-const STATIC_CACHE = "hcca-static-v4";
-const PUBLIC_PAGE_CACHE = "hcca-public-pages-v1";
+const STATIC_CACHE = "hcca-static-v5";
+const PUBLIC_PAGE_CACHE = "hcca-public-pages-v2";
 const PRIVATE_API_CACHE = "hcca-private-api-v1";
 const PRIVATE_API_META_CACHE = "hcca-private-api-meta-v1";
 const CACHE_PREFIX = "hcca-";
@@ -193,9 +193,20 @@ self.addEventListener("fetch", (event) => {
       caches.open(STATIC_CACHE).then(async (cache) => {
         const cached = await cache.match(request);
         if (cached) return cached;
-        const response = await fetch(request);
-        await cacheStaticAsset(request, response);
-        return response;
+        try {
+          const response = await fetch(request);
+          await cacheStaticAsset(request, response);
+          return response;
+        } catch {
+          // 舊版頁面可能請求已被新部署移除的 chunk。讓 fetch handler
+          // 正常回應，避免 service worker 產生未捕捉的 Failed to fetch。
+          await cache.delete(request);
+          return new Response("", {
+            status: 503,
+            statusText: "Static asset unavailable",
+            headers: { "Content-Type": "application/javascript" },
+          });
+        }
       }),
     );
     return;

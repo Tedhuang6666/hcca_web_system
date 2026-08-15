@@ -10,8 +10,10 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
+from authlib.integrations.base_client import MismatchingStateError
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -382,6 +384,28 @@ async def test_google_login_uses_configured_redirect_uri(
         "redirect_uri=https%3A%2F%2Fauth.example.com%2Fauth%2Fgoogle%2Fcallback"
         in response.headers["location"]
     )
+
+
+async def test_google_callback_retries_over_https_origin(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(settings, "ALLOWED_ORIGINS", ["https://hcca.tw"])
+    monkeypatch.setattr(
+        auth_module.google,
+        "authorize_access_token",
+        AsyncMock(side_effect=MismatchingStateError()),
+    )
+
+    response = await client.get(
+        "/auth/google/callback?code=stale&state=stale",
+        follow_redirects=False,
+        headers={"x-forwarded-host": "hcca.tw", "x-forwarded-proto": "https"},
+    )
+
+    assert response.status_code in (302, 307)
+    assert response.headers["location"].startswith("https://hcca.tw/auth/google/login?")
 
 
 async def test_discord_login_returns_503_when_not_configured(

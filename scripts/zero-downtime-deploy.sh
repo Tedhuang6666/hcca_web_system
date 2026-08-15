@@ -46,6 +46,10 @@ fi
 
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
 bootstrap_compose=("${compose[@]}")
+old_web_container=""
+if [[ "$has_previous_slot" == "1" ]]; then
+  old_web_container="$("${compose[@]}" ps -aq "web-$old" 2>/dev/null || true)"
+fi
 if [[ "$maintenance_mode" == "1" ]]; then
   # 僅套用在新版 bootstrap 與 migration；不寫入 env/compose，也不成為常駐設定。
   bootstrap_compose=(
@@ -182,6 +186,25 @@ if [[ "$maintenance_mode" == "1" ]]; then
     abort_deploy
   fi
 fi
+
+preserve_previous_static_assets() {
+  if [[ -z "$old_web_container" ]]; then
+    return 0
+  fi
+  local target_web_container
+  target_web_container="$("${compose[@]}" ps -q "web-$target" 2>/dev/null || true)"
+  if [[ -z "$target_web_container" ]]; then
+    echo "找不到新版 Web 容器，略過舊版 static assets 相容複製。" >&2
+    return 0
+  fi
+  if docker cp "$old_web_container:/app/.next/static/." "$target_web_container:/app/.next/static/"; then
+    echo "已保留舊版 Next.js static assets，避免舊頁面 chunk 在切換後 404。"
+  else
+    echo "無法複製舊版 Next.js static assets；新版頁面仍可部署，但舊頁面可能需要重新整理。" >&2
+  fi
+}
+
+preserve_previous_static_assets
 
 echo "Starting or reconciling Caddy proxy..."
 "${compose[@]}" up -d proxy
