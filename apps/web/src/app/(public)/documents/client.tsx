@@ -1116,14 +1116,14 @@ export default function DocumentListClient({
                       <td className="px-5 py-4 max-w-xs">
                         {doc.is_redacted ? (
                           <span className="font-medium" style={{ color: "var(--text-muted)" }}>
-                            {doc.subject || doc.title}
+                            {doc.summary || doc.subject || doc.title}
                           </span>
                         ) : (
                           <Link
                             href={`/documents/${encodeURIComponent(doc.serial_number)}`}
                             className="font-medium hover:underline transition-colors"
                             style={{ color: "var(--text-primary)" }}>
-                            {doc.subject || doc.title}
+                            {doc.summary || doc.subject || doc.title}
                           </Link>
                         )}
                         {doc.activity_id && (
@@ -1227,7 +1227,7 @@ export default function DocumentListClient({
                         style={{ textDecoration: "none" }}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate" style={{ color: "var(--text-muted)" }}>
-                            {doc.subject || doc.title}
+                            {doc.summary || doc.subject || doc.title}
                           </p>
                           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                             發文 {new Date(doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}

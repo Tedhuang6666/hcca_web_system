@@ -412,6 +412,7 @@ class Document(Base, TimestampMixin):
 
     # ── 公文本文結構 ─────────────────────────────────────────────────────────
     subject: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 主旨
+    summary: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 列表摘要
     basis: Mapped[str | None] = mapped_column(Text, nullable=True)  # 依據（公告等文別使用）
     doc_description: Mapped[str | None] = mapped_column(Text, nullable=True)  # 說明
     action_required: Mapped[str | None] = mapped_column(Text, nullable=True)  # 辦法

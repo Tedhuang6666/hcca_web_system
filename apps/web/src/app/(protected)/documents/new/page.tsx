@@ -46,6 +46,7 @@ type DocumentDraft = {
   classification: DocumentClassification;
   title: string;
   subject: string;
+  summary: string;
   category: DocumentCategory;
   selectedOrgId: string;
   activityId: string;
@@ -358,6 +359,7 @@ export default function NewDocumentPage() {
   const [classification, setClassification] = useState<DocumentClassification>("normal");
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState(governanceContext?.matterTitle ?? "");
+  const [summary, setSummary] = useState("");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [category, setCategory] = useState<DocumentCategory>("letter");
   const isMeetingNotice = category === "meeting_notice";
@@ -465,6 +467,7 @@ export default function NewDocumentPage() {
     classification,
     title,
     subject,
+    summary,
     category,
     selectedOrgId,
     activityId,
@@ -536,6 +539,7 @@ export default function NewDocumentPage() {
     setClassification(draft.classification ?? "normal");
     setTitle(draft.title ?? "");
     setSubject(draft.subject ?? "");
+    setSummary(draft.summary ?? "");
     setCategory(draft.category ?? "letter");
     setSelectedOrgId(draft.selectedOrgId ?? "");
     setActivityId(draft.activityId ?? "");
@@ -706,6 +710,7 @@ export default function NewDocumentPage() {
         issuer_postal_code: issuerPostalCode || undefined,
         issuer_address: issuerAddress || undefined,
         subject: copy.subjectLabel ? subject || undefined : undefined,
+        summary: summary.trim() || undefined,
         basis: category === "announcement" ? basis || undefined : undefined,
         doc_description: docDescription || undefined,
         action_required: copy.actionLabel ? actionRequired || undefined : undefined,
@@ -897,8 +902,8 @@ export default function NewDocumentPage() {
               </div>
             </div>
 
-            <div>
-              <Label required>公文標題</Label>
+              <div>
+                <Label required>公文標題</Label>
               <input
                 value={title || autoTitle}
                 onChange={(e) => setTitle(e.target.value)}
@@ -970,6 +975,13 @@ export default function NewDocumentPage() {
                 )}
               </div>
             )}
+            <div>
+              <Label>列表摘要（可選）</Label>
+              <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500}
+                placeholder="主旨為空或過於相同時，提供列表辨識用摘要"
+                className="w-full bg-transparent text-sm outline-none border-b pb-1"
+                style={{ borderColor: "var(--border)" }} />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div><Label>機關郵遞區號</Label><input value={issuerPostalCode} onChange={(e) => setIssuerPostalCode(e.target.value)} style={inputStyle} /></div>
               <div className="sm:col-span-2"><Label>機關地址</Label><input value={issuerAddress} onChange={(e) => setIssuerAddress(e.target.value)} style={inputStyle} /></div>

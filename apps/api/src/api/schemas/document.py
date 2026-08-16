@@ -469,6 +469,7 @@ class DocumentOut(BaseModel):
     confidentiality_expires_at: datetime | None = None
     category: DocumentCategory
     subject: str | None
+    summary: str | None = None
     basis: str | None = None
     doc_description: str | None
     action_required: str | None
@@ -528,6 +529,7 @@ class DocumentListItem(BaseModel):
     classification: DocumentClassification
     category: DocumentCategory
     subject: str | None
+    summary: str | None = None
     status: DocumentStatus
     org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
@@ -588,6 +590,7 @@ class DocumentCreate(BaseModel):
     confidentiality_expires_at: datetime | None = Field(None, description="保密期限訖日")
     category: DocumentCategory = Field(DocumentCategory.LETTER, description="公文類別")
     subject: str | None = Field(None, max_length=500, description="主旨")
+    summary: str | None = Field(None, max_length=500, description="列表摘要（可選）")
     basis: str | None = Field(None, description="依據（公告必填）")
     doc_description: str | None = Field(None, description="說明（詳細事由、依據）")
     action_required: str | None = Field(None, description="辦法（具體行動或執行方式）")
@@ -623,7 +626,7 @@ class DocumentCreate(BaseModel):
     recipients: list[RecipientCreate] = Field(default_factory=list, description="受文者清單")
 
     @field_validator(
-        "title", "subject", "doc_description", "action_required", "content", mode="before"
+        "title", "subject", "summary", "doc_description", "action_required", "content", mode="before"
     )
     @classmethod
     def prevent_xss_attacks(cls, v: str | None) -> str | None:
@@ -695,6 +698,7 @@ class DocumentUpdate(BaseModel):
     confidentiality_expires_at: datetime | None = None
     category: DocumentCategory | None = None
     subject: str | None = Field(None, max_length=500)
+    summary: str | None = Field(None, max_length=500)
     basis: str | None = None
     doc_description: str | None = None
     action_required: str | None = None

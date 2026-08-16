@@ -85,6 +85,7 @@ type DocumentEditDraft = {
   classification: DocumentClassification;
   category: DocumentCategory;
   subject: string;
+  summary: string;
   basis: string;
   declassificationCondition: "none" | "auto_at_date" | "manual_approval";
   confidentialityExpiresAt: string;
@@ -125,6 +126,7 @@ export default function EditDocumentPage() {
   const [classification, setClassification] = useState<DocumentClassification>("normal");
   const [category, setCategory] = useState<DocumentCategory>("letter");
   const [subject, setSubject] = useState("");
+  const [summary, setSummary] = useState("");
   const [basis, setBasis] = useState("");
   const [declassificationCondition, setDeclassificationCondition] = useState<"none" | "auto_at_date" | "manual_approval">("none");
   const [confidentialityExpiresAt, setConfidentialityExpiresAt] = useState("");
@@ -160,6 +162,7 @@ export default function EditDocumentPage() {
     classification,
     category,
     subject,
+    summary,
     basis,
     declassificationCondition,
     confidentialityExpiresAt,
@@ -225,6 +228,7 @@ export default function EditDocumentPage() {
     classification: doc.classification,
     category: doc.category,
       subject: doc.subject ?? "",
+      summary: doc.summary ?? "",
       basis: doc.basis ?? "",
       declassificationCondition: doc.declassification_condition ?? "none",
       confidentialityExpiresAt: doc.confidentiality_expires_at ? doc.confidentiality_expires_at.slice(0, 10) : "",
@@ -266,6 +270,7 @@ export default function EditDocumentPage() {
     setClassification(draft.classification ?? "normal");
     setCategory(draft.category ?? "letter");
     setSubject(draft.subject ?? "");
+    setSummary(draft.summary ?? "");
     setBasis(draft.basis ?? "");
     setDeclassificationCondition(draft.declassificationCondition ?? "none");
     setConfidentialityExpiresAt(draft.confidentialityExpiresAt ?? "");
@@ -314,6 +319,7 @@ export default function EditDocumentPage() {
     issuer_postal_code: issuerPostalCode || undefined,
     issuer_address: issuerAddress || undefined,
     subject: category === "decree" ? null : subject || undefined,
+    summary: summary || undefined,
     basis: category === "announcement" ? basis || undefined : undefined,
     doc_description: docDescription || undefined,
     action_required: category === "decree" ? null : actionRequired || undefined,
@@ -564,6 +570,13 @@ export default function EditDocumentPage() {
               <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>公文標題 *</label>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="輸入公文標題..."
                 className="w-full bg-transparent  text-sm outline-none border-b pb-1"
+                style={{ borderColor: "var(--border)" }} />
+            </div>
+            <div>
+              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>列表摘要（可選）</label>
+              <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500}
+                placeholder="主旨為空或過於相同時，提供列表辨識用摘要..."
+                className="w-full bg-transparent text-sm outline-none border-b pb-1"
                 style={{ borderColor: "var(--border)" }} />
             </div>
             <div className="grid grid-cols-3 gap-3">
