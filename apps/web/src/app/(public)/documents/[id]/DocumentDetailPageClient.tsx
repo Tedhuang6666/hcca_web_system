@@ -39,13 +39,6 @@ function toROCDate(dateStr: string) {
   return `中華民國 ${y} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
 }
 
-function toDateTimeLocal(dateStr: string | null) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 const CAT_LABEL: Record<string, string> = {
   letter: "函", decree: "令", announcement: "公告", report: "報告",
   record: "紀錄", consultation: "咨", meeting_notice: "開會通知單", inspection_notice: "會勘通知單",
@@ -189,8 +182,6 @@ export default function DocumentDetailPageClient({
   const [allUsersLoaded, setAllUsersLoaded] = useState(false);
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
-  const [archiveAtInput, setArchiveAtInput] = useState("");
-  const [archiveSettingsBusy, setArchiveSettingsBusy] = useState(false);
   const [visibilityValue, setVisibilityValue] = useState<DocumentVisibility>("org_only");
   const [visibilityBusy, setVisibilityBusy] = useState(false);
   const { can } = usePermissions();
@@ -229,7 +220,6 @@ export default function DocumentDetailPageClient({
   }, [currentUserId, doc, id]);
   useEffect(() => {
     if (doc) {
-      setArchiveAtInput(toDateTimeLocal(doc.archive_at));
       setVisibilityValue(doc.visibility_level);
     }
   }, [doc]);
@@ -279,21 +269,6 @@ export default function DocumentDetailPageClient({
   const handleRecall = async () => {
     try { await documentsApi.recall(id); toast.success("已撤回"); fetchDoc(); }
     catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
-  };
-
-  const handleArchiveSettings = async () => {
-    setArchiveSettingsBusy(true);
-    try {
-      await documentsApi.updateArchiveSettings(id, {
-        archive_at: archiveAtInput ? new Date(archiveAtInput).toISOString() : null,
-      });
-      toast.success(archiveAtInput ? "已設定預約歸檔" : "已取消預約歸檔");
-      fetchDoc();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "歸檔設定更新失敗"));
-    } finally {
-      setArchiveSettingsBusy(false);
-    }
   };
 
   const handleVisibilityChange = async () => {
@@ -443,7 +418,6 @@ export default function DocumentDetailPageClient({
     ["建立日期", new Date(doc.created_at).toLocaleDateString("zh-TW")],
     ["送審日期", doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString("zh-TW") : "—"],
     ["限辦日期", doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"],
-    ["預約歸檔", doc.archive_at ? new Date(doc.archive_at).toLocaleString("zh-TW") : "—"],
     [
       "承辦人",
       doc.handler_name
@@ -632,7 +606,7 @@ export default function DocumentDetailPageClient({
                 value={downloadVariant}
                 onChange={(event) => setDownloadVariant(event.target.value as RecipientDownloadVariant)}
                 className="h-full min-w-[5.25rem] appearance-auto bg-transparent px-2.5 pr-7 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
-                style={{ color: "var(--text-primary)", borderColor: "var(--primary)" }}
+                style={{ color: "var(--text-primary)", borderColor: "transparent" }}
               >
                 <option value="primary">正本</option>
                 <option value="duplicate">副本</option>
@@ -640,26 +614,31 @@ export default function DocumentDetailPageClient({
               </select>
             </label>
           )}
-          <AnimatedDownloadButton
-            request={async () => {
+          <button
+            type="button"
+            onClick={async () => {
               const query = canChoosePrintVariant ? `?variant=${downloadVariant}` : "";
-              const res = await authFetch(apiUrl(`/documents/${id}/print${query}`), { credentials: "include" });
-              if (!res.ok) {
-                const body = await res.json().catch(() => null) as { detail?: string } | null;
-                throw new Error(body?.detail || res.statusText);
+              try {
+                const res = await authFetch(apiUrl(`/documents/${id}/print${query}`), { credentials: "include" });
+                if (!res.ok) throw new Error(res.statusText);
+                const url = URL.createObjectURL(await res.blob());
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `${doc.serial_number || doc.title || "公文"}.pdf`;
+                link.click();
+                URL.revokeObjectURL(url);
+                toast.success("PDF 已下載");
+              } catch (error) {
+                toast.error(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`);
               }
-              return res;
             }}
-            filename={`${doc.serial_number || doc.title || "公文"}.pdf`}
-            className="px-4 py-2 text-sm font-medium inline-flex flex-1 items-center justify-center gap-1.5 transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-wait"
+            className="px-4 py-2 text-sm font-medium inline-flex flex-1 items-center justify-center gap-1.5 transition-colors hover:brightness-110"
             style={{
               background: "var(--primary-dim)",
               color: "var(--primary)",
               borderLeft: canChoosePrintVariant ? "1px solid var(--border-strong)" : undefined,
             }}
-            label="列印公文"
-            onComplete={() => toast.success("PDF 已下載")}
-            onError={(error) => toast.error(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
+          >列印公文</button>
           </div>
           </div>
         </div>
@@ -681,41 +660,6 @@ export default function DocumentDetailPageClient({
             style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" }}>
             確認送審（{approverIds.length} 位審核人）
           </button>
-        </div>
-      )}
-
-      {doc.status === "approved" && (can("document:archive_settings") || can("document:admin")) && (
-        <div className="card p-4 space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              預約歸檔
-            </h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              到期後系統會自動封存公文，封存後不再顯示審核步驟。
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <label className="flex-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-              歸檔時間
-              <input
-                type="datetime-local"
-                value={archiveAtInput}
-                min={toDateTimeLocal(new Date().toISOString())}
-                onChange={e => setArchiveAtInput(e.target.value)}
-                className="mt-1 w-full rounded-lg bg-transparent px-3 py-2 text-sm"
-                style={{ border: "1px solid var(--border)" }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={handleArchiveSettings}
-              disabled={archiveSettingsBusy}
-              className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
-            >
-              {archiveSettingsBusy ? "儲存中…" : archiveAtInput ? "儲存時間" : "取消預約"}
-            </button>
-          </div>
         </div>
       )}
 
