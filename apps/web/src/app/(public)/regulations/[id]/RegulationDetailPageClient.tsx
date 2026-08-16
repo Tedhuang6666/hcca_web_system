@@ -563,7 +563,11 @@ export default function RegulationDetailPageClient({
     (a, b) => new Date(a.amended_at).getTime() - new Date(b.amended_at).getTime()
   );
   const legislativeHistoryRows = splitLegislativeHistory(reg.legislative_history);
-  const generatedHistoryRows = formatGeneratedHistoryRows(sortedRevisions);
+  // 匯入的既有法規會同時留下文字沿革與 revision 快照；兩者代表同一批事件，
+  // 不應在畫面上再追加一份系統合成的沿革。
+  const generatedHistoryRows = legislativeHistoryRows.length > 0
+    ? []
+    : formatGeneratedHistoryRows(sortedRevisions);
   const hasHistoryRows = legislativeHistoryRows.length > 0 || generatedHistoryRows.length > 0;
   const latestRevision = sortedRevisions[sortedRevisions.length - 1] ?? null;
   const deletedCount = allArticles.filter(a => a.is_deleted).length;
