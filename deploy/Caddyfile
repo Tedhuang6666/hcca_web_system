@@ -45,6 +45,16 @@
 			health_timeout 3s
 		}
 	}
+# 受 X-Performance-Monitor-Token 保護的登入後效能探針；不含在公開頁面路由中。
+# 探針本身再由 FastAPI 驗證 token、限制 same-origin URL，避免僅靠 proxy 隔離。
+	handle /internal/observability/* {
+		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
+			health_uri /live
+			health_interval 15s
+			health_timeout 3s
+		}
+	}
 
 	handle /ws/* {
 		reverse_proxy api:8000 {
