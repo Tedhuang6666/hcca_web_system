@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -33,6 +34,7 @@ type QrSettings = {
   margin: number;
   showBadge: boolean;
   badgeText: string;
+  logoDataUrl: string;
 };
 
 type QrMatrix = {
@@ -54,6 +56,7 @@ const DEFAULT_SETTINGS: QrSettings = {
   margin: 4,
   showBadge: true,
   badgeText: "HCCA",
+  logoDataUrl: "",
 };
 
 const MODULE_STYLES: Array<{ key: ModuleStyle; label: string; detail: string }> = [
@@ -144,6 +147,14 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
     parts.push(`<text x="${margin + moduleCount / 2}" y="${badgeY + badgeSize * 0.74}" text-anchor="middle" fill="${foreground}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${fontSize}" font-weight="700" letter-spacing="0.05">${badgeText}</text>`);
   }
 
+  if (settings.logoDataUrl) {
+    const logoSize = Math.min(9, Math.max(6.5, moduleCount * 0.22));
+    const logoX = margin + (moduleCount - logoSize) / 2;
+    const logoY = margin + (moduleCount - logoSize) / 2;
+    parts.push(`<rect x="${logoX - 0.65}" y="${logoY - 0.65}" width="${logoSize + 1.3}" height="${logoSize + 1.3}" rx="1.4" fill="${background}"/>`);
+    parts.push(`<image href="${escapeXml(settings.logoDataUrl)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`);
+  }
+
   parts.push("</svg>");
   return parts.join("");
 }
@@ -198,6 +209,27 @@ export default function QrCodeGenerator() {
 
   const updateSetting = <K extends keyof QrSettings>(key: K, value: QrSettings[K]) => {
     setSettings((previous) => ({ ...previous, [key]: value }));
+  };
+
+  const handleLogoFiles = async (files: File[]) => {
+    const file = files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setNotice("請選擇圖片格式的會徽");
+      return;
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+        reader.onerror = () => reject(new Error("會徽讀取失敗"));
+        reader.readAsDataURL(file);
+      });
+      updateSetting("logoDataUrl", dataUrl);
+      setNotice("會徽已加入中央");
+    } catch {
+      setNotice("會徽讀取失敗，請重新選擇");
+    }
   };
 
   const createPngBlob = async (): Promise<Blob> => {
@@ -341,6 +373,19 @@ export default function QrCodeGenerator() {
               <button type="button" className="qr-copy-link" onClick={copyContent} disabled={!content.trim()}>
                 {notice === "內容已複製" ? <Check size={14} aria-hidden="true" /> : <Link2 size={14} aria-hidden="true" />} {notice === "內容已複製" ? "已複製內容" : "複製內容"}
               </button>
+            </div>
+
+            <div className="qr-setting-section">
+              <div className="qr-field-label"><span><Sparkles size={15} aria-hidden="true" />中央會徽</span><small>只在本機處理，不會上傳</small></div>
+              <AnimatedFileUpload
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                maxFiles={1}
+                label={settings.logoDataUrl ? "替換中央會徽" : "拖曳會徽到這裡"}
+                hint="支援 PNG、JPG、WebP、SVG；會自動置中"
+                onFiles={handleLogoFiles}
+                onRemove={() => updateSetting("logoDataUrl", "")}
+              />
+              {settings.logoDataUrl && <button type="button" className="qr-remove-logo" onClick={() => updateSetting("logoDataUrl", "")}>移除中央會徽</button>}
             </div>
 
             <div className="qr-setting-section">
