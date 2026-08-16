@@ -436,20 +436,16 @@ async def import_regulation_docx(
             raw,
             file.filename,
         )
-        reg = await reg_svc.create_regulation_from_import(
+        reg = await reg_svc.import_regulation_document(
             session,
             data=imported,
             category=category,
             org_id=org_id,
             created_by=current_user.id,
+            publish_immediately=publish_immediately,
+            change_brief=change_brief,
+            update_existing=True,
         )
-        if publish_immediately:
-            reg = await reg_svc.publish_imported_regulation(
-                session,
-                reg,
-                published_by=current_user.id,
-                change_brief=change_brief,
-            )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
