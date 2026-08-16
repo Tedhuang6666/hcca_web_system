@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  Activity,
   AlertTriangle,
   BookUser,
   ClipboardList,
@@ -113,6 +114,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { href: "/admin/impersonation", icon: UserCog, label: "代理登入", desc: "以特定使用者視角檢查平台", requiredPermission: "admin:impersonate" },
   { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌", desc: "追蹤所有操作紀錄" },
   { href: "/admin/diagnostics",  icon: Database,   label: "系統診斷",   desc: "資料庫、Redis 與 Celery 健康度" },
+  { href: "/admin/system/observability", icon: Activity, label: "效能觀測", desc: "全站 PSI、真實使用者、錯誤與慢查詢" },
 ];
 
 /* ── 主頁面 ──────────────────────────────────────────────────────────────── */
