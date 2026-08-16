@@ -14,7 +14,7 @@ type ModeScore = {
   metrics: { lcp_ms: number | null; inp_ms: number | null; tbt_ms: number | null; cls: number | null; ttfb_ms: number | null };
   audits: AuditItem[];
 };
-type PageScore = { url: string; path: string; status: "pass" | "needs_attention" | "error" | "pending"; mobile: ModeScore | null; desktop: ModeScore | null };
+type PageScore = { url: string; path: string; source?: "psi" | "configured" | "rum"; status: "pass" | "needs_attention" | "error" | "pending"; mobile: ModeScore | null; desktop: ModeScore | null };
 type RecentError = { category?: string; exc_type?: string; message?: string; path?: string; status_code?: number; occurrences?: number; last_seen?: number };
 type SlowQuery = { template: string; max_ms: number; occurrences: number; paths: { path: string; occurrences: number }[] };
 type Providers = { sentry?: { configured?: boolean; error?: string }; posthog?: { configured?: boolean } };
@@ -129,13 +129,14 @@ function scoreColor(score: number | null | undefined) {
   return "var(--error)";
 }
 
-function statusLabel(status: PageScore["status"]) {
+function statusLabel(status: PageScore["status"], source?: PageScore["source"]) {
+  if (status === "pending" && source === "rum") return "RUM 已發現／待 PSI";
   return { pass: "達標", needs_attention: "需處理", error: "採集失敗", pending: "待測試" }[status];
 }
 
-function StatusPill({ status }: { status: PageScore["status"] }) {
+function StatusPill({ status, source }: { status: PageScore["status"]; source?: PageScore["source"] }) {
   const color = status === "pass" ? "var(--success)" : status === "pending" ? "var(--text-muted)" : "var(--error)";
-  return <span className="inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold" style={{ borderColor: color, color }}>{statusLabel(status)}</span>;
+  return <span className="inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold" style={{ borderColor: color, color }}>{statusLabel(status, source)}</span>;
 }
 
 function Score({ value }: { value: number | null | undefined }) {
@@ -258,7 +259,7 @@ function OverviewPanel({ data, loading, onInspect }: { data: Overview | null; lo
 }
 
 function PageTable({ pages, threshold, onInspect }: { pages: PageScore[]; threshold: number; onInspect: (url: string) => void }) {
-  return <section className="space-y-3"><div><h2 className="text-base font-semibold">全部公開頁面</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>來源是本站 sitemap；每頁同時要求 mobile 與 desktop 達到 {threshold} 分。</p></div>{pages.length === 0 ? <EmptyState title="尚未發現公開頁面" detail="請確認 sitemap.xml 可由部署端公開讀取。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[760px] text-left text-sm"><thead style={{ background: "var(--bg-surface)" }}><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3 font-medium">頁面</th><th className="px-4 py-3 font-medium">Mobile</th><th className="px-4 py-3 font-medium">Desktop</th><th className="px-4 py-3 font-medium">LCP / TBT</th><th className="px-4 py-3 font-medium">狀態</th><th className="px-4 py-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{pages.map((page) => <tr key={page.url} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="max-w-[22rem] px-4 py-3"><div className="truncate font-medium" title={page.url}>{page.path}</div><div className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>{page.url}</div></td><td className="px-4 py-3"><Score value={page.mobile?.score} /></td><td className="px-4 py-3"><Score value={page.desktop?.score} /></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.mobile ? `${formatNumber(page.mobile.metrics.lcp_ms, " ms")} / ${formatNumber(page.mobile.metrics.tbt_ms, " ms")}` : "—"}</td><td className="px-4 py-3"><StatusPill status={page.status} /></td><td className="px-4 py-3 text-right"><button type="button" className="min-h-11 rounded-md px-2 text-xs font-semibold hover:bg-[var(--bg-hover)]" style={{ color: "var(--primary)" }} onClick={() => onInspect(page.url)}>查看詳情</button></td></tr>)}</tbody></table></div>}</section>;
+  return <section className="space-y-3"><div><h2 className="text-base font-semibold">全部已發現頁面</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>來源包含 sitemap、關鍵路由與真實使用者 RUM；每頁有 PSI 結果時，需同時達到 mobile 與 desktop {threshold} 分。RUM 發現的登入後頁面會先列出，待可驗證 session 的 PSI 採集補齊。</p></div>{pages.length === 0 ? <EmptyState title="尚未發現頁面" detail="請確認 sitemap.xml 或第一方 RUM 可由部署端讀取。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[820px] text-left text-sm"><thead style={{ background: "var(--bg-surface)" }}><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3 font-medium">頁面</th><th className="px-4 py-3 font-medium">來源</th><th className="px-4 py-3 font-medium">Mobile</th><th className="px-4 py-3 font-medium">Desktop</th><th className="px-4 py-3 font-medium">LCP / TBT</th><th className="px-4 py-3 font-medium">狀態</th><th className="px-4 py-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{pages.map((page) => <tr key={page.url} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="max-w-[22rem] px-4 py-3"><div className="truncate font-medium" title={page.url}>{page.path}</div><div className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>{page.url}</div></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.source === "rum" ? "RUM／登入後" : page.source === "psi" ? "PSI" : "關鍵路由"}</td><td className="px-4 py-3"><Score value={page.mobile?.score} /></td><td className="px-4 py-3"><Score value={page.desktop?.score} /></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.mobile ? `${formatNumber(page.mobile.metrics.lcp_ms, " ms")} / ${formatNumber(page.mobile.metrics.tbt_ms, " ms")}` : "—"}</td><td className="px-4 py-3"><StatusPill status={page.status} source={page.source} /></td><td className="px-4 py-3 text-right"><button type="button" className="min-h-11 rounded-md px-2 text-xs font-semibold hover:bg-[var(--bg-hover)]" style={{ color: "var(--primary)" }} onClick={() => onInspect(page.url)}>查看詳情</button></td></tr>)}</tbody></table></div>}</section>;
 }
 
 function ErrorsPanel({ data }: { data: ErrorsData }) {

@@ -550,6 +550,7 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
             {
                 "url": page_url,
                 "path": httpx.URL(page_url).path or "/",
+                "source": "psi",
                 "mobile": None,
                 "desktop": None,
             },
@@ -578,12 +579,28 @@ async def overview(session: AsyncSession) -> dict:
     day = datetime.now(UTC) - timedelta(days=1)
     pages = await latest_page_scores(session)
     discovered_urls = await discover_public_urls()
+    rum = await client_route_analytics()
+    base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
+    rum_paths = {
+        _normalize_client_path(route.get("path"))
+        for route in rum.get("routes", [])
+        if int(route.get("pageviews") or 0) > 0
+    }
+    for route in rum.get("routes", []):
+        if int(route.get("pageviews") or 0) <= 0:
+            continue
+        path = _normalize_client_path(route.get("path"))
+        url = urljoin(base, path.lstrip("/"))
+        if url not in discovered_urls and _same_origin(url, base):
+            discovered_urls.append(url)
     page_by_url = {page["url"]: page for page in pages}
     for url in discovered_urls:
         if url not in page_by_url:
+            source = "rum" if httpx.URL(url).path in rum_paths else "configured"
             page_by_url[url] = {
                 "url": url,
                 "path": httpx.URL(url).path or "/",
+                "source": source,
                 "mobile": None,
                 "desktop": None,
                 "status": "pending",

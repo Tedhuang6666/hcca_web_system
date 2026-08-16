@@ -74,6 +74,7 @@ class Settings(BaseSettings):
         "/petitions",
         "/partner-map",
         "/login",
+        "/merchandise-submissions",
     ]
     # 由 CI 在 image build 時寫入；不可在容器啟動後覆寫，才能正確識別實際執行映像。
     BUILD_COMMIT: str = ""
