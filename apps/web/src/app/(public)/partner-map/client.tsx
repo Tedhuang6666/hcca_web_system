@@ -734,7 +734,7 @@ export default function PartnerMapClient({
   const MapComponent = mapComponent;
 
   return (
-    <div className="h-[calc(100dvh-92px)] min-h-[620px] overflow-hidden rounded-lg border partner-map-shell" style={{ borderColor: "var(--border)" }}>
+    <div className="h-[calc(100dvh-158px)] min-h-0 overflow-hidden rounded-lg border partner-map-shell" style={{ borderColor: "var(--border)" }}>
       <div className="grid h-full grid-cols-1 lg:grid-cols-[360px_1fr]">
         <aside className="hidden min-h-0 flex-col border-b lg:flex lg:border-b-0 lg:border-r" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
           <div className="space-y-4 p-4">
