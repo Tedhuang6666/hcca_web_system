@@ -14,7 +14,8 @@ type ModeScore = {
   metrics: { lcp_ms: number | null; inp_ms: number | null; tbt_ms: number | null; cls: number | null; ttfb_ms: number | null };
   audits: AuditItem[];
 };
-type PageScore = { url: string; path: string; source?: "psi" | "configured" | "rum"; status: "pass" | "needs_attention" | "error" | "pending"; mobile: ModeScore | null; desktop: ModeScore | null };
+type PageStatus = "pass" | "needs_attention" | "error" | "pending";
+type PageScore = { url: string; path: string; source?: "psi" | "configured" | "rum"; status: PageStatus; authenticated_status?: PageStatus; mobile: ModeScore | null; desktop: ModeScore | null; authenticated_mobile: ModeScore | null; authenticated_desktop: ModeScore | null };
 type RecentError = { category?: string; exc_type?: string; message?: string; path?: string; status_code?: number; occurrences?: number; last_seen?: number };
 type SlowQuery = { template: string; max_ms: number; occurrences: number; paths: { path: string; occurrences: number }[] };
 type Providers = { sentry?: { configured?: boolean; error?: string }; posthog?: { configured?: boolean } };
@@ -22,6 +23,7 @@ type Overview = {
   system_health: HealthItem[];
   reliability: { error_rate: number | null; affected_users: number | null; new_issues: number; regressions: number };
   coverage: { discovered: number; monitored: number; passing: number; needs_attention: number; threshold: number };
+  authenticated_coverage: { monitored: number; passing: number; needs_attention: number; pending: number; threshold: number };
   synthetic: { mobile_performance: number | null; desktop_performance: number | null; mobile_lcp_ms: number | null; mobile_tbt_ms: number | null; tested_since: string | null };
   field: Record<string, number | null>;
   pages: PageScore[];
@@ -77,6 +79,13 @@ function normalizeOverview(value: Overview): Overview {
       needs_attention: coverage.needs_attention ?? 0,
       threshold: coverage.threshold ?? 95,
     },
+    authenticated_coverage: raw.authenticated_coverage ?? {
+      monitored: 0,
+      passing: 0,
+      needs_attention: 0,
+      pending: 0,
+      threshold: coverage.threshold ?? 95,
+    },
     synthetic: {
       mobile_performance: synthetic.mobile_performance ?? null,
       desktop_performance: synthetic.desktop_performance ?? null,
@@ -129,12 +138,12 @@ function scoreColor(score: number | null | undefined) {
   return "var(--error)";
 }
 
-function statusLabel(status: PageScore["status"], source?: PageScore["source"]) {
+function statusLabel(status: PageStatus, source?: PageScore["source"]) {
   if (status === "pending" && source === "rum") return "RUM 已發現／待 PSI";
   return { pass: "達標", needs_attention: "需處理", error: "採集失敗", pending: "待測試" }[status];
 }
 
-function StatusPill({ status, source }: { status: PageScore["status"]; source?: PageScore["source"] }) {
+function StatusPill({ status, source }: { status: PageStatus; source?: PageScore["source"] }) {
   const color = status === "pass" ? "var(--success)" : status === "pending" ? "var(--text-muted)" : "var(--error)";
   return <span className="inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold" style={{ borderColor: color, color }}>{statusLabel(status, source)}</span>;
 }
@@ -247,11 +256,12 @@ function OverviewPanel({ data, loading, onInspect }: { data: Overview | null; lo
   if (loading && !data) return <LoadingState />;
   if (!data) return <EmptyState title="尚無觀測資料" detail="確認超級管理員權限與 API 服務狀態後再重新整理。" />;
   return <div className="space-y-6">
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="監控摘要">
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="監控摘要">
       <SummaryMetric label="已發現頁面" value={data.coverage.discovered} detail={`目前列出 ${data.coverage.monitored} 頁`} />
       <SummaryMetric label="達標頁面" value={data.coverage.passing} detail={`門檻 PSI ${data.coverage.threshold}`} tone="var(--success)" />
       <SummaryMetric label="需要處理" value={data.coverage.needs_attention} detail="包含待測試與低於門檻" tone={data.coverage.needs_attention ? "var(--error)" : "var(--success)"} />
       <SummaryMetric label="最近 mobile 平均" value={formatNumber(data.synthetic.mobile_performance)} detail={`LCP ${formatNumber(data.synthetic.mobile_lcp_ms, " ms")}`} tone={scoreColor(data.synthetic.mobile_performance)} />
+      <SummaryMetric label="登入後達標" value={data.authenticated_coverage.passing} detail={`已測 ${data.authenticated_coverage.monitored} 頁／待測 ${data.authenticated_coverage.pending}`} tone={data.authenticated_coverage.needs_attention ? "var(--warning)" : "var(--success)"} />
     </section>
     <section><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-base font-semibold">服務狀態</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>這些狀態來自本次 API 請求的即時探測。</p></div><span className="text-xs" style={{ color: "var(--text-muted)" }}>版本 {data.latest_release.commit_sha?.slice(0, 8) ?? "—"}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{data.system_health.map((item) => <div key={item.name} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center gap-2 text-sm"><span aria-hidden="true" style={{ color: item.healthy ? "var(--success)" : "var(--error)" }}>●</span>{item.name}</div><strong className="mt-2 block">{item.healthy ? "正常" : "異常"}</strong></div>)}</div></section>
     <PageTable pages={data.pages} threshold={data.coverage.threshold} onInspect={onInspect} />
@@ -259,7 +269,7 @@ function OverviewPanel({ data, loading, onInspect }: { data: Overview | null; lo
 }
 
 function PageTable({ pages, threshold, onInspect }: { pages: PageScore[]; threshold: number; onInspect: (url: string) => void }) {
-  return <section className="space-y-3"><div><h2 className="text-base font-semibold">全部已發現頁面</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>來源包含 sitemap、關鍵路由與真實使用者 RUM；每頁有 PSI 結果時，需同時達到 mobile 與 desktop {threshold} 分。RUM 發現的登入後頁面會先列出，待可驗證 session 的 PSI 採集補齊。</p></div>{pages.length === 0 ? <EmptyState title="尚未發現頁面" detail="請確認 sitemap.xml 或第一方 RUM 可由部署端讀取。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[820px] text-left text-sm"><thead style={{ background: "var(--bg-surface)" }}><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3 font-medium">頁面</th><th className="px-4 py-3 font-medium">來源</th><th className="px-4 py-3 font-medium">Mobile</th><th className="px-4 py-3 font-medium">Desktop</th><th className="px-4 py-3 font-medium">LCP / TBT</th><th className="px-4 py-3 font-medium">狀態</th><th className="px-4 py-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{pages.map((page) => <tr key={page.url} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="max-w-[22rem] px-4 py-3"><div className="truncate font-medium" title={page.url}>{page.path}</div><div className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>{page.url}</div></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.source === "rum" ? "RUM／登入後" : page.source === "psi" ? "PSI" : "關鍵路由"}</td><td className="px-4 py-3"><Score value={page.mobile?.score} /></td><td className="px-4 py-3"><Score value={page.desktop?.score} /></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.mobile ? `${formatNumber(page.mobile.metrics.lcp_ms, " ms")} / ${formatNumber(page.mobile.metrics.tbt_ms, " ms")}` : "—"}</td><td className="px-4 py-3"><StatusPill status={page.status} source={page.source} /></td><td className="px-4 py-3 text-right"><button type="button" className="min-h-11 rounded-md px-2 text-xs font-semibold hover:bg-[var(--bg-hover)]" style={{ color: "var(--primary)" }} onClick={() => onInspect(page.url)}>查看詳情</button></td></tr>)}</tbody></table></div>}</section>;
+  return <section className="space-y-3"><div><h2 className="text-base font-semibold">全部已發現頁面</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>來源包含 sitemap、關鍵路由與真實使用者 RUM；公開與登入後合成測試都必須同時達到 mobile 與 desktop {threshold} 分。登入後結果由獨立短效 session 探針產生。</p></div>{pages.length === 0 ? <EmptyState title="尚未發現頁面" detail="請確認 sitemap.xml 或第一方 RUM 可由部署端讀取。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[1120px] text-left text-sm"><thead style={{ background: "var(--bg-surface)" }}><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3 font-medium">頁面</th><th className="px-4 py-3 font-medium">來源</th><th className="px-4 py-3 font-medium">公開 M / D</th><th className="px-4 py-3 font-medium">登入後 M / D</th><th className="px-4 py-3 font-medium">公開 LCP / TBT</th><th className="px-4 py-3 font-medium">狀態</th><th className="px-4 py-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{pages.map((page) => <tr key={page.url} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="max-w-[22rem] px-4 py-3"><div className="truncate font-medium" title={page.url}>{page.path}</div><div className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>{page.url}</div></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.source === "rum" ? "RUM／使用者" : page.source === "psi" ? "PSI" : "關鍵路由"}</td><td className="px-4 py-3"><Score value={page.mobile?.score} /> <span style={{ color: "var(--text-muted)" }}>/</span> <Score value={page.desktop?.score} /></td><td className="px-4 py-3"><Score value={page.authenticated_mobile?.score} /> <span style={{ color: "var(--text-muted)" }}>/</span> <Score value={page.authenticated_desktop?.score} /></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.mobile ? `${formatNumber(page.mobile.metrics.lcp_ms, " ms")} / ${formatNumber(page.mobile.metrics.tbt_ms, " ms")}` : "—"}</td><td className="space-y-1 px-4 py-3"><StatusPill status={page.status} source={page.source} />{page.authenticated_status && <div><span className="text-xs" style={{ color: "var(--text-muted)" }}>登入後：</span><StatusPill status={page.authenticated_status} /></div>}</td><td className="px-4 py-3 text-right"><button type="button" className="min-h-11 rounded-md px-2 text-xs font-semibold hover:bg-[var(--bg-hover)]" style={{ color: "var(--primary)" }} onClick={() => onInspect(page.url)}>查看詳情</button></td></tr>)}</tbody></table></div>}</section>;
 }
 
 function ErrorsPanel({ data }: { data: ErrorsData }) {
@@ -271,8 +281,14 @@ function RealUsersPanel({ data }: { data: RealUsersData }) {
 }
 
 function PerformancePanel({ data, page }: { data: PerformanceData; page: PageScore | null }) {
-  const modes = data.psi.flatMap((item) => [item.mobile, item.desktop].filter(Boolean) as ModeScore[]);
-  return <div className="space-y-6"><section className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: "var(--border)" }}><div><h2 className="text-base font-semibold">頁面效能詳情</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{data.url || page?.url || "—"}</p></div><span className="text-xs" style={{ color: "var(--text-muted)" }}>CrUX 與 PSI 分開呈現</span></section><div className="grid gap-3 sm:grid-cols-2">{modes.map((mode, index) => <div key={`${mode.tested_at}-${index}`} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between"><span className="text-sm font-medium">{index % 2 === 0 ? "Mobile" : "Desktop"}</span><Score value={mode.score} /></div><dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs"><Metric label="LCP" value={formatNumber(mode.metrics.lcp_ms, " ms")} /><Metric label="INP" value={formatNumber(mode.metrics.inp_ms, " ms")} /><Metric label="TBT" value={formatNumber(mode.metrics.tbt_ms, " ms")} /><Metric label="CLS" value={formatNumber(mode.metrics.cls)} /></dl><p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>測試於 {formatDate(mode.tested_at)}</p></div>)}</div>{modes.length === 0 && <EmptyState title="尚無 PSI 結果" detail="回到總覽執行一次 PSI 採集。" />}<section className="rounded-md border p-5" style={{ borderColor: "var(--border)" }}><h2 className="font-semibold">CrUX 近 28 天</h2>{data.crux.error ? <p className="mt-3 text-sm" style={{ color: "var(--error)" }}>資料讀取失敗：{data.crux.error}</p> : <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="LCP p75" value={formatNumber(data.crux.lcp_p75?.at(-1), " ms")} /><Metric label="INP p75" value={formatNumber(data.crux.inp_p75?.at(-1), " ms")} /><Metric label="CLS p75" value={formatNumber(data.crux.cls_p75?.at(-1))} /><Metric label="TTFB p75" value={formatNumber(data.crux.ttfb_p75?.at(-1), " ms")} /></div>}</section></div>;
+  const selected = page ?? data.psi[0] ?? null;
+  const modes = selected ? [
+    ["公開 Mobile", selected.mobile],
+    ["公開 Desktop", selected.desktop],
+    ["登入後 Mobile", selected.authenticated_mobile],
+    ["登入後 Desktop", selected.authenticated_desktop],
+  ].filter((entry): entry is [string, ModeScore] => Boolean(entry[1])) : [];
+  return <div className="space-y-6"><section className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: "var(--border)" }}><div><h2 className="text-base font-semibold">頁面效能詳情</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{data.url || page?.url || "—"}</p></div><span className="text-xs" style={{ color: "var(--text-muted)" }}>公開 PSI、登入後 Lighthouse 與 CrUX 分開呈現</span></section><div className="grid gap-3 sm:grid-cols-2">{modes.map(([label, mode]) => <div key={`${label}-${mode.tested_at}`} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between"><span className="text-sm font-medium">{label}</span><Score value={mode.score} /></div><dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs"><Metric label="LCP" value={formatNumber(mode.metrics.lcp_ms, " ms")} /><Metric label="INP" value={formatNumber(mode.metrics.inp_ms, " ms")} /><Metric label="TBT" value={formatNumber(mode.metrics.tbt_ms, " ms")} /><Metric label="CLS" value={formatNumber(mode.metrics.cls)} /></dl><p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>測試於 {formatDate(mode.tested_at)}</p></div>)}</div>{modes.length === 0 && <EmptyState title="尚無效能結果" detail="先執行公開 PSI 或等待 authenticated performance workflow 回報。" />}<section className="rounded-md border p-5" style={{ borderColor: "var(--border)" }}><h2 className="font-semibold">CrUX 近 28 天</h2>{data.crux.error ? <p className="mt-3 text-sm" style={{ color: "var(--error)" }}>資料讀取失敗：{data.crux.error}</p> : <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="LCP p75" value={formatNumber(data.crux.lcp_p75?.at(-1), " ms")} /><Metric label="INP p75" value={formatNumber(data.crux.inp_p75?.at(-1), " ms")} /><Metric label="CLS p75" value={formatNumber(data.crux.cls_p75?.at(-1))} /><Metric label="TTFB p75" value={formatNumber(data.crux.ttfb_p75?.at(-1), " ms")} /></div>}</section></div>;
 }
 
 function ReleasesPanel({ data }: { data: Release[] }) {

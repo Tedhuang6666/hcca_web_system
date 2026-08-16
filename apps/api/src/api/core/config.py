@@ -76,6 +76,42 @@ class Settings(BaseSettings):
         "/login",
         "/merchandise-submissions",
     ]
+    # 受保護頁面的合成效能探針使用短效 access token；只允許部署端以獨立
+    # secret 取得，避免把管理員 Cookie 或 OAuth 憑證放進 CI。
+    PERFORMANCE_MONITOR_TOKEN: str = ""
+    PERFORMANCE_MONITOR_USER_ID: str = ""
+    PERFORMANCE_AUTHENTICATED_URLS: list[str] = [
+        "/dashboard",
+        "/tasks",
+        "/work-items",
+        "/calendar",
+        "/matters",
+        "/governance",
+        "/documents",
+        "/regulations",
+        "/meetings",
+        "/council-proposals",
+        "/judicial-petitions",
+        "/petitions",
+        "/meal",
+        "/shop",
+        "/surveys",
+        "/partner-map",
+        "/recommended-vendors",
+        "/exam-papers",
+        "/credential",
+        "/announcements",
+        "/publications",
+        "/email",
+        "/finance",
+        "/operations",
+        "/admin/system/observability",
+        "/orgs",
+        "/audit-logs",
+        "/merchandise-submissions",
+        "/settings/security",
+        "/settings/integrations",
+    ]
     # 由 CI 在 image build 時寫入；不可在容器啟動後覆寫，才能正確識別實際執行映像。
     BUILD_COMMIT: str = ""
     BUILD_REF: str = ""
