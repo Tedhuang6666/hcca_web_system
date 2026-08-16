@@ -525,7 +525,10 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__dock {
   isolation: isolate;
-  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 28%, transparent);
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__shape {
@@ -534,34 +537,29 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__shape {
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__shape-fill {
-  fill: var(--bg-elevated);
-  stroke: var(--border-strong);
-  stroke-opacity: 0.9;
+  fill: transparent;
+  stroke: transparent;
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__shape-highlight {
   fill: none;
-  stroke: var(--primary);
-  stroke-opacity: 0.36;
+  stroke: transparent;
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__bead {
   z-index: 1;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 6px 12px color-mix(in srgb, var(--primary) 34%, transparent);
+  top: 50% !important;
+  width: 64px !important;
+  height: 44px !important;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 17%, var(--bg-elevated));
+  box-shadow: none;
+  transform: translate(-50%, -50%) !important;
   transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__bead::after {
-  position: absolute;
-  top: 6px;
-  left: 7px;
-  width: 7px;
-  height: 5px;
-  border-radius: 50%;
-  background: color-mix(in srgb, #fff 46%, transparent);
-  content: "";
+  display: none;
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__item {
@@ -574,7 +572,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__item {
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__item[data-visual-active="true"] {
-  color: var(--primary-fg);
+  color: var(--primary);
   font-weight: 700;
   transform: translateY(-1px);
 }
@@ -603,6 +601,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__label {
   color: inherit;
   line-height: 1.2;
   white-space: nowrap;
+  font-size: 0.7rem;
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
