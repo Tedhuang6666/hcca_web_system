@@ -47,6 +47,11 @@ async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID
                 manager.notify_pong(websocket)
     except WebSocketDisconnect:
         manager.disconnect(websocket, room)
+    except RuntimeError as exc:
+        if "WebSocket is not connected" not in str(exc):
+            raise
+        manager.disconnect(websocket, room)
+        logger.debug("WebSocket client disconnected during handshake room=%s", room)
 
 
 # ── 認證輔助 ─────────────────────────────────────────────────────────────────
@@ -216,6 +221,7 @@ async def websocket_room(
         return
 
     client_ip = _client_ip(websocket)
+    connected = False
     try:
         await manager.connect(
             websocket,
@@ -224,6 +230,7 @@ async def websocket_room(
             session_id=session_id,
             access_expires_at=access_expires_at,
         )
+        connected = True
     except WSCapacityError as exc:
         logger.warning(
             "WS capacity hit scope=%s room=%s ip=%s reason=%s",
@@ -255,10 +262,21 @@ async def websocket_room(
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, room)
-        await manager.broadcast_to_room(
-            room,
-            manager.build_message("leave", {"user_id": user_id}, room=room),
-        )
+        if connected:
+            await manager.broadcast_to_room(
+                room,
+                manager.build_message("leave", {"user_id": user_id}, room=room),
+            )
+    except RuntimeError as exc:
+        if "WebSocket is not connected" not in str(exc):
+            raise
+        manager.disconnect(websocket, room)
+        if connected:
+            await manager.broadcast_to_room(
+                room,
+                manager.build_message("leave", {"user_id": user_id}, room=room),
+            )
+        logger.debug("WebSocket client disconnected during handshake room=%s", room)
 
 
 # ── 管理端點（HTTP）──────────────────────────────────────────────────────────

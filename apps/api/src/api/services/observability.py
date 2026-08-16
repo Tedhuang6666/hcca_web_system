@@ -365,7 +365,9 @@ async def collect_pagespeed(
     urls, rum = await discover_observability_urls()
     release = release or await ensure_release(session)
     results: list[tuple[str, str, dict | None, str | None]] = []
-    semaphore = asyncio.Semaphore(2)
+    # Lighthouse 會在一次 PSI 請求內衍生大量同源資源/API 請求；並行跑多個
+    # URL 會把正式站的 upstream 健康檢查壓成 503。監控不得反過來影響使用者。
+    semaphore = asyncio.Semaphore(1)
 
     async def fetch_one(client: httpx.AsyncClient, url: str, strategy: str) -> None:
         async with semaphore:
