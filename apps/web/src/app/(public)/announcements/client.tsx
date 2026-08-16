@@ -151,8 +151,8 @@ export default function AnnouncementsClient({
                     )}
                     <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                       {item.published_at
-                        ? new Date(item.published_at).toLocaleString("zh-TW")
-                        : new Date(item.created_at).toLocaleString("zh-TW")}
+                        ? new Date(item.published_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
+                        : new Date(item.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
                     </span>
                   </div>
                   <h2 className="text-base font-semibold leading-snug">{item.title}</h2>

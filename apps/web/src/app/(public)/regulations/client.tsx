@@ -328,8 +328,8 @@ function RegCard({
       </div>
       <div className="flex items-center justify-between text-xs" style={{ color: "var(--text-muted)" }}>
         {reg.published_at
-          ? <span>發布 {new Date(reg.published_at).toLocaleDateString("zh-TW")}</span>
-          : <span>更新 {new Date(reg.updated_at).toLocaleDateString("zh-TW")}</span>
+          ? <span>發布 {new Date(reg.published_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</span>
+          : <span>更新 {new Date(reg.updated_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</span>
         }
         {!isArchived ? (
           <span className="flex items-center gap-1 reg-card-cta" style={{ color: "var(--primary-text)" }}>
