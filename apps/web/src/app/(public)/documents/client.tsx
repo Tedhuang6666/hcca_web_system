@@ -19,7 +19,6 @@ const TABS: { key: DocumentStatus | "all"; label: string }[] = [
   { key: "pending",  label: "待審核" },
   { key: "approved", label: "已核准" },
   { key: "rejected", label: "已退件" },
-  { key: "archived", label: "已封存" },
 ];
 
 const DOC_CATEGORIES: { key: string; label: string }[] = [
@@ -48,7 +47,10 @@ const DOC_VISIBILITIES: { key: string; label: string }[] = [
   { key: "publicly_open", label: "公開" },
 ];
 
-type SortKey = "created_desc" | "created_asc" | "title_asc" | "due_asc" | "urgency_desc";
+type SortKey =
+  | "created_desc" | "created_asc" | "title_asc"
+  | "due_asc" | "due_desc" | "urgency_desc" | "urgency_asc"
+  | "serial_asc" | "serial_desc";
 
 type FilterState = {
   category: string;
@@ -127,17 +129,21 @@ function SortTh({
   onToggle: (sk: SortKey) => void;
 }) {
   const active = sortKey === sk;
+  const descending = sk.endsWith("_desc");
+  const direction = active ? (descending ? "由大到小" : "由小到大") : "未排序";
   return (
     <th
       className="px-5 py-3.5 text-left"
       scope="col"
-      aria-sort={active ? "ascending" : "none"}>
+      aria-sort={active ? (descending ? "descending" : "ascending") : "none"}>
       <button
         type="button"
         className="-m-2 inline-flex min-h-11 items-center gap-1 rounded px-2 text-xs font-semibold"
         style={{ color: active ? "var(--primary)" : "var(--text-muted)" }}
+        aria-label={`${label}，${direction}。點擊切換排序方向`}
+        title={`${label}：${direction}，點擊切換`}
         onClick={() => onToggle(sk)}>
-        {label} {active ? "↑" : ""}
+        {label} {active ? (descending ? "↓" : "↑") : "↕"}
       </button>
     </th>
   );
@@ -443,7 +449,11 @@ export default function DocumentListClient({
     [activities]
   );
 
-  const sorted = useMemo(() => [...docs].sort((a, b) => {
+  const sorted = useMemo(() => [...docs].filter((doc) => doc.status !== "archived").sort((a, b) => {
+    const serialNumber = (value: string | null) => {
+      const match = value?.match(/(\d+)(?!.*\d)/);
+      return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+    };
     switch (sortKey) {
       case "created_asc": return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       case "title_asc":   return a.title.localeCompare(b.title, "zh-TW");
@@ -452,11 +462,32 @@ export default function DocumentListClient({
         const db = b.due_date ? new Date(b.due_date).getTime() : Infinity;
         return da - db;
       }
+      case "due_desc": {
+        const da = a.due_date ? new Date(a.due_date).getTime() : -Infinity;
+        const db = b.due_date ? new Date(b.due_date).getTime() : -Infinity;
+        return db - da;
+      }
       case "urgency_desc":
         return (URGENCY_ORDER[b.urgency] ?? 0) - (URGENCY_ORDER[a.urgency] ?? 0);
+      case "urgency_asc":
+        return (URGENCY_ORDER[a.urgency] ?? 0) - (URGENCY_ORDER[b.urgency] ?? 0);
+      case "serial_asc":
+        return serialNumber(a.serial_number) - serialNumber(b.serial_number);
+      case "serial_desc":
+        return serialNumber(b.serial_number) - serialNumber(a.serial_number);
       default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     }
   }), [docs, sortKey]);
+
+  const toggleSort = (key: SortKey) => {
+    const reverse: Partial<Record<SortKey, SortKey>> = {
+      created_desc: "created_asc", created_asc: "created_desc",
+      due_asc: "due_desc", due_desc: "due_asc",
+      urgency_desc: "urgency_asc", urgency_asc: "urgency_desc",
+      serial_asc: "serial_desc", serial_desc: "serial_asc",
+    };
+    setSortKey((current) => current === key ? (reverse[key] ?? key) : key);
+  };
 
   const selectableDocs = sorted.filter((doc) => !doc.is_redacted);
   const selectedList = selectableDocs.filter((doc) => selectedIds.has(doc.id));
@@ -1083,12 +1114,12 @@ export default function DocumentListClient({
                         className="accent-blue-600"
                       />
                     </th>}
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }} scope="col">字號</th>
-                    <SortTh label="主旨" sk="title_asc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
-                    <SortTh label="速別" sk="urgency_desc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
+                    <SortTh label="字號" sk="serial_asc" sortKey={sortKey} onToggle={toggleSort} />
+                    <SortTh label="主旨" sk="title_asc" sortKey={sortKey} onToggle={toggleSort} />
+                    <SortTh label="速別" sk="urgency_desc" sortKey={sortKey} onToggle={toggleSort} />
                     <th className="px-5 py-3.5 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }} scope="col">狀態</th>
-                    <SortTh label="發文日期" sk="created_desc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
-                    <SortTh label="限辦日期" sk="due_asc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
+                    <SortTh label="發文日期" sk="created_desc" sortKey={sortKey} onToggle={toggleSort} />
+                    <SortTh label="限辦日期" sk="due_asc" sortKey={sortKey} onToggle={toggleSort} />
                     <th className="px-5 py-3.5 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }} scope="col">操作</th>
                   </tr>
                 </thead>
