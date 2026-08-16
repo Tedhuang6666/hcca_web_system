@@ -16,7 +16,6 @@ from api.models.user import User
 from api.services.observability import (
     client_route_analytics,
     collect_crux_daily,
-    collect_pagespeed,
     critical_urls,
     crux_history,
     ensure_release,
@@ -24,6 +23,7 @@ from api.services.observability import (
     provider_snapshot,
 )
 from api.services.observability import overview as get_overview
+from api.services.observability_tasks import collect_pagespeed_scheduled
 
 router = APIRouter(prefix="/admin/system/observability", tags=["管理員 / Observability"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -164,11 +164,14 @@ async def releases(
 
 @router.post("/collect/psi")
 async def collect_psi(
-    session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
+    _admin: Annotated[User, Depends(require_superuser)]
 ) -> dict[str, Any]:
-    result = await collect_pagespeed(session)
-    await session.commit()
-    return result
+    task = collect_pagespeed_scheduled.delay()
+    return {
+        "queued": True,
+        "task_id": task.id,
+        "message": "PSI 採集已排入背景工作，完成後重新整理即可查看結果。",
+    }
 
 
 @router.post("/collect/crux-daily")
