@@ -73,6 +73,7 @@ type RegulationDetailPageClientProps = {
   initialId: string;
   initialRefs?: string[];
   initialTitle?: string | null;
+  initialRegulation?: RegulationOut | null;
   initialTab?: string | null;
   initialArticleRef?: string | null;
   initialUnitRef?: string | null;
@@ -84,6 +85,7 @@ export default function RegulationDetailPageClient({
   initialId,
   initialRefs = [],
   initialTitle = null,
+  initialRegulation = null,
   initialTab,
   initialArticleRef,
   initialUnitRef,
@@ -92,8 +94,8 @@ export default function RegulationDetailPageClient({
   // 統一 decode 後再給 API / localStorage / encodeURIComponent 使用，避免雙重編碼。
   const id = useMemo(() => decodeRouteSegment(initialId), [initialId]);
   const router = useRouter();
-  const [reg, setReg] = useState<RegulationOut | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [reg, setReg] = useState<RegulationOut | null>(initialRegulation);
+  const [loading, setLoading] = useState(!initialRegulation);
   const normalizedInitialTab = initialTab ?? null;
   const [tab, setTab] = useState<Tab>(isTab(normalizedInitialTab) ? normalizedInitialTab : "content");
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
@@ -147,13 +149,12 @@ export default function RegulationDetailPageClient({
   }, []);
 
   useEffect(() => {
-    setReg(null);
-    setLoading(true);
+    if (!initialRegulation) setLoading(true);
     regulationsApi.get(id)
       .then(setReg)
       .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, initialRegulation]);
 
   useEffect(() => {
     if (!reg?.published_document_id) {
