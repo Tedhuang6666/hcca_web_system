@@ -701,7 +701,9 @@ async def unarchive_document(
 ) -> Document:
     doc = await get_doc_or_404(doc_id, session)
     if doc.created_by != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以解除封存公文")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以解除封存公文"
+        )
     try:
         updated = await doc_svc.unarchive_document(session, doc, requested_by=current_user.id)
     except ValueError as e:
