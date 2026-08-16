@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.models.activity import Activity
 from api.models.activity_link import ActivityLink, ActivityLinkKind
@@ -616,7 +617,18 @@ async def _candidates(db: AsyncSession, activity: Activity) -> list[Candidate]:
         )
     for row in (
         await db.execute(
-            select(Regulation).where(Regulation.created_at.between(start, end)).limit(200)
+            select(Regulation)
+            .options(
+                load_only(
+                    Regulation.id,
+                    Regulation.title,
+                    Regulation.org_id,
+                    Regulation.created_by,
+                    Regulation.created_at,
+                )
+            )
+            .where(Regulation.created_at.between(start, end))
+            .limit(200)
         )
     ).scalars():
         candidates.append(

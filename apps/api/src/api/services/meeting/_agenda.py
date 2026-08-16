@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.core.clock import local_today
 from api.models.meeting import (
@@ -62,6 +63,18 @@ async def list_proposable_regulations(session: AsyncSession, meeting: Meeting) -
     linked = {item.regulation_id for item in meeting.agenda_items if item.regulation_id}
     result = await session.execute(
         select(Regulation)
+        .options(
+            load_only(
+                Regulation.id,
+                Regulation.title,
+                Regulation.proposal_metadata,
+                Regulation.legal_basis,
+                Regulation.preface,
+                Regulation.workflow_status,
+                Regulation.is_active,
+                Regulation.updated_at,
+            )
+        )
         .where(Regulation.workflow_status == intake)
         .where(Regulation.is_active.is_(True))
         .order_by(Regulation.updated_at.desc())

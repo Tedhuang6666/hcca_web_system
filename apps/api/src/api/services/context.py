@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.models.activity import Activity
 from api.models.activity_link import ActivityLink
@@ -112,7 +113,12 @@ async def petition_resolution_context(
         raise ValueError("陳情不存在")
     keyword = f"%{petition.title[:12]}%" if petition.title else "%"
     regs = (
-        await db.execute(select(Regulation).where(Regulation.title.ilike(keyword)).limit(5))
+        await db.execute(
+            select(Regulation)
+            .options(load_only(Regulation.id, Regulation.title))
+            .where(Regulation.title.ilike(keyword))
+            .limit(5)
+        )
     ).scalars()
     similar = (
         await db.execute(

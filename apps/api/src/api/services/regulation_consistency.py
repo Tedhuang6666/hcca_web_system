@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.models.document import Document, DocumentCategory
 from api.models.regulation import Regulation, RegulationWorkflowStatus
@@ -29,6 +30,13 @@ async def audit_regulation_document_consistency(session: AsyncSession) -> dict[s
             (
                 await session.execute(
                     select(Regulation)
+                    .options(
+                        load_only(
+                            Regulation.id,
+                            Regulation.workflow_status,
+                            Regulation.published_document_id,
+                        )
+                    )
                     .where(Regulation.workflow_status == RegulationWorkflowStatus.PUBLISHED)
                     .limit(_CHUNK)
                     .offset(reg_offset)
@@ -112,7 +120,13 @@ async def audit_regulation_document_consistency(session: AsyncSession) -> dict[s
         regs_by_id: dict = {}
         if reg_ids:
             rows = (
-                (await session.execute(select(Regulation).where(Regulation.id.in_(reg_ids))))
+                (
+                    await session.execute(
+                        select(Regulation)
+                        .options(load_only(Regulation.id))
+                        .where(Regulation.id.in_(reg_ids))
+                    )
+                )
                 .scalars()
                 .all()
             )
