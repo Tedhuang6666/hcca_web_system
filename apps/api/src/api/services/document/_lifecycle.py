@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -207,7 +207,13 @@ async def update_document(
     changed_by: uuid.UUID,
 ) -> Document:
     if doc.status != DocumentStatus.DRAFT:
-        raise ValueError(f"公文 {doc.serial_number} 非草稿狀態（{doc.status}），無法編輯")
+        if doc.status != DocumentStatus.APPROVED or doc.issued_at is None:
+            raise ValueError(f"公文 {doc.serial_number} 非可編輯狀態（{doc.status}），無法編輯")
+        issued_at = doc.issued_at
+        if issued_at.tzinfo is None:
+            issued_at = issued_at.replace(tzinfo=UTC)
+        if datetime.now(UTC) > issued_at + timedelta(hours=6):
+            raise ValueError("公文發出已超過六小時，無法編輯")
 
     changed = False
     update_fields = data.model_dump(

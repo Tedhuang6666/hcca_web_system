@@ -380,8 +380,10 @@ export default function EditDocumentPage() {
   const fetchDoc = useCallback(async () => {
     try {
       const d = await documentsApi.get(id);
-      if (d.status !== "draft") {
-        toast.error("只能編輯草稿狀態的公文");
+      const canEditIssued = d.status === "approved" && d.issued_at
+        && Date.now() <= new Date(d.issued_at).getTime() + 6 * 60 * 60 * 1000;
+      if (d.status !== "draft" && !canEditIssued) {
+        toast.error(d.status === "approved" ? "公文發出已超過六小時，無法編輯" : "只能編輯草稿或發出六小時內的公文");
         router.push(`/documents/${id}`);
         return;
       }
