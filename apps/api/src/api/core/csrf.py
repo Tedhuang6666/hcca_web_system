@@ -81,6 +81,8 @@ class CSRFMiddleware:
             "/email/resend/webhook",
             # 內部服務使用 API key，不依賴瀏覽器 cookie。
             "/internal/discord",
+            # authenticated performance CI 使用獨立服務 token，不依賴瀏覽器 CSRF cookie。
+            "/internal/observability",
             # 退訂端點以簽章 token 保護，免登入且無 CSRF cookie，故豁免
             "/notifications/unsubscribe",
             # 匿名瀏覽器錯誤回報不能依賴既有登入 session；端點本身只接收
