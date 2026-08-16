@@ -578,7 +578,7 @@ async def _update_existing_regulation_from_import(
         return None
 
     existing_history_dates = _history_dates(reg.legislative_history)
-    reg.category = category
+    # 更新同名法規時保留既有分類；匯入表單的分類只適用於新建法規。
     reg.content = data.content
     reg.preface = data.preface
     reg.legislative_history = data.legislative_history
@@ -1092,8 +1092,12 @@ async def delete_regulation(
     session: AsyncSession,
     reg: Regulation,
 ) -> None:
-    """永久刪除法規（僅允許尚未發布的草稿）"""
-    if reg.published_at is not None:
+    """刪除草稿；文件匯入後 12 小時內可撤回誤發布的匯入結果。"""
+    is_recent_file_import = (
+        reg.proposal_metadata == "__file_import__"
+        and reg.created_at >= datetime.now(UTC) - timedelta(hours=12)
+    )
+    if reg.published_at is not None and not is_recent_file_import:
         msg = "已發布的法規不可直接刪除，請先停用"
         raise ValueError(msg)
     await session.delete(reg)
