@@ -599,6 +599,24 @@ async def archive_document(
     return doc
 
 
+async def unarchive_document(
+    session: AsyncSession,
+    doc: Document,
+    *,
+    requested_by: uuid.UUID,
+) -> Document:
+    if doc.status != DocumentStatus.ARCHIVED:
+        raise ValueError(
+            f"公文 {doc.serial_number} 非已封存狀態，無法解除封存（目前狀態：{doc.status}）"
+        )
+
+    doc.status = DocumentStatus.APPROVED
+    await session.flush()
+    logger.info("公文解除封存 serial=%s by=%s", doc.serial_number, requested_by)
+    await invalidate_dashboard_cache()
+    return doc
+
+
 async def update_archive_settings(
     session: AsyncSession,
     doc: Document,
