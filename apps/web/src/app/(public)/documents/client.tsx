@@ -1084,10 +1084,10 @@ export default function DocumentListClient({
                       />
                     </th>}
                     <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }} scope="col">字號</th>
-                    <SortTh label="標題" sk="title_asc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
+                    <SortTh label="主旨" sk="title_asc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
                     <SortTh label="速別" sk="urgency_desc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
                     <th className="px-5 py-3.5 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }} scope="col">狀態</th>
-                    <SortTh label="建立日期" sk="created_desc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
+                    <SortTh label="發文日期" sk="created_desc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
                     <SortTh label="限辦日期" sk="due_asc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
                     <th className="px-5 py-3.5 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }} scope="col">操作</th>
                   </tr>
@@ -1116,20 +1116,15 @@ export default function DocumentListClient({
                       <td className="px-5 py-4 max-w-xs">
                         {doc.is_redacted ? (
                           <span className="font-medium" style={{ color: "var(--text-muted)" }}>
-                            {doc.title}
+                            {doc.subject || doc.title}
                           </span>
                         ) : (
                           <Link
                             href={`/documents/${encodeURIComponent(doc.serial_number)}`}
                             className="font-medium hover:underline transition-colors"
                             style={{ color: "var(--text-primary)" }}>
-                            {doc.title}
+                            {doc.subject || doc.title}
                           </Link>
-                        )}
-                        {doc.subject && (
-                          <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
-                            {doc.subject}
-                          </p>
                         )}
                         {doc.activity_id && (
                           <span className="mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px]"
@@ -1145,7 +1140,7 @@ export default function DocumentListClient({
                         <DocumentStatusBadge status={doc.status} />
                       </td>
                       <td className="px-5 py-4 text-xs whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
-                        {new Date(doc.created_at).toLocaleDateString("zh-TW")}
+                        {new Date(doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}
                       </td>
                       <td className="px-5 py-4 text-xs whitespace-nowrap">
                         {(() => {
@@ -1232,10 +1227,10 @@ export default function DocumentListClient({
                         style={{ textDecoration: "none" }}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate" style={{ color: "var(--text-muted)" }}>
-                            {doc.title}
+                            {doc.subject || doc.title}
                           </p>
                           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                            建立 {new Date(doc.created_at).toLocaleDateString("zh-TW")}
+                            發文 {new Date(doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -1250,13 +1245,13 @@ export default function DocumentListClient({
                       style={{ textDecoration: "none" }}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
-                          {doc.title}
+                          {doc.subject || doc.title}
                         </p>
                         <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary)" }}>
                           {doc.serial_number}
                         </p>
                         <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                          建立 {new Date(doc.created_at).toLocaleDateString("zh-TW")}
+                          發文 {new Date(doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}
                         </p>
                         {doc.due_date && (isOverdue || isSoon) && (
                           <p className="flex items-center gap-1 text-xs mt-0.5 font-medium"
