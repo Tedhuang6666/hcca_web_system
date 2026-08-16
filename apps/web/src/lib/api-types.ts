@@ -4244,7 +4244,7 @@ export interface paths {
         get: operations["get_document_documents__doc_id__get"];
         put?: never;
         post?: never;
-        /** 刪除草稿公文 */
+        /** 刪除草稿或發出六小時內的公文 */
         delete: operations["delete_document_documents__doc_id__delete"];
         options?: never;
         head?: never;
@@ -20115,6 +20115,10 @@ export interface components {
             page_info?: string | null;
             /** Retention Period */
             retention_period?: string | null;
+            /** Serial Number */
+            serial_number?: string | null;
+            /** Serial Template Id */
+            serial_template_id?: string | null;
             /** Source Document Date */
             source_document_date?: string | null;
             /** Source Document Number */
@@ -46506,7 +46510,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 非草稿狀態不可刪除 */
+            /** @description 僅草稿或發出六小時內可刪除 */
             409: {
                 headers: {
                     [name: string]: unknown;
