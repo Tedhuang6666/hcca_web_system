@@ -317,10 +317,10 @@ export function StepSubmit({
       </div>
 
       {/* 操作按鈕 */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="amendment-submit-actions flex flex-wrap items-center gap-3">
         <button onClick={onBack} className="btn btn-ghost text-sm px-4">← 返回編輯</button>
         <AnimatedDownloadButton
-          className="text-sm px-4 py-2 rounded-lg hover:opacity-80 inline-flex items-center gap-1.5"
+          className="text-sm px-4 py-2 rounded-lg amendment-export-button inline-flex items-center gap-1.5"
           style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
           request={async () => {
             const payload = { draft, regulationId: reg.id, regulationTitle: reg.title, exportedAt: new Date().toISOString() };
@@ -330,7 +330,7 @@ export function StepSubmit({
           label="匯出草案 (.json)"
           onComplete={() => toast.success("草案已匯出")} />
         <AnimatedDownloadButton
-          className="text-sm px-4 py-2 rounded-lg hover:opacity-80 inline-flex items-center gap-1.5"
+          className="text-sm px-4 py-2 rounded-lg amendment-export-button inline-flex items-center gap-1.5"
           style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
           request={async () => {
             if (comparisonRows.length === 0) throw new Error("目前沒有可匯出的條文異動");
