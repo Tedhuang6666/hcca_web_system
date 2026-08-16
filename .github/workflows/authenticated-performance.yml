@@ -4,13 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 2 * * *"
-  push:
-    branches: [main]
-    paths:
-      - "apps/api/**"
-      - "apps/web/**"
-      - "scripts/authenticated-lighthouse.mjs"
-      - ".github/workflows/authenticated-performance.yml"
 
 permissions:
   contents: read
