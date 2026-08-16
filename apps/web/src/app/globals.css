@@ -5952,7 +5952,7 @@ details[open] > :not(summary) {
     color: black !important;
     font-size: 11pt;
     line-height: 1.6;
-    font-family: 'Times New Roman', '標楷體', serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
   }
 
   /* ── 隱藏非列印元素 ── */
@@ -6030,6 +6030,24 @@ details[open] > :not(summary) {
     border-bottom: 2px solid black;
     padding-bottom: 0.5rem;
     margin-bottom: 1rem;
+  }
+
+  .document-detail-page {
+    max-width: 100% !important;
+  }
+
+  .document-detail-page .card {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: white !important;
+  }
+
+  .document-detail-page [style*="background"] {
+    background: white !important;
+  }
+
+  .document-detail-page [style*="color"] {
+    color: #111827 !important;
   }
   .document-print-header h1 {
     font-size: 16pt;
