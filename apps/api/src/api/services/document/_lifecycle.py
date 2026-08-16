@@ -221,6 +221,17 @@ async def update_document(
     update_fields = data.model_dump(
         exclude_unset=True, exclude={"change_note", "autosave", "is_public"}
     )
+    if "serial_number" in update_fields:
+        serial_number = update_fields["serial_number"].strip()
+        duplicate = await session.scalar(
+            select(Document.id).where(
+                Document.serial_number == serial_number,
+                Document.id != doc.id,
+            )
+        )
+        if duplicate is not None:
+            raise ValueError(f"公文字號「{serial_number}」已存在")
+        update_fields["serial_number"] = serial_number
     if data.is_public and "visibility_level" not in data.model_fields_set:
         update_fields["visibility_level"] = DocumentVisibility.PUBLICLY_OPEN
     classification = update_fields.get("classification", doc.classification)
@@ -647,7 +658,13 @@ async def delete_document(
     doc: Document,
 ) -> None:
     if doc.status != DocumentStatus.DRAFT:
-        raise ValueError(f"公文 {doc.serial_number} 非草稿狀態，無法刪除")
+        if doc.status != DocumentStatus.APPROVED or doc.issued_at is None:
+            raise ValueError(f"公文 {doc.serial_number} 目前狀態無法刪除")
+        issued_at = doc.issued_at
+        if issued_at.tzinfo is None:
+            issued_at = issued_at.replace(tzinfo=UTC)
+        if datetime.now(UTC) > issued_at + timedelta(hours=6):
+            raise ValueError("公文發出已超過六小時，無法刪除")
     await session.delete(doc)
     await session.flush()
     await invalidate_dashboard_cache()

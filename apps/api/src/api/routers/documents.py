@@ -454,11 +454,11 @@ async def update_document(
 @router.delete(
     "/{doc_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="刪除草稿公文",
+    summary="刪除草稿或發出六小時內的公文",
     responses={
         204: {"description": "刪除成功"},
         403: {"description": "僅建立者或有 document:delete 權限者可刪除"},
-        409: {"description": "非草稿狀態不可刪除"},
+        409: {"description": "僅草稿或發出六小時內可刪除"},
     },
 )
 async def delete_document(
