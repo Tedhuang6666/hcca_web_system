@@ -144,6 +144,7 @@ async def create_document(
         confidentiality_expires_at=data.confidentiality_expires_at,
         category=data.category,
         subject=data.subject,
+        summary=data.summary,
         basis=data.basis,
         doc_description=data.doc_description,
         action_required=data.action_required,
