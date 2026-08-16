@@ -25,6 +25,7 @@ from api.dependencies.permissions import (
     PermissionChecker,
 )
 from api.main import app
+from api.routers.agent_observability import require_performance_token
 
 # ---------------------------------------------------------------------------
 # 已知且刻意公開的路由（無需任何認證）
@@ -215,7 +216,10 @@ def _classify_route(route: APIRoute) -> str:
         for c in calls
     ):
         return "PERMISSION"
-    if any(isinstance(c, ApiScopeChecker) or c is api_key_required for c in calls):
+    if any(
+        isinstance(c, ApiScopeChecker) or c is api_key_required or c is require_performance_token
+        for c in calls
+    ):
         return "API_KEY"
     if get_current_active_user in calls:
         return "LOGIN"
