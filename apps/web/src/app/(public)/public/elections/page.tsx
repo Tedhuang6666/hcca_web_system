@@ -56,7 +56,7 @@ export default async function PublicElectionsPage() {
             <p className="text-xs font-semibold tracking-[0.18em] text-[#e8c970]">
               ELECTION LIVE
             </p>
-            <h1 className="mt-3 font-serif text-3xl font-semibold sm:text-4xl" style={{ color: "#f8f3e5" }}>即時開票中心</h1>
+            <h1 className="mt-3 font-serif text-3xl font-semibold text-[#f8f3e5] sm:text-4xl">即時開票中心</h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-[#cdd8e0] sm:text-base">
               集中查看目前進行中、暫停或已完成的公開選舉。票數由現場開票紀錄即時計算。
             </p>
