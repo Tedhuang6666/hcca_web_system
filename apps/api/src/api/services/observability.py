@@ -248,11 +248,21 @@ async def discover_public_urls() -> list[str]:
     return urls
 
 
+def _has_rum_observation(route: dict) -> bool:
+    """Treat any first-party metric as evidence that a route was actually used."""
+    if int(route.get("pageviews") or 0) > 0 or int(route.get("api_errors") or 0) > 0:
+        return True
+    samples = route.get("samples") or {}
+    return any(int(value or 0) > 0 for value in samples.values()) or bool(
+        route.get("api_latency_p95_ms") is not None
+    )
+
+
 def _merge_rum_urls(urls: list[str], rum: dict) -> list[str]:
     """Include every same-origin route seen by first-party RUM in the scan set."""
     base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
     for route in rum.get("routes", []):
-        if int(route.get("pageviews") or 0) <= 0:
+        if not _has_rum_observation(route):
             continue
         path = _normalize_client_path(route.get("path"))
         url = urljoin(base, path.lstrip("/"))
@@ -436,7 +446,7 @@ async def collect_pagespeed(
         else:
             failed += 1
     await session.flush()
-    rum_urls = sum(1 for route in rum.get("routes", []) if int(route.get("pageviews") or 0) > 0)
+    rum_urls = sum(1 for route in rum.get("routes", []) if _has_rum_observation(route))
     return {
         "created": created,
         "failed": failed,
@@ -612,7 +622,7 @@ async def overview(session: AsyncSession) -> dict:
     rum_paths = {
         _normalize_client_path(route.get("path"))
         for route in rum.get("routes", [])
-        if int(route.get("pageviews") or 0) > 0
+        if _has_rum_observation(route)
     }
     page_by_url = {page["url"]: page for page in pages}
     for page in page_by_url.values():
