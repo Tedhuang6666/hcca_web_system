@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -86,7 +86,10 @@ def _reg_query_with_relations():
 def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
     for reg in regs:
         creator = reg.__dict__.get("creator")
-        reg.__dict__["created_by_name"] = getattr(creator, "display_name", None)
+        imported_from_file = (reg.proposal_metadata or "").startswith("__file_import__")
+        reg.__dict__["created_by_name"] = (
+            "不詳" if imported_from_file else getattr(creator, "display_name", None)
+        )
         revisions = reg.__dict__.get("revisions") or []
         for rev in revisions:
             amender = rev.__dict__.get("amender")
@@ -329,7 +332,19 @@ async def list_regulations(
                         Regulation.preface.ilike(pattern),
                     )
                 )
-    q = q.order_by(Regulation.updated_at.desc()).limit(limit).offset(offset)
+    latest_history_date = (
+        select(func.max(RegulationRevision.amended_at))
+        .where(RegulationRevision.regulation_id == Regulation.id)
+        .scalar_subquery()
+    )
+    sort_date = func.coalesce(latest_history_date, Regulation.updated_at)
+    category_order = case(
+        (Regulation.category == RegulationCategory.CONSTITUTION, 0),
+        (Regulation.category == RegulationCategory.ORDINANCE, 1),
+        (Regulation.category == RegulationCategory.PROCEDURE, 2),
+        else_=3,
+    )
+    q = q.order_by(category_order, sort_date.desc(), Regulation.title).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().all())
 
@@ -375,7 +390,22 @@ async def search_regulations(
             ),
         )
     )
-    q = q.limit(limit)
+    latest_history_date = (
+        select(func.max(RegulationRevision.amended_at))
+        .where(RegulationRevision.regulation_id == Regulation.id)
+        .scalar_subquery()
+    )
+    category_order = case(
+        (Regulation.category == RegulationCategory.CONSTITUTION, 0),
+        (Regulation.category == RegulationCategory.ORDINANCE, 1),
+        (Regulation.category == RegulationCategory.PROCEDURE, 2),
+        else_=3,
+    )
+    q = q.order_by(
+        category_order,
+        func.coalesce(latest_history_date, Regulation.updated_at).desc(),
+        Regulation.title,
+    ).limit(limit)
     result = await session.execute(q)
     regs = _attach_display_names(list(result.scalars().unique().all()))
 
@@ -458,6 +488,7 @@ async def create_regulation_from_import(
         content=data.content,
         preface=data.preface,
         legislative_history=data.legislative_history,
+        proposal_metadata="__file_import__",
         org_id=org_id,
         created_by=created_by,
         version=1,
@@ -689,7 +720,7 @@ async def publish_imported_regulation(
     history_info = [parse_history_date_info(event) for event in events]
     history_dates = [info[0] for info in history_info if info[0] is not None]
     reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
-    reg.published_at = min(history_dates, default=now)
+    reg.published_at = max(history_dates, default=now)
     reg.updated_at = max(history_dates, default=now)
 
     content_snapshot = reg.content

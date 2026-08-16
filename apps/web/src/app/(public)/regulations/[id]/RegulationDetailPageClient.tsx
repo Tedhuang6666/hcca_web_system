@@ -583,7 +583,7 @@ export default function RegulationDetailPageClient({
   const councilApprovedLog = [...(reg.workflow_logs ?? [])]
     .reverse()
     .find((log) => log.to_status === "council_approved");
-  const proposerName = reg.created_by_name ?? reg.created_by;
+  const proposerName = reg.created_by_name ?? "不詳";
   const canRepeal = can("regulation:publish") || can("regulation:admin") || isAdmin;
 
   return (
