@@ -4572,6 +4572,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 解除封存公文（封存 → 已核准） */
+        post: operations["unarchive_document_documents__doc_id__unarchive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/visibility": {
         parameters: {
             query?: never;
@@ -6574,6 +6591,26 @@ export interface paths {
         };
         /** Bot Status */
         get: operations["bot_status_internal_discord_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/observability/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Snapshot
+         * @description 回傳不含身份資料的完整觀測快照；不提供任何寫入或控制能力。
+         */
+        get: operations["snapshot_internal_observability_snapshot_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -47345,6 +47382,51 @@ export interface operations {
             };
         };
     };
+    unarchive_document_documents__doc_id__unarchive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 解除封存成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description 非建立者或管理員 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 公文非已封存狀態 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_document_visibility_documents__doc_id__visibility_put: {
         parameters: {
             query?: never;
@@ -51955,6 +52037,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscordBotStatusOut"];
+                };
+            };
+        };
+    };
+    snapshot_internal_observability_snapshot_get: {
+        parameters: {
+            query?: {
+                window_hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

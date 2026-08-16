@@ -610,10 +610,10 @@ export default function DocumentListClient({
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            校園公文
+            公文
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {canBatch || can("document:draft") ? "查看、建立與處理公文。" : "查看公開的校園公文。"}
+            {canBatch || can("document:draft") ? "查看、建立與處理公文。" : "查看公開的公文。"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
