@@ -248,6 +248,26 @@ async def discover_public_urls() -> list[str]:
     return urls
 
 
+def _merge_rum_urls(urls: list[str], rum: dict) -> list[str]:
+    """Include every same-origin route seen by first-party RUM in the scan set."""
+    base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
+    for route in rum.get("routes", []):
+        if int(route.get("pageviews") or 0) <= 0:
+            continue
+        path = _normalize_client_path(route.get("path"))
+        url = urljoin(base, path.lstrip("/"))
+        normalized = url.rstrip("/") or url
+        if normalized not in urls and _same_origin(normalized, base):
+            urls.append(normalized)
+    return urls
+
+
+async def discover_observability_urls() -> tuple[list[str], dict]:
+    """Return sitemap/critical URLs plus routes actually visited by users."""
+    rum = await client_route_analytics()
+    return _merge_rum_urls(await discover_public_urls(), rum), rum
+
+
 async def provider_snapshot() -> dict:
     configured = bool(
         settings.SENTRY_AUTH_TOKEN and settings.SENTRY_ORG and settings.SENTRY_PROJECT
@@ -342,7 +362,7 @@ async def collect_pagespeed(
 ) -> dict:
     if not settings.GOOGLE_PAGESPEED_API_KEY:
         return {"created": 0, "failed": 0, "skipped": "GOOGLE_PAGESPEED_API_KEY 未設定"}
-    urls = await discover_public_urls()
+    urls, rum = await discover_observability_urls()
     release = release or await ensure_release(session)
     results: list[tuple[str, str, dict | None, str | None]] = []
     semaphore = asyncio.Semaphore(2)
@@ -414,7 +434,14 @@ async def collect_pagespeed(
         else:
             failed += 1
     await session.flush()
-    return {"created": created, "failed": failed, "urls": len(urls), "strategies": 2}
+    rum_urls = sum(1 for route in rum.get("routes", []) if int(route.get("pageviews") or 0) > 0)
+    return {
+        "created": created,
+        "failed": failed,
+        "urls": len(urls),
+        "rum_urls": rum_urls,
+        "strategies": 2,
+    }
 
 
 async def collect_crux_daily(session: AsyncSession) -> dict:
@@ -578,22 +605,17 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
 async def overview(session: AsyncSession) -> dict:
     day = datetime.now(UTC) - timedelta(days=1)
     pages = await latest_page_scores(session)
-    discovered_urls = await discover_public_urls()
     rum = await client_route_analytics()
-    base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
+    discovered_urls = _merge_rum_urls(await discover_public_urls(), rum)
     rum_paths = {
         _normalize_client_path(route.get("path"))
         for route in rum.get("routes", [])
         if int(route.get("pageviews") or 0) > 0
     }
-    for route in rum.get("routes", []):
-        if int(route.get("pageviews") or 0) <= 0:
-            continue
-        path = _normalize_client_path(route.get("path"))
-        url = urljoin(base, path.lstrip("/"))
-        if url not in discovered_urls and _same_origin(url, base):
-            discovered_urls.append(url)
     page_by_url = {page["url"]: page for page in pages}
+    for page in page_by_url.values():
+        if page["path"] in rum_paths:
+            page["source"] = "rum"
     for url in discovered_urls:
         if url not in page_by_url:
             source = "rum" if httpx.URL(url).path in rum_paths else "configured"
