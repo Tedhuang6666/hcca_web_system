@@ -555,22 +555,22 @@ export default function DocumentDetailPageClient({
               編輯
             </Link>
           )}
-          {isDraft && isCreator && (
+          {isCreator && (isDraft || isEditableIssued) && (
             <button
               type="button"
               className="btn btn-ghost text-sm gap-1.5"
               onClick={async () => {
-                if (!window.confirm("確定刪除此公文草稿？此操作無法復原。")) return;
+                if (!window.confirm("確定刪除此公文？此操作無法復原。")) return;
                 try {
                   await documentsApi.delete(id);
-                  toast.success("公文草稿已刪除");
+                  toast.success("公文已刪除");
                   router.push("/documents");
                 } catch (error) {
-                  toast.error(apiErrorMessage(error, "刪除公文草稿失敗"));
+                  toast.error(apiErrorMessage(error, "刪除公文失敗"));
                 }
               }}
             >
-              刪除草稿
+              刪除公文
             </button>
           )}
           {/* 草稿：送審（僅建立者） */}

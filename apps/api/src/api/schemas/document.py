@@ -683,6 +683,8 @@ class DocumentCreate(BaseModel):
 
 
 class DocumentUpdate(BaseModel):
+    serial_number: str | None = Field(None, min_length=1, max_length=30)
+    serial_template_id: uuid.UUID | None = None
     title: str | None = Field(None, min_length=1, max_length=200)
     issuer_full_name: str | None = Field(None, max_length=200)
     issuer_postal_code: str | None = Field(None, max_length=20)

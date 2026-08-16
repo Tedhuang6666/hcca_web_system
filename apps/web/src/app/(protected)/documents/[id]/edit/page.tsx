@@ -79,6 +79,7 @@ const CONTENT_LABELS: Record<DocumentCategory, { title: string; subject?: string
 };
 
 type DocumentEditDraft = {
+  serialNumber: string;
   title: string;
   urgency: DocumentUrgency;
   classification: DocumentClassification;
@@ -118,6 +119,7 @@ export default function EditDocumentPage() {
   const [saving, setSaving] = useState(false);
 
   // 表單狀態
+  const [serialNumber, setSerialNumber] = useState("");
   const [title, setTitle] = useState("");
   const [urgency, setUrgency] = useState<DocumentUrgency>("normal");
   const [classification, setClassification] = useState<DocumentClassification>("normal");
@@ -152,6 +154,7 @@ export default function EditDocumentPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [doc, setDoc] = useState<DocumentOut | null>(null);
   const draftValue = useMemo<DocumentEditDraft>(() => ({
+    serialNumber,
     title,
     urgency,
     classification,
@@ -183,6 +186,7 @@ export default function EditDocumentPage() {
     newRecipient,
     selectedTemplateId,
   }), [
+    serialNumber,
     actionRequired,
     category,
     basis,
@@ -215,6 +219,7 @@ export default function EditDocumentPage() {
     urgency,
   ]);
   const originalDraft = useMemo<DocumentEditDraft | null>(() => doc ? ({
+    serialNumber: doc.serial_number ?? "",
     title: doc.title,
     urgency: doc.urgency,
     classification: doc.classification,
@@ -255,6 +260,7 @@ export default function EditDocumentPage() {
     selectedTemplateId: doc.serial_template_id ?? "",
   }) : null, [doc]);
   const restoreDraft = useCallback((draft: DocumentEditDraft) => {
+    setSerialNumber(draft.serialNumber ?? "");
     setTitle(draft.title ?? "");
     setUrgency(draft.urgency ?? "normal");
     setClassification(draft.classification ?? "normal");
@@ -300,6 +306,7 @@ export default function EditDocumentPage() {
   });
 
   const buildUpdatePayload = useCallback((autosave = false) => ({
+    serial_number: serialNumber.trim() || undefined,
     title, urgency, classification, category,
     declassification_condition: classification === "normal" ? "none" : declassificationCondition,
     confidentiality_expires_at: declassificationCondition === "auto_at_date" ? confidentialityExpiresAt || undefined : null,
@@ -327,6 +334,7 @@ export default function EditDocumentPage() {
     change_note: autosave ? undefined : changeNote || undefined,
     autosave,
   }), [
+    serialNumber,
     actionRequired,
     basis,
     category,
@@ -388,6 +396,7 @@ export default function EditDocumentPage() {
         return;
       }
       setDoc(d);
+      setSerialNumber(d.serial_number ?? "");
       setTitle(d.title);
       setUrgency(d.urgency);
       setClassification(d.classification);
@@ -545,6 +554,12 @@ export default function EditDocumentPage() {
           {/* 基本資訊 */}
           <div className="card p-4 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>基本資訊</h3>
+            <div>
+              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>公文字號</label>
+              <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)}
+                placeholder="輸入公文字號..." maxLength={30}
+                className="w-full bg-transparent text-sm outline-none border-b pb-1" />
+            </div>
             <div>
               <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>公文標題 *</label>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="輸入公文標題..."
