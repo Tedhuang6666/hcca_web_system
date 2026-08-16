@@ -822,7 +822,7 @@ export default function RegulationDetailPageClient({
                 </p>
                 {reg.freeze_at && (
                   <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    凍結時間：{new Date(reg.freeze_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+                    凍結時間：{new Date(reg.freeze_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
                   </p>
                 )}
                 {can("regulation:admin") && (
@@ -1216,7 +1216,7 @@ export default function RegulationDetailPageClient({
                           </p>
                           <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
                             {draft.amendmentType === "partial" ? "部分修正" : "全文修正"} ·
-                            最後修改 {new Date(draft.updatedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+                            最後修改 {new Date(draft.updatedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
                           </p>
                         </div>
                         <button
@@ -1252,7 +1252,7 @@ export default function RegulationDetailPageClient({
         <div className="card p-4">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
             {([
-              ["最後更新", new Date(reg.updated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })],
+              ["最後更新", new Date(reg.updated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")],
               ["建立日期", new Date(reg.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })],
               ["狀態", reg.is_active ? "生效中" : "已停用"],
             ] as [string, string][]).map(([k, v]) => (

@@ -98,8 +98,8 @@ export default function AnnouncementDetailPageClient({
           )}
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
             {item.published_at
-              ? new Date(item.published_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
-              : new Date(item.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+              ? new Date(item.published_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")
+              : new Date(item.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
           </span>
         </div>
         {item.audience_type === "orgs" && item.audience_orgs.length > 0 && (
