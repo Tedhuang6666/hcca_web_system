@@ -28,7 +28,12 @@ async function requestJson(path, init = {}) {
     headers: { ...monitorHeaders, ...(init.headers || {}) },
   });
   if (!response.ok) {
-    throw new Error(`${path} returned HTTP ${response.status}`);
+    const body = (await response.text()).replace(/\s+/gu, " ").slice(0, 240);
+    const server = response.headers.get("server") || "unknown";
+    const ray = response.headers.get("cf-ray") || "";
+    throw new Error(
+      `${path} returned HTTP ${response.status} server=${server} cf-ray=${ray} body=${body}`,
+    );
   }
   return response.json();
 }
