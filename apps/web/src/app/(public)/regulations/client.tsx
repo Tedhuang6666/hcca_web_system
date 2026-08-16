@@ -148,7 +148,12 @@ export default function RegulationsClient({
   );
 
   const sorted = useMemo(
-    () => [...allRegs].sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? "")),
+    () => [...allRegs].sort((a, b) => {
+      const rank = { constitution: 0, ordinance: 1, procedure: 2 } as const;
+      const categoryDiff = (rank[a.category] ?? 3) - (rank[b.category] ?? 3);
+      if (categoryDiff) return categoryDiff;
+      return (b.updated_at ?? b.published_at ?? "").localeCompare(a.updated_at ?? a.published_at ?? "");
+    }),
     [allRegs],
   );
 
