@@ -157,6 +157,10 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = Field(default="")
     SENTRY_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
     SENTRY_PROFILES_SAMPLE_RATE: float = Field(default=0.0, ge=0.0, le=1.0)
+    SENTRY_API_URL: str = "https://sentry.io/api/0"
+    SENTRY_AUTH_TOKEN: str = ""
+    SENTRY_ORG: str = ""
+    SENTRY_PROJECT: str = ""
     # --- OpenTelemetry / Trace ---
     OTEL_ENABLED: bool = False
     OTEL_SERVICE_NAME: str = "hcca-api"
@@ -174,6 +178,7 @@ class Settings(BaseSettings):
     # --- PostHog 產品分析 ---
     POSTHOG_API_KEY: str = Field(default="")
     POSTHOG_HOST: str = Field(default="https://us.i.posthog.com")
+    POSTHOG_PERSONAL_API_KEY: str = ""
 
     # --- Search / Meilisearch ---
     MEILISEARCH_URL: str = Field(default="")
