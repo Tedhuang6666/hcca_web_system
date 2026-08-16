@@ -433,6 +433,8 @@ export default function DocumentDetailPageClient({
         && (a.approver.id === currentUserId || a.delegate?.id === currentUserId),
     );
   const isDraft = doc.status === "draft";
+  const isEditableIssued = doc.status === "approved" && doc.issued_at
+    && Date.now() <= new Date(doc.issued_at).getTime() + 6 * 60 * 60 * 1000;
   const docInfoRows: [string, string][] = [
     ["字號", doc.serial_number || "（未分配）"],
     ["類別", catLabel],
@@ -544,7 +546,7 @@ export default function DocumentDetailPageClient({
           </button>
 
           {/* 草稿：編輯（僅建立者） */}
-          {isDraft && isCreator && (
+          {isCreator && (isDraft || isEditableIssued) && (
             <Link href={`/documents/${id}/edit`} className="btn btn-ghost text-sm gap-1.5">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
