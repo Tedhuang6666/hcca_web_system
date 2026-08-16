@@ -55,6 +55,7 @@ from api.routers import (
     admin,
     admin_observability,
     admin_system,
+    agent_observability,
     analytics,
     announcements,
     api_keys,
@@ -442,6 +443,7 @@ def create_app() -> FastAPI:
     app.include_router(announcements.router)
     app.include_router(admin.router)
     app.include_router(admin_observability.router)
+    app.include_router(agent_observability.router)
     app.include_router(admin_system.public_router)
     app.include_router(admin_system.router)
     app.include_router(navigation_profiles.public_router)
