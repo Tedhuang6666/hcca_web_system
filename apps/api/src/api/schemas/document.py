@@ -626,7 +626,13 @@ class DocumentCreate(BaseModel):
     recipients: list[RecipientCreate] = Field(default_factory=list, description="受文者清單")
 
     @field_validator(
-        "title", "subject", "summary", "doc_description", "action_required", "content", mode="before"
+        "title",
+        "subject",
+        "summary",
+        "doc_description",
+        "action_required",
+        "content",
+        mode="before",
     )
     @classmethod
     def prevent_xss_attacks(cls, v: str | None) -> str | None:
