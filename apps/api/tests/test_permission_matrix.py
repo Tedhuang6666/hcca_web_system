@@ -38,6 +38,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/health/live", "GET"),
     ("/ready", "GET"),
     ("/metrics", "GET"),
+    # 部署探針使用專用 X-Observability-Agent-Token；非使用者認證端點。
+    ("/internal/observability/snapshot", "GET"),
     ("/live", "GET"),
     # 匿名前端 runtime error 回報；不依賴登入，才能捕捉登入/公開頁面崩潰。
     ("/system/client-errors", "POST"),

@@ -720,7 +720,7 @@ async def publish_imported_regulation(
     history_info = [parse_history_date_info(event) for event in events]
     history_dates = [info[0] for info in history_info if info[0] is not None]
     reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
-    reg.published_at = max(history_dates, default=now)
+    reg.published_at = min(history_dates, default=now)
     reg.updated_at = max(history_dates, default=now)
 
     content_snapshot = reg.content
