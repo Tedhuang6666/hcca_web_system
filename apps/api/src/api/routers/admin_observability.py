@@ -163,9 +163,7 @@ async def releases(
 
 
 @router.post("/collect/psi")
-async def collect_psi(
-    _admin: Annotated[User, Depends(require_superuser)]
-) -> dict[str, Any]:
+async def collect_psi(_admin: Annotated[User, Depends(require_superuser)]) -> dict[str, Any]:
     task = collect_pagespeed_scheduled.delay()
     return {
         "queued": True,
