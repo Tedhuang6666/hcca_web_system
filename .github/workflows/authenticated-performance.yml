@@ -1,0 +1,66 @@
+name: authenticated-performance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "apps/web/**"
+      - "scripts/authenticated-lighthouse.mjs"
+      - ".github/workflows/authenticated-performance.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authenticated-performance
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: Authenticated Lighthouse (mobile + desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install browser dependencies
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm install --no-save --ignore-scripts lighthouse@13.4.0
+
+      - name: Validate monitor secret
+        env:
+          PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
+        run: test -n "$PERFORMANCE_MONITOR_TOKEN"
+
+      - name: Run authenticated Lighthouse and persist results
+        env:
+          BASE_URL: https://hcca.tw
+          PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          MIN_SCORE: "95"
+          OUTPUT_FILE: .lighthouseci/authenticated-summary.json
+        run: node scripts/authenticated-lighthouse.mjs
+
+      - name: Upload authenticated performance report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: authenticated-lighthouse-report
+          path: .lighthouseci/authenticated-summary.json
+          if-no-files-found: ignore
+          retention-days: 30

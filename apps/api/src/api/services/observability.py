@@ -592,25 +592,35 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
                 "source": "psi",
                 "mobile": None,
                 "desktop": None,
+                "authenticated_mobile": None,
+                "authenticated_desktop": None,
             },
         )
-        page[strategy] = strategy_data
+        if strategy in {"mobile", "desktop"}:
+            page[strategy] = strategy_data
+        elif strategy in {"auth-mobile", "auth-desktop"}:
+            page[f"authenticated_{strategy.removeprefix('auth-')}"] = strategy_data
 
-    for page in pages.values():
-        modes = [page.get("mobile"), page.get("desktop")]
+    def _page_score_status(page: dict, mobile_key: str, desktop_key: str) -> str:
+        modes = [page.get(mobile_key), page.get(desktop_key)]
         if any(mode is None for mode in modes):
-            page["status"] = "pending"
-        elif any(mode["status"] == "error" for mode in modes):
-            page["status"] = "error"
-        elif all(
+            return "pending"
+        if any(mode["status"] == "error" for mode in modes):
+            return "error"
+        if all(
             mode["status"] == "ok"
             and mode["score"] is not None
             and mode["score"] >= PAGE_SCORE_THRESHOLD
             for mode in modes
         ):
-            page["status"] = "pass"
-        else:
-            page["status"] = "needs_attention"
+            return "pass"
+        return "needs_attention"
+
+    for page in pages.values():
+        page["status"] = _page_score_status(page, "mobile", "desktop")
+        page["authenticated_status"] = _page_score_status(
+            page, "authenticated_mobile", "authenticated_desktop"
+        )
     return sorted(pages.values(), key=lambda item: item["path"])
 
 
@@ -637,7 +647,10 @@ async def overview(session: AsyncSession) -> dict:
                 "source": source,
                 "mobile": None,
                 "desktop": None,
+                "authenticated_mobile": None,
+                "authenticated_desktop": None,
                 "status": "pending",
+                "authenticated_status": "pending",
             }
     pages = sorted(page_by_url.values(), key=lambda item: item["path"])
 
@@ -670,6 +683,15 @@ async def overview(session: AsyncSession) -> dict:
     slow_queries = get_slow_queries(top=20)
     passing = sum(page["status"] == "pass" for page in pages)
     attention = len(pages) - passing
+    authenticated_pages = [
+        page
+        for page in pages
+        if page.get("authenticated_mobile") is not None
+        or page.get("authenticated_desktop") is not None
+    ]
+    authenticated_passing = sum(
+        page.get("authenticated_status") == "pass" for page in authenticated_pages
+    )
     release = (
         await session.execute(
             select(ObservabilityRelease).order_by(ObservabilityRelease.deployed_at.desc()).limit(1)
@@ -681,6 +703,13 @@ async def overview(session: AsyncSession) -> dict:
             "monitored": len(pages),
             "passing": passing,
             "needs_attention": attention,
+            "threshold": PAGE_SCORE_THRESHOLD,
+        },
+        "authenticated_coverage": {
+            "monitored": len(authenticated_pages),
+            "passing": authenticated_passing,
+            "needs_attention": len(authenticated_pages) - authenticated_passing,
+            "pending": sum(page.get("authenticated_status") == "pending" for page in pages),
             "threshold": PAGE_SCORE_THRESHOLD,
         },
         "pages": pages,

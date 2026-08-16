@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.prometheus_metrics import (
     init_metrics,
     record_backup_run,
@@ -15,6 +18,7 @@ from api.core.prometheus_metrics import (
 )
 from api.core.sentry import _before_send
 from api.core.structured_logging import reset_request_id, set_request_id
+from api.models.observability import PageSpeedRun
 
 
 def test_business_metrics_are_exported() -> None:
@@ -58,3 +62,60 @@ async def test_metrics_endpoint_is_enabled(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert "hcca_http_requests_total" in response.text
+
+
+async def test_authenticated_performance_channel_issues_short_lived_access_token(
+    client: AsyncClient,
+    admin_user,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_TOKEN", "test-performance-token")
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_USER_ID", str(admin_user.id))
+
+    denied = await client.post(
+        "/internal/observability/auth-session",
+        headers={"X-Performance-Monitor-Token": "wrong"},
+    )
+    assert denied.status_code == 404
+
+    response = await client.post(
+        "/internal/observability/auth-session",
+        headers={"X-Performance-Monitor-Token": "test-performance-token"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["cookie_name"] == settings.ACCESS_TOKEN_COOKIE_NAME
+    assert payload["expires_in_seconds"] == settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    assert payload["access_token"]
+
+
+async def test_authenticated_performance_results_are_recorded_for_both_strategies(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_TOKEN", "test-performance-token")
+    monkeypatch.setattr(settings, "FRONTEND_BASE_URL", "http://test")
+    response = await client.post(
+        "/internal/observability/authenticated-runs",
+        headers={"X-Performance-Monitor-Token": "test-performance-token"},
+        json={
+            "release": "test-release",
+            "runs": [
+                {
+                    "url": "http://test/merchandise-submissions",
+                    "strategy": "mobile",
+                    "performance_score": 96,
+                },
+                {
+                    "url": "http://test/merchandise-submissions",
+                    "strategy": "desktop",
+                    "performance_score": 99,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["created"] == 2
+    rows = (await db_session.scalars(select(PageSpeedRun))).all()
+    assert {row.strategy for row in rows} == {"auth-mobile", "auth-desktop"}
