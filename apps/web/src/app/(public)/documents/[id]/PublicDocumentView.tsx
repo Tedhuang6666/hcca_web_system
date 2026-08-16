@@ -215,6 +215,14 @@ export default function PublicDocumentView({ document }: { document: DocumentOut
         </div>
       </header>
 
+      {document.regulation_id && (
+        <section className="card flex flex-wrap items-center gap-2 px-4 py-3 text-sm" aria-label="法規關聯">
+          <span style={{ color: "var(--text-muted)" }}>法規關聯：</span>
+          <Link href={"/regulations/" + document.regulation_id} className="font-medium hover:underline" style={{ color: "var(--primary)" }}>
+            查看對應法規與沿革 →
+          </Link>
+        </section>
+      )}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <article className="space-y-4 lg:col-span-2">
           <section className="card overflow-hidden" aria-labelledby="public-document-content-title">
