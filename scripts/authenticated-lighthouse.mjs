@@ -105,9 +105,13 @@ async function runLighthouse(chrome, url, strategy, cookieHeader) {
   };
 }
 
-const authSession = await requestJson("/internal/observability/auth-session", { method: "POST" });
+// `/api/*` is the Cloudflare-approved API ingress; Caddy strips this prefix
+// before forwarding to the token-protected FastAPI internal route.
+const authSession = await requestJson("/api/internal/observability/auth-session", {
+  method: "POST",
+});
 const cookieHeader = `${authSession.cookie_name}=${authSession.access_token}`;
-const targetsResponse = await requestJson("/internal/observability/auth-targets");
+const targetsResponse = await requestJson("/api/internal/observability/auth-targets");
 const targets = [...new Set((targetsResponse.urls || []).map((value) => String(value)))].sort();
 
 if (targets.length === 0) throw new Error("No authenticated performance targets were discovered");
@@ -149,7 +153,7 @@ try {
   await chrome.kill();
 }
 
-await requestJson("/internal/observability/authenticated-runs", {
+await requestJson("/api/internal/observability/authenticated-runs", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ release, runs }),
