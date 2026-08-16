@@ -52,8 +52,8 @@ def _provider_error(exc: Exception) -> str:
 
 
 def _api_headers(key: str) -> dict[str, str]:
-    # The query parameter is required by Google's public API; this header also supports
-    # gateways that translate the standard Google API key header.
+    # Keep provider credentials out of URLs so HTTP client and reverse-proxy logs cannot
+    # accidentally persist the key.
     return {"x-goog-api-key": key}
 
 
@@ -287,7 +287,6 @@ async def crux_history(url: str, form_factor: str = "PHONE") -> dict:
         response = await client.post(
             CRUX_HISTORY_URL,
             headers=_api_headers(key),
-            params={"key": key},
             json={"url": url, "formFactor": form_factor},
         )
         response.raise_for_status()
@@ -357,7 +356,6 @@ async def collect_pagespeed(
                     params=[
                         ("url", url),
                         ("strategy", strategy),
-                        ("key", settings.GOOGLE_PAGESPEED_API_KEY),
                         ("category", "performance"),
                         ("category", "accessibility"),
                         ("category", "best-practices"),
@@ -433,7 +431,6 @@ async def collect_crux_daily(session: AsyncSession) -> dict:
                 response = await client.post(
                     CRUX_URL,
                     headers=_api_headers(key),
-                    params={"key": key},
                     json={"url": url, "formFactor": form_factor},
                 )
                 response.raise_for_status()
