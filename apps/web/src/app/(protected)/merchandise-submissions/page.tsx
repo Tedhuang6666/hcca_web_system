@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Clock3,
   CheckCircle2,
@@ -19,9 +20,8 @@ import { toast } from "sonner";
 import { apiErrorMessage, merchandiseSubmissionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
-import MarkdownBlock from "@/components/site/MarkdownBlock";
-import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { excerpt } from "@/lib/seo";
+import type { AnimatedFileUploadProps } from "@/components/ui/AnimatedFileUpload";
 import type {
   MerchandiseSubmissionItemPortalOut,
   MerchandiseSubmissionOut,
@@ -36,6 +36,20 @@ type VotingSubmission = MerchandiseSubmissionOut & {
 };
 
 type SubmissionStep = "info" | "item" | "form";
+
+const MarkdownBlock = dynamic(() => import("@/components/site/MarkdownBlock"), {
+  loading: () => <div className="h-20 animate-pulse rounded bg-[var(--bg-elevated)]" />,
+  ssr: false,
+});
+const AnimatedFileUpload = dynamic<
+  AnimatedFileUploadProps<MerchandiseSubmissionUploadOut>
+>(
+  () => import("@/components/ui/AnimatedFileUpload"),
+  {
+    loading: () => <div className="h-28 animate-pulse rounded-lg bg-[var(--bg-elevated)]" />,
+    ssr: false,
+  },
+);
 
 const statusLabel: Record<string, string> = {
   draft: "草稿",
@@ -241,21 +255,18 @@ export default function MerchandiseSubmissionsPage() {
   const [step, setStep] = useState<SubmissionStep>("info");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mineLoading, setMineLoading] = useState(false);
+  const [mineLoaded, setMineLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const selected = useMemo(
     () => portal?.items.find((item) => item.id === selectedId) ?? null,
     [portal, selectedId],
   );
-  const load = useCallback(async () => {
+  const loadPortal = useCallback(async () => {
     setLoading(true);
     try {
-      const [portalData, mine] = await Promise.all([
-        merchandiseSubmissionsApi.portal(),
-        merchandiseSubmissionsApi.mine(),
-      ]);
-      setPortal(portalData);
-      setSubmissions(mine);
+      setPortal(await merchandiseSubmissionsApi.portal());
     } catch (error) {
       toast.error(apiErrorMessage(error, "無法載入校商投稿"));
     } finally {
@@ -263,8 +274,22 @@ export default function MerchandiseSubmissionsPage() {
     }
   }, []);
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadPortal();
+  }, [loadPortal]);
+  const loadMine = useCallback(async () => {
+    setMineLoading(true);
+    try {
+      setSubmissions(await merchandiseSubmissionsApi.mine());
+      setMineLoaded(true);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "無法載入我的投稿"));
+    } finally {
+      setMineLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (tab === "mine" && !mineLoaded && !mineLoading) void loadMine();
+  }, [loadMine, mineLoaded, mineLoading, tab]);
   const choose = (id: string) => {
     setSelectedId(id);
     setEditingId(null);
@@ -416,12 +441,17 @@ export default function MerchandiseSubmissionsPage() {
             borderColor: tab === "mine" ? "var(--primary)" : "transparent",
           }}
         >
-          我的投稿（{submissions.length}）
+          我的投稿{mineLoaded ? `（${submissions.length}）` : ""}
         </button>
       </nav>
       {tab === "mine" ? (
         <section className="space-y-3">
-          {submissions.length ? (
+          {mineLoading ? (
+            <div
+              className="h-40 animate-pulse rounded-xl"
+              style={{ background: "var(--bg-elevated)" }}
+            />
+          ) : submissions.length ? (
             submissions.map((submission) => (
               <article
                 key={submission.id}
