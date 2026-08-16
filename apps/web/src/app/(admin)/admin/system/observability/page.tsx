@@ -35,7 +35,7 @@ type RouteTelemetry = { path: string; pageviews: number; api_errors: number; sam
 type RealUsersData = { configured: boolean; data_available: boolean; dau: number | null; sessions: number | null; pageviews: number | null; top_routes: RouteTelemetry[]; web_vitals: Record<string, number | null>; client_errors: number | null; source: string; message: string };
 type PerformanceData = { url: string; psi: PageScore[]; crux: { collection_periods?: { firstDate: string; lastDate: string }[]; lcp_p75?: number[]; inp_p75?: number[]; cls_p75?: number[]; ttfb_p75?: number[]; error?: string }; lighthouse_regressions: PageScore[] };
 type Release = { release: string; commit_sha: string; environment: string; deployed_at: string };
-type CollectionResult = { created: number; failed: number; urls?: number; strategies?: number; skipped?: string };
+type CollectionResult = { queued?: boolean; task_id?: string; message?: string; created?: number; failed?: number; urls?: number; strategies?: number; skipped?: string };
 type CollectionNotice = { tone: "success" | "warning" | "error"; message: string };
 type Tab = "overview" | "errors" | "real-users" | "performance" | "releases";
 
@@ -200,10 +200,13 @@ export default function ObservabilityPage() {
       const result = await post<CollectionResult>("/admin/system/observability/collect/psi");
       if (result.skipped) {
         setCollectionNotice({ tone: "warning", message: `尚未採集：${result.skipped}` });
+      } else if (result.queued) {
+        setCollectionNotice({ tone: "success", message: result.message ?? "PSI 採集已排入背景工作，完成後重新整理即可查看結果。" });
+        setRefreshKey((value) => value + 1);
       } else {
         setCollectionNotice({
           tone: result.failed ? "warning" : "success",
-          message: `PSI 採集完成：${result.created} 筆成功${result.failed ? `，${result.failed} 筆失敗` : ""}。`,
+          message: `PSI 採集完成：${result.created ?? 0} 筆成功${result.failed ? `，${result.failed} 筆失敗` : ""}。`,
         });
         setRefreshKey((value) => value + 1);
       }
