@@ -759,8 +759,8 @@ export default function RegulationDetailPageClient({
 
             {reg.published_at && (
               <p className="regulation-detail-published-meta text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                發布日期：{new Date(reg.published_at).toLocaleDateString("zh-TW")}
-                　｜　最後更新：{new Date(reg.updated_at).toLocaleDateString("zh-TW")}
+                發布日期：{new Date(reg.published_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}
+                　｜　最後更新：{new Date(reg.updated_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}
               </p>
             )}
           </div>
@@ -781,7 +781,7 @@ export default function RegulationDetailPageClient({
                 本法規已廢止
               </p>
               <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
-                {reg.repealed_date ? `廢止日期：${new Date(reg.repealed_date).toLocaleDateString("zh-TW")}　｜　` : ""}
+                {reg.repealed_date ? `廢止日期：${new Date(reg.repealed_date).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}　｜　` : ""}
                 {reg.repeal_reason || "未提供廢止理由"}
               </p>
             </div>
@@ -822,7 +822,7 @@ export default function RegulationDetailPageClient({
                 </p>
                 {reg.freeze_at && (
                   <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    凍結時間：{new Date(reg.freeze_at).toLocaleString("zh-TW")}
+                    凍結時間：{new Date(reg.freeze_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
                   </p>
                 )}
                 {can("regulation:admin") && (
@@ -1023,13 +1023,13 @@ export default function RegulationDetailPageClient({
                 <div>
                   <p style={{ color: "var(--text-muted)" }}>提案時間</p>
                   <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>
-                    {new Date(reg.created_at).toLocaleDateString("zh-TW")}
+                    {new Date(reg.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}
                   </p>
                 </div>
                 <div>
                   <p style={{ color: "var(--text-muted)" }}>議會通過時間</p>
                   <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>
-                    {councilApprovedLog ? new Date(councilApprovedLog.created_at).toLocaleDateString("zh-TW") : "尚未記錄"}
+                    {councilApprovedLog ? new Date(councilApprovedLog.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" }) : "尚未記錄"}
                   </p>
                 </div>
                 <div>
@@ -1216,7 +1216,7 @@ export default function RegulationDetailPageClient({
                           </p>
                           <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
                             {draft.amendmentType === "partial" ? "部分修正" : "全文修正"} ·
-                            最後修改 {new Date(draft.updatedAt).toLocaleString("zh-TW")}
+                            最後修改 {new Date(draft.updatedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
                           </p>
                         </div>
                         <button
@@ -1252,8 +1252,8 @@ export default function RegulationDetailPageClient({
         <div className="card p-4">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
             {([
-              ["最後更新", new Date(reg.updated_at).toLocaleString("zh-TW")],
-              ["建立日期", new Date(reg.created_at).toLocaleDateString("zh-TW")],
+              ["最後更新", new Date(reg.updated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })],
+              ["建立日期", new Date(reg.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })],
               ["狀態", reg.is_active ? "生效中" : "已停用"],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k}>

@@ -1285,7 +1285,7 @@ export default function EditRegulationPage() {
                 <div className="flex justify-between">
                   <span style={{ color: "var(--text-muted)" }}>發布日期</span>
                   <span style={{ color: "var(--text-primary)" }}>
-                    {reg.published_at ? new Date(reg.published_at).toLocaleDateString("zh-TW") : "未發布"}
+                    {reg.published_at ? new Date(reg.published_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" }) : "未發布"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1361,7 +1361,7 @@ export default function EditRegulationPage() {
                       </span>
                       <div>
                         <p style={{ color: "var(--text-primary)" }}>{r.change_brief}</p>
-                        <p style={{ color: "var(--text-muted)" }}>{new Date(r.amended_at).toLocaleDateString("zh-TW")}</p>
+                        <p style={{ color: "var(--text-muted)" }}>{new Date(r.amended_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</p>
                       </div>
                     </div>
                   ))}
