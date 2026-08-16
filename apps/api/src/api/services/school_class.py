@@ -143,14 +143,10 @@ async def list_classes(
     academic_year: int | None = None,
     is_active: bool | None = None,
 ) -> list[SchoolClass]:
-    q = select(SchoolClass).options(
-        selectinload(SchoolClass.ranges),
-        selectinload(SchoolClass.roster_entries).selectinload(ClassRosterEntry.user),
-        selectinload(SchoolClass.manual_members).selectinload(ClassManualMember.user),
-        selectinload(SchoolClass.cadres).selectinload(ClassCadre.user),
-        selectinload(SchoolClass.memberships).selectinload(ClassMembership.user),
-        selectinload(SchoolClass.role_bindings),
-    )
+    # The list response only exposes the basic class fields. Loading every
+    # roster, membership, cadre, and role for every class made this endpoint
+    # scale with the entire class database instead of the number of classes.
+    q = select(SchoolClass)
     if academic_year is not None:
         q = q.where(SchoolClass.academic_year == academic_year)
     if is_active is not None:
