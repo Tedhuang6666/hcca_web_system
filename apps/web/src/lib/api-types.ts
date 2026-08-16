@@ -6599,6 +6599,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/observability/auth-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authenticated Session
+         * @description 發出只含 access token 的短效 synthetic session，絕不發 refresh token。
+         */
+        post: operations["authenticated_session_internal_observability_auth_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/observability/auth-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Authenticated Targets
+         * @description 供 CI 掃描公開關鍵路由、已造訪受保護路由與設定中的核心頁面。
+         */
+        get: operations["authenticated_targets_internal_observability_auth_targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/observability/authenticated-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Authenticated Runs
+         * @description 接收 CI 產生的 authenticated Lighthouse 結果；只接受本站 URL。
+         */
+        post: operations["record_authenticated_runs_internal_observability_authenticated_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/observability/snapshot": {
         parameters: {
             query?: never;
@@ -16262,6 +16322,56 @@ export interface components {
             };
             /** Summary */
             summary: string | null;
+        };
+        /** AuthenticatedAuditIn */
+        AuthenticatedAuditIn: {
+            /** Display Value */
+            display_value?: string | null;
+            /** Id */
+            id: string;
+            /** Numeric Value */
+            numeric_value?: number | null;
+            /** Score */
+            score?: number | null;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** AuthenticatedRunIn */
+        AuthenticatedRunIn: {
+            /** Audits */
+            audits?: components["schemas"]["AuthenticatedAuditIn"][];
+            /** Cls */
+            cls?: number | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Lcp Ms */
+            lcp_ms?: number | null;
+            /** Performance Score */
+            performance_score?: number | null;
+            /**
+             * Status
+             * @default ok
+             */
+            status: string;
+            /** Strategy */
+            strategy: string;
+            /** Tbt Ms */
+            tbt_ms?: number | null;
+            /** Url */
+            url: string;
+        };
+        /** AuthenticatedRunsIn */
+        AuthenticatedRunsIn: {
+            /**
+             * Release
+             * @default
+             */
+            release: string;
+            /** Runs */
+            runs: components["schemas"]["AuthenticatedRunIn"][];
         };
         /** AutoRenumberRequest */
         AutoRenumberRequest: {
@@ -52052,6 +52162,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscordBotStatusOut"];
+                };
+            };
+        };
+    };
+    authenticated_session_internal_observability_auth_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    authenticated_targets_internal_observability_auth_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    record_authenticated_runs_internal_observability_authenticated_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthenticatedRunsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
