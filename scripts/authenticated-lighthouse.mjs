@@ -161,11 +161,14 @@ try {
   await chrome.kill();
 }
 
-await requestJson("/api/internal/observability/authenticated-runs", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ release, runs }),
-});
+const persistenceBatchSize = 180;
+for (let offset = 0; offset < runs.length; offset += persistenceBatchSize) {
+  await requestJson("/api/internal/observability/authenticated-runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ release, runs: runs.slice(offset, offset + persistenceBatchSize) }),
+  });
+}
 
 const failures = runs.filter(
   (run) => run.status !== "ok" || run.performance_score == null || run.performance_score < minimumScore,
