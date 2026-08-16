@@ -2,13 +2,20 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
-from api.services.observability import collect_crux_daily, collect_pagespeed, ensure_release
+from api.services.observability import (
+    collect_crux_daily,
+    collect_pagespeed,
+    critical_urls,
+    crux_history,
+    ensure_release,
+    provider_snapshot,
+)
 from api.services.observability import overview as get_overview
 
 router = APIRouter(prefix="/admin/system/observability", tags=["管理員 / Observability"])
@@ -65,6 +72,7 @@ async def errors(
         "error_rate": None,
         "top_exceptions": [],
         "slow_transactions": [],
+        **(await provider_snapshot()).get("sentry", {}),
         "source": "sentry",
     }
 
@@ -81,6 +89,46 @@ async def real_users(_admin: Annotated[User, Depends(require_superuser)]) -> dic
         "client_errors": None,
         "source": "posthog",
     }
+
+
+@router.get("/performance")
+async def performance(
+    _admin: Annotated[User, Depends(require_superuser)], url: str | None = None
+) -> dict[str, Any]:
+    target = url or (critical_urls()[0] if critical_urls() else "")
+    return {
+        "psi": {},
+        "crux": await crux_history(target) if target else {},
+        "lighthouse_regressions": [],
+    }
+
+
+@router.get("/releases")
+async def releases(
+    session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
+) -> list[dict[str, Any]]:
+    from api.models.observability import ObservabilityRelease
+
+    rows = (
+        (
+            await session.execute(
+                select(ObservabilityRelease)
+                .order_by(ObservabilityRelease.deployed_at.desc())
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "release": row.release,
+            "commit_sha": row.commit_sha,
+            "environment": row.environment,
+            "deployed_at": row.deployed_at,
+        }
+        for row in rows
+    ]
 
 
 @router.post("/collect/psi")

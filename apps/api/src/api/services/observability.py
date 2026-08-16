@@ -19,6 +19,63 @@ CRUX_URL = "https://chromeuxreport.googleapis.com/v1/records:queryRecord"
 CRUX_HISTORY_URL = "https://chromeuxreport.googleapis.com/v1/records:queryHistoryRecord"
 
 
+async def provider_snapshot() -> dict:
+    configured = bool(
+        settings.SENTRY_AUTH_TOKEN and settings.SENTRY_ORG and settings.SENTRY_PROJECT
+    )
+    result: dict = {
+        "sentry": {"configured": configured},
+        "posthog": {"configured": bool(settings.POSTHOG_PERSONAL_API_KEY)},
+    }
+    if configured:
+        async with httpx.AsyncClient(timeout=20) as client:
+            try:
+                response = await client.get(
+                    f"{settings.SENTRY_API_URL}/projects/{settings.SENTRY_ORG}/{settings.SENTRY_PROJECT}/stats/",
+                    headers={"Authorization": f"Bearer {settings.SENTRY_AUTH_TOKEN}"},
+                    params={"stat": "received", "interval": "1h"},
+                )
+                response.raise_for_status()
+                result["sentry"]["stats"] = response.json()
+            except httpx.HTTPError as exc:
+                result["sentry"]["error"] = str(exc)
+    return result
+
+
+async def crux_history(url: str, form_factor: str = "PHONE") -> dict:
+    key = settings.GOOGLE_CRUX_API_KEY or settings.GOOGLE_PAGESPEED_API_KEY
+    if not key:
+        return {
+            "url": url,
+            "form_factor": form_factor,
+            "collection_periods": [],
+            "lcp_p75": [],
+            "inp_p75": [],
+            "cls_p75": [],
+            "ttfb_p75": [],
+        }
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post(
+            CRUX_HISTORY_URL, params={"key": key}, json={"url": url, "formFactor": form_factor}
+        )
+        response.raise_for_status()
+        record = response.json().get("record", {})
+    metrics = record.get("metrics", {})
+
+    def series(name: str) -> list[float | None]:
+        return metrics.get(name, {}).get("percentilesTimeseries", {}).get("p75s", [])
+
+    return {
+        "url": url,
+        "form_factor": form_factor,
+        "collection_periods": record.get("collectionPeriods", []),
+        "lcp_p75": series("largest_contentful_paint"),
+        "inp_p75": series("interaction_to_next_paint"),
+        "cls_p75": series("cumulative_layout_shift"),
+        "ttfb_p75": series("experimental_time_to_first_byte"),
+    }
+
+
 def critical_urls() -> list[str]:
     base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
     return [urljoin(base, path.lstrip("/")) for path in settings.OBSERVABILITY_CRITICAL_URLS]
