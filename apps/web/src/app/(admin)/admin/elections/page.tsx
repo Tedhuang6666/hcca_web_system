@@ -20,7 +20,10 @@ export default function ElectionsAdminPage() {
   useEffect(() => {
     electionsApi
       .list()
-      .then(setItems)
+      .then((response) => {
+        if (!Array.isArray(response)) throw new Error("選舉列表回應格式錯誤");
+        setItems(response);
+      })
       .catch(() => toast.error("無法載入選舉"))
       .finally(() => setLoading(false));
   }, []);
