@@ -697,8 +697,9 @@ async def test_delete_document_requires_draft_status(db_session: AsyncSession, m
     creator = await make_user()
     doc = await _make_draft(db_session, org, creator)
     await issue_document_directly(db_session, doc, issued_by=creator.id)
+    doc.issued_at = datetime.now(UTC) - timedelta(hours=7)
 
-    with pytest.raises(ValueError, match="草稿狀態"):
+    with pytest.raises(ValueError, match="超過六小時"):
         await delete_document(db_session, doc)
 
 
