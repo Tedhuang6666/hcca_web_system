@@ -32,6 +32,7 @@ from api.schemas.analytics import (
     ProductAnalyticsOut,
 )
 from api.services.analytics import get_product_analytics, record_page_view
+from api.services.observability import record_client_metrics
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
 
@@ -114,12 +115,14 @@ async def create_page_view(body: PageViewCreate, db: DbDep, current_user: Curren
 @router.post("/client-metrics", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
 async def create_client_metric(body: ClientMetricCreate, request: Request) -> dict[str, str]:
     """接收匿名前端 Web Vitals／API latency，交由產品分析平台聚合。"""
+    payload = body.model_dump()
+    await record_client_metrics([payload])
     posthog = get_posthog_client()
     if posthog:
         posthog.capture(
             distinct_id=request.headers.get("X-Client-ID", "anonymous"),
             event="web_client_metric",
-            properties=body.model_dump(),
+            properties=payload,
         )
     return {"status": "accepted"}
 
@@ -129,14 +132,16 @@ async def create_client_metric_batch(
     body: ClientMetricBatchCreate, request: Request
 ) -> dict[str, str | int]:
     """批次接收匿名前端 Web Vitals／API latency，避免每筆指標各自發送請求。"""
+    payloads = [metric.model_dump() for metric in body.items]
+    await record_client_metrics(payloads)
     posthog = get_posthog_client()
     if posthog:
         distinct_id = request.headers.get("X-Client-ID", "anonymous")
-        for metric in body.items:
+        for payload in payloads:
             posthog.capture(
                 distinct_id=distinct_id,
                 event="web_client_metric",
-                properties=metric.model_dump(),
+                properties=payload,
             )
     return {"status": "accepted", "accepted": len(body.items)}
 
