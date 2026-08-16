@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import local_today
 from api.core.database import engine
@@ -731,6 +731,16 @@ async def execute(
     if operation in {"browse_regulations", "regulation_choices"}:
         statement = (
             select(Regulation)
+            .options(
+                load_only(
+                    Regulation.id,
+                    Regulation.title,
+                    Regulation.version,
+                    Regulation.workflow_status,
+                    Regulation.published_at,
+                    Regulation.updated_at,
+                )
+            )
             .where(Regulation.is_active.is_(True))
             .order_by(Regulation.updated_at.desc())
             .limit(25 if operation == "regulation_choices" else 10)
@@ -809,6 +819,7 @@ async def execute(
             rows = (
                 await db.execute(
                     select(Regulation)
+                    .options(load_only(Regulation.id, Regulation.title, Regulation.version))
                     .where(
                         Regulation.title.ilike(needle),
                         Regulation.is_active.is_(True),

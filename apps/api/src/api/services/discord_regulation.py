@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.models.regulation import Regulation, RegulationArticle
 
@@ -139,6 +140,14 @@ async def lookup_citation(
 ) -> tuple[Regulation, RegulationArticle] | None:
     regulation = await db.scalar(
         select(Regulation)
+        .options(
+            load_only(
+                Regulation.id,
+                Regulation.title,
+                Regulation.is_active,
+                Regulation.updated_at,
+            )
+        )
         .where(Regulation.is_active.is_(True), Regulation.title.ilike(f"%{citation.law}%"))
         .order_by(Regulation.updated_at.desc())
         .limit(1)
@@ -147,6 +156,14 @@ async def lookup_citation(
         candidates = (
             await db.execute(
                 select(Regulation)
+                .options(
+                    load_only(
+                        Regulation.id,
+                        Regulation.title,
+                        Regulation.is_active,
+                        Regulation.updated_at,
+                    )
+                )
                 .where(Regulation.is_active.is_(True))
                 .order_by(Regulation.updated_at.desc())
                 .limit(300)

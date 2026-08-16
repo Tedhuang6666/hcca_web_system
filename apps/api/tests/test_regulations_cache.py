@@ -208,7 +208,9 @@ class TestInvalidatePublicRegulationsCache:
         """Invaliation should call cache_invalidate for both org-specific and cross-org 'all'."""
         org_id = uuid.uuid4()
 
-        with patch("api.routers.regulations.cache_invalidate", new_callable=AsyncMock) as invalidate:
+        with patch(
+            "api.routers.regulations.cache_invalidate", new_callable=AsyncMock
+        ) as invalidate:
             await _invalidate_public_regulations_cache(org_id)
 
             assert invalidate.await_count == 2, "Should call cache_invalidate twice"
@@ -225,12 +227,16 @@ class TestInvalidatePublicRegulationsCache:
         org_id1 = uuid.uuid4()
         org_id2 = uuid.uuid4()
 
-        with patch("api.routers.regulations.cache_invalidate", new_callable=AsyncMock) as invalidate:
+        with patch(
+            "api.routers.regulations.cache_invalidate", new_callable=AsyncMock
+        ) as invalidate:
             await _invalidate_public_regulations_cache(org_id1)
             await _invalidate_public_regulations_cache(org_id2)
 
             calls = invalidate.await_args_list
-            org_patterns = [call[0][0] for call in calls if "org:" in call[0][0] and call[0][0].endswith(":*")]
+            org_patterns = [
+                call[0][0] for call in calls if "org:" in call[0][0] and call[0][0].endswith(":*")
+            ]
 
             # Should have invalidated each org specifically
             assert f"reg:public:v1:org:{org_id1}:*" in org_patterns
