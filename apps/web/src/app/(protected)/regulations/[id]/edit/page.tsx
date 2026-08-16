@@ -120,6 +120,7 @@ export default function EditRegulationPage() {
   const [publishManualSerialNumber, setPublishManualSerialNumber] = useState("");
   const [revisionDrafts, setRevisionDrafts] = useState<RevisionDraft[]>([]);
   const [decreeDocuments, setDecreeDocuments] = useState<DocumentListItem[]>([]);
+  const [decreeDocumentsError, setDecreeDocumentsError] = useState(false);
   const [savingRevisionId, setSavingRevisionId] = useState<string | null>(null);
 
   // 條文狀態
@@ -298,8 +299,14 @@ export default function EditRegulationPage() {
       setRevisionDrafts([...(r.revisions ?? [])].sort((a, b) => a.version - b.version).map(revisionDraftFrom));
       documentsApi
         .list({ org_id: r.org_id, category: "decree", limit: "100" })
-        .then(setDecreeDocuments)
-        .catch(() => setDecreeDocuments([]));
+        .then((documents) => {
+          setDecreeDocuments(documents);
+          setDecreeDocumentsError(false);
+        })
+        .catch(() => {
+          setDecreeDocuments([]);
+          setDecreeDocumentsError(true);
+        });
     } catch (e) {
       toast.error(apiErrorMessage(e, "載入失敗"));
     } finally { setLoading(false); }
@@ -998,6 +1005,23 @@ export default function EditRegulationPage() {
                       ))}
                     </select>
                   </div>
+                  {decreeDocumentsError && (
+                    <div className="flex items-center justify-between gap-3 text-[11px]" style={{ color: "var(--danger)" }}>
+                      <span>公布公文清單載入失敗，暫時無法選取連結。</span>
+                      <button
+                        type="button"
+                        onClick={() => fetchReg()}
+                        className="shrink-0 underline underline-offset-2"
+                      >
+                        重新載入
+                      </button>
+                    </div>
+                  )}
+                  {!decreeDocumentsError && decreeDocuments.length === 0 && (
+                    <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      尚無可連結的「令」類公文；請先建立或公布公文後重新載入此頁。
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
