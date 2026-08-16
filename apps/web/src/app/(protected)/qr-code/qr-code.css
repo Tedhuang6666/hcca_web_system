@@ -533,6 +533,21 @@
   margin-top: 1rem;
 }
 
+.qr-remove-logo {
+  margin-top: 0.55rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.qr-remove-logo:hover {
+  color: var(--warning);
+}
+
 .qr-icon-button {
   display: grid;
   width: 2.3rem;
