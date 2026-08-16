@@ -20,12 +20,20 @@ if (!monitorToken) {
 const monitorHeaders = {
   "X-Performance-Monitor-Token": monitorToken,
   Accept: "application/json",
+  "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+  "User-Agent":
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
 };
 
 async function requestJson(path, init = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
-    headers: { ...monitorHeaders, ...(init.headers || {}) },
+    headers: {
+      ...monitorHeaders,
+      Origin: baseUrl,
+      Referer: `${baseUrl}/`,
+      ...(init.headers || {}),
+    },
   });
   if (!response.ok) {
     const body = (await response.text()).replace(/\s+/gu, " ").slice(0, 240);
