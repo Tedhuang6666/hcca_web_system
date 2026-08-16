@@ -138,9 +138,18 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.discord_sync_tasks",
     "api.services.metrics_tasks",
     "api.services.incident_tasks",
+    "api.services.observability_tasks",
 ]
 
 celery_app.conf.beat_schedule = {
+    "observability-pagespeed-every-6-hours": {
+        "task": "api.services.observability_tasks.collect_pagespeed_scheduled",
+        "schedule": 21600.0,
+    },
+    "observability-crux-daily": {
+        "task": "api.services.observability_tasks.collect_crux_daily",
+        "schedule": crontab(hour=3, minute=20),
+    },
     # 每 5 分鐘從 Google Calendar 增量拉取更新（雙向同步）
     "pull-google-calendar-every-5min": {
         "task": "api.services.google_calendar_tasks.pull_all_orgs",

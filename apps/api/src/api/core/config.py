@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "校園自治整合平台"
     APP_VERSION: str = _read_release_version()
     APP_RELEASE: str = ""
+    GOOGLE_PAGESPEED_API_KEY: str = ""
+    GOOGLE_CRUX_API_KEY: str = ""
+    OBSERVABILITY_CRITICAL_URLS: list[str] = ["/", "/announcements", "/laws", "/petitions", "/partner-map", "/login"]
     # 由 CI 在 image build 時寫入；不可在容器啟動後覆寫，才能正確識別實際執行映像。
     BUILD_COMMIT: str = ""
     BUILD_REF: str = ""
