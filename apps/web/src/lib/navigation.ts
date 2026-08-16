@@ -165,6 +165,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:all",
   },
   {
+    id: "systemObservability",
+    href: "/admin/system/observability",
+    iconKey: "analytics",
+    label: "效能觀測",
+    perm: "admin:all",
+  },
+  {
     id: "systemSettings",
     href: "/admin/settings",
     iconKey: "settings",
@@ -354,6 +361,7 @@ export const NAV_DEF: NavEntry[] = [
       "qrCode",
       "moduleBackoffice",
       "adminDashboard",
+      "systemObservability",
       "about",
     ]),
   },
