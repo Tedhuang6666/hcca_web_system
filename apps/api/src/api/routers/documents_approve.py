@@ -683,6 +683,43 @@ async def archive_document(
     return updated
 
 
+@router.post(
+    "/{doc_id}/unarchive",
+    response_model=DocumentOut,
+    summary="解除封存公文（封存 → 已核准）",
+    responses={
+        200: {"description": "解除封存成功"},
+        403: {"description": "非建立者或管理員"},
+        409: {"description": "公文非已封存狀態"},
+    },
+)
+async def unarchive_document(
+    doc_id: str,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_ARCHIVE))],
+    bg: BackgroundTasks,
+) -> Document:
+    doc = await get_doc_or_404(doc_id, session)
+    if doc.created_by != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以解除封存公文")
+    try:
+        updated = await doc_svc.unarchive_document(session, doc, requested_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="unarchive",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        summary=f"解除封存公文「{updated.title}」",
+    )
+    bg.add_task(ws_broadcast_bg, updated)
+    return updated
+
+
 @router.put(
     "/{doc_id}/archive-settings",
     response_model=DocumentOut,

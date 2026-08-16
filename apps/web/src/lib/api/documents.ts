@@ -46,6 +46,7 @@ export const documentsApi = {
     post<DocumentOut>(`/documents/${id}/reject`, { comment, mode }),
   recall: (id: string) => post<DocumentOut>(`/documents/${id}/recall`),
   archive: (id: string) => post<DocumentOut>(`/documents/${id}/archive`),
+  unarchive: (id: string) => post<DocumentOut>(`/documents/${id}/unarchive`),
   updateArchiveSettings: (id: string, body: DocumentArchiveSettingsUpdate) =>
     put<DocumentWithArchive>(`/documents/${id}/archive-settings`, body),
   batchApprove: (document_ids: string[], comment?: string) =>

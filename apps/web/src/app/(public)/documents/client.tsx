@@ -161,10 +161,10 @@ export default function DocumentListClient({
   ], [can, canReview]);
   const initialStatus = searchParams.get("status") as DocumentStatus | null;
 
-  const [docs, setDocs] = useState<DocumentListItem[]>(() =>
-    initialDocs ?? cacheGet<DocumentListItem[]>("documents/list") ?? [],
-  );
-  const [loading, setLoading] = useState(initialDocs === null && !cacheHas("documents/list"));
+  // 公開 SSR 與登入後 API 的可見範圍不同，不使用跨身份的舊快取作為首屏資料。
+  // 否則會先顯示公開筆數，再跳成登入者可見筆數。
+  const [docs, setDocs] = useState<DocumentListItem[]>(initialDocs ?? []);
+  const [loading, setLoading] = useState(initialDocs === null);
   const [now, setNow] = useState<number | null>(null);
   const isMountedFetch = useRef(false);
   const [activeTab, setActiveTab] = useState<DocumentStatus | "all">(
@@ -610,10 +610,10 @@ export default function DocumentListClient({
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            公文
+            校園公文
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {canBatch || can("document:draft") ? "建立、簽核與追蹤公文。" : "查看公開的校園公文。"}
+            {canBatch || can("document:draft") ? "查看、建立與處理公文。" : "查看公開的校園公文。"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">

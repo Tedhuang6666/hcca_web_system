@@ -613,6 +613,12 @@ export default function DocumentDetailPageClient({
               封存
             </button>
           )}
+          {doc.status === "archived" && isCreator && can("document:archive") && (
+            <button onClick={async () => { await documentsApi.unarchive(id); fetchDoc(); }}
+              className="btn btn-ghost text-sm gap-1.5">
+              解除封存
+            </button>
+          )}
           {/* 官式公文列印；製作者與管理員可選正本、副本或影本。 */}
           <div
             className="flex min-h-9 items-stretch overflow-hidden rounded-lg max-sm:min-h-11"
