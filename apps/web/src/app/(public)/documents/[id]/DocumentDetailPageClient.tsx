@@ -555,6 +555,24 @@ export default function DocumentDetailPageClient({
               編輯
             </Link>
           )}
+          {isDraft && isCreator && (
+            <button
+              type="button"
+              className="btn btn-ghost text-sm gap-1.5"
+              onClick={async () => {
+                if (!window.confirm("確定刪除此公文草稿？此操作無法復原。")) return;
+                try {
+                  await documentsApi.delete(id);
+                  toast.success("公文草稿已刪除");
+                  router.push("/documents");
+                } catch (error) {
+                  toast.error(apiErrorMessage(error, "刪除公文草稿失敗"));
+                }
+              }}
+            >
+              刪除草稿
+            </button>
+          )}
           {/* 草稿：送審（僅建立者） */}
           {isDraft && isCreator && !submitMode && (
             <button onClick={enterSubmitMode} className="btn btn-primary text-sm gap-1.5">
