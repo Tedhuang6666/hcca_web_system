@@ -1,3 +1,4 @@
+# ruff: noqa: E702
 import asyncio
 
 from celery import shared_task
@@ -10,7 +11,10 @@ from api.services.observability import collect_crux_daily, collect_pagespeed
 def collect_pagespeed_scheduled() -> dict:
     async def run():
         async with task_session() as session:
-            result = await collect_pagespeed(session); await session.commit(); return result
+            result = await collect_pagespeed(session)
+            await session.commit()
+            return result
+
     return asyncio.run(run())
 
 
@@ -18,5 +22,8 @@ def collect_pagespeed_scheduled() -> dict:
 def collect_crux_daily_scheduled() -> dict:
     async def run():
         async with task_session() as session:
-            result = await collect_crux_daily(session); await session.commit(); return result
+            result = await collect_crux_daily(session)
+            await session.commit()
+            return result
+
     return asyncio.run(run())

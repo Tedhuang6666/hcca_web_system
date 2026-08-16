@@ -1,3 +1,4 @@
+# ruff: noqa: E702
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,7 +22,9 @@ async def require_superuser(user: User = Depends(get_current_active_user)) -> Us
 
 
 @router.get("/overview", summary="Observability Overview")
-async def overview(session: DbDep, _admin: Annotated[User, Depends(require_superuser)]) -> dict[str, Any]:
+async def overview(
+    session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
+) -> dict[str, Any]:
     db_ok = True
     try:
         await session.execute(text("SELECT 1"))
@@ -34,33 +37,78 @@ async def overview(session: DbDep, _admin: Annotated[User, Depends(require_super
             {"name": "Redis", "healthy": True},
             {"name": "Celery", "healthy": True},
         ],
-        "reliability": {"error_rate": None, "affected_users": None, "new_issues": 0, "regressions": 0},
-        "synthetic": {"mobile_performance": None, "desktop_performance": None, "mobile_lcp_ms": None, "mobile_tbt_ms": None},
+        "reliability": {
+            "error_rate": None,
+            "affected_users": None,
+            "new_issues": 0,
+            "regressions": 0,
+        },
+        "synthetic": {
+            "mobile_performance": None,
+            "desktop_performance": None,
+            "mobile_lcp_ms": None,
+            "mobile_tbt_ms": None,
+        },
         "field": {"lcp_p75": None, "inp_p75": None, "cls_p75": None, "ttfb_p75": None},
         **(await get_overview(session)),
     }
 
 
 @router.get("/errors")
-async def errors(session: DbDep, _admin: Annotated[User, Depends(require_superuser)]) -> dict[str, Any]:
-    return {"new_issues": 0, "regressions": 0, "affected_users": None, "error_rate": None, "top_exceptions": [], "slow_transactions": [], "source": "sentry"}
+async def errors(
+    session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
+) -> dict[str, Any]:
+    return {
+        "new_issues": 0,
+        "regressions": 0,
+        "affected_users": None,
+        "error_rate": None,
+        "top_exceptions": [],
+        "slow_transactions": [],
+        "source": "sentry",
+    }
 
 
 @router.get("/real-users")
 async def real_users(_admin: Annotated[User, Depends(require_superuser)]) -> dict[str, Any]:
-    return {"dau": None, "sessions": None, "pageviews": None, "top_routes": [], "web_vitals": {"lcp_p75": None, "inp_p75": None, "cls_p75": None}, "funnel": [], "client_errors": None, "source": "posthog"}
+    return {
+        "dau": None,
+        "sessions": None,
+        "pageviews": None,
+        "top_routes": [],
+        "web_vitals": {"lcp_p75": None, "inp_p75": None, "cls_p75": None},
+        "funnel": [],
+        "client_errors": None,
+        "source": "posthog",
+    }
 
 
 @router.post("/collect/psi")
-async def collect_psi(session: DbDep, _admin: Annotated[User, Depends(require_superuser)]) -> dict[str, Any]:
-    result = await collect_pagespeed(session); await session.commit(); return result
+async def collect_psi(
+    session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
+) -> dict[str, Any]:
+    result = await collect_pagespeed(session)
+    await session.commit()
+    return result
 
 
 @router.post("/collect/crux-daily")
-async def collect_crux(session: DbDep, _admin: Annotated[User, Depends(require_superuser)]) -> dict[str, Any]:
-    result = await collect_crux_daily(session); await session.commit(); return result
+async def collect_crux(
+    session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
+) -> dict[str, Any]:
+    result = await collect_crux_daily(session)
+    await session.commit()
+    return result
 
 
 @router.post("/releases")
-async def create_release(session: DbDep, _admin: Annotated[User, Depends(require_superuser)], commit_sha: str) -> dict[str, Any]:
-    release = await ensure_release(session, commit_sha); await session.commit(); return {"release": release.release, "commit_sha": release.commit_sha, "deployed_at": release.deployed_at}
+async def create_release(
+    session: DbDep, _admin: Annotated[User, Depends(require_superuser)], commit_sha: str
+) -> dict[str, Any]:
+    release = await ensure_release(session, commit_sha)
+    await session.commit()
+    return {
+        "release": release.release,
+        "commit_sha": release.commit_sha,
+        "deployed_at": release.deployed_at,
+    }
