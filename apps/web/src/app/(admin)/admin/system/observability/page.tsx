@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Gauge, LoaderCircle, RefreshCw } from "lucide-react";
 import { post, request } from "@/lib/api/core";
 
 type HealthItem = { name: string; healthy: boolean; detail?: Record<string, unknown> };
@@ -34,6 +35,8 @@ type RouteTelemetry = { path: string; pageviews: number; api_errors: number; sam
 type RealUsersData = { configured: boolean; data_available: boolean; dau: number | null; sessions: number | null; pageviews: number | null; top_routes: RouteTelemetry[]; web_vitals: Record<string, number | null>; client_errors: number | null; source: string; message: string };
 type PerformanceData = { url: string; psi: PageScore[]; crux: { collection_periods?: { firstDate: string; lastDate: string }[]; lcp_p75?: number[]; inp_p75?: number[]; cls_p75?: number[]; ttfb_p75?: number[]; error?: string }; lighthouse_regressions: PageScore[] };
 type Release = { release: string; commit_sha: string; environment: string; deployed_at: string };
+type CollectionResult = { created: number; failed: number; urls?: number; strategies?: number; skipped?: string };
+type CollectionNotice = { tone: "success" | "warning" | "error"; message: string };
 type Tab = "overview" | "errors" | "real-users" | "performance" | "releases";
 
 const tabs: { id: Tab; label: string }[] = [
@@ -47,6 +50,69 @@ const tabs: { id: Tab; label: string }[] = [
 function formatNumber(value: number | null | undefined, suffix = "") {
   if (value == null || Number.isNaN(value)) return "—";
   return `${new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 }).format(value)}${suffix}`;
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+function normalizeOverview(value: Overview): Overview {
+  const raw = value as Partial<Overview>;
+  const coverage = (raw.coverage ?? {}) as Partial<Overview["coverage"]>;
+  const reliability = (raw.reliability ?? {}) as Partial<Overview["reliability"]>;
+  const synthetic = (raw.synthetic ?? {}) as Partial<Overview["synthetic"]>;
+  return {
+    ...value,
+    system_health: asArray<HealthItem>(raw.system_health),
+    reliability: {
+      error_rate: reliability.error_rate ?? null,
+      affected_users: reliability.affected_users ?? null,
+      new_issues: reliability.new_issues ?? 0,
+      regressions: reliability.regressions ?? 0,
+    },
+    coverage: {
+      discovered: coverage.discovered ?? 0,
+      monitored: coverage.monitored ?? 0,
+      passing: coverage.passing ?? 0,
+      needs_attention: coverage.needs_attention ?? 0,
+      threshold: coverage.threshold ?? 95,
+    },
+    synthetic: {
+      mobile_performance: synthetic.mobile_performance ?? null,
+      desktop_performance: synthetic.desktop_performance ?? null,
+      mobile_lcp_ms: synthetic.mobile_lcp_ms ?? null,
+      mobile_tbt_ms: synthetic.mobile_tbt_ms ?? null,
+      tested_since: synthetic.tested_since ?? null,
+    },
+    field: raw.field ?? {},
+    pages: asArray<PageScore>(raw.pages),
+    latest_release: raw.latest_release ?? { commit_sha: null, deployed_at: null },
+    recent_errors: asArray<RecentError>(raw.recent_errors),
+    slow_queries: asArray<SlowQuery>(raw.slow_queries),
+  };
+}
+
+function normalizeTabData(tab: Tab, value: ErrorsData | RealUsersData | PerformanceData | Release[]) {
+  if (tab === "releases") return asArray<Release>(value);
+  if (tab === "errors") {
+    const raw = (value ?? {}) as Partial<ErrorsData>;
+    return {
+      ...raw,
+      top_exceptions: asArray<RecentError>(raw.top_exceptions),
+      slow_transactions: asArray<SlowQuery>(raw.slow_transactions),
+    } as ErrorsData;
+  }
+  if (tab === "real-users") {
+    const raw = (value ?? {}) as Partial<RealUsersData>;
+    return { ...raw, top_routes: asArray<RouteTelemetry>(raw.top_routes) } as RealUsersData;
+  }
+  const raw = (value ?? {}) as Partial<PerformanceData>;
+  return {
+    ...raw,
+    psi: asArray<PageScore>(raw.psi),
+    lighthouse_regressions: asArray<PageScore>(raw.lighthouse_regressions),
+    crux: raw.crux ?? {},
+  } as PerformanceData;
 }
 
 function formatDate(value: string | number | null | undefined) {
@@ -83,6 +149,7 @@ export default function ObservabilityPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [collecting, setCollecting] = useState(false);
+  const [collectionNotice, setCollectionNotice] = useState<CollectionNotice | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
   const [tabData, setTabData] = useState<ErrorsData | RealUsersData | PerformanceData | Release[] | null>(null);
@@ -93,9 +160,9 @@ export default function ObservabilityPage() {
     let active = true;
     setLoading(true);
     request<Overview>("/admin/system/observability/overview")
-      .then((value) => { if (active) { setOverview(value); setOverviewError(null); } })
+      .then((value) => { if (active) { setOverview(normalizeOverview(value)); setOverviewError(null); } })
       .catch((error: Error) => { if (active) setOverviewError(error.message || "無法讀取觀測資料"); })
-      .finally(() => active && setLoading(false));
+      .finally(() => { if (active) { setLoading(false); setRefreshing(false); } });
     return () => { active = false; };
   }, [refreshKey]);
 
@@ -114,7 +181,7 @@ export default function ObservabilityPage() {
           ? `/admin/system/observability/performance${encodedUrl}`
           : "/admin/system/observability/releases";
     request<ErrorsData | RealUsersData | PerformanceData | Release[]>(endpoint)
-      .then((value) => active && setTabData(value))
+      .then((value) => active && setTabData(normalizeTabData(tab, value)))
       .catch((error: Error) => active && setTabError(error.message || "無法讀取資料"))
       .finally(() => active && setTabLoading(false));
     return () => { active = false; };
@@ -127,12 +194,21 @@ export default function ObservabilityPage() {
   }, [pages, selectedUrl]);
 
   async function collectPsi() {
+    setCollectionNotice(null);
     setCollecting(true);
     try {
-      await post<{ created: number; failed: number }>("/admin/system/observability/collect/psi");
-      setRefreshKey((value) => value + 1);
+      const result = await post<CollectionResult>("/admin/system/observability/collect/psi");
+      if (result.skipped) {
+        setCollectionNotice({ tone: "warning", message: `尚未採集：${result.skipped}` });
+      } else {
+        setCollectionNotice({
+          tone: result.failed ? "warning" : "success",
+          message: `PSI 採集完成：${result.created} 筆成功${result.failed ? `，${result.failed} 筆失敗` : ""}。`,
+        });
+        setRefreshKey((value) => value + 1);
+      }
     } catch (error) {
-      setOverviewError(error instanceof Error ? error.message : "PSI 採集失敗");
+      setCollectionNotice({ tone: "error", message: error instanceof Error ? error.message : "PSI 採集失敗" });
     } finally {
       setCollecting(false);
     }
@@ -141,9 +217,12 @@ export default function ObservabilityPage() {
   return <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
     <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: "var(--border)" }}>
       <div><p className="text-sm" style={{ color: "var(--text-muted)" }}>Production observability</p><h1 className="mt-1 text-2xl font-semibold sm:text-3xl">系統可觀測性</h1><p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>追蹤 sitemap 全部公開頁面、登入後真實使用者體驗，以及部署端的錯誤與慢查詢。</p></div>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="min-h-11 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-wait disabled:opacity-60" style={{ borderColor: "var(--border-strong)", color: "var(--text-primary)" }} onClick={() => { setRefreshing(true); setRefreshKey((value) => value + 1); setRefreshing(false); }} disabled={loading || refreshing}>{loading || refreshing ? "讀取中…" : "重新整理"}</button>
-        <button type="button" className="min-h-11 rounded-md px-3 text-sm font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60" style={{ background: "var(--primary)", color: "var(--primary-text)" }} onClick={collectPsi} disabled={collecting}>{collecting ? "PSI 採集中…" : "立即採集 PSI"}</button>
+      <div className="flex flex-col items-stretch gap-2 sm:items-end">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-wait disabled:opacity-60" style={{ borderColor: "var(--border-strong)", color: "var(--text-primary)" }} onClick={() => { setRefreshing(true); setRefreshKey((value) => value + 1); }} disabled={loading || refreshing}><RefreshCw size={16} aria-hidden="true" className={refreshing ? "animate-spin" : undefined} />{loading || refreshing ? "讀取中…" : "重新整理"}</button>
+          <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60" style={{ background: "var(--primary)", color: "var(--primary-text)" }} onClick={collectPsi} disabled={collecting} aria-busy={collecting}>{collecting ? <LoaderCircle size={16} aria-hidden="true" className="animate-spin" /> : <Gauge size={16} aria-hidden="true" />}{collecting ? "PSI 採集中…" : "立即採集 PSI"}</button>
+        </div>
+        {collectionNotice && <p role="status" className="text-right text-xs" style={{ color: collectionNotice.tone === "success" ? "var(--success)" : collectionNotice.tone === "warning" ? "var(--warning)" : "var(--error)" }}>{collectionNotice.message}</p>}
       </div>
     </header>
     <nav className="flex gap-1 overflow-x-auto border-b" style={{ borderColor: "var(--border)" }} aria-label="觀測分頁">

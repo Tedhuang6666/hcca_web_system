@@ -16,7 +16,12 @@ export const analyticsApi = {
     if (params?.date_to) q.set("date_to", params.date_to);
     return get<ProductAnalyticsOut>(`/analytics/product${q.size ? `?${q}` : ""}`);
   },
-  trackPageView: (path: string) => post<void>("/analytics/page-views", { path }),
+  trackPageView: (path: string) => {
+    // analytics_page_views.path is intentionally bounded; oversized editor URLs
+    // should never turn a background telemetry request into a 422.
+    const boundedPath = path.length > 255 ? `${path.slice(0, 252)}...` : path;
+    return post<void>("/analytics/page-views", { path: boundedPath });
+  },
   documentEfficiency: (params?: { org_id?: string; date_from?: string; date_to?: string }) => {
     const q = new URLSearchParams();
     if (params?.org_id) q.set("org_id", params.org_id);
