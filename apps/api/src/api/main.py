@@ -53,6 +53,7 @@ from api.dependencies.impersonation_guard import ImpersonationContextMiddleware
 from api.routers import (
     activities,
     admin,
+    admin_observability,
     admin_system,
     analytics,
     announcements,
@@ -440,6 +441,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router)
     app.include_router(announcements.router)
     app.include_router(admin.router)
+    app.include_router(admin_observability.router)
     app.include_router(admin_system.public_router)
     app.include_router(admin_system.router)
     app.include_router(navigation_profiles.public_router)
