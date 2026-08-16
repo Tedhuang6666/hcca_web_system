@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 import jwt
 import redis.asyncio as aioredis
 from jwt.exceptions import InvalidTokenError
+from redis.asyncio.connection import BlockingConnectionPool
 from redis.exceptions import RedisError
 
 from api.core.config import settings
@@ -22,16 +23,21 @@ logger = logging.getLogger(__name__)
 # --- Redis 連線 ---
 # 注意：aioredis 的 ConnectionPool 會在首次 await 時把連線綁到當前 event loop，
 # pytest-asyncio 每個 test 開新 loop 會撞「Future attached to a different loop」。
-# 改回 `from_url(...)` 配合 max_connections kwarg；底層仍是 pool，但 lazy 建立
-# 連線比較寬容跨 loop。生產環境 Gunicorn 每個 worker 是獨立 loop，不受影響。
-redis_client: aioredis.Redis = aioredis.from_url(
-    str(settings.REDIS_URL),
-    encoding="utf-8",
-    decode_responses=True,
-    max_connections=settings.REDIS_STATE_MAX_CONNECTIONS,
-    socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
-    socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
-    health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+# 改用有界等待 pool：Lighthouse／RUM 高峰會讓多個同源 API 同時讀寫 state Redis；
+# 非阻塞 pool 會在達到上限時立刻拋出「Too many connections」，連帶讓 rate-limit、
+# 錯誤稽核與登入撤銷路徑降級。排隊等待可讓短暫尖峰平滑消化，外層既有 timeout
+# 仍會在 Redis 真正失效時快速降級，不把請求無限卡住。
+redis_client: aioredis.Redis = aioredis.Redis(
+    connection_pool=BlockingConnectionPool.from_url(
+        str(settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=settings.REDIS_STATE_MAX_CONNECTIONS,
+        timeout=settings.REDIS_SOCKET_TIMEOUT,
+        socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+        socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+        health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+    )
 )
 
 # 以 jti 為 key（支援 user-level revoke）
