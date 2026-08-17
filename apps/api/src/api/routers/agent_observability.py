@@ -24,6 +24,7 @@ from api.core.security import create_access_token
 from api.models.observability import PageSpeedAudit, PageSpeedRun
 from api.models.user import User
 from api.services.observability import (
+    _has_pageview_observation,
     _has_rum_observation,
     client_route_analytics,
     discover_public_urls,
@@ -153,7 +154,7 @@ async def authenticated_targets() -> dict[str, Any]:
         if normalized not in targets:
             targets.append(normalized)
     for route in rum.get("routes", []):
-        if not _has_rum_observation(route):
+        if not _has_pageview_observation(route):
             continue
         path = str(route.get("path") or "/")
         candidate = str(httpx.URL(f"{base}{path.lstrip('/')}"))

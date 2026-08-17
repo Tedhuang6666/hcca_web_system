@@ -16,6 +16,8 @@ x-api-common: &api-common
     DEBUG: "false"
     ENABLE_API_DOCS: "false"
     COOKIE_SECURE: "true"
+    APP_RELEASE: ${APP_RELEASE:-}
+    BUILD_COMMIT: ${BUILD_COMMIT:-}
     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
     DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
@@ -50,7 +52,7 @@ x-api-service: &api-service
   mem_reservation: 256m
   environment:
     <<: *api-env
-    GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+    GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
     GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
     GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
     GUNICORN_GRACEFUL_TIMEOUT: ${GUNICORN_GRACEFUL_TIMEOUT:-30}
@@ -73,8 +75,8 @@ x-api-service: &api-service
       ]
     interval: 10s
     timeout: 5s
-    retries: 6
-    start_period: 30s
+    retries: 18
+    start_period: 180s
   stop_grace_period: 45s
 
 x-web-service: &web-service

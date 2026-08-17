@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -10,7 +11,14 @@ import { recordRecent } from "@/lib/recents";
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { API_BASE } from "@/lib/config";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+
+const GovernanceLinkPanel = dynamic(
+  () => import("@/components/governance/GovernanceLinkPanel"),
+  {
+    loading: () => <div className="min-h-11" aria-hidden="true" />,
+    ssr: false,
+  },
+);
 
 const AUDIENCE_LABEL: Record<string, string> = {
   all: "全體",

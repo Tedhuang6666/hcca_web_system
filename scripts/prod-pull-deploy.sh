@@ -83,6 +83,7 @@ if ! [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "❌ RELEASE_SHA 必須是完整 40 字元 commit SHA" >&2
   exit 1
 fi
+export BUILD_COMMIT="$release_sha"
 
 step "確認指定 commit 的不可變 GHCR 映像已就緒"
 ./scripts/wait-ghcr-image.sh "$release_sha"
@@ -141,8 +142,9 @@ step "啟動服務（--remove-orphans 清掉已退出 profile 的孤兒容器）
 step "目前服務狀態"
 "${compose[@]}" ps
 
-step "等待 healthcheck 收斂（最多 90s）"
-deadline=$(( $(date +%s) + 90 ))
+health_wait_seconds="${HEALTH_WAIT_SECONDS:-300}"
+step "等待 healthcheck 收斂（最多 ${health_wait_seconds}s）"
+deadline=$(( $(date +%s) + health_wait_seconds ))
 while :; do
   unhealthy="$("${compose[@]}" ps --format '{{.Service}} {{.Health}}' 2>/dev/null \
     | awk '$2=="unhealthy" || $2=="starting" {print $1}')"

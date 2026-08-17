@@ -62,7 +62,11 @@ function auditValue(audits, id) {
 
 async function assertAuthenticated(url, cookieHeader) {
   const response = await fetch(url, {
-    headers: { Cookie: cookieHeader },
+    headers: {
+      Cookie: cookieHeader,
+      "Accept-Language": monitorHeaders["Accept-Language"],
+      "User-Agent": monitorHeaders["User-Agent"],
+    },
     redirect: "manual",
   });
   if (response.status >= 300 && response.status < 400) {
@@ -80,13 +84,19 @@ async function isHtmlPage(url, cookieHeader) {
   const timeoutId = setTimeout(() => controller.abort(), 10_000);
   try {
     const response = await fetch(url, {
-      headers: { Cookie: cookieHeader, Accept: "text/html" },
+      headers: {
+        Cookie: cookieHeader,
+        Accept: "text/html",
+        "Accept-Language": monitorHeaders["Accept-Language"],
+        "User-Agent": monitorHeaders["User-Agent"],
+      },
       redirect: "follow",
       signal: controller.signal,
     });
-    const isPage = response.ok && (response.headers.get("content-type") || "").includes("text/html");
+    const contentType = response.headers.get("content-type") || "";
+    const isPage = response.ok && contentType.includes("text/html");
     await response.body?.cancel();
-    return isPage;
+    return { isPage, status: response.status, contentType };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -179,7 +189,7 @@ for (let offset = 0; offset < allTargets.length; offset += pageCheckConcurrency)
   const checked = await Promise.all(
     allTargets.slice(offset, offset + pageCheckConcurrency).map(async (target) => {
       try {
-        return { target, isPage: await isHtmlPage(target, cookieHeader) };
+        return { target, ...(await isHtmlPage(target, cookieHeader)) };
       } catch (error) {
         return {
           target,
@@ -191,7 +201,12 @@ for (let offset = 0; offset < allTargets.length; offset += pageCheckConcurrency)
   for (const result of checked) {
     if (result.isPage) pageCandidates.push(result.target);
     else if (result.error) process.stdout.write(`skip unavailable ${result.target}: ${result.error}\n`);
-    else process.stdout.write(`skip non-page ${result.target}\n`);
+    else {
+      process.stdout.write(
+        `skip non-page ${result.target} status=${result.status ?? "unknown"} ` +
+          `content-type=${result.contentType || "unknown"}\n`,
+      );
+    }
   }
 }
 const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);

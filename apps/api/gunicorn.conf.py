@@ -7,8 +7,9 @@ import os
 # UvicornWorker：支援 asyncio（ASGI），搭配 Gunicorn 提供多 worker 穩定性
 worker_class = "uvicorn.workers.UvicornWorker"
 
-# worker 數量：受容器記憶體上限約束，部署環境可用 GUNICORN_WORKERS 覆寫
-workers = int(os.getenv("GUNICORN_WORKERS", "2"))
+# worker 數量：受容器記憶體上限約束，部署環境可用 GUNICORN_WORKERS 覆寫。
+# 正式 API 容器預設約 1.2 GiB；兩個 worker 的啟動峰值會觸發 cgroup OOM。
+workers = int(os.getenv("GUNICORN_WORKERS", "1"))
 
 # 每個 worker 的執行緒數（UvicornWorker 下無效，留 1 即可）
 threads = 1
