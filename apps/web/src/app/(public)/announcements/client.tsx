@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { announcementsApi } from "@/lib/api";
+import { announcementsApi } from "@/lib/api/announcements";
 import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useFetch } from "@/hooks/useFetch";
