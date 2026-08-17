@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, case, desc, func, literal, or_, select
+from sqlalchemy import and_, case, desc, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import load_only
 
@@ -650,17 +650,6 @@ def task_count_from_inbox(inbox: TaskInboxResponse) -> TaskCountResponse:
     )
 
 
-async def _run_task_count_query(db: AsyncSession, statement: object) -> tuple[int, int]:
-    async def execute(source_db: AsyncSession) -> tuple[int, int]:
-        total, urgent = (await source_db.execute(statement)).one()  # type: ignore[arg-type]
-        return int(total or 0), int(urgent or 0)
-
-    if isinstance(db.bind, AsyncEngine):
-        async with AsyncSessionLocal() as source_db:
-            return await execute(source_db)
-    return await execute(db)
-
-
 async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResponse:
     """以 COUNT 查詢取得徽章數量，避免為共用 Topbar 載入完整待辦資料。"""
     cache_key = f"task_count:{user.id}"
@@ -854,15 +843,21 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
             )
         )
 
-    async def run_query(module: str, statement: object) -> tuple[str, int, int]:
-        total, urgent = await _run_task_count_query(db, statement)
-        return module, total, urgent
-
-    calls = [run_query(module, statement) for module, statement in count_queries]
-    if isinstance(db.bind, AsyncEngine):
-        results = await asyncio.gather(*calls)
-    else:
-        results = [await call for call in calls]
+    combined = (
+        union_all(
+            *[
+                statement.with_only_columns(
+                    literal(module).label("module"),
+                    *statement.selected_columns,
+                    maintain_column_froms=True,
+                )
+                for module, statement in count_queries
+            ]
+        )
+        if count_queries
+        else None
+    )
+    results = (await db.execute(combined)).all() if combined is not None else []
 
     by_module: dict[str, int] = {}
     urgent_count = 0
