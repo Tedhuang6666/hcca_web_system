@@ -16,6 +16,7 @@ import {
   hasSavedNavPreferences,
   isMeetingsUnlocked,
   isNavItemVisible,
+  DEFAULT_NAV_PREFERENCES,
   isSection,
   NAV_DEF_LOGGED_OUT,
   navProfileFromApi,
@@ -120,7 +121,7 @@ export default function Sidebar() {
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [desktopPrefs, setDesktopPrefs] = useState(() => readNavPreferences());
+  const [desktopPrefs, setDesktopPrefs] = useState(() => DEFAULT_NAV_PREFERENCES);
   const [hasCustomNav, setHasCustomNav] = useState(false);
   const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(false);
