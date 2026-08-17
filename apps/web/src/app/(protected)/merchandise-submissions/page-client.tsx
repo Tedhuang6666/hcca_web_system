@@ -857,6 +857,7 @@ export default function MerchandiseSubmissionsPageClient({
                   </p>
                   <button
                     type="button"
+                    data-performance-action="校商投稿／下一步查看投稿詳情"
                     className="btn btn-primary min-h-11 w-full sm:w-auto"
                     disabled={!selected}
                     onClick={continueToForm}
