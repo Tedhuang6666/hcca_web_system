@@ -31,7 +31,7 @@ class ClientMetricCreate(BaseModel):
     response_end_ms: float | None = Field(default=None, ge=0, le=86_400_000)
     interaction_id: str | None = Field(default=None, min_length=1, max_length=80)
     interaction_name: str | None = Field(default=None, min_length=1, max_length=120)
-    interaction_kind: Literal["click", "submit"] | None = None
+    interaction_kind: Literal["click", "submit", "change"] | None = None
     operation_kind: Literal["simple_get", "crud", "heavy"] | None = None
     method: str | None = Field(default=None, min_length=1, max_length=12)
     budget_ms: float | None = Field(default=None, ge=0, le=86_400_000)
