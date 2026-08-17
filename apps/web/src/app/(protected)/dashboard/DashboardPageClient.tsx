@@ -88,22 +88,40 @@ const EMPTY_PERMISSIONS = new Set<string>();
 
 function formatDate(s?: string | null) {
   if (!s) return "";
-  const d = new Date(s);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date(s));
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  return `${month}/${day}`;
+}
+
+function taipeiDateStamp(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(date);
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+  return { year, month, day, stamp: Date.UTC(year, month - 1, day) };
 }
 
 function formatTaskDue(s?: string | null) {
   if (!s) return "無期限";
   const d = new Date(s);
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const dueDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((dueDay - start) / 86_400_000);
+  const today = taipeiDateStamp(new Date());
+  const due = taipeiDateStamp(d);
+  const diffDays = Math.round((due.stamp - today.stamp) / 86_400_000);
   if (diffDays < 0) return `已逾期 ${Math.abs(diffDays)} 天`;
   if (diffDays === 0) return "今天";
   if (diffDays === 1) return "明天";
   if (diffDays <= 7) return `${diffDays} 天內`;
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  return `${due.month}/${due.day}`;
 }
 
 function SkeletonCard() {
