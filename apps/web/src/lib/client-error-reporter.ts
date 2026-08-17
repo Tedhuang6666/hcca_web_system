@@ -1,4 +1,5 @@
 import { apiUrl } from "./config";
+import { recordClientMetric } from "./client-metrics";
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_STACK_LENGTH = 6000;
@@ -46,6 +47,13 @@ export function reportClientError(input: ClientErrorInput): Promise<ClientErrorR
   for (const [key, timestamp] of recentReports) {
     if (Date.now() - timestamp >= 30_000) recentReports.delete(key);
   }
+
+  recordClientMetric({
+    metric: "client_error",
+    value: 1,
+    path: input.pathname ?? window.location.pathname,
+    interaction_name: (input.scope || "runtime").slice(0, 120),
+  });
 
   const payload = JSON.stringify({
     message: limit(input.message || "Unknown client error", MAX_MESSAGE_LENGTH),

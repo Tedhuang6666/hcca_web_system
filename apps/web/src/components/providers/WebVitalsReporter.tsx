@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";
 import { useEffect } from "react";
-import { flushClientMetrics, recordClientMetric } from "@/lib/client-metrics";
+import { flushClientMetrics, observeInteractions, recordClientMetric } from "@/lib/client-metrics";
 
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const ANONYMOUS_ID_KEY = "hcca:posthog-anonymous-id";
@@ -77,6 +77,8 @@ export default function WebVitalsReporter() {
   useEffect(() => {
     if (pathname) recordClientMetric({ metric: "page_view", value: 1, path: pathname });
   }, [pathname]);
+
+  useEffect(() => observeInteractions(), []);
 
   useEffect(() => {
     const flush = () => flushClientMetrics(true);
