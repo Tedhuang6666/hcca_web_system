@@ -141,8 +141,9 @@ step "啟動服務（--remove-orphans 清掉已退出 profile 的孤兒容器）
 step "目前服務狀態"
 "${compose[@]}" ps
 
-step "等待 healthcheck 收斂（最多 90s）"
-deadline=$(( $(date +%s) + 90 ))
+health_wait_seconds="${HEALTH_WAIT_SECONDS:-300}"
+step "等待 healthcheck 收斂（最多 ${health_wait_seconds}s）"
+deadline=$(( $(date +%s) + health_wait_seconds ))
 while :; do
   unhealthy="$("${compose[@]}" ps --format '{{.Service}} {{.Health}}' 2>/dev/null \
     | awk '$2=="unhealthy" || $2=="starting" {print $1}')"
