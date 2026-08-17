@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 
 type PermissionState = {
@@ -7,6 +7,55 @@ type PermissionState = {
   isAdmin: boolean;
   isOwner: boolean;
 };
+
+const EMPTY_PERMISSION_STATE: PermissionState = {
+  permissions: new Set<string>(),
+  isAdmin: false,
+  isOwner: false,
+};
+
+// Keep one stable snapshot for useSyncExternalStore. It gives React the same
+// server snapshot during hydration, then switches to the browser cache after
+// the hydrated tree is subscribed, preventing permission-driven text changes
+// from interrupting streaming hydration.
+let clientPermissionState = EMPTY_PERMISSION_STATE;
+
+function equalPermissionState(left: PermissionState, right: PermissionState): boolean {
+  if (
+    left.isAdmin !== right.isAdmin
+    || left.isOwner !== right.isOwner
+    || left.permissions.size !== right.permissions.size
+  ) return false;
+  for (const permission of left.permissions) {
+    if (!right.permissions.has(permission)) return false;
+  }
+  return true;
+}
+
+function refreshClientPermissionState(onChange: () => void) {
+  const next = readPermissionState();
+  if (equalPermissionState(clientPermissionState, next)) return;
+  clientPermissionState = next;
+  onChange();
+}
+
+function subscribeToPermissionState(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const refresh = () => refreshClientPermissionState(onChange);
+  window.addEventListener(AUTH_CACHE_EVENT, refresh);
+  // useSyncExternalStore invokes this after hydration, so browser-only
+  // sessionStorage is never read into the server-rendered tree.
+  refresh();
+  return () => window.removeEventListener(AUTH_CACHE_EVENT, refresh);
+}
+
+function getClientPermissionState() {
+  return clientPermissionState;
+}
+
+function getServerPermissionState() {
+  return EMPTY_PERMISSION_STATE;
+}
 
 function readPermissionState(): PermissionState {
   if (typeof window === "undefined") {
@@ -29,22 +78,12 @@ function readPermissionState(): PermissionState {
  *   if (can("document:create")) { ... }
  */
 export function usePermissions() {
-  // SSR cannot see sessionStorage. Restore the browser cache after hydration
-  // so permission-dependent navigation never changes the server-rendered tree
-  // during the hydration pass.
-  const [permissionState, setPermissionState] = useState<PermissionState>(() => ({
-    permissions: new Set<string>(),
-    isAdmin: false,
-    isOwner: false,
-  }));
+  const permissionState = useSyncExternalStore(
+    subscribeToPermissionState,
+    getClientPermissionState,
+    getServerPermissionState,
+  );
   const { permissions, isAdmin, isOwner } = permissionState;
-
-  useEffect(() => {
-    const refresh = () => setPermissionState(readPermissionState());
-    refresh();
-    window.addEventListener(AUTH_CACHE_EVENT, refresh);
-    return () => window.removeEventListener(AUTH_CACHE_EVENT, refresh);
-  }, []);
 
   /** 是否擁有指定權限（超管自動通過） */
   const can = useCallback((code: string) =>

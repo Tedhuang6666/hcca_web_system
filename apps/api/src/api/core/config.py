@@ -161,7 +161,10 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = Field(default="")
     CELERY_RESULT_BACKEND: str = Field(default="")
     REDIS_MAX_CONNECTIONS: int = Field(default=50, ge=1)
-    REDIS_STATE_MAX_CONNECTIONS: int = Field(default=20, ge=1)
+    # State Redis is shared by auth, rate limiting, idempotency and defense
+    # middleware. Keep enough waiters for a protected page's parallel API burst
+    # without changing the bounded-pool/timeout failure behavior.
+    REDIS_STATE_MAX_CONNECTIONS: int = Field(default=40, ge=1)
     REDIS_CACHE_MAX_CONNECTIONS: int = Field(default=20, ge=1)
     REDIS_REALTIME_MAX_CONNECTIONS: int = Field(default=8, ge=1)
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0)
