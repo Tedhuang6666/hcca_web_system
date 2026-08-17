@@ -357,6 +357,8 @@ function RealUsersPanel({ data }: { data: RealUsersData }) {
 }
 
 function PerformancePanel({ data, page }: { data: PerformanceData; page: PageScore | null }) {
+  // 舊版 API 或部分失敗回應可能沒有 crux；效能詳情不可因此整頁崩潰。
+  if (!data.crux) data.crux = {};
   const selected = page ?? data.psi[0] ?? null;
   const modes = selected ? [
     ["公開 Mobile", selected.mobile],
