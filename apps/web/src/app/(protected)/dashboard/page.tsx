@@ -24,7 +24,7 @@ export default async function DashboardPage() {
       "document:admin",
     ].includes(permission));
   const composite = await fetchOptional<DashboardCompositeResponse>(
-    `/dashboard/composite?include_matters=${canViewGovernanceWork}`,
+    `/dashboard/composite?include_tasks=false&include_matters=${canViewGovernanceWork}`,
   );
   const initialData: DashboardPageInitialData = {
     userName: session.display_name,

@@ -205,7 +205,7 @@ export default function DashboardPageClient({
     if (refreshDashboard || refreshMatters || refreshAnnouncements) setSecondaryLoading(true);
 
     const compositePromise = refreshDashboard
-      ? dashboardApi.composite({ includeMatters: canViewGovernanceWork })
+      ? dashboardApi.composite({ includeTasks: false, includeMatters: canViewGovernanceWork })
       : null;
     const tasksPromise = !refreshDashboard && refreshTasks ? tasksApi.list() : null;
     const mattersPromise = !refreshDashboard && refreshMatters
