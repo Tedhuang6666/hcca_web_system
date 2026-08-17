@@ -1156,6 +1156,7 @@ export default function DocumentListClient({
                         ) : (
                           <Link
                             href={`/documents/${encodeURIComponent(doc.serial_number)}`}
+                            prefetch={false}
                             className="font-medium hover:underline transition-colors"
                             style={{ color: "var(--text-primary)" }}>
                             {doc.summary || doc.subject || doc.title}
@@ -1205,6 +1206,7 @@ export default function DocumentListClient({
                             <>
                               <Link
                                 href={`/documents/${encodeURIComponent(doc.serial_number)}`}
+                                prefetch={false}
                                 className="btn btn-ghost text-xs px-3">
                                 查看
                               </Link>
@@ -1276,6 +1278,7 @@ export default function DocumentListClient({
                     ) : (
                     <Link
                       href={`/documents/${encodeURIComponent(doc.serial_number)}`}
+                      prefetch={false}
                       className="flex items-start justify-between gap-3 flex-1 min-w-0"
                       style={{ textDecoration: "none" }}>
                       <div className="flex-1 min-w-0">
