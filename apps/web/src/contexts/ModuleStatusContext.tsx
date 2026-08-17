@@ -70,9 +70,7 @@ export function ModuleStatusProvider({
   authenticated?: boolean;
   pollEnabled?: boolean;
 }) {
-  const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>(
-    () => readStatusCache(),
-  );
+  const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>({});
   const [wsRoom, setWsRoom] = useState<string | null>(null);
   const lowDataMode = useLowDataMode();
 
@@ -102,6 +100,11 @@ export function ModuleStatusProvider({
     initialDelayMs: INITIAL_POLL_DELAY_MS,
     intervalMs: lowDataMode ? LOW_DATA_POLL_MS : DEFAULT_POLL_MS,
   });
+
+  useEffect(() => {
+    const cached = readStatusCache();
+    if (Object.keys(cached).length > 0) setStatuses(cached);
+  }, []);
 
   useEffect(() => {
     const onNudge = (event: Event) => {

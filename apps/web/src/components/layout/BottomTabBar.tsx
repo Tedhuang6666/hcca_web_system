@@ -12,6 +12,7 @@ import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
   filterNavItems,
   constrainMobileHidden,
+  DEFAULT_NAV_PREFERENCES,
   hasSavedNavPreferences,
   isMeetingsUnlocked,
   isNavItemVisible,
@@ -133,7 +134,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [roleResolved, setRoleResolved] = useState(false);
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
+  const [navPrefs, setNavPrefs] = useState(() => DEFAULT_NAV_PREFERENCES);
   const [hasCustomNav, setHasCustomNav] = useState(false);
   const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);

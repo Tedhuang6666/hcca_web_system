@@ -29,7 +29,14 @@ function readPermissionState(): PermissionState {
  *   if (can("document:create")) { ... }
  */
 export function usePermissions() {
-  const [permissionState, setPermissionState] = useState<PermissionState>(readPermissionState);
+  // SSR cannot see sessionStorage. Restore the browser cache after hydration
+  // so permission-dependent navigation never changes the server-rendered tree
+  // during the hydration pass.
+  const [permissionState, setPermissionState] = useState<PermissionState>(() => ({
+    permissions: new Set<string>(),
+    isAdmin: false,
+    isOwner: false,
+  }));
   const { permissions, isAdmin, isOwner } = permissionState;
 
   useEffect(() => {
