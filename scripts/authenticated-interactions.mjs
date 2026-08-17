@@ -12,6 +12,7 @@ const targetPath = process.env.INTERACTION_TARGET || "/merchandise-submissions";
 const outputFile = process.env.OUTPUT_FILE || ".lighthouseci/authenticated-interactions.json";
 const feedbackBudgetMs = Number(process.env.FEEDBACK_BUDGET_MS || "100");
 const completionBudgetMs = Number(process.env.COMPLETION_BUDGET_MS || "500");
+const warmupMs = Math.max(0, Number(process.env.WARMUP_MS || "0"));
 
 if (!monitorToken) throw new Error("PERFORMANCE_MONITOR_TOKEN is required");
 
@@ -125,12 +126,16 @@ try {
     });
   });
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  await page.locator('[data-performance-action="校商投稿／我要投稿"]').waitFor({ state: "visible", timeout: 15_000 });
+  await page.locator('[data-performance-action="校商投稿／我要投稿"]').waitFor({ state: "visible", timeout: 30_000 });
+  if (warmupMs > 0) await page.waitForTimeout(warmupMs);
 
   results.push(await measureAction(page, {
     name: "校商投稿／我的投稿",
     trigger: page.locator('[data-performance-action="校商投稿／我的投稿"]'),
-    complete: () => waitForActiveTopTab(page, '[data-performance-action="校商投稿／我的投稿"]'),
+    complete: async () => {
+      await waitForActiveTopTab(page, '[data-performance-action="校商投稿／我的投稿"]');
+      await page.locator('[data-performance-state="mine-ready"]').waitFor({ state: "visible", timeout: 15_000 });
+    },
   }, interactionResponses));
   results.push(await measureAction(page, {
     name: "校商投稿／我要投稿",
