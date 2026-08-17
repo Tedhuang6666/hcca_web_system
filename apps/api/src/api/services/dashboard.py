@@ -67,6 +67,19 @@ def _dashboard_cache_key(user_id: str) -> str:
     return f"dashboard:{user_id}"
 
 
+def _dashboard_composite_cache_key(
+    user_id: str,
+    *,
+    include_tasks: bool,
+    include_matters: bool,
+    include_announcements: bool,
+) -> str:
+    return (
+        f"dashboard:composite:{user_id}:"
+        f"{int(include_tasks)}:{int(include_matters)}:{int(include_announcements)}"
+    )
+
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -130,48 +143,46 @@ def _decorate_item_priority(
 
 
 async def _w_doc_draft(db: AsyncSession, user: User) -> DashboardWidget | None:
-    count = await db.scalar(
-        select(func.count(Document.id))
-        .where(Document.created_by == user.id)
-        .where(Document.status == DocumentStatus.DRAFT)
-    )
-    count = int(count or 0)
-    if count == 0:
-        return None
     rows = (
-        (
-            await db.execute(
-                select(Document)
-                .options(
-                    load_only(
-                        Document.id,
-                        Document.title,
-                        Document.serial_number,
-                        Document.updated_at,
-                    )
-                )
-                .where(Document.created_by == user.id)
-                .where(Document.status == DocumentStatus.DRAFT)
-                .order_by(desc(Document.updated_at))
-                .limit(3)
+        await db.execute(
+            select(
+                Document,
+                func.count(Document.id).over().label("draft_count"),
             )
+            .options(
+                load_only(
+                    Document.id,
+                    Document.title,
+                    Document.serial_number,
+                    Document.updated_at,
+                )
+            )
+            .where(Document.created_by == user.id)
+            .where(Document.status == DocumentStatus.DRAFT)
+            .order_by(desc(Document.updated_at))
+            .limit(3)
         )
-        .scalars()
-        .all()
-    )
+    ).all()
+    if not rows:
+        return None
+    count = int(rows[0].draft_count)
     items = [
         _decorate_item_priority(
             DashboardWidgetItem(
-                title=d.title or "（未命名草稿）",
-                subtitle=d.serial_number,
-                href=f"/documents/{d.serial_number}/edit" if d.serial_number else "/documents",
-                timestamp=d.updated_at,
+                title=document.title or "（未命名草稿）",
+                subtitle=document.serial_number,
+                href=(
+                    f"/documents/{document.serial_number}/edit"
+                    if document.serial_number
+                    else "/documents"
+                ),
+                timestamp=document.updated_at,
             ),
             base_score=32,
             reason="草稿尚未送審",
             action="補齊內容後送出簽核",
         )
-        for d in rows
+        for document, _draft_count in rows
     ]
     return DashboardWidget(
         key="doc_draft",
@@ -627,28 +638,8 @@ async def _build_dashboard_uncached(db: AsyncSession, user: User) -> DashboardRe
     is_admin = bool(getattr(user, "is_superuser", False))
     hint = _layout_hint(perms, is_admin)
 
-    results = await asyncio.gather(
-        _run_widget(
-            db,
-            "doc_pending_my_approval",
-            lambda widget_db: _w_doc_pending_my_approval(widget_db, user, perms, is_admin),
-        ),
+    widget_builders: list[Awaitable[DashboardWidget | None]] = [
         _run_widget(db, "meeting_upcoming", lambda widget_db: _w_meeting_upcoming(widget_db, user)),
-        _run_widget(
-            db,
-            "regulation_publish",
-            lambda widget_db: _w_regulation_publish(widget_db, user, perms, is_admin),
-        ),
-        _run_widget(
-            db,
-            "regulation_review",
-            lambda widget_db: _w_regulation_review(widget_db, user, perms, is_admin),
-        ),
-        _run_widget(
-            db,
-            "petition_assigned",
-            lambda widget_db: _w_petition_assigned(widget_db, user, perms, is_admin),
-        ),
         _run_widget(db, "doc_draft", lambda widget_db: _w_doc_draft(widget_db, user)),
         _run_widget(db, "open_surveys", lambda widget_db: _w_open_surveys(widget_db, user)),
         _run_widget(
@@ -656,7 +647,41 @@ async def _build_dashboard_uncached(db: AsyncSession, user: User) -> DashboardRe
             "announcements_recent",
             lambda widget_db: _w_announcements_recent(widget_db, user),
         ),
-    )
+    ]
+    if is_admin or _has(perms, is_admin, "document:approve"):
+        widget_builders.append(
+            _run_widget(
+                db,
+                "doc_pending_my_approval",
+                lambda widget_db: _w_doc_pending_my_approval(widget_db, user, perms, is_admin),
+            )
+        )
+    if is_admin or _has(perms, is_admin, "president:publish"):
+        widget_builders.append(
+            _run_widget(
+                db,
+                "regulation_publish",
+                lambda widget_db: _w_regulation_publish(widget_db, user, perms, is_admin),
+            )
+        )
+    if _is_leader(perms, is_admin) or _has(perms, is_admin, "regulation:create"):
+        widget_builders.append(
+            _run_widget(
+                db,
+                "regulation_review",
+                lambda widget_db: _w_regulation_review(widget_db, user, perms, is_admin),
+            )
+        )
+    if is_admin or any(permission.startswith("petition:") for permission in perms):
+        widget_builders.append(
+            _run_widget(
+                db,
+                "petition_assigned",
+                lambda widget_db: _w_petition_assigned(widget_db, user, perms, is_admin),
+            )
+        )
+
+    results = await asyncio.gather(*widget_builders)
     widgets = [w for w in results if w is not None]
 
     if hint == "student":
@@ -778,6 +803,20 @@ async def build_dashboard_composite(
     include_announcements: bool = True,
 ) -> DashboardCompositeResponse:
     """一次組裝 dashboard 首屏資料，降低前端 round trips。"""
+    cache_key = _dashboard_composite_cache_key(
+        str(user.id),
+        include_tasks=include_tasks,
+        include_matters=include_matters,
+        include_announcements=include_announcements,
+    )
+    cached = await cache_get(cache_key)
+    if isinstance(cached, dict):
+        try:
+            return DashboardCompositeResponse.model_validate(cached)
+        except Exception:
+            logger.debug(
+                "dashboard composite cache payload invalid user=%s", user.id, exc_info=True
+            )
 
     async def dashboard_component() -> DashboardResponse:
         result = await _with_component_session(
@@ -825,9 +864,11 @@ async def build_dashboard_composite(
     index += int(include_matters)
     announcements = values[index] if include_announcements else None
 
-    return DashboardCompositeResponse(
+    response = DashboardCompositeResponse(
         dashboard=dashboard,  # type: ignore[arg-type]
         tasks=tasks,  # type: ignore[arg-type]
         matters=matters,  # type: ignore[arg-type]
         announcements=announcements,  # type: ignore[arg-type]
     )
+    await cache_set(cache_key, response.model_dump(mode="json"), ttl=20)
+    return response

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_get, cache_set
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -48,7 +49,14 @@ SiteAdminDep = Depends(require_any(PermissionCode.SITE_MANAGE, PermissionCode.AD
 
 @router.get("/public", response_model=PublicSiteBundleOut, summary="公開官網首頁資料")
 async def get_public_site(db: DbDep) -> PublicSiteBundleOut:
-    return PublicSiteBundleOut(
+    cached = await cache_get("site:public")
+    if isinstance(cached, dict):
+        try:
+            return PublicSiteBundleOut.model_validate(cached)
+        except Exception:
+            pass
+
+    bundle = PublicSiteBundleOut(
         settings=PublicSiteSettingsOut.model_validate(await site_svc.get_settings(db)),
         links=[PublicLinkOut.model_validate(item) for item in await site_svc.list_links(db, True)],
         link_categories=[
@@ -61,6 +69,8 @@ async def get_public_site(db: DbDep) -> PublicSiteBundleOut:
             for item in await site_svc.list_pages(db, published_only=True, nav_only=True)
         ],
     )
+    await cache_set("site:public", bundle.model_dump(mode="json"), ttl=60)
+    return bundle
 
 
 @router.get("/links", response_model=list[PublicLinkOut], summary="公開 Linktree 連結")

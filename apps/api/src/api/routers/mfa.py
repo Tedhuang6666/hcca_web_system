@@ -109,7 +109,10 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 async def mfa_status(db: DbDep, user: CurrentUser) -> MFAStatusOut:
     passkeys = await passkey_svc.list_credentials(db, user)
     return MFAStatusOut(
-        mfa_enabled=user.mfa_enabled,
+        # Older rows may contain NULL despite the current non-null model
+        # definition.  Treat that legacy value as disabled instead of turning
+        # a harmless status probe into a 500 response.
+        mfa_enabled=bool(user.mfa_enabled),
         has_pending_setup=user.mfa_pending_secret is not None,
         backup_code_count=mfa_svc.backup_code_count(user),
         passkey_count=len(passkeys),
