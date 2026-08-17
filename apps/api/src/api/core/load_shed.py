@@ -65,6 +65,9 @@ ALWAYS_ALLOWED_PREFIXES = (
     # 依賴負責驗證，這裡只略過保護性 503。
     "/auth/",
     "/admin/",
+    # Synthetic performance probes must still obtain sessions and persist results
+    # while a deploy temporarily enables the maintenance page.
+    "/internal/observability/",
     "/docs",
     "/redoc",
     "/openapi.json",
