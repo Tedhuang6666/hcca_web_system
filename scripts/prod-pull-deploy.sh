@@ -83,6 +83,7 @@ if ! [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "❌ RELEASE_SHA 必須是完整 40 字元 commit SHA" >&2
   exit 1
 fi
+export BUILD_COMMIT="$release_sha"
 
 step "確認指定 commit 的不可變 GHCR 映像已就緒"
 ./scripts/wait-ghcr-image.sh "$release_sha"
