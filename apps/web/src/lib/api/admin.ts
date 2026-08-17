@@ -4,6 +4,7 @@ import type {
 import { get, post, patch, del, request } from "./core";
 
 export const adminApi = {
+  dashboardStats: () => get<{ active_user_count: number; position_count: number }>("/admin/dashboard-stats"),
   // 使用者
   listUsers: (params?: { keyword?: string; active_only?: boolean; limit?: number; offset?: number }) => {
     const p: Record<string, string> = {};
