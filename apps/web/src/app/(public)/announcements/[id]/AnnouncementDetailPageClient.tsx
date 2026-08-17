@@ -4,8 +4,8 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { toast } from "sonner";
-import { announcementsApi, apiErrorMessage } from "@/lib/api";
+import { announcementsApi } from "@/lib/api/announcements";
+import { apiErrorMessage } from "@/lib/api-helpers";
 import type { AnnouncementOut } from "@/lib/types";
 import { recordRecent } from "@/lib/recents";
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
@@ -53,7 +53,7 @@ export default function AnnouncementDetailPageClient({
     announcementsApi.get(id)
       .then((nextItem) => setItem(nextItem))
       .catch((e) => {
-        toast.error(apiErrorMessage(e, "載入公告失敗"));
+        void import("sonner").then(({ toast }) => toast.error(apiErrorMessage(e, "載入公告失敗")));
       })
       .finally(() => setLoading(false));
   }, [id, initialItem]);
