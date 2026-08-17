@@ -39,7 +39,6 @@ type SubmissionStep = "info" | "item" | "form";
 
 const MarkdownBlock = dynamic(() => import("@/components/site/MarkdownBlock"), {
   loading: () => <div className="h-20 animate-pulse rounded bg-[var(--bg-elevated)]" />,
-  ssr: false,
 });
 const AnimatedFileUpload = dynamic<
   AnimatedFileUploadProps<MerchandiseSubmissionUploadOut>
