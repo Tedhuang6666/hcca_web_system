@@ -121,7 +121,12 @@ const authSession = await requestJson("/api/internal/observability/auth-session"
 });
 const cookieHeader = `${authSession.cookie_name}=${authSession.access_token}`;
 const targetsResponse = await requestJson("/api/internal/observability/auth-targets");
-const targets = [...new Set((targetsResponse.urls || []).map((value) => String(value)))].sort();
+const allTargets = [...new Set((targetsResponse.urls || []).map((value) => String(value)))].sort();
+const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
+const targetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
+const targets = targetLimit > 0
+  ? allTargets.slice(targetOffset, targetOffset + targetLimit)
+  : allTargets.slice(targetOffset);
 
 if (targets.length === 0) throw new Error("No authenticated performance targets were discovered");
 
@@ -190,6 +195,8 @@ const failures = runs.filter(
 );
 const summary = {
   release,
+  targets_total: allTargets.length,
+  target_offset: targetOffset,
   minimum_score: minimumScore,
   targets: targets.length,
   runs: runs.length,
