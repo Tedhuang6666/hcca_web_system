@@ -83,19 +83,46 @@ async def test_client_route_analytics_aggregates_all_field_metric_families(monke
 
             return [
                 json.dumps(
-                    {"metric": "page_view", "value": 1, "path": "/dashboard", "ts": time.time()}
+                    {
+                        "metric": "page_view",
+                        "value": 1,
+                        "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
                 ),
                 json.dumps(
-                    {"metric": "client_error", "value": 1, "path": "/dashboard", "ts": time.time()}
+                    {
+                        "metric": "client_error",
+                        "value": 1,
+                        "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
                 ),
                 json.dumps(
-                    {"metric": "longtask", "value": 180, "path": "/dashboard", "ts": time.time()}
+                    {
+                        "metric": "longtask",
+                        "value": 180,
+                        "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
                 ),
                 json.dumps(
                     {
                         "metric": "navigation_ttfb",
                         "value": 90,
                         "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
                         "ts": time.time(),
                     }
                 ),
@@ -104,6 +131,9 @@ async def test_client_route_analytics_aggregates_all_field_metric_families(monke
                         "metric": "resource_timing",
                         "value": 240,
                         "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
                         "ts": time.time(),
                     }
                 ),
@@ -112,6 +142,70 @@ async def test_client_route_analytics_aggregates_all_field_metric_families(monke
                         "metric": "custom_action",
                         "value": 320,
                         "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "metric": "lcp",
+                        "value": 1_200,
+                        "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "metric": "lcp",
+                        "value": 4_000,
+                        "path": "/dashboard",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "metric": "api_latency",
+                        "value": 100,
+                        "path": "/dashboard",
+                        "status": 200,
+                        "operation_kind": "simple_get",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "metric": "api_latency",
+                        "value": 1_000,
+                        "path": "/dashboard",
+                        "status": 503,
+                        "operation_kind": "simple_get",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
+                        "ts": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "metric": "api_latency",
+                        "value": 0,
+                        "path": "/dashboard",
+                        "status": 0,
+                        "operation_kind": "simple_get",
+                        "device_class": "mobile",
+                        "auth_state": "authenticated",
+                        "release": "web@test",
                         "ts": time.time(),
                     }
                 ),
@@ -130,8 +224,16 @@ async def test_client_route_analytics_aggregates_all_field_metric_families(monke
     result = await client_route_analytics(window_hours=1)
     route = result["routes"][0]
 
+    assert route["device_class"] == "mobile"
+    assert route["auth_state"] == "authenticated"
+    assert route["release"] == "web@test"
     assert route["pageviews"] == 1
     assert route["client_errors"] == 1
+    assert route["api_errors"] == 1
+    assert route["api_timeouts"] == 1
+    assert route["web_vitals"]["lcp_p50"] == 1200.0
+    assert route["web_vitals"]["lcp_p99"] == 4000.0
+    assert route["api_latency_percentiles_ms"]["p50_ms"] == 100.0
     assert route["longtask_p75_ms"] == 180.0
     assert route["navigation_ttfb_p75_ms"] == 90.0
     assert route["resource_timing_p75_ms"] == 240.0

@@ -34,9 +34,10 @@ type Overview = {
 };
 type ErrorsData = { new_issues: number; regressions: number | null; top_exceptions: RecentError[]; slow_transactions: SlowQuery[]; sentry?: { configured?: boolean; error?: string; stats?: unknown }; slow_query_source?: string };
 type BudgetStatus = "good" | "needs_improvement" | "poor" | "pending";
-type ApiLatencyBudget = { p95_ms: number | null; budget_ms: number; status: BudgetStatus };
-type InteractionTelemetry = { name: string; feedback_p75_ms: number | null; completion_p75_ms: number | null; samples: number; feedback_status: BudgetStatus; completion_status: BudgetStatus };
-type RouteTelemetry = { path: string; pageviews: number; api_errors: number; client_errors?: number; samples: Record<string, number>; web_vitals: Record<string, number | null>; api_latency_p95_ms: number | null; api_latency_p95_ms_by_kind?: Record<string, ApiLatencyBudget>; interaction_feedback_p75_ms?: number | null; interaction_completion_p75_ms?: number | null; interaction_samples?: { feedback: number; completion: number }; resource_timing_p75_ms?: number | null; longtask_p75_ms?: number | null; longtask_samples?: number; navigation_ttfb_p75_ms?: number | null; navigation_total_p75_ms?: number | null; custom_metrics?: Record<string, { p75_ms: number | null; samples: number }>; interactions?: InteractionTelemetry[] };
+type Percentiles = { p50_ms: number | null; p75_ms: number | null; p95_ms: number | null; p99_ms: number | null };
+type ApiLatencyBudget = Percentiles & { budget_ms: number; status: BudgetStatus };
+type InteractionTelemetry = { name: string; feedback_p75_ms: number | null; completion_p75_ms: number | null; feedback_percentiles_ms?: Percentiles; completion_percentiles_ms?: Percentiles; samples: number; feedback_status: BudgetStatus; completion_status: BudgetStatus };
+type RouteTelemetry = { path: string; device_class?: "mobile" | "desktop" | "unknown"; auth_state?: "public" | "authenticated" | "unknown"; release?: string; pageviews: number; api_errors: number; api_timeouts?: number; client_errors?: number; samples: Record<string, number>; web_vitals: Record<string, number | null>; api_latency_p95_ms: number | null; api_latency_percentiles_ms?: Percentiles; api_latency_p95_ms_by_kind?: Record<string, ApiLatencyBudget>; interaction_feedback_p75_ms?: number | null; interaction_completion_p75_ms?: number | null; interaction_samples?: { feedback: number; completion: number }; resource_timing_p75_ms?: number | null; longtask_p75_ms?: number | null; longtask_samples?: number; navigation_ttfb_p75_ms?: number | null; navigation_total_p75_ms?: number | null; custom_metrics?: Record<string, { p75_ms: number | null; samples: number }>; interactions?: InteractionTelemetry[] };
 type RealUsersData = { configured: boolean; data_available: boolean; dau: number | null; sessions: number | null; pageviews: number | null; top_routes: RouteTelemetry[]; web_vitals: Record<string, number | null>; client_errors: number | null; source: string; message: string };
 type PerformanceData = { url: string; psi: PageScore[]; crux: { collection_periods?: { firstDate: string; lastDate: string }[]; lcp_p75?: number[]; inp_p75?: number[]; cls_p75?: number[]; ttfb_p75?: number[]; error?: string }; lighthouse_regressions: PageScore[] };
 type Release = { release: string; commit_sha: string; environment: string; deployed_at: string };
@@ -328,9 +329,9 @@ function RealUsersPanel({ data }: { data: RealUsersData }) {
         </div>
         {routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" detail="開啟任一頁面後，等待約一秒讓批次 telemetry 送出。" /> : (
           <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}>
-            <table className="w-full min-w-[1220px] text-left text-sm">
+            <table className="w-full min-w-[1380px] text-left text-sm">
               <thead><tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                <th className="px-4 py-3">路由</th><th className="px-4 py-3">瀏覽</th><th className="px-4 py-3">LCP / INP / CLS p75</th>
+                <th className="px-4 py-3">路由</th><th className="px-4 py-3">裝置／狀態</th><th className="px-4 py-3">版本</th><th className="px-4 py-3">瀏覽</th><th className="px-4 py-3">LCP / INP / CLS p75</th>
                 <th className="px-4 py-3">互動回饋 / 完成 p75</th><th className="px-4 py-3">API p95（GET／CRUD／重型）</th><th className="px-4 py-3">瀏覽器執行效能</th><th className="px-4 py-3">錯誤</th>
               </tr></thead>
               <tbody>{routes.map((route) => {
@@ -338,14 +339,16 @@ function RealUsersPanel({ data }: { data: RealUsersData }) {
                 const completionStatus = budgetStatus(route.interaction_completion_p75_ms, 500, 2_000);
                 const api = route.api_latency_p95_ms_by_kind ?? {};
                 const webVitals = route.web_vitals ?? {};
-                return <tr key={route.path} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                  return <tr key={route.path} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
                   <td className="px-4 py-3 font-medium">{route.path}</td>
+                  <td className="px-4 py-3 text-xs"><div>{route.device_class ?? "—"}</div><div style={{ color: "var(--text-muted)" }}>{route.auth_state ?? "—"}</div></td>
+                  <td className="px-4 py-3 font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>{route.release ?? "—"}</td>
                   <td className="px-4 py-3">{route.pageviews}</td>
-                  <td className="px-4 py-3 text-xs">{formatNumber(webVitals.lcp_p75, " ms")} / {formatNumber(webVitals.inp_p75, " ms")} / {formatNumber(webVitals.cls_p75)}</td>
+                  <td className="px-4 py-3 text-xs"><div>{formatNumber(webVitals.lcp_p75, " ms")} / {formatNumber(webVitals.inp_p75, " ms")} / {formatNumber(webVitals.cls_p75)}</div><div style={{ color: "var(--text-muted)" }}>p99 LCP {formatNumber(webVitals.lcp_p99, " ms")}</div></td>
                   <td className="px-4 py-3 text-xs"><div style={{ color: budgetColor(feedbackStatus) }}>{formatNumber(route.interaction_feedback_p75_ms, " ms")} <span className="text-[10px]">回饋</span></div><div style={{ color: budgetColor(completionStatus) }}>{formatNumber(route.interaction_completion_p75_ms, " ms")} <span className="text-[10px]">完成</span></div></td>
                   <td className="px-4 py-3 text-xs"><div>GET {formatNumber(api.simple_get?.p95_ms, " ms")}</div><div>CRUD {formatNumber(api.crud?.p95_ms, " ms")}</div><div>重型 {formatNumber(api.heavy?.p95_ms, " ms")}</div></td>
                   <td className="px-4 py-3 text-xs"><div>TTFB {formatNumber(route.navigation_ttfb_p75_ms, " ms")}</div><div>長任務 {formatNumber(route.longtask_p75_ms, " ms")}</div><div>資源 {formatNumber(route.resource_timing_p75_ms, " ms")}</div></td>
-                  <td className="px-4 py-3 text-xs" style={{ color: route.api_errors || route.client_errors ? "var(--error)" : "var(--success)" }}><div>API {route.api_errors}</div><div>瀏覽器 {route.client_errors ?? 0}</div></td>
+                  <td className="px-4 py-3 text-xs" style={{ color: route.api_errors || route.api_timeouts || route.client_errors ? "var(--error)" : "var(--success)" }}><div>HTTP {route.api_errors}</div><div>Timeout {route.api_timeouts ?? 0}</div><div>瀏覽器 {route.client_errors ?? 0}</div></td>
                 </tr>;
               })}</tbody>
             </table>

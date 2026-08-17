@@ -136,13 +136,11 @@ async def create_client_metric_batch(
     await record_client_metrics(payloads)
     posthog = get_posthog_client()
     if posthog:
-        distinct_id = request.headers.get("X-Client-ID", "anonymous")
-        for payload in payloads:
-            posthog.capture(
-                distinct_id=distinct_id,
-                event="web_client_metric",
-                properties=payload,
-            )
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="web_client_metrics_batch",
+            properties={"count": len(payloads), "items": payloads},
+        )
     return {"status": "accepted", "accepted": len(body.items)}
 
 
@@ -168,13 +166,14 @@ async def create_component_metric_batch(
     """批次接收元件級 React Profiler 指標，避免每筆指標各自發送請求。"""
     posthog = get_posthog_client()
     if posthog:
-        distinct_id = request.headers.get("X-Client-ID", "anonymous")
-        for metric in body.items:
-            posthog.capture(
-                distinct_id=distinct_id,
-                event="component_performance",
-                properties=metric.model_dump(),
-            )
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="component_performance_batch",
+            properties={
+                "count": len(body.items),
+                "items": [metric.model_dump() for metric in body.items],
+            },
+        )
     return {"status": "accepted", "accepted": len(body.items)}
 
 

@@ -58,6 +58,11 @@ API_OPERATION_KINDS = {
     "crud": (500.0, 1_000.0),
     "heavy": (2_000.0, 4_000.0),
 }
+RUM_DIMENSION_DEFAULTS = {
+    "device_class": "unknown",
+    "auth_state": "unknown",
+    "release": "unknown",
+}
 
 
 def _provider_error(exc: Exception) -> str:
@@ -105,6 +110,15 @@ async def record_client_metrics(metrics: list[dict]) -> bool:
                     "start_time_ms": metric.get("start_time_ms"),
                     "response_end_ms": metric.get("response_end_ms"),
                     "budget_ms": metric.get("budget_ms"),
+                    "device_class": metric.get("device_class")
+                    if metric.get("device_class") in {"mobile", "desktop"}
+                    else RUM_DIMENSION_DEFAULTS["device_class"],
+                    "auth_state": metric.get("auth_state")
+                    if metric.get("auth_state") in {"public", "authenticated"}
+                    else RUM_DIMENSION_DEFAULTS["auth_state"],
+                    "connection_type": str(metric.get("connection_type") or "")[:20] or None,
+                    "release": str(metric.get("release") or "")[:64]
+                    or RUM_DIMENSION_DEFAULTS["release"],
                     "ts": now,
                 },
                 separators=(",", ":"),
@@ -146,6 +160,15 @@ def _budget_status(value: float | None, good: float, needs_improvement: float) -
     return "poor"
 
 
+def _percentiles(values: list[float], *, suffix: str = "") -> dict[str, float | None]:
+    return {
+        f"p50{suffix}": _percentile(values, 0.50),
+        f"p75{suffix}": _percentile(values, 0.75),
+        f"p95{suffix}": _percentile(values, 0.95),
+        f"p99{suffix}": _percentile(values, 0.99),
+    }
+
+
 async def client_route_analytics(window_hours: int = 24) -> dict:
     """Aggregate route-level RUM without exposing individual visitors or URLs with queries."""
     cache_key = f"observability:rum:v1:{max(1, min(window_hours, 168))}h"
@@ -171,7 +194,7 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
             "routes": [],
         }
 
-    grouped: dict[str, dict[str, list[float] | int]] = {}
+    grouped: dict[str, dict] = {}
     for raw in raw_items:
         try:
             event = json.loads(raw)
@@ -180,11 +203,20 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                 continue
             path = _normalize_client_path(event.get("path"))
             metric = str(event.get("metric") or "")
+            device_class = str(event.get("device_class") or RUM_DIMENSION_DEFAULTS["device_class"])
+            auth_state = str(event.get("auth_state") or RUM_DIMENSION_DEFAULTS["auth_state"])
+            release = str(event.get("release") or RUM_DIMENSION_DEFAULTS["release"])
+            group_key = "\x1f".join((path, device_class, auth_state, release))
             route = grouped.setdefault(
-                path,
+                group_key,
                 {
+                    "path": path,
+                    "device_class": device_class,
+                    "auth_state": auth_state,
+                    "release": release,
                     "pageviews": 0,
                     "api_errors": 0,
+                    "api_timeouts": 0,
                     "lcp": [],
                     "inp": [],
                     "cls": [],
@@ -218,8 +250,11 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     samples = by_kind[operation_kind]
                     assert isinstance(samples, list)
                     samples.append(float(event["value"]))
-                if int(event.get("status") or 0) >= 500:
+                status = int(event.get("status") or 0)
+                if status >= 400:
                     route["api_errors"] = int(route["api_errors"]) + 1
+                elif status == 0:
+                    route["api_timeouts"] = int(route["api_timeouts"]) + 1
             elif metric in {"interaction_feedback", "interaction_completion"}:
                 samples = route[metric]
                 assert isinstance(samples, list)
@@ -253,7 +288,7 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
             continue
 
     routes = []
-    for path, values in grouped.items():
+    for values in grouped.values():
         operation_rows = []
         operations = values["operations"]
         if isinstance(operations, dict):
@@ -271,6 +306,8 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                         "name": name,
                         "feedback_p75_ms": feedback_p75,
                         "completion_p75_ms": completion_p75,
+                        "feedback_percentiles_ms": _percentiles(feedback, suffix="_ms"),
+                        "completion_percentiles_ms": _percentiles(completion, suffix="_ms"),
                         "samples": len(feedback) + len(completion),
                         "feedback_status": _budget_status(feedback_p75, 100.0, 200.0),
                         "completion_status": _budget_status(completion_p75, 500.0, 2_000.0),
@@ -279,6 +316,7 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
         by_kind = values["api_latency_by_kind"]
         api_latency_by_kind = {
             kind: {
+                **_percentiles(samples, suffix="_ms"),
                 "p95_ms": _percentile(samples, 0.95),
                 "budget_ms": budgets[0],
                 "status": _budget_status(_percentile(samples, 0.95), *budgets),
@@ -288,19 +326,32 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
         }
         routes.append(
             {
-                "path": path,
+                "path": values["path"],
+                "device_class": values["device_class"],
+                "auth_state": values["auth_state"],
+                "release": values["release"],
                 "pageviews": int(values["pageviews"]),
                 "api_errors": int(values["api_errors"]),
+                "api_timeouts": int(values["api_timeouts"]),
                 "samples": {metric: len(values[metric]) for metric in CLIENT_VITAL_METRICS},
                 "web_vitals": {
-                    f"{metric}_p75": _percentile(values[metric], 0.75)
+                    key: value
                     for metric in CLIENT_VITAL_METRICS
+                    for percentile_name, value in _percentiles(values[metric]).items()
+                    for key in [f"{metric}_{percentile_name}"]
                 },
                 "api_latency_p95_ms": _percentile(values["api_latency"], 0.95),
+                "api_latency_percentiles_ms": _percentiles(values["api_latency"], suffix="_ms"),
                 "api_latency_p95_ms_by_kind": api_latency_by_kind,
                 "interaction_feedback_p75_ms": _percentile(values["interaction_feedback"], 0.75),
+                "interaction_feedback_percentiles_ms": _percentiles(
+                    values["interaction_feedback"], suffix="_ms"
+                ),
                 "interaction_completion_p75_ms": _percentile(
                     values["interaction_completion"], 0.75
+                ),
+                "interaction_completion_percentiles_ms": _percentiles(
+                    values["interaction_completion"], suffix="_ms"
                 ),
                 "interaction_samples": {
                     "feedback": len(values["interaction_feedback"]),

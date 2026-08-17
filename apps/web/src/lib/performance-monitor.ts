@@ -161,13 +161,12 @@ class PerformanceMonitor {
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   private visibilityHandler: (() => void) | null = null;
   private enabled = true;
-  private sampleRate = 1;
+  private sampleRate = process.env.NODE_ENV === "development" ? 1 : 0.1;
   private snapshotVersion = 0;
   private notifyScheduled = false;
   private sentComponentMetrics = new Map<string, ComponentMetric>();
   private sentCustomMetrics = new Map<string, number>();
   private sentVitals = new Map<string, number>();
-  private navigationSent = false;
   private unloadFlushStarted = false;
 
   private constructor() {
@@ -183,7 +182,6 @@ class PerformanceMonitor {
     this.setupResourceObserver();
     this.setupNavigationObserver();
     this.setupLongTaskObserver();
-    this.setupPaintObserver();
     this.setupLargestContentfulPaintObserver();
     this.setupLayoutShiftObserver();
     this.setupINPObserver();
@@ -268,23 +266,13 @@ class PerformanceMonitor {
     this.observers.push(observer);
   }
 
-  private setupPaintObserver(): void {
-    if (!this.isSupported("paint")) return;
-    const observer = new PerformanceObserver((list) => {
-      list.getEntries().forEach((entry) => {
-        if (entry.name === "first-contentful-paint") this.recordVital("fcp", entry.startTime);
-      });
-    });
-    observer.observe({ type: "paint", buffered: true });
-    this.observers.push(observer);
-  }
-
   private setupLargestContentfulPaintObserver(): void {
     if (!this.isSupported("largest-contentful-paint")) return;
     const observer = new PerformanceObserver((list) => {
       const entry = list.getEntries().at(-1) as LcpEntry | undefined;
       if (!entry) return;
-      this.recordVital("lcp", entry.startTime, componentNameForNode(entry.element));
+      const componentName = componentNameForNode(entry.element);
+      if (componentName) this.recordComponentVital("lcp", entry.startTime, componentName);
     });
     observer.observe({ type: "largest-contentful-paint", buffered: true });
     this.observers.push(observer);
@@ -292,18 +280,16 @@ class PerformanceMonitor {
 
   private setupLayoutShiftObserver(): void {
     if (!this.isSupported("layout-shift")) return;
-    let cumulativeLayoutShift = 0;
     const observer = new PerformanceObserver((list) => {
       list.getEntries().forEach((entry) => {
         const shift = entry as LayoutShiftEntry;
         if (shift.hadRecentInput) return;
         const value = shift.value ?? 0;
-        cumulativeLayoutShift += value;
-        this.recordVital("cls", cumulativeLayoutShift);
 
         const components = [...new Set(
           (shift.sources ?? []).map((source) => componentNameForNode(source.node)).filter(Boolean),
         )] as string[];
+        if (components.length === 0) return;
         components.forEach((componentName) => {
           this.recordComponentVital("cls", value / components.length, componentName);
         });
@@ -319,7 +305,8 @@ class PerformanceMonitor {
       list.getEntries().forEach((entry) => {
         if (entry.duration < 40) return;
         const event = entry as EventTimingEntry;
-        this.recordVital("inp", entry.duration, componentNameForNode(event.target as Node));
+        const componentName = componentNameForNode(event.target as Node);
+        if (componentName) this.recordComponentVital("inp", entry.duration, componentName);
       });
     });
     observer.observe({ type: "event", buffered: true });
@@ -348,7 +335,7 @@ class PerformanceMonitor {
   }
 
   recordComponentVital(name: VitalName, value: number, componentName: string): void {
-    if (!this.enabled || !Number.isFinite(value)) return;
+    if (!this.enabled || !Number.isFinite(value) || Math.random() > this.sampleRate) return;
     const key = `${componentName}:${name}`;
     const previous = this.componentVitals.get(key);
     const nextValue = name === "cls" ? (previous?.value ?? 0) + value : value;
@@ -364,7 +351,7 @@ class PerformanceMonitor {
   }
 
   recordResource(metric: ResourceMetric): void {
-    if (!this.enabled) return;
+    if (!this.enabled || Math.random() > this.sampleRate) return;
     this.resourceMetrics.push(metric);
     this.pendingResources.push(metric);
     if (this.resourceMetrics.length > 250) this.resourceMetrics.shift();
@@ -373,7 +360,7 @@ class PerformanceMonitor {
   }
 
   recordLongTask(metric: LongTaskMetric): void {
-    if (!this.enabled) return;
+    if (!this.enabled || Math.random() > this.sampleRate) return;
     this.longTaskMetrics.push(metric);
     this.pendingLongTasks.push(metric);
     if (this.longTaskMetrics.length > 80) this.longTaskMetrics.shift();
@@ -391,7 +378,7 @@ class PerformanceMonitor {
   }
 
   recordCustomMetric(metric: CustomMetric): void {
-    if (!this.enabled || !Number.isFinite(metric.value)) return;
+    if (!this.enabled || !Number.isFinite(metric.value) || Math.random() > this.sampleRate) return;
     this.customMetrics.set(`${metric.componentName}:${metric.metricName}`, { ...metric });
     this.notify();
   }
@@ -461,7 +448,6 @@ class PerformanceMonitor {
     this.sentComponentMetrics.clear();
     this.sentCustomMetrics.clear();
     this.sentVitals.clear();
-    this.navigationSent = false;
     this.notify();
   }
 
@@ -540,12 +526,6 @@ class PerformanceMonitor {
         component_name: metric.componentName,
       });
       this.sentVitals.set(key, metric.value);
-    }
-
-    if (this.navigationMetric && !this.navigationSent) {
-      recordClientMetric({ metric: "navigation_ttfb", value: this.navigationMetric.ttfb, path });
-      recordClientMetric({ metric: "navigation_total", value: this.navigationMetric.total, path });
-      this.navigationSent = true;
     }
 
     flushClientMetrics(Boolean(options.unload));

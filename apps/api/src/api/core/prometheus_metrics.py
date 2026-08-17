@@ -49,6 +49,10 @@ _http_requests_total = None
 _http_request_duration = None
 _http_in_flight = None
 _db_query_count = None
+_db_time_per_request = None
+_http_slow_requests_total = None
+_http_timeouts_total = None
+_build_info = None
 _celery_queue_depth = None
 _celery_tasks_total = None
 _document_approval_total = None
@@ -71,6 +75,7 @@ def init_metrics() -> None:
     """初始化 metric collectors。冪等。"""
     global _registry, _http_requests_total, _http_request_duration
     global _http_in_flight, _db_query_count, _celery_queue_depth
+    global _db_time_per_request, _http_slow_requests_total, _http_timeouts_total, _build_info
     global _celery_tasks_total, _document_approval_total, _email_delivery_total
     global _webhook_delivery_total, _outbox_delivery_total, _backup_runs_total
     global _backup_last_success, _websocket_connections, _rate_limit_blocked_total
@@ -108,6 +113,36 @@ def init_metrics() -> None:
         buckets=(1, 2, 4, 8, 16, 32, 64, 128),
         registry=_registry,
     )
+    _db_time_per_request = Histogram(
+        "hcca_db_time_per_request_seconds",
+        "Total SQLAlchemy query time observed during an HTTP request",
+        labelnames=["method", "path_template"],
+        buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+        registry=_registry,
+    )
+    _http_slow_requests_total = Counter(
+        "hcca_http_slow_requests_total",
+        "HTTP requests exceeding the configured slow-request threshold",
+        labelnames=["method", "path_template", "status"],
+        registry=_registry,
+    )
+    _http_timeouts_total = Counter(
+        "hcca_http_timeouts_total",
+        "HTTP responses using a timeout status code",
+        labelnames=["method", "path_template", "status"],
+        registry=_registry,
+    )
+    _build_info = Gauge(
+        "hcca_build_info",
+        "Build identity for correlating metrics with deployments",
+        labelnames=["release", "commit_sha", "environment"],
+        registry=_registry,
+    )
+    _build_info.labels(
+        release=os.getenv("APP_RELEASE", "unknown") or "unknown",
+        commit_sha=os.getenv("BUILD_COMMIT", "unknown") or "unknown",
+        environment=os.getenv("ENVIRONMENT", "unknown") or "unknown",
+    ).set(1)
     _celery_queue_depth = Gauge(
         "hcca_celery_queue_depth",
         "Celery queue depth (set by external probe)",
@@ -352,6 +387,19 @@ class PrometheusMetricsMiddleware:
                 query_count, _slow_count, _query_ms = get_request_counters()
                 if _db_query_count is not None:
                     _db_query_count.labels(method=method, path_template=tpl).observe(query_count)
+                if _db_time_per_request is not None:
+                    _db_time_per_request.labels(method=method, path_template=tpl).observe(
+                        _query_ms / 1000
+                    )
+                if duration >= float(os.getenv("SLOW_REQUEST_THRESHOLD_MS", "1000")) / 1000:
+                    if _http_slow_requests_total is not None:
+                        _http_slow_requests_total.labels(
+                            method=method, path_template=tpl, status=status
+                        ).inc()
+                if status in {"408", "504"} and _http_timeouts_total is not None:
+                    _http_timeouts_total.labels(
+                        method=method, path_template=tpl, status=status
+                    ).inc()
             except Exception:
                 logger.debug("Prometheus query counter 更新失敗", exc_info=True)
 

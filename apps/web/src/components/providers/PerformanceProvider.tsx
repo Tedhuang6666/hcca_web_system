@@ -33,7 +33,7 @@ interface PerformanceProviderProps {
 export default function PerformanceProvider({
   children,
   enableProfiler = process.env.NODE_ENV === "development",
-  profilerSampleRate = 1,
+  profilerSampleRate = process.env.NODE_ENV === "development" ? 1 : 0.1,
   devLogEnabled = process.env.NODE_ENV === "development",
   rootName = "App",
 }: PerformanceProviderProps) {
