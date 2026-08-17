@@ -1,6 +1,7 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
@@ -27,25 +28,40 @@ const monitorHeaders = {
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
 };
 
-async function requestJson(path, init = {}) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...monitorHeaders,
-      Origin: baseUrl,
-      Referer: `${baseUrl}/`,
-      ...(init.headers || {}),
-    },
-  });
-  if (!response.ok) {
+async function requestJson(path, init = {}, { retries = 5 } = {}) {
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers: {
+        ...monitorHeaders,
+        Origin: baseUrl,
+        Referer: `${baseUrl}/`,
+        ...(init.headers || {}),
+      },
+    });
+    if (response.ok) return response.json();
+
     const body = (await response.text()).replace(/\s+/gu, " ").slice(0, 240);
-    const server = response.headers.get("server") || "unknown";
-    const ray = response.headers.get("cf-ray") || "";
-    throw new Error(
-      `${path} returned HTTP ${response.status} server=${server} cf-ray=${ray} body=${body}`,
+    const retryable = response.status === 429 || response.status >= 500;
+    if (!retryable || attempt === retries - 1) {
+      const server = response.headers.get("server") || "unknown";
+      const ray = response.headers.get("cf-ray") || "";
+      throw new Error(
+        `${path} returned HTTP ${response.status} server=${server} cf-ray=${ray} body=${body}`,
+      );
+    }
+
+    const retryAfterSeconds = Number(response.headers.get("retry-after"));
+    const backoffMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? Math.min(60_000, retryAfterSeconds * 1_000)
+      : Math.min(60_000, 2_000 * 2 ** attempt);
+    process.stdout.write(
+      `retry ${path} status=${response.status} attempt=${attempt + 1}/${retries} ` +
+        `wait_ms=${backoffMs}\n`,
     );
+    await delay(backoffMs);
   }
-  return response.json();
+  throw new Error(`${path} request retry loop exhausted`);
 }
 
 function auditValue(audits, id) {
@@ -286,7 +302,7 @@ for (let offset = 0; offset < runs.length; offset += persistenceBatchSize) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ release, runs: runs.slice(offset, offset + persistenceBatchSize) }),
-  });
+  }, { retries: 10 });
 }
 
 const failures = runs.filter(

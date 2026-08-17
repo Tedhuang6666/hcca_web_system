@@ -99,6 +99,7 @@ def test_authentication_paths_are_exempt_from_protective_503() -> None:
         "/auth/mfa/login/verify",
         "/auth/mfa/passkeys/authentication/options",
         "/auth/mfa/passkeys/authentication/verify",
+        "/internal/observability/auth-session",
     ):
         assert _is_path_exempt(path)
 
