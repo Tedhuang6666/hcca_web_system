@@ -73,8 +73,8 @@ x-api-service: &api-service
       ]
     interval: 10s
     timeout: 5s
-    retries: 6
-    start_period: 30s
+    retries: 18
+    start_period: 180s
   stop_grace_period: 45s
 
 x-web-service: &web-service
