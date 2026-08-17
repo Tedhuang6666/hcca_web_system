@@ -9,7 +9,8 @@ from datetime import UTC, date, datetime, time
 
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import aliased, load_only, selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from api.core.clock import local_today
 from api.core.search import like_contains
@@ -76,9 +77,27 @@ def _active_assignment_exists_for_viewer(
 
 
 def _doc_query_for_list():
+    """列表只載入列表 schema 需要的欄位，避免把公文全文與大型欄位帶回。"""
     return select(Document).options(
-        selectinload(Document.creator),
-        selectinload(Document.org),
+        load_only(
+            Document.id,
+            Document.serial_number,
+            Document.title,
+            Document.urgency,
+            Document.classification,
+            Document.category,
+            Document.subject,
+            Document.summary,
+            Document.status,
+            Document.org_id,
+            Document.activity_id,
+            Document.created_by,
+            Document.due_date,
+            Document.submitted_at,
+            Document.completed_at,
+            Document.archive_at,
+            Document.created_at,
+        )
     )
 
 
@@ -527,12 +546,56 @@ async def build_document_list_items(
     viewer_id: uuid.UUID | None,
     reveal_sensitive: bool = False,
 ) -> list[DocumentListItem]:
+    access_docs: dict[uuid.UUID, Document] = {}
+    if viewer_id is not None:
+        sensitive_ids = [doc.id for doc in docs if is_sensitive_document(doc)]
+        if sensitive_ids:
+            approval_result = await session.execute(
+                select(DocumentApproval)
+                .options(
+                    load_only(
+                        DocumentApproval.id,
+                        DocumentApproval.document_id,
+                        DocumentApproval.approver_id,
+                        DocumentApproval.delegate_id,
+                        DocumentApproval.delegate_source,
+                    )
+                )
+                .where(DocumentApproval.document_id.in_(sensitive_ids))
+            )
+            recipient_result = await session.execute(
+                select(DocumentRecipient)
+                .options(
+                    load_only(
+                        DocumentRecipient.id,
+                        DocumentRecipient.document_id,
+                        DocumentRecipient.email,
+                        DocumentRecipient.target_user_id,
+                        DocumentRecipient.target_org_id,
+                        DocumentRecipient.target_class_id,
+                    )
+                )
+                .where(DocumentRecipient.document_id.in_(sensitive_ids))
+            )
+            approvals_by_doc: dict[uuid.UUID, list[DocumentApproval]] = {}
+            for approval in approval_result.scalars().all():
+                approvals_by_doc.setdefault(approval.document_id, []).append(approval)
+            recipients_by_doc: dict[uuid.UUID, list[DocumentRecipient]] = {}
+            for recipient in recipient_result.scalars().all():
+                recipients_by_doc.setdefault(recipient.document_id, []).append(recipient)
+            for doc in docs:
+                if doc.id not in sensitive_ids:
+                    continue
+                set_committed_value(doc, "approvals", approvals_by_doc.get(doc.id, []))
+                set_committed_value(doc, "recipients", recipients_by_doc.get(doc.id, []))
+                access_docs[doc.id] = doc
+
     items: list[DocumentListItem] = []
     for doc in docs:
         item = DocumentListItem.model_validate(doc)
         if is_sensitive_document(doc) and not reveal_sensitive:
             has_full_access = viewer_id is not None and await user_has_full_document_access(
-                session, doc, viewer_id
+                session, access_docs.get(doc.id, doc), viewer_id
             )
             if not has_full_access:
                 item = item.model_copy(
