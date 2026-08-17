@@ -1,4 +1,5 @@
 import { apiUrl } from "./config";
+import { requiresAuthentication } from "./route-access";
 
 type ClientMetric = {
   metric: string;
@@ -19,6 +20,10 @@ type ClientMetric = {
   operation_kind?: "simple_get" | "crud" | "heavy";
   method?: string;
   budget_ms?: number;
+  device_class?: "mobile" | "desktop";
+  auth_state?: "public" | "authenticated";
+  connection_type?: string;
+  release?: string;
 };
 
 const METRIC_WINDOW_MS = 60_000;
@@ -55,6 +60,32 @@ let activeInteraction: {
   apiRequestId: string | null;
   completionTimer: number | null;
 } | null = null;
+
+type NavigatorWithTelemetryHints = Navigator & {
+  connection?: { effectiveType?: string };
+  userAgentData?: { mobile?: boolean };
+};
+
+function telemetryContext(path: string): Pick<
+  ClientMetric,
+  "device_class" | "auth_state" | "connection_type" | "release"
+> {
+  const pathname = path.split("?", 1)[0].split("#", 1)[0] || "/";
+  const navigatorWithHints = navigator as NavigatorWithTelemetryHints;
+  const mobileHint = navigatorWithHints.userAgentData?.mobile;
+  const isMobile = typeof mobileHint === "boolean"
+    ? mobileHint
+    : typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 767px)").matches;
+  const isAuthenticated = requiresAuthentication(pathname)
+    || Boolean(window.localStorage.getItem("user_id"));
+  return {
+    device_class: isMobile ? "mobile" : "desktop",
+    auth_state: isAuthenticated ? "authenticated" : "public",
+    connection_type: navigatorWithHints.connection?.effectiveType?.slice(0, 20),
+    release: (process.env.NEXT_PUBLIC_BUILD_COMMIT || "unknown").slice(0, 64),
+  };
+}
 
 function canSendMetric(): boolean {
   const now = Date.now();
@@ -121,9 +152,11 @@ function scheduleMetricFlush(): void {
 
 function send(metric: ClientMetric): void {
   if (typeof window === "undefined" || !Number.isFinite(metric.value)) return;
+  const path = (metric.path ?? window.location.pathname).split("?")[0].slice(0, 255);
   pendingClientMetrics.push({
+    ...telemetryContext(path),
     ...metric,
-    path: (metric.path ?? window.location.pathname).split("?")[0].slice(0, 255),
+    path,
   });
   if (pendingClientMetrics.length > MAX_PENDING_CLIENT_METRICS) pendingClientMetrics.shift();
   scheduleMetricFlush();
@@ -332,40 +365,4 @@ export function flushClientMetrics(preferBeacon = false): void {
     return;
   }
   if (pendingClientMetrics.length > 0 || pendingComponentMetrics.length > 0) scheduleMetricFlush();
-}
-
-export function observeWebVitals(): () => void {
-  if (typeof window === "undefined" || typeof PerformanceObserver === "undefined") return () => undefined;
-  const observers: PerformanceObserver[] = [];
-  const path = () => window.location.pathname;
-  const supported = new Set(PerformanceObserver.supportedEntryTypes ?? []);
-  const observe = (type: string, callback: (entry: PerformanceEntry) => void) => {
-    if (!supported.has(type)) return;
-    const observer = new PerformanceObserver((list) => list.getEntries().forEach(callback));
-    observer.observe({ type, buffered: true });
-    observers.push(observer);
-  };
-
-  observe("paint", (entry) => {
-    if (entry.name === "first-contentful-paint") {
-      recordClientMetric({ metric: "fcp", value: entry.startTime, path: path() });
-    }
-  });
-  observe("largest-contentful-paint", (entry) => {
-    recordClientMetric({ metric: "lcp", value: entry.startTime, path: path() });
-  });
-  let cumulativeLayoutShift = 0;
-  observe("layout-shift", (entry) => {
-    const shift = entry as PerformanceEntry & { hadRecentInput?: boolean; value?: number };
-    if (!shift.hadRecentInput) {
-      cumulativeLayoutShift += shift.value ?? 0;
-      recordClientMetric({ metric: "cls", value: cumulativeLayoutShift, path: path() });
-    }
-  });
-  observe("event", (entry) => {
-    const duration = entry.duration;
-    if (duration >= 40) recordClientMetric({ metric: "inp", value: duration, path: path() });
-  });
-
-  return () => observers.forEach((observer) => observer.disconnect());
 }

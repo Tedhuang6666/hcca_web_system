@@ -35,6 +35,10 @@ class ClientMetricCreate(BaseModel):
     operation_kind: Literal["simple_get", "crud", "heavy"] | None = None
     method: str | None = Field(default=None, min_length=1, max_length=12)
     budget_ms: float | None = Field(default=None, ge=0, le=86_400_000)
+    device_class: Literal["mobile", "desktop"] | None = None
+    auth_state: Literal["public", "authenticated"] | None = None
+    connection_type: str | None = Field(default=None, min_length=1, max_length=20)
+    release: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class ClientMetricBatchCreate(BaseModel):
