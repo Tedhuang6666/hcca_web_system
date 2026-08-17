@@ -4,6 +4,17 @@ import { getServerSession } from "@/lib/server/session";
 
 import DashboardPageClient, { type DashboardPageInitialData } from "./DashboardPageClient";
 
+function dashboardGreeting(): string {
+  const hour = Number(new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    hourCycle: "h23",
+    timeZone: "Asia/Taipei",
+  }).format(new Date()));
+  if (hour < 12) return "早安";
+  if (hour < 18) return "午安";
+  return "晚安";
+}
+
 async function fetchOptional<T>(path: string): Promise<T | null> {
   try {
     return await serverRequest<T>(path, privateServerData);
@@ -28,6 +39,7 @@ export default async function DashboardPage() {
   );
   const initialData: DashboardPageInitialData = {
     userName: session.display_name,
+    greeting: dashboardGreeting(),
     dashboard: composite?.dashboard ?? null,
     tasks: composite?.tasks ?? null,
     matters: composite?.matters ?? null,

@@ -41,12 +41,23 @@ function refreshClientPermissionState(onChange: () => void) {
 
 function subscribeToPermissionState(onChange: () => void) {
   if (typeof window === "undefined") return () => {};
-  const refresh = () => refreshClientPermissionState(onChange);
+  let documentReady = document.readyState === "complete";
+  const refresh = () => {
+    if (documentReady) refreshClientPermissionState(onChange);
+  };
+  const markReady = () => {
+    documentReady = true;
+    refreshClientPermissionState(onChange);
+  };
   window.addEventListener(AUTH_CACHE_EVENT, refresh);
-  // useSyncExternalStore invokes this after hydration, so browser-only
-  // sessionStorage is never read into the server-rendered tree.
-  refresh();
-  return () => window.removeEventListener(AUTH_CACHE_EVENT, refresh);
+  if (!documentReady) window.addEventListener("load", markReady, { once: true });
+  // On the initial streamed document, wait for the browser load boundary so
+  // permission-driven navigation cannot interrupt selective hydration. SPA
+  // navigations run immediately because the document is already complete.
+  return () => {
+    window.removeEventListener(AUTH_CACHE_EVENT, refresh);
+    window.removeEventListener("load", markReady);
+  };
 }
 
 function getClientPermissionState() {

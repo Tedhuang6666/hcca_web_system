@@ -113,10 +113,11 @@ function articleLabel(article: RegulationArticleOut): string {
 }
 
 export default function RegulationsClient({
-  initialRegs = [],
+  initialRegs,
 }: {
   initialRegs?: Array<RegulationListItem | RegulationSearchResult>;
 }) {
+  const serverRegs = initialRegs ?? [];
   const [category, setCategory] = usePersistedState<RegulationCategory | "all">("hcca:pref:regulations:category:v1", "all");
   const [workflow, setWorkflow] = usePersistedState<RegulationWorkflowStatus | "all">("hcca:pref:regulations:workflow:v1", "all");
   const [search, setSearch] = useState("");
@@ -143,8 +144,9 @@ export default function RegulationsClient({
     },
     [category, debouncedSearch, showAll, canManage, workflow],
     "載入失敗",
-    initialRegs,
+    serverRegs,
     "regulations/list",
+    initialRegs !== undefined,
   );
 
   const sorted = useMemo(

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { cacheCurrentUser } from "@/lib/auth-cache";
+import { AUTH_CACHE_EVENT, cacheCurrentUser } from "@/lib/auth-cache";
 import { usePermissions } from "./usePermissions";
 
 describe("usePermissions", () => {
@@ -9,13 +9,22 @@ describe("usePermissions", () => {
     sessionStorage.clear();
   });
 
+  function renderPermissions() {
+    const hook = renderHook(() => usePermissions());
+    act(() => {
+      window.dispatchEvent(new Event("load"));
+      window.dispatchEvent(new Event(AUTH_CACHE_EVENT));
+    });
+    return hook;
+  }
+
   it("supports direct and compatibility permissions", () => {
     sessionStorage.setItem(
       "permissions",
       JSON.stringify(["document:create", "audit:view"]),
     );
 
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderPermissions();
 
     expect(result.current.can("document:create")).toBe(true);
     expect(result.current.can("document:draft")).toBe(true);
@@ -26,7 +35,7 @@ describe("usePermissions", () => {
   it("treats owners as administrators", () => {
     sessionStorage.setItem("is_owner", "true");
 
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderPermissions();
 
     expect(result.current.isOwner).toBe(true);
     expect(result.current.isAdmin).toBe(true);
@@ -36,14 +45,14 @@ describe("usePermissions", () => {
   it("ignores malformed cached permission JSON", () => {
     sessionStorage.setItem("permissions", "{broken");
 
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderPermissions();
 
     expect(result.current.permissions.size).toBe(0);
     expect(result.current.can("document:create")).toBe(false);
   });
 
   it("refreshes after the current user cache is updated", () => {
-    const { result } = renderHook(() => usePermissions());
+    const { result } = renderPermissions();
 
     act(() => {
       cacheCurrentUser({ id: "admin-1", is_superuser: true });

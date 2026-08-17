@@ -115,6 +115,13 @@ export default function GovernancePage() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // These lists are only needed after the create form opens. Do not make the
+  // initial work-centre navigation wait for every active user and organisation.
+  useEffect(() => {
+    if (!showCreate || orgs.length > 0 || users.length > 0) return;
     void Promise.all([
       withFallback(orgsApi.list({ active_only: true }), []),
       withFallback(adminApi.listUsers({ active_only: true, limit: 200 }), []),
@@ -122,8 +129,7 @@ export default function GovernancePage() {
       setOrgs(orgRows);
       setUsers(userRows);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [orgs.length, showCreate, users.length]);
 
   useEffect(() => {
     const openQuickCreate = () => {
