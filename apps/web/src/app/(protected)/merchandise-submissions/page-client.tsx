@@ -224,6 +224,8 @@ function TemplateGallery({
             <img
               src={uploadUrl(template.url)}
               alt={`${template.label} 範本`}
+              loading="lazy"
+              decoding="async"
               className="max-h-[34rem] w-full object-contain"
               style={{ background: "var(--bg-elevated)" }}
             />
