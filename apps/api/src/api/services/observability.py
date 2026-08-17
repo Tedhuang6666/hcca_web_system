@@ -728,7 +728,12 @@ async def overview(session: AsyncSession) -> dict:
     day = datetime.now(UTC) - timedelta(days=1)
     pages = await latest_page_scores(session)
     rum = await client_route_analytics()
-    discovered_urls = _merge_rum_urls(await discover_public_urls(), rum)
+    # The overview is requested by the admin UI and the agent snapshot. Do not
+    # block either response on a cold sitemap fetch; PSI rows already contain
+    # the monitored URL set, while RUM adds routes that were actually visited.
+    discovered_urls = _merge_rum_urls(
+        list(dict.fromkeys([*critical_urls(), *(page["url"] for page in pages)])), rum
+    )
     rum_paths = {
         _normalize_client_path(route.get("path"))
         for route in rum.get("routes", [])
