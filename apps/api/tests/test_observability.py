@@ -360,3 +360,35 @@ async def test_authenticated_performance_results_are_recorded_for_both_strategie
     assert response.json()["created"] == 2
     rows = (await db_session.scalars(select(PageSpeedRun))).all()
     assert {row.strategy for row in rows} == {"auth-mobile", "auth-desktop"}
+
+
+async def test_public_performance_results_are_recorded_for_both_strategies(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_TOKEN", "test-performance-token")
+    monkeypatch.setattr(settings, "FRONTEND_BASE_URL", "http://test")
+    response = await client.post(
+        "/internal/observability/public-runs",
+        headers={"X-Performance-Monitor-Token": "test-performance-token"},
+        json={
+            "release": "test-release-public",
+            "runs": [
+                {
+                    "url": "http://test/announcements",
+                    "strategy": "mobile",
+                    "performance_score": 97,
+                },
+                {
+                    "url": "http://test/announcements",
+                    "strategy": "desktop",
+                    "performance_score": 98,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["created"] == 2
+    rows = (await db_session.scalars(select(PageSpeedRun))).all()
+    assert {row.strategy for row in rows} == {"public-mobile", "public-desktop"}

@@ -30,6 +30,7 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
         )
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
     except ImportError:
         logger.warning("OpenTelemetry dependencies are not installed; tracing disabled")
         return False
@@ -41,7 +42,10 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
             DEPLOYMENT_ENVIRONMENT: settings.ENVIRONMENT,
         }
     )
-    provider = TracerProvider(resource=resource)
+    provider = TracerProvider(
+        resource=resource,
+        sampler=TraceIdRatioBased(settings.OTEL_TRACES_SAMPLE_RATE),
+    )
     endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
     try:
         if "/integration/otlp" in endpoint:
@@ -62,7 +66,15 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
     except ImportError:
         logger.warning("Configured OpenTelemetry exporter is not installed; tracing disabled")
         return False
-    provider.add_span_processor(BatchSpanProcessor(exporter))
+    provider.add_span_processor(
+        BatchSpanProcessor(
+            exporter,
+            max_queue_size=2_048,
+            schedule_delay_millis=5_000,
+            max_export_batch_size=512,
+            export_timeout_millis=2_000,
+        )
+    )
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app, excluded_urls="health,live,ready,metrics")
     SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)

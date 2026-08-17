@@ -25,6 +25,10 @@
   `sendBeacon`/`keepalive`，遇到 429/5xx 會 backoff，不阻塞 initial render。
 - API telemetry endpoint 使用批次寫入；Redis batch 使用單次 variadic `LPUSH`，
   避免每個 event 產生一個 Redis write command。
+- OpenTelemetry API trace 預設採樣率為 `OTEL_TRACES_SAMPLE_RATE=0.1`，Next.js
+  server 以 `OTEL_WEB_TRACES_SAMPLE_RATE=0.05` 採樣；兩端都使用 batch exporter，
+  queue 上限 2,048、單批最多 512 spans，export timeout 2 秒。這些設定避免
+  trace instrumentation 退回全量並拖慢 request critical path。
 - 不在 telemetry payload 放 access token、query string、完整 URL 或個人識別資料。
 
 ## Dashboard 判讀順序
@@ -35,7 +39,9 @@
 3. **頁面效能**：查看同一路由的 public PSI、authenticated Lighthouse 與 CrUX，
    不把 synthetic score 和 RUM 數值混成單一分數。
 4. **錯誤與慢查詢**：用 route template、status、DB query time/count、Redis
-   health 對照前端 API p95/p99。
+   exporter health／capacity 與 OTel trace 中的 Redis spans 對照前端 API p95/p99；
+   Grafana 的 API、DB、slow request、timeout 與 Redis panels 是 infrastructure
+   root-cause 視圖，admin dashboard 的 RUM panel 則維持真實使用者視角。
 5. **部署版本**：以 `release`、`commit_sha`、`deployed_at` 對齊 regression 起點。
 
 判讀範例：若 RUM 只有 mobile `/dashboard` 的 LCP p95 惡化，而 PSI 不變，先查

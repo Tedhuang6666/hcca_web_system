@@ -51,11 +51,6 @@ const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
 const LIQUID_DOCK_HEIGHT = 60;
 const LIQUID_BEAD_RADIUS = 20;
 
-interface DockMotion {
-  x: number;
-  velocity: number;
-}
-
 interface DockPointer {
   id: number;
   startX: number;
@@ -122,11 +117,13 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const beadXRef = useRef(0);
   const velocityRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
+  const shapePathRef = useRef<SVGPathElement>(null);
+  const shapeHighlightRef = useRef<SVGPathElement>(null);
+  const beadRef = useRef<HTMLSpanElement>(null);
   const hasInitialPositionRef = useRef(false);
   const pointerRef = useRef<DockPointer | null>(null);
   const suppressClickRef = useRef(false);
   const [dockWidth, setDockWidth] = useState(0);
-  const [motion, setMotion] = useState<DockMotion>({ x: 0, velocity: 0 });
   const [dragging, setDragging] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -147,6 +144,21 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     refresh: refreshCounts,
   } = useInboxCountsContext();
 
+  const renderMotion = useCallback((x: number, velocity: number) => {
+    if (dockWidth > 0) {
+      const path = buildLiquidDockPath(dockWidth, LIQUID_DOCK_HEIGHT, x, velocity);
+      shapePathRef.current?.setAttribute("d", path);
+      shapeHighlightRef.current?.setAttribute("d", path);
+    }
+    if (beadRef.current) {
+      const scaleX = 1 + Math.min(Math.abs(velocity) * 0.012, 0.16);
+      const scaleY = 1 - Math.min(Math.abs(velocity) * 0.004, 0.06);
+      beadRef.current.style.left = `${x}px`;
+      beadRef.current.style.transform =
+        `translate(-50%, -50%) scale(${scaleX}, ${scaleY})`;
+    }
+  }, [dockWidth]);
+
   const wakeSpring = useCallback(() => {
     if (animationFrameRef.current !== null) return;
 
@@ -158,17 +170,17 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       if (Math.abs(distance) < 0.08 && Math.abs(velocityRef.current) < 0.08) {
         beadXRef.current = targetXRef.current;
         velocityRef.current = 0;
-        setMotion({ x: beadXRef.current, velocity: 0 });
+        renderMotion(beadXRef.current, 0);
         animationFrameRef.current = null;
         return;
       }
 
-      setMotion({ x: beadXRef.current, velocity: velocityRef.current });
+      renderMotion(beadXRef.current, velocityRef.current);
       animationFrameRef.current = requestAnimationFrame(tick);
     };
 
     animationFrameRef.current = requestAnimationFrame(tick);
-  }, []);
+  }, [renderMotion]);
 
   useEffect(() => {
     return () => {
@@ -359,18 +371,18 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     if (!hasInitialPositionRef.current) {
       beadXRef.current = nextX;
       velocityRef.current = 0;
-      setMotion({ x: nextX, velocity: 0 });
+      renderMotion(nextX, 0);
       hasInitialPositionRef.current = true;
       return;
     }
     if (reducedMotion) {
       beadXRef.current = nextX;
       velocityRef.current = 0;
-      setMotion({ x: nextX, velocity: 0 });
+      renderMotion(nextX, 0);
       return;
     }
     wakeSpring();
-  }, [activeIndex, dockWidth, reducedMotion, tabs.length, wakeSpring]);
+  }, [activeIndex, dockWidth, reducedMotion, renderMotion, tabs.length, wakeSpring]);
 
   const dockPointFromEvent = useCallback((clientX: number) => {
     const dock = dockRef.current;
@@ -394,12 +406,12 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     if (reducedMotion) {
       beadXRef.current = point;
       velocityRef.current = 0;
-      setMotion({ x: point, velocity: 0 });
+      renderMotion(point, 0);
     } else {
       wakeSpring();
     }
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [dockPointFromEvent, dockWidth, reducedMotion, tabs.length, wakeSpring]);
+  }, [dockPointFromEvent, dockWidth, reducedMotion, renderMotion, tabs.length, wakeSpring]);
 
   const handlePointerMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
     const pointer = pointerRef.current;
@@ -415,11 +427,11 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     if (reducedMotion) {
       beadXRef.current = point;
       velocityRef.current = 0;
-      setMotion({ x: point, velocity: 0 });
+      renderMotion(point, 0);
     } else {
       wakeSpring();
     }
-  }, [dockPointFromEvent, dockWidth, reducedMotion, tabs.length, wakeSpring]);
+  }, [dockPointFromEvent, dockWidth, reducedMotion, renderMotion, tabs.length, wakeSpring]);
 
   const finishPointer = useCallback((event: React.PointerEvent<HTMLElement>) => {
     const pointer = pointerRef.current;
@@ -460,10 +472,8 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   }, [dockWidth, reducedMotion, tabs.length, wakeSpring]);
 
   const visualIndex = dragIndex ?? activeIndex;
-  const beadScaleX = 1 + Math.min(Math.abs(motion.velocity) * 0.012, 0.16);
-  const beadScaleY = 1 - Math.min(Math.abs(motion.velocity) * 0.004, 0.06);
   const dockPath = dockWidth > 0 && tabs.length > 0
-    ? buildLiquidDockPath(dockWidth, LIQUID_DOCK_HEIGHT, motion.x, motion.velocity)
+    ? buildLiquidDockPath(dockWidth, LIQUID_DOCK_HEIGHT, beadXRef.current, velocityRef.current)
     : "";
 
   if (keyboardOpen) return null;
@@ -499,10 +509,12 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
           viewBox={`0 0 ${Math.max(dockWidth, 1)} ${LIQUID_DOCK_HEIGHT}`}
           preserveAspectRatio="none">
           <path
+            ref={shapePathRef}
             className="bottom-tab-bar__shape-fill"
             d={dockPath}
             strokeWidth="1" />
           <path
+            ref={shapeHighlightRef}
             className="bottom-tab-bar__shape-highlight"
             d={dockPath}
             strokeLinecap="round"
@@ -510,15 +522,16 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
         </svg>
 
         <span
+          ref={beadRef}
           aria-hidden="true"
           className="bottom-tab-bar__bead pointer-events-none absolute"
           style={{
-            left: motion.x,
+            left: beadXRef.current,
             top: 14,
             width: LIQUID_BEAD_RADIUS * 2,
             height: LIQUID_BEAD_RADIUS * 2,
             opacity: dockWidth ? 1 : 0,
-            transform: `translate(-50%, -50%) scale(${beadScaleX}, ${beadScaleY})`,
+            transform: `translate(-50%, -50%) scale(1, 1)`,
             transformOrigin: "center",
             willChange: "transform, left",
           }} />

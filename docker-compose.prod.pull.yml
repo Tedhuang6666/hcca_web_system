@@ -377,6 +377,7 @@ services:
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
+      OTEL_WEB_TRACES_SAMPLE_RATE: ${OTEL_WEB_TRACES_SAMPLE_RATE:-0.05}
     depends_on:
       api:
         condition: service_healthy

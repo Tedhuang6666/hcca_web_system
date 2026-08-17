@@ -2,6 +2,13 @@
 
 let started = false;
 
+function getTraceSampleRate(): number {
+  const value = Number(
+    process.env.OTEL_WEB_TRACES_SAMPLE_RATE ?? process.env.OTEL_TRACES_SAMPLE_RATE ?? "0.1",
+  );
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.1;
+}
+
 export async function initOpenTelemetry(): Promise<boolean> {
   if (started || process.env.OTEL_ENABLED !== "true") {
     return started;
@@ -13,12 +20,19 @@ export async function initOpenTelemetry(): Promise<boolean> {
   }
 
   try {
-    const [{ NodeSDK }, { OTLPTraceExporter }, { HttpInstrumentation }, { resourceFromAttributes }, semconv] =
-      await Promise.all([
+    const [
+      { NodeSDK },
+      { OTLPTraceExporter },
+      { HttpInstrumentation },
+      { resourceFromAttributes },
+      { TraceIdRatioBasedSampler },
+      semconv,
+    ] = await Promise.all([
         import("@opentelemetry/sdk-node"),
         import("@opentelemetry/exporter-trace-otlp-proto"),
         import("@opentelemetry/instrumentation-http"),
         import("@opentelemetry/resources"),
+        import("@opentelemetry/sdk-trace-base"),
         import("@opentelemetry/semantic-conventions"),
       ]);
 
@@ -34,6 +48,7 @@ export async function initOpenTelemetry(): Promise<boolean> {
     const sdk = new NodeSDK({
       resource,
       traceExporter: exporter,
+      sampler: new TraceIdRatioBasedSampler(getTraceSampleRate()),
       instrumentations: [new HttpInstrumentation()],
     });
 

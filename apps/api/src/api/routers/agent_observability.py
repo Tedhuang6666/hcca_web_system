@@ -168,6 +168,13 @@ async def authenticated_targets() -> dict[str, Any]:
     }
 
 
+@router.get("/public-targets", dependencies=[Depends(require_performance_token)])
+async def public_targets() -> dict[str, Any]:
+    """供 public Lighthouse workflow 掃描 sitemap 與第一方已發現的所有頁面。"""
+    urls = await discover_public_urls()
+    return {"urls": urls}
+
+
 @router.post("/auth-session", dependencies=[Depends(require_performance_token)])
 async def authenticated_session(session: DbDep) -> dict[str, Any]:
     """發出只含 access token 的短效 synthetic session，絕不發 refresh token。"""
@@ -208,12 +215,13 @@ async def authenticated_session(session: DbDep) -> dict[str, Any]:
     }
 
 
-@router.post("/authenticated-runs", dependencies=[Depends(require_performance_token)])
-async def record_authenticated_runs(
+async def _record_performance_runs(
     payload: AuthenticatedRunsIn,
-    session: DbDep,
+    session: AsyncSession,
+    *,
+    strategy_prefix: str,
 ) -> dict[str, Any]:
-    """接收 CI 產生的 authenticated Lighthouse 結果；只接受本站 URL。"""
+    """Persist CI Lighthouse results for one public or authenticated channel."""
     base = httpx.URL(str(settings.FRONTEND_BASE_URL))
     release = await ensure_release(session, payload.release or None)
     created = 0
@@ -225,7 +233,7 @@ async def record_authenticated_runs(
             raise HTTPException(status_code=400, detail="結果 URL 不符合正式站來源")
         run = PageSpeedRun(
             url=item.url,
-            strategy=f"auth-{item.strategy}",
+            strategy=f"{strategy_prefix}{item.strategy}",
             release_id=release.id,
             status=item.status,
             error_message=item.error_message,
@@ -250,3 +258,21 @@ async def record_authenticated_runs(
         created += 1
     await session.flush()
     return {"created": created, "release": release.release}
+
+
+@router.post("/authenticated-runs", dependencies=[Depends(require_performance_token)])
+async def record_authenticated_runs(
+    payload: AuthenticatedRunsIn,
+    session: DbDep,
+) -> dict[str, Any]:
+    """接收 CI 產生的 authenticated Lighthouse 結果；只接受本站 URL。"""
+    return await _record_performance_runs(payload, session, strategy_prefix="auth-")
+
+
+@router.post("/public-runs", dependencies=[Depends(require_performance_token)])
+async def record_public_runs(
+    payload: AuthenticatedRunsIn,
+    session: DbDep,
+) -> dict[str, Any]:
+    """接收 CI 產生的 public Lighthouse 結果；只接受本站 URL。"""
+    return await _record_performance_runs(payload, session, strategy_prefix="public-")

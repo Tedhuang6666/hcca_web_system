@@ -16,9 +16,14 @@ concurrency:
 
 jobs:
   lighthouse:
-    name: Authenticated Lighthouse (mobile + desktop)
+    name: Authenticated Lighthouse (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,11 +52,15 @@ jobs:
           BASE_URL: https://hcca.tw
           PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
           GITHUB_SHA: ${{ github.sha }}
+          AUTHENTICATED: "true"
+          TARGET_SHARD_INDEX: ${{ matrix.shard }}
+          TARGET_SHARD_COUNT: "4"
           MIN_SCORE: "95"
-          OUTPUT_FILE: .lighthouseci/authenticated-summary.json
+          OUTPUT_FILE: .lighthouseci/authenticated-summary-${{ matrix.shard }}.json
         run: node scripts/authenticated-lighthouse.mjs
 
       - name: Run authenticated interaction budgets
+        if: matrix.shard == 0
         env:
           BASE_URL: https://hcca.tw
           PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
@@ -64,13 +73,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: authenticated-lighthouse-report
-          path: .lighthouseci/authenticated-summary.json
+          name: authenticated-lighthouse-report-${{ matrix.shard }}
+          path: .lighthouseci/authenticated-summary-${{ matrix.shard }}.json
           if-no-files-found: ignore
           retention-days: 30
 
       - name: Upload authenticated interaction report
-        if: always()
+        if: always() && matrix.shard == 0
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: authenticated-interaction-report

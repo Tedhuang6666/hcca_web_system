@@ -12,6 +12,7 @@ const { chromium } = require("playwright-core");
 
 const baseUrl = (process.env.BASE_URL || "https://hcca.tw").replace(/\/$/u, "");
 const monitorToken = process.env.PERFORMANCE_MONITOR_TOKEN || "";
+const authenticated = process.env.AUTHENTICATED !== "false";
 const release = process.env.GITHUB_SHA || process.env.APP_RELEASE || "local";
 const outputFile = process.env.OUTPUT_FILE || "authenticated-lighthouse-results.json";
 const minimumScore = Number(process.env.MIN_SCORE || "95");
@@ -121,7 +122,7 @@ async function isHtmlPage(url, cookieHeader) {
 const appDirectory = fileURLToPath(new URL("../apps/web/src/app/", import.meta.url));
 const pageFilePattern = /^page\.(?:tsx?|jsx?|mjs)$/u;
 
-async function discoverStaticRoutes(directory = appDirectory, segments = []) {
+async function discoverStaticRoutes(directory = appDirectory, segments = [], publicOnly = false) {
   const entries = await readdir(directory, { withFileTypes: true });
   const routes = entries.some((entry) => entry.isFile() && pageFilePattern.test(entry.name))
     ? [`/${segments.join("/")}`.replace(/\/+/gu, "/").replace(/\/$/u, "") || "/"]
@@ -131,10 +132,11 @@ async function discoverStaticRoutes(directory = appDirectory, segments = []) {
     entries
       .filter((entry) => entry.isDirectory())
       .filter((entry) => !entry.name.startsWith(".") && !entry.name.startsWith("[") && !entry.name.startsWith("@"))
+      .filter((entry) => !publicOnly || !["(protected)", "(admin)"].includes(entry.name))
       .map((entry) => {
         const isRouteGroup = entry.name.startsWith("(") && entry.name.endsWith(")");
         const nextSegments = isRouteGroup ? segments : [...segments, entry.name];
-        return discoverStaticRoutes(join(directory, entry.name), nextSegments);
+        return discoverStaticRoutes(join(directory, entry.name), nextSegments, publicOnly);
       }),
   );
   return [...routes, ...childRoutes.flat()];
@@ -182,14 +184,18 @@ async function runLighthouse(chrome, url, strategy, cookieHeader) {
 
 // `/api/*` is the Cloudflare-approved API ingress; Caddy strips this prefix
 // before forwarding to the token-protected FastAPI internal route.
-const authSession = await requestJson("/api/internal/observability/auth-session", {
-  method: "POST",
-});
-const cookieHeader = `${authSession.cookie_name}=${authSession.access_token}`;
-const targetsResponse = await requestJson("/api/internal/observability/auth-targets");
+const authSession = authenticated
+  ? await requestJson("/api/internal/observability/auth-session", { method: "POST" })
+  : null;
+const cookieHeader = authSession ? `${authSession.cookie_name}=${authSession.access_token}` : "";
+const targetsResponse = await requestJson(
+  authenticated
+    ? "/api/internal/observability/auth-targets"
+    : "/api/internal/observability/public-targets",
+);
 let staticRoutes = [];
 try {
-  staticRoutes = await discoverStaticRoutes();
+  staticRoutes = await discoverStaticRoutes(appDirectory, [], !authenticated);
 } catch (error) {
   process.stdout.write(
     `static route discovery unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
@@ -199,11 +205,24 @@ const staticTargets = staticRoutes.map((route) => `${baseUrl}${route}`);
 const allTargets = [
   ...new Set([...staticTargets, ...(targetsResponse.urls || []).map((value) => String(value))]),
 ].sort();
+const explicitTargetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
+const explicitTargetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
+const shardIndex = Math.max(0, Number.parseInt(process.env.TARGET_SHARD_INDEX || "0", 10) || 0);
+const shardCount = Math.max(1, Number.parseInt(process.env.TARGET_SHARD_COUNT || "1", 10) || 1);
+const shardSize = shardCount > 1 ? Math.ceil(allTargets.length / shardCount) : 0;
+const targetOffset = explicitTargetOffset || (shardCount > 1 ? shardIndex * shardSize : 0);
+const targetLimit = explicitTargetLimit || (shardCount > 1 ? shardSize : 0);
+const targetFilter = (process.env.TARGET_URL || "").trim();
+const targetsToCheck = targetFilter
+  ? allTargets.filter((target) => target === targetFilter)
+  : targetLimit > 0
+    ? allTargets.slice(targetOffset, targetOffset + targetLimit)
+    : allTargets.slice(targetOffset);
 const pageCandidates = [];
 const pageCheckConcurrency = 8;
-for (let offset = 0; offset < allTargets.length; offset += pageCheckConcurrency) {
+for (let offset = 0; offset < targetsToCheck.length; offset += pageCheckConcurrency) {
   const checked = await Promise.all(
-    allTargets.slice(offset, offset + pageCheckConcurrency).map(async (target) => {
+    targetsToCheck.slice(offset, offset + pageCheckConcurrency).map(async (target) => {
       try {
         return { target, ...(await isHtmlPage(target, cookieHeader)) };
       } catch (error) {
@@ -225,17 +244,19 @@ for (let offset = 0; offset < allTargets.length; offset += pageCheckConcurrency)
     }
   }
 }
-const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
-const targetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
-const targetFilter = (process.env.TARGET_URL || "").trim();
-const candidateTargets = targetFilter
-  ? pageCandidates.filter((target) => target === targetFilter)
-  : targetLimit > 0
-    ? pageCandidates.slice(targetOffset, targetOffset + targetLimit)
-    : pageCandidates.slice(targetOffset);
-const targets = candidateTargets;
+const targets = pageCandidates;
 
-if (targets.length === 0) throw new Error("No authenticated performance targets were discovered");
+if (targets.length === 0) {
+  if (allTargets.length === 0) throw new Error("No performance targets were discovered");
+  process.stdout.write(`shard ${shardIndex} has no HTML targets; skipping\n`);
+  await mkdir(dirname(outputFile), { recursive: true });
+  await writeFile(
+    outputFile,
+    `${JSON.stringify({ authenticated, release, targets_total: allTargets.length, targets: 0, runs: 0, passed: 0, failed: 0 }, null, 2)}\n`,
+    "utf8",
+  );
+  process.exit(0);
+}
 
 const chrome = await launchChrome({
   chromeFlags: [
@@ -252,21 +273,23 @@ let browser;
 try {
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${chrome.port}`);
   const context = browser.contexts()[0];
-  await context.addCookies([
-    {
-      name: authSession.cookie_name,
-      value: authSession.access_token,
-      url: `${baseUrl}/`,
-      httpOnly: true,
-      secure: true,
-      sameSite: "Strict",
-    },
-  ]);
+  if (authenticated && authSession) {
+    await context.addCookies([
+      {
+        name: authSession.cookie_name,
+        value: authSession.access_token,
+        url: `${baseUrl}/`,
+        httpOnly: true,
+        secure: true,
+        sameSite: "Strict",
+      },
+    ]);
+  }
   for (const url of targets) {
     for (const strategy of ["mobile", "desktop"]) {
-      process.stdout.write(`authenticated ${strategy} ${url}\n`);
+      process.stdout.write(`${authenticated ? "authenticated" : "public"} ${strategy} ${url}\n`);
       try {
-        await assertAuthenticated(url, cookieHeader);
+        if (authenticated) await assertAuthenticated(url, cookieHeader);
         runs.push(await runLighthouse(chrome, url, strategy, cookieHeader));
       } catch (error) {
         runs.push({
@@ -298,25 +321,34 @@ try {
 
 const persistenceBatchSize = 180;
 for (let offset = 0; offset < runs.length; offset += persistenceBatchSize) {
-  await requestJson("/api/internal/observability/authenticated-runs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ release, runs: runs.slice(offset, offset + persistenceBatchSize) }),
-  }, { retries: 10 });
+  await requestJson(
+    authenticated
+      ? "/api/internal/observability/authenticated-runs"
+      : "/api/internal/observability/public-runs",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ release, runs: runs.slice(offset, offset + persistenceBatchSize) }),
+    },
+    { retries: 10 },
+  );
 }
 
 const failures = runs.filter(
   (run) => run.status !== "ok" || run.performance_score == null || run.performance_score < minimumScore,
 );
 const summary = {
+  authenticated,
   release,
   targets_total: allTargets.length,
   static_routes_total: staticRoutes.length,
   page_candidates_total: pageCandidates.length,
   target_offset: targetOffset,
+  target_shard_index: shardIndex,
+  target_shard_count: shardCount,
   target_filter: targetFilter || null,
-  candidate_targets: candidateTargets.length,
-  skipped_targets: allTargets.length - pageCandidates.length,
+  candidate_targets: targets.length,
+  skipped_targets: targetsToCheck.length - pageCandidates.length,
   target_urls: targets,
   minimum_score: minimumScore,
   targets: targets.length,

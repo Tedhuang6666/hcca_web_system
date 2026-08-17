@@ -28,9 +28,9 @@ function ensureLoaded(key: string): Promise<PostHog> {
 function schedulePageview(key: string, url: string) {
   const capture = () => ensureLoaded(key).then((posthog) => posthog.capture("$pageview", { $current_url: url }));
   if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(capture);
+    requestIdleCallback(capture, { timeout: 2_500 });
   } else {
-    setTimeout(capture, 1);
+    setTimeout(capture, 1_500);
   }
 }
 
