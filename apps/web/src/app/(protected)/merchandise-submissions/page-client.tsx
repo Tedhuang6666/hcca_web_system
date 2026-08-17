@@ -87,6 +87,7 @@ function formatDeadline(value: string | null) {
   return new Intl.DateTimeFormat("zh-TW", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Asia/Taipei",
   }).format(date);
 }
 
@@ -469,6 +470,12 @@ export default function MerchandiseSubmissionsPageClient({
         <button
           type="button"
           data-performance-action="校商投稿／我的投稿"
+          onPointerEnter={() => {
+            if (!mineLoaded && !mineRequestRef.current) void loadMine();
+          }}
+          onFocus={() => {
+            if (!mineLoaded && !mineRequestRef.current) void loadMine();
+          }}
           onClick={() => setTab("mine")}
           className="min-h-11 border-b-2 px-4 text-sm font-semibold"
           style={{
@@ -479,7 +486,10 @@ export default function MerchandiseSubmissionsPageClient({
         </button>
       </nav>
       {tab === "mine" ? (
-        <section className="space-y-3">
+        <section
+          className="space-y-3"
+          data-performance-state={mineLoading ? "mine-loading" : "mine-ready"}
+        >
           {mineLoading ? (
             <div
               className="h-40 animate-pulse rounded-xl"
