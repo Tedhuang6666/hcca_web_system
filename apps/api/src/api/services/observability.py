@@ -670,7 +670,12 @@ def _crux_p75(metrics: dict, name: str) -> float | None:
     return metrics.get(name, {}).get("percentiles", {}).get("p75")
 
 
-async def latest_page_scores(session: AsyncSession, url: str | None = None) -> list[dict]:
+async def latest_page_scores(
+    session: AsyncSession,
+    url: str | None = None,
+    *,
+    include_audits: bool = True,
+) -> list[dict]:
     rows = (
         (
             await session.execute(
@@ -689,12 +694,12 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
     run_ids = [row.id for row in latest.values()]
     audit_rows = []
     if run_ids:
+        audit_ids = None if include_audits else ("interaction-to-next-paint", "server-response-time")
+        audit_query = select(PageSpeedAudit).where(PageSpeedAudit.run_id.in_(run_ids))
+        if audit_ids is not None:
+            audit_query = audit_query.where(PageSpeedAudit.audit_id.in_(audit_ids))
         audit_rows = (
-            (
-                await session.execute(
-                    select(PageSpeedAudit).where(PageSpeedAudit.run_id.in_(run_ids))
-                )
-            )
+            (await session.execute(audit_query))
             .scalars()
             .all()
         )
@@ -717,18 +722,22 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
                 "cls": row.cls,
                 "ttfb_ms": _audit_metric(audits, "server-response-time"),
             },
-            "audits": [
-                {
-                    "id": audit.audit_id,
-                    "title": audit.title,
-                    "score": audit.score,
-                    "numeric_value": audit.numeric_value,
-                    "display_value": audit.display_value,
-                }
-                for audit in sorted(
-                    audits, key=lambda item: item.score if item.score is not None else -1
-                )
-            ],
+            "audits": (
+                [
+                    {
+                        "id": audit.audit_id,
+                        "title": audit.title,
+                        "score": audit.score,
+                        "numeric_value": audit.numeric_value,
+                        "display_value": audit.display_value,
+                    }
+                    for audit in sorted(
+                        audits, key=lambda item: item.score if item.score is not None else -1
+                    )
+                ]
+                if include_audits
+                else []
+            ),
         }
         page = pages.setdefault(
             page_url,
@@ -776,7 +785,7 @@ async def overview(session: AsyncSession) -> dict:
         return cached
 
     day = datetime.now(UTC) - timedelta(days=1)
-    pages = await latest_page_scores(session)
+    pages = await latest_page_scores(session, include_audits=False)
     rum = await client_route_analytics()
     # The overview is requested by the admin UI and the agent snapshot. Do not
     # block either response on a cold sitemap fetch; PSI rows already contain
