@@ -6,6 +6,7 @@ const require = createRequire(new URL("../apps/web/package.json", import.meta.ur
 const lighthouseModule = require("lighthouse");
 const lighthouse = lighthouseModule.default || lighthouseModule;
 const { launch: launchChrome } = require("chrome-launcher");
+const { chromium } = require("playwright-core");
 
 const baseUrl = (process.env.BASE_URL || "https://hcca.tw").replace(/\/$/u, "");
 const monitorToken = process.env.PERFORMANCE_MONITOR_TOKEN || "";
@@ -135,7 +136,20 @@ const chrome = await launchChrome({
 });
 
 const runs = [];
+let browser;
 try {
+  browser = await chromium.connectOverCDP(`http://127.0.0.1:${chrome.port}`);
+  const context = browser.contexts()[0];
+  await context.addCookies([
+    {
+      name: authSession.cookie_name,
+      value: authSession.access_token,
+      url: `${baseUrl}/`,
+      httpOnly: true,
+      secure: true,
+      sameSite: "Strict",
+    },
+  ]);
   for (const url of targets) {
     for (const strategy of ["mobile", "desktop"]) {
       process.stdout.write(`authenticated ${strategy} ${url}\n`);
@@ -158,6 +172,7 @@ try {
     }
   }
 } finally {
+  if (browser) await browser.close();
   await chrome.kill();
 }
 
