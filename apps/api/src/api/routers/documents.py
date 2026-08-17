@@ -344,7 +344,9 @@ async def document_approval_context(
     },
 )
 async def get_document(doc_id: str, session: DbDep, current_user: OptionalUser) -> Document:
-    doc = await _get_doc_or_404(doc_id, session)
+    doc = await doc_svc.get_document_detail_by_identifier(session, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
     if current_user is None:
         if not doc_svc.can_anonymous_access_document(doc):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")

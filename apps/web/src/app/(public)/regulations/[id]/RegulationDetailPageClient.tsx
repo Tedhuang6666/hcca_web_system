@@ -149,10 +149,9 @@ export default function RegulationDetailPageClient({
   }, []);
 
   useEffect(() => {
-    // 公開法規已由 Server Component 注入；匿名訪客不必再重複下載同一份資料。
-    // 登入者仍在背景重新取得完整權限視圖，首屏不會被這個請求阻塞。
-    const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
-    if (!hasLocalLogin && initialRegulation) {
+    // 公開法規已由 Server Component 注入；登入與匿名訪客都不必重複下載同一份資料。
+    // 寫入操作完成後仍由 reload 明確刷新，避免首屏再發一次相同請求。
+    if (initialRegulation) {
       setLoading(false);
       return;
     }

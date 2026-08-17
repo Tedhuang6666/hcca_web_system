@@ -83,6 +83,16 @@ def _reg_query_with_relations():
     )
 
 
+def _reg_query_for_public_detail():
+    """公開法規詳情查詢，不載入回應未使用的組織與公布公文 ORM。"""
+    return select(Regulation).options(
+        selectinload(Regulation.creator),
+        selectinload(Regulation.articles),
+        selectinload(Regulation.revisions).selectinload(RegulationRevision.amender),
+        selectinload(Regulation.workflow_logs),
+    )
+
+
 def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
     for reg in regs:
         creator = reg.__dict__.get("creator")
@@ -250,6 +260,29 @@ async def get_regulation_by_identifier(
         .order_by(Regulation.is_active.desc(), Regulation.updated_at.desc())
         .limit(1)
     )
+    reg = result.scalar_one_or_none()
+    if reg is None:
+        return None
+    _attach_display_names([reg])
+    return reg
+
+
+async def get_public_regulation_by_identifier(
+    session: AsyncSession,
+    identifier: uuid.UUID | str,
+) -> Regulation | None:
+    """取得可公開的現行法規，將公開條件併入主查詢避免額外狀態查詢。"""
+    query = _where_publicly_effective(_reg_query_for_public_detail())
+    if isinstance(identifier, uuid.UUID):
+        query = query.where(Regulation.id == identifier)
+    else:
+        try:
+            query = query.where(Regulation.id == uuid.UUID(identifier))
+        except ValueError:
+            query = query.where(Regulation.title == identifier).order_by(
+                Regulation.is_active.desc(), Regulation.updated_at.desc()
+            )
+    result = await session.execute(query.limit(1))
     reg = result.scalar_one_or_none()
     if reg is None:
         return None
