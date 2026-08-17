@@ -420,12 +420,14 @@ export default function VendorAdminPage() {
           </button>
         </header>
 
-        <GovernanceLinkPanel
-          entityType="meal_vendor"
-          entityId={selectedVendorId || "meal-vendor-workspace"}
-          title={selectedVendor ? `學餐商家營運：${selectedVendor.name}` : "學餐商家營運工作區"}
-          href="/meal/vendor"
-        />
+        {selectedVendorId && (
+          <GovernanceLinkPanel
+            entityType="meal_vendor"
+            entityId={selectedVendorId}
+            title={`學餐商家營運：${selectedVendor?.name ?? "商家"}`}
+            href="/meal/vendor"
+          />
+        )}
 
         <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
           <aside className="rounded-lg p-3" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
