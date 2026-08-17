@@ -594,6 +594,7 @@ async def test_sensitive_public_document_is_redacted_without_full_access() -> No
 @pytest.mark.asyncio
 async def test_sensitive_document_creator_sees_list_content() -> None:
     session = _make_session()
+    session.execute = AsyncMock(side_effect=[_mock_scalars_result([]), _mock_scalars_result([])])
     creator_id = uuid.uuid4()
 
     doc = _make_list_doc(

@@ -27,12 +27,27 @@
       "options": { "legend": { "displayMode": "list" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
+          "expr": "histogram_quantile(0.50, sum(rate(hcca_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.75, sum(rate(hcca_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P75",
+          "refId": "B"
+        },
+        {
           "expr": "histogram_quantile(0.95, sum(rate(hcca_http_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "P95",
-          "refId": "A"
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(hcca_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99",
+          "refId": "D"
         }
       ],
-      "title": "API P95 延遲",
+      "title": "API 延遲分位數",
       "type": "timeseries"
     },
     {
@@ -50,6 +65,57 @@
       ],
       "title": "Celery Queue 積壓",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "list" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, path_template) (rate(hcca_db_time_per_request_seconds_bucket[5m])))",
+          "legendFormat": "DB p95 {{path_template}}",
+          "refId": "A"
+        }
+      ],
+      "title": "DB query time P95 by route",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "sum by (path_template) (rate(hcca_http_slow_requests_total[5m]))",
+          "legendFormat": "slow {{path_template}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (path_template) (rate(hcca_http_timeouts_total[5m]))",
+          "legendFormat": "timeout {{path_template}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Slow requests / timeouts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 6,
+      "options": { "textMode": "name", "colorMode": "value" },
+      "targets": [{
+        "expr": "max by (release, commit_sha, environment) (hcca_build_info)",
+        "legendFormat": "{{environment}} {{release}} {{commit_sha}}",
+        "refId": "A"
+      }],
+      "title": "Current build",
+      "type": "stat"
     }
   ],
   "refresh": "15s",

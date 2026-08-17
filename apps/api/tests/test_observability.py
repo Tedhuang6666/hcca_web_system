@@ -46,6 +46,7 @@ def test_business_metrics_are_exported() -> None:
     assert 'hcca_backup_runs_total{kind="database",status="success"}' in payload
     assert 'hcca_backup_last_success_timestamp_seconds{kind="database"}' in payload
     assert "hcca_websocket_connections 3.0" in payload
+    assert "hcca_build_info" in payload
 
 
 def test_sentry_event_uses_structured_log_request_id() -> None:
