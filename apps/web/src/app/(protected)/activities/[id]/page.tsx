@@ -70,6 +70,9 @@ const STATUS_LABEL: Record<string, string> = {
   warning: "需注意",
 };
 
+const ACTIVITY_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function dateText(value?: string | null) {
   if (!value) return "未設定";
   return new Date(value).toLocaleDateString("zh-TW");
@@ -82,6 +85,7 @@ function money(value?: number) {
 export default function ActivityWorkspacePage() {
   const params = useParams<{ id: string }>();
   const activityId = params.id;
+  const isValidActivityId = ACTIVITY_ID_PATTERN.test(activityId);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [workspace, setWorkspace] = useState<ActivityWorkspaceOut | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,8 +113,12 @@ export default function ActivityWorkspacePage() {
   }, [activityId]);
 
   useEffect(() => {
+    if (!isValidActivityId) {
+      setLoading(false);
+      return;
+    }
     void reload();
-  }, [reload]);
+  }, [isValidActivityId, reload]);
 
   const summary = workspace?.summary ?? {};
   const allLinkedCount = workspace?.sections.reduce((sum, section) => sum + section.count, 0) ?? 0;
@@ -171,6 +179,22 @@ export default function ActivityWorkspacePage() {
       toast.error(error instanceof Error ? error.message : "接受推薦失敗");
     }
   };
+
+  if (!isValidActivityId) {
+    return (
+      <main className="mx-auto max-w-2xl space-y-3 p-6">
+        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          找不到這個活動
+        </h1>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          活動連結已失效或不存在，請從工作中心重新選擇活動。
+        </p>
+        <Link href="/governance" className="btn btn-primary">
+          前往工作中心
+        </Link>
+      </main>
+    );
+  }
 
   if (loading && !workspace) {
     return <main className="p-6">載入活動工作區中...</main>;
