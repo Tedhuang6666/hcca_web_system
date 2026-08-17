@@ -114,7 +114,7 @@ export default function GovernanceLinkPanel({
   compact = false,
 }: {
   entityType: GovernanceEntityType;
-  entityId: string;
+  entityId: string | null;
   title: string;
   href: string;
   compact?: boolean;
@@ -142,6 +142,10 @@ export default function GovernanceLinkPanel({
 
   // 反向查詢：這筆資源屬於哪些事情。
   useEffect(() => {
+    if (!entityId) {
+      setLinks([]);
+      return;
+    }
     let alive = true;
     governanceApi
       .linksForTarget(entityType, entityId)
@@ -157,6 +161,10 @@ export default function GovernanceLinkPanel({
   }, [entityType, entityId]);
 
   useEffect(() => {
+    if (!entityId) {
+      setRelations([]);
+      return;
+    }
     let alive = true;
     governanceApi
       .listEntityRelations(entityType, entityId)
@@ -200,7 +208,7 @@ export default function GovernanceLinkPanel({
     );
   }, [matters, query, linkedIds]);
 
-  if (!canManage) return null;
+  if (!canManage || !entityId) return null;
 
   const linkMatter = async (matter: MatterListItem) => {
     setSaving(true);

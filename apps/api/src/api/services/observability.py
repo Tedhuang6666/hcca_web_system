@@ -787,7 +787,9 @@ async def overview(session: AsyncSession) -> dict:
     recent_errors = await get_recent_errors(top=20)
     slow_queries = get_slow_queries(top=20)
     passing = sum(page["status"] == "pass" for page in pages)
-    attention = len(pages) - passing
+    attention = sum(page["status"] == "needs_attention" for page in pages)
+    errors = sum(page["status"] == "error" for page in pages)
+    pending = sum(page["status"] == "pending" for page in pages)
     authenticated_pages = [
         page
         for page in pages
@@ -796,6 +798,12 @@ async def overview(session: AsyncSession) -> dict:
     ]
     authenticated_passing = sum(
         page.get("authenticated_status") == "pass" for page in authenticated_pages
+    )
+    authenticated_attention = sum(
+        page.get("authenticated_status") == "needs_attention" for page in authenticated_pages
+    )
+    authenticated_errors = sum(
+        page.get("authenticated_status") == "error" for page in authenticated_pages
     )
     release = (
         await session.execute(
@@ -821,12 +829,15 @@ async def overview(session: AsyncSession) -> dict:
             "monitored": len(pages),
             "passing": passing,
             "needs_attention": attention,
+            "errors": errors,
+            "pending": pending,
             "threshold": PAGE_SCORE_THRESHOLD,
         },
         "authenticated_coverage": {
             "monitored": len(authenticated_pages),
             "passing": authenticated_passing,
-            "needs_attention": len(authenticated_pages) - authenticated_passing,
+            "needs_attention": authenticated_attention,
+            "errors": authenticated_errors,
             "pending": sum(page.get("authenticated_status") == "pending" for page in pages),
             "threshold": PAGE_SCORE_THRESHOLD,
         },

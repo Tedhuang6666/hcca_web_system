@@ -22,8 +22,8 @@ type Providers = { sentry?: { configured?: boolean; error?: string }; posthog?: 
 type Overview = {
   system_health: HealthItem[];
   reliability: { error_rate: number | null; affected_users: number | null; new_issues: number; regressions: number };
-  coverage: { discovered: number; monitored: number; passing: number; needs_attention: number; threshold: number };
-  authenticated_coverage: { monitored: number; passing: number; needs_attention: number; pending: number; threshold: number };
+  coverage: { discovered: number; monitored: number; passing: number; needs_attention: number; errors: number; pending: number; threshold: number };
+  authenticated_coverage: { monitored: number; passing: number; needs_attention: number; errors: number; pending: number; threshold: number };
   synthetic: { mobile_performance: number | null; desktop_performance: number | null; mobile_lcp_ms: number | null; mobile_tbt_ms: number | null; tested_since: string | null };
   field: Record<string, number | null>;
   pages: PageScore[];
@@ -82,12 +82,15 @@ function normalizeOverview(value: Overview | null | undefined): Overview {
       monitored: coverage.monitored ?? 0,
       passing: coverage.passing ?? 0,
       needs_attention: coverage.needs_attention ?? 0,
+      errors: coverage.errors ?? 0,
+      pending: coverage.pending ?? 0,
       threshold: coverage.threshold ?? 95,
     },
     authenticated_coverage: {
       monitored: authenticatedCoverage.monitored ?? 0,
       passing: authenticatedCoverage.passing ?? 0,
       needs_attention: authenticatedCoverage.needs_attention ?? 0,
+      errors: authenticatedCoverage.errors ?? 0,
       pending: authenticatedCoverage.pending ?? 0,
       threshold: authenticatedCoverage.threshold ?? coverage.threshold ?? 95,
     },
@@ -267,9 +270,9 @@ function OverviewPanel({ data, loading, onInspect }: { data: Overview | null; lo
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="監控摘要">
       <SummaryMetric label="已發現頁面" value={data.coverage.discovered} detail={`目前列出 ${data.coverage.monitored} 頁`} />
       <SummaryMetric label="達標頁面" value={data.coverage.passing} detail={`門檻 PSI ${data.coverage.threshold}`} tone="var(--success)" />
-      <SummaryMetric label="需要處理" value={data.coverage.needs_attention} detail="包含待測試與低於門檻" tone={data.coverage.needs_attention ? "var(--error)" : "var(--success)"} />
+      <SummaryMetric label="低於門檻" value={data.coverage.needs_attention} detail={`採集失敗 ${data.coverage.errors}／待測 ${data.coverage.pending}`} tone={data.coverage.needs_attention ? "var(--error)" : "var(--success)"} />
       <SummaryMetric label="最近 mobile 平均" value={formatNumber(data.synthetic.mobile_performance)} detail={`LCP ${formatNumber(data.synthetic.mobile_lcp_ms, " ms")}`} tone={scoreColor(data.synthetic.mobile_performance)} />
-      <SummaryMetric label="登入後達標" value={data.authenticated_coverage.passing} detail={`已測 ${data.authenticated_coverage.monitored} 頁／待測 ${data.authenticated_coverage.pending}`} tone={data.authenticated_coverage.needs_attention ? "var(--warning)" : "var(--success)"} />
+      <SummaryMetric label="登入後達標" value={data.authenticated_coverage.passing} detail={`已測 ${data.authenticated_coverage.monitored}／失敗 ${data.authenticated_coverage.errors}／待測 ${data.authenticated_coverage.pending}`} tone={data.authenticated_coverage.errors || data.authenticated_coverage.needs_attention ? "var(--warning)" : "var(--success)"} />
     </section>
     <section><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-base font-semibold">服務狀態</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>這些狀態來自本次 API 請求的即時探測。</p></div><span className="text-xs" style={{ color: "var(--text-muted)" }}>版本 {data.latest_release.commit_sha?.slice(0, 8) ?? "—"}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{data.system_health.map((item) => <div key={item.name} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center gap-2 text-sm"><span aria-hidden="true" style={{ color: item.healthy ? "var(--success)" : "var(--error)" }}>●</span>{item.name}</div><strong className="mt-2 block">{item.healthy ? "正常" : "異常"}</strong></div>)}</div></section>
     <PageTable pages={data.pages} threshold={data.coverage.threshold} onInspect={onInspect} />

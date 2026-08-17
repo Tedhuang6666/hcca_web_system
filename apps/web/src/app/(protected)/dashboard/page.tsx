@@ -4,6 +4,8 @@ import { getServerSession } from "@/lib/server/session";
 
 import DashboardPageClient, { type DashboardPageInitialData } from "./DashboardPageClient";
 
+const DASHBOARD_SERVER_FETCH_TIMEOUT_MS = 900;
+
 function dashboardGreeting(): string {
   const hour = Number(new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
@@ -17,7 +19,9 @@ function dashboardGreeting(): string {
 
 async function fetchOptional<T>(path: string): Promise<T | null> {
   try {
-    return await serverRequest<T>(path, privateServerData);
+    return await serverRequest<T>(path, privateServerData, {
+      signal: AbortSignal.timeout(DASHBOARD_SERVER_FETCH_TIMEOUT_MS),
+    });
   } catch {
     return null;
   }
