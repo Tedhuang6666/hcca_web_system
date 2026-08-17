@@ -125,6 +125,17 @@ export default withSentryConfig(configWithAnalyzer, {
   // Upload a larger set of source maps for prettier stack traces (increases build time)
   widenClientFileUpload: true,
 
+  // Build telemetry is not part of application error monitoring. Disable the
+  // plugin's outbound build-time event so CI/local builds remain deterministic
+  // when the build environment intentionally restricts external telemetry.
+  telemetry: false,
+
+  // Source-map upload belongs in the reproducible production image workflow.
+  // Local builds should not fail merely because Sentry is unreachable.
+  sourcemaps: {
+    disable: process.env.CI !== "true",
+  },
+
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.
   // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
@@ -132,6 +143,10 @@ export default withSentryConfig(configWithAnalyzer, {
   tunnelRoute: "/monitoring",
 
   webpack: {
+    unstable_sentryWebpackPluginOptions: {
+      disable: process.env.CI !== "true",
+    },
+
     // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
     // See the following for more information:
     // https://docs.sentry.io/product/crons/
