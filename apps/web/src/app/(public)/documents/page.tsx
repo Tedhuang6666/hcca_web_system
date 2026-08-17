@@ -1,5 +1,6 @@
 import DocumentListClient from "./client";
 import { pageMetadata } from "@/lib/seo";
+import { fetchPublicDocuments } from "@/lib/serverFetch";
 
 export const metadata = pageMetadata({
   title: "公開公文",
@@ -9,5 +10,6 @@ export const metadata = pageMetadata({
 });
 
 export default async function DocumentListPage() {
-  return <DocumentListClient />;
+  const initialDocs = await fetchPublicDocuments({ limit: 20, offset: 0 });
+  return <DocumentListClient initialDocs={initialDocs} />;
 }
