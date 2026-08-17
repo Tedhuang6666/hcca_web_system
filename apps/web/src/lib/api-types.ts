@@ -44709,6 +44709,7 @@ export interface operations {
                 include_tasks?: boolean;
                 include_matters?: boolean;
                 include_announcements?: boolean;
+                compact_dashboard?: boolean;
             };
             header?: never;
             path?: never;

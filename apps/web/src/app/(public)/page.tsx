@@ -3,10 +3,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { preload } from "react-dom";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import {
-  fetchActiveUrgentAnnouncement,
-  fetchPublicBundle,
-} from "@/lib/serverFetch";
+import { fetchPublicBundle } from "@/lib/serverFetch";
 import DeferredHomeContent from "./DeferredHomeContent";
 import HomeHero from "./HomeHero";
 
@@ -21,10 +18,7 @@ function DeferredHomeFallback() {
 }
 
 export default async function PublicHomePage() {
-  const [bundle, urgentAnnouncement] = await Promise.all([
-    fetchPublicBundle(),
-    fetchActiveUrgentAnnouncement(),
-  ]);
+  const bundle = await fetchPublicBundle();
   const heroImageUrl = bundle?.settings?.site_logo_url?.trim() || DEFAULT_HERO_IMAGE_URL;
   // 自訂會徽若經 Next Image 處理，priority 會產生對應的 optimized preload。
   // 只有固定品牌資產能保證手動 preload 與實際 <img> URL 完全一致，避免
@@ -41,11 +35,10 @@ export default async function PublicHomePage() {
     <PublicSiteShell
       navPages={bundle?.nav_pages ?? []}
       settings={bundle?.settings}
-      urgentAnnouncement={urgentAnnouncement}
     >
       <HomeHero bundle={bundle} />
       <Suspense fallback={<DeferredHomeFallback />}>
-        <DeferredHomeContent bundle={bundle} urgentAnnouncement={urgentAnnouncement} />
+        <DeferredHomeContent bundle={bundle} />
       </Suspense>
     </PublicSiteShell>
   );

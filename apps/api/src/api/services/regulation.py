@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -397,8 +397,35 @@ async def search_regulations(
     """
     pattern = f"%{keyword}%"
 
-    # 搜尋法規主體
-    q = _reg_query_with_relations()
+    # 搜尋法規主體。搜尋結果只需要列表欄位與命中條文，避免載入完整修訂歷程、
+    # 審議日誌、建立者與公布公文等詳情關聯。
+    article_match = and_(
+        RegulationArticle.is_deleted.is_(False),
+        or_(
+            RegulationArticle.title.ilike(pattern),
+            RegulationArticle.subtitle.ilike(pattern),
+            RegulationArticle.content.ilike(pattern),
+        ),
+    )
+    q = select(Regulation).options(
+        load_only(
+            Regulation.id,
+            Regulation.title,
+            Regulation.category,
+            Regulation.version,
+            Regulation.is_active,
+            Regulation.is_repealed,
+            Regulation.workflow_status,
+            Regulation.org_id,
+            Regulation.published_at,
+            Regulation.repealed_date,
+            Regulation.freeze_reason,
+            Regulation.freeze_at,
+            Regulation.created_at,
+            Regulation.updated_at,
+        ),
+        selectinload(Regulation.articles.and_(article_match)),
+    )
     if org_id:
         q = q.where(Regulation.org_id == org_id)
     if active_only:
@@ -411,16 +438,7 @@ async def search_regulations(
             Regulation.content.ilike(pattern),
             Regulation.preface.ilike(pattern),
             # 子查詢：標題/副標題/內容含關鍵字的條文所屬法規
-            Regulation.id.in_(
-                select(RegulationArticle.regulation_id).where(
-                    or_(
-                        RegulationArticle.title.ilike(pattern),
-                        RegulationArticle.subtitle.ilike(pattern),
-                        RegulationArticle.content.ilike(pattern),
-                    ),
-                    RegulationArticle.is_deleted.is_(False),
-                )
-            ),
+            Regulation.id.in_(select(RegulationArticle.regulation_id).where(article_match)),
         )
     )
     latest_history_date = (
@@ -440,22 +458,9 @@ async def search_regulations(
         Regulation.title,
     ).limit(limit)
     result = await session.execute(q)
-    regs = _attach_display_names(list(result.scalars().unique().all()))
-
-    # 挑出每部法規中命中關鍵字的條文，存入 matched_articles
-    # （不覆寫 reg.articles，列表頁仍需完整條文做其他用途）
-    needle = keyword.lower()
+    regs = list(result.scalars().unique().all())
     for reg in regs:
-        reg.__dict__["matched_articles"] = [
-            a
-            for a in reg.articles
-            if not a.is_deleted
-            and (
-                needle in (a.title or "").lower()
-                or needle in (a.subtitle or "").lower()
-                or needle in (a.content or "").lower()
-            )
-        ]
+        reg.__dict__["matched_articles"] = list(reg.articles)
     return regs
 
 
