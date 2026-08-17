@@ -66,6 +66,31 @@ export function requestInitWithTrace(init: HccaRequestInit, trace: Record<string
 
 export class NetworkRequestError extends Error {}
 
+export function isRequestAborted(error: unknown, signal?: AbortSignal | null): boolean {
+  if (signal?.aborted) return true;
+  return typeof error === "object"
+    && error !== null
+    && "name" in error
+    && error.name === "AbortError";
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) return new Promise((resolve) => setTimeout(resolve, delayMs));
+  if (signal.aborted) return Promise.reject(signal.reason);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export async function fetchWithRetry(
   path: string,
   init: HccaRequestInit,
@@ -78,12 +103,14 @@ export async function fetchWithRetry(
       const response = await fetch(`${API_BASE}${path}`, requestInitWithTrace(init, trace));
       return { response, attempts };
     } catch (error) {
+      // 元件卸載或路由切換造成的取消不是網路故障；不要重試、開熔斷或回報錯誤。
+      if (isRequestAborted(error, init.signal)) throw error;
       if (attempts >= maxRetries) {
         const message = error instanceof Error ? error.message : `無法連線：${path}`;
         reportClientError({ scope: "api.network", message, stack: error instanceof Error ? error.stack : undefined });
         throw new NetworkRequestError(`無法連線至後端 API：${API_BASE}`);
       }
-      await new Promise((resolve) => setTimeout(resolve, [400, 900][attempts] ?? 1500));
+      await waitForRetry([400, 900][attempts] ?? 1500, init.signal);
       attempts += 1;
     }
   }
