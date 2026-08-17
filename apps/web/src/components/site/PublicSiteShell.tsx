@@ -55,7 +55,7 @@ export default function PublicSiteShell({
       <PublicSiteHeader
         navPages={headerNavPages}
         settings={headerSettings}
-        urgentAnnouncement={headerUrgentAnnouncement}
+        urgentAnnouncement={headerUrgentAnnouncement ?? undefined}
       />
       <main id="main-content">
         <PublicSiteBackLink />
