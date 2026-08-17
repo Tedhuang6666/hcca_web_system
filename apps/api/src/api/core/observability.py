@@ -19,7 +19,6 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
 
     try:
         from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         from opentelemetry.instrumentation.redis import RedisInstrumentor
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
@@ -43,10 +42,22 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
         }
     )
     provider = TracerProvider(resource=resource)
-    exporter = OTLPSpanExporter(
-        endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
-        insecure=settings.OTEL_EXPORTER_OTLP_ENDPOINT.startswith("http://"),
-    )
+    endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
+    if "/integration/otlp" in endpoint:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+            OTLPSpanExporter,
+        )
+
+        exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
+    else:
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+            OTLPSpanExporter,
+        )
+
+        exporter = OTLPSpanExporter(
+            endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+            insecure=settings.OTEL_EXPORTER_OTLP_ENDPOINT.startswith("http://"),
+        )
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app, excluded_urls="health,live,ready,metrics")
