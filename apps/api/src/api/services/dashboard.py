@@ -74,10 +74,12 @@ def _dashboard_composite_cache_key(
     include_tasks: bool,
     include_matters: bool,
     include_announcements: bool,
+    compact_dashboard: bool,
 ) -> str:
     return (
         f"dashboard:composite:{user_id}:"
         f"{int(include_tasks)}:{int(include_matters)}:{int(include_announcements)}"
+        f":{int(compact_dashboard)}"
     )
 
 
@@ -634,7 +636,12 @@ async def _run_widget(
     return await _safe_run(run, name)
 
 
-async def _build_dashboard_uncached(db: AsyncSession, user: User) -> DashboardResponse:
+async def _build_dashboard_uncached(
+    db: AsyncSession,
+    user: User,
+    *,
+    compact: bool = False,
+) -> DashboardResponse:
     """聚合當前使用者的儀表板 widgets（不含快取邏輯）。"""
     perms = await get_user_permission_codes(db, user.id)
     is_admin = bool(getattr(user, "is_superuser", False))
@@ -642,46 +649,87 @@ async def _build_dashboard_uncached(db: AsyncSession, user: User) -> DashboardRe
 
     widget_builders: list[Awaitable[DashboardWidget | None]] = [
         _run_widget(db, "meeting_upcoming", lambda widget_db: _w_meeting_upcoming(widget_db, user)),
-        _run_widget(db, "doc_draft", lambda widget_db: _w_doc_draft(widget_db, user)),
-        _run_widget(db, "open_surveys", lambda widget_db: _w_open_surveys(widget_db, user)),
         _run_widget(
             db,
             "announcements_recent",
             lambda widget_db: _w_announcements_recent(widget_db, user),
         ),
     ]
-    if is_admin or _has(perms, is_admin, "document:approve"):
-        widget_builders.append(
-            _run_widget(
-                db,
-                "doc_pending_my_approval",
-                lambda widget_db: _w_doc_pending_my_approval(widget_db, user, perms, is_admin),
+    if compact:
+        # 首屏只取一個角色最重要的工作 widget；完整儀表板由瀏覽器 hydration
+        # 後背景載入，避免七個以上查詢排隊拖慢首頁可互動時間。
+        if _is_leader(perms, is_admin):
+            if is_admin or _has(perms, is_admin, "president:publish"):
+                widget_builders.append(
+                    _run_widget(
+                        db,
+                        "regulation_publish",
+                        lambda widget_db: _w_regulation_publish(widget_db, user, perms, is_admin),
+                    )
+                )
+            elif _has(perms, is_admin, "regulation:create"):
+                widget_builders.append(
+                    _run_widget(
+                        db,
+                        "regulation_review",
+                        lambda widget_db: _w_regulation_review(widget_db, user, perms, is_admin),
+                    )
+                )
+        elif is_admin or _has(perms, is_admin, "document:approve"):
+            widget_builders.append(
+                _run_widget(
+                    db,
+                    "doc_pending_my_approval",
+                    lambda widget_db: _w_doc_pending_my_approval(widget_db, user, perms, is_admin),
+                )
             )
-        )
-    if is_admin or _has(perms, is_admin, "president:publish"):
-        widget_builders.append(
-            _run_widget(
-                db,
-                "regulation_publish",
-                lambda widget_db: _w_regulation_publish(widget_db, user, perms, is_admin),
+        elif _is_officer(perms):
+            widget_builders.append(
+                _run_widget(db, "doc_draft", lambda widget_db: _w_doc_draft(widget_db, user))
             )
-        )
-    if _is_leader(perms, is_admin) or _has(perms, is_admin, "regulation:create"):
-        widget_builders.append(
-            _run_widget(
-                db,
-                "regulation_review",
-                lambda widget_db: _w_regulation_review(widget_db, user, perms, is_admin),
+        else:
+            widget_builders.append(
+                _run_widget(db, "open_surveys", lambda widget_db: _w_open_surveys(widget_db, user))
             )
+    else:
+        widget_builders.extend(
+            [
+                _run_widget(db, "doc_draft", lambda widget_db: _w_doc_draft(widget_db, user)),
+                _run_widget(db, "open_surveys", lambda widget_db: _w_open_surveys(widget_db, user)),
+            ]
         )
-    if is_admin or any(permission.startswith("petition:") for permission in perms):
-        widget_builders.append(
-            _run_widget(
-                db,
-                "petition_assigned",
-                lambda widget_db: _w_petition_assigned(widget_db, user, perms, is_admin),
+        if is_admin or _has(perms, is_admin, "document:approve"):
+            widget_builders.append(
+                _run_widget(
+                    db,
+                    "doc_pending_my_approval",
+                    lambda widget_db: _w_doc_pending_my_approval(widget_db, user, perms, is_admin),
+                )
             )
-        )
+        if is_admin or _has(perms, is_admin, "president:publish"):
+            widget_builders.append(
+                _run_widget(
+                    db,
+                    "regulation_publish",
+                    lambda widget_db: _w_regulation_publish(widget_db, user, perms, is_admin),
+                )
+            )
+        if _is_leader(perms, is_admin) or _has(perms, is_admin, "regulation:create"):
+            widget_builders.append(
+                _run_widget(
+                    db,
+                    "regulation_review",
+                    lambda widget_db: _w_regulation_review(widget_db, user, perms, is_admin),
+                )
+            )
+        if is_admin or any(permission.startswith("petition:") for permission in perms):
+            widget_builders.append(
+                _run_widget(
+                    db,
+                    "petition_assigned",
+                    lambda widget_db: _w_petition_assigned(widget_db, user, perms, is_admin),
+                )
+            )
 
     results = await asyncio.gather(*widget_builders)
     widgets = [w for w in results if w is not None]
@@ -697,9 +745,16 @@ async def _build_dashboard_uncached(db: AsyncSession, user: User) -> DashboardRe
     return DashboardResponse(widgets=widgets, layout_hint=hint)
 
 
-async def build_dashboard(db: AsyncSession, user: User) -> DashboardResponse:
+async def build_dashboard(
+    db: AsyncSession,
+    user: User,
+    *,
+    compact: bool = False,
+) -> DashboardResponse:
     """聚合當前使用者的儀表板 widgets（含 Redis 快取 60s）。"""
     cache_key = _dashboard_cache_key(str(user.id))
+    if compact:
+        cache_key = f"{cache_key}:compact"
 
     # 嘗試從快取讀取
     cached = await cache_get(cache_key)
@@ -710,7 +765,7 @@ async def build_dashboard(db: AsyncSession, user: User) -> DashboardResponse:
             logger.debug("dashboard cache payload invalid user=%s", user.id, exc_info=True)
 
     # 快取未命中：重新建構
-    response = await _build_dashboard_uncached(db, user)
+    response = await _build_dashboard_uncached(db, user, compact=compact)
 
     # 寫入快取（排除 SQLAlchemy 模型物件，僅序列化 Pydantic）
     cache_data = response.model_dump(mode="json")
@@ -803,6 +858,7 @@ async def build_dashboard_composite(
     include_tasks: bool = True,
     include_matters: bool = True,
     include_announcements: bool = True,
+    compact_dashboard: bool = False,
 ) -> DashboardCompositeResponse:
     """一次組裝 dashboard 首屏資料，降低前端 round trips。"""
     cache_key = _dashboard_composite_cache_key(
@@ -810,6 +866,7 @@ async def build_dashboard_composite(
         include_tasks=include_tasks,
         include_matters=include_matters,
         include_announcements=include_announcements,
+        compact_dashboard=compact_dashboard,
     )
     cached = await cache_get(cache_key)
     if isinstance(cached, dict):
@@ -822,7 +879,12 @@ async def build_dashboard_composite(
 
     async def dashboard_component() -> DashboardResponse:
         result = await _with_component_session(
-            db, lambda source_db: build_dashboard(source_db, user)
+            db,
+            lambda source_db: build_dashboard(
+                source_db,
+                user,
+                compact=compact_dashboard,
+            ),
         )
         return result  # type: ignore[return-value]
 

@@ -150,6 +150,7 @@ export type DashboardPageInitialData = {
   userName: string;
   greeting: string;
   dashboard: DashboardResponse | null;
+  dashboardIsCompact?: boolean;
   tasks: TaskInboxResponse | null;
   matters: MatterListItem[] | null;
   announcements: AnnouncementListItem[] | null;
@@ -247,7 +248,8 @@ export default function DashboardPageClient({
     if (initialData?.announcements == null && cachedAnnouncements) {
       setAnnouncements(cachedAnnouncements);
     }
-    const refreshDashboard = !initialData?.dashboard && !cachedDashboard;
+    const refreshDashboard = Boolean(initialData?.dashboardIsCompact)
+      || (!initialData?.dashboard && !cachedDashboard);
     const refreshTasks = !initialData?.tasks && !cachedTasks;
     const refreshMatters = canViewGovernanceWork && initialData?.matters == null && !cachedMatters;
     const refreshAnnouncements = initialData?.announcements == null && !cachedAnnouncements;
@@ -257,7 +259,7 @@ export default function DashboardPageClient({
     const compositePromise = refreshDashboard
       ? dashboardApi.composite({ includeTasks: false, includeMatters: canViewGovernanceWork })
       : null;
-    const tasksPromise = !refreshDashboard && refreshTasks ? tasksApi.list() : null;
+    const tasksPromise = refreshTasks ? tasksApi.list() : null;
     const mattersPromise = !refreshDashboard && refreshMatters
       ? governanceApi.listMatters({ status: "active", limit: 6 })
       : null;
