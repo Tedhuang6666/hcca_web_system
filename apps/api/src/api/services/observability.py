@@ -694,15 +694,13 @@ async def latest_page_scores(
     run_ids = [row.id for row in latest.values()]
     audit_rows = []
     if run_ids:
-        audit_ids = None if include_audits else ("interaction-to-next-paint", "server-response-time")
+        audit_ids = (
+            None if include_audits else ("interaction-to-next-paint", "server-response-time")
+        )
         audit_query = select(PageSpeedAudit).where(PageSpeedAudit.run_id.in_(run_ids))
         if audit_ids is not None:
             audit_query = audit_query.where(PageSpeedAudit.audit_id.in_(audit_ids))
-        audit_rows = (
-            (await session.execute(audit_query))
-            .scalars()
-            .all()
-        )
+        audit_rows = (await session.execute(audit_query)).scalars().all()
     audits_by_run: dict[object, list[PageSpeedAudit]] = {}
     for audit in audit_rows:
         audits_by_run.setdefault(audit.run_id, []).append(audit)
