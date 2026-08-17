@@ -45,11 +45,13 @@ export const dashboardApi = {
     includeTasks?: boolean;
     includeMatters?: boolean;
     includeAnnouncements?: boolean;
+    compactDashboard?: boolean;
   }) => {
     const query = new URLSearchParams();
     if (options?.includeTasks === false) query.set("include_tasks", "false");
     if (options?.includeMatters === false) query.set("include_matters", "false");
     if (options?.includeAnnouncements === false) query.set("include_announcements", "false");
+    if (options?.compactDashboard) query.set("compact_dashboard", "true");
     const queryString = query.toString();
     const userId = typeof window === "undefined" ? null : localStorage.getItem("user_id");
     return request<DashboardCompositeResponse>(

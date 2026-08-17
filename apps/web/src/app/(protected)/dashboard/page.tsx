@@ -39,12 +39,13 @@ export default async function DashboardPage() {
       "document:admin",
     ].includes(permission));
   const composite = await fetchOptional<DashboardCompositeResponse>(
-    `/dashboard/composite?include_tasks=false&include_matters=${canViewGovernanceWork}`,
+    `/dashboard/composite?include_tasks=false&include_matters=${canViewGovernanceWork}&compact_dashboard=true`,
   );
   const initialData: DashboardPageInitialData = {
     userName: session.display_name,
     greeting: dashboardGreeting(),
     dashboard: composite?.dashboard ?? null,
+    dashboardIsCompact: Boolean(composite),
     tasks: composite?.tasks ?? null,
     matters: composite?.matters ?? null,
     announcements: composite?.announcements ?? null,
