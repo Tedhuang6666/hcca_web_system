@@ -382,11 +382,16 @@ def _has_rum_observation(route: dict) -> bool:
     )
 
 
+def _has_pageview_observation(route: dict) -> bool:
+    """Only browser navigations are valid PSI targets; API metrics are not pages."""
+    return int(route.get("pageviews") or 0) > 0
+
+
 def _merge_rum_urls(urls: list[str], rum: dict) -> list[str]:
     """Include every same-origin route seen by first-party RUM in the scan set."""
     base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
     for route in rum.get("routes", []):
-        if not _has_rum_observation(route):
+        if not _has_pageview_observation(route):
             continue
         path = _normalize_client_path(route.get("path"))
         url = urljoin(base, path.lstrip("/"))
