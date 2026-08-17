@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from itsdangerous import BadData, URLSafeTimedSerializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_get, cache_invalidate, cache_set
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
@@ -53,6 +54,19 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 logger = logging.getLogger(__name__)
+
+_PORTAL_CACHE_KEY = "merchandise_submission:portal:catalog"
+_PORTAL_CACHE_TTL_SECONDS = 15
+_MINE_CACHE_TTL_SECONDS = 10
+
+
+def _mine_cache_key(user_id: uuid.UUID) -> str:
+    return f"merchandise_submission:mine:{user_id}"
+
+
+async def _invalidate_mine_cache(user_id: uuid.UUID) -> None:
+    await cache_invalidate(_mine_cache_key(user_id))
+
 
 _REVIEW_STATUS_LABELS = {
     MerchandiseSubmissionStatus.REVIEWING: "進入審核",
@@ -171,22 +185,34 @@ def _serialize_submission(submission, *, include_submitter: bool):
 
 @router.get("/portal", response_model=MerchandiseSubmissionPortalOut, summary="取得投稿入口資料")
 async def portal(session: DbDep, current_user: CurrentUser) -> dict:
-    settings = await submission_svc.get_settings(session)
-    items = await submission_svc.list_items(session, include_inactive=False)
-    result = []
-    for item in items:
-        accepting, opens_at, closes_at, max_mb = submission_svc.effective_config(settings, item)
-        item_payload = MerchandiseSubmissionItemOut.model_validate(item).model_dump()
-        item_payload["custom_fields"] = submission_svc.effective_custom_fields(settings, item)
-        result.append(
-            {
-                **item_payload,
-                "is_accepting": accepting,
-                "effective_opens_at": opens_at,
-                "effective_closes_at": closes_at,
-                "effective_max_file_size_mb": max_mb,
-            }
-        )
+    catalog = await cache_get(_PORTAL_CACHE_KEY)
+    if catalog is None:
+        settings = await submission_svc.get_settings(session)
+        items = await submission_svc.list_items(session, include_inactive=False)
+        result = []
+        for item in items:
+            accepting, opens_at, closes_at, max_mb = submission_svc.effective_config(settings, item)
+            item_payload = MerchandiseSubmissionItemOut.model_validate(item).model_dump()
+            item_payload["custom_fields"] = submission_svc.effective_custom_fields(settings, item)
+            result.append(
+                {
+                    **item_payload,
+                    "is_accepting": accepting,
+                    "effective_opens_at": opens_at,
+                    "effective_closes_at": closes_at,
+                    "effective_max_file_size_mb": max_mb,
+                }
+            )
+        catalog = {
+            "settings": MerchandiseSubmissionSettingsOut.model_validate(settings).model_dump(
+                mode="json"
+            ),
+            "items": result,
+        }
+        await cache_set(_PORTAL_CACHE_KEY, catalog, ttl=_PORTAL_CACHE_TTL_SECONDS)
+    else:
+        settings = MerchandiseSubmissionSettingsOut.model_validate(catalog["settings"])
+        result = catalog["items"]
     return {
         "settings": settings,
         "items": result,
@@ -196,10 +222,16 @@ async def portal(session: DbDep, current_user: CurrentUser) -> dict:
 
 @router.get("/submissions/me", response_model=list[MerchandiseSubmissionOut], summary="我的投稿")
 async def my_submissions(session: DbDep, current_user: CurrentUser) -> list[dict]:
+    cache_key = _mine_cache_key(current_user.id)
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
     submissions = await submission_svc.list_my_submissions(session, user_id=current_user.id)
-    return [
+    result = [
         _serialize_submission(submission, include_submitter=False) for submission in submissions
     ]
+    await cache_set(cache_key, result, ttl=_MINE_CACHE_TTL_SECONDS)
+    return result
 
 
 @router.post("/uploads", response_model=MerchandiseSubmissionUploadOut, summary="上傳投稿圖稿")
@@ -398,6 +430,7 @@ async def create_submission(
         meta={"item_id": str(submission.item_id), "status": submission.status.value},
         summary=f"{'送出' if submit else '儲存'}校商投稿「{submission.item.name}」",
     )
+    await _invalidate_mine_cache(current_user.id)
     if submit and submission.status == MerchandiseSubmissionStatus.SUBMITTED:
         fields, image_urls = await _submission_discord_details(session, submission)
         await emit_routed_notification(
@@ -446,6 +479,7 @@ async def update_my_submission(
         meta={"status": submission.status.value},
         summary=f"更新校商投稿「{submission.item.name}」",
     )
+    await _invalidate_mine_cache(current_user.id)
     return _serialize_submission(submission, include_submitter=False)
 
 
@@ -479,6 +513,7 @@ async def delete_my_submission(
         meta={"status": submission.status.value},
         summary=f"刪除校商投稿「{item_name}」",
     )
+    await _invalidate_mine_cache(current_user.id)
 
 
 @router.get(
@@ -508,13 +543,15 @@ async def update_admin_settings(
 ):
     settings = await submission_svc.get_settings(session)
     try:
-        return await submission_svc.update_settings(
+        result = await submission_svc.update_settings(
             session, settings, payload, updated_by_id=current_user.id
         )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+    await cache_invalidate(_PORTAL_CACHE_KEY)
+    return result
 
 
 @router.post(
@@ -577,11 +614,13 @@ async def create_admin_item(
     payload: MerchandiseSubmissionItemCreate, session: DbDep, current_user: CurrentUser
 ):
     try:
-        return await submission_svc.create_item(session, payload, created_by_id=current_user.id)
+        item = await submission_svc.create_item(session, payload, created_by_id=current_user.id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+    await cache_invalidate(_PORTAL_CACHE_KEY)
+    return item
 
 
 @router.patch(
@@ -601,11 +640,13 @@ async def update_admin_item(
 ):
     item = or_404(await submission_svc.get_item(session, item_id), "找不到投稿品項")
     try:
-        return await submission_svc.update_item(session, item, payload)
+        item = await submission_svc.update_item(session, item, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+    await cache_invalidate(_PORTAL_CACHE_KEY)
+    return item
 
 
 @router.get(
@@ -672,6 +713,7 @@ async def add_admin_submission_file(
         meta={"file_count": len(submission.files)},
         summary=f"為校商投稿「{submission.item.name}」增加檔案",
     )
+    await _invalidate_mine_cache(submission.user_id)
     return _serialize_submission(submission, include_submitter=True)
 
 
@@ -717,6 +759,7 @@ async def replace_admin_submission_file(
         meta={"file_id": str(file_id)},
         summary=f"替換校商投稿「{submission.item.name}」檔案",
     )
+    await _invalidate_mine_cache(submission.user_id)
     return _serialize_submission(submission, include_submitter=True)
 
 
@@ -793,4 +836,5 @@ async def review_admin_submission(
         meta={"status": submission.status.value},
         summary=f"審核校商投稿「{submission.item.name}」",
     )
+    await _invalidate_mine_cache(submission.user_id)
     return _serialize_submission(submission, include_submitter=True)
