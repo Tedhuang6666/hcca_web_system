@@ -45,7 +45,6 @@ export default async function DashboardPage() {
     userName: session.display_name,
     greeting: dashboardGreeting(),
     dashboard: composite?.dashboard ?? null,
-    dashboardIsCompact: Boolean(composite),
     tasks: composite?.tasks ?? null,
     matters: composite?.matters ?? null,
     announcements: composite?.announcements ?? null,

@@ -14,6 +14,9 @@ from api.core.config import settings
 from api.core.security import redis_client
 
 logger = logging.getLogger(__name__)
+REDIS_STATS_TIMEOUT_SECONDS = 0.5
+CELERY_STATS_MIN_TIMEOUT_SECONDS = 0.75
+CELERY_STATS_MAX_TIMEOUT_SECONDS = 1.25
 
 
 @dataclass
@@ -46,13 +49,16 @@ def get_db_pool_stats(engine: AsyncEngine) -> DbPoolSnapshot:
 async def get_redis_stats() -> dict[str, Any]:
     """從 Redis INFO clients 抓連線數；失敗回傳 error 欄位。"""
     try:
-        info = await redis_client.info("clients")
+        info = await asyncio.wait_for(
+            redis_client.info("clients"),
+            timeout=REDIS_STATS_TIMEOUT_SECONDS,
+        )
         return {
             "connected_clients": int(info.get("connected_clients", 0)),
             "blocked_clients": int(info.get("blocked_clients", 0)),
             "error": None,
         }
-    except RedisError as exc:
+    except (RedisError, TimeoutError) as exc:
         return {"connected_clients": 0, "blocked_clients": 0, "error": exc.__class__.__name__}
 
 
@@ -79,7 +85,14 @@ async def get_celery_stats(timeout_seconds: float | None = None) -> dict[str, An
         except Exception:  # broker down or no workers
             return None
 
-    snapshot = await asyncio.to_thread(_inspect)
+    inspect_budget = min(
+        CELERY_STATS_MAX_TIMEOUT_SECONDS,
+        max(CELERY_STATS_MIN_TIMEOUT_SECONDS, timeout * 2 + 0.25),
+    )
+    try:
+        snapshot = await asyncio.wait_for(asyncio.to_thread(_inspect), timeout=inspect_budget)
+    except TimeoutError:
+        return {"queues": [], "error": "inspect_timeout"}
     if snapshot is None:
         return {"queues": [], "error": "inspect_failed"}
 

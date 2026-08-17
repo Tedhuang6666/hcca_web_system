@@ -93,6 +93,11 @@ def _reg_query_for_public_detail():
     )
 
 
+def _reg_query_for_detail():
+    """登入後詳情同樣只載入回應需要的關聯，保留草稿資料本身。"""
+    return _reg_query_for_public_detail()
+
+
 def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
     for reg in regs:
         creator = reg.__dict__.get("creator")
@@ -260,6 +265,29 @@ async def get_regulation_by_identifier(
         .order_by(Regulation.is_active.desc(), Regulation.updated_at.desc())
         .limit(1)
     )
+    reg = result.scalar_one_or_none()
+    if reg is None:
+        return None
+    _attach_display_names([reg])
+    return reg
+
+
+async def get_regulation_detail_by_identifier(
+    session: AsyncSession,
+    identifier: uuid.UUID | str,
+) -> Regulation | None:
+    """以 UUID 或法規中文全名取得詳情，避免載入未使用的公布公文關聯。"""
+    query = _reg_query_for_detail()
+    if isinstance(identifier, uuid.UUID):
+        query = query.where(Regulation.id == identifier)
+    else:
+        try:
+            query = query.where(Regulation.id == uuid.UUID(identifier))
+        except ValueError:
+            query = query.where(Regulation.title == identifier).order_by(
+                Regulation.is_active.desc(), Regulation.updated_at.desc()
+            )
+    result = await session.execute(query.limit(1))
     reg = result.scalar_one_or_none()
     if reg is None:
         return None
