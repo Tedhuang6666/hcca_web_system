@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useState } from "react";
-import { ApiError, notificationsApi, tasksApi } from "@/lib/api";
+import { ApiError } from "@/lib/api/core";
+import { notificationsApi } from "@/lib/api/notifications";
+import { tasksApi } from "@/lib/api/tasks";
 import { isFatalApiStatus } from "@/lib/polling";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
 import { useLowDataMode } from "@/hooks/useLowDataMode";

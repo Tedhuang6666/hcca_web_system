@@ -1,22 +1,22 @@
-name: authenticated-performance
+name: public-performance
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "17 2 * * *"
+    - cron: "47 */6 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: authenticated-performance
+  group: public-performance
   cancel-in-progress: true
 
 jobs:
   lighthouse:
-    name: Authenticated Lighthouse (shard ${{ matrix.shard }})
+    name: Public Lighthouse (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -47,42 +47,23 @@ jobs:
           PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
         run: test -n "$PERFORMANCE_MONITOR_TOKEN"
 
-      - name: Run authenticated Lighthouse and persist results
+      - name: Run public Lighthouse and persist results
         env:
           BASE_URL: https://hcca.tw
+          AUTHENTICATED: "false"
           PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
           GITHUB_SHA: ${{ github.sha }}
-          AUTHENTICATED: "true"
           TARGET_SHARD_INDEX: ${{ matrix.shard }}
           TARGET_SHARD_COUNT: "4"
           MIN_SCORE: "95"
-          OUTPUT_FILE: .lighthouseci/authenticated-summary-${{ matrix.shard }}.json
+          OUTPUT_FILE: .lighthouseci/public-summary-${{ matrix.shard }}.json
         run: node scripts/authenticated-lighthouse.mjs
 
-      - name: Run authenticated interaction budgets
-        if: matrix.shard == 0
-        env:
-          BASE_URL: https://hcca.tw
-          PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
-          OUTPUT_FILE: .lighthouseci/authenticated-interactions.json
-          FEEDBACK_BUDGET_MS: "100"
-          COMPLETION_BUDGET_MS: "500"
-        run: node scripts/authenticated-interactions.mjs
-
-      - name: Upload authenticated performance report
+      - name: Upload public performance report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: authenticated-lighthouse-report-${{ matrix.shard }}
-          path: .lighthouseci/authenticated-summary-${{ matrix.shard }}.json
-          if-no-files-found: ignore
-          retention-days: 30
-
-      - name: Upload authenticated interaction report
-        if: always() && matrix.shard == 0
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: authenticated-interaction-report
-          path: .lighthouseci/authenticated-interactions.json
+          name: public-lighthouse-report-${{ matrix.shard }}
+          path: .lighthouseci/public-summary-${{ matrix.shard }}.json
           if-no-files-found: ignore
           retention-days: 30

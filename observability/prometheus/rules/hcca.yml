@@ -44,6 +44,30 @@ groups:
           summary: "HCCA route P99 延遲過高"
           description: "至少一個路由最近 10 分鐘 P99 延遲超過 5 秒。"
 
+      - alert: HccaDbHighP95Time
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, path_template) (rate(hcca_db_time_per_request_seconds_bucket[5m]))
+          ) > 0.25
+        for: 10m
+        labels:
+          severity: P2
+          service: postgresql
+        annotations:
+          summary: "HCCA DB P95 查詢時間過高"
+          description: "至少一個 API route 的 DB query time P95 超過 250ms。"
+
+      - alert: HccaRedisClientDegraded
+        expr: min by (domain) (hcca_redis_client_healthy) == 0
+        for: 5m
+        labels:
+          severity: P2
+          service: redis
+        annotations:
+          summary: "HCCA Redis client domain degraded"
+          description: "至少一個 Redis client domain 持續無法完成健康檢查。"
+
       - alert: HccaHttpTimeouts
         expr: sum(rate(hcca_http_timeouts_total[5m])) > 0
         for: 5m

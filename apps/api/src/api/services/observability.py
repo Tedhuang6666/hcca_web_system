@@ -860,6 +860,9 @@ async def latest_page_scores(
             page[strategy] = strategy_data
         elif strategy in {"auth-mobile", "auth-desktop"}:
             page[f"authenticated_{strategy.removeprefix('auth-')}"] = strategy_data
+        elif strategy in {"public-mobile", "public-desktop"}:
+            page[strategy.removeprefix("public-")] = strategy_data
+            page["source"] = "synthetic"
 
     def _page_score_status(page: dict, mobile_key: str, desktop_key: str) -> str:
         modes = [page.get(mobile_key), page.get(desktop_key)]

@@ -38,6 +38,26 @@ groups:
         annotations:
           summary: "HCCA route p99 latency exceeds 2 seconds"
 
+      - alert: HccaDbHighP95Time
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, path_template) (rate(hcca_db_time_per_request_seconds_bucket[5m]))
+          ) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HCCA DB p95 time exceeds 250ms on a route"
+
+      - alert: HccaRedisClientDegraded
+        expr: min by (domain) (hcca_redis_client_healthy) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HCCA Redis client domain is degraded"
+
       - alert: HccaHttpTimeouts
         expr: sum(rate(hcca_http_timeouts_total[5m])) > 0
         for: 5m
