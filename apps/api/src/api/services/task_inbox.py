@@ -581,27 +581,7 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
     is_admin = bool(getattr(user, "is_superuser", False))
 
     source_calls = [
-        _run_source(
-            db,
-            "docs_approve",
-            lambda source_db: _docs_pending_my_approval(source_db, user, perms, is_admin),
-        ),
         _run_source(db, "meetings_upcoming", lambda source_db: _meetings_upcoming(source_db, user)),
-        _run_source(
-            db,
-            "regulations_publish",
-            lambda source_db: _regulations_to_publish(source_db, user, perms, is_admin),
-        ),
-        _run_source(
-            db,
-            "regulations_review",
-            lambda source_db: _regulations_to_review(source_db, user, perms, is_admin),
-        ),
-        _run_source(
-            db,
-            "petitions_assigned",
-            lambda source_db: _petitions_assigned(source_db, user, perms, is_admin),
-        ),
         _run_source(db, "surveys_fill", lambda source_db: _surveys_to_fill(source_db, user)),
         _run_source(
             db,
@@ -615,25 +595,68 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
         ),
         _run_source(
             db,
-            "announcements_publish",
-            lambda source_db: _announcements_to_publish(source_db, user, perms, is_admin),
-        ),
-        _run_source(
-            db,
-            "shop_sales",
-            lambda source_db: _shop_sales_to_manage(source_db, user, perms, is_admin),
-        ),
-        _run_source(
-            db,
-            "meal_deadlines",
-            lambda source_db: _meal_deadlines_to_manage(source_db, user, perms, is_admin),
-        ),
-        _run_source(
-            db,
             "work_items_assigned",
             lambda source_db: _work_items_assigned(source_db, user),
         ),
     ]
+    if _has(perms, is_admin, "document:approve"):
+        source_calls.append(
+            _run_source(
+                db,
+                "docs_approve",
+                lambda source_db: _docs_pending_my_approval(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "president:publish"):
+        source_calls.append(
+            _run_source(
+                db,
+                "regulations_publish",
+                lambda source_db: _regulations_to_publish(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "regulation:schedule") or _has(
+        perms, is_admin, "regulation:council_approve"
+    ):
+        source_calls.append(
+            _run_source(
+                db,
+                "regulations_review",
+                lambda source_db: _regulations_to_review(source_db, user, perms, is_admin),
+            )
+        )
+    if is_admin or any(permission.startswith("petition:") for permission in perms):
+        source_calls.append(
+            _run_source(
+                db,
+                "petitions_assigned",
+                lambda source_db: _petitions_assigned(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "announcement:publish"):
+        source_calls.append(
+            _run_source(
+                db,
+                "announcements_publish",
+                lambda source_db: _announcements_to_publish(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "shop:manage"):
+        source_calls.append(
+            _run_source(
+                db,
+                "shop_sales",
+                lambda source_db: _shop_sales_to_manage(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "meal:manage") or _has(perms, is_admin, "meal:manage_schedule"):
+        source_calls.append(
+            _run_source(
+                db,
+                "meal_deadlines",
+                lambda source_db: _meal_deadlines_to_manage(source_db, user, perms, is_admin),
+            )
+        )
     if isinstance(db.bind, AsyncEngine):
         groups = await asyncio.gather(*source_calls)
     else:
