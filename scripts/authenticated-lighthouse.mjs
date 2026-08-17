@@ -219,7 +219,9 @@ const targetsToCheck = targetFilter
     ? allTargets.slice(targetOffset, targetOffset + targetLimit)
     : allTargets.slice(targetOffset);
 const pageCandidates = [];
-const pageCheckConcurrency = 8;
+// Keep preflight requests bounded; the workflow itself serializes browser
+// shards so synthetic collection cannot become a production load test.
+const pageCheckConcurrency = 4;
 for (let offset = 0; offset < targetsToCheck.length; offset += pageCheckConcurrency) {
   const checked = await Promise.all(
     targetsToCheck.slice(offset, offset + pageCheckConcurrency).map(async (target) => {
