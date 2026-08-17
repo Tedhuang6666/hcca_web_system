@@ -32,6 +32,7 @@ from api.core.anomaly_detection import get_login_ips
 from api.core.config import settings
 from api.core.database import engine, get_db
 from api.core.defense import find_identity_block
+from api.core.defense import get_rules as get_defense_rules
 from api.core.error_audit import (
     clear_errors,
     find_error_by_id,
@@ -97,6 +98,8 @@ router = APIRouter(
 )
 public_router = APIRouter(prefix="/system", tags=["系統"])
 logger = logging.getLogger(__name__)
+
+_IDENTITY_EMAIL_LOOKUP_RULE = "email_block"
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
@@ -313,15 +316,24 @@ async def public_access_status(
     if user is None:
         return AccessBlockStatus(blocked=False)
 
-    identity_emails = await session.scalars(
-        select(UserIdentity.email).where(
-            UserIdentity.user_id == user.id,
-            UserIdentity.email.is_not(None),
+    # Most requests only need the user-id block check.  Avoid opening a DB
+    # connection for linked identities unless the active defense policy has an
+    # email block that could match one of them.  This is especially important
+    # because this public probe runs on many authenticated page loads.
+    rules = await get_defense_rules()
+    has_email_blocks = any(rule.get("rule_type") == _IDENTITY_EMAIL_LOOKUP_RULE for rule in rules)
+    identity_emails = {user.email}
+    if has_email_blocks:
+        identity_rows = await session.scalars(
+            select(UserIdentity.email).where(
+                UserIdentity.user_id == user.id,
+                UserIdentity.email.is_not(None),
+            )
         )
-    )
+        identity_emails.update(email for email in identity_rows.all() if email)
     identity_block = await find_identity_block(
         user_id=str(user.id),
-        emails={user.email, *(email for email in identity_emails.all() if email)},
+        emails=identity_emails,
     )
     if not identity_block:
         return AccessBlockStatus(blocked=False)

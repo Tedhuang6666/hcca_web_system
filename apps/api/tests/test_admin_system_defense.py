@@ -16,7 +16,7 @@ from api.core.celery_app import celery_app
 from api.core.defense import default_rate_limit_config, publish_rules, set_rate_limit_config
 from api.core.ip_blocklist import clear_cache as clear_ip_block_cache
 from api.core.rate_limit import _memory_buckets
-from api.dependencies.auth import get_current_active_user
+from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.main import app
 from api.models.audit_log import AuditLog
 from api.models.defense import DefenseRule
@@ -235,6 +235,49 @@ async def test_admin_can_preview_and_block_user_with_all_known_emails(
     assert ("email_block", "member@school.edu") in targets
     assert ("email_block", "member.alias@school.edu") in targets
 
+    await _reset_defense_cache()
+
+
+async def test_access_status_still_checks_linked_identity_email_block(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    await _reset_defense_cache()
+    _, member = await _seed_users(db_session)
+    db_session.add(
+        UserIdentity(
+            user_id=member.id,
+            provider="google",
+            external_id="member-access-status-sub",
+            email="member.alias@school.edu",
+            linked_at=member.created_at,
+        )
+    )
+    await db_session.flush()
+
+    async def override_optional_user() -> User:
+        return member
+
+    app.dependency_overrides[get_optional_user] = override_optional_user
+    await publish_rules(
+        [
+            {
+                "rule_type": "email_block",
+                "target": "member.alias@school.edu",
+                "reason": "linked identity blocked",
+                "expires_at": None,
+            }
+        ]
+    )
+
+    response = await client.get("/system/access-status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "blocked": True,
+        "reason": "linked identity blocked",
+        "expires_at": None,
+    }
     await _reset_defense_cache()
 
 

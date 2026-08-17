@@ -138,7 +138,14 @@ async def _get_or_404(ann_id: uuid.UUID, db: AsyncSession) -> Announcement:
     result = await db.execute(
         select(Announcement)
         .where(Announcement.id == ann_id)
-        .options(selectinload(Announcement.media), selectinload(Announcement.author))
+        .options(
+            selectinload(Announcement.media),
+            selectinload(Announcement.author),
+            # The popup response does not expose audience details. Avoid the
+            # default select-in queries for every org/member audience row.
+            noload(Announcement.audience_orgs),
+            noload(Announcement.audience_users),
+        )
     )
     ann = result.scalar_one_or_none()
     if ann is None:
