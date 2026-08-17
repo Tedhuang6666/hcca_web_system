@@ -19,7 +19,7 @@ import type { ModuleStatusPublic } from "./api/system";
 import { serverApiUrl } from "./config";
 
 export const PUBLIC_REVALIDATE_SECONDS = 300;
-const PUBLIC_FETCH_TIMEOUT_MS = 2_000;
+const PUBLIC_FETCH_TIMEOUT_MS = 5_000;
 
 async function fetchPublicApi(input: string): Promise<Response> {
   const controller = new AbortController();

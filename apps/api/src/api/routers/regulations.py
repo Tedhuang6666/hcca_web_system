@@ -342,10 +342,11 @@ async def regulation_usage_context(
     },
 )
 async def get_regulation(reg_id: str, session: DbDep, user: OptionalUser) -> Regulation:
+    if user is None:
+        reg = await reg_svc.get_public_regulation_by_identifier(session, reg_id)
+        return or_404(reg, "找不到此法規")
+
     reg = await _get_reg_or_404(reg_id, session)
-    # 未登入僅可查看已發布且有效的法規（避免草案外洩）
-    if user is None and not await reg_svc.is_publicly_effective(session, reg):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     return reg
 
 

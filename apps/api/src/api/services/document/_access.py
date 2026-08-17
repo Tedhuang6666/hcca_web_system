@@ -96,6 +96,17 @@ def _doc_query_with_relations():
     )
 
 
+def _doc_query_for_detail():
+    """公文詳情專用查詢，只載入 DocumentOut 與存取檢查真正需要的關聯。"""
+    return select(Document).options(
+        selectinload(Document.revisions),
+        selectinload(Document.approvals).joinedload(DocumentApproval.approver),
+        selectinload(Document.approvals).joinedload(DocumentApproval.delegate),
+        selectinload(Document.attachments),
+        selectinload(Document.recipients),
+    )
+
+
 def _delegation_query_with_relations():
     return select(DocumentApprovalDelegation).options(
         selectinload(DocumentApprovalDelegation.principal_user),
@@ -273,6 +284,11 @@ async def get_document(session: AsyncSession, doc_id: uuid.UUID) -> Document | N
     return result.scalar_one_or_none()
 
 
+async def get_document_detail(session: AsyncSession, doc_id: uuid.UUID) -> Document | None:
+    result = await session.execute(_doc_query_for_detail().where(Document.id == doc_id))
+    return result.scalar_one_or_none()
+
+
 async def get_document_by_serial(session: AsyncSession, serial_number: str) -> Document | None:
     result = await session.execute(
         _doc_query_with_relations().where(Document.serial_number == serial_number)
@@ -289,6 +305,34 @@ async def get_document_by_serial(session: AsyncSession, serial_number: str) -> D
         )
     )
     return result.scalar_one_or_none()
+
+
+async def get_document_detail_by_serial(
+    session: AsyncSession, serial_number: str
+) -> Document | None:
+    query = _doc_query_for_detail().where(Document.serial_number == serial_number)
+    document = (await session.execute(query)).scalar_one_or_none()
+    if document is not None:
+        return document
+
+    # 公文字號中的空格只是排版差異，連結可能在複製或手動輸入時被省略。
+    normalized_serial = serial_number.replace(" ", "")
+    query = _doc_query_for_detail().where(
+        func.replace(Document.serial_number, " ", "") == normalized_serial
+    )
+    return (await session.execute(query)).scalar_one_or_none()
+
+
+async def get_document_detail_by_identifier(
+    session: AsyncSession, identifier: uuid.UUID | str
+) -> Document | None:
+    """以 UUID 或字號取得公文詳情，使用最小關聯集合。"""
+    if isinstance(identifier, uuid.UUID):
+        return await get_document_detail(session, identifier)
+    try:
+        return await get_document_detail(session, uuid.UUID(identifier))
+    except ValueError:
+        return await get_document_detail_by_serial(session, identifier)
 
 
 async def get_approval_delegation(
