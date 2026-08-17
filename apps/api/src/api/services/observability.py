@@ -44,6 +44,8 @@ CLIENT_TELEMETRY_KEY = "observability:client-telemetry:v1"
 CLIENT_TELEMETRY_MAX_ITEMS = 20_000
 CLIENT_TELEMETRY_RETENTION_SECONDS = 172_800
 CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS = 10
+CLIENT_TELEMETRY_WRITE_TIMEOUT_SECONDS = 0.25
+CLIENT_TELEMETRY_READ_TIMEOUT_SECONDS = 0.75
 CLIENT_VITAL_METRICS = {"fcp", "lcp", "inp", "cls"}
 DISCOVERED_URLS_CACHE_TTL_SECONDS = 300
 API_OPERATION_KINDS = {
@@ -106,7 +108,10 @@ async def record_client_metrics(metrics: list[dict]) -> bool:
             pipeline.lpush(CLIENT_TELEMETRY_KEY, event)
         pipeline.ltrim(CLIENT_TELEMETRY_KEY, 0, CLIENT_TELEMETRY_MAX_ITEMS - 1)
         pipeline.expire(CLIENT_TELEMETRY_KEY, CLIENT_TELEMETRY_RETENTION_SECONDS)
-        await pipeline.execute()
+        await asyncio.wait_for(
+            pipeline.execute(),
+            timeout=CLIENT_TELEMETRY_WRITE_TIMEOUT_SECONDS,
+        )
         return True
     except Exception as exc:  # noqa: BLE001
         logger.debug("Client telemetry storage unavailable type=%s", _provider_error(exc))
@@ -134,14 +139,18 @@ def _budget_status(value: float | None, good: float, needs_improvement: float) -
 async def client_route_analytics(window_hours: int = 24) -> dict:
     """Aggregate route-level RUM without exposing individual visitors or URLs with queries."""
     cache_key = f"observability:rum:v1:{max(1, min(window_hours, 168))}h"
-    cached = await cache_get(cache_key)
+    try:
+        cached = await asyncio.wait_for(cache_get(cache_key), timeout=0.25)
+    except TimeoutError:
+        cached = None
     if isinstance(cached, dict):
         return cached
 
     cutoff = time.time() - max(1, min(window_hours, 168)) * 3600
     try:
-        raw_items = await redis_client.lrange(
-            CLIENT_TELEMETRY_KEY, 0, CLIENT_TELEMETRY_MAX_ITEMS - 1
+        raw_items = await asyncio.wait_for(
+            redis_client.lrange(CLIENT_TELEMETRY_KEY, 0, CLIENT_TELEMETRY_MAX_ITEMS - 1),
+            timeout=CLIENT_TELEMETRY_READ_TIMEOUT_SECONDS,
         )
     except Exception as exc:  # noqa: BLE001
         return {
@@ -277,7 +286,13 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
         "pageviews": total_pageviews,
         "routes": routes,
     }
-    await cache_set(cache_key, result, ttl=CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS)
+    try:
+        await asyncio.wait_for(
+            cache_set(cache_key, result, ttl=CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS),
+            timeout=0.25,
+        )
+    except TimeoutError:
+        logger.debug("client route analytics cache write timed out")
     return result
 
 

@@ -23,8 +23,10 @@ logger = logging.getLogger(__name__)
 
 BLOCKLIST_KEY = "ip:blocklist"
 _LOCAL_CACHE_TTL = 5.0
+_DETAIL_CACHE_TTL = 5.0
 
 _cache: dict[str, tuple[float, bool]] = {}
+_detail_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _cache_lock = asyncio.Lock()
 
 
@@ -72,6 +74,12 @@ async def is_blocked(ip: str) -> bool:
 async def get_block(ip: str) -> dict[str, Any] | None:
     if is_trusted_ip(ip) or await is_ip_allowed(ip):
         return None
+    now = time.monotonic()
+    cached = _detail_cache.get(ip)
+    if cached and cached[0] > now:
+        return cached[1]
+
+    result: dict[str, Any] | None = None
     try:
         raw = await asyncio.wait_for(redis_client.hget(BLOCKLIST_KEY, ip), timeout=0.8)
     except (RedisError, TimeoutError):
@@ -80,12 +88,15 @@ async def get_block(ip: str) -> dict[str, Any] | None:
         try:
             data = json.loads(raw)
             if data.get("expires_at") is None or data["expires_at"] > time.time():
-                return {"target": ip, "rule_type": "ip_block", **data}
+                result = {"target": ip, "rule_type": "ip_block", **data}
         except (json.JSONDecodeError, TypeError, KeyError):
-            return {"target": ip, "rule_type": "ip_block", "reason": "", "expires_at": None}
-    from api.core.defense import find_ip_block
+            result = {"target": ip, "rule_type": "ip_block", "reason": "", "expires_at": None}
+    if result is None:
+        from api.core.defense import find_ip_block
 
-    return await find_ip_block(ip)
+        result = await find_ip_block(ip)
+    _detail_cache[ip] = (now + _DETAIL_CACHE_TTL, result)
+    return result
 
 
 async def block(ip: str, *, reason: str = "", ttl_seconds: int | None = 3600) -> None:
@@ -100,6 +111,7 @@ async def block(ip: str, *, reason: str = "", ttl_seconds: int | None = 3600) ->
         return
     # 清本地快取讓下個 request 立即看到
     _cache.pop(ip, None)
+    _detail_cache.pop(ip, None)
 
 
 async def unblock(ip: str) -> bool:
@@ -108,6 +120,7 @@ async def unblock(ip: str) -> bool:
     except RedisError:
         return False
     _cache.pop(ip, None)
+    _detail_cache.pop(ip, None)
     return bool(removed)
 
 
@@ -134,3 +147,4 @@ async def list_blocked() -> list[dict[str, Any]]:
 def clear_cache() -> None:
     """測試用：清本地快取。"""
     _cache.clear()
+    _detail_cache.clear()
