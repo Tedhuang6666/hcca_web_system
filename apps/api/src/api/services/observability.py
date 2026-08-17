@@ -13,6 +13,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_get, cache_set
 from api.core.config import settings
 from api.core.error_audit import get_recent_errors
 from api.core.query_audit import get_slow_queries
@@ -710,6 +711,10 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
 
 
 async def overview(session: AsyncSession) -> dict:
+    cached = await cache_get("observability:overview")
+    if isinstance(cached, dict):
+        return cached
+
     day = datetime.now(UTC) - timedelta(days=1)
     pages = await latest_page_scores(session)
     rum = await client_route_analytics()
@@ -782,7 +787,20 @@ async def overview(session: AsyncSession) -> dict:
             select(ObservabilityRelease).order_by(ObservabilityRelease.deployed_at.desc()).limit(1)
         )
     ).scalar_one_or_none()
-    return {
+    compact_pages = []
+    for page in pages:
+        compact_page = dict(page)
+        for mode_key in (
+            "mobile",
+            "desktop",
+            "authenticated_mobile",
+            "authenticated_desktop",
+        ):
+            mode = page.get(mode_key)
+            compact_page[mode_key] = {**mode, "audits": []} if mode else None
+        compact_pages.append(compact_page)
+
+    snapshot = {
         "coverage": {
             "discovered": len(discovered_urls),
             "monitored": len(pages),
@@ -797,7 +815,7 @@ async def overview(session: AsyncSession) -> dict:
             "pending": sum(page.get("authenticated_status") == "pending" for page in pages),
             "threshold": PAGE_SCORE_THRESHOLD,
         },
-        "pages": pages,
+        "pages": compact_pages,
         "synthetic": {
             "mobile_performance": round(sum(mobile_scores) / len(mobile_scores), 2)
             if mobile_scores
@@ -822,3 +840,5 @@ async def overview(session: AsyncSession) -> dict:
         "recent_errors": recent_errors,
         "slow_queries": slow_queries,
     }
+    await cache_set("observability:overview", snapshot, ttl=15)
+    return snapshot

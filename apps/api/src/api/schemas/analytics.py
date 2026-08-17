@@ -3,11 +3,17 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PageViewCreate(BaseModel):
-    path: str = Field(min_length=1, max_length=255)
+    path: str = Field(min_length=1, max_length=2048)
+
+    @field_validator("path")
+    @classmethod
+    def bound_path_for_storage(cls, value: str) -> str:
+        """Keep telemetry from failing when an editor URL exceeds the DB limit."""
+        return value if len(value) <= 255 else f"{value[:252]}..."
 
 
 class ClientMetricCreate(BaseModel):

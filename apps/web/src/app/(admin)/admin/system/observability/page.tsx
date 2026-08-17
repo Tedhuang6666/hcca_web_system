@@ -61,11 +61,13 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
 }
 
-function normalizeOverview(value: Overview): Overview {
-  const raw = value as Partial<Overview>;
+function normalizeOverview(value: Overview | null | undefined): Overview {
+  const raw = (value && typeof value === "object" ? value : {}) as Partial<Overview>;
   const coverage = (raw.coverage ?? {}) as Partial<Overview["coverage"]>;
   const reliability = (raw.reliability ?? {}) as Partial<Overview["reliability"]>;
   const synthetic = (raw.synthetic ?? {}) as Partial<Overview["synthetic"]>;
+  const authenticatedCoverage = (raw.authenticated_coverage ?? {}) as Partial<Overview["authenticated_coverage"]>;
+  const latestRelease = (raw.latest_release ?? {}) as Partial<Overview["latest_release"]>;
   return {
     ...value,
     system_health: asArray<HealthItem>(raw.system_health),
@@ -82,12 +84,12 @@ function normalizeOverview(value: Overview): Overview {
       needs_attention: coverage.needs_attention ?? 0,
       threshold: coverage.threshold ?? 95,
     },
-    authenticated_coverage: raw.authenticated_coverage ?? {
-      monitored: 0,
-      passing: 0,
-      needs_attention: 0,
-      pending: 0,
-      threshold: coverage.threshold ?? 95,
+    authenticated_coverage: {
+      monitored: authenticatedCoverage.monitored ?? 0,
+      passing: authenticatedCoverage.passing ?? 0,
+      needs_attention: authenticatedCoverage.needs_attention ?? 0,
+      pending: authenticatedCoverage.pending ?? 0,
+      threshold: authenticatedCoverage.threshold ?? coverage.threshold ?? 95,
     },
     synthetic: {
       mobile_performance: synthetic.mobile_performance ?? null,
@@ -98,7 +100,10 @@ function normalizeOverview(value: Overview): Overview {
     },
     field: raw.field ?? {},
     pages: asArray<PageScore>(raw.pages),
-    latest_release: raw.latest_release ?? { commit_sha: null, deployed_at: null },
+    latest_release: {
+      commit_sha: latestRelease.commit_sha ?? null,
+      deployed_at: latestRelease.deployed_at ?? null,
+    },
     recent_errors: asArray<RecentError>(raw.recent_errors),
     slow_queries: asArray<SlowQuery>(raw.slow_queries),
   };
