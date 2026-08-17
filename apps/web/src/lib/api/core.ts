@@ -2,7 +2,7 @@ import { API_BASE } from "../config";
 import { ApiError } from "../api-helpers";
 import { clearAuthCache, clearImpersonationSession, getImpersonationSession } from "../auth-cache";
 import { reportClientError } from "../client-error-reporter";
-import { recordApiMetric, recordCircuitOpen } from "../client-metrics";
+import { beginApiRequest, recordApiMetric, recordCircuitOpen } from "../client-metrics";
 import { apiErrorFromResponse, errorMessageFromResponse, formatErrorDetail } from "./errors";
 import { circuitKey, circuitOpen, recordHardFailure, recordReachable } from "./circuit";
 import { refreshWithStatus, silentRefresh } from "./refresh";
@@ -29,6 +29,13 @@ function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
+function requestOperationKind(method: string, path: string): "simple_get" | "crud" | "heavy" {
+  if (method === "GET") return "simple_get";
+  return /(export|report|analytics|collect|backup|restore|upload|bulk|ai)/i.test(path)
+    ? "heavy"
+    : "crud";
+}
+
 function isProtectionRecoveryPath(pathname: string): boolean {
   return ["/login", "/auth", "/admin", "/maintenance"].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
@@ -49,6 +56,7 @@ export async function request<T>(
   retriedAfterRefresh = false,
 ): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
+  const operationKind = requestOperationKind(method, path);
   const key = circuitKey(path);
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   if (isOffline()) {
@@ -57,19 +65,20 @@ export async function request<T>(
   }
   if (circuitOpen(key)) {
     recordCircuitOpen(path);
-    recordApiMetric({ path, status: 0, attempts: 0, circuit_open: true, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    recordApiMetric({ path, method, operation_kind: operationKind, status: 0, attempts: 0, circuit_open: true, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
     throw new ApiError(0, "暫時無法連線至後端（熔斷中），請稍候再試");
   }
 
   const { headers: trace } = traceHeaders();
+  const requestId = beginApiRequest();
   let response: Response;
   try {
     const result = await fetchWithRetry(path, init, trace, method === "GET" ? 2 : 0);
     response = result.response;
-    recordApiMetric({ path, status: response.status, attempts: result.attempts, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    recordApiMetric({ path, method, operation_kind: operationKind, status: response.status, attempts: result.attempts, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
   } catch (error) {
     recordHardFailure(key);
-    recordApiMetric({ path, status: 0, attempts: method === "GET" ? 2 : 0, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    recordApiMetric({ path, method, operation_kind: operationKind, status: 0, attempts: method === "GET" ? 2 : 0, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
     if (error instanceof NetworkRequestError) throw new ApiError(0, error.message);
     throw error;
   }

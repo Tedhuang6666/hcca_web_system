@@ -23,6 +23,12 @@ class ClientMetricCreate(BaseModel):
     initiator_type: str | None = Field(default=None, min_length=1, max_length=50)
     start_time_ms: float | None = Field(default=None, ge=0, le=86_400_000)
     response_end_ms: float | None = Field(default=None, ge=0, le=86_400_000)
+    interaction_id: str | None = Field(default=None, min_length=1, max_length=80)
+    interaction_name: str | None = Field(default=None, min_length=1, max_length=120)
+    interaction_kind: Literal["click", "submit"] | None = None
+    operation_kind: Literal["simple_get", "crud", "heavy"] | None = None
+    method: str | None = Field(default=None, min_length=1, max_length=12)
+    budget_ms: float | None = Field(default=None, ge=0, le=86_400_000)
 
 
 class ClientMetricBatchCreate(BaseModel):
