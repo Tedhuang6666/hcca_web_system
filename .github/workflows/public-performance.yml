@@ -11,8 +11,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: public-performance
-  cancel-in-progress: true
+  # Public/authenticated synthetic workflows share this gate so a push cannot
+  # run two independent browser fleets against production at once.
+  group: production-performance
+  cancel-in-progress: false
 
 jobs:
   lighthouse:
@@ -21,7 +23,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         shard: [0, 1, 2, 3]
     steps:
