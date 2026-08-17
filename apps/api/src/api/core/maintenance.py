@@ -37,6 +37,7 @@ FEATURE_FLAGS_DEFAULT: dict[str, str] = {
 }
 
 _LOCAL_CACHE_TTL = 5.0
+_REDIS_READ_TIMEOUT_SECONDS = 0.25
 _cache: dict[str, tuple[float, Any]] = {}
 
 
@@ -69,8 +70,11 @@ async def get_maintenance_state() -> dict[str, Any]:
     if cached is not None:
         return cached
     try:
-        raw = await redis_client.get(MAINTENANCE_KEY)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(MAINTENANCE_KEY),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return {"enabled": False, "message": "", "until": None}
 
     if not raw:
@@ -113,8 +117,11 @@ async def is_feature_enabled(key: str, *, default: bool = True) -> bool:
         return cached
 
     try:
-        raw = await redis_client.get(FEATURE_FLAG_PREFIX + key)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(FEATURE_FLAG_PREFIX + key),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return default
 
     enabled = default if raw is None else raw == "1"
@@ -166,8 +173,11 @@ async def get_load_shed_force_mode() -> str:
     if cached is not None:
         return cached
     try:
-        raw = await redis_client.get(LOAD_SHED_MODE_KEY)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(LOAD_SHED_MODE_KEY),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return "auto"
     mode = raw if raw in {"off", "auto", "on", "bypass"} else "auto"
     _cache_set(LOAD_SHED_MODE_KEY, mode)
@@ -200,8 +210,11 @@ async def get_module_maintenance(module_id: str) -> dict[str, Any] | None:
     if cached is not None:
         return cached or None
     try:
-        raw = await redis_client.get(key)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(key),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return None
 
     state: dict[str, Any] | None
@@ -306,8 +319,11 @@ async def get_module_reset(module_id: str) -> float:
     if cached is not None:
         return cached
     try:
-        raw = await redis_client.get(key)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(key),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return 0.0
     try:
         value = float(raw) if raw else 0.0
