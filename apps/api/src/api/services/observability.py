@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import time
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin
 from xml.etree import ElementTree
@@ -48,6 +49,8 @@ CLIENT_TELEMETRY_WRITE_TIMEOUT_SECONDS = 0.25
 CLIENT_TELEMETRY_READ_TIMEOUT_SECONDS = 0.75
 CLIENT_VITAL_METRICS = {"fcp", "lcp", "inp", "cls"}
 DISCOVERED_URLS_CACHE_TTL_SECONDS = 300
+PROVIDER_SNAPSHOT_CACHE_KEY = "observability:provider-snapshot:v1"
+PROVIDER_SNAPSHOT_CACHE_TTL_SECONDS = 30
 API_OPERATION_KINDS = {
     "simple_get": (300.0, 500.0),
     "crud": (500.0, 1_000.0),
@@ -398,6 +401,15 @@ async def discover_observability_urls() -> tuple[list[str], dict]:
 
 
 async def provider_snapshot() -> dict:
+    try:
+        cached = await asyncio.wait_for(
+            cache_get(PROVIDER_SNAPSHOT_CACHE_KEY), timeout=0.25
+        )
+    except TimeoutError:
+        cached = None
+    if isinstance(cached, dict):
+        return cached
+
     configured = bool(
         settings.SENTRY_AUTH_TOKEN and settings.SENTRY_ORG and settings.SENTRY_PROJECT
     )
@@ -406,7 +418,8 @@ async def provider_snapshot() -> dict:
         "posthog": {"configured": bool(settings.POSTHOG_PERSONAL_API_KEY)},
     }
     if configured:
-        async with httpx.AsyncClient(timeout=20) as client:
+        timeout = httpx.Timeout(2.0, connect=0.5)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             try:
                 response = await client.get(
                     f"{settings.SENTRY_API_URL}/projects/{settings.SENTRY_ORG}/{settings.SENTRY_PROJECT}/stats/",
@@ -417,6 +430,15 @@ async def provider_snapshot() -> dict:
                 result["sentry"]["stats"] = response.json()
             except httpx.HTTPError as exc:
                 result["sentry"]["error"] = _provider_error(exc)
+    with suppress(TimeoutError):
+        await asyncio.wait_for(
+            cache_set(
+                PROVIDER_SNAPSHOT_CACHE_KEY,
+                result,
+                ttl=PROVIDER_SNAPSHOT_CACHE_TTL_SECONDS,
+            ),
+            timeout=0.25,
+        )
     return result
 
 
