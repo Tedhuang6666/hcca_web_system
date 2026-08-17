@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { activitiesApi } from "@/lib/api";
+import { activitiesApi } from "@/lib/api/activities";
 import type { Activity } from "@/lib/types";
 
 type ActivitySelectProps = {
