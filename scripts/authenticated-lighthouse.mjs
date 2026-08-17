@@ -74,6 +74,14 @@ async function assertAuthenticated(url, cookieHeader) {
   }
 }
 
+async function isHtmlPage(url, cookieHeader) {
+  const response = await fetch(url, {
+    headers: { Cookie: cookieHeader, Accept: "text/html" },
+    redirect: "follow",
+  });
+  return response.ok && (response.headers.get("content-type") || "").includes("text/html");
+}
+
 async function runLighthouse(chrome, url, strategy, cookieHeader) {
   const mobile = strategy === "mobile";
   const result = await lighthouse(url, {
@@ -124,9 +132,20 @@ const targetsResponse = await requestJson("/api/internal/observability/auth-targ
 const allTargets = [...new Set((targetsResponse.urls || []).map((value) => String(value)))].sort();
 const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
 const targetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
-const targets = targetLimit > 0
+const candidateTargets = targetLimit > 0
   ? allTargets.slice(targetOffset, targetOffset + targetLimit)
   : allTargets.slice(targetOffset);
+const targets = [];
+for (const target of candidateTargets) {
+  try {
+    if (await isHtmlPage(target, cookieHeader)) targets.push(target);
+    else process.stdout.write(`skip non-page ${target}\n`);
+  } catch (error) {
+    process.stdout.write(
+      `skip unavailable ${target}: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+}
 
 if (targets.length === 0) throw new Error("No authenticated performance targets were discovered");
 
@@ -205,6 +224,8 @@ const summary = {
   release,
   targets_total: allTargets.length,
   target_offset: targetOffset,
+  candidate_targets: candidateTargets.length,
+  skipped_targets: candidateTargets.length - targets.length,
   minimum_score: minimumScore,
   targets: targets.length,
   runs: runs.length,
