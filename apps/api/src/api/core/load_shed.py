@@ -15,6 +15,7 @@ JWT claim 被偽造也只能擠進 origin → RBAC 第二道防線會在 router 
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from collections.abc import Awaitable, Callable
@@ -188,29 +189,48 @@ class LoadShedMiddleware:
 
         # 自己人白名單 IP / 有效掃描 token：豁免黑名單與後續鎖定 / 維護 / load shed
         trusted = request_is_trusted(scope)
-
-        # 1. IP 黑名單（信任來源豁免；is_blocked 對白名單 IP 已回 False，
-        #    此處的 not trusted 主要讓「非白名單 IP + 有效掃描 token」也能穿過）
-        if not trusted and await is_blocked(ip):
-            await self._respond_blocked(scope, send, await get_block(ip))
-            return
-
         can_bypass = trusted or _can_bypass_protection(scope)
-        lockdown_reason = await endpoint_lockdown_reason(path)
+
+        # 這些都是唯讀防護投影；串行讀取會在 Redis pool 短暫壅塞時把多個
+        # 0.25～2 秒等待相加到每一個頁面 API。併行後總等待時間取最慢的一個，
+        # 各函式仍維持原本的 fail-open / fail-safe 預設值。
+        module_id = match_module(path)
+        checks = []
+        if not trusted:
+            checks.append(is_blocked(ip))
+        checks.extend(
+            [
+                endpoint_lockdown_reason(path),
+                get_maintenance_state(),
+            ]
+        )
+        if module_id:
+            checks.append(get_module_maintenance(module_id))
+        if settings.LOAD_SHED_ENABLED:
+            checks.append(get_load_shed_force_mode())
+        results = await asyncio.gather(*checks)
+
+        offset = 0
+        if not trusted:
+            if results[0]:
+                await self._respond_blocked(scope, send, await get_block(ip))
+                return
+            offset = 1
+
+        lockdown_reason = results[offset]
         if lockdown_reason and not can_bypass:
             await self._respond_lockdown(scope, send, lockdown_reason)
             return
 
         # 2. Maintenance mode（全站）
-        maintenance = await get_maintenance_state()
+        maintenance = results[offset + 1]
         if maintenance.get("enabled") and not can_bypass:
             await self._respond_maintenance(scope, send, maintenance)
             return
 
         # 3. Module state：維護模式允許 admin 驗證；關閉模式只保留 /admin 管理通道。
-        module_id = match_module(path)
         if module_id:
-            mstate = await get_module_maintenance(module_id)
+            mstate = results[offset + 2]
             if mstate and mstate.get("on"):
                 closed = mstate.get("mode") == "closed"
                 if closed or not can_bypass:
@@ -219,7 +239,8 @@ class LoadShedMiddleware:
 
         # 4. Load shed
         if settings.LOAD_SHED_ENABLED:
-            mode = await get_load_shed_force_mode()
+            mode_index = offset + 2 + bool(module_id)
+            mode = results[mode_index]
             should_shed = False
             reason = ""
             if mode == "bypass" or mode == "off":

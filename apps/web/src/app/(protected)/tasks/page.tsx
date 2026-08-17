@@ -84,6 +84,7 @@ function formatDueAt(s?: string | null) {
 
 const CACHE_KEYS = {
   tasks: "tasks/inbox",
+  dashboardTasks: "dashboard/tasks",
   docStats: "tasks/doc-stats",
   regCounts: "tasks/reg-counts",
 } as const;
@@ -112,7 +113,12 @@ export default function TasksPage() {
   const canSeeRegulationPublish = can("regulation:president_publish");
 
   useEffect(() => {
-    setCachedTasks(cacheGet<TaskInboxResponse>(CACHE_KEYS.tasks));
+    // Dashboard 已經抓過同一份待辦清單時，直接沿用該快取，避免從首頁
+    // 進入待辦中心又發出一次相同的 /tasks GET。
+    setCachedTasks(
+      cacheGet<TaskInboxResponse>(CACHE_KEYS.tasks)
+      ?? cacheGet<TaskInboxResponse>(CACHE_KEYS.dashboardTasks),
+    );
     setCachedDocStats(cacheGet<DocumentStats>(CACHE_KEYS.docStats));
     setCachedRegCounts(cacheGet<Record<string, number>>(CACHE_KEYS.regCounts));
     setCacheHydrated(true);
@@ -124,6 +130,7 @@ export default function TasksPage() {
     if (cachedTasks) {
       setData(cachedTasks);
       setLoading(false);
+      cacheSet(CACHE_KEYS.tasks, cachedTasks);
     }
     if (cachedDocStats) setDocStats(cachedDocStats);
     if (cachedRegCounts) setRegCounts(cachedRegCounts);
@@ -160,17 +167,19 @@ export default function TasksPage() {
     };
 
     const supplementaryTimer = window.setTimeout(loadSupplementary, 250);
-    tasksApi.list()
-      .then((nextData) => {
-        if (!mounted) return;
-        setData(nextData);
-        cacheSet(CACHE_KEYS.tasks, nextData);
-      })
-      .catch((e: unknown) => {
-        toast.error("無法載入待辦中心");
-        console.error(e);
-      })
-      .finally(() => { if (mounted) setLoading(false); });
+    if (!cachedTasks) {
+      tasksApi.list()
+        .then((nextData) => {
+          if (!mounted) return;
+          setData(nextData);
+          cacheSet(CACHE_KEYS.tasks, nextData);
+        })
+        .catch((e: unknown) => {
+          toast.error("無法載入待辦中心");
+          console.error(e);
+        })
+        .finally(() => { if (mounted) setLoading(false); });
+    }
     return () => {
       mounted = false;
       window.clearTimeout(supplementaryTimer);

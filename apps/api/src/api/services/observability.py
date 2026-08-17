@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import time
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin
 from xml.etree import ElementTree
@@ -44,8 +45,14 @@ CLIENT_TELEMETRY_KEY = "observability:client-telemetry:v1"
 CLIENT_TELEMETRY_MAX_ITEMS = 20_000
 CLIENT_TELEMETRY_RETENTION_SECONDS = 172_800
 CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS = 10
+CLIENT_TELEMETRY_WRITE_TIMEOUT_SECONDS = 0.25
+# A full 24-hour buffer can contain up to 20k compact events; production Redis
+# currently needs about 1.9s to transfer that bounded payload.
+CLIENT_TELEMETRY_READ_TIMEOUT_SECONDS = 3.0
 CLIENT_VITAL_METRICS = {"fcp", "lcp", "inp", "cls"}
 DISCOVERED_URLS_CACHE_TTL_SECONDS = 300
+PROVIDER_SNAPSHOT_CACHE_KEY = "observability:provider-snapshot:v1"
+PROVIDER_SNAPSHOT_CACHE_TTL_SECONDS = 30
 API_OPERATION_KINDS = {
     "simple_get": (300.0, 500.0),
     "crud": (500.0, 1_000.0),
@@ -106,7 +113,10 @@ async def record_client_metrics(metrics: list[dict]) -> bool:
             pipeline.lpush(CLIENT_TELEMETRY_KEY, event)
         pipeline.ltrim(CLIENT_TELEMETRY_KEY, 0, CLIENT_TELEMETRY_MAX_ITEMS - 1)
         pipeline.expire(CLIENT_TELEMETRY_KEY, CLIENT_TELEMETRY_RETENTION_SECONDS)
-        await pipeline.execute()
+        await asyncio.wait_for(
+            pipeline.execute(),
+            timeout=CLIENT_TELEMETRY_WRITE_TIMEOUT_SECONDS,
+        )
         return True
     except Exception as exc:  # noqa: BLE001
         logger.debug("Client telemetry storage unavailable type=%s", _provider_error(exc))
@@ -134,14 +144,18 @@ def _budget_status(value: float | None, good: float, needs_improvement: float) -
 async def client_route_analytics(window_hours: int = 24) -> dict:
     """Aggregate route-level RUM without exposing individual visitors or URLs with queries."""
     cache_key = f"observability:rum:v1:{max(1, min(window_hours, 168))}h"
-    cached = await cache_get(cache_key)
+    try:
+        cached = await asyncio.wait_for(cache_get(cache_key), timeout=0.25)
+    except TimeoutError:
+        cached = None
     if isinstance(cached, dict):
         return cached
 
     cutoff = time.time() - max(1, min(window_hours, 168)) * 3600
     try:
-        raw_items = await redis_client.lrange(
-            CLIENT_TELEMETRY_KEY, 0, CLIENT_TELEMETRY_MAX_ITEMS - 1
+        raw_items = await asyncio.wait_for(
+            redis_client.lrange(CLIENT_TELEMETRY_KEY, 0, CLIENT_TELEMETRY_MAX_ITEMS - 1),
+            timeout=CLIENT_TELEMETRY_READ_TIMEOUT_SECONDS,
         )
     except Exception as exc:  # noqa: BLE001
         return {
@@ -277,7 +291,13 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
         "pageviews": total_pageviews,
         "routes": routes,
     }
-    await cache_set(cache_key, result, ttl=CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS)
+    try:
+        await asyncio.wait_for(
+            cache_set(cache_key, result, ttl=CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS),
+            timeout=0.25,
+        )
+    except TimeoutError:
+        logger.debug("client route analytics cache write timed out")
     return result
 
 
@@ -362,11 +382,16 @@ def _has_rum_observation(route: dict) -> bool:
     )
 
 
+def _has_pageview_observation(route: dict) -> bool:
+    """Only browser navigations are valid PSI targets; API metrics are not pages."""
+    return int(route.get("pageviews") or 0) > 0
+
+
 def _merge_rum_urls(urls: list[str], rum: dict) -> list[str]:
     """Include every same-origin route seen by first-party RUM in the scan set."""
     base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
     for route in rum.get("routes", []):
-        if not _has_rum_observation(route):
+        if not _has_pageview_observation(route):
             continue
         path = _normalize_client_path(route.get("path"))
         url = urljoin(base, path.lstrip("/"))
@@ -383,6 +408,13 @@ async def discover_observability_urls() -> tuple[list[str], dict]:
 
 
 async def provider_snapshot() -> dict:
+    try:
+        cached = await asyncio.wait_for(cache_get(PROVIDER_SNAPSHOT_CACHE_KEY), timeout=0.25)
+    except TimeoutError:
+        cached = None
+    if isinstance(cached, dict):
+        return cached
+
     configured = bool(
         settings.SENTRY_AUTH_TOKEN and settings.SENTRY_ORG and settings.SENTRY_PROJECT
     )
@@ -391,7 +423,8 @@ async def provider_snapshot() -> dict:
         "posthog": {"configured": bool(settings.POSTHOG_PERSONAL_API_KEY)},
     }
     if configured:
-        async with httpx.AsyncClient(timeout=20) as client:
+        timeout = httpx.Timeout(2.0, connect=0.5)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             try:
                 response = await client.get(
                     f"{settings.SENTRY_API_URL}/projects/{settings.SENTRY_ORG}/{settings.SENTRY_PROJECT}/stats/",
@@ -402,6 +435,15 @@ async def provider_snapshot() -> dict:
                 result["sentry"]["stats"] = response.json()
             except httpx.HTTPError as exc:
                 result["sentry"]["error"] = _provider_error(exc)
+    with suppress(TimeoutError):
+        await asyncio.wait_for(
+            cache_set(
+                PROVIDER_SNAPSHOT_CACHE_KEY,
+                result,
+                ttl=PROVIDER_SNAPSHOT_CACHE_TTL_SECONDS,
+            ),
+            timeout=0.25,
+        )
     return result
 
 
@@ -628,7 +670,12 @@ def _crux_p75(metrics: dict, name: str) -> float | None:
     return metrics.get(name, {}).get("percentiles", {}).get("p75")
 
 
-async def latest_page_scores(session: AsyncSession, url: str | None = None) -> list[dict]:
+async def latest_page_scores(
+    session: AsyncSession,
+    url: str | None = None,
+    *,
+    include_audits: bool = True,
+) -> list[dict]:
     rows = (
         (
             await session.execute(
@@ -647,15 +694,13 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
     run_ids = [row.id for row in latest.values()]
     audit_rows = []
     if run_ids:
-        audit_rows = (
-            (
-                await session.execute(
-                    select(PageSpeedAudit).where(PageSpeedAudit.run_id.in_(run_ids))
-                )
-            )
-            .scalars()
-            .all()
+        audit_ids = (
+            None if include_audits else ("interaction-to-next-paint", "server-response-time")
         )
+        audit_query = select(PageSpeedAudit).where(PageSpeedAudit.run_id.in_(run_ids))
+        if audit_ids is not None:
+            audit_query = audit_query.where(PageSpeedAudit.audit_id.in_(audit_ids))
+        audit_rows = (await session.execute(audit_query)).scalars().all()
     audits_by_run: dict[object, list[PageSpeedAudit]] = {}
     for audit in audit_rows:
         audits_by_run.setdefault(audit.run_id, []).append(audit)
@@ -675,18 +720,22 @@ async def latest_page_scores(session: AsyncSession, url: str | None = None) -> l
                 "cls": row.cls,
                 "ttfb_ms": _audit_metric(audits, "server-response-time"),
             },
-            "audits": [
-                {
-                    "id": audit.audit_id,
-                    "title": audit.title,
-                    "score": audit.score,
-                    "numeric_value": audit.numeric_value,
-                    "display_value": audit.display_value,
-                }
-                for audit in sorted(
-                    audits, key=lambda item: item.score if item.score is not None else -1
-                )
-            ],
+            "audits": (
+                [
+                    {
+                        "id": audit.audit_id,
+                        "title": audit.title,
+                        "score": audit.score,
+                        "numeric_value": audit.numeric_value,
+                        "display_value": audit.display_value,
+                    }
+                    for audit in sorted(
+                        audits, key=lambda item: item.score if item.score is not None else -1
+                    )
+                ]
+                if include_audits
+                else []
+            ),
         }
         page = pages.setdefault(
             page_url,
@@ -734,7 +783,7 @@ async def overview(session: AsyncSession) -> dict:
         return cached
 
     day = datetime.now(UTC) - timedelta(days=1)
-    pages = await latest_page_scores(session)
+    pages = await latest_page_scores(session, include_audits=False)
     rum = await client_route_analytics()
     # The overview is requested by the admin UI and the agent snapshot. Do not
     # block either response on a cold sitemap fetch; PSI rows already contain

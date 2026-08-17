@@ -19,6 +19,7 @@ from api.core.prometheus_metrics import (
 from api.core.sentry import _before_send
 from api.core.structured_logging import reset_request_id, set_request_id
 from api.models.observability import PageSpeedRun
+from api.services.observability import _merge_rum_urls
 
 
 def test_business_metrics_are_exported() -> None:
@@ -55,6 +56,22 @@ def test_sentry_event_uses_structured_log_request_id() -> None:
     assert event is not None
     assert event["tags"]["request_id"] == "request-test-123"
     assert event["extra"]["request_id"] == "request-test-123"
+
+
+def test_rum_api_metrics_are_not_page_speed_targets(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "FRONTEND_BASE_URL", "https://hcca.tw")
+
+    urls = _merge_rum_urls(
+        ["https://hcca.tw/"],
+        {
+            "routes": [
+                {"path": "/auth/me", "pageviews": 0, "api_latency_p95_ms": 120},
+                {"path": "/new-page", "pageviews": 1, "api_latency_p95_ms": None},
+            ]
+        },
+    )
+
+    assert urls == ["https://hcca.tw/", "https://hcca.tw/new-page"]
 
 
 async def test_metrics_endpoint_is_enabled(client: AsyncClient) -> None:

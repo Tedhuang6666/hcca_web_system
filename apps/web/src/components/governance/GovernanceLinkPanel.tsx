@@ -102,6 +102,9 @@ const STATUS_LABEL: Record<string, string> = {
   canceled: "取消",
 };
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
  * 模組詳情頁的「納入治理」面板。
  * 顯示目前的 EntityRelation 關聯，並提供前往及解除關聯操作。
@@ -127,6 +130,7 @@ export default function GovernanceLinkPanel({
     "document:admin",
     "admin:all",
   );
+  const validEntityId = Boolean(entityId && UUID_PATTERN.test(entityId));
 
   const [open, setOpen] = useState(false);
   const [loadingMatters, setLoadingMatters] = useState(false);
@@ -142,7 +146,7 @@ export default function GovernanceLinkPanel({
 
   // 反向查詢：這筆資源屬於哪些事情。
   useEffect(() => {
-    if (!entityId) {
+    if (!entityId || !validEntityId) {
       setLinks([]);
       return;
     }
@@ -158,10 +162,10 @@ export default function GovernanceLinkPanel({
     return () => {
       alive = false;
     };
-  }, [entityType, entityId]);
+  }, [entityType, entityId, validEntityId]);
 
   useEffect(() => {
-    if (!entityId) {
+    if (!entityId || !validEntityId) {
       setRelations([]);
       return;
     }
@@ -177,7 +181,7 @@ export default function GovernanceLinkPanel({
     return () => {
       alive = false;
     };
-  }, [entityType, entityId]);
+  }, [entityType, entityId, validEntityId]);
 
   // 開啟挑選面板時才載入事情清單。
   useEffect(() => {
@@ -208,7 +212,7 @@ export default function GovernanceLinkPanel({
     );
   }, [matters, query, linkedIds]);
 
-  if (!canManage || !entityId) return null;
+  if (!canManage || !validEntityId || !entityId) return null;
 
   const linkMatter = async (matter: MatterListItem) => {
     setSaving(true);

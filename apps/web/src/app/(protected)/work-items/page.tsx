@@ -10,6 +10,10 @@ import { cacheGet, cacheSet } from "@/lib/api-cache";
 
 const CACHE_KEY = "work-items/list";
 
+function cacheKey(includeDone: boolean): string {
+  return `${CACHE_KEY}/${includeDone ? "all" : "open"}`;
+}
+
 type Filter = "open" | "all";
 
 function formatDue(s?: string | null) {
@@ -27,8 +31,10 @@ function formatDue(s?: string | null) {
 }
 
 export default function WorkItemsPage() {
-  const [items, setItems] = useState<WorkItemOut[]>(() => cacheGet<WorkItemOut[]>(CACHE_KEY) ?? []);
-  const [loading, setLoading] = useState(!cacheGet(CACHE_KEY));
+  const [items, setItems] = useState<WorkItemOut[]>(
+    () => cacheGet<WorkItemOut[]>(cacheKey(false)) ?? [],
+  );
+  const [loading, setLoading] = useState(() => !cacheGet(cacheKey(false)));
   const [filter, setFilter] = useState<Filter>("open");
   const [gtStatus, setGtStatus] = useState<GoogleTasksStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -36,11 +42,18 @@ export default function WorkItemsPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   const reload = useCallback((showDone = filter === "all") => {
-    setLoading(true);
+    const key = cacheKey(showDone);
+    const cached = cacheGet<WorkItemOut[]>(key);
+    if (cached) {
+      setItems(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     workItemsApi.list({ include_done: showDone })
       .then((data) => {
         setItems(data);
-        cacheSet(CACHE_KEY, data, 30_000);
+        cacheSet(key, data, 30_000);
       })
       .catch(() => toast.error("無法載入工作項目"))
       .finally(() => setLoading(false));
@@ -156,7 +169,6 @@ export default function WorkItemsPage() {
               type="button"
               onClick={() => {
                 setFilter(f);
-                reload(f === "all");
               }}
               className="flex-shrink-0 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
               style={{

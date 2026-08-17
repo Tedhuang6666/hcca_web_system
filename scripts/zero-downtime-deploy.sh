@@ -5,6 +5,7 @@ target="${1:-auto}"
 keep_old="${KEEP_OLD:-true}"
 maintenance_mode="${MAINTENANCE_MODE:-0}"
 drain_seconds="${DRAIN_SECONDS:-10}"
+health_wait_seconds="${HEALTH_WAIT_SECONDS:-300}"
 compose_file="${COMPOSE_FILE:-docker-compose.bluegreen.yml}"
 env_file="${ENV_FILE:-.env.production}"
 export PROD_ENV_FILE="$env_file"
@@ -86,7 +87,7 @@ wait_healthy() {
     return 1
   fi
 
-  for _ in $(seq 1 60); do
+  for _ in $(seq 1 "$(( (health_wait_seconds + 1) / 2 ))"); do
     status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid")"
     if [[ "$status" == "healthy" || "$status" == "running" ]]; then
       echo "$service is $status"
@@ -95,7 +96,7 @@ wait_healthy() {
     sleep 2
   done
 
-  echo "$service did not become healthy"
+  echo "$service did not become healthy within ${health_wait_seconds}s"
   docker logs --tail=80 "$cid" || true
   return 1
 }
