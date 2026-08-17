@@ -100,6 +100,11 @@ async def record_client_metrics(metrics: list[dict]) -> bool:
                     "interaction_kind": metric.get("interaction_kind"),
                     "operation_kind": metric.get("operation_kind"),
                     "method": str(metric.get("method") or "")[:12] or None,
+                    "resource_name": str(metric.get("resource_name") or "")[:500] or None,
+                    "initiator_type": str(metric.get("initiator_type") or "")[:50] or None,
+                    "start_time_ms": metric.get("start_time_ms"),
+                    "response_end_ms": metric.get("response_end_ms"),
+                    "budget_ms": metric.get("budget_ms"),
                     "ts": now,
                 },
                 separators=(",", ":"),
@@ -189,6 +194,11 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     "interaction_feedback": [],
                     "interaction_completion": [],
                     "client_errors": [],
+                    "resource_timing": [],
+                    "longtask": [],
+                    "navigation_ttfb": [],
+                    "navigation_total": [],
+                    "custom_metrics": {},
                     "operations": {},
                 },
             )
@@ -222,9 +232,23 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     assert isinstance(operation_samples, list)
                     operation_samples.append(float(event["value"]))
             elif metric == "client_error":
-                errors = values["client_errors"]
+                errors = route["client_errors"]
                 assert isinstance(errors, list)
                 errors.append(float(event["value"]))
+            elif metric in {"resource_timing", "longtask", "navigation_ttfb", "navigation_total"}:
+                samples = route[metric]
+                assert isinstance(samples, list)
+                samples.append(float(event["value"]))
+            elif metric not in CLIENT_VITAL_METRICS and metric not in {
+                "page_view",
+                "api_latency",
+                "api_circuit_open",
+            }:
+                custom_metrics = route["custom_metrics"]
+                assert isinstance(custom_metrics, dict)
+                samples = custom_metrics.setdefault(metric, [])
+                assert isinstance(samples, list)
+                samples.append(float(event["value"]))
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             continue
 
@@ -283,6 +307,16 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     "completion": len(values["interaction_completion"]),
                 },
                 "client_errors": len(values["client_errors"]),
+                "resource_timing_p75_ms": _percentile(values["resource_timing"], 0.75),
+                "longtask_p75_ms": _percentile(values["longtask"], 0.75),
+                "longtask_samples": len(values["longtask"]),
+                "navigation_ttfb_p75_ms": _percentile(values["navigation_ttfb"], 0.75),
+                "navigation_total_p75_ms": _percentile(values["navigation_total"], 0.75),
+                "custom_metrics": {
+                    name: {"p75_ms": _percentile(samples, 0.75), "samples": len(samples)}
+                    for name, samples in values["custom_metrics"].items()
+                    if isinstance(samples, list)
+                },
                 "interactions": sorted(
                     operation_rows, key=lambda item: item["samples"], reverse=True
                 )[:20],

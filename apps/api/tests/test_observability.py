@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +21,7 @@ from api.core.prometheus_metrics import (
 from api.core.sentry import _before_send
 from api.core.structured_logging import reset_request_id, set_request_id
 from api.models.observability import PageSpeedRun
-from api.services.observability import _merge_rum_urls
+from api.services.observability import _merge_rum_urls, client_route_analytics
 
 
 def test_business_metrics_are_exported() -> None:
@@ -72,6 +74,68 @@ def test_rum_api_metrics_are_not_page_speed_targets(monkeypatch) -> None:
     )
 
     assert urls == ["https://hcca.tw/", "https://hcca.tw/new-page"]
+
+
+async def test_client_route_analytics_aggregates_all_field_metric_families(monkeypatch) -> None:
+    class FakeRedis:
+        async def lrange(self, *_args):
+            import json
+
+            return [
+                json.dumps(
+                    {"metric": "page_view", "value": 1, "path": "/dashboard", "ts": time.time()}
+                ),
+                json.dumps(
+                    {"metric": "client_error", "value": 1, "path": "/dashboard", "ts": time.time()}
+                ),
+                json.dumps(
+                    {"metric": "longtask", "value": 180, "path": "/dashboard", "ts": time.time()}
+                ),
+                json.dumps(
+                    {
+                        "metric": "navigation_ttfb",
+                        "value": 90,
+                        "path": "/dashboard",
+                        "ts": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "metric": "resource_timing",
+                        "value": 240,
+                        "path": "/dashboard",
+                        "ts": time.time(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "metric": "custom_action",
+                        "value": 320,
+                        "path": "/dashboard",
+                        "ts": time.time(),
+                    }
+                ),
+            ]
+
+    async def no_cache_get(_key):
+        return None
+
+    async def no_cache_set(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr("api.services.observability.redis_client", FakeRedis())
+    monkeypatch.setattr("api.services.observability.cache_get", no_cache_get)
+    monkeypatch.setattr("api.services.observability.cache_set", no_cache_set)
+
+    result = await client_route_analytics(window_hours=1)
+    route = result["routes"][0]
+
+    assert route["pageviews"] == 1
+    assert route["client_errors"] == 1
+    assert route["longtask_p75_ms"] == 180.0
+    assert route["navigation_ttfb_p75_ms"] == 90.0
+    assert route["resource_timing_p75_ms"] == 240.0
+    assert route["custom_metrics"]["custom_action"]["p75_ms"] == 320.0
 
 
 async def test_metrics_endpoint_is_enabled(client: AsyncClient) -> None:
