@@ -177,8 +177,16 @@ try {
     }
   }
 } finally {
-  if (browser) await browser.close();
-  await chrome.kill();
+  try {
+    if (browser) await browser.close();
+  } catch (error) {
+    console.warn(`Chrome CDP cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    await chrome.kill();
+  } catch (error) {
+    console.warn(`Chrome launcher cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 const persistenceBatchSize = 180;
