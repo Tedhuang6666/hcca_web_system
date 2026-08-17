@@ -83,7 +83,8 @@ async function fetchSharedLiveElection(): Promise<ActiveLiveElection | null> {
  */
 export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElection | null {
   const [active, setActive] = useState<ActiveLiveElection | null>(null);
-  const { isModuleDown } = usePublicModuleStatus();
+  const { statuses, isModuleDown } = usePublicModuleStatus();
+  const electionStatusReady = Boolean(statuses.elections);
   const electionsModuleDown = isModuleDown("elections");
 
   useEffect(() => {
@@ -99,7 +100,10 @@ export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElec
       setActive(await fetchSharedLiveElection());
       return "ok";
     },
-    { enabled, intervalMs: pollMs },
+    // The public endpoint intentionally returns 503 while elections is closed.
+    // Wait for the module-status response before polling so every public page
+    // does not emit a predictable failed request during its first render.
+    { enabled: enabled && electionStatusReady, intervalMs: pollMs },
   );
 
   return active;

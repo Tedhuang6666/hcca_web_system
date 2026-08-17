@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Share2, Star, Tag, Trophy } from "lucide-react";
-import { toast } from "sonner";
 import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
@@ -21,6 +20,14 @@ import PartnerPromoCarousel, { type PartnerPromoImage } from "@/app/(protected)/
 
 const DEFAULT_CENTER: [number, number] = [24.795151, 120.98018];
 type PartnerLeafletMapComponent = (typeof import("@/app/(protected)/partner-map/PartnerLeafletMap"))["default"];
+
+function showErrorToast(message: string): void {
+  void import("sonner").then(({ toast }) => toast.error(message));
+}
+
+function showSuccessToast(message: string): void {
+  void import("sonner").then(({ toast }) => toast.success(message));
+}
 
 function MapLoadingState() {
   return (
@@ -492,7 +499,7 @@ export default function PartnerMapClient({
       ]);
       const partnerItems = partnerResult.status === "fulfilled" ? partnerResult.value : [];
       if (partnerResult.status === "rejected") {
-        toast.error(partnerResult.reason instanceof ApiError ? partnerResult.reason.message : "載入特約地圖失敗");
+        showErrorToast(partnerResult.reason instanceof ApiError ? partnerResult.reason.message : "載入特約地圖失敗");
       }
       const recommendedItems = recommendedResult.status === "fulfilled"
         ? recommendedResult.value
@@ -532,7 +539,7 @@ export default function PartnerMapClient({
             }))
         : [];
       if (recommendedResult.status === "rejected") {
-        toast.error(recommendedResult.reason instanceof ApiError ? recommendedResult.reason.message : "載入推薦商家失敗");
+        showErrorToast(recommendedResult.reason instanceof ApiError ? recommendedResult.reason.message : "載入推薦商家失敗");
       }
       setItems([...partnerItems, ...recommendedItems]);
     } finally {
@@ -595,7 +602,7 @@ export default function PartnerMapClient({
       recommendedVendorsApi
         .get(businessId)
         .then(setSelectedVendor)
-        .catch((error) => toast.error(error instanceof ApiError ? error.message : "載入推薦商家失敗"));
+        .catch((error) => showErrorToast(error instanceof ApiError ? error.message : "載入推薦商家失敗"));
       return;
     }
     setDetailLoading(true);
@@ -606,7 +613,7 @@ export default function PartnerMapClient({
         setSelectedBusiness(business);
         replacePartnerMapPath(businessPath(business.name));
       })
-      .catch((error) => toast.error(error instanceof ApiError ? error.message : "載入店家詳情失敗"))
+      .catch((error) => showErrorToast(error instanceof ApiError ? error.message : "載入店家詳情失敗"))
       .finally(() => setDetailLoading(false));
   }, []);
 
@@ -630,7 +637,7 @@ export default function PartnerMapClient({
       openBusiness(target.id);
     } else {
       replacePartnerMapPath("/partner-map");
-      toast.error("找不到此特約店家");
+      showErrorToast("找不到此特約店家");
     }
   }, [contactBusinesses, contactDirectoryReady, initialBusinessId, initialBusinessSlug, initialLinkHandled, items, loading, openBusiness]);
 
@@ -645,9 +652,9 @@ export default function PartnerMapClient({
     if (!selectedBusiness) return;
     try {
       await copyText(businessUrl(selectedBusiness.name));
-      toast.success("店家連結已複製");
+      showSuccessToast("店家連結已複製");
     } catch {
-      toast.error("無法複製連結，請手動複製網址列");
+      showErrorToast("無法複製連結，請手動複製網址列");
     }
   }, [selectedBusiness]);
 
@@ -668,15 +675,15 @@ export default function PartnerMapClient({
     }
     try {
       await copyText(url);
-      toast.success("此裝置不支援直接分享，連結已複製");
+      showSuccessToast("此裝置不支援直接分享，連結已複製");
     } catch {
-      toast.error("無法分享連結，請手動複製網址列");
+      showErrorToast("無法分享連結，請手動複製網址列");
     }
   }, [selectedBusiness]);
 
   const submitNewBusiness = async () => {
     if (!submission.name?.trim()) {
-      toast.error("請輸入店家名稱");
+      showErrorToast("請輸入店家名稱");
       return;
     }
     try {
@@ -684,11 +691,11 @@ export default function PartnerMapClient({
         ...submission,
         name: submission.name.trim(),
       });
-      toast.success("已送出投稿，等待管理員審核");
+      showSuccessToast("已送出投稿，等待管理員審核");
       setSubmissionOpen(false);
       setSubmission({ name: "", category: "", address: "", google_maps_url: "", reason: "", offer_hint: "" });
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "投稿失敗");
+      showErrorToast(error instanceof ApiError ? error.message : "投稿失敗");
     }
   };
 
@@ -696,10 +703,10 @@ export default function PartnerMapClient({
     if (!selectedBusiness) return;
     try {
       await partnerMapApi.rateBusiness(selectedBusiness.id, { rating: score, visit_count: 1, is_public: true });
-      toast.success("謝謝你的評價");
+      showSuccessToast("謝謝你的評價");
       partnerMapApi.getBusiness(selectedBusiness.id).then(setSelectedBusiness);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "評價失敗");
+      showErrorToast(error instanceof ApiError ? error.message : "評價失敗");
     }
   };
 
@@ -709,9 +716,9 @@ export default function PartnerMapClient({
       const updated = await partnerMapApi.checkIn(selectedBusiness.id);
       setSelectedBusiness(updated);
       partnerMapApi.rankings(5).then(setRankings).catch(() => {});
-      toast.success("已加入常去統計");
+      showSuccessToast("已加入常去統計");
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "更新失敗");
+      showErrorToast(error instanceof ApiError ? error.message : "更新失敗");
     }
   };
 
