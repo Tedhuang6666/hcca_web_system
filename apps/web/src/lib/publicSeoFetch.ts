@@ -15,7 +15,12 @@ export async function fetchPublicRegulation(id: string): Promise<RegulationOut |
 }
 
 export async function fetchPublicDocument(id: string): Promise<DocumentOut | null> {
-  return fetchPublicJson<DocumentOut>(`/documents/${encodeURIComponent(id)}`);
+  // 公文可見度可能在建立後才切換為公開；避免把切換前的 404/null
+  // 以一般公開內容快取保留 5 分鐘，導致公開連結持續顯示不存在。
+  return fetchCachedPublicJson<DocumentOut>(
+    `/documents/${encodeURIComponent(id)}`,
+    { revalidate: 15 },
+  );
 }
 
 export async function fetchPublicPetitions(
