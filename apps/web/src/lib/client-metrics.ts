@@ -43,6 +43,7 @@ const pendingComponentMetrics: ComponentMetricPayload[] = [];
 let metricFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let interactionSequence = 0;
 let apiRequestSequence = 0;
+let interactionObserverInstalled = false;
 let activeInteraction: {
   id: string;
   name: string;
@@ -239,7 +240,8 @@ export function completeActiveInteraction(
 }
 
 export function observeInteractions(): () => void {
-  if (typeof window === "undefined") return () => undefined;
+  if (typeof window === "undefined" || interactionObserverInstalled) return () => undefined;
+  interactionObserverInstalled = true;
 
   const actionForTarget = (target: EventTarget | null, selector: string) => {
     if (!(target instanceof Element)) return null;
@@ -264,6 +266,7 @@ export function observeInteractions(): () => void {
   return () => {
     document.removeEventListener("click", handleClick, true);
     document.removeEventListener("submit", handleSubmit, true);
+    interactionObserverInstalled = false;
   };
 }
 

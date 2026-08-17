@@ -188,6 +188,7 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     "api_latency_by_kind": {kind: [] for kind in API_OPERATION_KINDS},
                     "interaction_feedback": [],
                     "interaction_completion": [],
+                    "client_errors": [],
                     "operations": {},
                 },
             )
@@ -220,6 +221,10 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     operation_samples = operation[metric.removeprefix("interaction_")]
                     assert isinstance(operation_samples, list)
                     operation_samples.append(float(event["value"]))
+            elif metric == "client_error":
+                errors = values["client_errors"]
+                assert isinstance(errors, list)
+                errors.append(float(event["value"]))
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             continue
 
@@ -277,6 +282,7 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     "feedback": len(values["interaction_feedback"]),
                     "completion": len(values["interaction_completion"]),
                 },
+                "client_errors": len(values["client_errors"]),
                 "interactions": sorted(
                     operation_rows, key=lambda item: item["samples"], reverse=True
                 )[:20],
@@ -374,7 +380,11 @@ async def discover_public_urls() -> list[str]:
 
 def _has_rum_observation(route: dict) -> bool:
     """Treat any first-party metric as evidence that a route was actually used."""
-    if int(route.get("pageviews") or 0) > 0 or int(route.get("api_errors") or 0) > 0:
+    if (
+        int(route.get("pageviews") or 0) > 0
+        or int(route.get("api_errors") or 0) > 0
+        or int(route.get("client_errors") or 0) > 0
+    ):
         return True
     samples = route.get("samples") or {}
     return any(int(value or 0) > 0 for value in samples.values()) or bool(
