@@ -50,6 +50,10 @@ logger = logging.getLogger(__name__)
 
 TASK_INBOX_CACHE_TTL_SECONDS = 45
 TASK_COUNT_CACHE_TTL_SECONDS = 30
+# 每個 worker 限制待辦來源的同時查詢數，避免多個使用者同時進入待辦中心時
+# 一次建立 12 條資料庫連線，進而拖慢其他頁面與 readiness 檢查。
+TASK_SOURCE_CONCURRENCY = 4
+_task_source_semaphore = asyncio.Semaphore(TASK_SOURCE_CONCURRENCY)
 
 
 def _has(perms: frozenset[str], is_admin: bool, code: str) -> bool:
@@ -560,13 +564,14 @@ async def _run_source(
     """執行一個待辦來源；並行查詢不可共用同一個 AsyncSession。"""
 
     async def run() -> list[TaskItem]:
-        # 正式 request session 綁定 AsyncEngine，可安全各取一條連線並行。
-        # 測試與外部 transaction 可能綁定 AsyncConnection，改用原 session
-        # 讓測試資料與外層交易一致，並由 gather 的單一連線序列化執行。
-        if isinstance(db.bind, AsyncEngine):
-            async with AsyncSessionLocal() as source_db:
-                return await builder(source_db)
-        return await builder(db)
+        async with _task_source_semaphore:
+            # 正式 request session 綁定 AsyncEngine，可安全各取一條連線並行。
+            # 測試與外部 transaction 可能綁定 AsyncConnection，改用原 session
+            # 讓測試資料與外層交易一致，並由 gather 的單一連線序列化執行。
+            if isinstance(db.bind, AsyncEngine):
+                async with AsyncSessionLocal() as source_db:
+                    return await builder(source_db)
+            return await builder(db)
 
     return await _safe(name, run)
 

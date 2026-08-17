@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 
 # 快取設定
 DASHBOARD_CACHE_TTL_SECONDS = 60
+_dashboard_widget_semaphore = asyncio.Semaphore(4)
 
 
 def _dashboard_cache_key(user_id: str) -> str:
@@ -624,10 +625,11 @@ async def _run_widget(
     """在獨立 session 執行 widget，避免並行共用 AsyncSession。"""
 
     async def run() -> DashboardWidget | None:
-        if isinstance(db.bind, AsyncEngine):
-            async with AsyncSessionLocal() as widget_db:
-                return await builder(widget_db)
-        return await builder(db)
+        async with _dashboard_widget_semaphore:
+            if isinstance(db.bind, AsyncEngine):
+                async with AsyncSessionLocal() as widget_db:
+                    return await builder(widget_db)
+            return await builder(db)
 
     return await _safe_run(run, name)
 
