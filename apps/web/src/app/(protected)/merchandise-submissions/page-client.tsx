@@ -260,6 +260,7 @@ export default function MerchandiseSubmissionsPageClient({
   const [loading, setLoading] = useState(!initialPortal);
   const [mineLoading, setMineLoading] = useState(false);
   const [mineLoaded, setMineLoaded] = useState(false);
+  const mineRequestRef = useRef<Promise<MerchandiseSubmissionOut[]> | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const selected = useMemo(
@@ -283,7 +284,9 @@ export default function MerchandiseSubmissionsPageClient({
   const loadMine = useCallback(async () => {
     setMineLoading(true);
     try {
-      setSubmissions(await merchandiseSubmissionsApi.mine());
+      const request = mineRequestRef.current ?? merchandiseSubmissionsApi.mine();
+      mineRequestRef.current = request;
+      setSubmissions(await request);
       setMineLoaded(true);
     } catch (error) {
       toast.error(apiErrorMessage(error, "無法載入我的投稿"));
@@ -294,6 +297,31 @@ export default function MerchandiseSubmissionsPageClient({
   useEffect(() => {
     if (tab === "mine" && !mineLoaded && !mineLoading) void loadMine();
   }, [loadMine, mineLoaded, mineLoading, tab]);
+  useEffect(() => {
+    if (mineLoaded || mineRequestRef.current || typeof window === "undefined") return;
+    let cancelled = false;
+    const prefetch = () => {
+      if (cancelled || mineRequestRef.current) return;
+      const request = merchandiseSubmissionsApi.mine();
+      mineRequestRef.current = request;
+      void request.catch(() => undefined);
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const idleHandle = idleWindow.requestIdleCallback
+      ? idleWindow.requestIdleCallback(prefetch, { timeout: 1_500 })
+      : window.setTimeout(prefetch, 1_000);
+    return () => {
+      cancelled = true;
+      if (typeof idleWindow.cancelIdleCallback === "function" && typeof idleWindow.requestIdleCallback === "function") {
+        idleWindow.cancelIdleCallback(idleHandle as number);
+      } else {
+        window.clearTimeout(idleHandle as number);
+      }
+    };
+  }, [mineLoaded]);
   const choose = (id: string) => {
     setSelectedId(id);
     setEditingId(null);
