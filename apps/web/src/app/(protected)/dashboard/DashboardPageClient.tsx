@@ -128,6 +128,7 @@ function SkeletonCard() {
 
 export type DashboardPageInitialData = {
   userName: string;
+  greeting: string;
   dashboard: DashboardResponse | null;
   tasks: TaskInboxResponse | null;
   matters: MatterListItem[] | null;
@@ -146,7 +147,7 @@ export default function DashboardPageClient({
     cacheGet<AnnouncementListItem[]>("dashboard/announcements"),
   ).current;
   const [userName, setUserName] = useState(initialData?.userName ?? "");
-  const [greeting, setGreeting] = useState("歡迎回來");
+  const [greeting] = useState(initialData?.greeting ?? "歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(
     () => initialData?.dashboard ?? null,
   );
@@ -184,10 +185,6 @@ export default function DashboardPageClient({
       const name = localStorage.getItem("user_name");
       if (name) setUserName(name);
     }
-    const h = new Date().getHours();
-    if (h < 12) setGreeting("早安");
-    else if (h < 18) setGreeting("午安");
-    else setGreeting("晚安");
   }, [initialData?.userName]);
 
   useEffect(() => {

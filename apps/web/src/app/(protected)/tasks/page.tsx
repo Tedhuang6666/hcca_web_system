@@ -113,26 +113,21 @@ export default function TasksPage() {
       router.replace("/dashboard");
       return () => { mounted = false; };
     }
-    Promise.allSettled([
-      tasksApi.list(),
-      canSeeDocumentDrafts || canSeeDocumentApprovals ? documentsApi.stats() : Promise.resolve(null),
-      ...(["under_review", "scheduled", "council_approved"] as RegulationWorkflowStatus[])
-        .map(status => {
-          const allowed = status === "council_approved"
-            ? canSeeRegulationPublish
-            : canSeeRegulationReview;
-          return allowed
-            ? regulationsApi.list({ workflow_status: status, limit: "50" })
-            : Promise.resolve([]);
-        }),
-    ])
-      .then(([tasksRes, statsRes, underReviewRes, scheduledRes, councilApprovedRes]) => {
+    const loadSupplementary = () => {
+      void Promise.allSettled([
+        canSeeDocumentDrafts || canSeeDocumentApprovals ? documentsApi.stats() : Promise.resolve(null),
+        ...(["under_review", "scheduled", "council_approved"] as RegulationWorkflowStatus[])
+          .map(status => {
+            const allowed = status === "council_approved"
+              ? canSeeRegulationPublish
+              : canSeeRegulationReview;
+            return allowed
+              ? regulationsApi.list({ workflow_status: status, limit: "50" })
+              : Promise.resolve([]);
+          }),
+      ]).then(([statsRes, underReviewRes, scheduledRes, councilApprovedRes]) => {
         if (!mounted) return;
-        if (tasksRes.status === "fulfilled") {
-          setData(tasksRes.value);
-          cacheSet(CACHE_KEYS.tasks, tasksRes.value);
-        } else throw tasksRes.reason;
-        if (statsRes.status === "fulfilled") {
+        if (statsRes.status === "fulfilled" && statsRes.value) {
           setDocStats(statsRes.value);
           cacheSet(CACHE_KEYS.docStats, statsRes.value);
         }
@@ -143,13 +138,25 @@ export default function TasksPage() {
         };
         setRegCounts(counts);
         cacheSet(CACHE_KEYS.regCounts, counts);
+      });
+    };
+
+    const supplementaryTimer = window.setTimeout(loadSupplementary, 0);
+    tasksApi.list()
+      .then((nextData) => {
+        if (!mounted) return;
+        setData(nextData);
+        cacheSet(CACHE_KEYS.tasks, nextData);
       })
       .catch((e: unknown) => {
         toast.error("無法載入待辦中心");
         console.error(e);
       })
       .finally(() => { if (mounted) setLoading(false); });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+      window.clearTimeout(supplementaryTimer);
+    };
   }, [
     canSeeDocumentApprovals,
     canSeeDocumentDrafts,
