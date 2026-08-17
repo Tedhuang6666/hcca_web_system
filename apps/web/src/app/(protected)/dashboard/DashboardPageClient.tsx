@@ -148,16 +148,16 @@ export default function DashboardPageClient({
   const [userName, setUserName] = useState(initialData?.userName ?? "");
   const [greeting, setGreeting] = useState("歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(
-    () => initialData?.dashboard ?? cachedDashboard ?? null,
+    () => initialData?.dashboard ?? null,
   );
   const [tasks, setTasks] = useState<TaskInboxResponse | null>(
-    () => initialData?.tasks ?? cachedTasks ?? null,
+    () => initialData?.tasks ?? null,
   );
   const [matters, setMatters] = useState<MatterListItem[]>(
-    () => initialData?.matters ?? cachedMatters ?? [],
+    () => initialData?.matters ?? [],
   );
   const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>(
-    () => initialData?.announcements ?? cachedAnnouncements ?? [],
+    () => initialData?.announcements ?? [],
   );
   const [priorityLoading, setPriorityLoading] = useState(
     !initialData?.tasks && !cachedTasks,
@@ -196,6 +196,12 @@ export default function DashboardPageClient({
       setPriorityLoading(false);
       setSecondaryLoading(false);
       return;
+    }
+    if (!initialData?.dashboard && cachedDashboard) setData(cachedDashboard);
+    if (!initialData?.tasks && cachedTasks) setTasks(cachedTasks);
+    if (initialData?.matters == null && cachedMatters) setMatters(cachedMatters);
+    if (initialData?.announcements == null && cachedAnnouncements) {
+      setAnnouncements(cachedAnnouncements);
     }
     const refreshDashboard = !initialData?.dashboard && !cachedDashboard;
     const refreshTasks = !initialData?.tasks && !cachedTasks;
