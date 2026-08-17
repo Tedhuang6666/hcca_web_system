@@ -5,9 +5,11 @@ import time
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from api.core.config import settings
 from api.core.prometheus_metrics import (
+    _route_template,
     init_metrics,
     record_backup_run,
     record_celery_task,
@@ -63,6 +65,12 @@ def test_sentry_event_uses_structured_log_request_id() -> None:
     assert event is not None
     assert event["tags"]["request_id"] == "request-test-123"
     assert event["extra"]["request_id"] == "request-test-123"
+
+
+def test_unmatched_prometheus_paths_use_bounded_label() -> None:
+    request = Request({"type": "http", "path": "/random-user-supplied-path"})
+
+    assert _route_template(request) == "/__unmatched__"
 
 
 def test_rum_api_metrics_are_not_page_speed_targets(monkeypatch) -> None:
