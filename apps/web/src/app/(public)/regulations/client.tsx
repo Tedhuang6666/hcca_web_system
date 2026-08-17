@@ -2,8 +2,7 @@
 import { useEffect, useState, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { toast } from "sonner";
-import { regulationsApi, regulationHref } from "@/lib/api";
+import { regulationsApi, regulationHref } from "@/lib/api/regulations";
 import { useFetch } from "@/hooks/useFetch";
 import type {
   RegulationArticleOut,
@@ -390,9 +389,9 @@ function RegCard({
           const url = `${window.location.origin}${regulationHref(reg)}`;
           try {
             await navigator.clipboard.writeText(url);
-            toast.success("連結已複製");
+            void import("sonner").then(({ toast }) => toast.success("連結已複製"));
           } catch {
-            toast.error("複製失敗");
+            void import("sonner").then(({ toast }) => toast.error("複製失敗"));
           }
         }}
         className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:opacity-80 transition-opacity"

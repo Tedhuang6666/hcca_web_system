@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { surveysApi } from "@/lib/api";
+import { surveysApi } from "@/lib/api/surveys";
 import { useFetch } from "@/hooks/useFetch";
 import type { SurveyListItem, SurveyStatus } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";

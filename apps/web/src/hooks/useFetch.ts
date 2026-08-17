@@ -1,8 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { apiErrorMessage } from "@/lib/api-helpers";
 import { cacheGet, cacheHas, cacheRequest, cacheSet } from "@/lib/api-cache";
+
+function showFetchErrorToast(message: string) {
+  void import("sonner").then(({ toast }) => toast.error(message));
+}
 
 // ── 不帶 cacheKey 的原始多載（向後相容） ──────────────────────────────────────
 type Fetcher<T> = (signal?: AbortSignal) => Promise<T>;
@@ -69,7 +72,7 @@ export function useFetch<T>(
         }
       })
       .catch((e) => {
-        if (!cancelled) toast.error(apiErrorMessage(e, errorRef.current));
+        if (!cancelled) showFetchErrorToast(apiErrorMessage(e, errorRef.current));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
