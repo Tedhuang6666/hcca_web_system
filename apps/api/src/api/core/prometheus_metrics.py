@@ -391,11 +391,13 @@ class PrometheusMetricsMiddleware:
                     _db_time_per_request.labels(method=method, path_template=tpl).observe(
                         _query_ms / 1000
                     )
-                if duration >= float(os.getenv("SLOW_REQUEST_THRESHOLD_MS", "1000")) / 1000:
-                    if _http_slow_requests_total is not None:
-                        _http_slow_requests_total.labels(
-                            method=method, path_template=tpl, status=status
-                        ).inc()
+                if (
+                    duration >= float(os.getenv("SLOW_REQUEST_THRESHOLD_MS", "1000")) / 1000
+                    and _http_slow_requests_total is not None
+                ):
+                    _http_slow_requests_total.labels(
+                        method=method, path_template=tpl, status=status
+                    ).inc()
                 if status in {"408", "504"} and _http_timeouts_total is not None:
                     _http_timeouts_total.labels(
                         method=method, path_template=tpl, status=status
