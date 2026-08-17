@@ -409,9 +409,7 @@ async def discover_observability_urls() -> tuple[list[str], dict]:
 
 async def provider_snapshot() -> dict:
     try:
-        cached = await asyncio.wait_for(
-            cache_get(PROVIDER_SNAPSHOT_CACHE_KEY), timeout=0.25
-        )
+        cached = await asyncio.wait_for(cache_get(PROVIDER_SNAPSHOT_CACHE_KEY), timeout=0.25)
     except TimeoutError:
         cached = None
     if isinstance(cached, dict):
