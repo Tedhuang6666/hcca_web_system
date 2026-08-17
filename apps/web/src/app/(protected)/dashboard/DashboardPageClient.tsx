@@ -84,6 +84,8 @@ const TASK_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
   work_item: (p) => <ListChecks {...p} />,
 };
 
+const EMPTY_PERMISSIONS = new Set<string>();
+
 function formatDate(s?: string | null) {
   if (!s) return "";
   const d = new Date(s);
@@ -166,7 +168,21 @@ export default function DashboardPageClient({
   const [secondaryLoading, setSecondaryLoading] = useState(
     !initialData?.dashboard && !cachedDashboard,
   );
-  const { can, canAny, isAdmin, permissions } = usePermissions();
+  const [clientReady, setClientReady] = useState(false);
+  const {
+    can: hasPermission,
+    canAny: hasAnyPermission,
+    isAdmin: cachedIsAdmin,
+    permissions: cachedPermissions,
+  } = usePermissions();
+  // Permission-driven dashboard branches must wait until hydration has
+  // committed; auth/me can update the cache while the streamed tree is still
+  // being hydrated, which otherwise changes the server-rendered branch.
+  useEffect(() => setClientReady(true), []);
+  const isAdmin = clientReady && cachedIsAdmin;
+  const permissions = clientReady ? cachedPermissions : EMPTY_PERMISSIONS;
+  const can = (code: string) => clientReady && hasPermission(code);
+  const canAny = (...codes: string[]) => clientReady && hasAnyPermission(...codes);
   const hasTaskAccess = isAdmin
     || permissions.has("admin:all")
     || Array.from(permissions).some(
