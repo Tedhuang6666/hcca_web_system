@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";
 import { useEffect, useRef } from "react";
-import { flushClientMetrics, observeInteractions, recordClientMetric } from "@/lib/client-metrics";
+import { flushClientMetrics, recordClientMetric } from "@/lib/client-metrics";
 
 function report(metric: {
   id: string;
@@ -29,8 +29,6 @@ export default function WebVitalsReporter() {
   useEffect(() => {
     if (pathname) recordClientMetric({ metric: "page_view", value: 1, path: pathname });
   }, [pathname]);
-
-  useEffect(() => observeInteractions(), []);
 
   useEffect(() => {
     if (navigationReported.current || typeof performance === "undefined") return;

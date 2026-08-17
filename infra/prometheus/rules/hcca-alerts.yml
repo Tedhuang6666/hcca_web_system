@@ -26,6 +26,38 @@ groups:
         annotations:
           summary: "HCCA API p95 latency exceeds 500ms"
 
+      - alert: HccaRouteHighP99Latency
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le, path_template) (rate(hcca_http_request_duration_seconds_bucket[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HCCA route p99 latency exceeds 2 seconds"
+
+      - alert: HccaHttpTimeouts
+        expr: sum(rate(hcca_http_timeouts_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HCCA HTTP timeout responses detected"
+
+      - alert: HccaSlowRequestRate
+        expr: |
+          sum(rate(hcca_http_slow_requests_total[5m]))
+          /
+          clamp_min(sum(rate(hcca_http_requests_total[5m])), 0.001)
+          > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 5% of HCCA requests exceed the slow threshold"
+
       - alert: HccaCeleryTaskFailures
         expr: sum(increase(hcca_celery_tasks_total{status="failed"}[15m])) > 3
         for: 5m

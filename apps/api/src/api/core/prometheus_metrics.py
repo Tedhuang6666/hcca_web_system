@@ -39,9 +39,12 @@ from prometheus_client import (
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from api.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 metrics_enabled = True
+SLOW_REQUEST_THRESHOLD_SECONDS = settings.SLOW_REQUEST_THRESHOLD_MS / 1000
 
 
 _registry = None
@@ -356,6 +359,7 @@ class PrometheusMetricsMiddleware:
         method = scope.get("method", "GET")
         start = time.perf_counter()
         status_holder = {"code": 500}
+        exception_holder: dict[str, BaseException | None] = {"error": None}
 
         if _http_in_flight is not None:
             _http_in_flight.labels(method=method).inc()
@@ -367,6 +371,9 @@ class PrometheusMetricsMiddleware:
 
         try:
             await self.app(scope, receive, _send_wrapper)
+        except BaseException as exc:
+            exception_holder["error"] = exc
+            raise
         finally:
             duration = time.perf_counter() - start
             if _http_in_flight is not None:
@@ -391,19 +398,17 @@ class PrometheusMetricsMiddleware:
                     _db_time_per_request.labels(method=method, path_template=tpl).observe(
                         _query_ms / 1000
                     )
-                if (
-                    duration >= float(os.getenv("SLOW_REQUEST_THRESHOLD_MS", "1000")) / 1000
-                    and _http_slow_requests_total is not None
-                ):
-                    _http_slow_requests_total.labels(
-                        method=method, path_template=tpl, status=status
-                    ).inc()
-                if status in {"408", "504"} and _http_timeouts_total is not None:
-                    _http_timeouts_total.labels(
-                        method=method, path_template=tpl, status=status
-                    ).inc()
             except Exception:
                 logger.debug("Prometheus query counter 更新失敗", exc_info=True)
+
+            if duration >= SLOW_REQUEST_THRESHOLD_SECONDS and _http_slow_requests_total is not None:
+                _http_slow_requests_total.labels(
+                    method=method, path_template=tpl, status=status
+                ).inc()
+            if (
+                status in {"408", "504"} or isinstance(exception_holder["error"], TimeoutError)
+            ) and _http_timeouts_total is not None:
+                _http_timeouts_total.labels(method=method, path_template=tpl, status=status).inc()
 
 
 __all__ = [

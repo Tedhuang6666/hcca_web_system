@@ -2,7 +2,7 @@
 import asyncio
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,8 +85,11 @@ async def errors(
 
 
 @router.get("/real-users")
-async def real_users(_admin: Annotated[User, Depends(require_superuser)]) -> dict[str, Any]:
-    telemetry = await client_route_analytics()
+async def real_users(
+    _admin: Annotated[User, Depends(require_superuser)],
+    window_hours: Annotated[int, Query(ge=1, le=168)] = 24,
+) -> dict[str, Any]:
+    telemetry = await client_route_analytics(window_hours=window_hours)
     routes = telemetry.get("routes", [])
     latest_vitals = {
         key: value

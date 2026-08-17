@@ -352,6 +352,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/dashboard-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得管理總覽統計 */
+        get: operations["dashboard_stats_admin_dashboard_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/impersonate/end": {
         parameters: {
             query?: never;
@@ -15286,6 +15303,13 @@ export interface components {
             order_id: string;
             /** Seat Ids */
             seat_ids: string[];
+        };
+        /** AdminDashboardStats */
+        AdminDashboardStats: {
+            /** Active User Count */
+            active_user_count: number;
+            /** Position Count */
+            position_count: number;
         };
         /** AgendaAttachmentLinkCreate */
         AgendaAttachmentLinkCreate: {
@@ -38307,6 +38331,26 @@ export interface operations {
             };
         };
     };
+    dashboard_stats_admin_dashboard_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDashboardStats"];
+                };
+            };
+        };
+    };
     end_impersonation_admin_impersonate_end_post: {
         parameters: {
             query?: never;
@@ -40316,7 +40360,9 @@ export interface operations {
     };
     real_users_admin_system_observability_real_users_get: {
         parameters: {
-            query?: never;
+            query?: {
+                window_hours?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -40332,6 +40378,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

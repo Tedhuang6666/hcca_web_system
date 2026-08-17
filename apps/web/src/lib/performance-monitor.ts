@@ -3,7 +3,6 @@
 import {
   recordClientMetric,
   recordComponentMetric,
-  observeInteractions,
   flushClientMetrics,
   type ComponentMetricPayload,
 } from "./client-metrics";
@@ -156,7 +155,6 @@ class PerformanceMonitor {
   private pendingLongTasks: LongTaskMetric[] = [];
   private vitalMetrics = new Map<VitalName, number>();
   private observers: PerformanceObserver[] = [];
-  private interactionCleanup: (() => void) | null = null;
   private listeners = new Set<() => void>();
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   private visibilityHandler: (() => void) | null = null;
@@ -185,7 +183,6 @@ class PerformanceMonitor {
     this.setupLargestContentfulPaintObserver();
     this.setupLayoutShiftObserver();
     this.setupINPObserver();
-    this.interactionCleanup = observeInteractions();
     this.startPeriodicFlush();
     this.setupVisibilityFlush();
   }
@@ -534,8 +531,6 @@ class PerformanceMonitor {
   disconnect(): void {
     this.observers.forEach((observer) => observer.disconnect());
     this.observers = [];
-    this.interactionCleanup?.();
-    this.interactionCleanup = null;
     if (this.flushInterval) clearInterval(this.flushInterval);
     this.flushInterval = null;
     if (this.visibilityHandler) {

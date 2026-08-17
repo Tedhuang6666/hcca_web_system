@@ -30,6 +30,42 @@ groups:
           summary: "HCCA API P95 延遲過高"
           description: "最近 10 分鐘 API P95 延遲超過 2 秒。"
 
+      - alert: HccaRouteHighP99Latency
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(hcca_http_request_duration_seconds_bucket[5m])) by (le, path_template)
+          ) > 5
+        for: 10m
+        labels:
+          severity: P2
+          service: api
+        annotations:
+          summary: "HCCA route P99 延遲過高"
+          description: "至少一個路由最近 10 分鐘 P99 延遲超過 5 秒。"
+
+      - alert: HccaHttpTimeouts
+        expr: sum(rate(hcca_http_timeouts_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: P2
+          service: api
+        annotations:
+          summary: "HCCA HTTP timeout 回應持續出現"
+
+      - alert: HccaSlowRequestRate
+        expr: |
+          sum(rate(hcca_http_slow_requests_total[5m]))
+          /
+          clamp_min(sum(rate(hcca_http_requests_total[5m])), 0.001)
+          > 0.05
+        for: 10m
+        labels:
+          severity: P2
+          service: api
+        annotations:
+          summary: "HCCA 超過 5% request 高於 slow threshold"
+
       - alert: HccaCeleryTaskFailures
         expr: sum(rate(hcca_celery_tasks_total{status="failed"}[10m])) > 0.1
         for: 10m

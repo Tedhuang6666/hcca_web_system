@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from uuid import UUID as UUIDType
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,9 @@ class ObservabilityRelease(Base):
 
 class PageSpeedRun(Base):
     __tablename__ = "pagespeed_runs"
+    __table_args__ = (
+        Index("ix_pagespeed_runs_url_strategy_tested_at", "url", "strategy", "tested_at"),
+    )
     id: Mapped[UUIDType] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     strategy: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -44,6 +47,7 @@ class PageSpeedRun(Base):
 
 class PageSpeedAudit(Base):
     __tablename__ = "pagespeed_audits"
+    __table_args__ = (Index("ix_pagespeed_audits_run_id", "run_id"),)
     id: Mapped[UUIDType] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     run_id: Mapped[UUIDType] = mapped_column(
         UUID(as_uuid=True), ForeignKey("pagespeed_runs.id", ondelete="CASCADE"), nullable=False

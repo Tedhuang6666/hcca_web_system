@@ -39,21 +39,21 @@
       "title": "API latency by route",
       "gridPos": {"h": 9, "w": 12, "x": 0, "y": 6},
       "fieldConfig": {"defaults": {"unit": "s"}},
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum by (le, path_template) (rate(hcca_http_request_duration_seconds_bucket[5m])))",
-        "legendFormat": "{{path_template}}",
-        "refId": "A"
-      }]
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, path_template) (rate(hcca_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{path_template}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.75, sum by (le, path_template) (rate(hcca_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p75 {{path_template}}", "refId": "B"},
+        {"expr": "histogram_quantile(0.95, sum by (le, path_template) (rate(hcca_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{path_template}}", "refId": "C"},
+        {"expr": "histogram_quantile(0.99, sum by (le, path_template) (rate(hcca_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p99 {{path_template}}", "refId": "D"}
+      ]
     },
     {
       "type": "timeseries",
-      "title": "DB queries per request p95",
+      "title": "DB p95 time and queries per request",
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 6},
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum by (le, method) (rate(hcca_db_query_count_per_request_bucket[5m])))",
-        "legendFormat": "{{method}}",
-        "refId": "A"
-      }]
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, path_template) (rate(hcca_db_time_per_request_seconds_bucket[5m])))", "legendFormat": "DB p95 {{path_template}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, method) (rate(hcca_db_query_count_per_request_bucket[5m])))", "legendFormat": "queries p95 {{method}}", "refId": "B"}
+      ]
     },
     {
       "type": "timeseries",
@@ -141,6 +141,22 @@
           "refId": "B"
         }
       ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Slow requests and timeouts by route",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 42},
+      "targets": [
+        {"expr": "sum by (path_template) (rate(hcca_http_slow_requests_total[5m]))", "legendFormat": "slow {{path_template}}", "refId": "A"},
+        {"expr": "sum by (path_template) (rate(hcca_http_timeouts_total[5m]))", "legendFormat": "timeout {{path_template}}", "refId": "B"}
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Current build",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 42},
+      "options": {"textMode": "name", "colorMode": "value"},
+      "targets": [{"expr": "max by (release, commit_sha, environment) (hcca_build_info)", "legendFormat": "{{environment}} {{release}} {{commit_sha}}", "refId": "A"}]
     }
   ],
   "refresh": "30s",
