@@ -49,11 +49,29 @@ jobs:
           OUTPUT_FILE: .lighthouseci/authenticated-summary.json
         run: node scripts/authenticated-lighthouse.mjs
 
+      - name: Run authenticated interaction budgets
+        env:
+          BASE_URL: https://hcca.tw
+          PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
+          OUTPUT_FILE: .lighthouseci/authenticated-interactions.json
+          FEEDBACK_BUDGET_MS: "100"
+          COMPLETION_BUDGET_MS: "500"
+        run: node scripts/authenticated-interactions.mjs
+
       - name: Upload authenticated performance report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: authenticated-lighthouse-report
           path: .lighthouseci/authenticated-summary.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload authenticated interaction report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: authenticated-interaction-report
+          path: .lighthouseci/authenticated-interactions.json
           if-no-files-found: ignore
           retention-days: 30
