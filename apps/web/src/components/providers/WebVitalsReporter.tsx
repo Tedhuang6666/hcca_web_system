@@ -48,6 +48,36 @@ export default function WebVitalsReporter() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let idleHandle: number | null = null;
+    let timeoutHandle: number | null = null;
+
+    const startPerformanceObserver = () => {
+      if (cancelled) return;
+      // Resource and long-task observers are useful on public pages too, but
+      // their code is not part of the first render. Protected pages already
+      // share this singleton through PerformanceProvider.
+      void import("@/lib/performance-monitor").then(({ getPerformanceMonitor }) => {
+        if (!cancelled) getPerformanceMonitor();
+      }).catch(() => undefined);
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      idleHandle = window.requestIdleCallback(startPerformanceObserver, { timeout: 2_500 });
+    } else {
+      timeoutHandle = window.setTimeout(startPerformanceObserver, 1_500) as unknown as number;
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleHandle !== null && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleHandle);
+      }
+      if (timeoutHandle !== null) window.clearTimeout(timeoutHandle);
+    };
+  }, []);
+
+  useEffect(() => {
     const flush = () => flushClientMetrics(true);
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
