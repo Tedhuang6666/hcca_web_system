@@ -1,5 +1,6 @@
 """Redis 應用層快取 - 組織、權限、公文列表"""
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -10,6 +11,9 @@ from api.core.config import settings
 from api.core.prometheus_metrics import set_redis_client_healthy
 
 logger = logging.getLogger(__name__)
+
+_CACHE_READ_TIMEOUT_SECONDS = 0.25
+_CACHE_WRITE_TIMEOUT_SECONDS = 0.25
 
 cache_client: aioredis.Redis = aioredis.from_url(
     str(settings.REDIS_CACHE_URL or settings.REDIS_URL),
@@ -25,7 +29,10 @@ cache_client: aioredis.Redis = aioredis.from_url(
 async def cache_get(key: str) -> Any | None:
     """從 Redis 快取取得值；Redis 異常時 fallback 為 cache miss 並記錄。"""
     try:
-        value = await cache_client.get(key)
+        value = await asyncio.wait_for(
+            cache_client.get(key),
+            timeout=_CACHE_READ_TIMEOUT_SECONDS,
+        )
         set_redis_client_healthy("cache", True)
         if value is None:
             return None
@@ -40,7 +47,10 @@ async def cache_set(key: str, value: Any, ttl: int = 60) -> None:
     """設定 Redis 快取值；Redis 異常時記錄但不中斷業務邏輯。"""
     try:
         serialized = json.dumps(value, default=str)
-        await cache_client.setex(key, ttl, serialized)
+        await asyncio.wait_for(
+            cache_client.setex(key, ttl, serialized),
+            timeout=_CACHE_WRITE_TIMEOUT_SECONDS,
+        )
     except Exception:
         logger.error("cache_set failed key=%s ttl=%d", key, ttl, exc_info=True)
 
