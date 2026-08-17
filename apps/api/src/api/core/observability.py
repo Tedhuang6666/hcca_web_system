@@ -43,21 +43,25 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
     )
     provider = TracerProvider(resource=resource)
     endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
-    if "/integration/otlp" in endpoint:
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter,
-        )
+    try:
+        if "/integration/otlp" in endpoint:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter,
+            )
 
-        exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
-    else:
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,
-        )
+            exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
+        else:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                OTLPSpanExporter,
+            )
 
-        exporter = OTLPSpanExporter(
-            endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
-            insecure=settings.OTEL_EXPORTER_OTLP_ENDPOINT.startswith("http://"),
-        )
+            exporter = OTLPSpanExporter(
+                endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+                insecure=settings.OTEL_EXPORTER_OTLP_ENDPOINT.startswith("http://"),
+            )
+    except ImportError:
+        logger.warning("Configured OpenTelemetry exporter is not installed; tracing disabled")
+        return False
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app, excluded_urls="health,live,ready,metrics")
