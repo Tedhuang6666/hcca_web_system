@@ -135,24 +135,23 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (!canAccessAdmin) return;
     Promise.allSettled([
-      adminApi.listUsers({ active_only: true }),
+      adminApi.dashboardStats(),
       systemApi.listModules(),
-      adminApi.listPositions(),
       auditLogsApi.list({ limit: 6 }),
       systemApi.status(),
-    ]).then(([users, modules, positions, logs, status]) => {
+    ]).then(([users, modules, logs, status]) => {
       if (users.status === "fulfilled") {
-        setUserCount(users.value.length);
-        cacheSet(ADMIN_CACHE_KEY + "/userCount", users.value.length);
+        setUserCount(users.value.active_user_count);
+        cacheSet(ADMIN_CACHE_KEY + "/userCount", users.value.active_user_count);
       }
       if (modules.status === "fulfilled") {
         const count = (modules.value as ModuleStatus[]).filter((m) => !m.on).length;
         setDownModules(count);
         cacheSet(ADMIN_CACHE_KEY + "/downModules", count);
       }
-      if (positions.status === "fulfilled") {
-        setPositionCount(positions.value.length);
-        cacheSet(ADMIN_CACHE_KEY + "/positionCount", positions.value.length);
+      if (users.status === "fulfilled") {
+        setPositionCount(users.value.position_count);
+        cacheSet(ADMIN_CACHE_KEY + "/positionCount", users.value.position_count);
       }
       if (logs.status === "fulfilled") {
         setRecentLogs(logs.value as AuditLogOut[]);

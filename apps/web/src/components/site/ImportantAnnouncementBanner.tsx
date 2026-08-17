@@ -7,6 +7,8 @@ import { announcementsApi } from "@/lib/api/announcements";
 import type { AnnouncementOut } from "@/lib/types";
 
 const DISMISSAL_TTL_MS = 10 * 60 * 1000;
+const ANNOUNCEMENT_CACHE_KEY = "hcca:important-announcement";
+const ANNOUNCEMENT_CACHE_TTL_MS = 60 * 1000;
 
 export type ImportantAnnouncement = Pick<
   AnnouncementOut,
@@ -44,6 +46,29 @@ function rememberDismissal(item: ImportantAnnouncement) {
   }
 }
 
+function readAnnouncementCache(): ImportantAnnouncement | null | undefined {
+  try {
+    const raw = sessionStorage.getItem(ANNOUNCEMENT_CACHE_KEY);
+    if (!raw) return undefined;
+    const cached = JSON.parse(raw) as { savedAt: number; item: ImportantAnnouncement | null };
+    if (!Number.isFinite(cached.savedAt) || Date.now() - cached.savedAt > ANNOUNCEMENT_CACHE_TTL_MS) {
+      sessionStorage.removeItem(ANNOUNCEMENT_CACHE_KEY);
+      return undefined;
+    }
+    return cached.item;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeAnnouncementCache(item: ImportantAnnouncement | null) {
+  try {
+    sessionStorage.setItem(ANNOUNCEMENT_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), item }));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
 export default function ImportantAnnouncementBanner({
   announcement: initialAnnouncement,
 }: {
@@ -67,10 +92,21 @@ export default function ImportantAnnouncementBanner({
       };
     }
 
+    const cached = readAnnouncementCache();
+    if (cached !== undefined) {
+      setAnnouncement(cached);
+      setVisible(Boolean(cached && !wasRecentlyDismissed(cached)));
+      setResolved(true);
+      return () => {
+        active = false;
+      };
+    }
+
     setResolved(false);
     announcementsApi.activeUrgent()
       .then((item) => {
         if (!active) return;
+        writeAnnouncementCache(item);
         setAnnouncement(item);
         setVisible(Boolean(item && !wasRecentlyDismissed(item)));
         setResolved(true);

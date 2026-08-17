@@ -32,6 +32,30 @@ import {
 
 /* ── 折疊狀態：localStorage 持久化 ─────────────────────────────────────── */
 const COLLAPSED_KEY = "sidebar.collapsed-sections";
+const NAV_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function readCachedProfile(key: string): NavigationProfileConfig | null | undefined {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const cached = JSON.parse(raw) as { savedAt: number; profile: NavigationProfileConfig | null };
+    if (!Number.isFinite(cached.savedAt) || Date.now() - cached.savedAt > NAV_PROFILE_CACHE_TTL_MS) {
+      sessionStorage.removeItem(key);
+      return undefined;
+    }
+    return cached.profile;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeCachedProfile(key: string, profile: NavigationProfileConfig | null) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), profile }));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
 
 function readCollapsed(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -162,14 +186,22 @@ export default function Sidebar() {
       };
     }
     setPublicProfile(null);
+    const cacheKey = `hcca:navigation-profile:${localStorage.getItem("user_id") ?? "anonymous"}`;
+    const cached = readCachedProfile(cacheKey);
+    if (cached !== undefined) {
+      setServerProfile(cached);
+      return () => {
+        alive = false;
+      };
+    }
     navigationProfilesApi.me()
       .then((result) => {
         if (!alive) return;
-        setServerProfile(
-          result.source === "default" || !result.profile
-            ? null
-            : navProfileFromApi(result.profile),
-        );
+        const profile = result.source === "default" || !result.profile
+          ? null
+          : navProfileFromApi(result.profile);
+        setServerProfile(profile);
+        writeCachedProfile(cacheKey, profile);
       })
       .catch(() => {
         if (!alive) return;

@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
@@ -254,6 +254,11 @@ class PermissionCatalogItem(BaseModel):
     desc: str
 
 
+class AdminDashboardStats(BaseModel):
+    active_user_count: int
+    position_count: int
+
+
 # ── 輔助 ─────────────────────────────────────────────────────────────────────
 
 
@@ -408,6 +413,24 @@ async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserD
 
 
 # ── 使用者管理 ────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/dashboard-stats",
+    response_model=AdminDashboardStats,
+    summary="取得管理總覽統計",
+)
+async def dashboard_stats(db: DbDep, _: AdminUser) -> AdminDashboardStats:
+    active_users, positions = await db.execute(
+        select(
+            select(func.count(User.id)).where(User.is_active == True).scalar_subquery(),  # noqa: E712
+            select(func.count(Position.id)).scalar_subquery(),
+        )
+    ).one()
+    return AdminDashboardStats(
+        active_user_count=active_users,
+        position_count=positions,
+    )
 
 
 @router.get(
