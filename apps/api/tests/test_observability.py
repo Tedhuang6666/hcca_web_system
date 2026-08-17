@@ -21,7 +21,11 @@ from api.core.prometheus_metrics import (
 from api.core.sentry import _before_send
 from api.core.structured_logging import reset_request_id, set_request_id
 from api.models.observability import PageSpeedRun
-from api.services.observability import _merge_rum_urls, client_route_analytics
+from api.services.observability import (
+    _merge_rum_urls,
+    client_route_analytics,
+    record_client_metrics,
+)
 
 
 def test_business_metrics_are_exported() -> None:
@@ -239,6 +243,51 @@ async def test_client_route_analytics_aggregates_all_field_metric_families(monke
     assert route["navigation_ttfb_p75_ms"] == 90.0
     assert route["resource_timing_p75_ms"] == 240.0
     assert route["custom_metrics"]["custom_action"]["p75_ms"] == 320.0
+
+
+async def test_record_client_metrics_pushes_a_batch_with_one_redis_write(monkeypatch) -> None:
+    class FakePipeline:
+        def __init__(self) -> None:
+            self.commands: list[tuple] = []
+
+        def lpush(self, *args):
+            self.commands.append(("lpush", *args))
+            return self
+
+        def ltrim(self, *args):
+            self.commands.append(("ltrim", *args))
+            return self
+
+        def expire(self, *args):
+            self.commands.append(("expire", *args))
+            return self
+
+        async def execute(self):
+            return []
+
+    class FakeRedis:
+        def __init__(self) -> None:
+            self.pipeline_instance = FakePipeline()
+
+        def pipeline(self, **_kwargs):
+            return self.pipeline_instance
+
+    redis = FakeRedis()
+    monkeypatch.setattr("api.services.observability.redis_client", redis)
+
+    assert await record_client_metrics(
+        [
+            {"metric": "fcp", "value": 120},
+            {"metric": "lcp", "value": 480},
+        ]
+    )
+
+    commands = redis.pipeline_instance.commands
+    assert commands[0][0] == "lpush"
+    assert commands[0][1] == "observability:client-telemetry:v1"
+    assert len(commands[0][2:]) == 2
+    assert commands[1][0] == "ltrim"
+    assert commands[2][0] == "expire"
 
 
 async def test_metrics_endpoint_is_enabled(client: AsyncClient) -> None:
