@@ -8,7 +8,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12-slim@sha256:a39549e211a16149edf74e5fdc9ef03a6767e46cd987c5048b6659b6c9904c94 AS runtime
 
-RUN groupadd --gid 1001 appgroup && \
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --gid 1001 appgroup && \
     useradd --uid 1001 --gid appgroup --create-home --home-dir /home/appuser appuser
 
 WORKDIR /app
