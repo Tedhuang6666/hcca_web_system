@@ -51,20 +51,15 @@ async function assertAuthenticated(url, cookieHeader) {
   if (!response.ok) throw new Error(`authenticated navigation returned HTTP ${response.status}`);
 }
 
-async function waitForSelectedTab(page, label) {
-  await page.locator(`[role="tab"][aria-selected="true"]`).filter({ hasText: label }).waitFor({
-    state: "visible",
-    timeout: 5_000,
-  });
-}
-
-async function waitForAttribute(page, locator, attribute, expected) {
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
-    if (await locator.getAttribute(attribute) === expected) return;
-    await page.waitForTimeout(25);
-  }
-  throw new Error(`attribute ${attribute} did not become ${expected}`);
+async function waitForActiveTopTab(page, selector) {
+  await page.waitForFunction(
+    (tabSelector) => {
+      const element = document.querySelector(tabSelector);
+      return element instanceof HTMLElement && element.style.borderColor !== "transparent";
+    },
+    selector,
+    { timeout: 5_000 },
+  );
 }
 
 async function measureAction(page, action, interactionResponses) {
@@ -135,30 +130,43 @@ try {
   results.push(await measureAction(page, {
     name: "校商投稿／我的投稿",
     trigger: page.locator('[data-performance-action="校商投稿／我的投稿"]'),
-    complete: () => waitForSelectedTab(page, "我的投稿"),
+    complete: () => waitForActiveTopTab(page, '[data-performance-action="校商投稿／我的投稿"]'),
   }, interactionResponses));
   results.push(await measureAction(page, {
     name: "校商投稿／我要投稿",
     trigger: page.locator('[data-performance-action="校商投稿／我要投稿"]'),
-    complete: () => waitForSelectedTab(page, "我要投稿"),
+    complete: () => waitForActiveTopTab(page, '[data-performance-action="校商投稿／我要投稿"]'),
   }, interactionResponses));
   results.push(await measureAction(page, {
     name: "校商投稿／下一步選擇商品",
     trigger: page.locator('[data-performance-action="校商投稿／下一步選擇商品"]'),
     complete: () => page.locator('[role="tab"][aria-selected="true"]').filter({ hasText: "選擇商品" }).waitFor({ state: "visible" }),
   }, interactionResponses));
-  const item = page.locator('[data-performance-action^="校商投稿／選擇"]').first();
-  await item.waitFor({ state: "visible", timeout: 5_000 });
-  results.push(await measureAction(page, {
-    name: "校商投稿／選擇第一個商品",
-    trigger: item,
-    complete: () => waitForAttribute(page, item, "aria-pressed", "true"),
-  }, interactionResponses));
-  results.push(await measureAction(page, {
-    name: "校商投稿／下一步查看投稿詳情",
-    trigger: page.locator('[data-performance-action="校商投稿／下一步查看投稿詳情"]'),
-    complete: () => page.locator("#merchandise-item-details, input[type=file]").first().waitFor({ state: "visible", timeout: 5_000 }),
-  }, interactionResponses));
+  const item = page.locator('#merchandise-item-picker [data-performance-action^="校商投稿／選擇"]').first();
+  if (await item.count() === 0) {
+    results.push({
+      name: "校商投稿／選擇第一個商品",
+      status: "skipped",
+      reason: "目前沒有可投稿品項",
+    });
+    results.push({
+      name: "校商投稿／下一步查看投稿詳情",
+      status: "skipped",
+      reason: "目前沒有可投稿品項",
+    });
+  } else {
+    await item.waitFor({ state: "visible", timeout: 5_000 });
+    results.push(await measureAction(page, {
+      name: "校商投稿／選擇第一個商品",
+      trigger: item,
+      complete: () => page.getByText("投稿詳情與圖稿", { exact: true }).waitFor({ state: "visible", timeout: 5_000 }),
+    }, interactionResponses));
+    results.push({
+      name: "校商投稿／下一步查看投稿詳情",
+      status: "skipped",
+      reason: "選擇商品後已直接進入投稿詳情",
+    });
+  }
 } finally {
   try {
     if (browser) await browser.close();
@@ -172,7 +180,9 @@ try {
   }
 }
 
-const failures = results.filter((result) => result.feedback_ms > feedbackBudgetMs || result.completion_ms > completionBudgetMs);
+const failures = results.filter(
+  (result) => result.status !== "skipped" && (result.feedback_ms > feedbackBudgetMs || result.completion_ms > completionBudgetMs),
+);
 const summary = {
   target: `${baseUrl}${targetPath}`,
   feedback_budget_ms: feedbackBudgetMs,
