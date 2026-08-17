@@ -13,6 +13,12 @@ type ClientMetric = {
   initiator_type?: string;
   start_time_ms?: number;
   response_end_ms?: number;
+  interaction_id?: string;
+  interaction_name?: string;
+  interaction_kind?: "click" | "submit";
+  operation_kind?: "simple_get" | "crud" | "heavy";
+  method?: string;
+  budget_ms?: number;
 };
 
 const METRIC_WINDOW_MS = 60_000;
@@ -23,6 +29,8 @@ const CLIENT_METRIC_BATCH_SIZE = 50;
 const COMPONENT_METRIC_BATCH_SIZE = 25;
 const MAX_PENDING_CLIENT_METRICS = 100;
 const MAX_PENDING_COMPONENT_METRICS = 50;
+const INTERACTION_CONTEXT_TTL_MS = 10_000;
+const INTERACTION_COMPLETION_FALLBACK_MS = 250;
 const CLIENT_METRIC_BATCH_ENDPOINT = "/analytics/client-metrics/batch";
 const COMPONENT_METRIC_BATCH_ENDPOINT = "/analytics/component-metrics/batch";
 const METRIC_BACKOFF_MS = 60_000;
@@ -33,6 +41,19 @@ const recentApiMetrics = new Map<string, number>();
 const pendingClientMetrics: ClientMetric[] = [];
 const pendingComponentMetrics: ComponentMetricPayload[] = [];
 let metricFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let interactionSequence = 0;
+let apiRequestSequence = 0;
+let activeInteraction: {
+  id: string;
+  name: string;
+  kind: "click" | "submit";
+  path: string;
+  startedAt: number;
+  feedbackRecorded: boolean;
+  completionRecorded: boolean;
+  apiRequestId: string | null;
+  completionTimer: number | null;
+} | null = null;
 
 function canSendMetric(): boolean {
   const now = Date.now();
@@ -107,9 +128,15 @@ function send(metric: ClientMetric): void {
   scheduleMetricFlush();
 }
 
-export function recordApiMetric(metric: Omit<ClientMetric, "metric" | "value"> & { duration_ms: number }): void {
-  if (typeof window === "undefined" || shouldSkipApiMetric(metric)) return;
-  send({ metric: "api_latency", value: metric.duration_ms, ...metric });
+export function recordApiMetric(
+  metric: Omit<ClientMetric, "metric" | "value"> & { duration_ms: number; request_id?: string },
+): void {
+  if (typeof window === "undefined") return;
+  const { request_id: requestId, ...payload } = metric;
+  if (!shouldSkipApiMetric(metric)) {
+    send({ metric: "api_latency", value: payload.duration_ms, ...payload });
+  }
+  completeActiveInteraction(metric.status, metric.duration_ms, requestId);
 }
 
 export function recordCircuitOpen(path: string): void {
@@ -118,6 +145,126 @@ export function recordCircuitOpen(path: string): void {
 
 export function recordClientMetric(metric: ClientMetric): void {
   send(metric);
+}
+
+function interactionName(element: HTMLElement): string {
+  const explicit = element.dataset.performanceAction?.trim()
+    || element.getAttribute("aria-label")?.trim()
+    || element.getAttribute("title")?.trim();
+  return (explicit || `${element.tagName.toLowerCase()}.interaction`).slice(0, 120);
+}
+
+function finishInteractionIfComplete(): void {
+  if (activeInteraction?.feedbackRecorded && activeInteraction.completionRecorded) {
+    if (activeInteraction.completionTimer) clearTimeout(activeInteraction.completionTimer);
+    activeInteraction = null;
+  }
+}
+
+function recordInteractionFeedback(interaction: NonNullable<typeof activeInteraction>): void {
+  if (activeInteraction?.id !== interaction.id || interaction.feedbackRecorded) return;
+  interaction.feedbackRecorded = true;
+  send({
+    metric: "interaction_feedback",
+    value: Math.max(0, performance.now() - interaction.startedAt),
+    path: interaction.path,
+    interaction_id: interaction.id,
+    interaction_name: interaction.name,
+    interaction_kind: interaction.kind,
+    budget_ms: 100,
+  });
+  finishInteractionIfComplete();
+}
+
+function beginInteraction(element: HTMLElement, kind: "click" | "submit"): void {
+  if (activeInteraction && performance.now() - activeInteraction.startedAt < 50) return;
+  const startedAt = performance.now();
+  const interaction = {
+    id: `${Date.now().toString(36)}-${(interactionSequence += 1).toString(36)}`,
+    name: interactionName(element),
+    kind,
+    path: window.location.pathname,
+    startedAt,
+    feedbackRecorded: false,
+    completionRecorded: false,
+    apiRequestId: null,
+    completionTimer: null,
+  };
+  activeInteraction = { ...interaction };
+  const paint = () => recordInteractionFeedback(activeInteraction ?? interaction);
+  if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(paint);
+  else window.setTimeout(paint, 16);
+  activeInteraction.completionTimer = window.setTimeout(() => {
+    const current = activeInteraction;
+    if (current?.id === interaction.id && !current.apiRequestId && !current.completionRecorded) {
+      completeActiveInteraction(undefined, 0, undefined, true);
+    }
+  }, INTERACTION_COMPLETION_FALLBACK_MS);
+}
+
+export function beginApiRequest(): string {
+  const requestId = `${Date.now().toString(36)}-api-${(apiRequestSequence += 1).toString(36)}`;
+  const interaction = activeInteraction;
+  if (interaction && !interaction.apiRequestId && performance.now() - interaction.startedAt <= INTERACTION_CONTEXT_TTL_MS) {
+    interaction.apiRequestId = requestId;
+  }
+  return requestId;
+}
+
+export function completeActiveInteraction(
+  status: number | undefined,
+  apiDurationMs: number,
+  requestId?: string,
+  visualFallback = false,
+): void {
+  const interaction = activeInteraction;
+  if (!interaction || performance.now() - interaction.startedAt > INTERACTION_CONTEXT_TTL_MS) {
+    activeInteraction = null;
+    return;
+  }
+  if (!visualFallback && (!requestId || interaction.apiRequestId !== requestId)) return;
+  if (interaction.completionRecorded) return;
+  interaction.completionRecorded = true;
+  send({
+    metric: "interaction_completion",
+    value: Math.max(0, performance.now() - interaction.startedAt),
+    path: interaction.path,
+    status,
+    duration_ms: apiDurationMs,
+    interaction_id: interaction.id,
+    interaction_name: interaction.name,
+    interaction_kind: interaction.kind,
+  });
+  finishInteractionIfComplete();
+}
+
+export function observeInteractions(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+
+  const actionForTarget = (target: EventTarget | null, selector: string) => {
+    if (!(target instanceof Element)) return null;
+    const element = target.closest<HTMLElement>(selector);
+    if (!element || element.dataset.performanceIgnore === "true") return null;
+    return element;
+  };
+  const handleClick = (event: MouseEvent) => {
+    const element = actionForTarget(
+      event.target,
+      "[data-performance-action],button,a,[role='button'],input[type='submit']",
+    );
+    if (element) beginInteraction(element, "click");
+  };
+  const handleSubmit = (event: SubmitEvent) => {
+    const element = actionForTarget(event.target, "form,[data-performance-action]");
+    if (element) beginInteraction(element, "submit");
+  };
+
+  document.addEventListener("click", handleClick, true);
+  document.addEventListener("submit", handleSubmit, true);
+  return () => {
+    document.removeEventListener("click", handleClick, true);
+    document.removeEventListener("submit", handleSubmit, true);
+  };
 }
 
 export interface ComponentMetricPayload {

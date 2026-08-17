@@ -43,6 +43,11 @@ CLIENT_TELEMETRY_KEY = "observability:client-telemetry:v1"
 CLIENT_TELEMETRY_MAX_ITEMS = 20_000
 CLIENT_TELEMETRY_RETENTION_SECONDS = 172_800
 CLIENT_VITAL_METRICS = {"fcp", "lcp", "inp", "cls"}
+API_OPERATION_KINDS = {
+    "simple_get": (300.0, 500.0),
+    "crud": (500.0, 1_000.0),
+    "heavy": (2_000.0, 4_000.0),
+}
 
 
 def _provider_error(exc: Exception) -> str:
@@ -80,6 +85,11 @@ async def record_client_metrics(metrics: list[dict]) -> bool:
                     "value": float(value),
                     "path": _normalize_client_path(metric.get("path")),
                     "status": metric.get("status"),
+                    "interaction_id": str(metric.get("interaction_id") or "")[:80] or None,
+                    "interaction_name": str(metric.get("interaction_name") or "")[:120] or None,
+                    "interaction_kind": metric.get("interaction_kind"),
+                    "operation_kind": metric.get("operation_kind"),
+                    "method": str(metric.get("method") or "")[:12] or None,
                     "ts": now,
                 },
                 separators=(",", ":"),
@@ -106,6 +116,16 @@ def _percentile(values: list[float], percentile: float) -> float | None:
     ordered = sorted(values)
     index = max(0, min(len(ordered) - 1, math.ceil(percentile * len(ordered)) - 1))
     return round(ordered[index], 2)
+
+
+def _budget_status(value: float | None, good: float, needs_improvement: float) -> str:
+    if value is None:
+        return "pending"
+    if value <= good:
+        return "good"
+    if value <= needs_improvement:
+        return "needs_improvement"
+    return "poor"
 
 
 async def client_route_analytics(window_hours: int = 24) -> dict:
@@ -143,6 +163,10 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     "cls": [],
                     "fcp": [],
                     "api_latency": [],
+                    "api_latency_by_kind": {kind: [] for kind in API_OPERATION_KINDS},
+                    "interaction_feedback": [],
+                    "interaction_completion": [],
+                    "operations": {},
                 },
             )
             if metric == "page_view":
@@ -155,13 +179,62 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                 values = route["api_latency"]
                 assert isinstance(values, list)
                 values.append(float(event["value"]))
+                operation_kind = event.get("operation_kind")
+                by_kind = route["api_latency_by_kind"]
+                if operation_kind in API_OPERATION_KINDS and isinstance(by_kind, dict):
+                    samples = by_kind[operation_kind]
+                    assert isinstance(samples, list)
+                    samples.append(float(event["value"]))
                 if int(event.get("status") or 0) >= 500:
                     route["api_errors"] = int(route["api_errors"]) + 1
+            elif metric in {"interaction_feedback", "interaction_completion"}:
+                samples = route[metric]
+                assert isinstance(samples, list)
+                samples.append(float(event["value"]))
+                name = event.get("interaction_name")
+                operations = route["operations"]
+                if isinstance(name, str) and name and isinstance(operations, dict):
+                    operation = operations.setdefault(name, {"feedback": [], "completion": []})
+                    operation_samples = operation[metric.removeprefix("interaction_")]
+                    assert isinstance(operation_samples, list)
+                    operation_samples.append(float(event["value"]))
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             continue
 
     routes = []
     for path, values in grouped.items():
+        operation_rows = []
+        operations = values["operations"]
+        if isinstance(operations, dict):
+            for name, operation in operations.items():
+                if not isinstance(operation, dict):
+                    continue
+                feedback = operation.get("feedback", [])
+                completion = operation.get("completion", [])
+                if not isinstance(feedback, list) or not isinstance(completion, list):
+                    continue
+                feedback_p75 = _percentile(feedback, 0.75)
+                completion_p75 = _percentile(completion, 0.75)
+                operation_rows.append(
+                    {
+                        "name": name,
+                        "feedback_p75_ms": feedback_p75,
+                        "completion_p75_ms": completion_p75,
+                        "samples": len(feedback) + len(completion),
+                        "feedback_status": _budget_status(feedback_p75, 100.0, 200.0),
+                        "completion_status": _budget_status(completion_p75, 500.0, 2_000.0),
+                    }
+                )
+        by_kind = values["api_latency_by_kind"]
+        api_latency_by_kind = {
+            kind: {
+                "p95_ms": _percentile(samples, 0.95),
+                "budget_ms": budgets[0],
+                "status": _budget_status(_percentile(samples, 0.95), *budgets),
+            }
+            for kind, budgets in API_OPERATION_KINDS.items()
+            for samples in [by_kind.get(kind, []) if isinstance(by_kind, dict) else []]
+        }
         routes.append(
             {
                 "path": path,
@@ -173,6 +246,18 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     for metric in CLIENT_VITAL_METRICS
                 },
                 "api_latency_p95_ms": _percentile(values["api_latency"], 0.95),
+                "api_latency_p95_ms_by_kind": api_latency_by_kind,
+                "interaction_feedback_p75_ms": _percentile(values["interaction_feedback"], 0.75),
+                "interaction_completion_p75_ms": _percentile(
+                    values["interaction_completion"], 0.75
+                ),
+                "interaction_samples": {
+                    "feedback": len(values["interaction_feedback"]),
+                    "completion": len(values["interaction_completion"]),
+                },
+                "interactions": sorted(
+                    operation_rows, key=lambda item: item["samples"], reverse=True
+                )[:20],
             }
         )
     routes.sort(key=lambda item: (item["pageviews"], sum(item["samples"].values())), reverse=True)

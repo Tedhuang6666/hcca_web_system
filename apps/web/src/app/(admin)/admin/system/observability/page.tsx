@@ -33,7 +33,10 @@ type Overview = {
   providers?: Providers;
 };
 type ErrorsData = { new_issues: number; regressions: number | null; top_exceptions: RecentError[]; slow_transactions: SlowQuery[]; sentry?: { configured?: boolean; error?: string; stats?: unknown }; slow_query_source?: string };
-type RouteTelemetry = { path: string; pageviews: number; api_errors: number; samples: Record<string, number>; web_vitals: Record<string, number | null>; api_latency_p95_ms: number | null };
+type BudgetStatus = "good" | "needs_improvement" | "poor" | "pending";
+type ApiLatencyBudget = { p95_ms: number | null; budget_ms: number; status: BudgetStatus };
+type InteractionTelemetry = { name: string; feedback_p75_ms: number | null; completion_p75_ms: number | null; samples: number; feedback_status: BudgetStatus; completion_status: BudgetStatus };
+type RouteTelemetry = { path: string; pageviews: number; api_errors: number; samples: Record<string, number>; web_vitals: Record<string, number | null>; api_latency_p95_ms: number | null; api_latency_p95_ms_by_kind?: Record<string, ApiLatencyBudget>; interaction_feedback_p75_ms?: number | null; interaction_completion_p75_ms?: number | null; interaction_samples?: { feedback: number; completion: number }; interactions?: InteractionTelemetry[] };
 type RealUsersData = { configured: boolean; data_available: boolean; dau: number | null; sessions: number | null; pageviews: number | null; top_routes: RouteTelemetry[]; web_vitals: Record<string, number | null>; client_errors: number | null; source: string; message: string };
 type PerformanceData = { url: string; psi: PageScore[]; crux: { collection_periods?: { firstDate: string; lastDate: string }[]; lcp_p75?: number[]; inp_p75?: number[]; cls_p75?: number[]; ttfb_p75?: number[]; error?: string }; lighthouse_regressions: PageScore[] };
 type Release = { release: string; commit_sha: string; environment: string; deployed_at: string };
@@ -272,12 +275,75 @@ function PageTable({ pages, threshold, onInspect }: { pages: PageScore[]; thresh
   return <section className="space-y-3"><div><h2 className="text-base font-semibold">全部已發現頁面</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>來源包含 sitemap、關鍵路由與真實使用者 RUM；公開與登入後合成測試都必須同時達到 mobile 與 desktop {threshold} 分。登入後結果由獨立短效 session 探針產生。</p></div>{pages.length === 0 ? <EmptyState title="尚未發現頁面" detail="請確認 sitemap.xml 或第一方 RUM 可由部署端讀取。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[1120px] text-left text-sm"><thead style={{ background: "var(--bg-surface)" }}><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3 font-medium">頁面</th><th className="px-4 py-3 font-medium">來源</th><th className="px-4 py-3 font-medium">公開 M / D</th><th className="px-4 py-3 font-medium">登入後 M / D</th><th className="px-4 py-3 font-medium">公開 LCP / TBT</th><th className="px-4 py-3 font-medium">狀態</th><th className="px-4 py-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{pages.map((page) => <tr key={page.url} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="max-w-[22rem] px-4 py-3"><div className="truncate font-medium" title={page.url}>{page.path}</div><div className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>{page.url}</div></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.source === "rum" ? "RUM／使用者" : page.source === "psi" ? "PSI" : "關鍵路由"}</td><td className="px-4 py-3"><Score value={page.mobile?.score} /> <span style={{ color: "var(--text-muted)" }}>/</span> <Score value={page.desktop?.score} /></td><td className="px-4 py-3"><Score value={page.authenticated_mobile?.score} /> <span style={{ color: "var(--text-muted)" }}>/</span> <Score value={page.authenticated_desktop?.score} /></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.mobile ? `${formatNumber(page.mobile.metrics.lcp_ms, " ms")} / ${formatNumber(page.mobile.metrics.tbt_ms, " ms")}` : "—"}</td><td className="space-y-1 px-4 py-3"><StatusPill status={page.status} source={page.source} />{page.authenticated_status && <div><span className="text-xs" style={{ color: "var(--text-muted)" }}>登入後：</span><StatusPill status={page.authenticated_status} /></div>}</td><td className="px-4 py-3 text-right"><button type="button" className="min-h-11 rounded-md px-2 text-xs font-semibold hover:bg-[var(--bg-hover)]" style={{ color: "var(--primary)" }} onClick={() => onInspect(page.url)}>查看詳情</button></td></tr>)}</tbody></table></div>}</section>;
 }
 
+function budgetColor(status: BudgetStatus | undefined) {
+  return status === "good" ? "var(--success)" : status === "pending" ? "var(--text-muted)" : "var(--error)";
+}
+
+function budgetStatus(value: number | null | undefined, good: number, needs: number): BudgetStatus {
+  if (value == null) return "pending";
+  return value <= good ? "good" : value <= needs ? "needs_improvement" : "poor";
+}
+
 function ErrorsPanel({ data }: { data: ErrorsData }) {
   return <div className="space-y-6"><section className="grid gap-3 sm:grid-cols-3"><SummaryMetric label="最近錯誤" value={data.new_issues} detail="來自跨 worker 錯誤緩衝" tone={data.new_issues ? "var(--error)" : "var(--success)"} /><SummaryMetric label="Sentry" value={data.sentry?.configured ? "已連線" : "未設定"} detail={data.sentry?.error ?? "錯誤資料仍可由本機緩衝查看"} /><SummaryMetric label="慢查詢來源" value="即時" detail={data.slow_query_source ?? "query audit"} /></section><DataList title="近期錯誤" empty="目前沒有被保留的錯誤" items={data.top_exceptions} render={(item) => <div><div className="font-medium">{item.exc_type || item.category || "未分類錯誤"}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{item.path || "—"} · {item.occurrences ?? 1} 次 · HTTP {item.status_code ?? "—"}</div><div className="mt-1 truncate text-sm" style={{ color: "var(--text-secondary)" }}>{item.message || "—"}</div></div>} /><DataList title="慢查詢" empty="目前沒有超過門檻的慢查詢" items={data.slow_transactions} render={(item) => <div><div className="font-mono text-xs">{item.template}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最高 {formatNumber(item.max_ms, " ms")} · {item.occurrences} 次 · {item.paths?.[0]?.path || "—"}</div></div>} /></div>;
 }
 
 function RealUsersPanel({ data }: { data: RealUsersData }) {
-  return <div className="space-y-6"><section className="rounded-md border p-5" style={{ borderColor: data.data_available ? "var(--success)" : "var(--border)" }}><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">真實使用者監測</h2><p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>{data.message}</p></div><StatusPill status={data.data_available ? "pass" : "pending"} /></div></section><section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><SummaryMetric label="DAU" value={data.dau == null ? "—" : data.dau} detail="需 PostHog 查詢權限" /><SummaryMetric label="Sessions" value={data.sessions == null ? "—" : data.sessions} detail="需 PostHog 查詢權限" /><SummaryMetric label="Pageviews" value={data.pageviews == null ? "—" : data.pageviews} detail="第一方 RUM，近 24 小時" /><SummaryMetric label="RUM 狀態" value={data.data_available ? "運作中" : "待連線"} detail={data.source} /></section><section className="space-y-3"><div><h2 className="text-base font-semibold">所有已造訪路由</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>公開、登入與未來新增頁面會在首次造訪後自動出現；不收集訪客身份。</p></div>{data.top_routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" detail="開啟任一頁面後，等待約一秒讓批次 telemetry 送出。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3">路由</th><th className="px-4 py-3">瀏覽</th><th className="px-4 py-3">LCP p75</th><th className="px-4 py-3">INP p75</th><th className="px-4 py-3">CLS p75</th><th className="px-4 py-3">API p95</th><th className="px-4 py-3">錯誤</th></tr></thead><tbody>{data.top_routes.map((route) => <tr key={route.path} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="px-4 py-3 font-medium">{route.path}</td><td className="px-4 py-3">{route.pageviews}</td><td className="px-4 py-3">{formatNumber(route.web_vitals.lcp_p75, " ms")}</td><td className="px-4 py-3">{formatNumber(route.web_vitals.inp_p75, " ms")}</td><td className="px-4 py-3">{formatNumber(route.web_vitals.cls_p75)}</td><td className="px-4 py-3">{formatNumber(route.api_latency_p95_ms, " ms")}</td><td className="px-4 py-3" style={{ color: route.api_errors ? "var(--error)" : "var(--success)" }}>{route.api_errors}</td></tr>)}</tbody></table></div>}</section></div>;
+  const routeInteractions = data.top_routes.flatMap((route) =>
+    (route.interactions ?? []).map((interaction) => ({ route: route.path, interaction })),
+  );
+  return (
+    <div className="space-y-6">
+      <section className="rounded-md border p-5" style={{ borderColor: data.data_available ? "var(--success)" : "var(--border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">真實使用者監測</h2>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>{data.message}</p>
+          </div>
+          <StatusPill status={data.data_available ? "pass" : "pending"} />
+        </div>
+        <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+          互動回饋 ≤100 ms／INP p75 ≤200 ms；API p95：簡單 GET ≤300 ms、CRUD ≤500 ms、重型操作 ≤2 s。
+        </p>
+      </section>
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryMetric label="DAU" value={data.dau == null ? "—" : data.dau} detail="需 PostHog 查詢權限" />
+        <SummaryMetric label="Sessions" value={data.sessions == null ? "—" : data.sessions} detail="需 PostHog 查詢權限" />
+        <SummaryMetric label="Pageviews" value={data.pageviews == null ? "—" : data.pageviews} detail="第一方 RUM，近 24 小時" />
+        <SummaryMetric label="RUM 狀態" value={data.data_available ? "運作中" : "待連線"} detail={data.source} />
+      </section>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">所有已造訪路由</h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>公開、登入與未來新增頁面會在首次造訪後自動出現；不收集訪客身份。</p>
+        </div>
+        {data.top_routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" detail="開啟任一頁面後，等待約一秒讓批次 telemetry 送出。" /> : (
+          <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}>
+            <table className="w-full min-w-[1220px] text-left text-sm">
+              <thead><tr className="border-b" style={{ borderColor: "var(--border)" }}>
+                <th className="px-4 py-3">路由</th><th className="px-4 py-3">瀏覽</th><th className="px-4 py-3">LCP / INP / CLS p75</th>
+                <th className="px-4 py-3">互動回饋 / 完成 p75</th><th className="px-4 py-3">API p95（GET／CRUD／重型）</th><th className="px-4 py-3">錯誤</th>
+              </tr></thead>
+              <tbody>{data.top_routes.map((route) => {
+                const feedbackStatus = budgetStatus(route.interaction_feedback_p75_ms, 100, 200);
+                const completionStatus = budgetStatus(route.interaction_completion_p75_ms, 500, 2_000);
+                const api = route.api_latency_p95_ms_by_kind ?? {};
+                return <tr key={route.path} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                  <td className="px-4 py-3 font-medium">{route.path}</td>
+                  <td className="px-4 py-3">{route.pageviews}</td>
+                  <td className="px-4 py-3 text-xs">{formatNumber(route.web_vitals.lcp_p75, " ms")} / {formatNumber(route.web_vitals.inp_p75, " ms")} / {formatNumber(route.web_vitals.cls_p75)}</td>
+                  <td className="px-4 py-3 text-xs"><div style={{ color: budgetColor(feedbackStatus) }}>{formatNumber(route.interaction_feedback_p75_ms, " ms")} <span className="text-[10px]">回饋</span></div><div style={{ color: budgetColor(completionStatus) }}>{formatNumber(route.interaction_completion_p75_ms, " ms")} <span className="text-[10px]">完成</span></div></td>
+                  <td className="px-4 py-3 text-xs"><div>GET {formatNumber(api.simple_get?.p95_ms, " ms")}</div><div>CRUD {formatNumber(api.crud?.p95_ms, " ms")}</div><div>重型 {formatNumber(api.heavy?.p95_ms, " ms")}</div></td>
+                  <td className="px-4 py-3" style={{ color: route.api_errors ? "var(--error)" : "var(--success)" }}>{route.api_errors}</td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      {routeInteractions.length > 0 && <section className="space-y-3"><div><h2 className="text-base font-semibold">具名操作</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>按鈕、表單與導覽操作會量測按下後首次視覺回饋，以及對應 API 完成時間。</p></div><div className="grid gap-3 md:grid-cols-2">{routeInteractions.slice(0, 40).map(({ route, interaction }) => <div key={`${route}:${interaction.name}`} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm font-medium">{interaction.name}</span><span className="text-xs" style={{ color: "var(--text-muted)" }}>{route}</span></div><div className="mt-2 grid grid-cols-2 gap-3 text-xs"><div style={{ color: budgetColor(interaction.feedback_status) }}>回饋 {formatNumber(interaction.feedback_p75_ms, " ms")}</div><div style={{ color: budgetColor(interaction.completion_status) }}>完成 {formatNumber(interaction.completion_p75_ms, " ms")}</div></div></div>)}</div></section>}
+    </div>
+  );
 }
 
 function PerformancePanel({ data, page }: { data: PerformanceData; page: PageScore | null }) {

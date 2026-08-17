@@ -429,6 +429,7 @@ export default function MerchandiseSubmissionsPageClient({
       >
         <button
           type="button"
+          data-performance-action="校商投稿／我要投稿"
           onClick={() => setTab("submit")}
           className="min-h-11 border-b-2 px-4 text-sm font-semibold"
           style={{
@@ -439,6 +440,7 @@ export default function MerchandiseSubmissionsPageClient({
         </button>
         <button
           type="button"
+          data-performance-action="校商投稿／我的投稿"
           onClick={() => setTab("mine")}
           className="min-h-11 border-b-2 px-4 text-sm font-semibold"
           style={{
@@ -568,6 +570,7 @@ export default function MerchandiseSubmissionsPageClient({
                     </button>
                     <button
                       type="button"
+                      data-performance-action="校商投稿／刪除投稿"
                       onClick={() => void remove(submission)}
                       disabled={deletingId === submission.id}
                       className="btn btn-ghost min-h-10"
@@ -614,6 +617,7 @@ export default function MerchandiseSubmissionsPageClient({
                 <button
                   key={value}
                   type="button"
+                  data-performance-action={`校商投稿／${label}`}
                   role="tab"
                   aria-selected={isActive}
                   disabled={isDisabled || (value === "item" && Boolean(editingId))}
@@ -707,6 +711,7 @@ export default function MerchandiseSubmissionsPageClient({
                 </p>
                 <button
                   type="button"
+                  data-performance-action="校商投稿／下一步選擇商品"
                   className="btn btn-primary mt-4 min-h-11"
                   onClick={() => setStep("item")}
                 >
@@ -758,6 +763,7 @@ export default function MerchandiseSubmissionsPageClient({
                       {portal.items.map((item) => (
                         <button
                           type="button"
+                          data-performance-action={`校商投稿／選擇${item.name}`}
                           key={item.id}
                           aria-pressed={selectedId === item.id}
                           disabled={Boolean(editingId)}
@@ -1017,6 +1023,7 @@ export default function MerchandiseSubmissionsPageClient({
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <button
                       type="button"
+                      data-performance-action="校商投稿／儲存草稿"
                       className="btn btn-ghost min-h-11 w-full sm:w-auto"
                       disabled={saving || !portal?.is_eligible_submitter}
                       onClick={() => void save(false)}
@@ -1025,6 +1032,7 @@ export default function MerchandiseSubmissionsPageClient({
                     </button>
                     <button
                       type="button"
+                      data-performance-action="校商投稿／送出投稿"
                       className="btn min-h-11 w-full sm:w-auto"
                       disabled={saving || !canUpload}
                       onClick={() => void save(true)}
