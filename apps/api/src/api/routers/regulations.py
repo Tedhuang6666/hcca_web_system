@@ -346,7 +346,9 @@ async def get_regulation(reg_id: str, session: DbDep, user: OptionalUser) -> Reg
         reg = await reg_svc.get_public_regulation_by_identifier(session, reg_id)
         return or_404(reg, "找不到此法規")
 
-    reg = await _get_reg_or_404(reg_id, session)
+    reg = await reg_svc.get_regulation_detail_by_identifier(session, reg_id)
+    if reg is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     return reg
 
 

@@ -150,7 +150,6 @@ export type DashboardPageInitialData = {
   userName: string;
   greeting: string;
   dashboard: DashboardResponse | null;
-  dashboardIsCompact?: boolean;
   tasks: TaskInboxResponse | null;
   matters: MatterListItem[] | null;
   announcements: AnnouncementListItem[] | null;
@@ -248,8 +247,10 @@ export default function DashboardPageClient({
     if (initialData?.announcements == null && cachedAnnouncements) {
       setAnnouncements(cachedAnnouncements);
     }
-    const refreshDashboard = Boolean(initialData?.dashboardIsCompact)
-      || (!initialData?.dashboard && !cachedDashboard);
+    // The server already rendered the compact dashboard for the first paint.
+    // Refetching a full composite immediately after hydration duplicated the
+    // heaviest dashboard request and delayed the first usable interaction.
+    const refreshDashboard = !initialData?.dashboard && !cachedDashboard;
     const refreshTasks = !initialData?.tasks && !cachedTasks;
     const refreshMatters = canViewGovernanceWork && initialData?.matters == null && !cachedMatters;
     const refreshAnnouncements = initialData?.announcements == null && !cachedAnnouncements;

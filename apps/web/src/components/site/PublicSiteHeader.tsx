@@ -13,6 +13,7 @@ import ImportantAnnouncementBanner, {
 import PublicEmblem from "@/components/site/PublicEmblem";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
 import { BRANDING } from "@/lib/branding";
+import { apiUrl } from "@/lib/config";
 import {
   PUBLIC_NAV_GROUP_META,
   type PublicNavGroupId,
@@ -40,6 +41,9 @@ function PublicSiteHeaderContent({
   urgentAnnouncement?: ImportantAnnouncement | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [loadedAnnouncement, setLoadedAnnouncement] = useState<ImportantAnnouncement | null>(
+    urgentAnnouncement ?? null,
+  );
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [liveBannerReady, setLiveBannerReady] = useState(false);
   const { theme, toggleTheme } = useTheme();
@@ -114,6 +118,21 @@ function PublicSiteHeaderContent({
   }, []);
 
   useEffect(() => {
+    if (urgentAnnouncement) return;
+    const controller = new AbortController();
+    void fetch(apiUrl("/announcements/active-urgent"), {
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((announcement: ImportantAnnouncement | null) => {
+        if (!controller.signal.aborted) setLoadedAnnouncement(announcement);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [urgentAnnouncement]);
+
+  useEffect(() => {
     let idleId: number | undefined;
     const timeoutId = window.setTimeout(() => {
       if (typeof window.requestIdleCallback === "function") {
@@ -133,7 +152,7 @@ function PublicSiteHeaderContent({
       <Suspense fallback={null}>
         {liveBannerReady && <DeferredLiveElectionBanner />}
       </Suspense>
-      <ImportantAnnouncementBanner announcement={urgentAnnouncement} />
+      <ImportantAnnouncementBanner announcement={loadedAnnouncement} />
       <div className="public-header-inner">
         <Link href="/" className="public-brand" onClick={() => setOpen(false)}>
           <span className="public-brand-mark">
