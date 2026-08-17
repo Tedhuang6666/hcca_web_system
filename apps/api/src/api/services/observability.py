@@ -44,6 +44,7 @@ CLIENT_TELEMETRY_KEY = "observability:client-telemetry:v1"
 CLIENT_TELEMETRY_MAX_ITEMS = 20_000
 CLIENT_TELEMETRY_RETENTION_SECONDS = 172_800
 CLIENT_VITAL_METRICS = {"fcp", "lcp", "inp", "cls"}
+DISCOVERED_URLS_CACHE_TTL_SECONDS = 300
 API_OPERATION_KINDS = {
     "simple_get": (300.0, 500.0),
     "crud": (500.0, 1_000.0),
@@ -315,6 +316,10 @@ async def _read_sitemap(
 
 async def discover_public_urls() -> list[str]:
     """Discover every same-origin URL exposed by the production sitemap."""
+    cached = await cache_get("observability:discovered-urls")
+    if isinstance(cached, list) and all(isinstance(url, str) for url in cached):
+        return cached
+
     base = str(settings.FRONTEND_BASE_URL).rstrip("/") + "/"
     fallback = critical_urls()
     try:
@@ -331,6 +336,11 @@ async def discover_public_urls() -> list[str]:
         normalized = url.rstrip("/") or url
         if normalized not in urls and _same_origin(normalized, base):
             urls.append(normalized)
+    await cache_set(
+        "observability:discovered-urls",
+        urls,
+        ttl=DISCOVERED_URLS_CACHE_TTL_SECONDS,
+    )
     return urls
 
 
