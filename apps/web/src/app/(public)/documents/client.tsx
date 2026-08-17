@@ -2,10 +2,13 @@
 import { useState, useEffect, useReducer, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "sonner";
-import { documentsApi, orgsApi, savedFiltersApi, usersApi, withFallback, apiErrorMessage } from "@/lib/api";
+import { documentsApi } from "@/lib/api/documents";
+import { orgsApi, type OrgRead } from "@/lib/api/orgs";
+import { savedFiltersApi } from "@/lib/api/saved-filters";
+import { usersApi } from "@/lib/api/users";
+import { apiErrorMessage, withFallback } from "@/lib/api-helpers";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
-import type { OrgRead, UserSummary } from "@/lib/api";
+import type { UserSummary } from "@/lib/api/core";
 import type { Activity, BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
@@ -46,6 +49,14 @@ const DOC_VISIBILITIES: { key: string; label: string }[] = [
   { key: "public", label: "登入" },
   { key: "publicly_open", label: "公開" },
 ];
+
+function showSuccessToast(message: string) {
+  void import("sonner").then(({ toast }) => toast.success(message));
+}
+
+function showErrorToast(message: string) {
+  void import("sonner").then(({ toast }) => toast.error(message));
+}
 
 type SortKey =
   | "created_desc" | "created_asc" | "title_asc"
@@ -337,7 +348,7 @@ export default function DocumentListClient({
         setHasMore(data.length === PAGE_SIZE);
         setSelectedIds(new Set());
       })
-      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
+      .catch((e) => showErrorToast(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [activeTab, debouncedSearch, filters, queryVisibility]);
 
@@ -399,9 +410,9 @@ export default function DocumentListClient({
     try {
       const created = await savedFiltersApi.create({ scope: "documents", name: name.trim(), params, share_path });
       setSavedFilters(prev => [created, ...prev]);
-      toast.success("已儲存常用篩選");
+      showSuccessToast("已儲存常用篩選");
     } catch (e) {
-      toast.error(apiErrorMessage(e, "儲存失敗"));
+      showErrorToast(apiErrorMessage(e, "儲存失敗"));
     }
   };
 
@@ -410,9 +421,9 @@ export default function DocumentListClient({
     try {
       await savedFiltersApi.delete(id);
       setSavedFilters(prev => prev.filter(x => x.id !== id));
-      toast.success("已刪除");
+      showSuccessToast("已刪除");
     } catch (e) {
-      toast.error(apiErrorMessage(e, "刪除失敗"));
+      showErrorToast(apiErrorMessage(e, "刪除失敗"));
     }
   };
 
@@ -442,7 +453,7 @@ export default function DocumentListClient({
       setOffset(nextOffset);
       setHasMore(more.length === PAGE_SIZE);
     } catch (e) {
-      toast.error(apiErrorMessage(e, "載入失敗"));
+      showErrorToast(apiErrorMessage(e, "載入失敗"));
     } finally {
       setLoadingMore(false);
     }
@@ -508,9 +519,9 @@ export default function DocumentListClient({
   const summarizeBatch = (result: BatchDocumentOperationOut) => {
     const failed = result.results.filter((item) => !item.ok);
     if (result.succeeded > 0) {
-      toast.success(`完成 ${result.succeeded} 筆，失敗 ${result.failed} 筆`);
+      showSuccessToast(`完成 ${result.succeeded} 筆，失敗 ${result.failed} 筆`);
     } else {
-      toast.error("批量操作未完成任何公文");
+      showErrorToast("批量操作未完成任何公文");
     }
     if (failed.length > 0) {
       console.table(failed.map((item) => ({
@@ -553,7 +564,7 @@ export default function DocumentListClient({
       : action === "approve" || action === "reject" || action === "delegate" ? selectedPendingArray
       : selectedArray;
     if (targetIds.length === 0) {
-      toast.error(action === "archive" ? "請先選取已核准公文" : "請先選取待審核公文");
+      showErrorToast(action === "archive" ? "請先選取已核准公文" : "請先選取待審核公文");
       return;
     }
     setBatchBusy(true);
@@ -571,7 +582,7 @@ export default function DocumentListClient({
         result = await documentsApi.batchArchive(targetIds);
       } else {
         if (!delegateId) {
-          toast.error("請先選擇代理人");
+          showErrorToast("請先選擇代理人");
           return;
         }
         result = await documentsApi.batchDelegate(targetIds, delegateId);
@@ -579,7 +590,7 @@ export default function DocumentListClient({
       summarizeBatch(result);
       await reloadCurrent();
     } catch (e) {
-      toast.error(apiErrorMessage(e, "批量操作失敗"));
+      showErrorToast(apiErrorMessage(e, "批量操作失敗"));
     } finally {
       setBatchBusy(false);
     }
@@ -1216,9 +1227,9 @@ export default function DocumentListClient({
                                   const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
                                   try {
                                     await navigator.clipboard.writeText(url);
-                                    toast.success("連結已複製");
+                                    showSuccessToast("連結已複製");
                                   } catch {
-                                    toast.error("複製失敗");
+                                    showErrorToast("複製失敗");
                                   }
                                 }}
                                 className="min-h-11 min-w-11 rounded hover:opacity-80 transition-opacity"
@@ -1316,8 +1327,8 @@ export default function DocumentListClient({
                       <button
                         onClick={async () => {
                           const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
-                          try { await navigator.clipboard.writeText(url); toast.success("連結已複製"); }
-                          catch { toast.error("複製失敗"); }
+                          try { await navigator.clipboard.writeText(url); showSuccessToast("連結已複製"); }
+                          catch { showErrorToast("複製失敗"); }
                         }}
                         className="min-h-11 min-w-11 rounded flex-shrink-0 hover:opacity-80"
                         style={{ color: "var(--text-muted)" }}
