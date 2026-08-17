@@ -141,10 +141,13 @@ def init_metrics() -> None:
         labelnames=["release", "commit_sha", "environment"],
         registry=_registry,
     )
+    # Keep the metric correlated with `/ready` even when a deployment omits the
+    # optional release variables.  APP_VERSION is generated from VERSION and
+    # the commit count, so it is a useful bounded fallback rather than "unknown".
     _build_info.labels(
-        release=os.getenv("APP_RELEASE", "unknown") or "unknown",
-        commit_sha=os.getenv("BUILD_COMMIT", "unknown") or "unknown",
-        environment=os.getenv("ENVIRONMENT", "unknown") or "unknown",
+        release=settings.APP_RELEASE or settings.APP_VERSION or "unknown",
+        commit_sha=settings.BUILD_COMMIT or settings.BUILD_REF or "unknown",
+        environment=settings.ENVIRONMENT or os.getenv("ENVIRONMENT", "unknown") or "unknown",
     ).set(1)
     _celery_queue_depth = Gauge(
         "hcca_celery_queue_depth",
