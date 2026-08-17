@@ -75,11 +75,20 @@ async function assertAuthenticated(url, cookieHeader) {
 }
 
 async function isHtmlPage(url, cookieHeader) {
-  const response = await fetch(url, {
-    headers: { Cookie: cookieHeader, Accept: "text/html" },
-    redirect: "follow",
-  });
-  return response.ok && (response.headers.get("content-type") || "").includes("text/html");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(url, {
+      headers: { Cookie: cookieHeader, Accept: "text/html" },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    const isPage = response.ok && (response.headers.get("content-type") || "").includes("text/html");
+    await response.body?.cancel();
+    return isPage;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function runLighthouse(chrome, url, strategy, cookieHeader) {
@@ -131,14 +140,24 @@ const cookieHeader = `${authSession.cookie_name}=${authSession.access_token}`;
 const targetsResponse = await requestJson("/api/internal/observability/auth-targets");
 const allTargets = [...new Set((targetsResponse.urls || []).map((value) => String(value)))].sort();
 const pageCandidates = [];
-for (const target of allTargets) {
-  try {
-    if (await isHtmlPage(target, cookieHeader)) pageCandidates.push(target);
-    else process.stdout.write(`skip non-page ${target}\n`);
-  } catch (error) {
-    process.stdout.write(
-      `skip unavailable ${target}: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
+const pageCheckConcurrency = 8;
+for (let offset = 0; offset < allTargets.length; offset += pageCheckConcurrency) {
+  const checked = await Promise.all(
+    allTargets.slice(offset, offset + pageCheckConcurrency).map(async (target) => {
+      try {
+        return { target, isPage: await isHtmlPage(target, cookieHeader) };
+      } catch (error) {
+        return {
+          target,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }),
+  );
+  for (const result of checked) {
+    if (result.isPage) pageCandidates.push(result.target);
+    else if (result.error) process.stdout.write(`skip unavailable ${result.target}: ${result.error}\n`);
+    else process.stdout.write(`skip non-page ${result.target}\n`);
   }
 }
 const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
