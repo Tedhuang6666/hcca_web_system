@@ -19,7 +19,7 @@ import {
 } from "@/lib/api";
 import type { RegulationWorkflowStatus } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
-import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { cacheGet, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { LoadingState } from "@/components/ui/LoadingState";
 
@@ -90,10 +90,14 @@ const CACHE_KEYS = {
 
 export default function TasksPage() {
   const router = useRouter();
-  const [data, setData] = useState<TaskInboxResponse | null>(() => cacheGet<TaskInboxResponse>(CACHE_KEYS.tasks) ?? null);
-  const [docStats, setDocStats] = useState<DocumentStats | null>(() => cacheGet<DocumentStats>(CACHE_KEYS.docStats) ?? null);
-  const [regCounts, setRegCounts] = useState<Record<string, number>>(() => cacheGet<Record<string, number>>(CACHE_KEYS.regCounts) ?? {});
-  const [loading, setLoading] = useState(!cacheHas(CACHE_KEYS.tasks));
+  const [cachedTasks, setCachedTasks] = useState<TaskInboxResponse | undefined>();
+  const [cachedDocStats, setCachedDocStats] = useState<DocumentStats | undefined>();
+  const [cachedRegCounts, setCachedRegCounts] = useState<Record<string, number> | undefined>();
+  const [cacheHydrated, setCacheHydrated] = useState(false);
+  const [data, setData] = useState<TaskInboxResponse | null>(null);
+  const [docStats, setDocStats] = useState<DocumentStats | null>(null);
+  const [regCounts, setRegCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TaskModule | "all">("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const { can, canAny, isAdmin, permissions } = usePermissions();
@@ -108,7 +112,21 @@ export default function TasksPage() {
   const canSeeRegulationPublish = can("regulation:president_publish");
 
   useEffect(() => {
+    setCachedTasks(cacheGet<TaskInboxResponse>(CACHE_KEYS.tasks));
+    setCachedDocStats(cacheGet<DocumentStats>(CACHE_KEYS.docStats));
+    setCachedRegCounts(cacheGet<Record<string, number>>(CACHE_KEYS.regCounts));
+    setCacheHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!cacheHydrated) return;
     let mounted = true;
+    if (cachedTasks) {
+      setData(cachedTasks);
+      setLoading(false);
+    }
+    if (cachedDocStats) setDocStats(cachedDocStats);
+    if (cachedRegCounts) setRegCounts(cachedRegCounts);
     if (!hasTaskAccess) {
       router.replace("/dashboard");
       return () => { mounted = false; };
@@ -141,7 +159,7 @@ export default function TasksPage() {
       });
     };
 
-    const supplementaryTimer = window.setTimeout(loadSupplementary, 0);
+    const supplementaryTimer = window.setTimeout(loadSupplementary, 250);
     tasksApi.list()
       .then((nextData) => {
         if (!mounted) return;
@@ -162,6 +180,10 @@ export default function TasksPage() {
     canSeeDocumentDrafts,
     canSeeRegulationPublish,
     canSeeRegulationReview,
+    cacheHydrated,
+    cachedDocStats,
+    cachedRegCounts,
+    cachedTasks,
     hasTaskAccess,
     router,
   ]);

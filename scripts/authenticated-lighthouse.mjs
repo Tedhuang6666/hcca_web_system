@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const lighthouseModule = require("lighthouse");
@@ -91,6 +92,28 @@ async function isHtmlPage(url, cookieHeader) {
   }
 }
 
+const appDirectory = fileURLToPath(new URL("../apps/web/src/app/", import.meta.url));
+const pageFilePattern = /^page\.(?:tsx?|jsx?|mjs)$/u;
+
+async function discoverStaticRoutes(directory = appDirectory, segments = []) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const routes = entries.some((entry) => entry.isFile() && pageFilePattern.test(entry.name))
+    ? [`/${segments.join("/")}`.replace(/\/+/gu, "/").replace(/\/$/u, "") || "/"]
+    : [];
+
+  const childRoutes = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .filter((entry) => !entry.name.startsWith(".") && !entry.name.startsWith("[") && !entry.name.startsWith("@"))
+      .map((entry) => {
+        const isRouteGroup = entry.name.startsWith("(") && entry.name.endsWith(")");
+        const nextSegments = isRouteGroup ? segments : [...segments, entry.name];
+        return discoverStaticRoutes(join(directory, entry.name), nextSegments);
+      }),
+  );
+  return [...routes, ...childRoutes.flat()];
+}
+
 async function runLighthouse(chrome, url, strategy, cookieHeader) {
   const mobile = strategy === "mobile";
   const result = await lighthouse(url, {
@@ -138,7 +161,18 @@ const authSession = await requestJson("/api/internal/observability/auth-session"
 });
 const cookieHeader = `${authSession.cookie_name}=${authSession.access_token}`;
 const targetsResponse = await requestJson("/api/internal/observability/auth-targets");
-const allTargets = [...new Set((targetsResponse.urls || []).map((value) => String(value)))].sort();
+let staticRoutes = [];
+try {
+  staticRoutes = await discoverStaticRoutes();
+} catch (error) {
+  process.stdout.write(
+    `static route discovery unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
+}
+const staticTargets = staticRoutes.map((route) => `${baseUrl}${route}`);
+const allTargets = [
+  ...new Set([...staticTargets, ...(targetsResponse.urls || []).map((value) => String(value))]),
+].sort();
 const pageCandidates = [];
 const pageCheckConcurrency = 8;
 for (let offset = 0; offset < allTargets.length; offset += pageCheckConcurrency) {
@@ -246,6 +280,7 @@ const failures = runs.filter(
 const summary = {
   release,
   targets_total: allTargets.length,
+  static_routes_total: staticRoutes.length,
   page_candidates_total: pageCandidates.length,
   target_offset: targetOffset,
   target_filter: targetFilter || null,

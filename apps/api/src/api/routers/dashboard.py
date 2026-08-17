@@ -38,6 +38,7 @@ async def get_dashboard_composite(
     include_tasks: bool = Query(True),
     include_matters: bool = Query(True),
     include_announcements: bool = Query(True),
+    compact_dashboard: bool = Query(False),
 ) -> DashboardCompositeResponse:
     """以單次 API 回傳 dashboard、待辦、治理摘要與最新公告。"""
     return await build_dashboard_composite(
@@ -46,4 +47,5 @@ async def get_dashboard_composite(
         include_tasks=include_tasks,
         include_matters=include_matters,
         include_announcements=include_announcements,
+        compact_dashboard=compact_dashboard,
     )

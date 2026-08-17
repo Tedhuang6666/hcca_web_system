@@ -28,7 +28,7 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
-from sqlalchemy import and_, extract, or_, select
+from sqlalchemy import and_, extract, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -111,20 +111,25 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
     base = select(Document.id).where(Document.created_by == current_user.id)
     COUNT_THRESHOLD = 100  # 限制計數至 100；超過則返回 "99+"
 
-    async def safe_count(q) -> int | str:
-        """計數至閾值；若超過，返回 "99+"""
-        result = await session.execute(q.limit(COUNT_THRESHOLD + 1))
-        rows = list(result.scalars().all())
-        return "99+" if len(rows) > COUNT_THRESHOLD else len(rows)
+    def capped_count(label: str, query) -> object:
+        """單次 UNION 查詢中的 capped count；超過門檻即可回傳 99+。"""
+        limited = query.limit(COUNT_THRESHOLD + 1).subquery()
+        return select(
+            literal(label).label("metric"),
+            func.count().label("total"),
+        ).select_from(limited)
 
-    draft_count = await safe_count(base.where(Document.status == DocumentStatus.DRAFT))
-    pending_count = await safe_count(base.where(Document.status == DocumentStatus.PENDING))
-    rejected_count = await safe_count(base.where(Document.status == DocumentStatus.REJECTED))
-    approved_month = await safe_count(
-        base.where(Document.status == DocumentStatus.APPROVED)
-        .where(extract("year", Document.updated_at) == now.year)
-        .where(extract("month", Document.updated_at) == now.month)
-    )
+    count_queries = [
+        capped_count("draft", base.where(Document.status == DocumentStatus.DRAFT)),
+        capped_count("pending_submitted", base.where(Document.status == DocumentStatus.PENDING)),
+        capped_count("rejected", base.where(Document.status == DocumentStatus.REJECTED)),
+        capped_count(
+            "approved_this_month",
+            base.where(Document.status == DocumentStatus.APPROVED)
+            .where(extract("year", Document.updated_at) == now.year)
+            .where(extract("month", Document.updated_at) == now.month),
+        ),
+    ]
 
     # 待我審核（分配給我且尚未決定的 approval step）
     active_assignment = select(DocumentApprovalDelegation.id).where(
@@ -138,33 +143,38 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
             DocumentApprovalDelegation.end_at >= now,
         ),
     )
-    my_pending = 0
     if can_approve:
-        my_pending = await safe_count(
-            select(DocumentApproval.id)
-            .join(Document, DocumentApproval.document_id == Document.id)
-            .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
-            .where(
-                or_(
-                    DocumentApproval.approver_id == current_user.id,
-                    and_(
-                        DocumentApproval.delegate_source == DelegateSource.MANUAL,
-                        DocumentApproval.delegate_id == current_user.id,
-                    ),
-                    and_(
-                        DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
-                        active_assignment.exists(),
-                    ),
-                )
+        count_queries.append(
+            capped_count(
+                "pending_my_approval",
+                select(DocumentApproval.id)
+                .join(Document, DocumentApproval.document_id == Document.id)
+                .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+                .where(
+                    or_(
+                        DocumentApproval.approver_id == current_user.id,
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.MANUAL,
+                            DocumentApproval.delegate_id == current_user.id,
+                        ),
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
+                            active_assignment.exists(),
+                        ),
+                    )
+                ),
             )
         )
 
+    rows = (await session.execute(union_all(*count_queries))).all()
+    counts = {metric: "99+" if total > COUNT_THRESHOLD else int(total) for metric, total in rows}
+
     result = {
-        "draft": draft_count,
-        "pending_submitted": pending_count,
-        "pending_my_approval": my_pending,
-        "approved_this_month": approved_month,
-        "rejected": rejected_count,
+        "draft": counts.get("draft", 0),
+        "pending_submitted": counts.get("pending_submitted", 0),
+        "pending_my_approval": counts.get("pending_my_approval", 0),
+        "approved_this_month": counts.get("approved_this_month", 0),
+        "rejected": counts.get("rejected", 0),
     }
     with contextlib.suppress(Exception):
         await redis_client.set(cache_key, json.dumps(result), ex=60)

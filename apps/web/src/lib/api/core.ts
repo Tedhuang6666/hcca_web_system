@@ -10,6 +10,7 @@ import {
   authFetch,
   csrfHeaders,
   fetchWithRetry,
+  isRequestAborted,
   NetworkRequestError,
   traceHeaders,
   type HccaRequestInit,
@@ -77,6 +78,7 @@ export async function request<T>(
     response = result.response;
     recordApiMetric({ path, method, operation_kind: operationKind, status: response.status, attempts: result.attempts, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
   } catch (error) {
+    if (isRequestAborted(error, init.signal)) throw error;
     recordHardFailure(key);
     recordApiMetric({ path, method, operation_kind: operationKind, status: 0, attempts: method === "GET" ? 2 : 0, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
     if (error instanceof NetworkRequestError) throw new ApiError(0, error.message);

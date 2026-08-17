@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -150,6 +150,7 @@ export type DashboardPageInitialData = {
   userName: string;
   greeting: string;
   dashboard: DashboardResponse | null;
+  dashboardIsCompact?: boolean;
   tasks: TaskInboxResponse | null;
   matters: MatterListItem[] | null;
   announcements: AnnouncementListItem[] | null;
@@ -160,12 +161,16 @@ export default function DashboardPageClient({
 }: {
   initialData: DashboardPageInitialData | null;
 }) {
-  const cachedDashboard = useRef(cacheGet<DashboardResponse>("dashboard/data")).current;
-  const cachedTasks = useRef(cacheGet<TaskInboxResponse>("dashboard/tasks")).current;
-  const cachedMatters = useRef(cacheGet<MatterListItem[]>("dashboard/matters")).current;
-  const cachedAnnouncements = useRef(
-    cacheGet<AnnouncementListItem[]>("dashboard/announcements"),
-  ).current;
+  // 不在首次 render 讀取模組快取：伺服器 render 沒有瀏覽器快取，若瀏覽器
+  // 在 hydration 時已有資料，會讓兩邊輸出的樹不同並觸發 React hydration error #418。
+  // hydration 完成後再載入快取，仍可保留切頁回來的即時顯示效果。
+  const [cachedDashboard, setCachedDashboard] = useState<DashboardResponse | undefined>();
+  const [cachedTasks, setCachedTasks] = useState<TaskInboxResponse | undefined>();
+  const [cachedMatters, setCachedMatters] = useState<MatterListItem[] | undefined>();
+  const [cachedAnnouncements, setCachedAnnouncements] = useState<
+    AnnouncementListItem[] | undefined
+  >();
+  const [cacheHydrated, setCacheHydrated] = useState(false);
   const [userName, setUserName] = useState(initialData?.userName ?? "");
   const [greeting] = useState(initialData?.greeting ?? "歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(
@@ -197,6 +202,14 @@ export default function DashboardPageClient({
   // committed; auth/me can update the cache while the streamed tree is still
   // being hydrated, which otherwise changes the server-rendered branch.
   useEffect(() => setClientReady(true), []);
+
+  useEffect(() => {
+    setCachedDashboard(cacheGet<DashboardResponse>("dashboard/data"));
+    setCachedTasks(cacheGet<TaskInboxResponse>("dashboard/tasks"));
+    setCachedMatters(cacheGet<MatterListItem[]>("dashboard/matters"));
+    setCachedAnnouncements(cacheGet<AnnouncementListItem[]>("dashboard/announcements"));
+    setCacheHydrated(true);
+  }, []);
   const isAdmin = clientReady && cachedIsAdmin;
   const permissions = clientReady ? cachedPermissions : EMPTY_PERMISSIONS;
   const can = (code: string) => clientReady && hasPermission(code);
@@ -222,6 +235,7 @@ export default function DashboardPageClient({
   }, [initialData?.userName]);
 
   useEffect(() => {
+    if (!cacheHydrated) return;
     const userId = localStorage.getItem("user_id");
     if (!userId) {
       setPriorityLoading(false);
@@ -234,7 +248,8 @@ export default function DashboardPageClient({
     if (initialData?.announcements == null && cachedAnnouncements) {
       setAnnouncements(cachedAnnouncements);
     }
-    const refreshDashboard = !initialData?.dashboard && !cachedDashboard;
+    const refreshDashboard = Boolean(initialData?.dashboardIsCompact)
+      || (!initialData?.dashboard && !cachedDashboard);
     const refreshTasks = !initialData?.tasks && !cachedTasks;
     const refreshMatters = canViewGovernanceWork && initialData?.matters == null && !cachedMatters;
     const refreshAnnouncements = initialData?.announcements == null && !cachedAnnouncements;
@@ -244,7 +259,7 @@ export default function DashboardPageClient({
     const compositePromise = refreshDashboard
       ? dashboardApi.composite({ includeTasks: false, includeMatters: canViewGovernanceWork })
       : null;
-    const tasksPromise = !refreshDashboard && refreshTasks ? tasksApi.list() : null;
+    const tasksPromise = refreshTasks ? tasksApi.list() : null;
     const mattersPromise = !refreshDashboard && refreshMatters
       ? governanceApi.listMatters({ status: "active", limit: 6 })
       : null;
@@ -290,7 +305,7 @@ export default function DashboardPageClient({
         if (refreshTasks) setPriorityLoading(false);
         setSecondaryLoading(false);
       });
-  }, [canViewGovernanceWork, cachedAnnouncements, cachedDashboard, cachedMatters, cachedTasks, initialData]);
+  }, [cacheHydrated, canViewGovernanceWork, cachedAnnouncements, cachedDashboard, cachedMatters, cachedTasks, initialData]);
 
   const widgets = data?.widgets ?? [];
   const layoutHint = data?.layout_hint ?? "student";
