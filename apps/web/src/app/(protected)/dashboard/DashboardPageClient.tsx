@@ -2,28 +2,27 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
 import {
   FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
   CheckSquare, ChevronRight, Plus, Loader2, Clock, ArrowUpRight,
   Layers3, ShoppingCart, Utensils, CalendarDays, Inbox, ShieldCheck,
   Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
 } from "lucide-react";
+import { announcementsApi } from "@/lib/api/announcements";
+import { dashboardApi, type DashboardResponse } from "@/lib/api/dashboard";
+import { governanceApi } from "@/lib/api/governance";
 import {
-  announcementsApi, dashboardApi,
-  governanceApi,
   tasksApi,
-  type DashboardResponse,
   type TaskInboxResponse,
   type TaskItem,
   type TaskModule,
-} from "@/lib/api";
+} from "@/lib/api/tasks";
 import type { AnnouncementListItem, MatterListItem } from "@/lib/types";
 import { cacheGet, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import OnboardingHint from "@/components/ui/OnboardingHint";
-import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation";
+import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation-profile";
 import { riskColor, sortMattersByInsight } from "@/lib/governanceInsights";
 
 const DashboardWidgets = dynamic(() => import("./DashboardWidgets"), { ssr: false });
@@ -286,7 +285,7 @@ export default function DashboardPageClient({
             cacheSet("dashboard/announcements", compositeRes.value.announcements);
           }
         } else if (refreshDashboard && compositeRes.status === "rejected") {
-          toast.error("無法載入儀表板");
+          void import("sonner").then(({ toast }) => toast.error("無法載入儀表板"));
           console.error(compositeRes.reason);
         }
         if (tasksRes.status === "fulfilled" && tasksRes.value) {

@@ -1,4 +1,8 @@
 import type { NavigationProfileOut } from "./types";
+import { NAVIGATION_PROFILE_RULES, type NavigationProfile } from "./navigation-profile";
+
+export type { NavigationProfile } from "./navigation-profile";
+export { resolveNavigationProfile } from "./navigation-profile";
 
 export type NavItem = {
   id: string;
@@ -29,7 +33,6 @@ export type NavVisibilityOptions = {
   isModuleClosed?: (item: NavItem) => boolean;
 };
 
-export type NavigationProfile = "default" | "student" | "teacher" | "vendor" | "mealVendor";
 export type RuntimeNavigationProfile = NavigationProfile | string;
 
 export type NavigationProfileConfig = {
@@ -490,8 +493,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     label: "教職員視角",
     description: "保留教職員常用的通知、行事曆、問卷、題庫、商品與學餐入口。",
     audience: "導師、行政老師、協助班級或教學服務的教職員",
-    matchAnyPrefixes: ["class:", "exam:"],
-    matchAnyPermissions: ["survey:review", "survey:manage"],
+    ...NAVIGATION_PROFILE_RULES.teacher,
     desktopSections: NAV_DEF_TEACHER,
     mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "merchandiseSubmissions", "meal"],
   },
@@ -500,7 +502,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     label: "校商與廠商視角",
     description: "把合作商家需要的特約管理、合作活動、公告與待辦集中起來。",
     audience: "校商、合作廠商、外部合作窗口",
-    matchAnyPrefixes: ["partner_map:", "electronic_credential:"],
+    ...NAVIGATION_PROFILE_RULES.vendor,
     desktopSections: NAV_DEF_VENDOR,
     mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "credential", "announcements"],
   },
@@ -509,17 +511,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     label: "餐商視角",
     description: "把畫面集中在餐商管理、學餐訂購狀態與待辦。",
     audience: "學生餐廳、合作餐商、供餐窗口",
-    matchAnyPrefixes: ["meal:"],
-    excludePrefixes: [
-      "document:",
-      "regulation:",
-      "admin:",
-      "shop:",
-      "finance:",
-      "org:",
-      "petition:",
-      "election:",
-    ],
+    ...NAVIGATION_PROFILE_RULES.mealVendor,
     desktopSections: NAV_DEF_MEAL_VENDOR,
     mobileOrder: ["dashboard", "tasks", "mealVendor", "meal", "announcements"],
   },
@@ -611,46 +603,6 @@ export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): 
     return Boolean(options.meetingsUnlocked || options.hasPrefix("meeting:"));
   }
   return filterNavItems([item], options.can, options.hasPrefix).length > 0;
-}
-
-export function resolveNavigationProfile(
-  permissions: Set<string>,
-  isAdmin: boolean,
-): NavigationProfile {
-  if (isAdmin || permissions.has("admin:all")) return "default";
-  const hasPrefix = (prefix: string) => Array.from(permissions).some((p) => p.startsWith(prefix));
-  const hasNonViewerPermission = (prefix: string, viewerOnly: string[]) =>
-    Array.from(permissions).some((permission) =>
-      permission.startsWith(prefix) && !viewerOnly.includes(permission),
-    );
-  const hasGovernanceOrBackoffice = [
-    hasNonViewerPermission("document:", ["document:view_all"]),
-    hasNonViewerPermission("regulation:", ["regulation:view_all"]),
-    "admin:",
-    "org:",
-    "finance:",
-    "election:",
-    "audit:",
-    "email:",
-    "merchandise_submission:",
-    "shop:",
-    "electronic_credential:",
-  ].some((entry) => typeof entry === "string" ? hasPrefix(entry) : entry);
-
-  if (hasGovernanceOrBackoffice) return "default";
-
-  for (const profile of [
-    NAVIGATION_PROFILES.mealVendor,
-    NAVIGATION_PROFILES.vendor,
-    NAVIGATION_PROFILES.teacher,
-  ]) {
-    const matchedPrefix = profile.matchAnyPrefixes?.some(hasPrefix) ?? false;
-    const matchedPermission = profile.matchAnyPermissions?.some((code) => permissions.has(code)) ?? false;
-    const excluded = profile.excludePrefixes?.some(hasPrefix) ?? false;
-    if ((matchedPrefix || matchedPermission) && !excluded) return profile.id as NavigationProfile;
-  }
-
-  return "student";
 }
 
 export function navDefinitionForProfile(profile: RuntimeNavigationProfile): NavEntry[] {
