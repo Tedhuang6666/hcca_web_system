@@ -338,11 +338,12 @@ def set_websocket_broker_healthy(healthy: bool) -> None:
 
 
 def _route_template(request: Request) -> str:
-    """從 request 拿 path template（如 /users/{id}）；無 match 時用原 path。"""
+    """從 request 拿 bounded path template；未匹配路徑集中到單一 label。"""
     route = request.scope.get("route")
     if route is None:
-        return request.url.path
-    return getattr(route, "path", request.url.path)
+        return "/__unmatched__"
+    template = getattr(route, "path", None)
+    return template if isinstance(template, str) and template.startswith("/") else "/__unmatched__"
 
 
 class PrometheusMetricsMiddleware:
