@@ -130,15 +130,10 @@ const authSession = await requestJson("/api/internal/observability/auth-session"
 const cookieHeader = `${authSession.cookie_name}=${authSession.access_token}`;
 const targetsResponse = await requestJson("/api/internal/observability/auth-targets");
 const allTargets = [...new Set((targetsResponse.urls || []).map((value) => String(value)))].sort();
-const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
-const targetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
-const candidateTargets = targetLimit > 0
-  ? allTargets.slice(targetOffset, targetOffset + targetLimit)
-  : allTargets.slice(targetOffset);
-const targets = [];
-for (const target of candidateTargets) {
+const pageCandidates = [];
+for (const target of allTargets) {
   try {
-    if (await isHtmlPage(target, cookieHeader)) targets.push(target);
+    if (await isHtmlPage(target, cookieHeader)) pageCandidates.push(target);
     else process.stdout.write(`skip non-page ${target}\n`);
   } catch (error) {
     process.stdout.write(
@@ -146,6 +141,12 @@ for (const target of candidateTargets) {
     );
   }
 }
+const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
+const targetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
+const candidateTargets = targetLimit > 0
+  ? pageCandidates.slice(targetOffset, targetOffset + targetLimit)
+  : pageCandidates.slice(targetOffset);
+const targets = candidateTargets;
 
 if (targets.length === 0) throw new Error("No authenticated performance targets were discovered");
 
@@ -223,9 +224,10 @@ const failures = runs.filter(
 const summary = {
   release,
   targets_total: allTargets.length,
+  page_candidates_total: pageCandidates.length,
   target_offset: targetOffset,
   candidate_targets: candidateTargets.length,
-  skipped_targets: candidateTargets.length - targets.length,
+  skipped_targets: allTargets.length - pageCandidates.length,
   minimum_score: minimumScore,
   targets: targets.length,
   runs: runs.length,
