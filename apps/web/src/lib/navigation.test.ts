@@ -62,4 +62,12 @@ describe("navigation visibility", () => {
       .toBe("default");
     expect(resolveNavigationProfile(new Set(["shop:manage"]), false)).toBe("default");
   });
+
+  it("resolves specialized navigation profiles without loading full navigation definitions", () => {
+    expect(resolveNavigationProfile(new Set(["meal:view"]), false)).toBe("mealVendor");
+    expect(resolveNavigationProfile(new Set(["partner_map:business_manage"]), false)).toBe("vendor");
+    expect(resolveNavigationProfile(new Set(["class:manage"]), false)).toBe("teacher");
+    expect(resolveNavigationProfile(new Set(["meal:view", "document:view_all"]), false))
+      .toBe("student");
+  });
 });
