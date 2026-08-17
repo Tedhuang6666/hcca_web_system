@@ -361,7 +361,7 @@ def user_summary(user: User, *, reveal_sensitive: bool = False) -> dict:
         "masked_student_id": mask_identifier(user.student_id, visible_end=2),
         "is_active": user.is_active,
         "is_verified": user.is_verified,
-        "mfa_enabled": user.mfa_enabled,
+        "mfa_enabled": bool(user.mfa_enabled),
         "is_superuser": user.is_superuser,
         "created_at": user.created_at,
     }
@@ -477,7 +477,7 @@ async def user_detail(
         "account": {
             "status": "active" if user.is_active else "inactive",
             "email_verified": user.is_verified,
-            "mfa_enabled": user.mfa_enabled,
+            "mfa_enabled": bool(user.mfa_enabled),
             "session_status": "unknown_until_checked",
         },
         "roles": role_out,
