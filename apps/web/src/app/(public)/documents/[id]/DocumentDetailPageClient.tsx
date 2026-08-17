@@ -209,10 +209,12 @@ export default function DocumentDetailPageClient({
   useEffect(() => {
     // The route is shared with the public page. Its SSR data is fetched
     // without credentials and may come from the public cache, so it cannot
-    // be used as the authenticated document state.
+    // be used as the only authenticated document state. Keep it visible while
+    // the authenticated request fills in private fields, instead of replacing
+    // an already-rendered document with a full-page loading state.
     setDoc(initialDoc);
     setForbidden(false);
-    setLoading(true);
+    setLoading(!initialDoc);
     void fetchDoc();
   }, [fetchDoc, initialDoc]);
   useEffect(() => {
@@ -372,7 +374,7 @@ export default function DocumentDetailPageClient({
     }
   };
 
-  if (loading) {
+  if (loading && !doc) {
     return (
       <DetailPageLoading
         title="公文詳情載入中"
@@ -411,8 +413,17 @@ export default function DocumentDetailPageClient({
         && (a.approver.id === currentUserId || a.delegate?.id === currentUserId),
     );
   const isDraft = doc.status === "draft";
-  const isEditableIssued = doc.status === "approved" && doc.issued_at
-    && Date.now() <= new Date(doc.issued_at).getTime() + 6 * 60 * 60 * 1000;
+  const isEditableIssued = Boolean(
+    doc.status === "approved"
+      && doc.issued_at
+      && Date.now() <= new Date(doc.issued_at).getTime() + 6 * 60 * 60 * 1000,
+  );
+  const isSummaryEditable = Boolean(
+    doc.status === "approved"
+      && doc.issued_at
+      && Date.now() > new Date(doc.issued_at).getTime() + 6 * 60 * 60 * 1000,
+  );
+  const canEditDocument = canEditSummary && (isDraft || isEditableIssued || isSummaryEditable);
   const docInfoRows: [string, string][] = [
     ["字號", doc.serial_number || "（未分配）"],
     ["類別", catLabel],
@@ -525,14 +536,14 @@ export default function DocumentDetailPageClient({
             </svg>
           </button>
 
-          {/* 草稿：編輯（僅建立者） */}
-          {canEditSummary && (
+          {/* 超過六小時的已發文公文仍可進入摘要編輯 */}
+          {canEditDocument && (
             <Link href={`/documents/${id}/edit`} className="btn btn-ghost text-sm gap-1.5">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
-              編輯
+              {isSummaryEditable ? "編輯摘要" : "編輯"}
             </Link>
           )}
           {isCreator && (isDraft || isEditableIssued) && (

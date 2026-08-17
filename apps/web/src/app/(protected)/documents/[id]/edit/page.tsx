@@ -155,6 +155,7 @@ export default function EditDocumentPage() {
   const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [doc, setDoc] = useState<DocumentOut | null>(null);
+  const [summaryOnly, setSummaryOnly] = useState(false);
   const draftValue = useMemo<DocumentEditDraft>(() => ({
     serialNumber,
     title,
@@ -217,6 +218,7 @@ export default function EditDocumentPage() {
     sourceDocumentDate,
     sourceDocumentNumber,
     retentionPeriod,
+    summary,
     subject,
     title,
     urgency,
@@ -310,36 +312,46 @@ export default function EditDocumentPage() {
     }, [originalDraft]),
   });
 
-  const buildUpdatePayload = useCallback((autosave = false) => ({
-    serial_number: serialNumber.trim() || undefined,
-    title, urgency, classification, category,
-    declassification_condition: classification === "normal" ? "none" : declassificationCondition,
-    confidentiality_expires_at: declassificationCondition === "auto_at_date" ? confidentialityExpiresAt || undefined : null,
-    serial_template_id: selectedTemplateId || null,
-    issuer_postal_code: issuerPostalCode || undefined,
-    issuer_address: issuerAddress || undefined,
-    subject: category === "decree" ? null : subject || undefined,
-    summary: summary || undefined,
-    basis: category === "announcement" ? basis || undefined : undefined,
-    doc_description: docDescription || undefined,
-    action_required: category === "decree" ? null : actionRequired || undefined,
-    meeting_purpose: (category === "meeting_notice" || category === "inspection_notice") ? meetingPurpose || undefined : undefined,
-    meeting_time: (category === "meeting_notice" || category === "inspection_notice" || category === "record") && meetingTime ? meetingTime : undefined,
-    meeting_location: (category === "meeting_notice" || category === "inspection_notice" || category === "record") ? meetingLocation || undefined : undefined,
-    meeting_chairperson: (category === "meeting_notice" || category === "inspection_notice" || category === "record") ? meetingChairperson || undefined : undefined,
-    handler_name: handlerName || undefined,
-    handler_unit: handlerUnit || undefined,
-    handler_email: handlerEmail || undefined,
-    handler_phone: handlerPhone || undefined,
-    classification_number: classificationNumber || undefined,
-    file_number: fileNumber || undefined,
-    source_document_date: sourceDocumentDate || undefined,
-    source_document_number: sourceDocumentNumber || undefined,
-    retention_period: retentionPeriod || undefined,
-    due_date: dueDate || undefined,
-    change_note: autosave ? undefined : changeNote || undefined,
-    autosave,
-  }), [
+  const buildUpdatePayload = useCallback((autosave = false) => {
+    if (summaryOnly) {
+      return {
+        summary,
+        change_note: autosave ? undefined : changeNote || undefined,
+        autosave,
+      };
+    }
+
+    return {
+      serial_number: serialNumber.trim() || undefined,
+      title, urgency, classification, category,
+      declassification_condition: classification === "normal" ? "none" : declassificationCondition,
+      confidentiality_expires_at: declassificationCondition === "auto_at_date" ? confidentialityExpiresAt || undefined : null,
+      serial_template_id: selectedTemplateId || null,
+      issuer_postal_code: issuerPostalCode || undefined,
+      issuer_address: issuerAddress || undefined,
+      subject: category === "decree" ? null : subject || undefined,
+      summary: summary || undefined,
+      basis: category === "announcement" ? basis || undefined : undefined,
+      doc_description: docDescription || undefined,
+      action_required: category === "decree" ? null : actionRequired || undefined,
+      meeting_purpose: (category === "meeting_notice" || category === "inspection_notice") ? meetingPurpose || undefined : undefined,
+      meeting_time: (category === "meeting_notice" || category === "inspection_notice" || category === "record") && meetingTime ? meetingTime : undefined,
+      meeting_location: (category === "meeting_notice" || category === "inspection_notice" || category === "record") ? meetingLocation || undefined : undefined,
+      meeting_chairperson: (category === "meeting_notice" || category === "inspection_notice" || category === "record") ? meetingChairperson || undefined : undefined,
+      handler_name: handlerName || undefined,
+      handler_unit: handlerUnit || undefined,
+      handler_email: handlerEmail || undefined,
+      handler_phone: handlerPhone || undefined,
+      classification_number: classificationNumber || undefined,
+      file_number: fileNumber || undefined,
+      source_document_date: sourceDocumentDate || undefined,
+      source_document_number: sourceDocumentNumber || undefined,
+      retention_period: retentionPeriod || undefined,
+      due_date: dueDate || undefined,
+      change_note: autosave ? undefined : changeNote || undefined,
+      autosave,
+    };
+  }, [
     serialNumber,
     actionRequired,
     basis,
@@ -366,6 +378,8 @@ export default function EditDocumentPage() {
     sourceDocumentDate,
     sourceDocumentNumber,
     retentionPeriod,
+    summary,
+    summaryOnly,
     subject,
     title,
     urgency,
@@ -380,28 +394,39 @@ export default function EditDocumentPage() {
     }, [originalDraft]),
     save: useCallback(async () => {
       await documentsApi.update(id, buildUpdatePayload(true));
-      await documentsRecipientsApi.update(id, recipients.map(r => ({
-        recipient_type: r.recipient_type,
-        name: r.name,
-        email: r.email || undefined,
-        target_user_id: r.target_user_id,
-        target_org_id: r.target_org_id,
-        target_class_id: r.target_class_id,
-      })));
-    }, [buildUpdatePayload, id, recipients]),
+      if (!summaryOnly) {
+        await documentsRecipientsApi.update(id, recipients.map(r => ({
+          recipient_type: r.recipient_type,
+          name: r.name,
+          email: r.email || undefined,
+          target_user_id: r.target_user_id,
+          target_org_id: r.target_org_id,
+          target_class_id: r.target_class_id,
+        })));
+      }
+    }, [buildUpdatePayload, id, recipients, summaryOnly]),
   });
 
   const fetchDoc = useCallback(async () => {
     try {
       const d = await documentsApi.get(id);
-      const canEditIssued = d.status === "approved" && d.issued_at
-        && Date.now() <= new Date(d.issued_at).getTime() + 6 * 60 * 60 * 1000;
-      if (d.status !== "draft" && !canEditIssued) {
-        toast.error(d.status === "approved" ? "公文發出已超過六小時，無法編輯" : "只能編輯草稿或發出六小時內的公文");
+      const canEditIssued = Boolean(
+        d.status === "approved"
+          && d.issued_at
+          && Date.now() <= new Date(d.issued_at).getTime() + 6 * 60 * 60 * 1000,
+      );
+      const canEditSummaryOnly = Boolean(
+        d.status === "approved"
+          && d.issued_at
+          && Date.now() > new Date(d.issued_at).getTime() + 6 * 60 * 60 * 1000,
+      );
+      if (d.status !== "draft" && !canEditIssued && !canEditSummaryOnly) {
+        toast.error("只能編輯草稿、發出六小時內的公文，或更新逾時公文的摘要");
         router.push(`/documents/${id}`);
         return;
       }
       setDoc(d);
+      setSummaryOnly(canEditSummaryOnly);
       setSerialNumber(d.serial_number ?? "");
       setTitle(d.title);
       setUrgency(d.urgency);
@@ -470,17 +495,19 @@ export default function EditDocumentPage() {
   };
 
   const save = async () => {
-    if (!title.trim()) { toast.error("請輸入公文標題"); return; }
+    if (!summaryOnly && !title.trim()) { toast.error("請輸入公文標題"); return; }
     setSaving(true);
     try {
       await documentsApi.update(id, buildUpdatePayload(false));
-      // 更新受文者（整批覆寫）
-      await documentsRecipientsApi.update(id, recipients.map(r => ({
-        recipient_type: r.recipient_type, name: r.name, email: r.email || undefined,
-        target_user_id: r.target_user_id,
-        target_org_id: r.target_org_id,
-        target_class_id: r.target_class_id,
-      })));
+      if (!summaryOnly) {
+        // 更新受文者（整批覆寫）
+        await documentsRecipientsApi.update(id, recipients.map(r => ({
+          recipient_type: r.recipient_type, name: r.name, email: r.email || undefined,
+          target_user_id: r.target_user_id,
+          target_org_id: r.target_org_id,
+          target_class_id: r.target_class_id,
+        })));
+      }
       clearDraft();
       toast.success("公文已更新");
       router.push(`/documents/${id}`);
@@ -527,7 +554,7 @@ export default function EditDocumentPage() {
           className="w-8 h-8 rounded-lg flex items-center justify-center  hover:"
           style={{ border: "1px solid var(--border)" }}>←</Link>
         <div>
-          <h1 className="text-xl font-semibold ">編輯公文</h1>
+          <h1 className="text-xl font-semibold ">{summaryOnly ? "編輯公文摘要" : "編輯公文"}</h1>
           <p className="text-sm font-mono" style={{ color: "var(--primary)" }}>
             {doc.serial_number || "（草稿，尚未發文）"}
           </p>
@@ -543,7 +570,7 @@ export default function EditDocumentPage() {
                 ? `線上已儲存：${new Date(onlineAutosave.lastSavedAt).toLocaleTimeString("zh-TW")}`
                 : onlineAutosave.status === "error"
                   ? onlineAutosave.error
-                  : "編輯時會自動線上儲存草稿"}
+                  : summaryOnly ? "僅能修改已發文公文的列表摘要" : "編輯時會自動線上儲存草稿"}
           </p>
         </div>
       </div>
@@ -555,7 +582,52 @@ export default function EditDocumentPage() {
         href={`/documents/${encodeURIComponent(doc.serial_number)}`}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {summaryOnly && (
+        <div className="card space-y-4 p-4">
+          <div>
+            <h2 className="text-sm font-semibold">已發文公文摘要</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              此公文發出已超過六小時，正文與流程欄位已鎖定；僅可更新列表摘要。
+            </p>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs" style={{ color: "var(--text-muted)" }}>
+              列表摘要（可選）
+            </label>
+            <input
+              value={summary}
+              onChange={e => setSummary(e.target.value)}
+              maxLength={500}
+              placeholder="提供列表辨識用摘要..."
+              className="w-full bg-transparent text-sm outline-none"
+              style={{ ...inputStyle, padding: "0.5rem" }}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs" style={{ color: "var(--text-muted)" }}>
+              修訂備註（選填）
+            </label>
+            <input
+              value={changeNote}
+              onChange={e => setChangeNote(e.target.value)}
+              placeholder="說明本次修改原因..."
+              className="w-full bg-transparent text-xs outline-none"
+              style={{ ...inputStyle, padding: "0.5rem" }}
+            />
+          </div>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="w-full rounded-lg py-2.5 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-50"
+            style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
+          >
+            {saving ? "儲存中..." : "儲存摘要"}
+          </button>
+        </div>
+      )}
+
+      <fieldset disabled={summaryOnly} className="min-w-0 border-0 p-0">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
           {/* 基本資訊 */}
           <div className="card p-4 space-y-3">
@@ -572,13 +644,13 @@ export default function EditDocumentPage() {
                 className="w-full bg-transparent  text-sm outline-none border-b pb-1"
                 style={{ borderColor: "var(--border)" }} />
             </div>
-            <div>
+            {!summaryOnly && <div>
               <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>列表摘要（可選）</label>
               <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500}
                 placeholder="主旨為空或過於相同時，提供列表辨識用摘要..."
                 className="w-full bg-transparent text-sm outline-none border-b pb-1"
                 style={{ borderColor: "var(--border)" }} />
-            </div>
+            </div>}
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: "速別", value: urgency, setter: setUrgency as (v: string) => void,
@@ -842,6 +914,7 @@ export default function EditDocumentPage() {
           </div>
         </div>
       </div>
+      </fieldset>
     </div>
   );
 }

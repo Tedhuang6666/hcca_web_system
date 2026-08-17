@@ -424,11 +424,11 @@ async def update_document_visibility(
 @router.patch(
     "/{doc_id}",
     response_model=DocumentOut,
-    summary="更新公文（草稿或發出六小時內，自動建立版本快照）",
+    summary="更新公文（超過六小時僅可更新摘要）",
     responses={
         200: {"description": "更新成功，版本號遞增"},
         403: {"description": "非建立者"},
-        409: {"description": "非草稿狀態或發出已超過六小時"},
+        409: {"description": "非草稿狀態或發出已超過六小時且更新內容不只摘要"},
     },
 )
 async def update_document(
