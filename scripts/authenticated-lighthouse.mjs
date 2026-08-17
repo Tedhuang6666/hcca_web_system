@@ -162,9 +162,12 @@ for (let offset = 0; offset < allTargets.length; offset += pageCheckConcurrency)
 }
 const targetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
 const targetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
-const candidateTargets = targetLimit > 0
-  ? pageCandidates.slice(targetOffset, targetOffset + targetLimit)
-  : pageCandidates.slice(targetOffset);
+const targetFilter = (process.env.TARGET_URL || "").trim();
+const candidateTargets = targetFilter
+  ? pageCandidates.filter((target) => target === targetFilter)
+  : targetLimit > 0
+    ? pageCandidates.slice(targetOffset, targetOffset + targetLimit)
+    : pageCandidates.slice(targetOffset);
 const targets = candidateTargets;
 
 if (targets.length === 0) throw new Error("No authenticated performance targets were discovered");
@@ -245,8 +248,10 @@ const summary = {
   targets_total: allTargets.length,
   page_candidates_total: pageCandidates.length,
   target_offset: targetOffset,
+  target_filter: targetFilter || null,
   candidate_targets: candidateTargets.length,
   skipped_targets: allTargets.length - pageCandidates.length,
+  target_urls: targets,
   minimum_score: minimumScore,
   targets: targets.length,
   runs: runs.length,
