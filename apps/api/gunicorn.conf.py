@@ -35,8 +35,10 @@ graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30"))
 
 # ── 效能調優 ──────────────────────────────────────────────────────────────────
 
-# 預先 fork 所有 worker（減少 fork 後的啟動延遲）
-preload_app = True
+# 不要在 master process 建立 SQLAlchemy/async Redis 資源後再 fork。
+# 這些 client 會攜帶 event-loop 與 connection-pool 狀態，preload 會讓 worker
+# 共用 fork 前的 async 資源，造成 Redis/DB 連線異常與 worker boot timeout。
+preload_app = False
 
 # 最大請求數後自動重啟 worker（防止記憶體洩漏）
 max_requests = int(os.getenv("GUNICORN_MAX_REQUESTS", "1000"))

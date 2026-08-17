@@ -1,6 +1,6 @@
 # Production blue-green compose file.
 # Run with:
-#   docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db redis proxy
+#   docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db pgbouncer redis proxy
 #   bash scripts/zero-downtime-deploy.sh green
 
 x-api-common: &api-common
@@ -18,7 +18,7 @@ x-api-common: &api-common
     COOKIE_SECURE: "true"
     APP_RELEASE: ${APP_RELEASE:-}
     BUILD_COMMIT: ${BUILD_COMMIT:-}
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-pgbouncer}:${DB_PORT:-6432}/${POSTGRES_DB:?set POSTGRES_DB}
     DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
     DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
@@ -30,6 +30,7 @@ x-api-common: &api-common
     REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
     CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
     CELERY_RESULT_BACKEND: ""
+    DB_USE_PGBOUNCER: ${DB_USE_PGBOUNCER:-true}
     SENTRY_DSN: ${SENTRY_DSN:-}
     SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
     SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
@@ -51,6 +52,8 @@ x-api-common: &api-common
     redis-broker:
       condition: service_healthy
     redis-realtime:
+      condition: service_healthy
+    pgbouncer:
       condition: service_healthy
   volumes:
     - uploads:/app/uploads
@@ -157,6 +160,36 @@ services:
       timeout: 5s
       retries: 5
 
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    restart: unless-stopped
+    mem_limit: ${PGBOUNCER_MEM_LIMIT:-64m}
+    mem_reservation: 16m
+    cpus: ${PGBOUNCER_CPUS:-0.25}
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB:?set POSTGRES_DB}
+      AUTH_TYPE: scram-sha-256
+      LISTEN_PORT: "6432"
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-200}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
+      MIN_POOL_SIZE: "5"
+      RESERVE_POOL_SIZE: "5"
+      SERVER_RESET_QUERY: DISCARD ALL
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -216,6 +249,10 @@ services:
   migrate:
     <<: *api-common
     restart: "no"
+    environment:
+      <<: *api-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_USE_PGBOUNCER: "false"
     command: python -m alembic -c /app/alembic.ini upgrade head
 
   api-blue:
