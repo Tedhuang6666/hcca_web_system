@@ -108,7 +108,9 @@ reload_caddy() {
 
 enter_maintenance() {
   echo "Entering maintenance mode before stopping the old slot..."
-  "${compose[@]}" up -d proxy
+  # 可能已有舊 compose topology 的同名 proxy container；強制重建才能確保
+  # Caddy 掛載 blue-green route 與 maintenance page，而不是沿用舊版 mount。
+  "${compose[@]}" up -d --force-recreate proxy
   reload_caddy maintenance
   echo "Maintenance page is now active."
 }
@@ -156,9 +158,17 @@ if [[ "$maintenance_mode" != "1" ]]; then
   echo "Migrations require MAINTENANCE_MODE=1 so traffic stays on the maintenance page." >&2
   exit 2
 fi
-if ! "${bootstrap_compose[@]}" run --rm migrate; then
-  echo "Migration failed; keeping the maintenance page active." >&2
-  exit 1
+if [[ "${SKIP_MIGRATE:-0}" == "1" ]]; then
+  echo "SKIP_MIGRATE=1; migration explicitly skipped."
+else
+  migration_current="$("${bootstrap_compose[@]}" run --rm migrate \
+    python -m alembic -c /app/alembic.ini current 2>/dev/null || true)"
+  if grep -q '(head)' <<<"$migration_current"; then
+    echo "Schema is already at Alembic head; no migration needed."
+  elif ! "${bootstrap_compose[@]}" run --rm migrate; then
+    echo "Migration failed; keeping the maintenance page active." >&2
+    exit 1
+  fi
 fi
 
 echo "Starting target slot: $target..."
@@ -208,7 +218,9 @@ preserve_previous_static_assets() {
 preserve_previous_static_assets
 
 echo "Starting or reconciling Caddy proxy..."
-"${compose[@]}" up -d proxy
+# Reconcile the proxy mount after a deploy from the legacy single-slot compose
+# file; without this, reload_caddy may not see /etc/caddy/bluegreen/*.Caddyfile.
+"${compose[@]}" up -d --force-recreate proxy
 
 echo "Reloading Caddy to route traffic to $target..."
 if ! reload_caddy "$target"; then
