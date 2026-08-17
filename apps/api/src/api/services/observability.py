@@ -128,8 +128,10 @@ async def record_client_metrics(metrics: list[dict]) -> bool:
         return True
     try:
         pipeline = redis_client.pipeline(transaction=False)
-        for event in events:
-            pipeline.lpush(CLIENT_TELEMETRY_KEY, event)
+        # Use one variadic LPUSH for the whole batch.  The pipeline still keeps
+        # retention updates atomic with the write, while avoiding one Redis
+        # command per telemetry event on the request path.
+        pipeline.lpush(CLIENT_TELEMETRY_KEY, *events)
         pipeline.ltrim(CLIENT_TELEMETRY_KEY, 0, CLIENT_TELEMETRY_MAX_ITEMS - 1)
         pipeline.expire(CLIENT_TELEMETRY_KEY, CLIENT_TELEMETRY_RETENTION_SECONDS)
         await asyncio.wait_for(
@@ -359,10 +361,20 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                 },
                 "client_errors": len(values["client_errors"]),
                 "resource_timing_p75_ms": _percentile(values["resource_timing"], 0.75),
+                "resource_timing_percentiles_ms": _percentiles(
+                    values["resource_timing"], suffix="_ms"
+                ),
                 "longtask_p75_ms": _percentile(values["longtask"], 0.75),
+                "longtask_percentiles_ms": _percentiles(values["longtask"], suffix="_ms"),
                 "longtask_samples": len(values["longtask"]),
                 "navigation_ttfb_p75_ms": _percentile(values["navigation_ttfb"], 0.75),
+                "navigation_ttfb_percentiles_ms": _percentiles(
+                    values["navigation_ttfb"], suffix="_ms"
+                ),
                 "navigation_total_p75_ms": _percentile(values["navigation_total"], 0.75),
+                "navigation_total_percentiles_ms": _percentiles(
+                    values["navigation_total"], suffix="_ms"
+                ),
                 "custom_metrics": {
                     name: {"p75_ms": _percentile(samples, 0.75), "samples": len(samples)}
                     for name, samples in values["custom_metrics"].items()
