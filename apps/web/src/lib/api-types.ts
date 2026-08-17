@@ -4265,7 +4265,7 @@ export interface paths {
         delete: operations["delete_document_documents__doc_id__delete"];
         options?: never;
         head?: never;
-        /** 更新公文（草稿或發出六小時內，自動建立版本快照） */
+        /** 更新公文（超過六小時僅可更新摘要） */
         patch: operations["update_document_documents__doc_id__patch"];
         trace?: never;
     };
@@ -6670,6 +6670,46 @@ export interface paths {
          * @description 接收 CI 產生的 authenticated Lighthouse 結果；只接受本站 URL。
          */
         post: operations["record_authenticated_runs_internal_observability_authenticated_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/observability/public-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Public Runs
+         * @description 接收 CI 產生的 public Lighthouse 結果；只接受本站 URL。
+         */
+        post: operations["record_public_runs_internal_observability_public_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/observability/public-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Targets
+         * @description 供 public Lighthouse workflow 掃描 sitemap 與第一方已發現的所有頁面。
+         */
+        get: operations["public_targets_internal_observability_public_targets_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -46736,7 +46776,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 非草稿狀態或發出已超過六小時 */
+            /** @description 非草稿狀態或發出已超過六小時且更新內容不只摘要 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -52297,6 +52337,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_public_runs_internal_observability_public_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthenticatedRunsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_targets_internal_observability_public_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
