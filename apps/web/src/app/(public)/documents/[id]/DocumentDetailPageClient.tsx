@@ -184,7 +184,7 @@ export default function DocumentDetailPageClient({
   const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
   const [visibilityValue, setVisibilityValue] = useState<DocumentVisibility>("org_only");
   const [visibilityBusy, setVisibilityBusy] = useState(false);
-  const { can } = usePermissions();
+  const { can, isAdmin } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
 
   const fetchDoc = useCallback(async () => {
@@ -394,6 +394,7 @@ export default function DocumentDetailPageClient({
   if (!doc) return <div className="text-center text-red-400 mt-20">公文不存在或無權限查看</div>;
 
   const isCreator = doc.created_by === currentUserId;
+  const canEditSummary = isCreator || isAdmin || can("document:edit") || can("document:admin") || can("document:create") || can("document:view_all");
   const canChoosePrintVariant = isCreator
     || can("document:admin")
     || can("document:view_all");
@@ -464,6 +465,9 @@ export default function DocumentDetailPageClient({
               </div>
             </div>
             <h1 className="document-detail-title text-lg font-semibold leading-snug break-words sm:text-xl">{doc.title}</h1>
+            {doc.summary && (
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>摘要：{doc.summary}</p>
+            )}
           </div>
         </div>
 
@@ -522,7 +526,7 @@ export default function DocumentDetailPageClient({
           </button>
 
           {/* 草稿：編輯（僅建立者） */}
-          {isCreator && (isDraft || isEditableIssued) && (
+          {canEditSummary && (
             <Link href={`/documents/${id}/edit`} className="btn btn-ghost text-sm gap-1.5">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
