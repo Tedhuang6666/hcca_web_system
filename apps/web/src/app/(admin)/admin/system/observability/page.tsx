@@ -294,7 +294,8 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
 }
 
 function RealUsersPanel({ data }: { data: RealUsersData }) {
-  const routeInteractions = data.top_routes.flatMap((route) =>
+  const routes = Array.isArray(data.top_routes) ? data.top_routes : [];
+  const routeInteractions = routes.flatMap((route) =>
     (route.interactions ?? []).map((interaction) => ({ route: route.path, interaction })),
   );
   return (
@@ -322,21 +323,22 @@ function RealUsersPanel({ data }: { data: RealUsersData }) {
           <h2 className="text-base font-semibold">所有已造訪路由</h2>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>公開、登入與未來新增頁面會在首次造訪後自動出現；不收集訪客身份。</p>
         </div>
-        {data.top_routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" detail="開啟任一頁面後，等待約一秒讓批次 telemetry 送出。" /> : (
+        {routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" detail="開啟任一頁面後，等待約一秒讓批次 telemetry 送出。" /> : (
           <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}>
             <table className="w-full min-w-[1220px] text-left text-sm">
               <thead><tr className="border-b" style={{ borderColor: "var(--border)" }}>
                 <th className="px-4 py-3">路由</th><th className="px-4 py-3">瀏覽</th><th className="px-4 py-3">LCP / INP / CLS p75</th>
                 <th className="px-4 py-3">互動回饋 / 完成 p75</th><th className="px-4 py-3">API p95（GET／CRUD／重型）</th><th className="px-4 py-3">錯誤</th>
               </tr></thead>
-              <tbody>{data.top_routes.map((route) => {
+              <tbody>{routes.map((route) => {
                 const feedbackStatus = budgetStatus(route.interaction_feedback_p75_ms, 100, 200);
                 const completionStatus = budgetStatus(route.interaction_completion_p75_ms, 500, 2_000);
                 const api = route.api_latency_p95_ms_by_kind ?? {};
+                const webVitals = route.web_vitals ?? {};
                 return <tr key={route.path} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
                   <td className="px-4 py-3 font-medium">{route.path}</td>
                   <td className="px-4 py-3">{route.pageviews}</td>
-                  <td className="px-4 py-3 text-xs">{formatNumber(route.web_vitals.lcp_p75, " ms")} / {formatNumber(route.web_vitals.inp_p75, " ms")} / {formatNumber(route.web_vitals.cls_p75)}</td>
+                  <td className="px-4 py-3 text-xs">{formatNumber(webVitals.lcp_p75, " ms")} / {formatNumber(webVitals.inp_p75, " ms")} / {formatNumber(webVitals.cls_p75)}</td>
                   <td className="px-4 py-3 text-xs"><div style={{ color: budgetColor(feedbackStatus) }}>{formatNumber(route.interaction_feedback_p75_ms, " ms")} <span className="text-[10px]">回饋</span></div><div style={{ color: budgetColor(completionStatus) }}>{formatNumber(route.interaction_completion_p75_ms, " ms")} <span className="text-[10px]">完成</span></div></td>
                   <td className="px-4 py-3 text-xs"><div>GET {formatNumber(api.simple_get?.p95_ms, " ms")}</div><div>CRUD {formatNumber(api.crud?.p95_ms, " ms")}</div><div>重型 {formatNumber(api.heavy?.p95_ms, " ms")}</div></td>
                   <td className="px-4 py-3" style={{ color: route.api_errors ? "var(--error)" : "var(--success)" }}>{route.api_errors}</td>

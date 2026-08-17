@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, desc, or_, select
+from sqlalchemy import and_, case, desc, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import load_only
 
@@ -49,6 +49,7 @@ from api.services.task_priority import prioritize_tasks
 logger = logging.getLogger(__name__)
 
 TASK_INBOX_CACHE_TTL_SECONDS = 45
+TASK_COUNT_CACHE_TTL_SECONDS = 30
 
 
 def _has(perms: frozenset[str], is_admin: bool, code: str) -> bool:
@@ -647,6 +648,235 @@ def task_count_from_inbox(inbox: TaskInboxResponse) -> TaskCountResponse:
         by_module=inbox.by_module,
         urgent_count=sum(1 for item in inbox.items if item.severity == "critical"),
     )
+
+
+async def _run_task_count_query(db: AsyncSession, statement: object) -> tuple[int, int]:
+    async def execute(source_db: AsyncSession) -> tuple[int, int]:
+        total, urgent = (await source_db.execute(statement)).one()  # type: ignore[arg-type]
+        return int(total or 0), int(urgent or 0)
+
+    if isinstance(db.bind, AsyncEngine):
+        async with AsyncSessionLocal() as source_db:
+            return await execute(source_db)
+    return await execute(db)
+
+
+async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResponse:
+    """以 COUNT 查詢取得徽章數量，避免為共用 Topbar 載入完整待辦資料。"""
+    cache_key = f"task_count:{user.id}"
+    cached = await cache_get(cache_key)
+    if isinstance(cached, dict):
+        try:
+            return TaskCountResponse.model_validate(cached)
+        except Exception:
+            logger.debug("task count cache payload invalid user=%s", user.id, exc_info=True)
+
+    perms = await get_user_permission_codes(db, user.id)
+    is_admin = bool(getattr(user, "is_superuser", False))
+    now = datetime.now(UTC)
+    cutoff_72h = now + timedelta(hours=72)
+    cutoff_48h = now + timedelta(hours=48)
+    count_queries: list[tuple[str, object]] = []
+
+    if _has(perms, is_admin, "document:approve"):
+        active_assignment = select(DocumentApprovalDelegation.id).where(
+            DocumentApprovalDelegation.principal_user_id == DocumentApproval.approver_id,
+            DocumentApprovalDelegation.delegate_user_id == user.id,
+            DocumentApprovalDelegation.org_id == Document.org_id,
+            DocumentApprovalDelegation.is_active.is_(True),
+            DocumentApprovalDelegation.start_at <= now,
+            or_(
+                DocumentApprovalDelegation.end_at.is_(None),
+                DocumentApprovalDelegation.end_at >= now,
+            ),
+        )
+        count_queries.append(
+            (
+                "document",
+                select(func.count(DocumentApproval.id), literal(0))
+                .select_from(DocumentApproval)
+                .join(Document, DocumentApproval.document_id == Document.id)
+                .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+                .where(
+                    or_(
+                        DocumentApproval.approver_id == user.id,
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.MANUAL,
+                            DocumentApproval.delegate_id == user.id,
+                        ),
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
+                            active_assignment.exists(),
+                        ),
+                    )
+                ),
+            )
+        )
+
+    count_queries.extend(
+        [
+            (
+                "meeting",
+                select(func.count(Meeting.id), literal(0))
+                .select_from(Meeting)
+                .join(MeetingAttendance, MeetingAttendance.meeting_id == Meeting.id)
+                .where(MeetingAttendance.user_id == user.id)
+                .where(MeetingAttendance.status != AttendanceStatus.ABSENT)
+                .where(
+                    Meeting.status.in_(
+                        [MeetingStatus.DRAFT, MeetingStatus.ACTIVE, MeetingStatus.PAUSED]
+                    )
+                )
+                .where(Meeting.starts_at.is_not(None))
+                .where(Meeting.starts_at >= now, Meeting.starts_at <= cutoff_72h),
+            ),
+            (
+                "survey",
+                select(func.count(Survey.id), literal(0))
+                .select_from(Survey)
+                .where(Survey.status == SurveyStatus.OPEN),
+            ),
+            (
+                "calendar",
+                select(
+                    func.count(CalendarEventChecklistItem.id),
+                    func.count(case((CalendarEventChecklistItem.due_at < now, 1))),
+                )
+                .select_from(CalendarEventChecklistItem)
+                .join(CalendarEvent, CalendarEvent.id == CalendarEventChecklistItem.event_id)
+                .where(CalendarEventChecklistItem.assignee_id == user.id)
+                .where(CalendarEventChecklistItem.is_done.is_(False))
+                .where(CalendarEvent.is_active.is_(True)),
+            ),
+            (
+                "calendar",
+                select(func.count(CalendarEvent.id), literal(0))
+                .select_from(CalendarEvent)
+                .join(
+                    CalendarEventParticipant, CalendarEventParticipant.event_id == CalendarEvent.id
+                )
+                .where(CalendarEventParticipant.user_id == user.id)
+                .where(CalendarEvent.starts_at >= now, CalendarEvent.starts_at <= cutoff_72h)
+                .where(CalendarEvent.is_active.is_(True)),
+            ),
+            (
+                "work_item",
+                select(
+                    func.count(WorkItem.id),
+                    func.count(case((WorkItem.due_at < now, 1))),
+                )
+                .select_from(WorkItem)
+                .where(WorkItem.assigned_to_id == user.id)
+                .where(WorkItem.status == WorkItemStatus.OPEN)
+                .where(WorkItem.is_active.is_(True)),
+            ),
+        ]
+    )
+
+    if is_admin or _has(perms, is_admin, "president:publish"):
+        count_queries.append(
+            (
+                "regulation",
+                select(func.count(Regulation.id), func.count(Regulation.id))
+                .select_from(Regulation)
+                .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED),
+            )
+        )
+    if (
+        is_admin
+        or _has(perms, is_admin, "regulation:schedule")
+        or _has(perms, is_admin, "regulation:council_approve")
+    ):
+        count_queries.append(
+            (
+                "regulation",
+                select(func.count(Regulation.id), literal(0))
+                .select_from(Regulation)
+                .where(
+                    Regulation.workflow_status.in_(
+                        [RegulationWorkflowStatus.UNDER_REVIEW, RegulationWorkflowStatus.SCHEDULED]
+                    )
+                ),
+            )
+        )
+    if is_admin or any(permission.startswith("petition:") for permission in perms):
+        count_queries.append(
+            (
+                "petition",
+                select(func.count(PetitionCase.id), literal(0))
+                .select_from(PetitionCase)
+                .where(PetitionCase.assigned_to_id == user.id)
+                .where(
+                    PetitionCase.status.in_(
+                        [
+                            PetitionStatus.SUBMITTED,
+                            PetitionStatus.IN_PROGRESS,
+                            PetitionStatus.NEEDS_INFO,
+                        ]
+                    )
+                ),
+            )
+        )
+    if is_admin or _has(perms, is_admin, "announcement:publish"):
+        count_queries.append(
+            (
+                "announcement",
+                select(func.count(Announcement.id), literal(0))
+                .select_from(Announcement)
+                .where(Announcement.is_published.is_(False)),
+            )
+        )
+    if is_admin or _has(perms, is_admin, "shop:manage"):
+        count_queries.append(
+            (
+                "shop",
+                select(func.count(Product.id), literal(0))
+                .select_from(Product)
+                .where(Product.status == ProductStatus.ACTIVE)
+                .where(Product.sale_end.is_not(None))
+                .where(Product.sale_end >= now, Product.sale_end <= cutoff_48h),
+            )
+        )
+    if (
+        is_admin
+        or _has(perms, is_admin, "meal:manage")
+        or _has(perms, is_admin, "meal:manage_schedule")
+    ):
+        count_queries.append(
+            (
+                "meal",
+                select(func.count(MenuSchedule.id), literal(0))
+                .select_from(MenuSchedule)
+                .where(MenuSchedule.is_closed.is_(False))
+                .where(
+                    MenuSchedule.order_deadline >= now, MenuSchedule.order_deadline <= cutoff_48h
+                ),
+            )
+        )
+
+    async def run_query(module: str, statement: object) -> tuple[str, int, int]:
+        total, urgent = await _run_task_count_query(db, statement)
+        return module, total, urgent
+
+    calls = [run_query(module, statement) for module, statement in count_queries]
+    if isinstance(db.bind, AsyncEngine):
+        results = await asyncio.gather(*calls)
+    else:
+        results = [await call for call in calls]
+
+    by_module: dict[str, int] = {}
+    urgent_count = 0
+    for module, total, urgent in results:
+        if total:
+            by_module[module] = by_module.get(module, 0) + total
+        urgent_count += urgent
+    response = TaskCountResponse(
+        total=sum(by_module.values()),
+        by_module=by_module,
+        urgent_count=urgent_count,
+    )
+    await cache_set(cache_key, response.model_dump(mode="json"), ttl=TASK_COUNT_CACHE_TTL_SECONDS)
+    return response
 
 
 async def build_task_inbox_cached(db: AsyncSession, user: User) -> TaskInboxResponse:

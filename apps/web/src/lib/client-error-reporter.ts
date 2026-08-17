@@ -89,6 +89,13 @@ function errorDetails(value: unknown): { message: string; stack?: string } {
   }
 }
 
+function resourceUrl(target: Element): string | null {
+  if (target instanceof HTMLImageElement) return target.currentSrc || target.src || null;
+  if (target instanceof HTMLScriptElement) return target.src || null;
+  if (target instanceof HTMLLinkElement) return target.href || null;
+  return target.getAttribute("src") || target.getAttribute("href");
+}
+
 /** 安裝 window error / unhandledrejection 入口，涵蓋未經 React boundary 的錯誤。 */
 export function installGlobalClientErrorReporter(): () => void {
   if (typeof window === "undefined") return () => undefined;
@@ -97,8 +104,12 @@ export function installGlobalClientErrorReporter(): () => void {
     const target = event.target;
     const details = errorDetails(event.error ?? event.message);
     const resource = target instanceof Element;
+    const failedResource = resource ? resourceUrl(target) : null;
     reportClientError({
       ...details,
+      message: resource
+        ? `${details.message || "資源載入失敗"}${failedResource ? ` [${failedResource}]` : ""}`
+        : details.message,
       scope: resource ? `resource:${target.tagName.toLowerCase()}` : "window.error",
     });
   };
