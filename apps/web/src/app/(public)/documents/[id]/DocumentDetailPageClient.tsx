@@ -194,7 +194,11 @@ export default function DocumentDetailPageClient({
       setForbidden(false);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
+        setDoc(null);
         setForbidden(true);
+      } else if (e instanceof ApiError && e.status === 404) {
+        setDoc(null);
+        setForbidden(false);
       } else {
         setForbidden(false);
         toast.error(apiErrorMessage(e, "載入失敗"));
@@ -203,13 +207,11 @@ export default function DocumentDetailPageClient({
   }, [id]);
 
   useEffect(() => {
-    if (initialDoc) {
-      setDoc(initialDoc);
-      setForbidden(false);
-      setLoading(false);
-      return;
-    }
-    setDoc(null);
+    // The route is shared with the public page. Its SSR data is fetched
+    // without credentials and may come from the public cache, so it cannot
+    // be used as the authenticated document state.
+    setDoc(initialDoc);
+    setForbidden(false);
     setLoading(true);
     void fetchDoc();
   }, [fetchDoc, initialDoc]);
