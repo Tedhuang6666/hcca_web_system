@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.cache import cache_invalidate_dashboard
+from api.core.cache import cache_get, cache_invalidate_dashboard, cache_set
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
@@ -34,6 +34,20 @@ router = APIRouter(prefix="/announcements", tags=["公告系統"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
+
+_PUBLIC_ACTIVE_URGENT_CACHE_KEY = "announcement:active-urgent:public:v1"
+_PUBLIC_ACTIVE_URGENT_CACHE_TTL_SECONDS = 10
+_PUBLIC_ANNOUNCEMENT_LIST_CACHE_TTL_SECONDS = 30
+
+
+def _public_announcement_list_cache_key(
+    org_id: uuid.UUID | None,
+    activity_id: uuid.UUID | None,
+    skip: int,
+    limit: int,
+) -> str:
+    return f"announcement:public-list:v1:{org_id or 'all'}:{activity_id or 'all'}:{skip}:{limit}"
+
 
 # 持有任一公告管理權限者可檢視所有公告（不受對象限制）
 _MANAGE_CODES = frozenset(
@@ -112,11 +126,29 @@ def _enrich(ann: object, storage_url_fn: object = None) -> AnnouncementOut:
 )
 async def get_active_urgent(db: DbDep, viewer: OptionalUser) -> AnnouncementOut | None:
     """回傳目前有效且檢視者可見的重要公告（首頁 Popup 使用）；無則回傳 null。"""
+    if viewer is None:
+        cached = await cache_get(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+        if isinstance(cached, dict) and "value" in cached:
+            value = cached["value"]
+            return AnnouncementOut.model_validate(value) if isinstance(value, dict) else None
     scope = await _viewer_scope(db, viewer)
     ann = await ann_svc.get_active_urgent(db, scope=scope)
     if ann is None:
+        if viewer is None:
+            await cache_set(
+                _PUBLIC_ACTIVE_URGENT_CACHE_KEY,
+                {"value": None},
+                ttl=_PUBLIC_ACTIVE_URGENT_CACHE_TTL_SECONDS,
+            )
         return None
-    return _enrich(ann)
+    result = _enrich(ann)
+    if viewer is None:
+        await cache_set(
+            _PUBLIC_ACTIVE_URGENT_CACHE_KEY,
+            {"value": result.model_dump(mode="json")},
+            ttl=_PUBLIC_ACTIVE_URGENT_CACHE_TTL_SECONDS,
+        )
+    return result
 
 
 @router.get("", response_model=list[AnnouncementListItem], summary="列出已發布公告")
@@ -129,6 +161,15 @@ async def list_announcements(
     limit: int = Query(20, ge=1, le=100),
 ) -> list[AnnouncementListItem]:
     """列出已發布且檢視者可見的公告，依發布時間倒序排列。"""
+    cache_key = None
+    if viewer is None:
+        cache_key = _public_announcement_list_cache_key(org_id, activity_id, skip, limit)
+        cached = await cache_get(cache_key)
+        if isinstance(cached, list):
+            try:
+                return [AnnouncementListItem.model_validate(item) for item in cached]
+            except Exception:
+                pass
     scope = await _viewer_scope(db, viewer)
     anns = await ann_svc.list_announcements(
         db,
@@ -146,6 +187,12 @@ async def list_announcements(
         if author:
             item.author_name = getattr(author, "display_name", "")
         result.append(item)
+    if cache_key is not None:
+        await cache_set(
+            cache_key,
+            [item.model_dump(mode="json") for item in result],
+            ttl=_PUBLIC_ANNOUNCEMENT_LIST_CACHE_TTL_SECONDS,
+        )
     return result
 
 
