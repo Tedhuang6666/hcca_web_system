@@ -2130,23 +2130,30 @@ async def public_screen(token: str, session: DbDep) -> dict:
 async def public_screen_ws(websocket: WebSocket, token: str) -> None:
     from api.core.database import AsyncSessionLocal
 
-    async with AsyncSessionLocal() as session:
-        meeting = await meeting_svc.get_meeting_by_screen_token(session, token)
-        if meeting is None:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="找不到此大屏")
-            return
-        room = f"meeting-screen:{token}"
-        await manager.connect(websocket, room)
-        await websocket.send_json(
-            manager.build_message(
-                "meeting.screen_snapshot",
-                await meeting_svc.screen_payload(session, meeting),
-                room=room,
-            )
-        )
-
+    room = f"meeting-screen:{token}"
+    connected = False
     try:
+        await manager.connect(websocket, room)
+        connected = True
+        async with AsyncSessionLocal() as session:
+            meeting = await meeting_svc.get_meeting_by_screen_token(session, token)
+            if meeting is None:
+                await websocket.close(
+                    code=status.WS_1008_POLICY_VIOLATION,
+                    reason="找不到此大屏",
+                )
+                return
+            await websocket.send_json(
+                manager.build_message(
+                    "meeting.screen_snapshot",
+                    await meeting_svc.screen_payload(session, meeting),
+                    room=room,
+                )
+            )
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(websocket, room)
+        pass
+    finally:
+        if connected:
+            manager.disconnect(websocket, room)

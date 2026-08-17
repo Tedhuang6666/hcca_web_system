@@ -19,7 +19,8 @@ COPY --from=builder /build/.venv /app/.venv
 COPY apps/discord-bot/src /app/src
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    HOME="/home/appuser" \
+    HOME="/tmp" \
+    XDG_CACHE_HOME="/tmp/.cache" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app/src"

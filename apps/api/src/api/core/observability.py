@@ -11,6 +11,16 @@ _api_initialized = False
 _celery_initialized = False
 
 
+def _otel_headers() -> dict[str, str]:
+    """Parse OTLP headers without exposing credentials in application logs."""
+    headers: dict[str, str] = {}
+    for item in settings.OTEL_EXPORTER_OTLP_HEADERS.split(","):
+        key, separator, value = item.partition("=")
+        if key.strip() and separator and value.strip():
+            headers[key.strip()] = value.strip()
+    return headers
+
+
 def init_api_tracing(app: object, *, engine: object) -> bool:
     """Instrument FastAPI and SQLAlchemy when an OTLP collector is configured."""
     global _api_initialized
@@ -53,7 +63,10 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
                 OTLPSpanExporter,
             )
 
-            exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
+            exporter = OTLPSpanExporter(
+                endpoint=f"{endpoint}/v1/traces",
+                headers=_otel_headers(),
+            )
         else:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
                 OTLPSpanExporter,
@@ -62,6 +75,7 @@ def init_api_tracing(app: object, *, engine: object) -> bool:
             exporter = OTLPSpanExporter(
                 endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
                 insecure=settings.OTEL_EXPORTER_OTLP_ENDPOINT.startswith("http://"),
+                headers=_otel_headers(),
             )
     except ImportError:
         logger.warning("Configured OpenTelemetry exporter is not installed; tracing disabled")

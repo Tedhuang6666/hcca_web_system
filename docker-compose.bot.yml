@@ -8,6 +8,8 @@ services:
     init: true
     stop_grace_period: 30s
     environment:
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/.cache
       HCCA_API_URL: ${HCCA_DISCORD_BOT_API_URL:?請設定 API 的公開 HTTPS 網址}
       HCCA_API_KEY: ${HCCA_DISCORD_BOT_API_KEY:?請設定 discord:bot API Key}
       HCCA_API_CF_ACCESS_CLIENT_ID: ${HCCA_DISCORD_BOT_CF_ACCESS_CLIENT_ID:-}
