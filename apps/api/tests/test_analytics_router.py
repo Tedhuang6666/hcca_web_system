@@ -336,12 +336,19 @@ async def test_client_metric_batch_accepts_multiple_metrics(
             "items": [
                 {"metric": "fcp", "value": 1200, "path": "/login"},
                 {"metric": "api_latency", "value": 80, "path": "/login", "status": 200},
+                {
+                    "metric": "interaction_feedback",
+                    "value": 42,
+                    "path": "/login",
+                    "interaction_kind": "change",
+                },
+                {"metric": "resource_timing", "value": 180, "path": "/login"},
             ]
         },
     )
 
     assert resp.status_code == 202
-    assert resp.json() == {"status": "accepted", "accepted": 2}
+    assert resp.json() == {"status": "accepted", "accepted": 4}
 
 
 async def test_component_metric_batch_accepts_multiple_metrics(

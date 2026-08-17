@@ -832,8 +832,14 @@ async def overview(session: AsyncSession) -> dict:
     # The overview is requested by the admin UI and the agent snapshot. Do not
     # block either response on a cold sitemap fetch; PSI rows already contain
     # the monitored URL set, while RUM adds routes that were actually visited.
+    try:
+        discovered_catalog = await asyncio.wait_for(discover_public_urls(), timeout=1.5)
+    except Exception:  # noqa: BLE001
+        # The dashboard must remain responsive when the production sitemap is slow;
+        # the next refresh retries while retaining the known configured/PSI routes.
+        discovered_catalog = critical_urls()
     discovered_urls = _merge_rum_urls(
-        list(dict.fromkeys([*critical_urls(), *(page["url"] for page in pages)])), rum
+        list(dict.fromkeys([*discovered_catalog, *(page["url"] for page in pages)])), rum
     )
     rum_paths = {
         _normalize_client_path(route.get("path"))

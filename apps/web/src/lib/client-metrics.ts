@@ -15,7 +15,7 @@ type ClientMetric = {
   response_end_ms?: number;
   interaction_id?: string;
   interaction_name?: string;
-  interaction_kind?: "click" | "submit";
+  interaction_kind?: "click" | "submit" | "change";
   operation_kind?: "simple_get" | "crud" | "heavy";
   method?: string;
   budget_ms?: number;
@@ -47,7 +47,7 @@ let interactionObserverInstalled = false;
 let activeInteraction: {
   id: string;
   name: string;
-  kind: "click" | "submit";
+  kind: "click" | "submit" | "change";
   path: string;
   startedAt: number;
   feedbackRecorded: boolean;
@@ -177,7 +177,7 @@ function recordInteractionFeedback(interaction: NonNullable<typeof activeInterac
   finishInteractionIfComplete();
 }
 
-function beginInteraction(element: HTMLElement, kind: "click" | "submit"): void {
+function beginInteraction(element: HTMLElement, kind: "click" | "submit" | "change"): void {
   if (activeInteraction && performance.now() - activeInteraction.startedAt < 50) return;
   const startedAt = performance.now();
   const interaction = {
@@ -260,12 +260,21 @@ export function observeInteractions(): () => void {
     const element = actionForTarget(event.target, "form,[data-performance-action]");
     if (element) beginInteraction(element, "submit");
   };
+  const handleChange = (event: Event) => {
+    const element = actionForTarget(
+      event.target,
+      "[data-performance-action],select,input[type='checkbox'],input[type='radio']",
+    );
+    if (element) beginInteraction(element, "change");
+  };
 
   document.addEventListener("click", handleClick, true);
   document.addEventListener("submit", handleSubmit, true);
+  document.addEventListener("change", handleChange, true);
   return () => {
     document.removeEventListener("click", handleClick, true);
     document.removeEventListener("submit", handleSubmit, true);
+    document.removeEventListener("change", handleChange, true);
     interactionObserverInstalled = false;
   };
 }
