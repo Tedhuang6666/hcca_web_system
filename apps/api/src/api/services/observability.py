@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 CLIENT_TELEMETRY_KEY = "observability:client-telemetry:v1"
 CLIENT_TELEMETRY_MAX_ITEMS = 20_000
 CLIENT_TELEMETRY_RETENTION_SECONDS = 172_800
+CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS = 10
 CLIENT_VITAL_METRICS = {"fcp", "lcp", "inp", "cls"}
 DISCOVERED_URLS_CACHE_TTL_SECONDS = 300
 API_OPERATION_KINDS = {
@@ -132,6 +133,11 @@ def _budget_status(value: float | None, good: float, needs_improvement: float) -
 
 async def client_route_analytics(window_hours: int = 24) -> dict:
     """Aggregate route-level RUM without exposing individual visitors or URLs with queries."""
+    cache_key = f"observability:rum:v1:{max(1, min(window_hours, 168))}h"
+    cached = await cache_get(cache_key)
+    if isinstance(cached, dict):
+        return cached
+
     cutoff = time.time() - max(1, min(window_hours, 168)) * 3600
     try:
         raw_items = await redis_client.lrange(
@@ -264,13 +270,15 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
         )
     routes.sort(key=lambda item: (item["pageviews"], sum(item["samples"].values())), reverse=True)
     total_pageviews = sum(route["pageviews"] for route in routes)
-    return {
+    result = {
         "available": True,
         "source": "first_party_redis",
         "window_hours": window_hours,
         "pageviews": total_pageviews,
         "routes": routes,
     }
+    await cache_set(cache_key, result, ttl=CLIENT_TELEMETRY_ANALYTICS_CACHE_TTL_SECONDS)
+    return result
 
 
 def _same_origin(url: str, base_url: str) -> bool:
