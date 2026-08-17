@@ -7,7 +7,22 @@ import type {
   ProductAnalyticsOut,
   SurveyParticipationItem,
 } from "../types";
-import { get, post } from "./core";
+import { BASE, get, post } from "./core";
+
+function hasCsrfCookie(): boolean {
+  return typeof document !== "undefined"
+    && document.cookie.split(";").some((item) => item.trim().startsWith("csrf_token="));
+}
+
+async function ensureCsrfCookie(): Promise<boolean> {
+  if (typeof document === "undefined" || hasCsrfCookie()) return true;
+  try {
+    await fetch(`${BASE}/ready`, { credentials: "include", cache: "no-store" });
+  } catch {
+    return false;
+  }
+  return hasCsrfCookie();
+}
 
 export const analyticsApi = {
   product: (params?: { date_from?: string; date_to?: string }) => {
@@ -16,10 +31,11 @@ export const analyticsApi = {
     if (params?.date_to) q.set("date_to", params.date_to);
     return get<ProductAnalyticsOut>(`/analytics/product${q.size ? `?${q}` : ""}`);
   },
-  trackPageView: (path: string) => {
+  trackPageView: async (path: string) => {
     // analytics_page_views.path is intentionally bounded; oversized editor URLs
     // should never turn a background telemetry request into a 422.
     const boundedPath = path.length > 255 ? `${path.slice(0, 252)}...` : path;
+    if (!(await ensureCsrfCookie())) return;
     return post<void>("/analytics/page-views", { path: boundedPath });
   },
   documentEfficiency: (params?: { org_id?: string; date_from?: string; date_to?: string }) => {
