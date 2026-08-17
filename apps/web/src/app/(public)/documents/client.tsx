@@ -250,6 +250,10 @@ export default function DocumentListClient({
     if (filters.orgId) initialParams.org_id = filters.orgId;
     if (filters.activityId) initialParams.activity_id = filters.activityId;
 
+    const documentsRequest = initialDocs !== null && !userId
+      ? Promise.resolve(initialDocs)
+      : documentsApi.list(initialParams).catch(() => null);
+
     Promise.all([
       cacheHas("documents/orgs")
         ? Promise.resolve(cacheGet<OrgRead[]>("documents/orgs")!)
@@ -257,7 +261,7 @@ export default function DocumentListClient({
           ? withFallback(orgsApi.list({ active_only: true }), [])
           : Promise.resolve([]),
       userId ? withFallback(savedFiltersApi.list("documents"), []) : Promise.resolve([]),
-      documentsApi.list(initialParams).catch(() => null),
+      documentsRequest,
     ]).then(([orgsRes, savedFiltersRes, docsRes]) => {
       setOrgs(orgsRes as OrgRead[]);
       if (!cacheHas("documents/orgs")) cacheSet("documents/orgs", orgsRes);
