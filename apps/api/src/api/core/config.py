@@ -205,6 +205,8 @@ class Settings(BaseSettings):
     OTEL_ENABLED: bool = False
     OTEL_SERVICE_NAME: str = "hcca-api"
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
+    # 逗號分隔的 OTLP headers，例如 authorization=Bearer <token>。
+    OTEL_EXPORTER_OTLP_HEADERS: str = ""
     OTEL_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
 
     # --- Incident persistence / recovery guardrails ---
@@ -689,6 +691,19 @@ class Settings(BaseSettings):
         if is_prod and "*" in self.ALLOWED_HOSTS:
             raise ValueError("生產環境 ALLOWED_HOSTS 不可包含 '*'；請明確列出允許 Host")
         if is_prod:
+            database_host = (urlsplit(self.DATABASE_URL).hostname or "").lower()
+            database_port = urlsplit(self.DATABASE_URL).port
+            if self.DB_USE_PGBOUNCER and (
+                database_host in {"db", "localhost", "127.0.0.1", "::1"} or database_port == 5432
+            ):
+                raise ValueError(
+                    "生產環境 DB_USE_PGBOUNCER=true 時，DATABASE_URL 必須指向 PgBouncer，"
+                    "不可直接連 db:5432"
+                )
+            if not self.DB_USE_PGBOUNCER and database_host == "pgbouncer":
+                raise ValueError(
+                    "生產環境 DB_USE_PGBOUNCER=false 時，DATABASE_URL 不可指向 PgBouncer"
+                )
             service_urls = (
                 ("DATABASE_URL", self.DATABASE_URL),
                 ("REDIS_URL", self.REDIS_URL),

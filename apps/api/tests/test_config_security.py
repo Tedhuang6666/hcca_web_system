@@ -102,6 +102,26 @@ def test_production_rejects_local_service_urls(field_name: str, local_url: str) 
         _make(**overrides)
 
 
+def test_production_rejects_direct_db_when_pgbouncer_is_enabled() -> None:
+    with pytest.raises(ValidationError, match="DB_USE_PGBOUNCER"):
+        _make(
+            ENVIRONMENT="production",
+            COOKIE_SECURE=True,
+            DB_USE_PGBOUNCER=True,
+            DATABASE_URL="postgresql+asyncpg://user:pass@db:5432/campus",
+        )
+
+
+def test_production_rejects_pgbouncer_url_when_disabled() -> None:
+    with pytest.raises(ValidationError, match="DB_USE_PGBOUNCER"):
+        _make(
+            ENVIRONMENT="production",
+            COOKIE_SECURE=True,
+            DB_USE_PGBOUNCER=False,
+            DATABASE_URL="postgresql+asyncpg://user:pass@pgbouncer:6432/campus",
+        )
+
+
 def test_email_lists_are_lowercased_and_stripped() -> None:
     s = _make(SUPERUSER_EMAILS=["  Admin@Example.com  ", "", "@user@x.com"])
     assert s.SUPERUSER_EMAILS == ["admin@example.com", "user@x.com"]
