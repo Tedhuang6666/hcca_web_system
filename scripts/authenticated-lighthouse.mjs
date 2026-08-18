@@ -271,6 +271,24 @@ const chrome = await launchChrome({
 });
 
 const runs = [];
+const persistenceBatchSize = 10;
+let persistedRuns = 0;
+
+async function persistRuns(batch) {
+  if (batch.length === 0) return;
+  await requestJson(
+    authenticated
+      ? "/api/internal/observability/authenticated-runs"
+      : "/api/internal/observability/public-runs",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ release, runs: batch }),
+    },
+    { retries: 10 },
+  );
+}
+
 let browser;
 try {
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${chrome.port}`);
@@ -307,6 +325,10 @@ try {
         });
       }
     }
+    if (runs.length - persistedRuns >= persistenceBatchSize) {
+      await persistRuns(runs.slice(persistedRuns));
+      persistedRuns = runs.length;
+    }
   }
 } finally {
   try {
@@ -321,20 +343,8 @@ try {
   }
 }
 
-const persistenceBatchSize = 180;
-for (let offset = 0; offset < runs.length; offset += persistenceBatchSize) {
-  await requestJson(
-    authenticated
-      ? "/api/internal/observability/authenticated-runs"
-      : "/api/internal/observability/public-runs",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ release, runs: runs.slice(offset, offset + persistenceBatchSize) }),
-    },
-    { retries: 10 },
-  );
-}
+await persistRuns(runs.slice(persistedRuns));
+persistedRuns = runs.length;
 
 const failures = runs.filter(
   (run) => run.status !== "ok" || run.performance_score == null || run.performance_score < minimumScore,
@@ -355,6 +365,7 @@ const summary = {
   minimum_score: minimumScore,
   targets: targets.length,
   runs: runs.length,
+  persisted_runs: persistedRuns,
   passed: runs.length - failures.length,
   failed: failures.length,
   failures,
