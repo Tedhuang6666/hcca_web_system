@@ -61,4 +61,24 @@ describe("usePermissions", () => {
     expect(result.current.isAdmin).toBe(true);
     expect(result.current.can("anything:at-all")).toBe(true);
   });
+
+  it("restores cached permissions when hydration starts after document load", () => {
+    sessionStorage.setItem("permissions", JSON.stringify(["hydration:permission"]));
+    const previousReadyState = document.readyState;
+    Object.defineProperty(document, "readyState", {
+      configurable: true,
+      value: "complete",
+    });
+
+    try {
+      const { result } = renderHook(() => usePermissions());
+
+      expect(result.current.permissions.has("hydration:permission")).toBe(true);
+    } finally {
+      Object.defineProperty(document, "readyState", {
+        configurable: true,
+        value: previousReadyState,
+      });
+    }
+  });
 });
