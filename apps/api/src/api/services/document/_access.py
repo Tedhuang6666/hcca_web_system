@@ -434,9 +434,13 @@ async def check_document_access(
 ) -> bool:
     if await user_has_full_document_access(session, doc, user_id):
         return True
-    # 公開狀態同時支援新欄位與舊版 is_public 旗標；兩者必須共用同一套
-    # 判定，避免未登入列表能看到、登入後詳情卻被 403 的身份切換問題。
-    return can_anonymous_access_document(doc)
+    # 登入者可查看 PUBLIC（需登入）與 PUBLICLY_OPEN（免登入）公文；
+    # 舊版資料的 is_public 旗標也必須保留相容性。機密分類一律不可透過公開
+    # 狀態取得，避免未登入列表與登入後詳情的安全規則不一致。
+    return (
+        doc.visibility_level in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}
+        or doc.is_public is True
+    ) and not is_sensitive_document(doc)
 
 
 async def _build_visibility_filter(
