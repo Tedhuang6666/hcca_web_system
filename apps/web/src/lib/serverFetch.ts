@@ -139,6 +139,17 @@ export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut |
   return getCachedPublicJson<AnnouncementOut | null>("/announcements/active-urgent");
 }
 
+export async function fetchPublicShellData(): Promise<{
+  bundle: PublicSiteBundleOut | null;
+  urgentAnnouncement: AnnouncementOut | null;
+}> {
+  const [bundle, urgentAnnouncement] = await Promise.all([
+    fetchPublicBundle(),
+    fetchActiveUrgentAnnouncement(),
+  ]);
+  return { bundle, urgentAnnouncement };
+}
+
 export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]> {
   return (await getCachedPublicJson<ModuleStatusPublic[]>("/system/module-status")) ?? [];
 }

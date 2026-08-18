@@ -7,7 +7,7 @@ import NavigationProgress from "@/components/layout/NavigationProgress";
 import AccessBlockGuard from "@/components/security/AccessBlockGuard";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import PerformanceProvider from "@/components/providers/PerformanceProvider";
-import { getServerSession } from "@/lib/server/session";
+import { getServerImportantAnnouncement, getServerSession } from "@/lib/server/session";
 import "../design-system.css";
 
 // 受保護頁面使用 per-request CSP nonce；禁止 Next 將含有 inline bootstrap
@@ -22,7 +22,10 @@ export const metadata: Metadata = {
 };
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const initialUser = await getServerSession();
+  const [initialUser, initialImportantAnnouncement] = await Promise.all([
+    getServerSession(),
+    getServerImportantAnnouncement(),
+  ]);
 
   return (
     <>
@@ -30,7 +33,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <NavigationProgress />
       <ScrollProgressBar />
       <PerformanceProvider>
-        <AppShell initialUser={initialUser}>{children}</AppShell>
+        <AppShell
+          initialUser={initialUser}
+          initialImportantAnnouncement={initialImportantAnnouncement}
+        >
+          {children}
+        </AppShell>
       </PerformanceProvider>
       <AppEnhancements />
       <Toaster

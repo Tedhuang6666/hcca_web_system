@@ -32,13 +32,15 @@ export function useFetch<T>(
 
   const hasCached = resolvedKey ? cacheHas(resolvedKey) : false;
   const cachedValue = resolvedKey ? cacheGet<T>(resolvedKey) : undefined;
+  const hasInitialData = initialValue !== undefined &&
+    (!Array.isArray(initialValue) || initialValue.length > 0);
 
   const [data, setData] = useState<T | undefined>(() => {
     if (hasCached && cachedValue !== undefined) return cachedValue;
     return initialValue;
   });
   // 有快取時跳過 loading，直接顯示舊資料；背景靜默更新
-  const [loading, setLoading] = useState(!hasCached && !skipInitialFetch);
+  const [loading, setLoading] = useState(!hasCached && !skipInitialFetch && !hasInitialData);
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
@@ -58,7 +60,7 @@ export function useFetch<T>(
 
     // 有快取時只靜默背景更新，不顯示 loading
     const isStale = resolvedKey ? !cacheHas(resolvedKey) : true;
-    if (isStale) setLoading(true);
+    if (isStale && !hasInitialData) setLoading(true);
 
     const request = resolvedKey
       ? cacheRequest(resolvedKey, (signal) => fetcherRef.current(signal), controller.signal)

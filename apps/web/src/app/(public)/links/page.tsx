@@ -1,7 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { fetchPublicBundle } from "@/lib/serverFetch";
+import { fetchPublicShellData } from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
 import type { PublicLinkOut } from "@/lib/types";
 
@@ -13,7 +13,7 @@ export const metadata = pageMetadata({
 });
 
 export default async function LinksPage() {
-  const bundle = await fetchPublicBundle();
+  const { bundle, urgentAnnouncement } = await fetchPublicShellData();
 
   const grouped = new Map<string, PublicLinkOut[]>();
   for (const link of bundle?.links ?? []) {
@@ -23,7 +23,11 @@ export default async function LinksPage() {
   const groupEntries = Array.from(grouped.entries());
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
+    <PublicSiteShell
+      navPages={bundle?.nav_pages ?? []}
+      settings={bundle?.settings}
+      urgentAnnouncement={urgentAnnouncement}
+    >
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <header className="mb-8 text-center">
           <p className="text-sm font-semibold text-[var(--primary)]">Linktree</p>

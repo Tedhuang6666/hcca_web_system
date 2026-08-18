@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { BRANDING } from "@/lib/branding";
-import { fetchAnnouncement, fetchPublicBundle } from "@/lib/serverFetch";
+import { fetchAnnouncement, fetchPublicShellData } from "@/lib/serverFetch";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
@@ -35,7 +35,7 @@ export default async function PublicNewsDetailPage({
 }) {
   const { id } = await params;
   const [bundle, item] = await Promise.all([
-    fetchPublicBundle(),
+    fetchPublicShellData(),
     fetchAnnouncement(id),
   ]);
 
@@ -68,7 +68,11 @@ export default async function PublicNewsDetailPage({
         { name: "最新公告", url: absoluteUrl("/news") },
         { name: item.title, url: canonical },
       ])} />
-      <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
+      <PublicSiteShell
+        navPages={bundle.bundle?.nav_pages ?? []}
+        settings={bundle.bundle?.settings}
+        urgentAnnouncement={bundle.urgentAnnouncement}
+      >
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <article className="space-y-5">
           <header className="public-page-head space-y-3">

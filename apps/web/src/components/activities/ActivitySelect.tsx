@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { activitiesApi } from "@/lib/api/activities";
+import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import type { Activity } from "@/lib/types";
 
 type ActivitySelectProps = {
@@ -14,7 +15,30 @@ type ActivitySelectProps = {
   className?: string;
   scope?: "mine" | "all";
   onActivitiesLoaded?: (activities: Activity[]) => void;
+  hideWhenUnauthenticated?: boolean;
 };
+
+function subscribeToAuthChanges(onChange: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener("storage", onChange);
+  window.addEventListener(AUTH_CACHE_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(AUTH_CACHE_EVENT, onChange);
+  };
+}
+
+function getAuthSnapshot() {
+  try {
+    return Boolean(window.localStorage.getItem("user_id"));
+  } catch {
+    return false;
+  }
+}
+
+function getServerAuthSnapshot() {
+  return false;
+}
 
 const STATUS_LABEL: Record<Activity["status"], string> = {
   draft: "草稿",
@@ -33,13 +57,22 @@ export default function ActivitySelect({
   className = "",
   scope = "mine",
   onActivitiesLoaded,
+  hideWhenUnauthenticated = false,
 }: ActivitySelectProps) {
+  const isAuthenticated = useSyncExternalStore(
+    subscribeToAuthChanges,
+    getAuthSnapshot,
+    getServerAuthSnapshot,
+  );
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!hideWhenUnauthenticated);
 
   useEffect(() => {
     let alive = true;
-    if (typeof window === "undefined" || !localStorage.getItem("user_id")) {
+    if (
+      typeof window === "undefined" ||
+      (hideWhenUnauthenticated ? !isAuthenticated : !localStorage.getItem("user_id"))
+    ) {
       setActivities([]);
       onActivitiesLoaded?.([]);
       setLoading(false);
@@ -68,12 +101,16 @@ export default function ActivitySelect({
     return () => {
       alive = false;
     };
-  }, [onActivitiesLoaded, scope]);
+  }, [hideWhenUnauthenticated, isAuthenticated, onActivitiesLoaded, scope]);
 
   const options = useMemo(
     () => activities.filter((activity) => activity.status !== "archived" && activity.is_active),
     [activities],
   );
+
+  if (hideWhenUnauthenticated && !isAuthenticated) {
+    return null;
+  }
 
   if (!loading && options.length === 0 && includeNone) {
     return null;

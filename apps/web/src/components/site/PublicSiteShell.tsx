@@ -4,9 +4,10 @@ import PublicEmblem from "@/components/site/PublicEmblem";
 import PublicSiteBackLink from "@/components/site/PublicSiteBackLink";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
 import { BRANDING } from "@/lib/branding";
+import { fetchActiveUrgentAnnouncement } from "@/lib/serverFetch";
 import type { AnnouncementOut, PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 
-export default function PublicSiteShell({
+export default async function PublicSiteShell({
   children,
   navPages = [],
   settings,
@@ -17,6 +18,13 @@ export default function PublicSiteShell({
   settings?: PublicSiteSettingsOut | null;
   urgentAnnouncement?: AnnouncementOut | null;
 }) {
+  // Resolve the shared announcement on the server so the header's first paint
+  // already has its final height. Fetching is independently cached in
+  // serverFetch, so public pages do not repeat the backend query per request.
+  const resolvedUrgentAnnouncement =
+    urgentAnnouncement === undefined
+      ? await fetchActiveUrgentAnnouncement()
+      : urgentAnnouncement;
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   // PublicSiteHeader is a client component. Pass only its display fields so the
   // RSC payload never includes full page bodies, homepage configuration, or
@@ -34,13 +42,14 @@ export default function PublicSiteShell({
     title: page.title,
     nav_label: page.nav_label,
   }));
-  const headerUrgentAnnouncement = urgentAnnouncement
+  const resolvedHeaderAnnouncement = urgentAnnouncement ?? resolvedUrgentAnnouncement;
+  const headerUrgentAnnouncement = resolvedHeaderAnnouncement
     ? {
-        id: urgentAnnouncement.id,
-        updated_at: urgentAnnouncement.updated_at,
-        link_url: urgentAnnouncement.link_url,
-        title: urgentAnnouncement.title,
-        link_label: urgentAnnouncement.link_label,
+        id: resolvedHeaderAnnouncement.id,
+        updated_at: resolvedHeaderAnnouncement.updated_at,
+        link_url: resolvedHeaderAnnouncement.link_url,
+        title: resolvedHeaderAnnouncement.title,
+        link_label: resolvedHeaderAnnouncement.link_label,
       }
     : null;
 
@@ -55,7 +64,7 @@ export default function PublicSiteShell({
       <PublicSiteHeader
         navPages={headerNavPages}
         settings={headerSettings}
-        urgentAnnouncement={headerUrgentAnnouncement ?? undefined}
+        urgentAnnouncement={headerUrgentAnnouncement}
       />
       <main id="main-content">
         <PublicSiteBackLink />

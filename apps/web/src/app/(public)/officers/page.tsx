@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import PublicOfficerDirectory from "@/components/site/PublicOfficerDirectory";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { pageMetadata } from "@/lib/seo";
-import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
+import { fetchPublicOfficers, fetchPublicShellData } from "@/lib/serverFetch";
 
 export const metadata = pageMetadata({
   title: "班聯會幹部名單",
@@ -14,13 +14,18 @@ export const metadata = pageMetadata({
 });
 
 export default async function OfficersPage() {
-  const [bundle, officers] = await Promise.all([
-    fetchPublicBundle(),
+  const [shellData, officers] = await Promise.all([
+    fetchPublicShellData(),
     fetchPublicOfficers(),
   ]);
+  const bundle = shellData.bundle;
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
+    <PublicSiteShell
+      navPages={bundle?.nav_pages ?? []}
+      settings={bundle?.settings}
+      urgentAnnouncement={shellData.urgentAnnouncement}
+    >
       <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:pt-12">
         <header
           className="public-page-head mb-12 rounded-2xl border p-6 sm:p-8 lg:p-10"
