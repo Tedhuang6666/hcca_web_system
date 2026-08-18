@@ -5,6 +5,7 @@ import { Boxes, RefreshCcw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { useWS } from "@/hooks/useWS";
 import { systemApi, type ModuleStatus, apiErrorMessage } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 5000;
@@ -45,6 +46,12 @@ export default function ModulesPage() {
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [userRoom, setUserRoom] = useState<string | null>(null);
+
+  useEffect(() => {
+    const userId = localStorage.getItem("user_id");
+    setUserRoom(userId ? `user:${userId}` : null);
+  }, []);
 
   const load = useCallback(async () => {
     if (!isAdmin) return;
@@ -63,6 +70,12 @@ export default function ModulesPage() {
     const timer = setInterval(() => void load(), POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [load]);
+
+  useWS(userRoom, useCallback((message) => {
+    if (message.type === "module_maintenance" || message.type === "module_recovery") {
+      void load();
+    }
+  }, [load]), isAdmin);
 
   const setMaintenance = async (
     mod: ModuleStatus,

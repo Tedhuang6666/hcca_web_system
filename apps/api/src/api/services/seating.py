@@ -504,8 +504,22 @@ async def release_holds(session: AsyncSession, zone_id: uuid.UUID, user_id: uuid
 
 
 async def cleanup_expired_holds(session: AsyncSession) -> int:
+    expired_zone_ids = set(
+        (
+            await session.execute(
+                select(SeatHold.zone_id).where(SeatHold.expires_at < _now()).distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
     res = await session.execute(delete(SeatHold).where(SeatHold.expires_at < _now()))
     await session.flush()
+    if expired_zone_ids:
+        from api.services.realtime_events import broadcast_seat_zone_changed
+
+        for zone_id in expired_zone_ids:
+            await broadcast_seat_zone_changed(zone_id)
     return res.rowcount or 0
 
 

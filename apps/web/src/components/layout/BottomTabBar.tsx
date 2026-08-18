@@ -247,10 +247,14 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   }, []);
 
   useWS(userRoom, useCallback((msg) => {
+    if (msg.type === "inbox.changed") {
+      refreshCounts();
+      return;
+    }
     if (msg.type !== "notification.created") return;
     const unread = typeof msg.unread === "number" ? msg.unread : null;
     if (unread !== null) setNotifCount(unread);
-    else refreshCounts();
+    refreshCounts();
   }, [refreshCounts, setNotifCount]), role !== "guest");
 
   useEffect(() => {

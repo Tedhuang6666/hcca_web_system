@@ -120,10 +120,14 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   useWS(
     userRoom,
     useCallback((msg) => {
+      if (msg.type === "inbox.changed") {
+        refreshCounts();
+        return;
+      }
       if (msg.type !== "notification.created") return;
       const unread = typeof msg.unread === "number" ? msg.unread : null;
       if (unread !== null) setUnreadCount(unread);
-      else refreshCounts();
+      refreshCounts();
       if (msg.notification && typeof msg.notification === "object") {
         setPreviewNtfs((items) => [msg.notification as NotificationItem, ...items].slice(0, 5));
       }

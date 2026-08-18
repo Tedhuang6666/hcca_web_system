@@ -14,6 +14,7 @@ from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.work_item import WorkItemCreate, WorkItemUpdate
 from api.services._base import apply_updates
 from api.services.outbox import emit
+from api.services.realtime_events import broadcast_user_event
 
 
 async def create_work_item(
@@ -24,6 +25,12 @@ async def create_work_item(
     await db.flush()
     await _emit_assignment_notice(db, item)
     await _push_to_google_tasks(db, item)
+    if item.assigned_to_id:
+        await broadcast_user_event(
+            item.assigned_to_id,
+            "inbox.changed",
+            {"source": "work_item", "work_item_id": str(item.id)},
+        )
     await cache_invalidate_dashboard(item.assigned_to_id and str(item.assigned_to_id))
     return item
 
@@ -75,6 +82,7 @@ async def list_work_items_by_source(
 
 async def update_work_item(db: AsyncSession, *, item: WorkItem, data: WorkItemUpdate) -> WorkItem:
     before_status = item.status
+    before_assignee_id = item.assigned_to_id
     payload = apply_updates(item, data)
     if item.status == WorkItemStatus.DONE and before_status != WorkItemStatus.DONE:
         item.completed_at = datetime.now(UTC)
@@ -84,6 +92,18 @@ async def update_work_item(db: AsyncSession, *, item: WorkItem, data: WorkItemUp
     if "assigned_to_id" in payload and item.status == WorkItemStatus.OPEN:
         await _emit_assignment_notice(db, item)
     await _push_to_google_tasks(db, item)
+    if item.assigned_to_id:
+        await broadcast_user_event(
+            item.assigned_to_id,
+            "inbox.changed",
+            {"source": "work_item", "work_item_id": str(item.id)},
+        )
+    if before_assignee_id and before_assignee_id != item.assigned_to_id:
+        await broadcast_user_event(
+            before_assignee_id,
+            "inbox.changed",
+            {"source": "work_item", "work_item_id": str(item.id)},
+        )
     await cache_invalidate_dashboard()
     return item
 
@@ -93,6 +113,12 @@ async def complete_work_item(db: AsyncSession, *, item: WorkItem) -> WorkItem:
     item.completed_at = datetime.now(UTC)
     await db.flush()
     await _push_to_google_tasks(db, item)
+    if item.assigned_to_id:
+        await broadcast_user_event(
+            item.assigned_to_id,
+            "inbox.changed",
+            {"source": "work_item", "work_item_id": str(item.id)},
+        )
     await cache_invalidate_dashboard(item.assigned_to_id and str(item.assigned_to_id))
     return item
 

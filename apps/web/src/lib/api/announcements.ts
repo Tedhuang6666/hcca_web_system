@@ -13,6 +13,11 @@ function invalidateActiveUrgentCache(): void {
   activeUrgentCache = null;
 }
 
+function refreshActiveUrgent(): Promise<AnnouncementOut | null> {
+  invalidateActiveUrgentCache();
+  return getActiveUrgent();
+}
+
 function getActiveUrgent(): Promise<AnnouncementOut | null> {
   if (activeUrgentCache && activeUrgentCache.expiresAt > Date.now()) {
     return Promise.resolve(activeUrgentCache.value);
@@ -36,6 +41,7 @@ function getActiveUrgent(): Promise<AnnouncementOut | null> {
 
 export const announcementsApi = {
   activeUrgent: getActiveUrgent,
+  refreshActiveUrgent,
   list: (params?: { org_id?: string; activity_id?: string; skip?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.org_id) qs.set("org_id", params.org_id);

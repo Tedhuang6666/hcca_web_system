@@ -6,13 +6,14 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
-from api.models.seating import SeatingZone
+from api.models.seating import Seat, SeatAssignment, SeatingZone
 from api.models.shop import Order
 from api.models.user import User
 from api.routers._common import or_404
@@ -32,6 +33,7 @@ from api.schemas.seating import (
 )
 from api.services import seating as seating_svc
 from api.services.permission import get_user_permission_codes
+from api.services.realtime_events import broadcast_seat_zone_changed
 
 router = APIRouter(prefix="/seating", tags=["劃位"])
 
@@ -51,6 +53,12 @@ async def _get_zone_or_404(zone_id: uuid.UUID, session: AsyncSession) -> Seating
 
 def _bad_request(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+async def _zone_for_seat(session: AsyncSession, seat_id: uuid.UUID | None) -> uuid.UUID | None:
+    if seat_id is None:
+        return None
+    return await session.scalar(select(Seat.zone_id).where(Seat.id == seat_id))
 
 
 # ── 場次 / 座位圖管理（SEATING_MANAGE）─────────────────────────────────────────
@@ -110,9 +118,11 @@ async def replace_seats(
 ) -> SeatingZone:
     zone = await _get_zone_or_404(zone_id, session)
     try:
-        return await seating_svc.replace_seats(session, zone, data=payload)
+        result = await seating_svc.replace_seats(session, zone, data=payload)
     except ValueError as e:
         raise _bad_request(e) from e
+    await broadcast_seat_zone_changed(zone_id)
+    return result
 
 
 @router.put(
@@ -124,7 +134,9 @@ async def replace_waves(
     zone_id: uuid.UUID, payload: WavesReplace, session: DbDep, _: SeatingManager
 ) -> SeatingZone:
     zone = await _get_zone_or_404(zone_id, session)
-    return await seating_svc.replace_waves(session, zone, data=payload)
+    result = await seating_svc.replace_waves(session, zone, data=payload)
+    await broadcast_seat_zone_changed(zone_id)
+    return result
 
 
 @router.get(
@@ -145,10 +157,15 @@ async def list_zone_assignments(zone_id: uuid.UUID, session: DbDep) -> list[Assi
     dependencies=[Depends(require_permission(PermissionCode.SEATING_MANAGE))],
 )
 async def release_assignment(assignment_id: uuid.UUID, session: DbDep) -> None:
+    zone_id = await session.scalar(
+        select(SeatAssignment.zone_id).where(SeatAssignment.id == assignment_id)
+    )
     try:
         await seating_svc.release_assignment(session, assignment_id)
     except ValueError as e:
         raise _bad_request(e) from e
+    if zone_id:
+        await broadcast_seat_zone_changed(zone_id)
 
 
 # ── 管理員代為劃位（SEATING_ASSIGN）────────────────────────────────────────────
@@ -162,12 +179,15 @@ async def release_assignment(assignment_id: uuid.UUID, session: DbDep) -> None:
 async def admin_assign(
     payload: AdminAssignRequest, session: DbDep, current_user: SeatingAssigner
 ) -> list[AssignmentOut]:
+    zone_id = await _zone_for_seat(session, payload.seat_ids[0] if payload.seat_ids else None)
     try:
         await seating_svc.admin_assign(
             session, admin=current_user, order_id=payload.order_id, seat_ids=payload.seat_ids
         )
     except ValueError as e:
         raise _bad_request(e) from e
+    if zone_id:
+        await broadcast_seat_zone_changed(zone_id)
     return [
         seating_svc.serialize_assignment(a)
         for a in await seating_svc.list_assignments(session, order_id=payload.order_id)
@@ -200,7 +220,9 @@ async def hold(
     can_now, _ = await seating_svc.resolve_open_state(session, zone, current_user)
     if not can_now:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="尚未輪到您劃位")
-    return await seating_svc.hold_seats(session, zone, current_user, payload.seat_ids)
+    result = await seating_svc.hold_seats(session, zone, current_user, payload.seat_ids)
+    await broadcast_seat_zone_changed(zone_id)
+    return result
 
 
 @router.delete(
@@ -210,12 +232,14 @@ async def hold(
 )
 async def release_hold(zone_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> None:
     await seating_svc.release_holds(session, zone_id, current_user.id)
+    await broadcast_seat_zone_changed(zone_id)
 
 
 @router.post("/select", response_model=list[AssignmentOut], summary="確認劃位（自助）")
 async def select_seats(
     payload: SeatSelectRequest, session: DbDep, current_user: CurrentUser
 ) -> list[AssignmentOut]:
+    zone_id = await _zone_for_seat(session, payload.seat_ids[0] if payload.seat_ids else None)
     try:
         await seating_svc.confirm_selection(
             session, user=current_user, order_id=payload.order_id, seat_ids=payload.seat_ids
@@ -224,6 +248,8 @@ async def select_seats(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
         raise _bad_request(e) from e
+    if zone_id:
+        await broadcast_seat_zone_changed(zone_id)
     return [
         seating_svc.serialize_assignment(a)
         for a in await seating_svc.list_assignments(session, order_id=payload.order_id)

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { seatingApi, apiErrorMessage } from "@/lib/api";
+import { useWS } from "@/hooks/useWS";
 import type { LayoutDecoration, SeatMapOut, SeatState, SeatStateKind } from "@/lib/types";
 
 const SEAT = 32;
@@ -76,6 +77,14 @@ export default function SeatSelectionPage() {
     const id = setInterval(load, 10000);
     return () => clearInterval(id);
   }, [load]);
+
+  useWS(
+    zoneId ? `seat-zone:${zoneId}` : null,
+    (message) => {
+      if (message.type === "seat_map.changed") void load();
+    },
+    Boolean(zoneId),
+  );
 
   const seatById = useMemo(() => {
     const m = new Map<string, SeatState>();

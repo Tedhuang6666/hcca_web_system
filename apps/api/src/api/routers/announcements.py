@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.cache import cache_get, cache_invalidate_dashboard, cache_set
+from api.core.cache import cache_get, cache_invalidate, cache_invalidate_dashboard, cache_set
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
@@ -27,6 +27,7 @@ from api.services import announcement as ann_svc
 from api.services import audit as audit_svc
 from api.services.discord_bot import emit_announcement_notice
 from api.services.permission import get_user_permission_codes
+from api.services.realtime_events import broadcast_public_urgent_changed
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/announcements", tags=["公告系統"])
@@ -294,6 +295,8 @@ async def create_announcement(
     )
     await emit_announcement_notice(db, ann)
     await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
@@ -341,6 +344,8 @@ async def update_announcement(
         summary=f"更新公告「{ann.title}」",
     )
     await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
@@ -371,6 +376,7 @@ async def publish_announcement(
     )
     await emit_announcement_notice(db, ann)
     await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
     try:
         from api.services.outbox import emit as outbox_emit
 
@@ -386,6 +392,7 @@ async def publish_announcement(
         )
     except Exception:
         pass
+    await broadcast_public_urgent_changed(ann.id)
     # 治理匯流：公告發布經 audit_svc.record()（action="announcement.publish"）統一橋接，
     # 不再於此手寫 ingest。
     return _enrich(ann)
@@ -417,6 +424,8 @@ async def unpublish_announcement(
         summary=f"取消發布公告「{ann.title}」",
     )
     await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
@@ -457,6 +466,8 @@ async def set_urgent(
         summary=f"設定公告「{ann.title}」重要狀態",
     )
     await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
@@ -484,6 +495,8 @@ async def delete_announcement(
     )
     await ann_svc.delete(db, ann_id)
     await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann_id)
 
 
 # ── 媒體管理 ───────────────────────────────────────────────────────────────────
