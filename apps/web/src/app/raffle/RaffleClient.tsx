@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ArrowRight,
   Check,
-  CircleHelp,
   ArrowUpRight,
   LockKeyhole,
   RotateCcw,
@@ -33,10 +32,6 @@ function localId(key: string): string {
   const value = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   window.localStorage.setItem(key, value);
   return value;
-}
-
-function finiteCount(event: RaffleEventOut | null): number {
-  return event?.prizes.reduce((sum, prize) => sum + (prize.remaining_quantity ?? 0), 0) ?? 0;
 }
 
 function findPrizeIndex(event: RaffleEventOut, draw: RaffleDrawOut): number {
@@ -165,8 +160,7 @@ export default function RaffleClient() {
   const tierNote = useMemo(() => {
     if (!event) return "每台平板驗證一次";
     if (event.status === "paused") return "工作人員暫停中，請稍候再抽";
-    if (event.reserve_released) return "尾聲模式已開啟，剩餘好獎全部加入抽選";
-    return `目前有限獎品剩餘 ${finiteCount(event)} 份`;
+    return "每位參加者一次機會";
   }, [event]);
 
   const roulettePrizes = useMemo<Prize[]>(
@@ -194,8 +188,8 @@ export default function RaffleClient() {
       <section className={styles.shell}>
         <section className={styles.stageCard} aria-live="polite">
           <div className={styles.stageTopline}>
-            <span>LUCKY DRAW</span>
-            <span>現場抽獎台</span>
+            <span>社博集點抽獎</span>
+            <span>竹嶺班聯</span>
           </div>
 
           {stage === "loading" && <div className={styles.loadingPanel}><div className={styles.loader} /><p>正在確認抽獎台狀態…</p></div>}
@@ -249,7 +243,6 @@ export default function RaffleClient() {
               <button className={styles.drawButton} type="button" onClick={runDraw} disabled={stage === "rolling" || event.status !== "open"}>
                 <span>{stage === "rolling" ? "正在抽選…" : "抽出我的獎品"}</span><Sparkles size={18} />
               </button>
-              <p className={styles.drawFootnote}><CircleHelp size={13} /> 結果由系統鎖定，動畫只是揭曉。</p>
             </div>
           )}
 
@@ -259,7 +252,7 @@ export default function RaffleClient() {
               <div className={styles.resultEmblem} aria-hidden="true"><BrandEmblem size={82} /></div>
               <p className={styles.resultTier}>{result.prize_tier}賞</p>
               <h2>{result.prize_name}</h2>
-              <p className={styles.resultCopy}>請截圖或帶著這個畫面到兌獎桌領取。</p>
+              <p className={styles.resultCopy}>請向四周工作人員領取對應獎品</p>
               <div className={styles.resultTicket}><span>領獎序號</span><strong>#{String(result.draw_number).padStart(3, "0")}</strong><span>請向工作人員出示</span></div>
               <div className={styles.nextActions}>
                 <button className={styles.nextButton} type="button" onClick={() => void nextTurn()} disabled={nextBusy}>

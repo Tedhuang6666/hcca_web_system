@@ -347,20 +347,45 @@
   top: 0;
   bottom: 0;
   z-index: 2;
-  width: 17%;
+  width: 5.5rem;
   pointer-events: none;
   content: "";
 }
 
-.roulette::before { left: 0; background: linear-gradient(90deg, var(--ink), transparent); }
-.roulette::after { right: 0; background: linear-gradient(270deg, var(--ink), transparent); }
+.roulette::before {
+  left: -1.8rem;
+  border-right: 1px solid rgba(16, 42, 67, 0.36);
+  border-radius: 0 50% 50% 0 / 0 18% 18% 0;
+  background:
+    radial-gradient(ellipse 0.7rem 44% at 86% 50%, #fff9ef 0 36%, #c8b9a2 37% 49%, #80735f 50% 55%, transparent 56%),
+    linear-gradient(90deg, #b5a58d 0%, #e5d8c5 48%, #fff8ed 76%, #b6a58c 100%);
+  box-shadow: 0.7rem 0 1.5rem rgba(0, 0, 0, 0.28), inset -0.35rem 0 0.7rem rgba(16, 42, 67, 0.2);
+}
+
+.roulette::after {
+  right: -1.8rem;
+  border-left: 1px solid rgba(16, 42, 67, 0.36);
+  border-radius: 50% 0 0 50% / 18% 0 0 18%;
+  background:
+    radial-gradient(ellipse 0.7rem 44% at 14% 50%, #fff9ef 0 36%, #c8b9a2 37% 49%, #80735f 50% 55%, transparent 56%),
+    linear-gradient(90deg, #b6a58c 0%, #fff8ed 24%, #e5d8c5 52%, #b5a58d 100%);
+  box-shadow: -0.7rem 0 1.5rem rgba(0, 0, 0, 0.28), inset 0.35rem 0 0.7rem rgba(16, 42, 67, 0.2);
+}
 
 .rouletteRolling {
   border-color: var(--gold);
   box-shadow: 0 0 0 5px rgba(213, 173, 70, 0.18);
 }
 
-.rouletteRolling::after { animation: raffle-shimmer 1s ease-in-out infinite; }
+.rouletteRolling .rouletteIndicator {
+  animation: raffle-pointer-tick 145ms steps(1, end) infinite;
+  will-change: transform;
+}
+
+.rouletteRolling .rouletteIndicator span {
+  animation: raffle-pointer-head-tick 145ms steps(1, end) infinite;
+  will-change: transform;
+}
 .rouletteTrack { z-index: 1; width: 100%; }
 
 .roulettePrize {
@@ -568,14 +593,24 @@
 .gate input:focus-visible { outline: 3px solid rgba(213, 173, 70, 0.8); outline-offset: 4px; }
 
 @keyframes raffle-spin { to { transform: rotate(360deg); } }
-@keyframes raffle-shimmer { 0%, 100% { opacity: 0.35; transform: translateX(0); } 50% { opacity: 0.95; transform: translateX(-18px); } }
 @keyframes raffle-result-in { from { opacity: 0; transform: translateY(1rem) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes raffle-emblem-in { from { opacity: 0; transform: scale(0.5) rotate(-12deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
 @keyframes raffle-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes raffle-pointer-tick {
+  0%, 68% { transform: translateX(-50%) translateY(0); }
+  69% { transform: translateX(-50%) translateY(2px); }
+  74%, 100% { transform: translateX(-50%) translateY(-1px); }
+}
+@keyframes raffle-pointer-head-tick {
+  0%, 68% { transform: translate(-50%, -50%); }
+  69% { transform: translate(-50%, -42%); }
+  74%, 100% { transform: translate(-50%, -52%); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .loader,
-  .rouletteRolling::after,
+  .rouletteRolling .rouletteIndicator,
+  .rouletteRolling .rouletteIndicator span,
   .resultPanel,
   .resultEmblem,
   .countdown::before { animation: none; }
