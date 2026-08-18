@@ -211,6 +211,11 @@ export default function PublicDocumentView({ document }: { document: DocumentOut
             >
               {document.title}
             </h1>
+            {document.summary && (
+              <p className="mt-1 break-words text-sm" style={{ color: "var(--text-muted)" }}>
+                摘要：{document.summary}
+              </p>
+            )}
           </div>
         </div>
       </header>
