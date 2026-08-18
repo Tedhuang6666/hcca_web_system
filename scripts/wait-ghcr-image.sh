@@ -7,7 +7,7 @@
 set -uo pipefail
 
 sha="${1:?用法: wait-ghcr-image.sh <git-sha> [timeout_sec]}"
-timeout="${2:-1200}"   # 預設最多等 20 分鐘
+timeout="${2:-${GHCR_IMAGE_WAIT_SECONDS:-1200}}"   # 預設最多等 20 分鐘
 api="ghcr.io/tedhuang6666/hcca_web_system-api:${sha}"
 web="ghcr.io/tedhuang6666/hcca_web_system-web:${sha}"
 
