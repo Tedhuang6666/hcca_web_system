@@ -40,10 +40,10 @@ export default function ThemeToggle() {
 
   const handleToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const origin = pointerOrigin.current ?? {
-      x: event.detail === 0 ? rect.left + rect.width / 2 : event.clientX,
-      y: event.detail === 0 ? rect.top + rect.height / 2 : event.clientY,
-    };
+    const useButtonCenter = window.matchMedia("(pointer: coarse)").matches || event.detail === 0;
+    const origin = !useButtonCenter && pointerOrigin.current
+      ? pointerOrigin.current
+      : { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     pointerOrigin.current = null;
     toggleTheme({
       x: origin.x,
