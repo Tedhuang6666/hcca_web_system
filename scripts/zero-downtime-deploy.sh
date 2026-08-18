@@ -105,7 +105,20 @@ wait_healthy() {
 
 reload_caddy() {
   local config="$1"
-  "${compose[@]}" exec -T proxy caddy reload --config "/etc/caddy/bluegreen/Caddyfile.$config"
+  local attempts="${CADDY_RELOAD_ATTEMPTS:-15}"
+  local delay_seconds="${CADDY_RELOAD_DELAY_SECONDS:-2}"
+
+  for attempt in $(seq 1 "$attempts"); do
+    if "${compose[@]}" exec -T proxy caddy reload --config "/etc/caddy/bluegreen/Caddyfile.$config"; then
+      return 0
+    fi
+    if [[ "$attempt" -lt "$attempts" ]]; then
+      echo "Caddy admin API 尚未 ready，${delay_seconds}s 後重試（$attempt/$attempts）" >&2
+      sleep "$delay_seconds"
+    fi
+  done
+
+  return 1
 }
 
 enter_maintenance() {
