@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Copy, ExternalLink, Gauge, Lock, Pause, Play, RefreshCw, Send, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { usePermissions } from "@/hooks/usePermissions";
-import { apiErrorMessage, rafflesApi } from "@/lib/api";
+import { ApiError, apiErrorMessage, rafflesApi } from "@/lib/api";
 import type { RaffleAdminOut, RaffleStatus } from "@/lib/types";
 
 import styles from "./raffle-admin.module.css";
@@ -13,11 +12,11 @@ import styles from "./raffle-admin.module.css";
 const statusLabel: Record<RaffleStatus, string> = { draft: "草稿", open: "進行中", paused: "暫停", closed: "已結束" };
 
 export default function RaffleAdminClient() {
-  const { can } = usePermissions();
-  const hasAdminAccess = can("admin:all");
   const [events, setEvents] = useState<RaffleAdminOut[]>([]);
   const [busy, setBusy] = useState(false);
   const [accessCode, setAccessCode] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [permissionChecked, setPermissionChecked] = useState(false);
 
   const selected = events[0] ?? null;
 
@@ -25,14 +24,21 @@ export default function RaffleAdminClient() {
     try {
       const rows = await rafflesApi.list();
       setEvents(rows);
+      setAccessDenied(false);
     } catch (caught) {
-      toast.error(apiErrorMessage(caught, "無法讀取抽獎狀態"));
+      if (caught instanceof ApiError && (caught.status === 401 || caught.status === 403)) {
+        setAccessDenied(true);
+      } else {
+        toast.error(apiErrorMessage(caught, "無法讀取抽獎狀態"));
+      }
+    } finally {
+      setPermissionChecked(true);
     }
   }, []);
 
   useEffect(() => {
-    if (hasAdminAccess) void load();
-  }, [hasAdminAccess, load]);
+    void load();
+  }, [load]);
 
   const activate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -88,7 +94,11 @@ export default function RaffleAdminClient() {
 
   const finiteRemaining = selected?.prizes.reduce((sum, prize) => sum + (prize.remaining_quantity ?? 0), 0) ?? 0;
 
-  if (!hasAdminAccess) {
+  if (!permissionChecked) {
+    return <main className={styles.denied}><Lock size={30} /><h1>正在確認管理權限</h1><p>正在連線確認抽獎管理權限。</p></main>;
+  }
+
+  if (accessDenied) {
     return <main className={styles.denied}><Lock size={30} /><h1>需要管理員權限</h1><p>抽獎管理僅開放給管理員。</p></main>;
   }
 
@@ -123,7 +133,7 @@ export default function RaffleAdminClient() {
                 <button className={styles.resetSmall} type="button" disabled={busy} onClick={() => void reset()}>清除測試資料</button>
               </div></div>
 
-              <div className={styles.metrics}><Metric label="已抽出" value={String(selected.draw_count)} note="人" accent="orange" /><Metric label="有限獎剩餘" value={String(finiteRemaining)} note="份" accent="yellow" /><Metric label="目前節奏" value={selected.reserve_released ? "尾聲" : "保留中"} note={selected.reserve_released ? "全獎池開放" : "每 3 人釋出 1 份"} accent="green" /></div>
+              <div className={styles.metrics}><Metric label="已抽出" value={String(selected.draw_count)} note="人" accent="orange" /><Metric label="有限獎剩餘" value={String(finiteRemaining)} note="份" accent="yellow" /><Metric label="目前節奏" value={selected.reserve_released ? "尾聲" : "保留中"} note={selected.reserve_released ? "全獎池開放" : "依人數分段"} accent="green" /></div>
 
               <div className={styles.gridTwo}>
                 <section className={styles.panel}><div className={styles.panelTitle}><div><span>固定獎品</span><small>系統預設，不需另外設定</small></div>{!selected.reserve_released && selected.status !== "closed" && <button className={styles.outlineButton} type="button" onClick={() => void changeStatus(selected.status, true)}><Send size={14} /> 開啟尾聲獎</button>}</div><div className={styles.prizeList}>{selected.prizes.map((prize) => <div className={styles.prizeRow} key={prize.id}><span className={`${styles.tier} ${styles[`tier_${prize.tier}`]}`}>{prize.tier}</span><strong>{prize.name}</strong><span className={styles.stock}>{prize.remaining_quantity === null ? "∞" : `${prize.remaining_quantity} / ${prize.total_quantity}`}</span></div>)}</div><p className={styles.panelHint}><ShieldCheck size={14} /> 庫存由後端鎖定，多台平板同時抽獎也不會超發。</p></section>
