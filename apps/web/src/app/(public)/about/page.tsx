@@ -2,7 +2,7 @@ import PublicSiteShell from "@/components/site/PublicSiteShell";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicOfficerDirectory from "@/components/site/PublicOfficerDirectory";
 import PublicContactSection from "@/components/site/PublicContactSection";
-import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
+import { fetchPublicOfficers, fetchPublicShellData } from "@/lib/serverFetch";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { pageMetadata } from "@/lib/seo";
@@ -15,11 +15,18 @@ export const metadata = pageMetadata({
 });
 
 export default async function AboutPage() {
-  const [bundle, officers] = await Promise.all([fetchPublicBundle(), fetchPublicOfficers()]);
+  const [{ bundle, urgentAnnouncement }, officers] = await Promise.all([
+    fetchPublicShellData(),
+    fetchPublicOfficers(),
+  ]);
   const settings = bundle?.settings;
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={settings}>
+    <PublicSiteShell
+      navPages={bundle?.nav_pages ?? []}
+      settings={settings}
+      urgentAnnouncement={urgentAnnouncement}
+    >
       <div className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 lg:pt-12">
         <section id="about" className="scroll-mt-24">
           <header className="public-page-head mb-8">

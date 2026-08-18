@@ -28,7 +28,7 @@ import { isBareRoute, isPublicRoute, requiresAuthentication } from "@/lib/route-
 import { ApiError } from "@/lib/api-helpers";
 import { authApi } from "@/lib/api/auth";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
-import type { ServerSessionUser } from "@/lib/server/session";
+import type { ServerImportantAnnouncement, ServerSessionUser } from "@/lib/server/session";
 
 const AUTH_CHECK_TIMEOUT_MS = 8_000;
 
@@ -50,9 +50,11 @@ async function withAuthCheckTimeout<T>(promise: Promise<T>): Promise<T> {
 function SessionGate({
   children,
   initialUser,
+  initialImportantAnnouncement,
 }: {
   children: React.ReactNode;
   initialUser: ServerSessionUser | null;
+  initialImportantAnnouncement: ServerImportantAnnouncement | null | undefined;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -182,7 +184,14 @@ function SessionGate({
   if (isPublicRoute(pathname)) {
     // 公開 layout 已有 PublicModuleStatusProvider；AppShell 的 authenticated
     // module endpoint 只服務登入後功能，避免訪客首屏多打一個背景請求。
-    return <AppShellContent isLoggedIn={false}>{children}</AppShellContent>;
+    return (
+      <AppShellContent
+        isLoggedIn={false}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </AppShellContent>
+    );
   }
 
   if (!authReady || redirecting) {
@@ -198,7 +207,12 @@ function SessionGate({
 
   return (
     <ModuleStatusProvider authenticated={isLoggedIn} pollEnabled={isLoggedIn}>
-      <AppShellContent isLoggedIn={isLoggedIn}>{children}</AppShellContent>
+      <AppShellContent
+        isLoggedIn={isLoggedIn}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </AppShellContent>
     </ModuleStatusProvider>
   );
 }
@@ -206,9 +220,11 @@ function SessionGate({
 function AppShellContent({
   children,
   isLoggedIn,
+  initialImportantAnnouncement,
 }: {
   children: React.ReactNode;
   isLoggedIn: boolean;
+  initialImportantAnnouncement: ServerImportantAnnouncement | null | undefined;
 }) {
   const { can, isAdmin, permissions } = usePermissions();
   const { isModuleDown, moduleInfo: getModuleInfo } = useModuleStatus();
@@ -276,7 +292,7 @@ function AppShellContent({
         {/* 主內容區 */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <ImpersonationBanner />
-          <ImportantAnnouncementBanner />
+          <ImportantAnnouncementBanner announcement={initialImportantAnnouncement} />
           <Topbar onMenuClick={toggleSidebar} />
           <main
             id="main-content"
@@ -321,9 +337,11 @@ function AppShellContent({
 export default function AppShell({
   children,
   initialUser = null,
+  initialImportantAnnouncement,
 }: {
   children: React.ReactNode;
   initialUser?: ServerSessionUser | null;
+  initialImportantAnnouncement?: ServerImportantAnnouncement | null;
 }) {
   const pathname = usePathname();
 
@@ -331,5 +349,12 @@ export default function AppShell({
     return <>{children}</>;
   }
 
-  return <SessionGate initialUser={initialUser}>{children}</SessionGate>;
+  return (
+    <SessionGate
+      initialUser={initialUser}
+      initialImportantAnnouncement={initialImportantAnnouncement}
+    >
+      {children}
+    </SessionGate>
+  );
 }

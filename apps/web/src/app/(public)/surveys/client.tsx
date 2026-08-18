@@ -94,6 +94,7 @@ export default function SurveysClient({
           label="活動"
           noneLabel="全部問卷"
           scope="all"
+          hideWhenUnauthenticated
           className="w-full shrink-0 md:w-52"
           onActivitiesLoaded={setActivities}
         />

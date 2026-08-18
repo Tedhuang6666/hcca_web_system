@@ -6,7 +6,7 @@ import AppEnhancements from "@/components/layout/AppEnhancements";
 import NavigationProgress from "@/components/layout/NavigationProgress";
 import AccessBlockGuard from "@/components/security/AccessBlockGuard";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
-import { getServerSession } from "@/lib/server/session";
+import { getServerImportantAnnouncement, getServerSession } from "@/lib/server/session";
 import "../design-system.css";
 
 // 管理頁面同樣使用 per-request CSP nonce，必須避免靜態 HTML 快取造成 nonce 不一致。
@@ -20,14 +20,22 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const initialUser = await getServerSession();
+  const [initialUser, initialImportantAnnouncement] = await Promise.all([
+    getServerSession(),
+    getServerImportantAnnouncement(),
+  ]);
 
   return (
     <>
       <AccessBlockGuard />
       <NavigationProgress />
       <ScrollProgressBar />
-      <AppShell initialUser={initialUser}>{children}</AppShell>
+      <AppShell
+        initialUser={initialUser}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </AppShell>
       <AppEnhancements />
       <Toaster
         position="top-right"

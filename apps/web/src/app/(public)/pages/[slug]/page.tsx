@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { fetchPublicBundle, fetchPublicPage } from "@/lib/serverFetch";
+import { fetchPublicPage, fetchPublicShellData } from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
 
 export async function generateMetadata({
@@ -31,14 +31,18 @@ export default async function CmsPage({
 }) {
   const { slug } = await params;
   const [bundle, page] = await Promise.all([
-    fetchPublicBundle(),
+    fetchPublicShellData(),
     fetchPublicPage(slug),
   ]);
 
   if (!page) notFound();
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
+    <PublicSiteShell
+      navPages={bundle.bundle?.nav_pages ?? []}
+      settings={bundle.bundle?.settings}
+      urgentAnnouncement={bundle.urgentAnnouncement}
+    >
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <article className="space-y-6">
           <header>

@@ -1,6 +1,6 @@
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { fetchPublicBundle } from "@/lib/serverFetch";
+import { fetchPublicShellData } from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -11,12 +11,16 @@ export const metadata = pageMetadata({
 });
 
 export default async function ContactPage() {
-  const bundle = await fetchPublicBundle();
+  const { bundle, urgentAnnouncement } = await fetchPublicShellData();
   const settings = bundle?.settings;
   const markdown = settings?.contact_md?.trim() ?? "";
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={settings}>
+    <PublicSiteShell
+      navPages={bundle?.nav_pages ?? []}
+      settings={settings}
+      urgentAnnouncement={urgentAnnouncement}
+    >
       <div className="mx-auto max-w-5xl px-4 pb-16 pt-10 sm:px-6 lg:pt-12">
         <header className="public-page-head mb-8">
           <p className="public-section-kicker">Contact HCCA</p>
