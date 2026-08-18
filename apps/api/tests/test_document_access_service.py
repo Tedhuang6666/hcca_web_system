@@ -421,6 +421,25 @@ async def test_check_document_access_allows_public_visibility_for_non_member(
     assert await check_document_access(db_session, doc, viewer.id) is True
 
 
+async def test_check_document_access_allows_legacy_public_flag_for_non_member(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    viewer = await make_user()
+    doc = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.ORG_ONLY,
+        is_public=True,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+    await db_session.refresh(doc, attribute_names=["approvals"])
+
+    assert await check_document_access(db_session, doc, viewer.id) is True
+
+
 async def test_check_document_access_denies_org_only_for_non_member(
     db_session: AsyncSession, make_user
 ) -> None:

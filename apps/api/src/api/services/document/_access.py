@@ -77,28 +77,8 @@ def _active_assignment_exists_for_viewer(
 
 
 def _doc_query_for_list():
-    """列表只載入列表 schema 需要的欄位，避免把公文全文與大型欄位帶回。"""
-    return select(Document).options(
-        load_only(
-            Document.id,
-            Document.serial_number,
-            Document.title,
-            Document.urgency,
-            Document.classification,
-            Document.category,
-            Document.subject,
-            Document.summary,
-            Document.status,
-            Document.org_id,
-            Document.activity_id,
-            Document.created_by,
-            Document.due_date,
-            Document.submitted_at,
-            Document.completed_at,
-            Document.archive_at,
-            Document.created_at,
-        )
-    )
+    """列表直接載入完整公文欄位，避免欄位精簡造成前後端資料不同步。"""
+    return select(Document)
 
 
 def _doc_query_with_relations():
@@ -454,10 +434,9 @@ async def check_document_access(
 ) -> bool:
     if await user_has_full_document_access(session, doc, user_id):
         return True
-    return doc.visibility_level in {
-        DocumentVisibility.PUBLIC,
-        DocumentVisibility.PUBLICLY_OPEN,
-    } and not is_sensitive_document(doc)
+    # 公開狀態同時支援新欄位與舊版 is_public 旗標；兩者必須共用同一套
+    # 判定，避免未登入列表能看到、登入後詳情卻被 403 的身份切換問題。
+    return can_anonymous_access_document(doc)
 
 
 async def _build_visibility_filter(
