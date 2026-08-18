@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Copy, ExternalLink, Gauge, Lock, Pause, Play, Plus, RefreshCw, RotateCcw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ChevronRight, Copy, ExternalLink, Gauge, Lock, Pause, Play, Plus, RefreshCw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";

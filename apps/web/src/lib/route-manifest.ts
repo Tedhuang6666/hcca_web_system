@@ -23,7 +23,6 @@ export const MODULE_MANIFEST = {
   governance: { label: "治理中樞", routePrefixes: ["/governance"], navIds: ["governanceHub"], navigationGroup: "我的工作" },
   matters: { label: "整合工作台", routePrefixes: ["/matters"], navIds: ["matters"], navigationGroup: "我的工作" },
   activities: { label: "活動管理", routePrefixes: ["/activities", "/admin/activities"], navIds: ["activitiesAdmin"], navigationGroup: "發布與營運" },
-  raffle: { label: "現場抽獎", routePrefixes: ["/raffle", "/admin/raffle"], navIds: ["raffleAdmin"], navigationGroup: "發布與營運" },
   elections: { label: "選舉開票", routePrefixes: ["/elections", "/admin/elections"], navIds: ["electionsAdmin"], navigationGroup: "治理事務" },
   seating: { label: "票務劃位", routePrefixes: ["/seating"], navIds: [], navigationGroup: "校園服務" },
   finance: { label: "財務與收款", routePrefixes: ["/finance", "/receivables"], navIds: ["finance", "receivables"], navigationGroup: "發布與營運" },
