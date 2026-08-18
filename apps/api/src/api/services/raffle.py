@@ -1,4 +1,4 @@
-"""抽獎業務邏輯：驗證碼入場、保留節奏與序列化抽取。"""
+"""抽獎業務邏輯：驗證碼入場、隨機獎池與序列化抽取。"""
 
 from __future__ import annotations
 
@@ -26,8 +26,9 @@ DEFAULT_PRIZES = (
     ("D", "資料夾或徽章", None, 5),
 )
 
-# 未知總人數時，有限獎品約每 3 位逐步釋放一份；尾聲才開放 A 賞。
-FINITE_PRIZE_RATE = 3
+# 每次抽獎獨立擲骰；有限獎機率固定為 1/3，庫存與保留獎仍是硬上限。
+FINITE_PRIZE_CHANCE = 1
+FINITE_PRIZE_ROLLS = 3
 A_PRIZE_RELEASE_DRAW = 50
 RESERVED_FINITE_BY_TIER = {"A": 1, "B": 2, "C": 1}
 TIER_WEIGHTS = {"A": 1, "B": 3, "C": 7}
@@ -232,35 +233,12 @@ def _released_limits(event: RaffleEvent) -> dict[str, int]:
     if event.reserve_released:
         return totals
 
-    available = {
+    limits = {
         tier: min(total, max(0, total - RESERVED_FINITE_BY_TIER.get(tier, 0)))
         for tier, total in totals.items()
     }
     if event.draw_count < A_PRIZE_RELEASE_DRAW:
-        available["A"] = 0
-
-    release_count = min(sum(available.values()), event.draw_count // FINITE_PRIZE_RATE)
-    limits = {tier: 0 for tier in available}
-    if release_count == 0:
-        return limits
-
-    # 以權重分配「已釋放」額度，而不是一次打開整個階段；如此抽完一份後，
-    # 下一份會在後續參加者進場時逐步出現，不會突然從好獎切換成長段參加獎。
-    total_weight = sum(TIER_WEIGHTS[tier] for tier, quantity in available.items() if quantity)
-    expected = {
-        tier: release_count * TIER_WEIGHTS[tier] / total_weight
-        for tier, quantity in available.items()
-        if quantity
-    }
-    for tier, value in expected.items():
-        limits[tier] = min(available[tier], int(value))
-
-    remaining = release_count - sum(limits.values())
-    while remaining:
-        candidates = [tier for tier, quantity in available.items() if limits[tier] < quantity]
-        tier = max(candidates, key=lambda item: (expected[item] - limits[item], TIER_WEIGHTS[item]))
-        limits[tier] += 1
-        remaining -= 1
+        limits["A"] = 0
     return limits
 
 
@@ -275,15 +253,30 @@ def _released_finite_prizes(event: RaffleEvent) -> list[RafflePrize]:
 
 
 def _weighted_choice(prizes: list[RafflePrize], final_mode: bool = False) -> RafflePrize:
-    # 前段讓 C/B 比較容易出現；尾聲釋放保留獎後提高 A 賞權重。
+    # 先抽獎項等級，再在同級獎品中抽取，避免 B 賞因有兩個品項而機率被加倍。
     weights = {"A": 5, "B": 4, "C": 3} if final_mode else {"A": 1, "B": 3, "C": 7}
-    total = sum(weights.get(prize.tier, 5) for prize in prizes)
+    tiers = list(dict.fromkeys(prize.tier for prize in prizes))
+    total = sum(weights.get(tier, 5) for tier in tiers)
     point = secrets.randbelow(total)
-    for prize in prizes:
-        point -= weights.get(prize.tier, 5)
+    for tier in tiers:
+        point -= weights.get(tier, 5)
         if point < 0:
-            return prize
+            tier_prizes = [prize for prize in prizes if prize.tier == tier]
+            return tier_prizes[secrets.randbelow(len(tier_prizes))]
     return prizes[-1]
+
+
+def _should_give_finite(finite: list[RafflePrize]) -> bool:
+    return bool(finite) and secrets.randbelow(FINITE_PRIZE_ROLLS) < FINITE_PRIZE_CHANCE
+
+
+def _select_prize(event: RaffleEvent) -> RafflePrize | None:
+    finite = _released_finite_prizes(event)
+    if _should_give_finite(finite):
+        return _weighted_choice(finite, event.reserve_released)
+    return next((item for item in event.prizes if item.tier == "D"), None) or (
+        finite[0] if finite else None
+    )
 
 
 async def draw(db: AsyncSession, body: RaffleDrawRequest) -> RaffleDraw:
@@ -324,16 +317,7 @@ async def draw(db: AsyncSession, body: RaffleDrawRequest) -> RaffleDraw:
     if event.status != RaffleStatus.OPEN:
         raise ValueError("這場抽獎目前沒有開放抽獎")
 
-    finite = _released_finite_prizes(event)
-    # 未知總人數時只抽已釋放的有限獎，A/B/C 的保留量不會因早期手氣被吃掉。
-    should_give_finite = bool(finite)
-    prize = (
-        _weighted_choice(finite, event.reserve_released)
-        if should_give_finite
-        else next((item for item in event.prizes if item.tier == "D"), None)
-    )
-    if prize is None:
-        prize = finite[0] if finite else None
+    prize = _select_prize(event)
     if prize is None:
         raise ValueError("獎品尚未設定")
     if prize.remaining_quantity is not None:
