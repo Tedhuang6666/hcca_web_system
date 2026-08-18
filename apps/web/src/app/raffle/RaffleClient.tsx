@@ -6,7 +6,7 @@ import {
   ArrowRight,
   Check,
   CircleHelp,
-  ExternalLink,
+  ArrowUpRight,
   LockKeyhole,
   RotateCcw,
   Sparkles,
@@ -176,44 +176,36 @@ export default function RaffleClient() {
 
   return (
     <main className={styles.page}>
+      <div className={styles.ambient} aria-hidden="true" />
       <header className={styles.header}>
         <Link className={styles.brand} href="/" aria-label={`回到${BRANDING.orgShortName}首頁`}>
-          <BrandEmblem size={42} framed />
+          <BrandEmblem size={48} />
           <span className={styles.brandCopy}>
-            <strong>{BRANDING.orgShortName}</strong>
-            <small>{BRANDING.platformName}</small>
+            <strong>HCCA</strong>
+            <small>{BRANDING.orgShortName}</small>
           </span>
         </Link>
-        <Link className={styles.backLink} href="/">
-          回到首頁 <ExternalLink size={14} />
-        </Link>
+        <div className={styles.headerRight}>
+          <span className={styles.status}><i /> 現場開放中</span>
+          <Link className={styles.backLink} href="/">首頁 <ArrowUpRight size={15} /></Link>
+        </div>
       </header>
 
       <section className={styles.shell}>
-        <div className={styles.intro}>
-          <span className={styles.sectionLabel}>現場服務</span>
-          <h1>現場抽獎</h1>
-          <p>輸入工作人員提供的驗證碼，抽出今天的獎品。</p>
-          <div className={styles.notice}>
-            <LockKeyhole size={16} aria-hidden />
-            <span>驗證成功後會留在這台平板，不需要重複輸入。</span>
-          </div>
-        </div>
-
         <section className={styles.stageCard} aria-live="polite">
           <div className={styles.stageTopline}>
-            <span>抽獎台</span>
-            <span className={styles.status}><i /> 現場開放中</span>
+            <span>LUCKY DRAW</span>
+            <span>現場抽獎台</span>
           </div>
 
           {stage === "loading" && <div className={styles.loadingPanel}><div className={styles.loader} /><p>正在確認抽獎台狀態…</p></div>}
 
           {stage === "gate" && (
             <form className={styles.gate} onSubmit={submitEntry}>
-              <div className={styles.gateHeading}>
-                <span className={styles.iconTile}><LockKeyhole size={18} /></span>
-                <div><h2>輸入驗證碼</h2><p>請向現場工作人員索取</p></div>
-              </div>
+              <BrandEmblem size={76} className={styles.gateEmblem} />
+              <p className={styles.formLabel}>ENTER ACCESS CODE</p>
+              <h2>準備好了嗎？</h2>
+              <p className={styles.formIntro}>請向工作人員索取現場驗證碼。</p>
               <label>
                 現場驗證碼
                 <input
@@ -225,14 +217,18 @@ export default function RaffleClient() {
                 />
               </label>
               {error && <p className={styles.error} role="alert">{error}</p>}
-              <button className={styles.primaryButton} type="submit">開始抽獎 <ArrowRight size={17} /></button>
-              <p className={styles.helper}><CircleHelp size={14} /> 每台平板只需驗證一次</p>
+              <button className={styles.primaryButton} type="submit">進入抽獎台 <ArrowRight size={17} /></button>
+              <p className={styles.helper}><LockKeyhole size={14} /> 驗證成功後不需重新輸入</p>
             </form>
           )}
 
           {(stage === "ready" || stage === "rolling") && event && (
             <div className={styles.drawPanel}>
-              <div className={styles.drawMeta}><span>第 {event.draw_count + 1} 位</span><span>{tierNote}</span></div>
+              <div className={styles.drawMeta}><span>第 {String(event.draw_count + 1).padStart(2, "0")} 位參加者</span><span>{tierNote}</span></div>
+              <div className={styles.drawHeadline}>
+                <span>按下按鈕</span>
+                <strong>抽出你的獎品</strong>
+              </div>
               <div className={`${styles.roulette} ${stage === "rolling" ? styles.rouletteRolling : ""}`}>
                 {roulettePrizes.length > 0 && <SpinRoulette
                   prizes={roulettePrizes}
@@ -253,17 +249,17 @@ export default function RaffleClient() {
               <button className={styles.drawButton} type="button" onClick={runDraw} disabled={stage === "rolling" || event.status !== "open"}>
                 <span>{stage === "rolling" ? "正在抽選…" : "抽出我的獎品"}</span><Sparkles size={18} />
               </button>
-              <p className={styles.drawFootnote}>結果會由系統鎖定，動畫結束後顯示。</p>
+              <p className={styles.drawFootnote}><CircleHelp size={13} /> 結果由系統鎖定，動畫只是揭曉。</p>
             </div>
           )}
 
           {stage === "result" && result && event && (
             <div className={styles.resultPanel}>
-              <div className={styles.resultEmblem} aria-hidden="true"><BrandEmblem size={58} framed /></div>
-              <div className={styles.resultKicker}><Check size={15} /> 抽獎完成・第 {result.draw_number} 位</div>
+              <div className={styles.resultTopline}><span><Check size={15} /> 抽獎完成</span><span>NO. {String(result.draw_number).padStart(3, "0")}</span></div>
+              <div className={styles.resultEmblem} aria-hidden="true"><BrandEmblem size={82} /></div>
               <p className={styles.resultTier}>{result.prize_tier}賞</p>
               <h2>{result.prize_name}</h2>
-              <p className={styles.resultCopy}>請帶著這個畫面到兌獎桌領取獎品。</p>
+              <p className={styles.resultCopy}>請截圖或帶著這個畫面到兌獎桌領取。</p>
               <div className={styles.resultTicket}><span>領獎序號</span><strong>#{String(result.draw_number).padStart(3, "0")}</strong><span>請向工作人員出示</span></div>
               <div className={styles.nextActions}>
                 <button className={styles.nextButton} type="button" onClick={() => void nextTurn()} disabled={nextBusy}>
@@ -277,7 +273,7 @@ export default function RaffleClient() {
         </section>
       </section>
 
-      <footer className={styles.footer}><span>有問題？請直接詢問現場工作人員</span><span>HCCA 校園自治整合平台</span></footer>
+      <footer className={styles.footer}><span>有問題？請直接詢問現場工作人員</span><span>{BRANDING.orgShortName} · {BRANDING.acronym}</span></footer>
     </main>
   );
 }
