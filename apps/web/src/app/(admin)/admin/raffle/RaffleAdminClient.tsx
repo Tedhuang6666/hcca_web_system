@@ -13,7 +13,8 @@ import styles from "./raffle-admin.module.css";
 const statusLabel: Record<RaffleStatus, string> = { draft: "草稿", open: "進行中", paused: "暫停", closed: "已結束" };
 
 export default function RaffleAdminClient() {
-  const { isAdmin } = usePermissions();
+  const { can } = usePermissions();
+  const hasAdminAccess = can("admin:all");
   const [events, setEvents] = useState<RaffleAdminOut[]>([]);
   const [busy, setBusy] = useState(false);
   const [accessCode, setAccessCode] = useState("");
@@ -30,8 +31,8 @@ export default function RaffleAdminClient() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) void load();
-  }, [isAdmin, load]);
+    if (hasAdminAccess) void load();
+  }, [hasAdminAccess, load]);
 
   const activate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -87,7 +88,7 @@ export default function RaffleAdminClient() {
 
   const finiteRemaining = selected?.prizes.reduce((sum, prize) => sum + (prize.remaining_quantity ?? 0), 0) ?? 0;
 
-  if (!isAdmin) {
+  if (!hasAdminAccess) {
     return <main className={styles.denied}><Lock size={30} /><h1>需要管理員權限</h1><p>抽獎管理僅開放給管理員。</p></main>;
   }
 
