@@ -1,9 +1,10 @@
-"""信任代理 middleware — 從 CF-Connecting-IP 取真實 client IP。
+"""信任代理 middleware — 從代理標頭取真實 client IP。
 
 啟用 `TRUST_CLOUDFLARE_PROXY=True` 後，本 middleware 會在每個 HTTP / WebSocket
 請求進來時檢查：
   1. socket peer IP 是否屬於 Cloudflare 官方 CIDR（或 CF_TRUSTED_PROXIES 覆寫清單）
-  2. 若是，從 `CF-Connecting-IP` header 取真實 client IP，替換 scope["client"]
+  2. 若是，優先從 `CF-Connecting-IP`、再從 `X-Forwarded-For` 取真實 client IP，
+     替換 scope["client"]
 
 這樣下游 rate_limit、anomaly_detection、audit log 都能取到使用者真實 IP，
 而不是 Cloudflare edge 的 IP（否則全站會被視為同一 IP，rate limit 失效）。
@@ -66,7 +67,7 @@ def _parse_networks(cidrs: tuple[str, ...] | list[str]) -> list[ipaddress._BaseN
 
 class TrustedProxyMiddleware:
     """
-    Pure ASGI middleware：若 socket peer ∈ 信任 CIDR，從 CF-Connecting-IP 換真實 IP。
+    Pure ASGI middleware：若 socket peer ∈ 信任 CIDR，從代理標頭換真實 IP。
 
     對 HTTP 與 WebSocket scope 都生效。lifespan scope 直接通過。
     """
@@ -118,6 +119,11 @@ class TrustedProxyMiddleware:
             return
 
         real_ip = self._get_header(scope, b"cf-connecting-ip")
+        if not real_ip:
+            # Caddy / Uvicorn 可能會保留 X-Forwarded-For 而移除自訂 CF 標頭；
+            # 此時信任的反向代理已經把最左側地址設為原始使用者 IP。
+            forwarded_for = self._get_header(scope, b"x-forwarded-for")
+            real_ip = forwarded_for.split(",", 1)[0].strip() if forwarded_for else None
         if not real_ip:
             await self.app(scope, receive, send)
             return
