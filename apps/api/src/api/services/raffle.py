@@ -26,14 +26,11 @@ DEFAULT_PRIZES = (
     ("D", "資料夾或徽章", None, 5),
 )
 
-# 未知總人數時，有限獎品採階段釋放；reserve_released 由管理員在活動尾聲開啟。
-RELEASE_SCHEDULE = (
-    (0, {"A": 0, "B": 1, "C": 2}),
-    (50, {"A": 1, "B": 3, "C": 5}),
-    (100, {"A": 2, "B": 6, "C": 8}),
-    (150, {"A": 3, "B": 8, "C": 9}),
-)
+# 未知總人數時，有限獎品約每 3 位逐步釋放一份；尾聲才開放 A 賞。
+FINITE_PRIZE_RATE = 3
+A_PRIZE_RELEASE_DRAW = 50
 RESERVED_FINITE_BY_TIER = {"A": 1, "B": 2, "C": 1}
+TIER_WEIGHTS = {"A": 1, "B": 3, "C": 7}
 
 
 def _hash(value: str) -> str:
@@ -235,19 +232,36 @@ def _released_limits(event: RaffleEvent) -> dict[str, int]:
     if event.reserve_released:
         return totals
 
-    stage_limits = RELEASE_SCHEDULE[0][1]
-    for minimum_draws, limits in RELEASE_SCHEDULE:
-        if event.draw_count >= minimum_draws:
-            stage_limits = limits
-
-    return {
-        tier: min(
-            total,
-            max(0, total - RESERVED_FINITE_BY_TIER.get(tier, 0)),
-            stage_limits.get(tier, 0),
-        )
+    available = {
+        tier: min(total, max(0, total - RESERVED_FINITE_BY_TIER.get(tier, 0)))
         for tier, total in totals.items()
     }
+    if event.draw_count < A_PRIZE_RELEASE_DRAW:
+        available["A"] = 0
+
+    release_count = min(sum(available.values()), event.draw_count // FINITE_PRIZE_RATE)
+    limits = {tier: 0 for tier in available}
+    if release_count == 0:
+        return limits
+
+    # 以權重分配「已釋放」額度，而不是一次打開整個階段；如此抽完一份後，
+    # 下一份會在後續參加者進場時逐步出現，不會突然從好獎切換成長段參加獎。
+    total_weight = sum(TIER_WEIGHTS[tier] for tier, quantity in available.items() if quantity)
+    expected = {
+        tier: release_count * TIER_WEIGHTS[tier] / total_weight
+        for tier, quantity in available.items()
+        if quantity
+    }
+    for tier, value in expected.items():
+        limits[tier] = min(available[tier], int(value))
+
+    remaining = release_count - sum(limits.values())
+    while remaining:
+        candidates = [tier for tier, quantity in available.items() if limits[tier] < quantity]
+        tier = max(candidates, key=lambda item: (expected[item] - limits[item], TIER_WEIGHTS[item]))
+        limits[tier] += 1
+        remaining -= 1
+    return limits
 
 
 def _released_finite_prizes(event: RaffleEvent) -> list[RafflePrize]:
