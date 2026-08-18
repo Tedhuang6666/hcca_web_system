@@ -181,6 +181,11 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/site/pages", "GET"),
     ("/site/pages/{slug}", "GET"),
     ("/site/public", "GET"),
+    # 現場抽獎：入口由活動碼、驗證碼或 session token 保護，不使用平台登入。
+    ("/raffles/ping", "GET"),
+    ("/raffles/session", "GET"),
+    ("/raffles/join", "POST"),
+    ("/raffles/draw", "POST"),
     # 角色視角導覽（僅允許公開與學生視角，端點本身不需登入）
     ("/navigation-profiles/{profile_key}", "GET"),
     # 系統狀態（公開，供監控用）
