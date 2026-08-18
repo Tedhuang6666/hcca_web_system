@@ -6,6 +6,7 @@ keep_old="${KEEP_OLD:-true}"
 maintenance_mode="${MAINTENANCE_MODE:-0}"
 drain_seconds="${DRAIN_SECONDS:-10}"
 health_wait_seconds="${HEALTH_WAIT_SECONDS:-300}"
+auto_rollback="${AUTO_ROLLBACK:-1}"
 compose_file="${COMPOSE_FILE:-docker-compose.bluegreen.yml}"
 env_file="${ENV_FILE:-.env.production}"
 export PROD_ENV_FILE="$env_file"
@@ -120,15 +121,49 @@ stop_target_slot() {
   "${compose[@]}" stop "web-$target" "api-$target" || true
   if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
     "${compose[@]}" stop "celery-worker-$target" || true
+    "${compose[@]}" stop celery-beat || true
   fi
+}
+
+write_active_slot() {
+  local slot="$1" tmp_state
+  tmp_state="$(mktemp "$state_dir/active-slot.XXXXXX")"
+  printf '%s\n' "$slot" > "$tmp_state"
+  mv -f "$tmp_state" "$state_file"
+}
+
+rollback_to_previous_slot() {
+  [[ "$has_previous_slot" == "1" ]] || return 1
+  [[ "$active" == "blue" || "$active" == "green" ]] || return 1
+
+  echo "嘗試恢復舊 active slot：$active"
+  if ! "${compose[@]}" up -d "api-$active" "web-$active"; then
+    return 1
+  fi
+  if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
+    if ! "${compose[@]}" up -d "celery-worker-$active" celery-beat; then
+      return 1
+    fi
+  fi
+  wait_healthy "api-$active" || return 1
+  wait_healthy "web-$active" || return 1
+  reload_caddy "$active" || return 1
+  write_active_slot "$active"
+  echo "✓ 已將流量恢復到 $active"
+  return 0
 }
 
 abort_deploy() {
   stop_target_slot
-  if [[ "$maintenance_mode" != "1" ]]; then
-    enter_maintenance || true
+  if [[ "$auto_rollback" == "1" && "${SKIP_MIGRATE:-0}" == "1" ]]; then
+    if rollback_to_previous_slot; then
+      echo "新版部署失敗，已自動 rollback 到舊 slot。" >&2
+      exit 1
+    fi
+    echo "⚠️  自動 rollback 失敗，改切維護頁。" >&2
   fi
-  echo "不會自動啟動舊 slot；請檢查新版容器與 migration。" >&2
+  enter_maintenance || true
+  echo "部署失敗，已保持維護頁；請檢查新版容器與 migration。" >&2
   exit 1
 }
 
@@ -228,9 +263,7 @@ if ! reload_caddy "$target"; then
   abort_deploy
 fi
 
-tmp_state="$(mktemp "$state_dir/active-slot.XXXXXX")"
-printf '%s\n' "$target" > "$tmp_state"
-mv -f "$tmp_state" "$state_file"
+write_active_slot "$target"
 
 echo "Traffic is now on $target."
 
@@ -239,7 +272,7 @@ if [[ "${SKIP_SMOKE:-0}" != "1" ]]; then
   if ! API_SERVICE="api-$target" WEB_SERVICE="web-$target" \
     ENV_FILE="$env_file" COMPOSE_FILE="$compose_file" \
     ./scripts/prod-pull-smoke.sh; then
-    echo "Smoke test failed; switching to maintenance and refusing legacy rollback." >&2
+    echo "Smoke test failed; attempting automatic rollback." >&2
     abort_deploy
   fi
 fi
