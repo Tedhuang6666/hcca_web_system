@@ -35,6 +35,7 @@ if [[ "$target" != "blue" && "$target" != "green" ]]; then
   echo "Usage: $0 [blue|green|auto]"
   echo "Optional env: ENV_FILE=.env.production COMPOSE_FILE=docker-compose.bluegreen.yml"
   echo "  MAINTENANCE_MODE=1 先顯示靜態維護頁，再停止舊 API/Web 以節省資源"
+  echo "  SKIP_MIGRATE=1      已確認 schema 不變時，可在 MAINTENANCE_MODE=0 無中斷切流"
   echo "  KEEP_OLD=false      blue-green 模式切流後停止舊 slot"
   exit 2
 fi
