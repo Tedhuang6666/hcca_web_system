@@ -1,0 +1,155 @@
+"""抽獎活動 API。公開端只拿活動 session；管理端沿用 admin:all。"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.database import get_db
+from api.dependencies.permissions import require_permission
+from api.models.raffle import RaffleStatus
+from api.models.user import User
+from api.schemas.raffle import (
+    RaffleAdminOut,
+    RaffleCreate,
+    RaffleDrawOut,
+    RaffleDrawRequest,
+    RaffleEventOut,
+    RaffleJoinOut,
+    RaffleJoinRequest,
+    RaffleStatusUpdate,
+)
+from api.services import raffle as raffle_service
+
+router = APIRouter(prefix="/raffles", tags=["抽獎活動"])
+DbDep = Annotated[AsyncSession, Depends(get_db)]
+AdminUser = Annotated[User, Depends(require_permission("admin:all"))]
+
+
+def _draw_out(draw) -> RaffleDrawOut:
+    return RaffleDrawOut(
+        id=draw.id,
+        draw_number=draw.draw_number,
+        prize_id=draw.prize_id,
+        prize_tier=draw.prize.tier,
+        prize_name=draw.prize.name,
+        created_at=draw.created_at,
+    )
+
+
+def _event_out(event) -> RaffleEventOut:
+    return RaffleEventOut.model_validate(event)
+
+
+@router.get("/ping", status_code=status.HTTP_204_NO_CONTENT)
+async def raffle_ping() -> None:
+    """讓匿名抽獎頁先取得 CSRF cookie，再送出 join。"""
+
+
+@router.post("/join", response_model=RaffleJoinOut)
+async def join(body: RaffleJoinRequest, db: DbDep) -> RaffleJoinOut:
+    try:
+        _session, event, token = await raffle_service.join_event(
+            db, body.event_code, body.access_code, body.device_id
+        )
+        await db.commit()
+    except PermissionError as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return RaffleJoinOut(session_token=token, event=_event_out(event))
+
+
+@router.get("/session", response_model=RaffleJoinOut)
+async def restore_session(session_token: str, db: DbDep) -> RaffleJoinOut:
+    try:
+        session, event = await raffle_service.get_public_event(db, session_token)
+        existing = await raffle_service.get_session_draw(db, session.id)
+        return RaffleJoinOut(
+            session_token=session_token,
+            event=_event_out(event),
+            existing_draw=_draw_out(existing) if existing else None,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+
+
+@router.post("/draw", response_model=RaffleDrawOut)
+async def draw(body: RaffleDrawRequest, db: DbDep) -> RaffleDrawOut:
+    try:
+        result = await raffle_service.draw(db, body)
+        await db.commit()
+        return _draw_out(result)
+    except PermissionError as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.get(
+    "",
+    response_model=list[RaffleAdminOut],
+    dependencies=[Depends(require_permission("admin:all"))],
+)
+async def admin_list(db: DbDep, _user: AdminUser) -> list[RaffleAdminOut]:
+    events = await raffle_service.list_events(db)
+    return [
+        RaffleAdminOut(
+            **_event_out(event).model_dump(),
+            recent_draws=[
+                _draw_out(draw) for draw in await raffle_service.recent_draws(db, event.id)
+            ],
+        )
+        for event in events
+    ]
+
+
+@router.post(
+    "",
+    response_model=RaffleAdminOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("admin:all"))],
+)
+async def admin_create(body: RaffleCreate, db: DbDep, user: AdminUser) -> RaffleAdminOut:
+    try:
+        event = await raffle_service.create_event(db, body, user)
+        await db.commit()
+        return RaffleAdminOut(**_event_out(event).model_dump(), recent_draws=[])
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, f"建立活動失敗：{exc}") from exc
+
+
+@router.patch(
+    "/{event_id}",
+    response_model=RaffleAdminOut,
+    dependencies=[Depends(require_permission("admin:all"))],
+)
+async def admin_update(
+    event_id: uuid.UUID, body: RaffleStatusUpdate, db: DbDep, _user: AdminUser
+) -> RaffleAdminOut:
+    try:
+        event = await raffle_service.update_event(
+            db, event_id, RaffleStatus(body.status), body.reserve_released
+        )
+        await db.commit()
+        event = await raffle_service.get_event(db, event.id)
+        return RaffleAdminOut(
+            **_event_out(event).model_dump(),
+            recent_draws=[
+                _draw_out(draw) for draw in await raffle_service.recent_draws(db, event.id)
+            ],
+        )
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+
+__all__ = ["router"]

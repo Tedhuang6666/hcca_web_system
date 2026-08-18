@@ -104,6 +104,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "activity:manage",
   },
   {
+    id: "raffleAdmin",
+    href: "/admin/raffle",
+    iconKey: "raffle",
+    label: "現場抽獎",
+    perm: "admin:all",
+  },
+  {
     id: "receivables",
     href: "/finance/receivables",
     iconKey: "shopOrders",

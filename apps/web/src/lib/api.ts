@@ -72,3 +72,4 @@ export * from "./api/loans";
 export * from "./api/inventory";
 export * from "./api/electronic-credentials";
 export * from "./api/support";
+export * from "./api/raffles";
