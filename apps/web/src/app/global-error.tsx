@@ -1,6 +1,5 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 import { reportClientError } from "@/lib/client-error-reporter";
@@ -17,7 +16,9 @@ function isChunkLoadError(error: Error): boolean {
 
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    void import("@sentry/nextjs")
+      .then((Sentry) => Sentry.captureException(error))
+      .catch(() => undefined);
     void reportClientError({
       scope: "global-error",
       message: error.message || "Global error",
