@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,8 +10,6 @@ import {
   RotateCcw,
   Sparkles,
 } from "lucide-react";
-import { SpinRoulette, type Prize } from "react-spin-roulette";
-
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { ApiError, apiErrorMessage, rafflesApi } from "@/lib/api";
 import { BRANDING } from "@/lib/branding";
@@ -24,6 +22,7 @@ const DEVICE_KEY = "hcca-raffle-device";
 const RESULT_HOLD_MS = 10_000;
 
 type Stage = "loading" | "gate" | "ready" | "rolling" | "result";
+type CylinderPrize = { id: string; label: string; value?: string | number };
 
 function localId(key: string): string {
   if (typeof window === "undefined") return "server";
@@ -163,7 +162,7 @@ export default function RaffleClient() {
     return "每位參加者一次機會";
   }, [event]);
 
-  const roulettePrizes = useMemo<Prize[]>(
+  const roulettePrizes = useMemo<CylinderPrize[]>(
     () => event?.prizes.map((prize) => ({ id: prize.id, label: `${prize.tier}賞・${prize.name}`, value: prize.tier })) ?? [],
     [event],
   );
@@ -224,20 +223,7 @@ export default function RaffleClient() {
                 <strong>抽出你的獎品</strong>
               </div>
               <div className={`${styles.roulette} ${stage === "rolling" ? styles.rouletteRolling : ""}`}>
-                {roulettePrizes.length > 0 && <SpinRoulette
-                  prizes={roulettePrizes}
-                  winningIndex={winningIndex}
-                  isSpinning={stage === "rolling"}
-                  duration={3000}
-                  minSpins={5}
-                  prizeSize={142}
-                  orientation="horizontal"
-                  className={styles.rouletteTrack}
-                  prizeClassName={styles.roulettePrize}
-                  indicatorClassName={styles.rouletteIndicator}
-                  renderPrize={(prize) => <><span className={styles.rouletteTier}>{String(prize.value ?? "")}</span><span>{prize.label.replace(`${String(prize.value ?? "")}賞・`, "")}</span></>}
-                  renderIndicator={() => <div className={styles.rouletteIndicator}><span /></div>}
-                />}
+                {roulettePrizes.length > 0 && <CylinderRoulette prizes={roulettePrizes} winningIndex={winningIndex} isSpinning={stage === "rolling"} />}
               </div>
               {error && <p className={styles.error} role="alert">{error}</p>}
               <button className={styles.drawButton} type="button" onClick={runDraw} disabled={stage === "rolling" || event.status !== "open"}>
@@ -268,5 +254,50 @@ export default function RaffleClient() {
 
       <footer className={styles.footer}><span>有問題？請直接詢問現場工作人員</span><span>{BRANDING.orgShortName} · {BRANDING.acronym}</span></footer>
     </main>
+  );
+}
+
+function CylinderRoulette({
+  prizes,
+  winningIndex,
+  isSpinning,
+}: {
+  prizes: CylinderPrize[];
+  winningIndex: number;
+  isSpinning: boolean;
+}) {
+  const faceWidth = 142;
+  const angle = 360 / prizes.length;
+  const radius = faceWidth / (2 * Math.tan(Math.PI / prizes.length));
+  const targetRotation = -(360 * 5 + winningIndex * angle);
+  const reelStyle = {
+    transform: `rotateY(${isSpinning ? targetRotation : 0}deg)`,
+    transition: isSpinning ? "transform 3000ms cubic-bezier(0.12, 0.72, 0.16, 1)" : "none",
+    "--cylinder-radius": `${radius}px`,
+  } as CSSProperties;
+
+  return (
+    <div className={styles.rouletteTrack} role="listbox" aria-label="Prize roulette" aria-busy={isSpinning}>
+      <div className={`${styles.cylinderReel} ${isSpinning ? styles.cylinderReelSpinning : ""}`} style={reelStyle}>
+        {prizes.map((prize, index) => {
+          const value = String(prize.value ?? "");
+          return (
+            <div
+              className={styles.cylinderFace}
+              key={prize.id}
+              role="option"
+              aria-label={prize.label}
+              style={{ transform: `rotateY(${index * angle}deg) translateZ(${radius}px)` }}
+            >
+              <div className={styles.roulettePrize}>
+                <span className={styles.rouletteTier}>{value}</span>
+                <span>{prize.label.replace(`${value}賞・`, "")}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className={styles.rouletteIndicator} aria-hidden="true"><span /></div>
+    </div>
   );
 }
