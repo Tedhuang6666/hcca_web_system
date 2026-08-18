@@ -193,13 +193,14 @@ class LoadShedMiddleware:
         # 自己人白名單 IP / 有效掃描 token：豁免黑名單與後續鎖定 / 維護 / load shed
         trusted = request_is_trusted(scope)
         can_bypass = trusted or _can_bypass_protection(scope)
+        check_ip_block = not trusted and not can_bypass
 
         # 這些都是唯讀防護投影；串行讀取會在 Redis pool 短暫壅塞時把多個
         # 0.25～2 秒等待相加到每一個頁面 API。併行後總等待時間取最慢的一個，
         # 各函式仍維持原本的 fail-open / fail-safe 預設值。
         module_id = match_module(path)
         checks = []
-        if not trusted:
+        if check_ip_block:
             checks.append(is_blocked(ip))
         checks.extend(
             [
@@ -214,7 +215,7 @@ class LoadShedMiddleware:
         results = await asyncio.gather(*checks)
 
         offset = 0
-        if not trusted:
+        if check_ip_block:
             if results[0]:
                 await self._respond_blocked(scope, send, await get_block(ip))
                 return

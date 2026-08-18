@@ -13,9 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.celery_app import celery_app
+from api.core.config import settings
 from api.core.defense import default_rate_limit_config, publish_rules, set_rate_limit_config
+from api.core.ip_blocklist import block as block_ip
 from api.core.ip_blocklist import clear_cache as clear_ip_block_cache
+from api.core.ip_blocklist import unblock as unblock_ip
 from api.core.rate_limit import _memory_buckets
+from api.core.security import create_access_token
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.main import app
 from api.models.audit_log import AuditLog
@@ -190,6 +194,25 @@ async def test_cidr_block_hits_middleware_and_allowlist_wins(client: AsyncClient
     allowed = await client.get("/")
     assert allowed.status_code == 200
     await _reset_defense_cache()
+
+
+async def test_admin_jwt_bypasses_ip_blocklist(client: AsyncClient) -> None:
+    blocked_ips = ("127.0.0.1", "testclient", "test")
+    for ip in blocked_ips:
+        await block_ip(ip, reason="test block")
+    clear_ip_block_cache()
+
+    token = create_access_token("admin-subject", {"is_admin": True})
+    try:
+        response = await client.get(
+            "/",
+            cookies={settings.ACCESS_TOKEN_COOKIE_NAME: token},
+        )
+        assert response.status_code != 403
+    finally:
+        for ip in blocked_ips:
+            await unblock_ip(ip)
+        clear_ip_block_cache()
 
 
 async def test_admin_can_preview_and_block_user_with_all_known_emails(
