@@ -26,9 +26,8 @@ DEFAULT_PRIZES = (
     ("D", "資料夾或徽章", None, 5),
 )
 
-# 每次抽獎獨立擲骰；有限獎機率固定為 1/3，庫存與保留獎仍是硬上限。
-FINITE_PRIZE_CHANCE = 1
-FINITE_PRIZE_ROLLS = 3
+# 活動規模保底 200 人；有限獎機率會隨剩餘庫存動態調整。
+PLANNED_DRAW_COUNT = 200
 A_PRIZE_RELEASE_DRAW = 50
 RESERVED_FINITE_BY_TIER = {"A": 1, "B": 2, "C": 1}
 TIER_WEIGHTS = {"A": 1, "B": 3, "C": 7}
@@ -252,6 +251,18 @@ def _released_finite_prizes(event: RaffleEvent) -> list[RafflePrize]:
     ]
 
 
+def _released_finite_count(event: RaffleEvent) -> int:
+    claimed = _tier_claimed(event)
+    limits = _released_limits(event)
+    count = 0
+    for tier, limit in limits.items():
+        remaining = sum(
+            prize.remaining_quantity or 0 for prize in event.prizes if prize.tier == tier
+        )
+        count += min(remaining, max(0, limit - claimed[tier]))
+    return count
+
+
 def _weighted_choice(prizes: list[RafflePrize], final_mode: bool = False) -> RafflePrize:
     # 先抽獎項等級，再在同級獎品中抽取，避免 B 賞因有兩個品項而機率被加倍。
     weights = {"A": 5, "B": 4, "C": 3} if final_mode else {"A": 1, "B": 3, "C": 7}
@@ -266,13 +277,19 @@ def _weighted_choice(prizes: list[RafflePrize], final_mode: bool = False) -> Raf
     return prizes[-1]
 
 
-def _should_give_finite(finite: list[RafflePrize]) -> bool:
-    return bool(finite) and secrets.randbelow(FINITE_PRIZE_ROLLS) < FINITE_PRIZE_CHANCE
+def _should_give_finite(event: RaffleEvent) -> bool:
+    finite_count = _released_finite_count(event)
+    if finite_count == 0:
+        return False
+    remaining_slots = max(1, PLANNED_DRAW_COUNT - event.draw_count)
+    if finite_count >= remaining_slots:
+        return True
+    return secrets.randbelow(remaining_slots) < finite_count
 
 
 def _select_prize(event: RaffleEvent) -> RafflePrize | None:
     finite = _released_finite_prizes(event)
-    if _should_give_finite(finite):
+    if finite and _should_give_finite(event):
         return _weighted_choice(finite, event.reserve_released)
     return next((item for item in event.prizes if item.tier == "D"), None) or (
         finite[0] if finite else None
