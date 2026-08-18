@@ -43,6 +43,7 @@ x-api-common: &api-common
     OTEL_ENABLED: ${OTEL_ENABLED:-false}
     OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
   depends_on:
     db:
       condition: service_healthy
