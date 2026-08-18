@@ -50,7 +50,13 @@ function subscribeToPermissionState(onChange: () => void) {
     refreshClientPermissionState(onChange);
   };
   window.addEventListener(AUTH_CACHE_EVENT, refresh);
-  if (!documentReady) window.addEventListener("load", markReady, { once: true });
+  if (!documentReady) {
+    window.addEventListener("load", markReady, { once: true });
+  } else {
+    // Full reloads can hydrate after the document load event already fired.
+    // Read the cache now instead of waiting for an event that will not recur.
+    refreshClientPermissionState(onChange);
+  }
   // On the initial streamed document, wait for the browser load boundary so
   // permission-driven navigation cannot interrupt selective hydration. SPA
   // navigations run immediately because the document is already complete.
