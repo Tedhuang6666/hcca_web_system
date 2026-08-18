@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { usePublicModuleStatus } from "@/contexts/PublicModuleStatusContext";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
+import { usePublicWS } from "@/hooks/usePublicWS";
 import { electionsApi } from "@/lib/api/elections";
 import { apiUrl } from "@/lib/config";
 import type { CandidateTally, ElectionLiveSummary, ElectionStatus } from "@/lib/types";
@@ -104,6 +105,22 @@ export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElec
     // Wait for the module-status response before polling so every public page
     // does not emit a predictable failed request during its first render.
     { enabled: enabled && electionStatusReady, intervalMs: pollMs },
+  );
+
+  usePublicWS(
+    active?.id ? `/public/elections/${encodeURIComponent(active.id)}` : null,
+    (message) => {
+      if (message.type !== "election_update" || !message.data) return;
+      const summary = message.data as ElectionLiveSummary;
+      setActive((previous) => {
+        if (!previous || previous.id !== summary.election_id) return previous;
+        const next = { ...previous, status: summary.status, summary };
+        sharedActive = next;
+        sharedCheckedAt = Date.now();
+        return next;
+      });
+    },
+    enabled && !electionsModuleDown,
   );
 
   return active;

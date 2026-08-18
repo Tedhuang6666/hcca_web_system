@@ -7,6 +7,7 @@ import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { mealApi, apiErrorMessage } from "@/lib/api";
 import type { MealOrderListItem, MealOrderOut, MealOrderStatus, MenuScheduleListItem, MealVendorOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useWS } from "@/hooks/useWS";
 
 const STATUS_CFG: Record<MealOrderStatus, { label: string; color: string; bg: string; border: string }> = {
   pending:   { label: "待確認", color: "var(--warning)",    bg: "var(--warning-dim)",   border: "var(--warning)" },
@@ -184,7 +185,7 @@ function OrderRow({
 
 // ── 商家管理面板（meal:manage） ────────────────────────────────────────────────
 
-function VendorDashboard() {
+function VendorDashboard({ refreshToken = 0 }: { refreshToken?: number }) {
   const [vendors, setVendors] = useState<MealVendorOut[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<string>("");
   const [schedules, setSchedules] = useState<MenuScheduleListItem[]>([]);
@@ -229,6 +230,9 @@ function VendorDashboard() {
   }, [selectedSchedule]);
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
+  useEffect(() => {
+    if (refreshToken > 0) void loadOrders();
+  }, [loadOrders, refreshToken]);
 
   const handleConfirm = async (id: string) => {
     try { await mealApi.confirmOrder(id); toast.success("已確認"); await loadOrders(); }
@@ -448,6 +452,8 @@ export default function MealOrdersPage() {
   const [tab, setTab] = useState<PageTab>("my");
   const [orders, setOrders] = useState<MealOrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRoom, setUserRoom] = useState<string | null>(null);
+  const [orderRefreshToken, setOrderRefreshToken] = useState(0);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -458,6 +464,26 @@ export default function MealOrdersPage() {
   }, []);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    const userId = localStorage.getItem("user_id");
+    setUserRoom(userId ? `user:${userId}` : null);
+  }, []);
+
+  useWS(userRoom, useCallback((message) => {
+    const data = message.data as { domain?: string } | undefined;
+    if (message.type === "order.updated" && data?.domain === "meal") {
+      setOrderRefreshToken((value) => value + 1);
+      void load();
+    }
+  }, [load]));
+
+  useWS("meal:orders", useCallback((message) => {
+    if (message.type === "order.updated") {
+      setOrderRefreshToken((value) => value + 1);
+      void load();
+    }
+  }, [load]), isManager);
 
   const handleCancel = async (orderId: string) => {
     if (!confirm("確定要取消此訂單？")) return;
@@ -564,7 +590,7 @@ export default function MealOrdersPage() {
       {/* ── 商家管理 ─────────────────────────────────────────────────────── */}
       {tab === "vendor" && isManager && (
         <div key="vendor" className="tab-panel-transition">
-          <VendorDashboard />
+          <VendorDashboard refreshToken={orderRefreshToken} />
         </div>
       )}
     </div>

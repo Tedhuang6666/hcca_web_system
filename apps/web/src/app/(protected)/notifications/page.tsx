@@ -199,6 +199,10 @@ export default function NotificationsPage() {
 
   // 訂閱 WebSocket：收到新通知時重新載入通知列表
   useWS(wsRoom, useCallback((msg) => {
+    if (msg.type === "inbox.changed") {
+      void fetchAll();
+      return;
+    }
     if (msg.type === "notification.created") {
       if (msg.notification && typeof msg.notification === "object") {
         setItems((current) => [msg.notification as NotificationItem, ...current].slice(0, 80));

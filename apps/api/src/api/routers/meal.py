@@ -55,6 +55,7 @@ from api.schemas.meal import (
 from api.schemas.shop import ImageUploadOut
 from api.services import audit as audit_svc
 from api.services import meal as meal_svc
+from api.services.realtime_events import broadcast_order_updated
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/meal", tags=["學餐訂購系統"])
@@ -116,6 +117,16 @@ async def _item_or_404(item_id: uuid.UUID, session: DbDep) -> MenuItem:
 async def _order_or_404(order_id: uuid.UUID, session: DbDep) -> MealOrder:
     o = await meal_svc.get_meal_order(session, order_id)
     return or_404(o, "找不到此學餐訂單")
+
+
+async def _broadcast_meal_order(order: MealOrder) -> None:
+    await broadcast_order_updated(
+        domain="meal",
+        order_id=order.id,
+        user_id=order.user_id,
+        status=order.status.value,
+        is_paid=order.is_paid,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -791,6 +802,7 @@ async def create_meal_order(
         },
         summary=f"建立學餐訂單「{order.serial_number}」",
     )
+    await _broadcast_meal_order(order)
     return order
 
 
@@ -914,7 +926,9 @@ async def create_class_meal_order(
         ) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    return await _order_or_404(order.id, session)
+    order = await _order_or_404(order.id, session)
+    await _broadcast_meal_order(order)
+    return order
 
 
 @router.post(
@@ -934,7 +948,9 @@ async def update_meal_order_payment(
     class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
     if not current_user.is_superuser and order.class_id not in class_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權標示此訂單收款")
-    return await meal_svc.set_order_paid(session, order, is_paid=is_paid, actor_id=current_user.id)
+    order = await meal_svc.set_order_paid(session, order, is_paid=is_paid, actor_id=current_user.id)
+    await _broadcast_meal_order(order)
+    return order
 
 
 @router.post(
@@ -1065,6 +1081,7 @@ async def cancel_meal_order(
         meta={"serial_number": order.serial_number, "reason": payload.reason},
         summary=f"取消學餐訂單「{order.serial_number}」",
     )
+    await _broadcast_meal_order(order)
     return order
 
 
@@ -1090,7 +1107,9 @@ async def update_meal_order(
         await meal_svc.replace_meal_order_items(session, order, data=payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    return await _order_or_404(order.id, session)
+    order = await _order_or_404(order.id, session)
+    await _broadcast_meal_order(order)
+    return order
 
 
 # ── 商家：訂單管理端點 ────────────────────────────────────────────────────────
@@ -1126,6 +1145,7 @@ async def confirm_meal_order(
         meta={"serial_number": order.serial_number, "status": order.status.value},
         summary=f"確認學餐訂單「{order.serial_number}」",
     )
+    await _broadcast_meal_order(order)
     return order
 
 
@@ -1159,6 +1179,7 @@ async def complete_meal_order(
         meta={"serial_number": order.serial_number, "status": order.status.value},
         summary=f"完成學餐訂單「{order.serial_number}」",
     )
+    await _broadcast_meal_order(order)
     return order
 
 

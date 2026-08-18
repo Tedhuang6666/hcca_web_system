@@ -172,6 +172,18 @@ async def test_room_access_meeting_room_non_attendee_denied(member_user: User) -
         await _assert_room_access(f"meeting:{uuid.uuid4()}", str(member_user.id))
 
 
+async def test_room_access_unknown_seat_zone_denied(member_user: User) -> None:
+    with pytest.raises(PermissionError):
+        await _assert_room_access(f"seat-zone:{uuid.uuid4()}", str(member_user.id))
+
+
+async def test_room_access_order_manager_rooms_denied_without_permission(member_user: User) -> None:
+    with pytest.raises(PermissionError):
+        await _assert_room_access("shop:orders", str(member_user.id))
+    with pytest.raises(PermissionError):
+        await _assert_room_access("meal:orders", str(member_user.id))
+
+
 async def test_room_access_unknown_room_default_denied(member_user: User) -> None:
     try:
         await _assert_room_access("election:some-id", str(member_user.id))

@@ -68,6 +68,7 @@ from api.services import audit as audit_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 from api.services.permission import get_user_permission_codes
+from api.services.realtime_events import broadcast_order_updated
 from api.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,16 @@ async def _get_variant_option_or_404(
 async def _get_order_or_404(order_id: uuid.UUID, session: AsyncSession) -> Order:
     o = await shop_svc.get_order(session, order_id)
     return or_404(o, "找不到此訂單")
+
+
+async def _broadcast_shop_order(order: Order) -> None:
+    await broadcast_order_updated(
+        domain="shop",
+        order_id=order.id,
+        user_id=order.user_id,
+        status=order.status.value,
+        is_paid=order.is_paid,
+    )
 
 
 async def _has_shop_manage(session: AsyncSession, user: User) -> bool:
@@ -617,6 +628,7 @@ async def checkout(
         full = await shop_svc.get_order(session, order.id)
         if full is not None:
             result.append(shop_svc.serialize_order(full))
+        await _broadcast_shop_order(full or order)
         try:
             from api.services.outbox import emit as outbox_emit
 
@@ -766,6 +778,7 @@ async def create_class_order(
     for order in orders:
         full = await shop_svc.get_order(session, order.id)
         result.append(shop_svc.serialize_order(full or order))
+        await _broadcast_shop_order(full or order)
     return result
 
 
@@ -909,7 +922,9 @@ async def cancel_order(
         summary=f"取消商品訂單「{order.serial_number}」",
     )
     refreshed = await shop_svc.get_order(session, order.id)
-    return shop_svc.serialize_order(refreshed or order)
+    updated = refreshed or order
+    await _broadcast_shop_order(updated)
+    return shop_svc.serialize_order(updated)
 
 
 @router.patch("/orders/{order_id}", response_model=OrderOut, summary="截止前修改訂單品項")
@@ -932,7 +947,9 @@ async def update_order_items(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     refreshed = await shop_svc.get_order(session, order.id)
-    return shop_svc.serialize_order(refreshed or order)
+    updated = refreshed or order
+    await _broadcast_shop_order(updated)
+    return shop_svc.serialize_order(updated)
 
 
 @router.patch("/orders/{order_id}/payment", response_model=OrderOut, summary="標示訂單是否已繳費")
@@ -968,7 +985,9 @@ async def update_order_payment(
         summary=f"標示訂單「{order.serial_number}」{'已繳費' if payload.is_paid else '未繳費'}",
     )
     refreshed = await shop_svc.get_order(session, order.id)
-    return shop_svc.serialize_order(refreshed or order)
+    updated = refreshed or order
+    await _broadcast_shop_order(updated)
+    return shop_svc.serialize_order(updated)
 
 
 # ── 報表匯出 ──────────────────────────────────────────────────────────────────

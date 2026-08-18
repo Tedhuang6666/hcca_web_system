@@ -54,6 +54,31 @@ async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID
         logger.debug("WebSocket client disconnected during handshake room=%s", room)
 
 
+@router.websocket("/ws/public/announcements")
+async def public_announcement_websocket(websocket: WebSocket) -> None:
+    """公開重要公告變更推播；訊息只包含公告 ID，不攜帶受限內容。"""
+    if not await _validate_ws_origin(websocket):
+        return
+    room = "public:announcements"
+    try:
+        await manager.connect(websocket, room, _client_ip(websocket))
+    except WSCapacityError as exc:
+        await websocket.close(code=1013, reason=exc.reason)
+        return
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            if raw.get("type") == "pong":
+                manager.notify_pong(websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+    except RuntimeError as exc:
+        if "WebSocket is not connected" not in str(exc):
+            raise
+        manager.disconnect(websocket, room)
+        logger.debug("WebSocket client disconnected during handshake room=%s", room)
+
+
 # ── 認證輔助 ─────────────────────────────────────────────────────────────────
 
 
@@ -178,6 +203,25 @@ async def _assert_room_access(room: str, user_id: str) -> None:
             )
             if not is_attendee:
                 raise PermissionError("無權加入此會議房間")
+            return
+
+        if room.startswith("seat-zone:"):
+            from api.models.seating import SeatingZone
+
+            zone_id = uuid.UUID(room.split(":", 1)[1])
+            exists = await db.scalar(select(SeatingZone.id).where(SeatingZone.id == zone_id))
+            if not exists:
+                raise PermissionError("找不到此劃位場次")
+            return
+
+        if room == "shop:orders":
+            if "shop:manage" not in codes:
+                raise PermissionError("無權加入商品訂單房間")
+            return
+
+        if room == "meal:orders":
+            if "meal:manage" not in codes:
+                raise PermissionError("無權加入學餐訂單房間")
             return
 
         # 預設拒絕：未明確授權的房間一律不得加入。

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { announcementsApi } from "@/lib/api";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
+import { usePublicWS } from "@/hooks/usePublicWS";
 import type { AnnouncementOut } from "@/lib/types";
 import AnnouncementMarkdown from "./AnnouncementMarkdown";
 
@@ -94,6 +95,19 @@ export default function UrgentAnnouncementPopup() {
       .catch(() => { /* public best-effort popup */ });
     return () => { mounted = false; };
   }, [lowDataMode]);
+
+  usePublicWS("/public/announcements", () => {
+    void announcementsApi.refreshActiveUrgent().then((announcement) => {
+      if (!announcement || hasDismissedUrgent(announcement)) {
+        setItem(null);
+        setOpen(false);
+        return;
+      }
+      writeUrgentCache(announcement);
+      setItem(announcement);
+      setOpen(true);
+    }).catch(() => undefined);
+  }, !lowDataMode);
 
   if (!mounted || !item || !open) return null;
 

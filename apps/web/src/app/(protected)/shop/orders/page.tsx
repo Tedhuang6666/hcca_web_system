@@ -10,6 +10,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import { useWS } from "@/hooks/useWS";
 
 export default function OrdersPage() {
   const { can } = usePermissions();
@@ -22,6 +23,12 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
   const canManageOrders = isAdmin || activities.length > 0;
+  const [userRoom, setUserRoom] = useState<string | null>(null);
+
+  useEffect(() => {
+    const userId = localStorage.getItem("user_id");
+    setUserRoom(userId ? `user:${userId}` : null);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +58,14 @@ export default function OrdersPage() {
   useEffect(() => {
     activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
   }, []);
+
+  useWS(userRoom, useCallback((message) => {
+    if (message.type === "order.updated") void load();
+  }, [load]));
+
+  useWS(isAdmin ? "shop:orders" : null, useCallback((message) => {
+    if (message.type === "order.updated") void load();
+  }, [load]), isAdmin);
 
   const confirmedOrders = orders.filter(o => o.status === "confirmed");
   const totalAmount = confirmedOrders.reduce((s, o) => s + o.total_price, 0);

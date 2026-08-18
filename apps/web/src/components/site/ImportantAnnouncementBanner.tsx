@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { announcementsApi } from "@/lib/api/announcements";
+import { usePublicWS } from "@/hooks/usePublicWS";
 import type { AnnouncementOut } from "@/lib/types";
 
 const DISMISSAL_TTL_MS = 10 * 60 * 1000;
@@ -121,6 +122,14 @@ export default function ImportantAnnouncementBanner({
       active = false;
     };
   }, [initialAnnouncement]);
+
+  usePublicWS("/public/announcements", () => {
+    void announcementsApi.refreshActiveUrgent().then((item) => {
+      setAnnouncement(item);
+      setVisible(Boolean(item && !wasRecentlyDismissed(item)));
+      setResolved(true);
+    }).catch(() => undefined);
+  });
 
   if (!resolved || !announcement || !visible) return null;
 

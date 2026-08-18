@@ -8,6 +8,7 @@ import { seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import type { SeatBookingOut, OrderOut, ProductOut, ZoneListItem } from "@/lib/types";
+import { useWS } from "@/hooks/useWS";
 
 type SeatingItem = {
   productId: string;
@@ -22,6 +23,12 @@ export default function OrderDetailPage() {
   const [assignments, setAssignments] = useState<SeatBookingOut[]>([]);
   const [seatingItems, setSeatingItems] = useState<SeatingItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRoom, setUserRoom] = useState<string | null>(null);
+
+  useEffect(() => {
+    const userId = localStorage.getItem("user_id");
+    setUserRoom(userId ? `user:${userId}` : null);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +57,13 @@ export default function OrderDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useWS(userRoom, useCallback((message) => {
+    const data = message.data as { domain?: string; order_id?: string } | undefined;
+    if (message.type === "order.updated" && data?.domain === "shop" && data.order_id === id) {
+      void load();
+    }
+  }, [id, load]));
 
   if (loading) return <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入中…</div>;
   if (!order) return <div className="p-6">找不到訂單。<Link href="/shop/orders" className="btn btn-ghost text-sm ml-2">返回訂單</Link></div>;
