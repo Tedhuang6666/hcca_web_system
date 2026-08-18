@@ -154,7 +154,7 @@ if [[ "$maintenance_mode" == "1" ]]; then
 fi
 
 echo "Applying migrations in maintenance mode..."
-if [[ "$maintenance_mode" != "1" ]]; then
+if [[ "$maintenance_mode" != "1" && "${SKIP_MIGRATE:-0}" != "1" ]]; then
   echo "Migrations require MAINTENANCE_MODE=1 so traffic stays on the maintenance page." >&2
   exit 2
 fi
