@@ -27,6 +27,7 @@
 	handle_path /api/* {
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 			health_uri /live
 			health_interval 10s
 			health_timeout 3s
@@ -36,6 +37,7 @@
 	handle /ws/* {
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 
@@ -44,6 +46,7 @@
 		header Cache-Control "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 
@@ -51,6 +54,7 @@
 		header Cache-Control "no-store"
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 
@@ -66,30 +70,35 @@
 	handle /auth/google/* {
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 
 	handle /auth/discord/* {
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 
 	handle /health {
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 
 	handle /ready {
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 
 	handle /live {
 		reverse_proxy api-green:8000 {
 			header_up CF-Connecting-IP {client_ip}
+			header_up X-Real-IP {client_ip}
 		}
 	}
 

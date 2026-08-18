@@ -120,6 +120,8 @@ class TrustedProxyMiddleware:
 
         real_ip = self._get_header(scope, b"cf-connecting-ip")
         if not real_ip:
+            real_ip = self._get_header(scope, b"x-real-ip")
+        if not real_ip:
             # Caddy / Uvicorn 可能會保留 X-Forwarded-For 而移除自訂 CF 標頭；
             # 此時信任的反向代理已經把最左側地址設為原始使用者 IP。
             forwarded_for = self._get_header(scope, b"x-forwarded-for")
