@@ -171,6 +171,13 @@ from api.models.loan import (  # noqa: F401
     LoanUnit,
     LoanUnitStatus,
 )
+from api.models.raffle import (  # noqa: F401
+    RaffleDraw,
+    RaffleEvent,
+    RafflePrize,
+    RaffleSession,
+    RaffleStatus,
+)
 from api.models.meal import (  # noqa: F401
     MealClassPickupCode,
     MealOrder,

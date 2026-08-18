@@ -1480,3 +1480,47 @@ export interface SupportGuide {
 
 
 // ── Google Calendar 同步 ──────────────────────────────────────────────────────
+
+export type RaffleStatus = "draft" | "open" | "paused" | "closed";
+
+export interface RafflePrizeOut {
+  id: string;
+  tier: string;
+  name: string;
+  total_quantity: number | null;
+  remaining_quantity: number | null;
+  sort_order: number;
+}
+
+export interface RaffleDrawOut {
+  id: string;
+  draw_number: number;
+  prize_id: string;
+  prize_tier: string;
+  prize_name: string;
+  created_at: string;
+}
+
+export interface RaffleEventOut {
+  id: string;
+  event_code: string;
+  title: string;
+  description: string | null;
+  status: RaffleStatus;
+  draw_count: number;
+  reserve_released: boolean;
+  access_code_hint: string;
+  prizes: RafflePrizeOut[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RaffleAdminOut extends RaffleEventOut {
+  recent_draws: RaffleDrawOut[];
+}
+
+export interface RaffleJoinOut {
+  session_token: string;
+  event: RaffleEventOut;
+  existing_draw: RaffleDrawOut | null;
+}

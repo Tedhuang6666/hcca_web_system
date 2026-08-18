@@ -101,6 +101,7 @@ from api.routers import (
     privacy,
     public_api,
     publications,
+    raffles,
     receivables,
     recommended_vendors,
     regulations,
@@ -499,6 +500,7 @@ def create_app() -> FastAPI:
     app.include_router(loans.router)
     app.include_router(inventory.router)
     app.include_router(recommended_vendors.router)
+    app.include_router(raffles.router)
     app.include_router(work_items.router)
     app.include_router(user_google_tasks.router)
     app.include_router(governance.router)
