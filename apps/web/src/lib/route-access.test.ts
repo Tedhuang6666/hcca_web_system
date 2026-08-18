@@ -59,6 +59,16 @@ describe("route manifest", () => {
     expect(getRoutePolicy("/").shell).toBe("bare");
     expect(getRoutePolicy("/about").shell).toBe("bare");
   });
+
+  it("keeps the现场抽獎入口 public and bare for shared tablets", () => {
+    expect(getRoutePolicy("/raffle")).toMatchObject({
+      public: true,
+      requiresAuth: false,
+      shell: "bare",
+      indexable: false,
+      sitemap: false,
+    });
+  });
 });
 
 describe("partner map route access", () => {

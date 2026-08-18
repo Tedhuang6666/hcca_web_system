@@ -1,51 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, Copy, ExternalLink, Gauge, Lock, Pause, Play, Plus, RefreshCw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Copy, ExternalLink, Gauge, Lock, Pause, Play, RefreshCw, Send, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
-import { apiErrorMessage, rafflesApi, type RaffleCreateInput } from "@/lib/api";
+import { apiErrorMessage, rafflesApi } from "@/lib/api";
 import type { RaffleAdminOut, RaffleStatus } from "@/lib/types";
 
 import styles from "./raffle-admin.module.css";
-
-type PrizeDraft = RaffleCreateInput["prizes"][number];
-
-const starterPrizes: PrizeDraft[] = [
-  { tier: "A", name: "水壺", quantity: 2, sort_order: 0 },
-  { tier: "A", name: "帽踢", quantity: 2, sort_order: 1 },
-  { tier: "B", name: "麻袋", quantity: 5, sort_order: 2 },
-  { tier: "B", name: "帆布袋", quantity: 5, sort_order: 3 },
-  { tier: "C", name: "金屬吊牌", quantity: 10, sort_order: 4 },
-  { tier: "D", name: "資料夾或徽章", quantity: null, sort_order: 5 },
-];
 
 const statusLabel: Record<RaffleStatus, string> = { draft: "草稿", open: "進行中", paused: "暫停", closed: "已結束" };
 
 export default function RaffleAdminClient() {
   const { isAdmin } = usePermissions();
   const [events, setEvents] = useState<RaffleAdminOut[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [createdCodes, setCreatedCodes] = useState<Record<string, string>>({});
-  const [form, setForm] = useState<RaffleCreateInput>({
-    event_code: "WELCOME26",
-    title: "迎新現場抽獎",
-    description: "每位參加者一次機會，好獎分段釋出。",
-    access_code: "2626",
-    prizes: starterPrizes,
-  });
+  const [accessCode, setAccessCode] = useState("");
 
-  const selected = events.find((event) => event.id === selectedId) ?? events[0] ?? null;
+  const selected = events[0] ?? null;
 
   const load = useCallback(async () => {
     try {
       const rows = await rafflesApi.list();
       setEvents(rows);
-      setSelectedId((current) => current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null);
     } catch (caught) {
-      toast.error(apiErrorMessage(caught, "無法讀取抽獎活動"));
+      toast.error(apiErrorMessage(caught, "無法讀取抽獎狀態"));
     }
   }, []);
 
@@ -53,21 +33,20 @@ export default function RaffleAdminClient() {
     if (isAdmin) void load();
   }, [isAdmin, load]);
 
-  const createEvent = async (event: React.FormEvent<HTMLFormElement>) => {
+  const activate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.event_code.trim() || !form.title.trim() || !form.access_code.trim()) {
-      toast.error("請完成活動碼、標題與驗證碼");
+    if (!accessCode.trim()) {
+      toast.error("請輸入本輪驗證碼");
       return;
     }
     setBusy(true);
     try {
-      const created = await rafflesApi.create({ ...form, event_code: form.event_code.trim(), title: form.title.trim() });
-      setCreatedCodes((current) => ({ ...current, [created.id]: form.access_code }));
-      toast.success("抽獎活動已建立，請確認獎品後再開放");
-      await load();
-      setSelectedId(created.id);
+      const created = await rafflesApi.create({ access_code: accessCode.trim() });
+      setAccessCode("");
+      toast.success("抽獎台已開放，請把驗證碼提供給參加者");
+      setEvents((current) => [created, ...current]);
     } catch (caught) {
-      toast.error(apiErrorMessage(caught, "建立活動失敗"));
+      toast.error(apiErrorMessage(caught, "無法開放抽獎"));
     } finally {
       setBusy(false);
     }
@@ -79,17 +58,12 @@ export default function RaffleAdminClient() {
     try {
       const updated = await rafflesApi.update(selected.id, { status, reserve_released });
       setEvents((current) => current.map((row) => row.id === updated.id ? updated : row));
-      toast.success(status === "open" ? "抽獎台已開放" : status === "paused" ? "抽獎台已暫停" : status === "closed" ? "活動已結束" : "已更新活動");
+      toast.success(status === "open" ? "抽獎台已開放" : status === "paused" ? "抽獎台已暫停" : status === "closed" ? "本輪抽獎已結束" : "狀態已更新");
     } catch (caught) {
-      toast.error(apiErrorMessage(caught, "更新活動失敗"));
+      toast.error(apiErrorMessage(caught, "更新抽獎狀態失敗"));
     } finally {
       setBusy(false);
     }
-  };
-
-  const releaseReserve = () => {
-    if (!selected) return;
-    void changeStatus(selected.status, true);
   };
 
   const copy = async (text: string, message: string) => {
@@ -97,52 +71,67 @@ export default function RaffleAdminClient() {
     toast.success(message);
   };
 
+  const reset = async () => {
+    if (!selected || !window.confirm("確定要清除本輪所有測試資料嗎？中獎紀錄與平板驗證 session 都會被刪除，獎品庫存會恢復原始數量。")) return;
+    setBusy(true);
+    try {
+      const resetEvent = await rafflesApi.reset(selected.id);
+      setEvents((current) => current.map((row) => row.id === resetEvent.id ? resetEvent : row));
+      toast.success("本輪測試資料已清除，抽獎台已重新開放");
+    } catch (caught) {
+      toast.error(apiErrorMessage(caught, "清除測試資料失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const finiteRemaining = selected?.prizes.reduce((sum, prize) => sum + (prize.remaining_quantity ?? 0), 0) ?? 0;
 
   if (!isAdmin) {
-    return <main className={styles.denied}><Lock size={30} /><h1>需要管理員權限</h1><p>抽獎活動設定僅開放給管理員。</p></main>;
+    return <main className={styles.denied}><Lock size={30} /><h1>需要管理員權限</h1><p>抽獎管理僅開放給管理員。</p></main>;
   }
 
   return (
     <main className={styles.page}>
       <header className={styles.pageHeader}>
-        <div><div className={styles.kicker}><Sparkles size={14} /> 現場工具</div><h1>抽獎控制台</h1><p>先設定獎品，再交給現場平板。庫存由後端鎖定，不怕多台同時抽。</p></div>
+        <div><div className={styles.kicker}>現場工具</div><h1>抽獎管理</h1><p>固定獎池、單一驗證碼；多台平板可同時使用。</p></div>
         <button className={styles.ghostButton} type="button" onClick={() => void load()}><RefreshCw size={15} /> 重新整理</button>
       </header>
 
       <div className={styles.layout}>
-        <aside className={styles.sidebar}>
-          <div className={styles.sideTitle}><span>活動清單</span><span className={styles.count}>{events.length}</span></div>
-          {events.length === 0 ? <div className={styles.emptyList}><Gauge size={20} /><p>還沒有活動</p><span>右側建立第一場抽獎</span></div> : events.map((event) => (
-            <button key={event.id} type="button" className={`${styles.eventItem} ${selected?.id === event.id ? styles.eventItemActive : ""}`} onClick={() => setSelectedId(event.id)}>
-              <span className={`${styles.statusDot} ${styles[`status_${event.status}`]}`} />
-              <span className={styles.eventItemCopy}><strong>{event.title}</strong><small>{event.event_code} · {statusLabel[event.status]}</small></span><ChevronRight size={15} />
-            </button>
-          ))}
-          <div className={styles.sideNote}><ShieldCheck size={15} /><span>抽獎結果會留存紀錄，平板只保留匿名 session。</span></div>
-        </aside>
-
         <section className={styles.content}>
-          {!selected ? <CreateForm form={form} setForm={setForm} onSubmit={createEvent} busy={busy} /> : (
+          <section className={styles.activatePanel}>
+            <div>
+              <span className={styles.statusBadge}>開始新一輪</span>
+              <h2>設定驗證碼，直接開放抽獎</h2>
+              <p>獎品與數量已固定，不需要建立活動或輸入活動碼。</p>
+            </div>
+            <form className={styles.activateForm} onSubmit={activate}>
+              <label>本輪驗證碼<input value={accessCode} onChange={(event) => setAccessCode(event.target.value)} placeholder="輸入 4 位以上驗證碼" autoComplete="off" /></label>
+              <button className={styles.primaryCreate} type="submit" disabled={busy}>{busy ? "開放中…" : "開放抽獎"} <Play size={15} /></button>
+            </form>
+          </section>
+
+          {!selected ? <section className={styles.emptyState}><Gauge size={24} /><h2>尚未開放本輪抽獎</h2><p>輸入驗證碼後，系統會自動建立固定獎池。</p></section> : (
             <>
-              <div className={styles.controlHead}><div><span className={`${styles.statusBadge} ${styles[`badge_${selected.status}`]}`}>{statusLabel[selected.status]}</span><h2>{selected.title}</h2><p>{selected.description || "尚未填寫活動說明"}</p></div><div className={styles.headActions}>
-                {selected.status === "draft" && <button className={styles.primarySmall} type="button" disabled={busy} onClick={() => void changeStatus("open")}><Play size={14} /> 開放抽獎</button>}
+              <div className={styles.controlHead}><div><span className={`${styles.statusBadge} ${styles[`badge_${selected.status}`]}`}>{statusLabel[selected.status]}</span><h2>目前抽獎台</h2><p>{selected.description}</p></div><div className={styles.headActions}>
+                {selected.status === "draft" && <button className={styles.primarySmall} type="button" disabled={busy} onClick={() => void changeStatus("open")}><Play size={14} /> 開放</button>}
                 {selected.status === "open" && <button className={styles.warningSmall} type="button" disabled={busy} onClick={() => void changeStatus("paused")}><Pause size={14} /> 暫停</button>}
-                {selected.status === "paused" && <button className={styles.primarySmall} type="button" disabled={busy} onClick={() => void changeStatus("open")}><Play size={14} /> 繼續抽獎</button>}
+                {selected.status === "paused" && <button className={styles.primarySmall} type="button" disabled={busy} onClick={() => void changeStatus("open")}><Play size={14} /> 繼續</button>}
                 {selected.status !== "closed" && <button className={styles.closeSmall} type="button" disabled={busy} onClick={() => void changeStatus("closed")}><X size={14} /> 結束</button>}
+                <button className={styles.resetSmall} type="button" disabled={busy} onClick={() => void reset()}>清除測試資料</button>
               </div></div>
 
-              <div className={styles.metrics}><Metric label="已抽出" value={String(selected.draw_count)} note="人" accent="orange" /><Metric label="有限獎剩餘" value={String(finiteRemaining)} note="份" accent="yellow" /><Metric label="節奏" value={selected.reserve_released ? "尾聲" : "保留中"} note={selected.reserve_released ? "全獎池開放" : "每 3 人釋出 1 份"} accent="green" /></div>
+              <div className={styles.metrics}><Metric label="已抽出" value={String(selected.draw_count)} note="人" accent="orange" /><Metric label="有限獎剩餘" value={String(finiteRemaining)} note="份" accent="yellow" /><Metric label="目前節奏" value={selected.reserve_released ? "尾聲" : "保留中"} note={selected.reserve_released ? "全獎池開放" : "每 3 人釋出 1 份"} accent="green" /></div>
 
               <div className={styles.gridTwo}>
-                <section className={styles.panel}><div className={styles.panelTitle}><div><span>獎品庫存</span><small>後端即時狀態</small></div>{!selected.reserve_released && selected.status !== "closed" && <button className={styles.outlineButton} type="button" onClick={releaseReserve}><Send size={14} /> 釋放尾聲獎</button>}</div><div className={styles.prizeList}>{selected.prizes.map((prize) => <div className={styles.prizeRow} key={prize.id}><span className={`${styles.tier} ${styles[`tier_${prize.tier}`]}`}>{prize.tier}</span><strong>{prize.name}</strong><span className={styles.stock}>{prize.remaining_quantity === null ? "∞" : `${prize.remaining_quantity} / ${prize.total_quantity}`}</span></div>)}</div><p className={styles.panelHint}><ShieldCheck size={14} /> 保留模式會讓好獎按節奏出現；「釋放尾聲獎」後，剩餘有限獎全部加入抽選。</p></section>
-                <section className={styles.panel}><div className={styles.panelTitle}><div><span>現場入口</span><small>提供給學弟使用</small></div><ExternalLink size={16} color="var(--text-muted)" /></div><div className={styles.shareBox}><div><small>活動碼</small><strong>{selected.event_code}</strong></div><button type="button" onClick={() => void copy(selected.event_code, "活動碼已複製")}><Copy size={14} /></button></div><div className={styles.shareBox}><div><small>現場驗證碼</small><strong>{createdCodes[selected.id] ?? selected.access_code_hint}</strong></div>{createdCodes[selected.id] && <button type="button" onClick={() => void copy(createdCodes[selected.id], "驗證碼已複製")}><Copy size={14} /></button>}</div><div className={styles.shareUrl}><span>{typeof window === "undefined" ? "/raffle" : `${window.location.origin}/raffle`}</span><button type="button" onClick={() => void copy(`${window.location.origin}/raffle`, "抽獎網址已複製")}><Copy size={14} /></button></div><p className={styles.panelHint}><Lock size={14} /> 驗證成功後會固定在每台平板，不會因重新整理而跳回入口。</p></section>
+                <section className={styles.panel}><div className={styles.panelTitle}><div><span>固定獎品</span><small>系統預設，不需另外設定</small></div>{!selected.reserve_released && selected.status !== "closed" && <button className={styles.outlineButton} type="button" onClick={() => void changeStatus(selected.status, true)}><Send size={14} /> 開啟尾聲獎</button>}</div><div className={styles.prizeList}>{selected.prizes.map((prize) => <div className={styles.prizeRow} key={prize.id}><span className={`${styles.tier} ${styles[`tier_${prize.tier}`]}`}>{prize.tier}</span><strong>{prize.name}</strong><span className={styles.stock}>{prize.remaining_quantity === null ? "∞" : `${prize.remaining_quantity} / ${prize.total_quantity}`}</span></div>)}</div><p className={styles.panelHint}><ShieldCheck size={14} /> 庫存由後端鎖定，多台平板同時抽獎也不會超發。</p></section>
+                <section className={styles.panel}><div className={styles.panelTitle}><div><span>參加者入口</span><small>現場平板開啟此網址</small></div><ExternalLink size={16} color="var(--text-muted)" /></div><div className={styles.shareBox}><div><small>抽獎網址</small><strong>/raffle</strong></div><button type="button" onClick={() => void copy(`${window.location.origin}/raffle`, "抽獎網址已複製")}><Copy size={14} /></button></div><p className={styles.panelHint}><Lock size={14} /> 驗證成功後會固定在每台平板；上一位抽完可直接交給下一位。</p></section>
               </div>
 
-              <section className={styles.panel}><div className={styles.panelTitle}><div><span>最近抽獎</span><small>即時同步・最近 12 筆</small></div><button className={styles.iconButton} type="button" onClick={() => void load()}><RefreshCw size={14} /></button></div>{selected.recent_draws.length === 0 ? <div className={styles.noDraws}>活動開始後，這裡會顯示每一筆中獎結果。</div> : <div className={styles.drawTable}>{selected.recent_draws.map((draw) => <div className={styles.drawRow} key={draw.id}><span>#{String(draw.draw_number).padStart(3, "0")}</span><strong><b className={`${styles.tierMini} ${styles[`tier_${draw.prize_tier}`]}`}>{draw.prize_tier}</b>{draw.prize_name}</strong><time>{new Date(draw.created_at).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}</time></div>)}</div>}</section>
+              <section className={styles.panel}><div className={styles.panelTitle}><div><span>最近抽獎</span><small>最近 12 筆結果</small></div><button className={styles.iconButton} type="button" onClick={() => void load()}><RefreshCw size={14} /></button></div>{selected.recent_draws.length === 0 ? <div className={styles.noDraws}>抽獎開始後，這裡會顯示中獎紀錄。</div> : <div className={styles.drawTable}>{selected.recent_draws.map((draw) => <div className={styles.drawRow} key={draw.id}><span>#{String(draw.draw_number).padStart(3, "0")}</span><strong><b className={`${styles.tierMini} ${styles[`tier_${draw.prize_tier}`]}`}>{draw.prize_tier}</b>{draw.prize_name}</strong><time>{new Date(draw.created_at).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}</time></div>)}</div>}</section>
             </>
           )}
-          {selected && <button className={styles.newEventButton} type="button" onClick={() => setSelectedId(null)}><Plus size={15} /> 建立另一場活動</button>}
         </section>
       </div>
     </main>
@@ -151,9 +140,4 @@ export default function RaffleAdminClient() {
 
 function Metric({ label, value, note, accent }: { label: string; value: string; note: string; accent: string }) {
   return <div className={styles.metric}><span className={`${styles.metricIcon} ${styles[`metric_${accent}`]}`}><Gauge size={16} /></span><div><small>{label}</small><strong>{value}<em>{note}</em></strong></div></div>;
-}
-
-function CreateForm({ form, setForm, onSubmit, busy }: { form: RaffleCreateInput; setForm: React.Dispatch<React.SetStateAction<RaffleCreateInput>>; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; busy: boolean }) {
-  const updatePrize = (index: number, patch: Partial<PrizeDraft>) => setForm((current) => ({ ...current, prizes: current.prizes.map((prize, prizeIndex) => prizeIndex === index ? { ...prize, ...patch } : prize) }));
-  return <form className={styles.createPanel} onSubmit={onSubmit}><div className={styles.createIntro}><div className={styles.createIcon}><Sparkles size={20} /></div><div><span className={styles.statusBadge}>新活動</span><h2>建立一場現場抽獎</h2><p>預設獎品已依照你提供的 A／B／C／D 賞填好，可以直接開始。</p></div></div><div className={styles.formGrid}><label>活動碼<input value={form.event_code} onChange={(event) => setForm((current) => ({ ...current, event_code: event.target.value.toUpperCase() }))} /></label><label>現場驗證碼<input value={form.access_code} onChange={(event) => setForm((current) => ({ ...current, access_code: event.target.value }))} /></label><label className={styles.full}>活動名稱<input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label><label className={styles.full}>給參加者看的說明<textarea value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label></div><div className={styles.formSectionTitle}><span>獎品與數量</span><small>D 賞數量留空代表無限</small></div><div className={styles.prizeEditor}>{form.prizes.map((prize, index) => <div className={styles.prizeEditRow} key={`${prize.tier}-${index}`}><select value={prize.tier} onChange={(event) => updatePrize(index, { tier: event.target.value })}><option>A</option><option>B</option><option>C</option><option>D</option></select><input value={prize.name} onChange={(event) => updatePrize(index, { name: event.target.value })} /><input type="number" min="0" placeholder="∞" value={prize.quantity ?? ""} disabled={prize.tier === "D"} onChange={(event) => updatePrize(index, { quantity: event.target.value === "" ? null : Number(event.target.value) })} /></div>)}</div><button className={styles.primaryCreate} type="submit" disabled={busy}><Sparkles size={17} /> {busy ? "建立中…" : "建立抽獎活動"}</button></form>;
 }

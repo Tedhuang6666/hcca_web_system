@@ -1503,13 +1503,11 @@ export interface RaffleDrawOut {
 
 export interface RaffleEventOut {
   id: string;
-  event_code: string;
   title: string;
   description: string | null;
   status: RaffleStatus;
   draw_count: number;
   reserve_released: boolean;
-  access_code_hint: string;
   prizes: RafflePrizeOut[];
   created_at: string;
   updated_at: string;
@@ -1523,4 +1521,9 @@ export interface RaffleJoinOut {
   session_token: string;
   event: RaffleEventOut;
   existing_draw: RaffleDrawOut | null;
+}
+
+export interface RaffleNextOut {
+  session_token: string;
+  event: RaffleEventOut;
 }

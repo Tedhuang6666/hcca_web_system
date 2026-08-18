@@ -186,6 +186,7 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/raffles/session", "GET"),
     ("/raffles/join", "POST"),
     ("/raffles/draw", "POST"),
+    ("/raffles/next", "POST"),
     # 角色視角導覽（僅允許公開與學生視角，端點本身不需登入）
     ("/navigation-profiles/{profile_key}", "GET"),
     # 系統狀態（公開，供監控用）

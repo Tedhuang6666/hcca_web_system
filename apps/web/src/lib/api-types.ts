@@ -11351,6 +11351,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/raffles/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Next Turn */
+        post: operations["next_turn_raffles_next_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/raffles/ping": {
         parameters: {
             query?: never;
@@ -11403,6 +11420,23 @@ export interface paths {
         head?: never;
         /** Admin Update */
         patch: operations["admin_update_raffles__event_id__patch"];
+        trace?: never;
+    };
+    "/raffles/{event_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Reset */
+        post: operations["admin_reset_raffles__event_id__reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/ready": {
@@ -31722,10 +31756,16 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /**
+         * RaffleActivate
+         * @description 以單一驗證碼開啟固定獎池，不讓現場管理員設定活動欄位。
+         */
+        RaffleActivate: {
+            /** Access Code */
+            access_code: string;
+        };
         /** RaffleAdminOut */
         RaffleAdminOut: {
-            /** Access Code Hint */
-            access_code_hint: string;
             /**
              * Created At
              * Format: date-time
@@ -31735,8 +31775,6 @@ export interface components {
             description: string | null;
             /** Draw Count */
             draw_count: number;
-            /** Event Code */
-            event_code: string;
             /**
              * Id
              * Format: uuid
@@ -31757,19 +31795,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-        };
-        /** RaffleCreate */
-        RaffleCreate: {
-            /** Access Code */
-            access_code: string;
-            /** Description */
-            description?: string | null;
-            /** Event Code */
-            event_code: string;
-            /** Prizes */
-            prizes: components["schemas"]["RafflePrizeCreate"][];
-            /** Title */
-            title: string;
         };
         /** RaffleDrawOut */
         RaffleDrawOut: {
@@ -31804,8 +31829,6 @@ export interface components {
         };
         /** RaffleEventOut */
         RaffleEventOut: {
-            /** Access Code Hint */
-            access_code_hint: string;
             /**
              * Created At
              * Format: date-time
@@ -31815,8 +31838,6 @@ export interface components {
             description: string | null;
             /** Draw Count */
             draw_count: number;
-            /** Event Code */
-            event_code: string;
             /**
              * Id
              * Format: uuid
@@ -31849,22 +31870,17 @@ export interface components {
             access_code: string;
             /** Device Id */
             device_id?: string | null;
-            /** Event Code */
-            event_code: string;
         };
-        /** RafflePrizeCreate */
-        RafflePrizeCreate: {
-            /** Name */
-            name: string;
-            /** Quantity */
-            quantity: number | null;
-            /**
-             * Sort Order
-             * @default 0
-             */
-            sort_order: number;
-            /** Tier */
-            tier: string;
+        /** RaffleNextOut */
+        RaffleNextOut: {
+            event: components["schemas"]["RaffleEventOut"];
+            /** Session Token */
+            session_token: string;
+        };
+        /** RaffleNextRequest */
+        RaffleNextRequest: {
+            /** Session Token */
+            session_token: string;
         };
         /** RafflePrizeOut */
         RafflePrizeOut: {
@@ -63132,7 +63148,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RaffleCreate"];
+                "application/json": components["schemas"]["RaffleActivate"];
             };
         };
         responses: {
@@ -63222,6 +63238,39 @@ export interface operations {
             };
         };
     };
+    next_turn_raffles_next_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RaffleNextRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleNextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     raffle_ping_raffles_ping_get: {
         parameters: {
             query?: never;
@@ -63285,6 +63334,37 @@ export interface operations {
                 "application/json": components["schemas"]["RaffleStatusUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_reset_raffles__event_id__reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
