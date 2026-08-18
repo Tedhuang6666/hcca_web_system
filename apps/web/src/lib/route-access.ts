@@ -39,6 +39,7 @@ const BARE_ROUTE_PATHS = [
   "/public",
   "/live",
   "/unsubscribe",
+  "/raffle",
 ];
 
 const INDEXABLE_EXACT_PATHS = new Set([

@@ -8,19 +8,10 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class RafflePrizeCreate(BaseModel):
-    tier: str = Field(..., min_length=1, max_length=2)
-    name: str = Field(..., min_length=1, max_length=160)
-    quantity: int | None = Field(..., ge=0)
-    sort_order: int = 0
+class RaffleActivate(BaseModel):
+    """以單一驗證碼開啟固定獎池，不讓現場管理員設定活動欄位。"""
 
-
-class RaffleCreate(BaseModel):
-    event_code: str = Field(..., min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
-    title: str = Field(..., min_length=1, max_length=160)
-    description: str | None = Field(None, max_length=1000)
     access_code: str = Field(..., min_length=4, max_length=32)
-    prizes: list[RafflePrizeCreate] = Field(..., min_length=1, max_length=30)
 
 
 class RaffleStatusUpdate(BaseModel):
@@ -54,20 +45,17 @@ class RaffleEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    event_code: str
     title: str
     description: str | None
     status: str
     draw_count: int
     reserve_released: bool
-    access_code_hint: str
     prizes: list[RafflePrizeOut]
     created_at: datetime
     updated_at: datetime
 
 
 class RaffleJoinRequest(BaseModel):
-    event_code: str = Field(..., min_length=3, max_length=32)
     access_code: str = Field(..., min_length=4, max_length=32)
     device_id: str | None = Field(None, max_length=120)
 
@@ -76,6 +64,15 @@ class RaffleJoinOut(BaseModel):
     session_token: str
     event: RaffleEventOut
     existing_draw: RaffleDrawOut | None = None
+
+
+class RaffleNextRequest(BaseModel):
+    session_token: str = Field(..., min_length=20, max_length=200)
+
+
+class RaffleNextOut(BaseModel):
+    session_token: str
+    event: RaffleEventOut
 
 
 class RaffleDrawRequest(BaseModel):
@@ -89,13 +86,14 @@ class RaffleAdminOut(RaffleEventOut):
 
 __all__ = [
     "RaffleAdminOut",
-    "RaffleCreate",
+    "RaffleActivate",
     "RaffleDrawOut",
     "RaffleDrawRequest",
     "RaffleEventOut",
     "RaffleJoinOut",
     "RaffleJoinRequest",
-    "RafflePrizeCreate",
+    "RaffleNextOut",
+    "RaffleNextRequest",
     "RafflePrizeOut",
     "RaffleStatusUpdate",
 ]

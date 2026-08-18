@@ -1,16 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Check, CircleHelp, LockKeyhole, RotateCcw, Sparkles, Ticket } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
+import {
+  ArrowRight,
+  Check,
+  CircleHelp,
+  ExternalLink,
+  LockKeyhole,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
 import { SpinRoulette, type Prize } from "react-spin-roulette";
 
+import BrandEmblem from "@/components/brand/BrandEmblem";
 import { ApiError, apiErrorMessage, rafflesApi } from "@/lib/api";
+import { BRANDING } from "@/lib/branding";
 import type { RaffleDrawOut, RaffleEventOut } from "@/lib/types";
 
 import styles from "./raffle.module.css";
 
 const SESSION_KEY = "hcca-raffle-session";
 const DEVICE_KEY = "hcca-raffle-device";
+const RESULT_HOLD_MS = 10_000;
 
 type Stage = "loading" | "gate" | "ready" | "rolling" | "result";
 
@@ -39,8 +51,9 @@ export default function RaffleClient() {
   const [result, setResult] = useState<RaffleDrawOut | null>(null);
   const [error, setError] = useState("");
   const [winningIndex, setWinningIndex] = useState(0);
-  const [eventCode, setEventCode] = useState("");
   const [accessCode, setAccessCode] = useState("");
+  const [nextBusy, setNextBusy] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(false);
 
   const restore = useCallback(async () => {
     await rafflesApi.ping().catch(() => undefined);
@@ -71,17 +84,16 @@ export default function RaffleClient() {
     void restore();
   }, [restore]);
 
-  const submitEntry = async (form: React.FormEvent<HTMLFormElement>) => {
+  const submitEntry = async (form: FormEvent<HTMLFormElement>) => {
     form.preventDefault();
     setError("");
-    if (!eventCode.trim() || !accessCode.trim()) {
-      setError("請輸入活動碼與現場驗證碼。");
+    if (!accessCode.trim()) {
+      setError("請輸入現場驗證碼。");
       return;
     }
     setStage("loading");
     try {
       const joined = await rafflesApi.join({
-        event_code: eventCode.trim(),
         access_code: accessCode.trim(),
         device_id: localId(DEVICE_KEY),
       });
@@ -89,11 +101,10 @@ export default function RaffleClient() {
       setSessionToken(joined.session_token);
       setEvent(joined.event);
       setResult(joined.existing_draw);
-      if (joined.existing_draw) setWinningIndex(findPrizeIndex(joined.event, joined.existing_draw));
       setStage(joined.existing_draw ? "result" : "ready");
     } catch (caught) {
       setStage("gate");
-      setError(apiErrorMessage(caught, "活動碼或驗證碼不正確，請再確認一次。"));
+      setError(apiErrorMessage(caught, "驗證碼不正確，請向工作人員確認。"));
     }
   };
 
@@ -101,13 +112,13 @@ export default function RaffleClient() {
     if (!sessionToken || !event || stage === "rolling") return;
     setError("");
     try {
-      // 先向後端鎖定結果，再把結果索引交給動畫元件；前端永遠不決定獎品。
       const drawn = await rafflesApi.draw(sessionToken, crypto.randomUUID());
       setWinningIndex(findPrizeIndex(event, drawn));
       setStage("rolling");
       await new Promise((resolve) => window.setTimeout(resolve, 3000));
       setResult(drawn);
       setEvent((current) => current && { ...current, draw_count: current.draw_count + 1 });
+      setAutoAdvance(true);
       setStage("result");
     } catch (caught) {
       setStage("ready");
@@ -115,22 +126,47 @@ export default function RaffleClient() {
     }
   };
 
+  const nextTurn = useCallback(async () => {
+    if (!sessionToken || nextBusy) return;
+    setNextBusy(true);
+    setError("");
+    try {
+      const next = await rafflesApi.next(sessionToken);
+      window.localStorage.setItem(SESSION_KEY, next.session_token);
+      setSessionToken(next.session_token);
+      setEvent(next.event);
+      setResult(null);
+      setAutoAdvance(false);
+      setStage("ready");
+    } catch (caught) {
+      setError(apiErrorMessage(caught, "目前無法開始下一輪，請確認抽獎台狀態。"));
+    } finally {
+      setNextBusy(false);
+    }
+  }, [nextBusy, sessionToken]);
+
+  useEffect(() => {
+    if (stage !== "result" || !autoAdvance) return;
+    const timer = window.setTimeout(() => void nextTurn(), RESULT_HOLD_MS);
+    return () => window.clearTimeout(timer);
+  }, [autoAdvance, nextTurn, stage]);
+
   const clearLocalSession = () => {
     window.localStorage.removeItem(SESSION_KEY);
     setSessionToken("");
     setEvent(null);
     setResult(null);
-    setEventCode("");
     setAccessCode("");
     setError("");
+    setAutoAdvance(false);
     setStage("gate");
   };
 
   const tierNote = useMemo(() => {
-    if (!event) return "現場限定・每台平板只需驗證一次";
+    if (!event) return "每台平板驗證一次";
     if (event.status === "paused") return "工作人員暫停中，請稍候再抽";
     if (event.reserve_released) return "尾聲模式已開啟，剩餘好獎全部加入抽選";
-    return `好獎會分段釋出，目前還有 ${finiteCount(event)} 份有限獎品`;
+    return `目前有限獎品剩餘 ${finiteCount(event)} 份`;
   }, [event]);
 
   const roulettePrizes = useMemo<Prize[]>(
@@ -140,39 +176,57 @@ export default function RaffleClient() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.noise} aria-hidden />
       <header className={styles.header}>
-        <a className={styles.brand} href="/raffle" aria-label="回到抽獎入口">
-          <span className={styles.brandMark}><Ticket size={18} strokeWidth={2.5} /></span>
-          <span>HCCA 現場抽獎</span>
-        </a>
-        <div className={styles.headerStatus}><span /> 現場系統運作中</div>
+        <Link className={styles.brand} href="/" aria-label={`回到${BRANDING.orgShortName}首頁`}>
+          <BrandEmblem size={42} framed />
+          <span className={styles.brandCopy}>
+            <strong>{BRANDING.orgShortName}</strong>
+            <small>{BRANDING.platformName}</small>
+          </span>
+        </Link>
+        <Link className={styles.backLink} href="/">
+          回到首頁 <ExternalLink size={14} />
+        </Link>
       </header>
 
       <section className={styles.shell}>
-        <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>LUCKY DRAW / 2026</p>
-          <h1>今天的好運，<br /><em>留給你。</em></h1>
-          <p className={styles.intro}>輸入現場提供的驗證碼，轉動你的專屬獎品。<br />每台平板驗證一次，抽過就會替你記住結果。</p>
-          <div className={styles.trustLine}><LockKeyhole size={14} /> 驗證成功後會留在這台平板，不需重複輸入</div>
+        <div className={styles.intro}>
+          <span className={styles.sectionLabel}>現場服務</span>
+          <h1>現場抽獎</h1>
+          <p>輸入工作人員提供的驗證碼，抽出今天的獎品。</p>
+          <div className={styles.notice}>
+            <LockKeyhole size={16} aria-hidden />
+            <span>驗證成功後會留在這台平板，不需要重複輸入。</span>
+          </div>
         </div>
 
-        <div className={styles.stageCard}>
+        <section className={styles.stageCard} aria-live="polite">
           <div className={styles.stageTopline}>
-            <span>{event?.title ?? "現場獎品抽選"}</span>
-            <span className={styles.livePill}><span /> LIVE</span>
+            <span>抽獎台</span>
+            <span className={styles.status}><i /> 現場開放中</span>
           </div>
 
           {stage === "loading" && <div className={styles.loadingPanel}><div className={styles.loader} /><p>正在確認抽獎台狀態…</p></div>}
 
           {stage === "gate" && (
             <form className={styles.gate} onSubmit={submitEntry}>
-              <div className={styles.gateHeading}><span className={styles.iconTile}><LockKeyhole size={19} /></span><div><h2>先拿到入場資格</h2><p>請向工作人員索取活動碼與驗證碼</p></div></div>
-              <label>活動碼<input value={eventCode} onChange={(e) => setEventCode(e.target.value)} placeholder="例如：WELCOME26" autoComplete="off" /></label>
-              <label>現場驗證碼<input value={accessCode} onChange={(e) => setAccessCode(e.target.value)} placeholder="輸入 4 位以上驗證碼" autoComplete="one-time-code" /></label>
+              <div className={styles.gateHeading}>
+                <span className={styles.iconTile}><LockKeyhole size={18} /></span>
+                <div><h2>輸入驗證碼</h2><p>請向現場工作人員索取</p></div>
+              </div>
+              <label>
+                現場驗證碼
+                <input
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  placeholder="輸入驗證碼"
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </label>
               {error && <p className={styles.error} role="alert">{error}</p>}
-              <button className={styles.primaryButton} type="submit">進入抽獎台 <ArrowRight size={18} /></button>
-              <p className={styles.helper}><CircleHelp size={14} /> 驗證只需做一次，之後這台平板會自動記住</p>
+              <button className={styles.primaryButton} type="submit">開始抽獎 <ArrowRight size={17} /></button>
+              <p className={styles.helper}><CircleHelp size={14} /> 每台平板只需驗證一次</p>
             </form>
           )}
 
@@ -185,8 +239,8 @@ export default function RaffleClient() {
                   winningIndex={winningIndex}
                   isSpinning={stage === "rolling"}
                   duration={3000}
-                  minSpins={4}
-                  prizeSize={154}
+                  minSpins={5}
+                  prizeSize={142}
                   orientation="horizontal"
                   className={styles.rouletteTrack}
                   prizeClassName={styles.roulettePrize}
@@ -197,26 +251,33 @@ export default function RaffleClient() {
               </div>
               {error && <p className={styles.error} role="alert">{error}</p>}
               <button className={styles.drawButton} type="button" onClick={runDraw} disabled={stage === "rolling" || event.status !== "open"}>
-                <span>{stage === "rolling" ? "正在抽選…" : "抽出我的獎品"}</span><Sparkles size={20} />
+                <span>{stage === "rolling" ? "正在抽選…" : "抽出我的獎品"}</span><Sparkles size={18} />
               </button>
-              <p className={styles.drawFootnote}>按下後請不要關閉此頁面，動畫結束就會看到結果</p>
+              <p className={styles.drawFootnote}>結果會由系統鎖定，動畫結束後顯示。</p>
             </div>
           )}
 
           {stage === "result" && result && event && (
             <div className={styles.resultPanel}>
-              <div className={styles.confetti} aria-hidden>{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ "--i": i } as React.CSSProperties} />)}</div>
+              <div className={styles.resultEmblem} aria-hidden="true"><BrandEmblem size={58} framed /></div>
               <div className={styles.resultKicker}><Check size={15} /> 抽獎完成・第 {result.draw_number} 位</div>
               <p className={styles.resultTier}>{result.prize_tier}賞</p>
               <h2>{result.prize_name}</h2>
-              <p className={styles.resultCopy}>恭喜你！請帶著這個畫面到兌獎桌領取獎品。</p>
-              <div className={styles.resultTicket}><span>獎品序號</span><strong>#{String(result.draw_number).padStart(3, "0")}</strong><span>請向工作人員出示</span></div>
-              <button className={styles.textButton} type="button" onClick={clearLocalSession}><RotateCcw size={14} /> 切換另一場活動</button>
+              <p className={styles.resultCopy}>請帶著這個畫面到兌獎桌領取獎品。</p>
+              <div className={styles.resultTicket}><span>領獎序號</span><strong>#{String(result.draw_number).padStart(3, "0")}</strong><span>請向工作人員出示</span></div>
+              <div className={styles.nextActions}>
+                <button className={styles.nextButton} type="button" onClick={() => void nextTurn()} disabled={nextBusy}>
+                  {nextBusy ? "準備下一位…" : "下一位抽獎"} <ArrowRight size={16} />
+                </button>
+                <p className={styles.countdown}>{autoAdvance ? `${RESULT_HOLD_MS / 1000} 秒後自動回到抽獎台` : "可直接交給下一位參加者"}</p>
+              </div>
+              <button className={styles.textButton} type="button" onClick={clearLocalSession}><RotateCcw size={14} /> 清除這台平板的驗證紀錄</button>
             </div>
           )}
-        </div>
+        </section>
       </section>
-      <footer className={styles.footer}><span>有問題？請直接詢問現場工作人員</span><span>本頁適合平板與手機使用</span></footer>
+
+      <footer className={styles.footer}><span>有問題？請直接詢問現場工作人員</span><span>HCCA 校園自治整合平台</span></footer>
     </main>
   );
 }

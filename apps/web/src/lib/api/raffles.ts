@@ -2,28 +2,18 @@ import type {
   RaffleAdminOut,
   RaffleDrawOut,
   RaffleJoinOut,
+  RaffleNextOut,
   RaffleStatus,
 } from "../types";
 import { get, patch, post } from "./core";
 
-export interface RafflePrizeCreateInput {
-  tier: string;
-  name: string;
-  quantity: number | null;
-  sort_order: number;
-}
-
-export interface RaffleCreateInput {
-  event_code: string;
-  title: string;
-  description?: string | null;
+export interface RaffleActivateInput {
   access_code: string;
-  prizes: RafflePrizeCreateInput[];
 }
 
 export const rafflesApi = {
   ping: () => get<void>("/raffles/ping"),
-  join: (body: { event_code: string; access_code: string; device_id?: string }) =>
+  join: (body: { access_code: string; device_id?: string }) =>
     post<RaffleJoinOut>("/raffles/join", body),
   restore: (sessionToken: string) =>
     get<RaffleJoinOut>(`/raffles/session?session_token=${encodeURIComponent(sessionToken)}`),
@@ -32,8 +22,11 @@ export const rafflesApi = {
       session_token: sessionToken,
       idempotency_key: idempotencyKey,
     }),
+  next: (sessionToken: string) =>
+    post<RaffleNextOut>("/raffles/next", { session_token: sessionToken }),
   list: () => get<RaffleAdminOut[]>("/raffles"),
-  create: (body: RaffleCreateInput) => post<RaffleAdminOut>("/raffles", body),
+  create: (body: RaffleActivateInput) => post<RaffleAdminOut>("/raffles", body),
   update: (id: string, body: { status: RaffleStatus; reserve_released?: boolean }) =>
     patch<RaffleAdminOut>(`/raffles/${id}`, body),
+  reset: (id: string) => post<RaffleAdminOut>(`/raffles/${id}/reset`, {}),
 };
