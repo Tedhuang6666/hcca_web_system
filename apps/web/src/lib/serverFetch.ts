@@ -94,7 +94,8 @@ export async function fetchPublicDocuments(
   if (params.limit !== undefined) search.set("limit", String(params.limit));
   if (params.offset !== undefined) search.set("offset", String(params.offset));
 
-  return getCachedPublicJson<DocumentListItem[]>(`/documents?${search.toString()}`);
+  // 公文摘要可在建立後編輯；使用短快取避免公開列表長時間停留在舊資料。
+  return fetchPublicJson<DocumentListItem[]>(`/documents?${search.toString()}`, { revalidate: 15 });
 }
 
 export async function fetchPublicRegulations(): Promise<RegulationListItem[]> {

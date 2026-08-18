@@ -263,6 +263,30 @@ async def test_get_document_anonymous_public_open_succeeds(
 
 
 @pytest.mark.asyncio
+async def test_get_document_authenticated_legacy_public_flag_succeeds(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"登入公開組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="get-auth-public-creator@example.com", display_name="Creator", is_active=True)
+    viewer = User(email="get-auth-public-viewer@example.com", display_name="Viewer", is_active=True)
+    db_session.add_all([org, creator, viewer])
+    await db_session.flush()
+
+    doc = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.ORG_ONLY,
+        is_public=True,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    resp = _authed(authed_client_factory, viewer).get(f"/documents/{doc.id}")
+
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
 async def test_get_document_anonymous_login_only_returns_404(
     db_session: AsyncSession, client
 ) -> None:

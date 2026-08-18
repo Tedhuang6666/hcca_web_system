@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo, memo } from "react";
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -184,18 +184,33 @@ export default function DocumentDetailPageClient({
   const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
   const [visibilityValue, setVisibilityValue] = useState<DocumentVisibility>("org_only");
   const [visibilityBusy, setVisibilityBusy] = useState(false);
+  const initialFetchRef = useRef(true);
   const { can, isAdmin } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
 
   const fetchDoc = useCallback(async () => {
+    const isInitialFetch = initialFetchRef.current;
+    initialFetchRef.current = false;
     try {
       const d = await documentsApi.get(id);
       setDoc(d);
       setForbidden(false);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
-        setDoc(null);
-        setForbidden(true);
+        // SSR 已由匿名端點驗證過的普通公開公文，不應因登入請求的
+        // 短暫身份／權限不同步而被清空成「無權限」。後續重新抓取若仍
+        // 403 則不再沿用舊資料，避免可見度已被收回時繼續顯示內容。
+        const canKeepPublicInitialDoc = isInitialFetch
+          && initialDoc
+          && initialDoc.classification === "normal"
+          && (initialDoc.visibility_level === "publicly_open" || initialDoc.is_public);
+        if (canKeepPublicInitialDoc) {
+          setDoc(initialDoc);
+          setForbidden(false);
+        } else {
+          setDoc(null);
+          setForbidden(true);
+        }
       } else if (e instanceof ApiError && e.status === 404) {
         setDoc(null);
         setForbidden(false);
