@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+from api.services import raffle as raffle_service
 from api.services.raffle import _released_finite_prizes, _released_limits
 
 
@@ -20,24 +21,24 @@ def make_event(draw_count: int, reserve_released: bool = False):
 def test_release_limits_hold_back_a_prize_at_the_start():
     event = make_event(draw_count=0)
 
-    assert _released_limits(event) == {"A": 0, "B": 1, "C": 2}
-    assert {prize.tier for prize in _released_finite_prizes(event)} == {"B", "C"}
+    assert _released_limits(event) == {"A": 0, "B": 0, "C": 0}
+    assert _released_finite_prizes(event) == []
 
 
 def test_release_limits_open_more_prizes_as_draw_count_grows():
     event = make_event(draw_count=100)
 
-    assert _released_limits(event) == {"A": 2, "B": 6, "C": 8}
+    assert _released_limits(event) == {"A": 3, "B": 8, "C": 9}
 
 
 def test_release_limits_keep_late_reserve_until_admin_releases_it():
     event = make_event(draw_count=60)
-    event.prizes[0].remaining_quantity = 1
-    event.prizes[1].remaining_quantity = 2
-    event.prizes[2].remaining_quantity = 1
+    event.prizes[0].remaining_quantity = 2
+    event.prizes[1].remaining_quantity = 5
+    event.prizes[2].remaining_quantity = 5
 
-    assert _released_finite_prizes(event) == []
-    assert [prize.remaining_quantity for prize in event.prizes[:3]] == [1, 2, 1]
+    assert {prize.tier for prize in _released_finite_prizes(event)} == {"A", "B", "C"}
+    assert [prize.remaining_quantity for prize in event.prizes[:3]] == [2, 5, 5]
 
 
 def test_release_limits_release_everything_in_final_mode():
@@ -45,3 +46,23 @@ def test_release_limits_release_everything_in_final_mode():
 
     assert _released_limits(event) == {"A": 4, "B": 10, "C": 10}
     assert {prize.tier for prize in _released_finite_prizes(event)} == {"A", "B", "C"}
+
+
+def test_draw_results_keep_releasing_finite_prizes_over_time(monkeypatch):
+    event = make_event(draw_count=0)
+    results: list[str] = []
+
+    monkeypatch.setattr(raffle_service.secrets, "randbelow", lambda limit: 0)
+    for _ in range(63):
+        finite = _released_finite_prizes(event)
+        prize = raffle_service._weighted_choice(finite) if finite else event.prizes[-1]
+        results.append(prize.tier)
+        if prize.remaining_quantity is not None:
+            prize.remaining_quantity -= 1
+        event.draw_count += 1
+
+    assert results[:3] == ["D", "D", "D"]
+    assert results[3] in {"B", "C"}
+    assert results[6] in {"B", "C"}
+    assert results.count("D") == 43
+    assert sum(tier != "D" for tier in results) == 20
