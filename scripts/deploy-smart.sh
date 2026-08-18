@@ -276,7 +276,10 @@ elif ! git verify-commit HEAD >/dev/null 2>&1; then
   exit 1
 fi
 
-chmod +x scripts/*.sh
+[[ -x scripts/prod-pull-deploy.sh && -x scripts/prod-health-report.sh ]] || {
+  echo "❌ 遠端部署腳本沒有 executable 權限" >&2
+  exit 1
+}
 export RELEASE_SHA="$release_sha"
 export SKIP_GIT=1
 export WITH_WORKERS="$with_workers"
