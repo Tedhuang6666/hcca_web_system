@@ -11299,6 +11299,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/raffles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin List */
+        get: operations["admin_list_raffles_get"];
+        put?: never;
+        /** Admin Create */
+        post: operations["admin_create_raffles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/raffles/draw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draw */
+        post: operations["draw_raffles_draw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/raffles/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join */
+        post: operations["join_raffles_join_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/raffles/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Raffle Ping
+         * @description 讓匿名抽獎頁先取得 CSRF cookie，再送出 join。
+         */
+        get: operations["raffle_ping_raffles_ping_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/raffles/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Restore Session */
+        get: operations["restore_session_raffles_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/raffles/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Update */
+        patch: operations["admin_update_raffles__event_id__patch"];
+        trace?: never;
+    };
     "/ready": {
         parameters: {
             query?: never;
@@ -31615,6 +31721,175 @@ export interface components {
             name: string;
             /** Pending */
             pending: number;
+        };
+        /** RaffleAdminOut */
+        RaffleAdminOut: {
+            /** Access Code Hint */
+            access_code_hint: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Draw Count */
+            draw_count: number;
+            /** Event Code */
+            event_code: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Prizes */
+            prizes: components["schemas"]["RafflePrizeOut"][];
+            /** Recent Draws */
+            recent_draws?: components["schemas"]["RaffleDrawOut"][];
+            /** Reserve Released */
+            reserve_released: boolean;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RaffleCreate */
+        RaffleCreate: {
+            /** Access Code */
+            access_code: string;
+            /** Description */
+            description?: string | null;
+            /** Event Code */
+            event_code: string;
+            /** Prizes */
+            prizes: components["schemas"]["RafflePrizeCreate"][];
+            /** Title */
+            title: string;
+        };
+        /** RaffleDrawOut */
+        RaffleDrawOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Draw Number */
+            draw_number: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Prize Id
+             * Format: uuid
+             */
+            prize_id: string;
+            /** Prize Name */
+            prize_name: string;
+            /** Prize Tier */
+            prize_tier: string;
+        };
+        /** RaffleDrawRequest */
+        RaffleDrawRequest: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Session Token */
+            session_token: string;
+        };
+        /** RaffleEventOut */
+        RaffleEventOut: {
+            /** Access Code Hint */
+            access_code_hint: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Draw Count */
+            draw_count: number;
+            /** Event Code */
+            event_code: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Prizes */
+            prizes: components["schemas"]["RafflePrizeOut"][];
+            /** Reserve Released */
+            reserve_released: boolean;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RaffleJoinOut */
+        RaffleJoinOut: {
+            event: components["schemas"]["RaffleEventOut"];
+            existing_draw?: components["schemas"]["RaffleDrawOut"] | null;
+            /** Session Token */
+            session_token: string;
+        };
+        /** RaffleJoinRequest */
+        RaffleJoinRequest: {
+            /** Access Code */
+            access_code: string;
+            /** Device Id */
+            device_id?: string | null;
+            /** Event Code */
+            event_code: string;
+        };
+        /** RafflePrizeCreate */
+        RafflePrizeCreate: {
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /** Tier */
+            tier: string;
+        };
+        /** RafflePrizeOut */
+        RafflePrizeOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Remaining Quantity */
+            remaining_quantity: number | null;
+            /** Sort Order */
+            sort_order: number;
+            /** Tier */
+            tier: string;
+            /** Total Quantity */
+            total_quantity: number | null;
+        };
+        /** RaffleStatusUpdate */
+        RaffleStatusUpdate: {
+            /** Reserve Released */
+            reserve_released?: boolean | null;
+            /** Status */
+            status: string;
         };
         /** RateLimitConfigBody */
         RateLimitConfigBody: {
@@ -62815,6 +63090,209 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicationStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_raffles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleAdminOut"][];
+                };
+            };
+        };
+    };
+    admin_create_raffles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RaffleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draw_raffles_draw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RaffleDrawRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleDrawOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    join_raffles_join_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RaffleJoinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleJoinOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    raffle_ping_raffles_ping_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    restore_session_raffles_session_get: {
+        parameters: {
+            query: {
+                session_token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleJoinOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_raffles__event_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RaffleStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaffleAdminOut"];
                 };
             };
             /** @description Validation Error */
