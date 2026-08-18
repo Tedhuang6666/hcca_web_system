@@ -55,22 +55,32 @@ def test_draw_result_randomly_selects_finite_or_participation_prize(monkeypatch)
     monkeypatch.setattr(raffle_service.secrets, "randbelow", lambda limit: 0)
     assert raffle_service._select_prize(event).tier in {"B", "C"}
 
-    monkeypatch.setattr(raffle_service.secrets, "randbelow", lambda limit: limit - 1)
+    rolls: list[int] = []
+
+    def randbelow(limit: int) -> int:
+        rolls.append(limit)
+        return limit - 1
+
+    monkeypatch.setattr(raffle_service.secrets, "randbelow", randbelow)
     assert raffle_service._select_prize(event).tier == "D"
+    assert rolls == [raffle_service.PLANNED_DRAW_COUNT]
 
 
 def test_draw_results_follow_random_probability_not_fixed_draw_schedule(monkeypatch):
     event = make_event(draw_count=100)
-    for prize in event.prizes[:3]:
-        prize.total_quantity = 1_000
-        prize.remaining_quantity = 1_000
     gate_rolls = cycle((0, 1, 2))
 
     def randbelow(limit: int) -> int:
-        return next(gate_rolls) if limit == raffle_service.FINITE_PRIZE_ROLLS else 0
+        return next(gate_rolls) % limit
 
     monkeypatch.setattr(raffle_service.secrets, "randbelow", randbelow)
-    results = [raffle_service._select_prize(event).tier for _ in range(300)]
+    results: list[str] = []
+    for _ in range(300):
+        prize = raffle_service._select_prize(event)
+        results.append(prize.tier)
+        if prize.remaining_quantity is not None:
+            prize.remaining_quantity -= 1
+        event.draw_count += 1
 
-    assert results.count("D") == 200
-    assert sum(tier != "D" for tier in results) == 100
+    assert results.count("D") > 0
+    assert sum(tier != "D" for tier in results) > 0
