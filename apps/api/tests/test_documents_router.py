@@ -281,7 +281,7 @@ async def test_get_document_authenticated_legacy_public_flag_succeeds(
     db_session.add(doc)
     await db_session.flush()
 
-    resp = _authed(authed_client_factory, viewer).get(f"/documents/{doc.id}")
+    resp = await _authed(authed_client_factory, viewer).get(f"/documents/{doc.id}")
 
     assert resp.status_code == 200, resp.text
 

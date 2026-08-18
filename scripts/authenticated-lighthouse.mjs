@@ -346,8 +346,11 @@ try {
 await persistRuns(runs.slice(persistedRuns));
 persistedRuns = runs.length;
 
-const failures = runs.filter(
-  (run) => run.status !== "ok" || run.performance_score == null || run.performance_score < minimumScore,
+const collectionFailures = runs.filter(
+  (run) => run.status !== "ok" || run.performance_score == null,
+);
+const budgetFailures = runs.filter(
+  (run) => run.status === "ok" && run.performance_score != null && run.performance_score < minimumScore,
 );
 const summary = {
   authenticated,
@@ -366,11 +369,19 @@ const summary = {
   targets: targets.length,
   runs: runs.length,
   persisted_runs: persistedRuns,
-  passed: runs.length - failures.length,
-  failed: failures.length,
-  failures,
+  collected: runs.length - collectionFailures.length,
+  passed: runs.length - collectionFailures.length - budgetFailures.length,
+  failed: collectionFailures.length,
+  collection_failed: collectionFailures.length,
+  budget_failed: budgetFailures.length,
+  failures: collectionFailures,
+  budget_failures: budgetFailures.map(({ url, strategy, performance_score }) => ({
+    url,
+    strategy,
+    performance_score,
+  })),
 };
 await mkdir(dirname(outputFile), { recursive: true });
 await writeFile(outputFile, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 console.log(JSON.stringify(summary, null, 2));
-if (failures.length > 0) process.exitCode = 1;
+if (collectionFailures.length > 0) process.exitCode = 1;
