@@ -332,49 +332,70 @@
 .roulette {
   position: relative;
   display: grid;
-  min-height: 15.5rem;
+  min-height: 17rem;
   place-items: center;
   isolation: isolate;
   overflow: hidden;
-  border: 1px solid rgba(16, 42, 67, 0.24);
-  border-radius: 2px;
-  background: var(--ink);
+  border: 1px solid rgba(16, 42, 67, 0.3);
+  border-radius: 0.35rem;
+  padding: 1.25rem 4.8rem;
+  background:
+    linear-gradient(var(--ink), var(--ink)) center / calc(100% - 9.6rem) calc(100% - 2.5rem) no-repeat,
+    linear-gradient(112deg, #eadfce 0%, #fffaf1 18%, #e9ddca 50%, #fffaf1 82%, #d4c4ad 100%);
+  box-shadow:
+    inset 0 0.8rem 1.4rem rgba(16, 42, 67, 0.12),
+    inset 0 -0.8rem 1.4rem rgba(16, 42, 67, 0.18),
+    0 0.9rem 1.7rem rgba(16, 42, 67, 0.16);
 }
 
 .roulette::before,
 .roulette::after {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 2;
-  width: 5.5rem;
+  top: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 3;
+  width: 5.7rem;
   pointer-events: none;
   content: "";
 }
 
 .roulette::before {
-  left: -1.8rem;
-  border-right: 1px solid rgba(16, 42, 67, 0.36);
-  border-radius: 0 50% 50% 0 / 0 18% 18% 0;
+  left: 0.7rem;
+  border: 1px solid rgba(16, 42, 67, 0.22);
+  border-right-color: rgba(16, 42, 67, 0.48);
+  border-radius: 48% 0.7rem 0.7rem 48% / 50% 12% 12% 50%;
   background:
-    radial-gradient(ellipse 0.7rem 44% at 86% 50%, #fff9ef 0 36%, #c8b9a2 37% 49%, #80735f 50% 55%, transparent 56%),
-    linear-gradient(90deg, #b5a58d 0%, #e5d8c5 48%, #fff8ed 76%, #b6a58c 100%);
-  box-shadow: 0.7rem 0 1.5rem rgba(0, 0, 0, 0.28), inset -0.35rem 0 0.7rem rgba(16, 42, 67, 0.2);
+    radial-gradient(ellipse 0.72rem 44% at 86% 50%, #fffdf7 0 31%, #bcae99 32% 47%, #776b5a 48% 54%, transparent 55%),
+    linear-gradient(90deg, #b0a088 0%, #e0d3c0 42%, #fffaf0 73%, #b2a18b 100%);
+  box-shadow:
+    0.95rem 0 1.7rem rgba(0, 0, 0, 0.34),
+    inset -0.55rem 0 0.85rem rgba(16, 42, 67, 0.24),
+    inset 0 0.3rem 0.35rem rgba(255, 255, 255, 0.42),
+    inset 0 -0.35rem 0.5rem rgba(16, 42, 67, 0.18);
 }
 
 .roulette::after {
-  right: -1.8rem;
-  border-left: 1px solid rgba(16, 42, 67, 0.36);
-  border-radius: 50% 0 0 50% / 18% 0 0 18%;
+  right: 0.7rem;
+  border: 1px solid rgba(16, 42, 67, 0.22);
+  border-left-color: rgba(16, 42, 67, 0.48);
+  border-radius: 0.7rem 48% 48% 0.7rem / 12% 50% 50% 12%;
   background:
-    radial-gradient(ellipse 0.7rem 44% at 14% 50%, #fff9ef 0 36%, #c8b9a2 37% 49%, #80735f 50% 55%, transparent 56%),
-    linear-gradient(90deg, #b6a58c 0%, #fff8ed 24%, #e5d8c5 52%, #b5a58d 100%);
-  box-shadow: -0.7rem 0 1.5rem rgba(0, 0, 0, 0.28), inset 0.35rem 0 0.7rem rgba(16, 42, 67, 0.2);
+    radial-gradient(ellipse 0.72rem 44% at 14% 50%, #fffdf7 0 31%, #bcae99 32% 47%, #776b5a 48% 54%, transparent 55%),
+    linear-gradient(90deg, #b2a18b 0%, #fffaf0 27%, #e0d3c0 58%, #b0a088 100%);
+  box-shadow:
+    -0.95rem 0 1.7rem rgba(0, 0, 0, 0.34),
+    inset 0.55rem 0 0.85rem rgba(16, 42, 67, 0.24),
+    inset 0 0.3rem 0.35rem rgba(255, 255, 255, 0.42),
+    inset 0 -0.35rem 0.5rem rgba(16, 42, 67, 0.18);
 }
 
 .rouletteRolling {
   border-color: var(--gold);
-  box-shadow: 0 0 0 5px rgba(213, 173, 70, 0.18);
+  box-shadow:
+    0 0 0 5px rgba(213, 173, 70, 0.2),
+    inset 0 0.8rem 1.4rem rgba(16, 42, 67, 0.12),
+    inset 0 -0.8rem 1.4rem rgba(16, 42, 67, 0.18),
+    0 1rem 2rem rgba(16, 42, 67, 0.24);
 }
 
 .rouletteRolling .rouletteIndicator {
@@ -386,7 +407,13 @@
   animation: raffle-pointer-head-tick 145ms steps(1, end) infinite;
   will-change: transform;
 }
-.rouletteTrack { z-index: 1; width: 100%; }
+.rouletteTrack {
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(245, 239, 228, 0.16);
+  box-shadow: inset 0 0 1.5rem rgba(0, 0, 0, 0.38);
+}
 
 .roulettePrize {
   display: grid;
@@ -420,9 +447,11 @@
   bottom: 0;
   left: 50%;
   z-index: 4;
-  width: 3px;
+  width: 4px;
   background: var(--gold);
-  box-shadow: 0 0 0 5px rgba(213, 173, 70, 0.17);
+  box-shadow:
+    0 0 0 5px rgba(213, 173, 70, 0.17),
+    0 0 0.7rem rgba(213, 173, 70, 0.58);
   transform: translateX(-50%);
 }
 
@@ -430,10 +459,11 @@
   position: absolute;
   top: 0;
   left: 50%;
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   background: var(--gold);
   clip-path: polygon(50% 100%, 0 0, 100% 0);
+  filter: drop-shadow(0 0.22rem 0.18rem rgba(16, 42, 67, 0.36));
   transform: translate(-50%, -50%);
 }
 
@@ -597,14 +627,16 @@
 @keyframes raffle-emblem-in { from { opacity: 0; transform: scale(0.5) rotate(-12deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
 @keyframes raffle-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @keyframes raffle-pointer-tick {
-  0%, 68% { transform: translateX(-50%) translateY(0); }
-  69% { transform: translateX(-50%) translateY(2px); }
-  74%, 100% { transform: translateX(-50%) translateY(-1px); }
+  0%, 62% { transform: translateX(-50%) translateY(0); }
+  63% { transform: translateX(-50%) translateY(3px); }
+  69% { transform: translateX(-50%) translateY(-2px); }
+  78%, 100% { transform: translateX(-50%) translateY(0); }
 }
 @keyframes raffle-pointer-head-tick {
-  0%, 68% { transform: translate(-50%, -50%); }
-  69% { transform: translate(-50%, -42%); }
-  74%, 100% { transform: translate(-50%, -52%); }
+  0%, 62% { transform: translate(-50%, -50%) rotate(0); }
+  63% { transform: translate(-50%, -36%) rotate(3deg); }
+  69% { transform: translate(-50%, -58%) rotate(-2deg); }
+  78%, 100% { transform: translate(-50%, -50%) rotate(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -630,7 +662,11 @@
   .resultPanel,
   .loadingPanel { width: min(100% - 2.4rem, 42rem); }
   .drawHeadline { display: grid; gap: 0.4rem; }
-  .roulette { min-height: 13rem; }
+  .roulette { min-height: 13rem; padding-inline: 3.4rem; background-size: calc(100% - 6.8rem) calc(100% - 2rem), auto; }
+  .roulette::before,
+  .roulette::after { width: 4.4rem; top: 1rem; bottom: 1rem; }
+  .roulette::before { left: 0.45rem; }
+  .roulette::after { right: 0.45rem; }
   .roulettePrize { min-height: 8.6rem; font-size: 0.9rem; }
   .footer { flex-direction: column; gap: 0.25rem; }
 }
