@@ -57,6 +57,10 @@ if grep -q '^CF_TRUSTED_PROXIES=\[\]$' "$env_file"; then
   echo "❌ 必須設定 Caddy Docker network 的 CF_TRUSTED_PROXIES CIDR" >&2
   exit 1
 fi
+if ! grep -Eq '^CF_TRUSTED_PROXIES=.*(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' "$env_file"; then
+  echo "❌ CF_TRUSTED_PROXIES 必須包含 Caddy Docker network 的私有 CIDR" >&2
+  exit 1
+fi
 
 if [[ "${SKIP_GIT:-0}" != "1" && -d .git ]]; then
   step "git pull"
