@@ -1,4 +1,4 @@
-"""現場抽獎 API。參加者只需驗證碼；管理端使用固定獎池。"""
+"""現場抽獎 API。參加者只需驗證碼；管理端可調整獎池。"""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from api.schemas.raffle import (
     RaffleJoinRequest,
     RaffleNextOut,
     RaffleNextRequest,
+    RafflePrizeOut,
     RaffleStatusUpdate,
 )
 from api.services import raffle as raffle_service
@@ -43,7 +44,33 @@ def _draw_out(draw) -> RaffleDrawOut:
 
 
 def _event_out(event) -> RaffleEventOut:
-    return RaffleEventOut.model_validate(event)
+    probabilities = raffle_service.current_prize_probabilities(event)
+    reserved = raffle_service.reserved_quantities(event)
+    return RaffleEventOut(
+        id=event.id,
+        title=event.title,
+        description=event.description,
+        status=event.status,
+        draw_count=event.draw_count,
+        reserve_released=event.reserve_released,
+        prizes=[
+            RafflePrizeOut(
+                id=prize.id,
+                tier=prize.tier,
+                name=prize.name,
+                total_quantity=prize.total_quantity,
+                remaining_quantity=prize.remaining_quantity,
+                sort_order=prize.sort_order,
+                reserved_quantity=0
+                if prize.total_quantity is None
+                else reserved.get(prize.tier, 0),
+                current_probability=probabilities.get(prize.id, 0),
+            )
+            for prize in event.prizes
+        ],
+        created_at=event.created_at,
+        updated_at=event.updated_at,
+    )
 
 
 @router.get("/ping", status_code=status.HTTP_204_NO_CONTENT)
@@ -153,7 +180,11 @@ async def admin_update(
 ) -> RaffleAdminOut:
     try:
         event = await raffle_service.update_event(
-            db, event_id, RaffleStatus(body.status), body.reserve_released
+            db,
+            event_id,
+            RaffleStatus(body.status) if body.status else None,
+            body.reserve_released,
+            body.prizes,
         )
         await db.commit()
         event = await raffle_service.get_event(db, event.id)

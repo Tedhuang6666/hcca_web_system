@@ -3,12 +3,14 @@ import type {
   RaffleDrawOut,
   RaffleJoinOut,
   RaffleNextOut,
+  RafflePrizeInput,
   RaffleStatus,
 } from "../types";
 import { get, patch, post } from "./core";
 
 export interface RaffleActivateInput {
   access_code: string;
+  prizes?: RafflePrizeInput[];
 }
 
 export const rafflesApi = {
@@ -26,7 +28,10 @@ export const rafflesApi = {
     post<RaffleNextOut>("/raffles/next", { session_token: sessionToken }),
   list: () => get<RaffleAdminOut[]>("/raffles"),
   create: (body: RaffleActivateInput) => post<RaffleAdminOut>("/raffles", body),
-  update: (id: string, body: { status: RaffleStatus; reserve_released?: boolean }) =>
+  update: (
+    id: string,
+    body: { status?: RaffleStatus; reserve_released?: boolean; prizes?: RafflePrizeInput[] },
+  ) =>
     patch<RaffleAdminOut>(`/raffles/${id}`, body),
   reset: (id: string) => post<RaffleAdminOut>(`/raffles/${id}/reset`, {}),
 };

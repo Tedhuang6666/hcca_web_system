@@ -8,15 +8,23 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class RafflePrizeInput(BaseModel):
+    tier: str = Field(..., min_length=1, max_length=2)
+    name: str = Field(..., min_length=1, max_length=160)
+    total_quantity: int | None = Field(None, ge=0)
+
+
 class RaffleActivate(BaseModel):
-    """以單一驗證碼開啟固定獎池，不讓現場管理員設定活動欄位。"""
+    """以驗證碼開啟抽獎，獎池可由管理員自訂。"""
 
     access_code: str = Field(..., min_length=4, max_length=32)
+    prizes: list[RafflePrizeInput] | None = Field(None, min_length=1, max_length=50)
 
 
 class RaffleStatusUpdate(BaseModel):
-    status: str = Field(..., pattern=r"^(draft|open|paused|closed)$")
+    status: str | None = Field(None, pattern=r"^(draft|open|paused|closed)$")
     reserve_released: bool | None = None
+    prizes: list[RafflePrizeInput] | None = Field(None, min_length=1, max_length=50)
 
 
 class RafflePrizeOut(BaseModel):
@@ -28,6 +36,8 @@ class RafflePrizeOut(BaseModel):
     total_quantity: int | None
     remaining_quantity: int | None
     sort_order: int
+    reserved_quantity: int = 0
+    current_probability: float = 0
 
 
 class RaffleDrawOut(BaseModel):
@@ -94,6 +104,7 @@ __all__ = [
     "RaffleJoinRequest",
     "RaffleNextOut",
     "RaffleNextRequest",
+    "RafflePrizeInput",
     "RafflePrizeOut",
     "RaffleStatusUpdate",
 ]
