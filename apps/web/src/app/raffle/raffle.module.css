@@ -388,9 +388,9 @@
   position: absolute;
   top: 0;
   left: 50%;
-  width: 142px;
+  width: var(--cylinder-face-width);
   height: 100%;
-  margin-left: -71px;
+  margin-left: calc(var(--cylinder-face-width) / -2);
   transform-style: preserve-3d;
   backface-visibility: hidden;
 }

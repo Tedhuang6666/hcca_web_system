@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -266,18 +266,32 @@ function CylinderRoulette({
   winningIndex: number;
   isSpinning: boolean;
 }) {
-  const faceWidth = 142;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setTrackWidth(entry.contentRect.width);
+    });
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, []);
+
+  const faceWidth = trackWidth > 0 ? Math.min(360, Math.max(180, trackWidth * 0.42)) : 220;
   const angle = 360 / prizes.length;
   const radius = faceWidth / (2 * Math.tan(Math.PI / prizes.length));
   const targetRotation = -(360 * 5 + winningIndex * angle);
   const reelStyle = {
     transform: `rotateY(${isSpinning ? targetRotation : 0}deg)`,
     transition: isSpinning ? "transform 3000ms cubic-bezier(0.12, 0.72, 0.16, 1)" : "none",
+    "--cylinder-face-width": `${faceWidth}px`,
     "--cylinder-radius": `${radius}px`,
   } as CSSProperties;
 
   return (
-    <div className={styles.rouletteTrack} role="listbox" aria-label="Prize roulette" aria-busy={isSpinning}>
+    <div ref={trackRef} className={styles.rouletteTrack} role="listbox" aria-label="Prize roulette" aria-busy={isSpinning}>
       <div className={`${styles.cylinderReel} ${isSpinning ? styles.cylinderReelSpinning : ""}`} style={reelStyle}>
         {prizes.map((prize, index) => {
           const value = String(prize.value ?? "");
