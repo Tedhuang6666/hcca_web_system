@@ -1,5 +1,6 @@
 from itertools import cycle
 from types import SimpleNamespace
+from uuid import uuid4
 
 from api.services import raffle as raffle_service
 from api.services.raffle import _released_finite_prizes, _released_limits
@@ -63,7 +64,35 @@ def test_draw_result_randomly_selects_finite_or_participation_prize(monkeypatch)
 
     monkeypatch.setattr(raffle_service.secrets, "randbelow", randbelow)
     assert raffle_service._select_prize(event).tier == "D"
-    assert rolls == [raffle_service.PLANNED_DRAW_COUNT]
+    assert rolls == [raffle_service.PLANNED_DRAW_COUNT, 1]
+
+
+def test_reserve_quantities_scale_with_custom_prize_totals():
+    event = make_event(draw_count=100)
+    event.prizes = [
+        SimpleNamespace(tier="A", total_quantity=8, remaining_quantity=8),
+        SimpleNamespace(tier="B", total_quantity=4, remaining_quantity=4),
+        SimpleNamespace(tier="F", total_quantity=100, remaining_quantity=100),
+        SimpleNamespace(tier="F", total_quantity=None, remaining_quantity=None),
+    ]
+
+    assert raffle_service.reserved_quantities(event) == {"A": 2, "B": 1, "F": 10}
+    assert raffle_service._released_limits(event) == {"A": 6, "B": 3, "F": 90}
+
+
+def test_current_probabilities_hide_reserved_top_prizes_until_late_stage():
+    prizes = [
+        SimpleNamespace(id=uuid4(), tier="A", total_quantity=4, remaining_quantity=4),
+        SimpleNamespace(id=uuid4(), tier="B", total_quantity=4, remaining_quantity=4),
+        SimpleNamespace(id=uuid4(), tier="F", total_quantity=None, remaining_quantity=None),
+    ]
+    event = SimpleNamespace(draw_count=0, reserve_released=False, prizes=prizes)
+
+    probabilities = raffle_service.current_prize_probabilities(event)
+
+    assert probabilities.get(prizes[0].id, 0) == 0
+    assert round(sum(probabilities.values()), 5) == 100
+    assert probabilities[prizes[1].id] < probabilities[prizes[2].id]
 
 
 def test_draw_results_follow_random_probability_not_fixed_draw_schedule(monkeypatch):

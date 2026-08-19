@@ -1483,6 +1483,12 @@ export interface SupportGuide {
 
 export type RaffleStatus = "draft" | "open" | "paused" | "closed";
 
+export interface RafflePrizeInput {
+  tier: string;
+  name: string;
+  total_quantity: number | null;
+}
+
 export interface RafflePrizeOut {
   id: string;
   tier: string;
@@ -1490,6 +1496,8 @@ export interface RafflePrizeOut {
   total_quantity: number | null;
   remaining_quantity: number | null;
   sort_order: number;
+  reserved_quantity: number;
+  current_probability: number;
 }
 
 export interface RaffleDrawOut {
