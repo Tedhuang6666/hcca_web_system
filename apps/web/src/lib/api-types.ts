@@ -31758,11 +31758,13 @@ export interface components {
         };
         /**
          * RaffleActivate
-         * @description 以單一驗證碼開啟固定獎池，不讓現場管理員設定活動欄位。
+         * @description 以驗證碼開啟抽獎，獎池可由管理員自訂。
          */
         RaffleActivate: {
             /** Access Code */
             access_code: string;
+            /** Prizes */
+            prizes?: components["schemas"]["RafflePrizeInput"][] | null;
         };
         /** RaffleAdminOut */
         RaffleAdminOut: {
@@ -31882,8 +31884,22 @@ export interface components {
             /** Session Token */
             session_token: string;
         };
+        /** RafflePrizeInput */
+        RafflePrizeInput: {
+            /** Name */
+            name: string;
+            /** Tier */
+            tier: string;
+            /** Total Quantity */
+            total_quantity?: number | null;
+        };
         /** RafflePrizeOut */
         RafflePrizeOut: {
+            /**
+             * Current Probability
+             * @default 0
+             */
+            current_probability: number;
             /**
              * Id
              * Format: uuid
@@ -31893,6 +31909,11 @@ export interface components {
             name: string;
             /** Remaining Quantity */
             remaining_quantity: number | null;
+            /**
+             * Reserved Quantity
+             * @default 0
+             */
+            reserved_quantity: number;
             /** Sort Order */
             sort_order: number;
             /** Tier */
@@ -31902,10 +31923,12 @@ export interface components {
         };
         /** RaffleStatusUpdate */
         RaffleStatusUpdate: {
+            /** Prizes */
+            prizes?: components["schemas"]["RafflePrizeInput"][] | null;
             /** Reserve Released */
             reserve_released?: boolean | null;
             /** Status */
-            status: string;
+            status?: string | null;
         };
         /** RateLimitConfigBody */
         RateLimitConfigBody: {
