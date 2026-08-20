@@ -111,9 +111,25 @@ async def test_expense_claim_with_multiple_items_creates_pending_journal(
             "expense_account_id": str(expense.id),
             "description": "文具採購",
             "items": [
-                {"name": "原子筆", "unit_price": 200, "tax_rate": 5, "quantity": 1},
-                {"name": "立可帶", "unit_price": 35, "quantity": 2},
-                {"name": "膠帶", "unit_price": 20, "quantity": 1},
+                {
+                    "name": "原子筆",
+                    "unit_price": 200,
+                    "tax_rate": 5,
+                    "quantity": 1,
+                    "budget_exception_note": "尚未編列",
+                },
+                {
+                    "name": "立可帶",
+                    "unit_price": 35,
+                    "quantity": 2,
+                    "budget_exception_note": "尚未編列",
+                },
+                {
+                    "name": "膠帶",
+                    "unit_price": 20,
+                    "quantity": 1,
+                    "budget_exception_note": "尚未編列",
+                },
             ],
         },
     )
@@ -208,7 +224,14 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
             "expense_account_id": str(expense.id),
             "description": "校商文具採購",
             "source_url": "https://vendor.example/quote/123",
-            "items": [{"name": "原子筆", "unit_price": 120, "quantity": 2}],
+            "items": [
+                {
+                    "name": "原子筆",
+                    "unit_price": 120,
+                    "quantity": 2,
+                    "budget_exception_note": "尚未編列",
+                }
+            ],
         },
     )
     assert created.status_code == 201
@@ -259,7 +282,14 @@ async def test_expense_workflow_action_requires_special_permission(
             "fund_account_id": str(fund_account_id),
             "expense_account_id": str(expense.id),
             "description": "未授權狀態操作",
-            "items": [{"name": "資料夾", "unit_price": 80, "quantity": 1}],
+            "items": [
+                {
+                    "name": "資料夾",
+                    "unit_price": 80,
+                    "quantity": 1,
+                    "budget_exception_note": "尚未編列",
+                }
+            ],
         },
     )
 
@@ -268,3 +298,52 @@ async def test_expense_workflow_action_requires_special_permission(
         json={"status": ExpenseProcurementStatus.REQUESTED},
     )
     assert response.status_code == 403
+
+
+async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
+    db_session, member_user, make_user, authed_client_factory
+) -> None:
+    reviewer = await make_user(email="budget-reviewer@school.edu")
+    org = await _grant_many(
+        db_session,
+        [member_user, reviewer],
+        ["finance:view", "finance:budget", "finance:budget_propose", "finance:budget_review"],
+    )
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    creator = authed_client_factory(member_user)
+    reviewer_client = authed_client_factory(reviewer)
+
+    budget = await creator.post(
+        f"/finance/ledgers/{ledger.id}/budgets",
+        json={"period_id": str(period.id), "name": "115 學年度共同預算"},
+    )
+    assert budget.status_code == 201
+    submission = await creator.post(
+        f"/finance/budgets/{budget.json()['id']}/submissions",
+        json={"kind": "initial", "title": "初始預算案"},
+    )
+    assert submission.status_code == 201
+    category = await creator.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/nodes",
+        json={"name": "行政庶務"},
+    )
+    leaf = await creator.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/nodes",
+        json={"parent_id": category.json()["id"], "name": "文具購買"},
+    )
+    allocation = await creator.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/allocations",
+        json={"node_id": leaf.json()["id"], "amount": 5000, "proposing_org_id": str(org.id)},
+    )
+    assert allocation.status_code == 201
+    submitted = await creator.post(f"/finance/budget-submissions/{submission.json()['id']}/submit")
+    assert submitted.json()["status"] == "submitted"
+    approved = await reviewer_client.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/review",
+        json={"status": "approved"},
+    )
+    assert approved.json()["status"] == "approved"
+    detail = await creator.get(f"/finance/budgets/{budget.json()['id']}")
+    assert detail.status_code == 200
+    leaf_detail = next(item for item in detail.json()["nodes"] if item["id"] == leaf.json()["id"])
+    assert leaf_detail["allocated_amount"] == 5000

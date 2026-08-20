@@ -66,6 +66,31 @@ class ExpensePaymentStatus(enum.StrEnum):
     UNPAID = "unpaid"
     SCHOOL_PAID = "school_paid"
     DUES_PAID = "dues_paid"
+    ADVANCE_REIMBURSED = "advance_reimbursed"
+
+
+class ExpensePaymentMethod(enum.StrEnum):
+    DIRECT = "direct"
+    ADVANCE = "advance"
+
+
+class BudgetSubmissionKind(enum.StrEnum):
+    INITIAL = "initial"
+    SUPPLEMENTAL = "supplemental"
+
+
+class BudgetSubmissionStatus(enum.StrEnum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    RETURNED = "returned"
+    REJECTED = "rejected"
+
+
+class ExpenseEvidenceType(enum.StrEnum):
+    RECEIPT = "receipt"
+    INVOICE = "invoice"
+    OTHER = "other"
 
 
 class FinanceLedger(Base, TimestampMixin):
@@ -182,6 +207,18 @@ class JournalEntry(Base, TimestampMixin):
     budget_included_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    proposing_org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orgs.id"), nullable=True, index=True
+    )
+    advanced_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
+    payment_method: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ExpensePaymentMethod.DIRECT
+    )
+    reimbursement_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_journal_entries.id"), nullable=True
+    )
     reversal_of_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("finance_journal_entries.id"), nullable=True
     )
@@ -221,6 +258,133 @@ class ExpenseClaimItem(Base, TimestampMixin):
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
     tax_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    budget_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id"), nullable=True, index=True
+    )
+    budget_exception_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class FinanceBudget(Base, TimestampMixin):
+    __tablename__ = "finance_budgets"
+    __table_args__ = (UniqueConstraint("ledger_id", "period_id", name="uq_finance_budget_period"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ledger_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_ledgers.id"), nullable=False, index=True
+    )
+    period_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_fiscal_periods.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+
+
+class FinanceBudgetSubmission(Base, TimestampMixin):
+    __tablename__ = "finance_budget_submissions"
+    __table_args__ = (Index("ix_finance_budget_submission_status", "budget_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    budget_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budgets.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=BudgetSubmissionKind.INITIAL
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=BudgetSubmissionStatus.DRAFT, index=True
+    )
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class FinanceBudgetNode(Base, TimestampMixin):
+    __tablename__ = "finance_budget_nodes"
+    __table_args__ = (
+        UniqueConstraint("budget_id", "parent_id", "name", name="uq_finance_budget_node_name"),
+        Index("ix_finance_budget_node_parent", "budget_id", "parent_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    budget_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budgets.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class FinanceBudgetAllocation(Base, TimestampMixin):
+    __tablename__ = "finance_budget_allocations"
+    __table_args__ = (Index("ix_finance_budget_allocation_node", "node_id", "submission_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    submission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_budget_submissions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id"), nullable=False
+    )
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposed_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    proposing_org_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orgs.id"), nullable=False
+    )
+
+
+class FinanceBudgetAllocationRevision(Base, TimestampMixin):
+    __tablename__ = "finance_budget_allocation_revisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    allocation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_budget_allocations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    previous_amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    next_amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    changed_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+
+
+class ExpenseClaimItemEvidence(Base, TimestampMixin):
+    __tablename__ = "finance_expense_claim_item_evidence"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_expense_claim_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ExpenseEvidenceType.RECEIPT
+    )
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    uploaded_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
 
 
 class BankTransaction(Base, TimestampMixin):

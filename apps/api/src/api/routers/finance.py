@@ -17,8 +17,13 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.finance import (
     ChartAccount,
+    ExpenseClaimItem,
+    ExpenseClaimItemEvidence,
     ExpensePaymentStatus,
     FinanceAccountType,
+    FinanceBudget,
+    FinanceBudgetAllocation,
+    FinanceBudgetSubmission,
     FinanceLedger,
     FiscalPeriod,
     FundAccount,
@@ -27,12 +32,24 @@ from api.models.finance import (
 )
 from api.models.user import User
 from api.schemas.finance import (
+    BudgetAllocationCreate,
+    BudgetAllocationOut,
+    BudgetAllocationUpdate,
+    BudgetCreate,
+    BudgetDetailOut,
+    BudgetNodeCreate,
+    BudgetNodeOut,
+    BudgetOut,
+    BudgetReview,
+    BudgetSubmissionCreate,
+    BudgetSubmissionOut,
     ChartAccountCreate,
     ChartAccountOut,
     ChartAccountUpdate,
     ExpenseBudgetUpdate,
     ExpenseClaimCreate,
     ExpenseProcurementUpdate,
+    ExpenseReimbursementCreate,
     ExpenseReturnCreate,
     FinanceEvidenceUploadOut,
     FundAccountCreate,
@@ -117,6 +134,67 @@ def require_journal_permission(*permissions: PermissionCode) -> JournalPermissio
 
 def require_period_permission(*permissions: PermissionCode) -> PeriodPermissionChecker:
     return PeriodPermissionChecker(*permissions)
+
+
+class BudgetPermissionChecker:
+    def __init__(self, *permissions: PermissionCode) -> None:
+        self.permissions = permissions
+
+    async def __call__(self, budget_id: uuid.UUID, db: DbDep, user: CurrentUser) -> FinanceBudget:
+        budget = await service.get_budget(db, budget_id)
+        await _assert_ledger_permission(
+            db, user, await service.get_ledger(db, budget.ledger_id), *self.permissions
+        )
+        return budget
+
+
+class SubmissionPermissionChecker:
+    def __init__(self, *permissions: PermissionCode) -> None:
+        self.permissions = permissions
+
+    async def __call__(
+        self, submission_id: uuid.UUID, db: DbDep, user: CurrentUser
+    ) -> FinanceBudgetSubmission:
+        submission = await db.get(FinanceBudgetSubmission, submission_id)
+        if not submission:
+            raise HTTPException(404, "預算案不存在")
+        budget = await service.get_budget(db, submission.budget_id)
+        await _assert_ledger_permission(
+            db, user, await service.get_ledger(db, budget.ledger_id), *self.permissions
+        )
+        return submission
+
+
+class AllocationPermissionChecker:
+    def __init__(self, *permissions: PermissionCode) -> None:
+        self.permissions = permissions
+
+    async def __call__(
+        self, allocation_id: uuid.UUID, db: DbDep, user: CurrentUser
+    ) -> FinanceBudgetAllocation:
+        allocation = await db.get(FinanceBudgetAllocation, allocation_id)
+        if not allocation:
+            raise HTTPException(404, "預算配置不存在")
+        submission = await db.get(FinanceBudgetSubmission, allocation.submission_id)
+        if not submission:
+            raise HTTPException(404, "預算案不存在")
+        budget = await service.get_budget(db, submission.budget_id)
+        await _assert_ledger_permission(
+            db, user, await service.get_ledger(db, budget.ledger_id), *self.permissions
+        )
+        return allocation
+
+
+def require_budget_permission(*permissions: PermissionCode) -> BudgetPermissionChecker:
+    return BudgetPermissionChecker(*permissions)
+
+
+def require_submission_permission(*permissions: PermissionCode) -> SubmissionPermissionChecker:
+    return SubmissionPermissionChecker(*permissions)
+
+
+def require_allocation_permission(*permissions: PermissionCode) -> AllocationPermissionChecker:
+    return AllocationPermissionChecker(*permissions)
 
 
 @router.post(
@@ -218,6 +296,135 @@ async def list_periods(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[
         )
     ).scalars()
     return [PeriodOut.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/ledgers/{ledger_id}/budgets",
+    response_model=list[BudgetOut],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def list_budgets(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[BudgetOut]:
+    return [BudgetOut.model_validate(item) for item in await service.list_budgets(db, ledger_id)]
+
+
+@router.post(
+    "/ledgers/{ledger_id}/budgets",
+    response_model=BudgetOut,
+    status_code=201,
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def create_budget(
+    ledger_id: uuid.UUID, body: BudgetCreate, db: DbDep, _: CurrentUser
+) -> BudgetOut:
+    budget = await service.create_budget(db, ledger_id, body)
+    await db.commit()
+    return BudgetOut.model_validate(budget)
+
+
+@router.get(
+    "/budgets/{budget_id}",
+    response_model=BudgetDetailOut,
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def get_budget_detail(budget_id: uuid.UUID, db: DbDep, _: CurrentUser) -> BudgetDetailOut:
+    return BudgetDetailOut.model_validate(
+        await service.budget_detail(db, await service.get_budget(db, budget_id))
+    )
+
+
+@router.post(
+    "/budgets/{budget_id}/submissions",
+    response_model=BudgetSubmissionOut,
+    status_code=201,
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def create_budget_submission(
+    budget_id: uuid.UUID, body: BudgetSubmissionCreate, db: DbDep, user: CurrentUser
+) -> BudgetSubmissionOut:
+    submission = await service.create_budget_submission(
+        db, await service.get_budget(db, budget_id), body, user.id
+    )
+    await db.commit()
+    return BudgetSubmissionOut.model_validate(submission)
+
+
+@router.post(
+    "/budget-submissions/{submission_id}/nodes",
+    response_model=BudgetNodeOut,
+    status_code=201,
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
+)
+async def create_budget_node(
+    submission_id: uuid.UUID, body: BudgetNodeCreate, db: DbDep, _: CurrentUser
+) -> BudgetNodeOut:
+    node = await service.create_budget_node(db, submission_id, body)
+    await db.commit()
+    return BudgetNodeOut.model_validate(node)
+
+
+@router.post(
+    "/budget-submissions/{submission_id}/allocations",
+    response_model=BudgetAllocationOut,
+    status_code=201,
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
+)
+async def create_budget_allocation(
+    submission_id: uuid.UUID, body: BudgetAllocationCreate, db: DbDep, user: CurrentUser
+) -> BudgetAllocationOut:
+    allocation = await service.create_budget_allocation(db, submission_id, body, user.id)
+    await db.commit()
+    return BudgetAllocationOut.model_validate(allocation)
+
+
+@router.post(
+    "/budget-submissions/{submission_id}/submit",
+    response_model=BudgetSubmissionOut,
+    dependencies=[Depends(require_submission_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def submit_budget_submission(
+    submission_id: uuid.UUID, db: DbDep, _: CurrentUser
+) -> BudgetSubmissionOut:
+    submission = await service.submit_budget_submission(db, submission_id)
+    await db.commit()
+    return BudgetSubmissionOut.model_validate(submission)
+
+
+@router.post(
+    "/budget-submissions/{submission_id}/review",
+    response_model=BudgetSubmissionOut,
+    dependencies=[Depends(require_submission_permission(PermissionCode.FINANCE_BUDGET_REVIEW))],
+)
+async def review_budget_submission(
+    submission_id: uuid.UUID, body: BudgetReview, db: DbDep, user: CurrentUser
+) -> BudgetSubmissionOut:
+    submission = await service.review_budget_submission(db, submission_id, body, user.id)
+    await db.commit()
+    return BudgetSubmissionOut.model_validate(submission)
+
+
+@router.patch(
+    "/budget-allocations/{allocation_id}",
+    response_model=BudgetAllocationOut,
+    dependencies=[Depends(require_allocation_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def update_budget_allocation(
+    allocation_id: uuid.UUID, body: BudgetAllocationUpdate, db: DbDep, user: CurrentUser
+) -> BudgetAllocationOut:
+    allocation = await service.update_budget_allocation(db, allocation_id, body, user.id)
+    await db.commit()
+    return BudgetAllocationOut.model_validate(allocation)
 
 
 @router.get(
@@ -535,6 +742,37 @@ async def mark_dues_payment(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -
     return _journal_out(await service.journal_with_lines(db, entry))
 
 
+@router.post(
+    "/journals/{entry_id}/reimburse-advance",
+    response_model=JournalOut,
+    dependencies=[
+        Depends(
+            require_journal_permission(
+                PermissionCode.FINANCE_SCHOOL_PAYMENT, PermissionCode.FINANCE_DUES_PAYMENT
+            )
+        )
+    ],
+)
+async def reimburse_advance(
+    entry_id: uuid.UUID, body: ExpenseReimbursementCreate, db: DbDep, user: CurrentUser
+) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    await service.reimburse_expense_claim(db, entry, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action="finance.advance_reimbursement",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"完成代墊償還：{entry.description}",
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
 @router.patch(
     "/journals/{entry_id}/budget",
     response_model=JournalOut,
@@ -582,6 +820,92 @@ async def download_evidence(entry_id: uuid.UUID, db: DbDep, _: CurrentUser):
         )
     return RedirectResponse(
         await storage.get_url(entry.evidence_url, disposition="attachment"),
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.get(
+    "/journals/{entry_id}/claim-items",
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[dict]:
+    items = list(
+        (
+            await db.execute(
+                select(ExpenseClaimItem).where(ExpenseClaimItem.journal_entry_id == entry_id)
+            )
+        ).scalars()
+    )
+    evidence_rows = (
+        list(
+            (
+                await db.execute(
+                    select(ExpenseClaimItemEvidence).where(
+                        ExpenseClaimItemEvidence.item_id.in_([item.id for item in items])
+                    )
+                )
+            ).scalars()
+        )
+        if items
+        else []
+    )
+    by_item: dict[uuid.UUID, list[ExpenseClaimItemEvidence]] = {}
+    for evidence in evidence_rows:
+        by_item.setdefault(evidence.item_id, []).append(evidence)
+    return [
+        {
+            "id": item.id,
+            "name": item.name,
+            "unit_price": item.unit_price,
+            "tax_rate": item.tax_rate,
+            "quantity": item.quantity,
+            "budget_node_id": item.budget_node_id,
+            "budget_exception_note": item.budget_exception_note,
+            "evidence_count": len(by_item.get(item.id, [])),
+        }
+        for item in items
+    ]
+
+
+@router.get("/expense-evidence/{evidence_id}")
+async def download_item_evidence(evidence_id: uuid.UUID, db: DbDep, user: CurrentUser):
+    evidence = await db.get(ExpenseClaimItemEvidence, evidence_id)
+    if not evidence:
+        raise HTTPException(404, "憑證不存在")
+    item = await db.get(ExpenseClaimItem, evidence.item_id)
+    if not item:
+        raise HTTPException(404, "報帳品項不存在")
+    entry = await db.get(JournalEntry, item.journal_entry_id)
+    if not entry:
+        raise HTTPException(404, "報帳不存在")
+    if entry.created_by_id != user.id and entry.advanced_by_id != user.id:
+        ledger = await service.get_ledger(db, entry.ledger_id)
+        await _assert_ledger_permission(
+            db,
+            user,
+            ledger,
+            PermissionCode.FINANCE_EXPENSE_CLAIM,
+            PermissionCode.FINANCE_REVIEW,
+            PermissionCode.FINANCE_SCHOOL_PAYMENT,
+            PermissionCode.FINANCE_DUES_PAYMENT,
+            PermissionCode.FINANCE_BUDGET,
+        )
+    service.validate_evidence_key(evidence.storage_key, entry.ledger_id)
+    storage = get_storage()
+    local_path = storage.local_path(evidence.storage_key)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(404, "憑證檔案不存在")
+        return FileResponse(
+            local_path,
+            filename=evidence.filename,
+            media_type=evidence.content_type,
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return RedirectResponse(
+        await storage.get_url(
+            evidence.storage_key, disposition="attachment", download_name=evidence.filename
+        ),
         headers={"Cache-Control": "private, no-store"},
     )
 
