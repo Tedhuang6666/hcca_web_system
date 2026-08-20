@@ -105,6 +105,8 @@ class PermissionCode(StrEnum):
     FINANCE_SCHOOL_PAYMENT = "finance:school_payment"
     FINANCE_DUES_PAYMENT = "finance:dues_payment"
     FINANCE_BUDGET = "finance:budget"
+    FINANCE_BUDGET_PROPOSE = "finance:budget_propose"
+    FINANCE_BUDGET_REVIEW = "finance:budget_review"
 
     SEATING_MANAGE = "seating:manage"
     SEATING_ASSIGN = "seating:assign"
@@ -723,8 +725,20 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
         "group": "財務系統",
         "code": PermissionCode.FINANCE_BUDGET,
-        "label": "管理預算列管",
-        "desc": "標記報帳是否已列入預算並保留稽核資訊",
+        "label": "管理預算",
+        "desc": "建立共同預算、送審、修正已核准額度與處理預算列管",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_BUDGET_PROPOSE,
+        "label": "編列部門預算",
+        "desc": "在共同預算草案中新增與編輯所屬部門的預算條目",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_BUDGET_REVIEW,
+        "label": "審核預算案",
+        "desc": "核准、退回或否決共同預算與追加預算案",
     },
     {
         "group": "商品系統",

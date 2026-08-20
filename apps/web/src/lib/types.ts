@@ -15,6 +15,7 @@
 import type {
   AnnouncementListItem,
   ExpenseClaimCreate,
+  ExpenseClaimItemCreate,
   JournalOut,
   MatterListItem,
 } from './api-bridge'
@@ -154,7 +155,11 @@ export type ExpenseClaimStatus =
   | 'rejected'
   | 'completed'
 export type ExpenseProcurementStatus = 'not_required' | 'requested' | 'ordered' | 'received'
-export type ExpensePaymentStatus = 'unpaid' | 'school_paid' | 'dues_paid'
+export type ExpensePaymentStatus = 'unpaid' | 'school_paid' | 'dues_paid' | 'advance_reimbursed'
+export type ExpensePaymentMethod = 'direct' | 'advance'
+export type BudgetSubmissionKind = 'initial' | 'supplemental'
+export type BudgetSubmissionStatus = 'draft' | 'submitted' | 'approved' | 'returned' | 'rejected'
+export type ExpenseEvidenceType = 'receipt' | 'invoice' | 'other'
 export type ExpenseProcurementUpdate = {
   status: ExpenseProcurementStatus
   note?: string | null
@@ -163,8 +168,25 @@ export type ExpenseBudgetUpdate = {
   included: boolean
   note?: string | null
 }
-export type FinanceExpenseClaimCreate = Omit<ExpenseClaimCreate, 'source_url'> & {
+export type FinanceExpenseClaimEvidence = {
+  storage_key: string
+  filename: string
+  content_type: string
+  file_size: number
+  evidence_type: ExpenseEvidenceType
+  note?: string | null
+}
+export type FinanceExpenseClaimItemCreate = Omit<ExpenseClaimItemCreate, 'evidence'> & {
+  budget_node_id?: string | null
+  budget_exception_note?: string | null
+  evidence?: FinanceExpenseClaimEvidence[]
+}
+export type FinanceExpenseClaimCreate = Omit<ExpenseClaimCreate, 'source_url' | 'items'> & {
   source_url?: string | null
+  proposing_org_id?: string | null
+  payment_method?: ExpensePaymentMethod
+  advanced_by_id?: string | null
+  items: FinanceExpenseClaimItemCreate[]
 }
 export type FinanceJournalOut = JournalOut & {
   claim_status?: ExpenseClaimStatus | null
@@ -177,6 +199,27 @@ export type FinanceJournalOut = JournalOut & {
   budget_included?: boolean | null
   budget_included_by_id?: string | null
   budget_included_at?: string | null
+  proposing_org_id?: string | null
+  advanced_by_id?: string | null
+  payment_method?: ExpensePaymentMethod
+  reimbursement_entry_id?: string | null
+}
+export type FinanceBudget = { id: string; ledger_id: string; period_id: string; name: string }
+export type FinanceBudgetSubmission = {
+  id: string; budget_id: string; kind: BudgetSubmissionKind; status: BudgetSubmissionStatus
+  title: string; note?: string | null; created_by_id: string; submitted_at?: string | null
+  reviewed_by_id?: string | null; reviewed_at?: string | null; review_note?: string | null
+}
+export type FinanceBudgetNode = {
+  id: string; budget_id: string; parent_id?: string | null; name: string; sort_order: number
+  allocated_amount: number; used_amount: number; remaining_amount: number
+}
+export type FinanceBudgetAllocation = {
+  id: string; submission_id: string; node_id: string; amount: number; note?: string | null
+  proposed_by_id: string; proposing_org_id: string
+}
+export type FinanceBudgetDetail = FinanceBudget & {
+  submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]
 }
 
 /**

@@ -6,7 +6,11 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.models.finance import (
+    BudgetSubmissionKind,
+    BudgetSubmissionStatus,
     ExpenseClaimStatus,
+    ExpenseEvidenceType,
+    ExpensePaymentMethod,
     ExpensePaymentStatus,
     ExpenseProcurementStatus,
     FinanceAccountType,
@@ -130,6 +134,24 @@ class ExpenseClaimItemCreate(BaseModel):
     unit_price: int = Field(gt=0, le=2_000_000_000)
     tax_rate: int = Field(default=0, ge=0, le=100)
     quantity: int = Field(gt=0, le=100_000)
+    budget_node_id: uuid.UUID | None = None
+    budget_exception_note: str | None = Field(None, max_length=500)
+    evidence: list[ExpenseClaimEvidenceIn] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def budget_reason_required(self) -> ExpenseClaimItemCreate:
+        if self.budget_node_id is None and not (self.budget_exception_note or "").strip():
+            raise ValueError("未對應預算的品項必須說明原因")
+        return self
+
+
+class ExpenseClaimEvidenceIn(BaseModel):
+    storage_key: str = Field(min_length=1, max_length=500)
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=120)
+    file_size: int = Field(gt=0, le=20 * 1024 * 1024)
+    evidence_type: ExpenseEvidenceType = ExpenseEvidenceType.RECEIPT
+    note: str | None = Field(None, max_length=500)
 
 
 class ExpenseClaimCreate(BaseModel):
@@ -142,6 +164,17 @@ class ExpenseClaimCreate(BaseModel):
     evidence_url: str | None = Field(None, max_length=500)
     source_url: str | None = Field(None, max_length=500)
     note: str | None = None
+    proposing_org_id: uuid.UUID | None = None
+    payment_method: ExpensePaymentMethod = ExpensePaymentMethod.DIRECT
+    advanced_by_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def advance_requires_person(self) -> ExpenseClaimCreate:
+        if self.payment_method == ExpensePaymentMethod.ADVANCE and self.advanced_by_id is None:
+            raise ValueError("代墊報帳必須指定代墊人")
+        if self.payment_method == ExpensePaymentMethod.DIRECT and self.advanced_by_id is not None:
+            raise ValueError("直接付款不可指定代墊人")
+        return self
 
 
 class ExpenseProcurementUpdate(BaseModel):
@@ -158,11 +191,115 @@ class ExpenseReturnCreate(BaseModel):
     note: str = Field(min_length=1, max_length=500)
 
 
+class ExpenseReimbursementCreate(BaseModel):
+    period_id: uuid.UUID
+    entry_date: date
+    fund_account_id: uuid.UUID
+    payment_status: ExpensePaymentStatus = ExpensePaymentStatus.DUES_PAID
+    note: str | None = Field(None, max_length=500)
+
+
+class BudgetCreate(BaseModel):
+    period_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=160)
+
+
+class BudgetSubmissionCreate(BaseModel):
+    kind: BudgetSubmissionKind = BudgetSubmissionKind.INITIAL
+    title: str = Field(min_length=1, max_length=160)
+    note: str | None = None
+
+
+class BudgetNodeCreate(BaseModel):
+    parent_id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=160)
+    sort_order: int = 0
+
+
+class BudgetAllocationCreate(BaseModel):
+    node_id: uuid.UUID
+    amount: int = Field(gt=0, le=2_000_000_000)
+    proposing_org_id: uuid.UUID
+    note: str | None = None
+
+
+class BudgetAllocationUpdate(BaseModel):
+    amount: int = Field(gt=0, le=2_000_000_000)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class BudgetReview(BaseModel):
+    status: BudgetSubmissionStatus
+    note: str | None = Field(None, max_length=500)
+
+    @model_validator(mode="after")
+    def review_status_valid(self) -> BudgetReview:
+        if self.status not in {
+            BudgetSubmissionStatus.APPROVED,
+            BudgetSubmissionStatus.RETURNED,
+            BudgetSubmissionStatus.REJECTED,
+        }:
+            raise ValueError("審核結果必須是核准、退回或否決")
+        return self
+
+
 class FinanceEvidenceUploadOut(BaseModel):
     storage_key: str
     filename: str
     content_type: str
     file_size: int
+
+
+class BudgetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    ledger_id: uuid.UUID
+    period_id: uuid.UUID
+    name: str
+
+
+class BudgetSubmissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    budget_id: uuid.UUID
+    kind: BudgetSubmissionKind
+    status: BudgetSubmissionStatus
+    title: str
+    note: str | None
+    created_by_id: uuid.UUID
+    submitted_at: datetime | None
+    reviewed_by_id: uuid.UUID | None
+    reviewed_at: datetime | None
+    review_note: str | None
+
+
+class BudgetNodeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    budget_id: uuid.UUID
+    parent_id: uuid.UUID | None
+    name: str
+    sort_order: int
+    allocated_amount: int = 0
+    used_amount: int = 0
+    remaining_amount: int = 0
+
+
+class BudgetAllocationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    submission_id: uuid.UUID
+    node_id: uuid.UUID
+    amount: int
+    note: str | None
+    proposed_by_id: uuid.UUID
+    proposing_org_id: uuid.UUID
+
+
+class BudgetDetailOut(BudgetOut):
+    submissions: list[BudgetSubmissionOut]
+    nodes: list[BudgetNodeOut]
+    allocations: list[BudgetAllocationOut]
 
 
 class JournalLineOut(JournalLineIn):
@@ -198,6 +335,10 @@ class JournalOut(BaseModel):
     budget_included: bool | None
     budget_included_by_id: uuid.UUID | None
     budget_included_at: datetime | None
+    proposing_org_id: uuid.UUID | None = None
+    advanced_by_id: uuid.UUID | None = None
+    payment_method: ExpensePaymentMethod = ExpensePaymentMethod.DIRECT
+    reimbursement_entry_id: uuid.UUID | None = None
     lines: list[JournalLineOut]
 
 
