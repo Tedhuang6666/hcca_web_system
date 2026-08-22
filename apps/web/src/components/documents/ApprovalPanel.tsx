@@ -208,7 +208,8 @@ export function ApprovalPanel({
             <div key={step.id} className="flex items-center flex-1" role="listitem">
               <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
                 <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                  className="approval-timeline-node w-9 h-9 rounded-full flex items-center justify-center transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                  data-status={step.status}
                   style={{
                     border: `2px solid var(${s.colorVar})`,
                     color: `var(${s.colorVar})`,
@@ -228,7 +229,8 @@ export function ApprovalPanel({
               </div>
               {i < steps.length - 1 && (
                 <div
-                  className="flex-1 h-0.5 mx-2 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                  className="approval-timeline-connector flex-1 h-0.5 mx-2 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                  data-complete={step.status === "approved" || undefined}
                   style={{
                     background: step.status === "approved"
                       ? "var(--success)"
@@ -254,7 +256,9 @@ export function ApprovalPanel({
           return (
             <div key={step.id}>
               <div
-                className="rounded-xl p-3.5"
+                className="approval-step-card rounded-xl p-3.5"
+                data-status={step.status}
+                data-current={isMyTurn || undefined}
                 style={
                   isMyTurn
                     ? {
@@ -286,7 +290,7 @@ export function ApprovalPanel({
                       )}
                     </div>
                     <span
-                      className="badge text-[10px]"
+                      className="approval-status-badge badge text-[10px]"
                       style={{
                         color: `var(${s.colorVar})`,
                         background: `var(${s.bgVar})`,
@@ -365,7 +369,8 @@ export function ApprovalPanel({
             <button
               onClick={handleApprove}
               disabled={loading}
-              className="btn flex-1"
+              aria-busy={loading}
+              className="motion-action-button motion-action-button--approve btn flex-1"
               style={{
                 background: "var(--success-dim)",
                 color: "var(--success)",
@@ -379,7 +384,7 @@ export function ApprovalPanel({
             </button>
             <button
               onClick={() => setShowReject(true)}
-              className="btn flex-1"
+              className="motion-action-button motion-action-button--reject btn flex-1"
               style={{
                 background: "var(--danger-dim)",
                 color: "var(--danger)",

@@ -12,6 +12,7 @@ import {
   Scale,
 } from "lucide-react";
 
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import type { DashboardWidget } from "@/lib/api";
 
 type IconProps = { size: number; "aria-hidden": boolean };
@@ -120,12 +121,12 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
           </div>
         </div>
         {widget.count !== null && widget.count !== undefined && (
-          <span
-            className="text-2xl font-bold leading-none flex-shrink-0"
+          <AnimatedNumber
+            value={widget.count}
+            cap={99}
+            className="dashboard-widget-count text-2xl font-bold leading-none flex-shrink-0"
             style={{ color: severity.color }}
-          >
-            {widget.count > 99 ? "99+" : widget.count}
-          </span>
+          />
         )}
       </header>
 
