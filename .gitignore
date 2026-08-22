@@ -120,7 +120,8 @@ apps/discord-bot/env.example
 ssh/
 apps/api/src/api/discord_cogs/__pycache__/
 
-# Lighthouse temporary profiles accidentally created in repo root
+# Lighthouse profiles
+/C:*lighthouse.*/
 C:\Users\ted98\AppData\Local\lighthouse.*/
 CUsersted98AppDataLocallighthouse.*/
 .playwright-cli/
