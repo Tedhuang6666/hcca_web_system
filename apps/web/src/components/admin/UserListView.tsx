@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { adminApi, apiErrorMessage } from "@/lib/api";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { AdminUserDetail, PermissionCodeInfo, PositionSummary } from "@/lib/types";
 
 // ── 使用者列表視圖 ────────────────────────────────────────────────────────────
@@ -16,6 +17,7 @@ export default function UserListView({
   onUpdated: () => void;
   onPreRegister: () => void;
 }) {
+  const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [assignPos, setAssignPos] = useState<Record<string, string>>({});
@@ -58,7 +60,13 @@ export default function UserListView({
   };
 
   const toggleActive = async (u: AdminUserDetail) => {
-    if (!confirm(`確定要${u.is_active ? "停用" : "啟用"}帳號「${u.display_name}」？`)) return;
+    const action = u.is_active ? "停用" : "啟用";
+    if (!(await confirm({
+      title: `確定要${action}帳號？`,
+      description: `使用者「${u.display_name}」${u.is_active ? "將無法繼續使用平台" : "將恢復使用平台的權限"}。`,
+      confirmLabel: action,
+      danger: u.is_active,
+    }))) return;
     try {
       await adminApi.updateUser(u.id, { is_active: !u.is_active });
       toast.success(u.is_active ? "帳號已停用" : "帳號已啟用");
@@ -68,8 +76,12 @@ export default function UserListView({
 
   const toggleSuperuser = async (u: AdminUserDetail) => {
     const action = u.is_superuser ? "取消超管權限" : "賦予超管權限";
-    const confirm1 = confirm(`確定要${action}「${u.display_name}」？\n超管可存取所有功能，請謹慎操作。`);
-    if (!confirm1) return;
+    if (!(await confirm({
+      title: `確定要${action}？`,
+      description: `「${u.display_name}」${u.is_superuser ? "將失去" : "將取得"}所有平台功能的存取權。`,
+      confirmLabel: action,
+      danger: !u.is_superuser,
+    }))) return;
     try {
       await adminApi.updateUser(u.id, { is_superuser: !u.is_superuser });
       toast.success(`已${action}`);

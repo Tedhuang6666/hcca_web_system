@@ -11,17 +11,34 @@ interface ConfirmOptions {
   danger?: boolean;
 }
 
+interface PromptOptions extends ConfirmOptions {
+  inputLabel?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  required?: boolean;
+}
+
 type Resolver = (ok: boolean) => void;
+type PromptResolver = (value: string | null) => void;
 
 interface ConfirmContextValue {
   confirm: (opts: ConfirmOptions) => Promise<boolean>;
+  prompt: (opts: PromptOptions) => Promise<string | null>;
 }
 
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
 interface ConfirmState extends ConfirmOptions {
+  kind: "confirm";
   resolver: Resolver;
 }
+
+interface PromptState extends PromptOptions {
+  kind: "prompt";
+  resolver: PromptResolver;
+}
+
+type DialogState = ConfirmState | PromptState;
 
 /**
  * 全域確認對話框 provider。包在 AppShell 或 layout 內後，
@@ -34,43 +51,62 @@ interface ConfirmState extends ConfirmOptions {
  * }
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<ConfirmState | null>(null);
+  const [state, setState] = useState<DialogState | null>(null);
+  const [inputValue, setInputValue] = useState("");
 
   const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
     return new Promise((resolve) => {
-      setState({ ...opts, resolver: resolve });
+      setState({ ...opts, kind: "confirm", resolver: resolve });
     });
   }, []);
 
-  const handleClose = (result: boolean) => {
-    if (state) {
+  const prompt = useCallback((opts: PromptOptions): Promise<string | null> => {
+    return new Promise((resolve) => {
+      setInputValue(opts.defaultValue ?? "");
+      setState({ ...opts, kind: "prompt", resolver: resolve });
+    });
+  }, []);
+
+  const closeConfirm = (result: boolean) => {
+    if (state?.kind === "confirm") {
       state.resolver(result);
       setState(null);
     }
   };
 
+  const closePrompt = (value: string | null) => {
+    if (state?.kind === "prompt") {
+      state.resolver(value);
+      setState(null);
+    }
+  };
+
   return (
-    <ConfirmContext.Provider value={{ confirm }}>
+    <ConfirmContext.Provider value={{ confirm, prompt }}>
       {children}
       {state && (
         <Modal
           title={state.title}
           size="sm"
           mobileFullscreen={false}
-          onClose={() => handleClose(false)}
+          onClose={() => state.kind === "confirm" ? closeConfirm(false) : closePrompt(null)}
           footer={
             <>
               <button
                 type="button"
                 className="btn"
-                onClick={() => handleClose(false)}
+                onClick={() => state.kind === "confirm" ? closeConfirm(false) : closePrompt(null)}
                 data-autofocus>
                 {state.cancelLabel ?? "取消"}
               </button>
               <button
                 type="button"
                 className={`btn ${state.danger ? "btn-danger" : "btn-primary"}`}
-                onClick={() => handleClose(true)}
+                onClick={() => {
+                  if (state.kind === "confirm") closeConfirm(true);
+                  else closePrompt(inputValue);
+                }}
+                disabled={state.kind === "prompt" && state.required && !inputValue.trim()}
                 style={state.danger ? {
                   background: "var(--danger)",
                   color: "#fff",
@@ -80,8 +116,28 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </button>
             </>
           }>
-          <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            {state.description ?? "此動作無法復原，請再次確認。"}
+          <div className="space-y-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+            {state.description && <div>{state.description}</div>}
+            {state.kind === "prompt" && (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium">{state.inputLabel ?? "請輸入內容"}</span>
+                <input
+                  data-autofocus
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && (!state.required || inputValue.trim())) {
+                      event.preventDefault();
+                      closePrompt(inputValue);
+                    }
+                  }}
+                  placeholder={state.placeholder}
+                  className="input w-full"
+                  aria-required={state.required || undefined}
+                />
+              </label>
+            )}
+            {state.kind === "confirm" && !state.description && "此動作無法復原，請再次確認。"}
           </div>
         </Modal>
       )}
@@ -92,9 +148,15 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 export function useConfirm() {
   const ctx = useContext(ConfirmContext);
   if (!ctx) {
-    // 開發時的 fallback：用 window.confirm（非 hook 但仍可運作）
-    return ({ title, description }: ConfirmOptions) =>
-      Promise.resolve(window.confirm(`${title}\n\n${description ?? ""}`));
+    throw new Error("useConfirm 必須在 ConfirmProvider 內使用");
   }
   return ctx.confirm;
+}
+
+export function usePrompt() {
+  const ctx = useContext(ConfirmContext);
+  if (!ctx) {
+    throw new Error("usePrompt 必須在 ConfirmProvider 內使用");
+  }
+  return ctx.prompt;
 }

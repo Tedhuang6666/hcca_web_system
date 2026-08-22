@@ -12,7 +12,6 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import BottomTabBar from "./BottomTabBar";
 import PageTransition from "./PageTransition";
-import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { LoadingState } from "@/components/ui/LoadingState";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
@@ -258,7 +257,6 @@ function AppShellContent({
   return (
     <PermissionProvider can={can}>
       <InboxCountsProvider value={inboxCounts}>
-      <ConfirmProvider>
       <div className="app-shell flex h-[100dvh] overflow-hidden">
         <a
           href="#main-content"
@@ -328,7 +326,6 @@ function AppShellContent({
         />
       </div>
       {isLoggedIn && <PasskeySetupPrompt />}
-      </ConfirmProvider>
       </InboxCountsProvider>
     </PermissionProvider>
   );

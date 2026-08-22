@@ -9,7 +9,13 @@ import pytest
 from jwt.exceptions import InvalidTokenError
 
 from api.core import security
-from api.core.security import create_access_token, create_refresh_token, decode_token
+from api.core.security import (
+    RedisUnavailableError,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    revoke_user,
+)
 from api.dependencies import auth as auth_dependency
 
 
@@ -73,7 +79,9 @@ def test_decode_legacy_token_requires_standard_claims(monkeypatch: pytest.Monkey
         decode_token(token)
 
 
-def test_decode_legacy_token_with_standard_claims_is_supported(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_decode_legacy_token_with_standard_claims_is_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(security.settings, "AUTH_LEGACY_TOKEN_COMPAT_ENABLED", True)
     token = jwt.encode(
         {
@@ -142,3 +150,16 @@ async def test_register_active_token_does_not_wait_for_stalled_redis(
         security.register_active_token("user-123", "jti-123", ttl_seconds=60),
         timeout=1.5,
     )
+
+
+async def test_revoke_user_fails_closed_when_redis_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UnavailableRedis:
+        async def smembers(self, *_args: object) -> set[str]:
+            raise ConnectionError("redis unavailable")
+
+    monkeypatch.setattr(security, "redis_client", UnavailableRedis())
+
+    with pytest.raises(RedisUnavailableError, match="revoking user tokens"):
+        await revoke_user("user-123")

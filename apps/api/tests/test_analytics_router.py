@@ -5,8 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from api.main import app
 from api.models.analytics_page_view import AnalyticsPageView
 from api.models.announcement import Announcement
 from api.models.document import ApprovalStepStatus, Document, DocumentApproval, DocumentStatus
@@ -349,6 +351,18 @@ async def test_client_metric_batch_accepts_multiple_metrics(
 
     assert resp.status_code == 202
     assert resp.json() == {"status": "accepted", "accepted": 4}
+
+
+async def test_client_metric_batch_is_available_without_csrf_cookie() -> None:
+    """sendBeacon 無法附加 CSRF header，公開頁的效能指標不能因此失敗。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/analytics/client-metrics/batch",
+            json={"items": [{"metric": "lcp", "value": 1200, "path": "/"}]},
+        )
+
+    assert response.status_code == 202
+    assert response.json() == {"status": "accepted", "accepted": 1}
 
 
 async def test_component_metric_batch_accepts_multiple_metrics(

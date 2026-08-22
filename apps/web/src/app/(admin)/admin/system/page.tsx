@@ -30,6 +30,7 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useResilientPoll, type PollOutcome } from "@/hooks/useResilientPoll";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   ApiError,
   systemApi,
@@ -221,6 +222,7 @@ function StatusPill({
 
 export default function SystemDefensePage() {
   const { isAdmin } = usePermissions();
+  const confirm = useConfirm();
   const [snapshot, setSnapshot] = useState<SystemMetricsSnapshot | null>(null);
   const [summary, setSummary] = useState<DefenseSummary | null>(null);
   const [flags, setFlags] = useState<SystemFeatureFlag[]>([]);
@@ -436,7 +438,12 @@ export default function SystemDefensePage() {
   };
 
   const setRuleActive = async (rule: DefenseRule, isActive: boolean) => {
-    if (!isActive && !window.confirm("停用這條防禦規則？")) return;
+    if (!isActive && !(await confirm({
+      title: "停用這條防禦規則？",
+      description: "停用後，這條規則不會再保護平台流量。",
+      confirmLabel: "停用規則",
+      danger: true,
+    }))) return;
     try {
       await systemApi.updateDefenseRule(rule.id, { is_active: isActive });
       toast.success(isActive ? "防禦規則已重新啟用" : "防禦規則已停用");
@@ -464,7 +471,12 @@ export default function SystemDefensePage() {
   };
 
   const unblockIp = async (ip: string) => {
-    if (!window.confirm(`解除 ${ip} 的緊急封鎖？`)) return;
+    if (!(await confirm({
+      title: "解除緊急封鎖？",
+      description: `IP ${ip} 將能再次存取平台。`,
+      confirmLabel: "解除封鎖",
+      danger: true,
+    }))) return;
     try {
       await systemApi.removeIpBlock(ip);
       toast.success(`已解除 ${ip}`);
@@ -476,7 +488,12 @@ export default function SystemDefensePage() {
 
   const revokeUser = async () => {
     if (!revokeUserId.trim()) return;
-    if (!window.confirm(`強制登出使用者 ${revokeUserId}？`)) return;
+    if (!(await confirm({
+      title: "強制登出使用者？",
+      description: `使用者 ${revokeUserId} 的所有工作階段會立即撤銷。`,
+      confirmLabel: "強制登出",
+      danger: true,
+    }))) return;
     try {
       const out = await systemApi.revokeUserTokens(revokeUserId.trim());
       toast.success(`已撤銷 ${out.revoked_count} 個 token`);
@@ -498,7 +515,12 @@ export default function SystemDefensePage() {
 
   const blockUser = async () => {
     if (!blockUserIdentifier.trim() || !blockUserReason.trim()) return;
-    if (!window.confirm(`確定封鎖 ${blockUserPreview?.email ?? blockUserIdentifier}？`)) return;
+    if (!(await confirm({
+      title: "確定封鎖使用者？",
+      description: `${blockUserPreview?.email ?? blockUserIdentifier} 會被封鎖，既有工作階段也會撤銷。`,
+      confirmLabel: "封鎖使用者",
+      danger: true,
+    }))) return;
     try {
       const result = await blockUserAccount({
         identifier: blockUserIdentifier.trim(),
@@ -1409,6 +1431,7 @@ function ErrorRow({ item }: { item: RecentErrorItem }) {
 }
 
 function RecentErrorsPanel() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<RecentErrorItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [lookupCode, setLookupCode] = useState("");
@@ -1432,7 +1455,12 @@ function RecentErrorsPanel() {
   }, [load]);
 
   const clear = async () => {
-    if (!window.confirm("清空目前的錯誤緩衝？")) return;
+    if (!(await confirm({
+      title: "清空錯誤緩衝？",
+      description: "近期錯誤紀錄會被移除，無法復原。",
+      confirmLabel: "清空紀錄",
+      danger: true,
+    }))) return;
     try {
       const out = await systemApi.clearErrors();
       toast.success(`已清空 ${out.cleared} 筆錯誤`);
@@ -1565,6 +1593,7 @@ function DeadLetterRow({ item }: { item: DeadLetterItem }) {
 }
 
 function DeadLetterPanel() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<DeadLetterItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -1585,7 +1614,12 @@ function DeadLetterPanel() {
   }, [load]);
 
   const clear = async () => {
-    if (!window.confirm("清空 Celery dead-letter 佇列？")) return;
+    if (!(await confirm({
+      title: "清空 Dead Letter 佇列？",
+      description: "失敗背景任務的可追查紀錄會被永久移除。",
+      confirmLabel: "清空佇列",
+      danger: true,
+    }))) return;
     try {
       await systemApi.clearDeadLetters();
       toast.success("已清空 Celery dead-letter");
@@ -1673,6 +1707,7 @@ function Action({
 }
 
 function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
 
@@ -1692,7 +1727,12 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
   };
 
   const dbUpgrade = async () => {
-    if (!window.confirm("執行資料庫遷移 alembic upgrade head？建議先確認已備份。")) return;
+    if (!(await confirm({
+      title: "執行資料庫遷移？",
+      description: "將執行 alembic upgrade head。請先確認資料庫已備份。",
+      confirmLabel: "執行遷移",
+      danger: true,
+    }))) return;
     setBusy("db");
     try {
       const out = await systemApi.dbUpgrade();
@@ -1715,12 +1755,12 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
   };
 
   const restart = async () => {
-    if (
-      !window.confirm(
-        "重啟服務？開發環境會觸發熱重載，正式環境會對 gunicorn master 送 SIGHUP 優雅重載 worker。",
-      )
-    )
-      return;
+    if (!(await confirm({
+      title: "重啟服務？",
+      description: "正式環境會對 Gunicorn master 送出 SIGHUP，優雅重載 worker。",
+      confirmLabel: "重啟服務",
+      danger: true,
+    }))) return;
     setBusy("restart");
     try {
       const out = await systemApi.restartService();
