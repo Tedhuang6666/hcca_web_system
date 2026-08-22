@@ -44,7 +44,7 @@ function BlockedContent() {
       });
     } finally {
       clearAuthCache();
-      window.location.href = "/login";
+      router.replace("/login");
     }
   };
 

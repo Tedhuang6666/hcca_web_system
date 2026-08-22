@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Copy, Home, RefreshCw, Undo2 } from "lucide-react";
 import { useState } from "react";
 
@@ -15,6 +16,7 @@ export default function RouteErrorState({
   reset: () => void;
   homeHref?: string;
 }) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const presentation = errorPresentation(error);
   const code = errorCode(error);
@@ -32,7 +34,7 @@ export default function RouteErrorState({
   function primaryAction() {
     if (error.status === 401) {
       const next = `${window.location.pathname}${window.location.search}`;
-      window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+      router.push(`/login?next=${encodeURIComponent(next)}`);
       return;
     }
     if (error.status === 403) {

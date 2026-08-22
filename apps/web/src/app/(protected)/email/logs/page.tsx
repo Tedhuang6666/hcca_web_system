@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { emailApi, apiErrorMessage } from "@/lib/api";
 import type {
@@ -92,6 +93,7 @@ function fmt(iso: string | null): string {
 }
 
 export default function EmailLogsPage() {
+  const router = useRouter();
   const orgOptions = useOrgOptions();
   const [tab, setTab] = useState("");
   const [query, setQuery] = useState("");
@@ -173,7 +175,7 @@ export default function EmailLogsPage() {
     setBusyId(id);
     try {
       const draft = await emailApi.cloneMessage(id, "all");
-      window.location.href = `/email?draft=${draft.id}`;
+      router.push(`/email?draft=${draft.id}`);
     } catch (e) {
       toast.error(apiErrorMessage(e, "建立新信失敗"));
       setBusyId(null);

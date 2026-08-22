@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { emailApi, apiErrorMessage } from "@/lib/api";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
@@ -10,6 +11,7 @@ import type { EmailAnalyticsOut, EmailMessageOut } from "@/lib/types";
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
 
 export default function EmailAnalyticsPage() {
+  const router = useRouter();
   const [messages, setMessages] = useState<EmailMessageOut[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [analytics, setAnalytics] = useState<EmailAnalyticsOut | null>(null);
@@ -82,7 +84,7 @@ export default function EmailAnalyticsPage() {
                 className="btn btn-secondary btn-sm"
                 onClick={async () => {
                   const draft = await emailApi.cloneMessage(selectedId, "unopened");
-                  window.location.href = `/email?draft=${draft.id}`;
+                  router.push(`/email?draft=${draft.id}`);
                 }}
               >
                 建立提醒郵件

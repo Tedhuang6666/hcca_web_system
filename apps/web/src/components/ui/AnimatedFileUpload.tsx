@@ -8,6 +8,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ChangeEvent, ClipboardEvent } from "react";
 
@@ -109,10 +110,13 @@ function UploadFileRow({
       <div className="animated-upload__thumb" aria-hidden="true">
         {item.preview ? (
           <>
-            <img src={item.preview} alt="" className="animated-upload__image animated-upload__image--ghost" />
-            <img
+            <Image src={item.preview} alt="" fill sizes="2.7rem" unoptimized className="animated-upload__image animated-upload__image--ghost" />
+            <Image
               src={item.preview}
               alt=""
+              fill
+              sizes="2.7rem"
+              unoptimized
               className="animated-upload__image animated-upload__image--live"
               style={{ "--upload-progress": item.progress } as CSSProperties}
             />

@@ -219,7 +219,7 @@ export default function DocumentDetailPageClient({
         toast.error(apiErrorMessage(e, "載入失敗"));
       }
     } finally { setLoading(false); }
-  }, [id]);
+  }, [id, initialDoc]);
 
   useEffect(() => {
     // The route is shared with the public page. Its SSR data is fetched

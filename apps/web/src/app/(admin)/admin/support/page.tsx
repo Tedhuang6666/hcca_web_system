@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BookOpen,
@@ -119,6 +120,7 @@ function Panel({ title, children, action }: { title: string; children: React.Rea
 }
 
 export default function SupportConsolePage() {
+  const router = useRouter();
   const { canAny, isAdmin } = usePermissions();
   const allowed = isAdmin || canAny("support.users.read", "support.tickets.read");
   const canInteractiveImpersonate = isAdmin || canAny("support.users.impersonate_interactive");
@@ -278,7 +280,7 @@ export default function SupportConsolePage() {
         expires_at: new Date(session.expires_at).getTime(),
         read_only: session.read_only,
       });
-      window.location.assign("/dashboard");
+      router.push("/dashboard");
     } catch (error) { toast.error(apiErrorMessage(error, "啟動模擬使用者失敗")); }
   };
 

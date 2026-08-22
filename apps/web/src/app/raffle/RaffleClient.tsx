@@ -301,6 +301,7 @@ function CylinderRoulette({
               key={prize.id}
               role="option"
               aria-label={prize.label}
+              aria-selected={index === winningIndex}
               style={{ transform: `rotateY(${index * angle}deg) translateZ(${radius}px)` }}
             >
               <div className={styles.roulettePrize}>
