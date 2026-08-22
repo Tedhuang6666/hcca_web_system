@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { apiErrorMessage, merchandiseSubmissionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { excerpt } from "@/lib/seo";
 import type { AnimatedFileUploadProps } from "@/components/ui/AnimatedFileUpload";
 import type {
@@ -245,6 +246,7 @@ export default function MerchandiseSubmissionsPageClient({
 }: {
   initialPortal: MerchandiseSubmissionPortalOut | null;
 }) {
+  const confirm = useConfirm();
   const { can } = usePermissions();
   const canManageSubmissions =
     can("merchandise_submission:manage") || can("shop:manage");
@@ -345,7 +347,12 @@ export default function MerchandiseSubmissionsPageClient({
     setTab("submit");
   };
   const remove = async (submission: MerchandiseSubmissionOut) => {
-    if (!window.confirm(`確定刪除「${submission.item_name}」的投稿？刪除後無法復原。`)) return;
+    if (!(await confirm({
+      title: `刪除「${submission.item_name}」的投稿？`,
+      description: "投稿內容與附件會被移除，無法復原。",
+      confirmLabel: "刪除投稿",
+      danger: true,
+    }))) return;
     setDeletingId(submission.id);
     try {
       await merchandiseSubmissionsApi.deleteSubmission(submission.id);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import MobileNavConfigurator from "@/components/layout/MobileNavConfigurator";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import NavIcon from "@/components/layout/NavIcon";
 import { adminApi, apiErrorMessage, navigationProfilesApi } from "@/lib/api";
 import {
@@ -40,6 +41,7 @@ const EMPTY_DRAFT: Draft = {
 };
 
 export default function NavigationProfilesPage() {
+  const confirm = useConfirm();
   const [profiles, setProfiles] = useState<NavigationProfileOut[]>([]);
   const [positions, setPositions] = useState<PositionSummary[]>([]);
   const [permissionCodes, setPermissionCodes] = useState<PermissionCodeInfo[]>([]);
@@ -109,7 +111,12 @@ export default function NavigationProfilesPage() {
 
   const remove = async () => {
     if (!selected || selected.is_system) return;
-    if (!window.confirm(`刪除「${selected.label}」？`)) return;
+    if (!(await confirm({
+      title: `刪除「${selected.label}」？`,
+      description: "套用此導覽視角的使用者會回到其他符合條件的視角。",
+      confirmLabel: "刪除視角",
+      danger: true,
+    }))) return;
     try {
       await navigationProfilesApi.delete(selected.id);
       toast.success("視角已刪除");

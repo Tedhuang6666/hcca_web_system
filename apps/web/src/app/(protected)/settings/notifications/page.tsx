@@ -16,6 +16,7 @@ import { enableWebPush } from "@/lib/web-push";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string }[] = [
   { key: "document_pending", label: "公文待審", desc: "有公文需要您審核或處理時提醒" },
@@ -85,6 +86,7 @@ function Switch({
 }
 
 export default function NotificationSettingsPage() {
+  const confirm = useConfirm();
   const { can } = usePermissions();
   const canManageSystemEmail = can("feature_flag:admin");
   const { isModuleClosed } = useModuleStatus();
@@ -166,7 +168,12 @@ export default function NotificationSettingsPage() {
   const toggleSystemEmail = async (flag: FeatureFlagOut, confirmMessage: string) => {
     if (systemEmailSaving || flag.archived_at) return;
     const next = !flag.is_globally_enabled;
-    if (!next && !window.confirm(confirmMessage)) return;
+    if (!next && !(await confirm({
+      title: "關閉系統寄信？",
+      description: confirmMessage,
+      confirmLabel: "關閉寄信",
+      danger: true,
+    }))) return;
 
     setSystemEmailSaving(flag.key);
     try {

@@ -34,6 +34,7 @@ import { safeImageUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
@@ -422,6 +423,7 @@ function rosterMemberKey(tabId: string, title: string, name: string) {
 }
 
 export default function PublicSiteAdminPage() {
+  const confirm = useConfirm();
   const [tab, setTab] = useState<Tab>("homepage");
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<PublicSiteSettingsOut>(emptySettings);
@@ -966,7 +968,12 @@ export default function PublicSiteAdminPage() {
   };
 
   const deleteLink = async (link: PublicLinkOut) => {
-    if (!window.confirm(`確定要刪除「${link.title}」嗎？此操作無法復原。`)) return;
+    if (!(await confirm({
+      title: `刪除「${link.title}」？`,
+      description: "此公開連結會立即從網站移除，無法復原。",
+      confirmLabel: "刪除連結",
+      danger: true,
+    }))) return;
     try {
       await siteApi.deleteLink(link.id);
       if (editingLinkId === link.id) cancelEditLink();

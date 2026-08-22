@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   featureFlagsApi,
   type FeatureFlagOut, apiErrorMessage } from "@/lib/api";
@@ -136,6 +137,7 @@ export default function FeatureFlagsPage() {
 }
 
 function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => void }) {
+  const confirm = useConfirm();
   const [globally, setGlobally] = useState(flag.is_globally_enabled);
   const [pct, setPct] = useState(flag.percentage_rollout);
   const [users, setUsers] = useState(flag.enabled_user_ids.join("\n"));
@@ -167,7 +169,12 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
   };
 
   const onArchive = async () => {
-    if (!window.confirm(`封存 flag「${flag.key}」？封存後不會再被評估。`)) return;
+    if (!(await confirm({
+      title: `封存 flag「${flag.key}」？`,
+      description: "封存後不會再被評估，直到重新建立新的 flag。",
+      confirmLabel: "封存 flag",
+      danger: true,
+    }))) return;
     setBusy(true);
     try {
       await featureFlagsApi.archive(flag.id);

@@ -24,6 +24,7 @@ import {
 } from "../partner-map-icons";
 import CredentialAuthorizationPanel from "./CredentialAuthorizationPanel";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import BusinessAccountPanel from "./BusinessAccountPanel";
 import BusinessHoursEditor from "../BusinessHoursEditor";
 import type { BusinessHours } from "@/lib/partner-map-types";
@@ -132,6 +133,7 @@ const emptyLocation = () => ({
 });
 
 export default function PartnerMapAdminPage() {
+  const confirm = useConfirm();
   const [businesses, setBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
@@ -315,7 +317,12 @@ export default function PartnerMapAdminPage() {
   };
 
   const removeBusinessPromo = async (imageId: string) => {
-    if (!selected || !window.confirm("確定移除這張宣傳圖？")) return;
+    if (!selected || !(await confirm({
+      title: "移除這張宣傳圖？",
+      description: "圖片會從店家公開頁面移除，無法復原。",
+      confirmLabel: "移除圖片",
+      danger: true,
+    }))) return;
     try {
       if (imageId === "legacy") {
         await partnerMapApi.deleteFlyer(selected.id);
@@ -469,7 +476,12 @@ export default function PartnerMapAdminPage() {
   };
 
   const deleteSelectedBusiness = async () => {
-    if (!selected || !window.confirm(`確定要刪除「${selected.name}」嗎？店家的據點、優惠與評價也會一併刪除。`)) return;
+    if (!selected || !(await confirm({
+      title: `刪除「${selected.name}」？`,
+      description: "店家的據點、優惠與評價也會一併刪除，無法復原。",
+      confirmLabel: "刪除店家",
+      danger: true,
+    }))) return;
     setDeleting(true);
     try {
       await partnerMapApi.deleteBusiness(selected.id);

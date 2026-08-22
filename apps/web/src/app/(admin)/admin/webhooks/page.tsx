@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   webhooksApi,
   type WebhookDeliveryOut,
@@ -28,6 +29,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function WebhooksPage() {
   const { isAdmin } = usePermissions();
+  const confirm = useConfirm();
   const [subs, setSubs] = useState<WebhookSubscriptionOut[]>([]);
   const [onlyActive, setOnlyActive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,7 +101,12 @@ export default function WebhooksPage() {
   };
 
   const onDelete = async (sub: WebhookSubscriptionOut) => {
-    if (!window.confirm(`刪除訂閱「${sub.name}」？已投遞紀錄會保留。`)) return;
+    if (!(await confirm({
+      title: `刪除訂閱「${sub.name}」？`,
+      description: "已投遞紀錄會保留，但之後不會再傳送事件。",
+      confirmLabel: "刪除訂閱",
+      danger: true,
+    }))) return;
     setBusy(true);
     try {
       await webhooksApi.remove(sub.id);

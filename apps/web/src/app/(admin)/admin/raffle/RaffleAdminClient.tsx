@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Copy, ExternalLink, Gauge, Lock, Pause, Play, Plus, RefreshCw, Save, Send, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 import { ApiError, apiErrorMessage, rafflesApi } from "@/lib/api";
 import type { RaffleAdminOut, RafflePrizeInput, RaffleStatus } from "@/lib/types";
@@ -48,6 +49,7 @@ function parsePrizeDrafts(drafts: PrizeDraft[]): RafflePrizeInput[] | null {
 }
 
 export default function RaffleAdminClient() {
+  const confirm = useConfirm();
   const [events, setEvents] = useState<RaffleAdminOut[]>([]);
   const [busy, setBusy] = useState(false);
   const [accessCode, setAccessCode] = useState("");
@@ -143,7 +145,12 @@ export default function RaffleAdminClient() {
   };
 
   const reset = async () => {
-    if (!selected || !window.confirm("確定要清除本輪所有測試資料嗎？中獎紀錄與平板驗證 session 都會被刪除，獎品庫存會恢復原始數量。")) return;
+    if (!selected || !(await confirm({
+      title: "清除本輪所有測試資料？",
+      description: "中獎紀錄與平板驗證 session 都會刪除，獎品庫存會恢復原始數量。",
+      confirmLabel: "清除測試資料",
+      danger: true,
+    }))) return;
     setBusy(true);
     try {
       const resetEvent = await rafflesApi.reset(selected.id);
