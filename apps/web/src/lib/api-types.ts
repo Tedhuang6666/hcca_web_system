@@ -4265,7 +4265,7 @@ export interface paths {
         delete: operations["delete_document_documents__doc_id__delete"];
         options?: never;
         head?: never;
-        /** 更新公文（超過六小時僅可更新摘要） */
+        /** 更新公文（發文超過六小時仍可修改，並留下稽核紀錄） */
         patch: operations["update_document_documents__doc_id__patch"];
         trace?: never;
     };
@@ -47560,7 +47560,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 非草稿狀態或發出已超過六小時且更新內容不只摘要 */
+            /** @description 非草稿狀態或目前不可編輯 */
             409: {
                 headers: {
                     [name: string]: unknown;
