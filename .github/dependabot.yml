@@ -1,6 +1,6 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
@@ -10,6 +10,20 @@ updates:
     open-pull-requests-limit: 3
     groups:
       python-minor:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: uv
+    directory: /apps/discord-bot
+    schedule:
+      interval: weekly
+      day: monday
+      time: "01:00"
+      timezone: Asia/Taipei
+    open-pull-requests-limit: 3
+    groups:
+      discord-bot-minor:
         update-types:
           - minor
           - patch
