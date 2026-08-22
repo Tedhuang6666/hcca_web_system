@@ -6,13 +6,40 @@ from collections.abc import Callable
 from unittest.mock import patch
 from uuid import UUID
 
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.merchandise_submission import MerchandiseSubmissionFile
 from api.models.org import Org
 from api.models.user import User
+from api.routers import merchandise_submissions as merchandise_submissions_router
 from api.services.merchandise_submission_ai import AI_DETECTION_VERSION
+
+
+def test_presigned_storage_redirect_accepts_configured_s3_host(monkeypatch) -> None:
+    monkeypatch.setattr(merchandise_submissions_router.settings, "S3_BUCKET", "hcca-files")
+    monkeypatch.setattr(merchandise_submissions_router.settings, "S3_REGION", "ap-northeast-1")
+
+    response = merchandise_submissions_router._presigned_storage_redirect(
+        "https://hcca-files.s3.ap-northeast-1.amazonaws.com/design.png?signature=example"
+    )
+
+    assert response.headers["location"].startswith("https://hcca-files.s3.ap-northeast-1")
+
+
+def test_presigned_storage_redirect_rejects_untrusted_host(monkeypatch) -> None:
+    monkeypatch.setattr(merchandise_submissions_router.settings, "S3_BUCKET", "hcca-files")
+    monkeypatch.setattr(merchandise_submissions_router.settings, "S3_REGION", "ap-northeast-1")
+
+    try:
+        merchandise_submissions_router._presigned_storage_redirect(
+            "https://attacker.example/design.png?signature=example"
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 502
+    else:
+        raise AssertionError("Expected an untrusted storage URL to be rejected")
 
 
 async def test_merchandise_submission_portal_requires_login(client: AsyncClient) -> None:
