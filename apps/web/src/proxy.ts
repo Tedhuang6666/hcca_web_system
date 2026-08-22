@@ -391,7 +391,6 @@ function publicAssetCacheControl(pathname: string): string | null {
   if (pathname === "/theme.v1.js") return "public, max-age=31536000, immutable";
   if (
     pathname === "/robots.txt"
-    || pathname === "/theme.js"
     || pathname === "/manifest.webmanifest"
     || pathname === "/llms.txt"
   ) {
