@@ -138,7 +138,7 @@ export default function Modal({
     <div
       ref={dialogRef}
       data-modal-root="true"
-      className={`fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
+      className={`modal-root fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       role="dialog"
       aria-modal="true"
@@ -147,11 +147,11 @@ export default function Modal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className={`flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
+        className={`modal-surface ${mobileFullscreen ? "modal-surface-mobile" : ""} flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         <div
-          className="flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3"
+          className="modal-header flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3"
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <h2 id={titleId} className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -161,7 +161,7 @@ export default function Modal({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-lg transition-colors hover:opacity-70"
+            className="modal-close-button flex h-11 w-11 items-center justify-center rounded-lg transition-colors"
             style={{ color: "var(--text-muted)" }}
             aria-label="關閉"
           >
@@ -180,10 +180,10 @@ export default function Modal({
             </svg>
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4">{children}</div>
+        <div className="modal-content min-h-0 flex-1 overflow-y-auto p-5 pt-4">{children}</div>
         {footer && (
           <div
-            className="flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap"
+            className="modal-footer flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap"
             style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
           >
             {footer}

@@ -4289,6 +4289,390 @@ details[open] > :not(summary) {
   animation: spin 700ms linear infinite;
 }
 
+/* ── 操作細節：讓狀態轉換有明確的開始、進行與落點 ─────────────────────── */
+.empty-state {
+  position: relative;
+  isolation: isolate;
+  min-height: 15rem;
+  padding-inline: 1.25rem;
+}
+
+.empty-state-icon {
+  display: grid;
+  width: 4rem;
+  height: 4rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--primary-dim) 72%, var(--bg-elevated));
+}
+
+.empty-state-icon > svg {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.empty-state-title {
+  margin-top: 0.2rem;
+  letter-spacing: -0.01em;
+}
+
+.empty-state-description {
+  line-height: 1.7;
+}
+
+.empty-state-action {
+  margin-top: 0.35rem;
+}
+
+.empty-state > * {
+  animation: empty-state-reveal 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.empty-state > *:nth-child(2) { animation-delay: 55ms; }
+.empty-state > *:nth-child(3) { animation-delay: 95ms; }
+.empty-state > *:nth-child(4) { animation-delay: 135ms; }
+
+@keyframes empty-state-reveal {
+  from { opacity: 0; transform: translateY(7px); filter: blur(2px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.status-badge,
+.regulation-category-badge {
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms ease,
+    filter 160ms ease;
+}
+
+.status-badge {
+  animation: status-badge-arrive 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.status-badge:hover,
+.regulation-category-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.status-badge-dot {
+  animation: status-dot-arrive 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes status-badge-arrive {
+  from { opacity: 0; transform: translateY(3px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes status-dot-arrive {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.loading-state[aria-busy="true"] {
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
+}
+
+.modal-root {
+  animation: modal-backdrop-arrive 180ms ease-out both;
+}
+
+.modal-surface {
+  position: relative;
+  isolation: isolate;
+  animation: modal-surface-arrive 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center 35%;
+}
+
+.modal-header {
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-elevated));
+}
+
+.modal-close-button {
+  color: var(--text-muted);
+  background: transparent;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-close-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  transform: rotate(6deg) scale(1.03);
+}
+
+.modal-close-button:active { transform: rotate(0) scale(0.94); }
+
+.modal-content {
+  scrollbar-gutter: stable;
+}
+
+.modal-footer {
+  box-shadow: 0 -8px 18px color-mix(in srgb, var(--bg-surface) 58%, transparent);
+}
+
+.confirm-dialog-content[data-dialog-kind="confirm"] {
+  line-height: 1.75;
+}
+
+@keyframes modal-backdrop-arrive {
+  from { opacity: 0; backdrop-filter: blur(0); }
+  to { opacity: 1; backdrop-filter: blur(4px); }
+}
+
+@keyframes modal-surface-arrive {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); filter: blur(2px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+.combobox,
+.multi-combobox {
+  isolation: isolate;
+}
+
+.combobox-input,
+.multi-combobox-input {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.combobox[data-state="open"] .combobox-input,
+.multi-combobox[data-state="open"] .multi-combobox-input,
+.combobox-input:focus,
+.multi-combobox-input:focus {
+  border-color: var(--border-focus) !important;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent),
+    0 8px 18px color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.combobox-menu,
+.multi-combobox-menu,
+.combobox-empty,
+.multi-combobox-empty {
+  transform-origin: top center;
+  animation: select-menu-arrive 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.combobox-menu,
+.multi-combobox-menu {
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text-primary) 13%, transparent);
+}
+
+.combobox-option,
+.multi-combobox-option {
+  position: relative;
+  transition:
+    background-color 130ms ease,
+    color 130ms ease,
+    transform 130ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.combobox-option:hover,
+.combobox-option.is-active,
+.multi-combobox-option:hover,
+.multi-combobox-option.is-active {
+  transform: translateX(2px);
+}
+
+.combobox-option.is-selected::after {
+  position: absolute;
+  top: 50%;
+  right: 0.8rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  transform: translateY(-50%);
+}
+
+.combobox-option.is-selected {
+  padding-right: 2.25rem;
+}
+
+.combobox-menu li:last-child .combobox-option,
+.multi-combobox-menu li:last-child .multi-combobox-option {
+  border-bottom-color: transparent !important;
+}
+
+.combobox-clear,
+.multi-combobox-chip-remove {
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.combobox-clear:hover,
+.multi-combobox-chip-remove:hover {
+  color: var(--text-primary);
+  background: var(--bg-active) !important;
+  transform: translateY(-50%) scale(1.05);
+}
+
+.multi-combobox-chip {
+  animation: chip-arrive 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.multi-combobox-chip-remove:hover {
+  transform: scale(1.07);
+}
+
+@keyframes select-menu-arrive {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); filter: blur(2px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@keyframes chip-arrive {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.drawer-panel {
+  will-change: transform;
+}
+
+.drawer-panel > header {
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-elevated));
+}
+
+.drawer-panel > header button {
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-panel > header button:hover {
+  color: var(--text-primary) !important;
+  background: var(--bg-hover);
+  transform: rotate(6deg) scale(1.03);
+}
+
+@media (max-width: 639px) {
+  .modal-surface-mobile {
+    animation-name: modal-sheet-arrive;
+    transform-origin: center bottom;
+  }
+
+  .empty-state {
+    min-height: 13rem;
+    padding-block: 3.5rem;
+  }
+}
+
+@keyframes modal-sheet-arrive {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+html {
+  caret-color: var(--primary);
+}
+
+textarea {
+  caret-color: var(--primary);
+  resize: vertical;
+}
+
+:where(input, textarea, select)[aria-invalid="true"] {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+:where(input, textarea, select):user-invalid {
+  border-color: var(--danger);
+}
+
+input[type="file"] {
+  max-width: 100%;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.42rem 0.65rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input[type="file"]::file-selector-button:hover {
+  border-color: var(--primary);
+  background: var(--primary-dim);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input[type="checkbox"]:active:not(:disabled),
+input[type="radio"]:active:not(:disabled) {
+  transform: scale(0.88);
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  animation: choice-settle 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes choice-settle {
+  0% { transform: scale(0.78); }
+  72% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+[data-sonner-toast] {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text-primary) 14%, transparent) !important;
+  transition:
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms ease;
+}
+
+[data-sonner-toast]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--text-primary) 17%, transparent) !important;
+}
+
+[data-sonner-toast][data-type="success"] { border-color: var(--success-border) !important; }
+[data-sonner-toast][data-type="error"] { border-color: var(--danger-border) !important; }
+[data-sonner-toast][data-type="warning"] { border-color: var(--warning-border) !important; }
+[data-sonner-toast][data-type="info"] { border-color: var(--info-border) !important; }
+
+[data-sonner-toast] [data-button] {
+  border-radius: var(--radius-sm) !important;
+  font-weight: 650 !important;
+}
+
+@media (hover: none) {
+  .status-badge:hover,
+  .regulation-category-badge:hover,
+  [data-sonner-toast]:hover {
+    transform: none;
+  }
+}
+
 /* ── App atmosphere and dashboard ─────────────────────────────────────── */
 .app-shell {
   position: relative;

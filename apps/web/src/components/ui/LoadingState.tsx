@@ -18,6 +18,7 @@ export function LoadingState({
       className={`loading-state ${compact ? "loading-state-compact" : ""}`}
       role="status"
       aria-live="polite"
+      aria-busy="true"
     >
       <span className="loading-orbit" aria-hidden="true">
         <Loader2 size={compact ? 18 : 24} />

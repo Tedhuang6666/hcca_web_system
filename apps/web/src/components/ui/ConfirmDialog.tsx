@@ -116,7 +116,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </button>
             </>
           }>
-          <div className="space-y-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+          <div
+            className="confirm-dialog-content space-y-3 text-sm"
+            data-dialog-kind={state.kind}
+            style={{ color: "var(--text-secondary)" }}
+          >
             {state.description && <div>{state.description}</div>}
             {state.kind === "prompt" && (
               <label className="block space-y-1.5">
