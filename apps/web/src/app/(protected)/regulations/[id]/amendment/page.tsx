@@ -18,6 +18,7 @@ import {
   type Draft,
   type DraftStatus } from "@/components/regulations/AmendmentDraftParts";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { regulationsApi, regulationHref, apiErrorMessage } from "@/lib/api";
 import type { RegulationOut } from "@/lib/types";
 
@@ -27,6 +28,7 @@ export default function DraftAmendmentPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { can } = usePermissions();
+  const confirm = useConfirm();
 
   const [reg, setReg] = useState<RegulationOut | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,9 +95,14 @@ export default function DraftAmendmentPage() {
     setStep(2);
   };
 
-  const handleDelete = (draftId: string) => {
+  const handleDelete = async (draftId: string) => {
     const draft = drafts.find(d => d.id === draftId);
-    if (draft && !window.confirm(`確定刪除「${draft.name}」？此操作只會刪除本機草稿。`)) {
+    if (draft && !(await confirm({
+      title: `刪除「${draft.name}」？`,
+      description: "此操作只會刪除本機草稿，且無法復原。",
+      confirmLabel: "刪除草稿",
+      danger: true,
+    }))) {
       return;
     }
     persistDrafts(drafts.filter(d => d.id !== draftId));
@@ -196,7 +203,7 @@ export default function DraftAmendmentPage() {
           <StepDraftList
             drafts={drafts}
             onOpen={handleOpen} onNew={handleNew}
-            onDelete={handleDelete} onImport={handleImport}
+            onDelete={(draftId) => { void handleDelete(draftId); }} onImport={handleImport}
           />
           {showCreateForm && (
             <div className="card p-4 space-y-3">
@@ -255,7 +262,7 @@ export default function DraftAmendmentPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => handleDelete(activeDraft.id)}
+                onClick={() => { void handleDelete(activeDraft.id); }}
                 className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
                 style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.08)" }}
               >
