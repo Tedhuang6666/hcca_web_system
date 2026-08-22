@@ -159,6 +159,8 @@ class JournalEntry(Base, TimestampMixin):
     __tablename__ = "finance_journal_entries"
     __table_args__ = (
         Index("ix_finance_journal_ledger_status", "ledger_id", "status"),
+        Index("ix_finance_journal_proposing_org", "proposing_org_id"),
+        Index("ix_finance_journal_advanced_by", "advanced_by_id"),
         UniqueConstraint(
             "ledger_id", "source_type", "source_id", "source_event", name="uq_finance_source_event"
         ),
@@ -208,10 +210,10 @@ class JournalEntry(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     proposing_org_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("orgs.id"), nullable=True
     )
     advanced_by_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     payment_method: Mapped[str] = mapped_column(
         String(20), nullable=False, default=ExpensePaymentMethod.DIRECT
@@ -246,6 +248,7 @@ class ExpenseClaimItem(Base, TimestampMixin):
     """報帳傳票的逐項明細，保留品項、單價與數量供日後稽核。"""
 
     __tablename__ = "finance_expense_claim_items"
+    __table_args__ = (Index("ix_finance_claim_item_budget_node", "budget_node_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     journal_entry_id: Mapped[uuid.UUID] = mapped_column(
@@ -259,21 +262,25 @@ class ExpenseClaimItem(Base, TimestampMixin):
     tax_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     budget_node_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id"), nullable=True
     )
     budget_exception_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class FinanceBudget(Base, TimestampMixin):
     __tablename__ = "finance_budgets"
-    __table_args__ = (UniqueConstraint("ledger_id", "period_id", name="uq_finance_budget_period"),)
+    __table_args__ = (
+        UniqueConstraint("ledger_id", "period_id", name="uq_finance_budget_period"),
+        Index("ix_finance_budgets_ledger", "ledger_id"),
+        Index("ix_finance_budgets_period", "period_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     ledger_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("finance_ledgers.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("finance_ledgers.id"), nullable=False
     )
     period_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("finance_fiscal_periods.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("finance_fiscal_periods.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(160), nullable=False)
 
@@ -366,13 +373,13 @@ class FinanceBudgetAllocationRevision(Base, TimestampMixin):
 
 class ExpenseClaimItemEvidence(Base, TimestampMixin):
     __tablename__ = "finance_expense_claim_item_evidence"
+    __table_args__ = (Index("ix_finance_expense_claim_item_evidence_item", "item_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("finance_expense_claim_items.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
