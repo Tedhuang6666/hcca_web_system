@@ -391,4 +391,4 @@ const summary = {
 await mkdir(dirname(outputFile), { recursive: true });
 await writeFile(outputFile, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 console.log(JSON.stringify(summary, null, 2));
-if (collectionFailures.length > 0) process.exitCode = 1;
+if (collectionFailures.length > 0 || budgetFailures.length > 0) process.exitCode = 1;
