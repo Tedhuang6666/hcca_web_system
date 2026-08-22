@@ -16,15 +16,13 @@ import logging
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from jwt import InvalidTokenError
-from jwt import encode as jwt_encode
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
-from api.core.security import decode_token
+from api.core.security import create_signed_token, decode_token
 from api.models.user import User
 from api.services import audit_chain
 
@@ -136,8 +134,6 @@ def create_impersonation_token(
         raise ImpersonationError("一般管理員不能 impersonate 最高權限者")
 
     minutes = max(1, min(minutes, IMPERSONATION_MAX_MINUTES))
-    now = datetime.now(UTC)
-    expire = now + timedelta(minutes=minutes)
     payload: dict = {
         "sub": str(target.id),
         "type": "impersonation",
@@ -147,10 +143,8 @@ def create_impersonation_token(
         "target_email": target.email,
         "target_name": target.display_name,
         "jti": uuid.uuid4().hex,
-        "iat": now,
-        "exp": expire,
     }
-    return jwt_encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return create_signed_token(payload, timedelta(minutes=minutes))
 
 
 def parse_impersonation_token(token: str) -> dict | None:
