@@ -25,6 +25,7 @@ from api.core.structured_logging import reset_request_id, set_request_id
 from api.models.observability import PageSpeedRun
 from api.services.observability import (
     _merge_rum_urls,
+    _read_sitemap,
     client_route_analytics,
     record_client_metrics,
 )
@@ -87,6 +88,26 @@ def test_rum_api_metrics_are_not_page_speed_targets(monkeypatch) -> None:
     )
 
     assert urls == ["https://hcca.tw/", "https://hcca.tw/new-page"]
+
+
+async def test_read_sitemap_rejects_xml_entity_declarations() -> None:
+    class FakeResponse:
+        content = b"""<?xml version=\"1.0\"?>
+        <!DOCTYPE sitemapindex [<!ENTITY payload \"https://hcca.tw/private\">]>
+        <sitemapindex><sitemap><loc>&payload;</loc></sitemap></sitemapindex>"""
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def get(self, _url: str) -> FakeResponse:
+            return FakeResponse()
+
+    urls = await _read_sitemap(
+        FakeClient(), "https://hcca.tw/sitemap.xml", "https://hcca.tw", set()
+    )
+
+    assert urls == []
 
 
 async def test_client_route_analytics_aggregates_all_field_metric_families(monkeypatch) -> None:
