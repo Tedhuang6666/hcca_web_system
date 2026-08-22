@@ -39,6 +39,7 @@ import { regulationHref, regulationsApi } from "@/lib/api/regulations";
 import { apiErrorMessage } from "@/lib/api-helpers";
 import { apiUrl } from "@/lib/config";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
 import { recordRecent } from "@/lib/recents";
 import {
@@ -103,6 +104,7 @@ export default function RegulationDetailPageClient({
   // 統一 decode 後再給 API / localStorage / encodeURIComponent 使用，避免雙重編碼。
   const id = useMemo(() => decodeRouteSegment(initialId), [initialId]);
   const router = useRouter();
+  const confirm = useConfirm();
   const [reg, setReg] = useState<RegulationOut | null>(initialRegulation);
   const [loading, setLoading] = useState(!initialRegulation);
   const normalizedInitialTab = initialTab ?? null;
@@ -285,15 +287,20 @@ export default function RegulationDetailPageClient({
       .catch(() => showErrorToast("複製失敗"));
   }, []);
 
-  const handleDeleteAmendmentDraft = useCallback((draftId: string) => {
+  const handleDeleteAmendmentDraft = useCallback(async (draftId: string) => {
     const draft = amendmentDrafts.find((item) => item.id === draftId);
     if (!draft) return;
-    if (!window.confirm(`確定刪除「${draft.name}」？此操作只會刪除本機草稿。`)) return;
+    if (!(await confirm({
+      title: `刪除「${draft.name}」？`,
+      description: "此操作只會刪除本機草稿，且無法復原。",
+      confirmLabel: "刪除草稿",
+      danger: true,
+    }))) return;
     const next = amendmentDrafts.filter((item) => item.id !== draftId);
     saveDrafts(id, next);
     setAmendmentDrafts(next);
     showSuccessToast("修正案草稿已刪除");
-  }, [amendmentDrafts, id]);
+  }, [amendmentDrafts, confirm, id]);
 
   // 必須 memo 化：否則每次 render 都是新陣列，會讓 articleDisplayRows 與
   // 下方 deep-link effect 無限重跑（重複點亮高亮、不斷 scrollIntoView 卡住頁面）。
@@ -1236,7 +1243,7 @@ export default function RegulationDetailPageClient({
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleDeleteAmendmentDraft(draft.id)}
+                          onClick={() => { void handleDeleteAmendmentDraft(draft.id); }}
                           className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg hover:opacity-80"
                           style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.25)", background: "rgba(220,38,38,0.06)" }}
                           aria-label={`刪除草稿 ${draft.name}`}
