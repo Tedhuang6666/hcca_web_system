@@ -1,9 +1,8 @@
 name: Build Docker Images
 
 on:
-  workflow_run:
-    workflows: ["CI — Lint, Types & Test"]
-    types: [completed]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -11,9 +10,6 @@ permissions:
 
 jobs:
   build:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
 
     strategy:
@@ -31,7 +27,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: main
+          # 固定使用觸發此次 push 的 commit；不能在 runner 排隊期間改抓新版 main。
+          ref: ${{ github.sha }}
 
       - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:

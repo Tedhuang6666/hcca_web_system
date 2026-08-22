@@ -23,6 +23,8 @@ usage() {
   DEPLOY_HEALTH_WAIT_SECONDS=300 DEPLOY_IMAGE_WAIT_SECONDS=1200
   DEPLOY_MIGRATION_MODE=auto（auto / always / skip）
   DEPLOY_REQUIRE_GPG_VERIFY=0 DEPLOY_HEALTH_REPORT_REQUIRED=1
+  DEPLOY_CI_WORKFLOW='CI — Lint, Types & Test'
+  DEPLOY_CI_WAIT_SECONDS=3600 DEPLOY_CI_POLL_SECONDS=15
 EOF
 }
 
@@ -92,6 +94,9 @@ image_wait_seconds="${DEPLOY_IMAGE_WAIT_SECONDS:-1200}"
 migration_mode="${DEPLOY_MIGRATION_MODE:-auto}"
 require_gpg_verify="${DEPLOY_REQUIRE_GPG_VERIFY:-0}"
 health_report_required="${DEPLOY_HEALTH_REPORT_REQUIRED:-1}"
+ci_workflow="${DEPLOY_CI_WORKFLOW:-CI — Lint, Types & Test}"
+ci_wait_seconds="${DEPLOY_CI_WAIT_SECONDS:-3600}"
+ci_poll_seconds="${DEPLOY_CI_POLL_SECONDS:-15}"
 
 for command in git ssh; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -140,6 +145,78 @@ if ! git cat-file -e "$base_ref^{commit}" 2>/dev/null; then
 fi
 base_sha="$(git rev-parse "$base_ref")"
 
+wait_for_ci() {
+  local repo_slug start deadline runs run_id run_status run_conclusion run_url
+
+  command -v gh >/dev/null 2>&1 || {
+    echo "❌ 找不到 GitHub CLI（gh）；部署前無法確認 CI。" >&2
+    exit 1
+  }
+  if ! [[ "$ci_wait_seconds" =~ ^[1-9][0-9]*$ ]] || ! [[ "$ci_poll_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "❌ DEPLOY_CI_WAIT_SECONDS 與 DEPLOY_CI_POLL_SECONDS 必須是正整數" >&2
+    exit 2
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "❌ 未登入 GitHub CLI；部署前無法確認 CI。請先執行 gh auth login。" >&2
+    exit 1
+  fi
+  if ! repo_slug="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')"; then
+    echo "❌ 無法判定 GitHub repository，無法確認 CI。" >&2
+    exit 1
+  fi
+
+  echo "▶ 等待 CI 通過後才部署：$ci_workflow（commit: $release_sha）"
+  start="$(date +%s)"
+  deadline=$((start + ci_wait_seconds))
+  while :; do
+    if ! runs="$(gh run list \
+      --repo "$repo_slug" \
+      --workflow "$ci_workflow" \
+      --commit "$release_sha" \
+      --event push \
+      --limit 1 \
+      --json databaseId,status,conclusion,url \
+      --jq '.[] | [.databaseId, .status, (.conclusion // ""), .url] | @tsv')"; then
+      echo "❌ 無法查詢 GitHub Actions CI 狀態。" >&2
+      exit 1
+    fi
+
+    if [[ -n "$runs" ]]; then
+      IFS=$'\t' read -r run_id run_status run_conclusion run_url <<< "$runs"
+      case "$run_status:$run_conclusion" in
+        completed:success)
+          echo "✓ CI 已全部通過：$run_url"
+          return 0
+          ;;
+        completed:*)
+          echo "❌ CI 未通過，取消部署：$run_url" >&2
+          echo "失敗或未完成的 job：" >&2
+          gh run view "$run_id" --repo "$repo_slug" --json jobs --jq \
+            '.jobs[] | select(.conclusion != "success") | .name' >&2 || true
+          echo "失敗步驟：" >&2
+          gh run view "$run_id" --repo "$repo_slug" --json jobs --jq '
+            .jobs[] | select(.conclusion != "success") as $job |
+            $job.steps[]? | select(.conclusion != "success") |
+            "\($job.name) / \(.name): \(.conclusion)"
+          ' >&2 || true
+          exit 1
+          ;;
+        *)
+          echo "CI 尚在執行（${run_status}），${ci_poll_seconds}s 後再確認：$run_url"
+          ;;
+      esac
+    else
+      echo "尚未找到此 commit 的 CI workflow，${ci_poll_seconds}s 後再確認。"
+    fi
+
+    if [[ "$(date +%s)" -ge "$deadline" ]]; then
+      echo "❌ 等待 CI 超過 ${ci_wait_seconds}s，取消部署。" >&2
+      exit 1
+    fi
+    sleep "$ci_poll_seconds"
+  done
+}
+
 if [[ "$dry_run" == "1" ]]; then
   if [[ "$push_enabled" == "1" ]]; then
     echo "▶ dry-run：會推送 $branch → $remote_name（目標 $release_sha）"
@@ -156,6 +233,11 @@ else
     exit 1
   fi
   echo "▶ 跳過 Git push，使用遠端已有的 $release_sha"
+fi
+
+# Docker image 可在 push 後立即平行建置，但正式環境切流只能使用通過完整 CI 的 commit。
+if [[ "$dry_run" != "1" ]]; then
+  wait_for_ci
 fi
 
 if [[ "$migration_mode" != "auto" && "$migration_mode" != "always" && "$migration_mode" != "skip" ]]; then
