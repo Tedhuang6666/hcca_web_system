@@ -48,6 +48,7 @@ export default function ThemeToggle() {
     toggleTheme({
       x: origin.x,
       y: origin.y,
+      target: event.currentTarget,
     });
   };
 

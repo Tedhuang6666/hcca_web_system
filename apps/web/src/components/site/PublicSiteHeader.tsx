@@ -323,9 +323,10 @@ function PublicSiteHeaderContent({
               const rect = event.currentTarget.getBoundingClientRect();
               const useButtonCenter = window.matchMedia("(pointer: coarse)").matches
                 || event.detail === 0;
-              toggleTheme(useButtonCenter
+              const origin = useButtonCenter
                 ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-                : { x: event.clientX, y: event.clientY });
+                : { x: event.clientX, y: event.clientY };
+              toggleTheme({ ...origin, target: event.currentTarget });
             }}
             className="public-icon-button"
             aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}
