@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import PageTransition from "@/components/layout/PageTransition";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import PublicSiteBackLink from "@/components/site/PublicSiteBackLink";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
@@ -68,7 +69,7 @@ export default async function PublicSiteShell({
       />
       <main id="main-content">
         <PublicSiteBackLink />
-        {children}
+        <PageTransition>{children}</PageTransition>
       </main>
       <footer className="public-footer">
         <div className="public-footer-inner">

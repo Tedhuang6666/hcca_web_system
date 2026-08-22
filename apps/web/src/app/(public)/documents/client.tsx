@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useReducer, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useReducer, useMemo, useCallback, useRef, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RefreshCw, X } from "lucide-react";
@@ -1224,7 +1224,10 @@ export default function DocumentListClient({
           </div>
         ) : (
           /* 桌機版表格 / 手機版卡片列表 */
-          <div className="data-reveal">
+          <div
+            key={`${activeTab}:${debouncedSearch}:${sortKey}:${JSON.stringify(filters)}`}
+            className="document-results-stage data-reveal"
+          >
             {/* 桌機表格（md 以上顯示） */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm" role="table" aria-label="公文列表">
@@ -1253,8 +1256,11 @@ export default function DocumentListClient({
                   {sorted.map((doc, idx) => (
                     <tr
                       key={doc.id}
-                      className="hover:[background:var(--bg-hover)]"
-                      style={idx < docs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                      className="document-list-row hover:[background:var(--bg-hover)]"
+                      style={{
+                        ...(idx < docs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}),
+                        ["--result-index" as string]: idx,
+                      } as CSSProperties}>
                       {canBatch && <td className="px-5 py-4">
                         <input
                           type="checkbox"
@@ -1365,12 +1371,12 @@ export default function DocumentListClient({
 
             {/* 手機卡片列表（md 以下顯示） */}
             <ul className="md:hidden divide-y" style={{ borderColor: "var(--border)" }} aria-label="公文列表">
-              {sorted.map((doc) => {
+              {sorted.map((doc, idx) => {
                 const urg = dueDateUrgency(doc.due_date, now);
                 const isOverdue = urg === "overdue";
                 const isSoon = urg === "soon";
                 return (
-                  <li key={doc.id}>
+                  <li key={doc.id} className="document-list-card" style={{ ["--result-index" as string]: idx } as CSSProperties}>
                     <div className="flex items-start justify-between gap-2 px-4 py-4 transition-colors hover:[background:var(--bg-hover)]">
                     {canBatch && <input
                       type="checkbox"

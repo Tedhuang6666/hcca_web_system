@@ -69,6 +69,12 @@ export default function NewPetitionPage() {
       !draft.title.trim() && !draft.content.trim()
     ), []),
   });
+  const completedSections = [
+    Boolean(typeId),
+    isLoggedIn || Boolean(contactEmail.trim()),
+    Boolean(title.trim()),
+    Boolean(content.trim()),
+  ];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,19 +106,27 @@ export default function NewPetitionPage() {
     // fragment 不會送至伺服器或寫入 access log；頁面再以 POST body 送 token 查詢。
     const shareHref = `/petitions/share#${created.share_token}`;
     return (
-      <div className="max-w-2xl mx-auto space-y-5">
-        <div className="card p-6 space-y-4">
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>案件已送出</h1>
+      <div className="petition-receipt-page max-w-2xl mx-auto space-y-5">
+        <article className="petition-receipt card p-6 space-y-4">
+          <div className="petition-receipt-seal" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.35" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m5 12 4.2 4.2L19 6.8" />
+            </svg>
+            <span>已收件</span>
+          </div>
+          <div className="petition-receipt-heading">
+            <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>案件已送出</h1>
+          </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             請妥善保存案號與驗證碼。驗證碼只會在此畫面顯示一次。
             {isLoggedIn ? " 您也可以直接在我的案件中查看。" : " 未登入案件無法直接查看及管理，回復速度也可能較慢。"}
           </p>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          <div className="petition-receipt-codes grid sm:grid-cols-2 gap-3">
+            <div className="petition-receipt-code rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>案號</p>
               <p className="text-2xl font-semibold tracking-widest" style={{ color: "var(--text-primary)" }}>{created.case_number}</p>
             </div>
-            <div className="rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+            <div className="petition-receipt-code petition-receipt-code--verification rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>驗證碼</p>
               <p className="text-2xl font-semibold tracking-widest" style={{ color: "var(--warning)" }}>{created.verification_code}</p>
             </div>
@@ -133,7 +147,7 @@ export default function NewPetitionPage() {
             </button>
             <Link className="btn btn-ghost" href="/petitions">回陳情系統</Link>
           </div>
-        </div>
+        </article>
       </div>
     );
   }
@@ -145,7 +159,15 @@ export default function NewPetitionPage() {
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>選擇具名或匿名後送出，系統會依類型自動分派給負責機關。</p>
         <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
-      <form onSubmit={submit} className="card p-5 space-y-4">
+      <form onSubmit={submit} className="petition-submission-form card p-5 space-y-4">
+        <ol className="petition-progress" aria-label="陳情填寫進度">
+          {["選擇類型", "聯絡資料", "填寫內容", "確認送出"].map((label, index) => (
+            <li key={label} data-complete={completedSections[index] || undefined}>
+              <span className="petition-progress-dot" aria-hidden="true" />
+              <span>{label}</span>
+            </li>
+          ))}
+        </ol>
         {!isLoggedIn && (
           <div className="rounded-lg p-4 text-sm" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)", color: "var(--text-primary)" }}>
             您目前未登入。未登入送件後無法直接查看及管理案件，必須保存案號與驗證碼才能查詢；因承辦單位較難確認聯絡身分，回復速度較慢。
@@ -167,7 +189,8 @@ export default function NewPetitionPage() {
             type="button"
             onClick={() => setIsNamed(true)}
             aria-pressed={isNamed}
-            className="rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+            className="petition-identity-choice rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+            data-selected={isNamed || undefined}
             style={{
               border: `1px solid ${isNamed ? "var(--primary)" : "var(--border)"}`,
               background: isNamed ? "var(--primary-dim)" : "transparent",
@@ -179,7 +202,8 @@ export default function NewPetitionPage() {
             type="button"
             onClick={() => setIsNamed(false)}
             aria-pressed={!isNamed}
-            className="rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+            className="petition-identity-choice rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+            data-selected={!isNamed || undefined}
             style={{
               border: `1px solid ${!isNamed ? "var(--primary)" : "var(--border)"}`,
               background: !isNamed ? "var(--primary-dim)" : "transparent",
@@ -189,7 +213,7 @@ export default function NewPetitionPage() {
           </button>
         </div>
         {!isNamed && (
-          <div className="rounded-lg p-4 text-sm" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border)", color: "var(--text-primary)" }}>
+          <div className="petition-privacy-note rounded-lg p-4 text-sm" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border)", color: "var(--text-primary)" }}>
             您的資料僅供紀錄用，不會顯示給任何管理員或承辦單位。
           </div>
         )}
@@ -212,7 +236,13 @@ export default function NewPetitionPage() {
         />
         <div className="flex justify-end gap-2">
           <Link className="btn btn-ghost" href="/petitions">取消</Link>
-          <button className="btn btn-primary" disabled={submitting || !typeId}>{submitting ? "送出中..." : "送出陳情"}</button>
+          <button
+            className="petition-submit-button btn btn-primary"
+            disabled={submitting || !typeId}
+            aria-busy={submitting}
+          >
+            {submitting ? "送出中..." : "送出陳情"}
+          </button>
         </div>
       </form>
     </div>

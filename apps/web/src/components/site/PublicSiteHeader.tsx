@@ -340,7 +340,7 @@ function PublicSiteHeaderContent({
           <button
             ref={menuButtonRef}
             type="button"
-            className="public-menu-button"
+            className={`public-menu-button ${open ? "is-open" : ""}`}
             onClick={() => {
               if (menuRef.current) menuRef.current.open = false;
               setOpen((value) => !value);
@@ -364,7 +364,7 @@ function PublicSiteHeaderContent({
           <nav
             id="public-mobile-nav"
             ref={mobileNavRef}
-            className="public-mobile-nav"
+            className="public-mobile-nav public-mobile-nav-index"
             aria-label="公開網站行動導覽"
           >
             <p className="public-mobile-nav-heading">你想先做什麼？</p>
@@ -374,7 +374,7 @@ function PublicSiteHeaderContent({
                   key={item.key}
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className="public-mobile-link"
+                  className="public-mobile-link public-mobile-index-link"
                   aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
                 >
                   {item.label}

@@ -195,7 +195,7 @@ export function ApprovalPanel({
   };
 
   return (
-    <div className="card p-5 space-y-5">
+    <div className="approval-panel card p-5 space-y-5">
       <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
         審核工作流
       </h2>
@@ -271,6 +271,14 @@ export function ApprovalPanel({
                         border: `1px solid var(${s.bgVar})`,
                       }
                 }>
+                {(step.status === "approved" || step.status === "rejected") && (
+                  <span
+                    className={`approval-formal-seal approval-formal-seal--${step.status}`}
+                    aria-hidden="true"
+                  >
+                    {step.status === "approved" ? "核准" : "退件"}
+                  </span>
+                )}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
@@ -370,7 +378,7 @@ export function ApprovalPanel({
               onClick={handleApprove}
               disabled={loading}
               aria-busy={loading}
-              className="motion-action-button motion-action-button--approve btn flex-1"
+              className="approval-action-button motion-action-button motion-action-button--approve btn flex-1"
               style={{
                 background: "var(--success-dim)",
                 color: "var(--success)",
@@ -384,7 +392,7 @@ export function ApprovalPanel({
             </button>
             <button
               onClick={() => setShowReject(true)}
-              className="motion-action-button motion-action-button--reject btn flex-1"
+              className="approval-action-button motion-action-button motion-action-button--reject btn flex-1"
               style={{
                 background: "var(--danger-dim)",
                 color: "var(--danger)",
