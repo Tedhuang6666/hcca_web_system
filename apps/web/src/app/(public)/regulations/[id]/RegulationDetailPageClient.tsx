@@ -883,7 +883,7 @@ export default function RegulationDetailPageClient({
             )}
             {hasHistoryRows && (
               <details
-                className="mb-6 rounded-xl"
+                className="reader-font-scale mb-6 rounded-xl"
                 style={{
                   background: "var(--bg-elevated)",
                   border: "1px solid var(--border)",
@@ -912,7 +912,11 @@ export default function RegulationDetailPageClient({
               </details>
             )}
             {activeArticles.length === 0 && reg.content ? (
-              <RegulationMarkdownContent content={reg.content} className={PROSE} style={zoomStyle} />
+              <RegulationMarkdownContent
+                content={reg.content}
+                className={`reader-font-scale ${PROSE}`}
+                style={zoomStyle}
+              />
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -989,7 +993,10 @@ export default function RegulationDetailPageClient({
                       </div>
                     </aside>
                   )}
-                  <div className="w-full min-w-0 flex-1 glass overflow-hidden" style={zoomStyle}>
+                  <div
+                    className="reader-font-scale w-full min-w-0 flex-1 glass overflow-hidden"
+                    style={zoomStyle}
+                  >
                     {activeArticles.length === 0
                       ? <p className="p-6 text-center" style={{ color: "var(--text-muted)" }}>尚無條文記錄</p>
                       : articleDisplayRows.map(({ article, displayLabel, hiddenByChapter }) => (

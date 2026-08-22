@@ -7,7 +7,7 @@ const DEFAULT_ZOOM = 100;
 const MIN_ZOOM = 70;
 const MAX_ZOOM = 150;
 
-type ZoomStyle = CSSProperties & { zoom: number };
+type ZoomStyle = CSSProperties & { "--reader-font-scale": number };
 
 function clampZoom(value: number) {
   if (!Number.isFinite(value)) return DEFAULT_ZOOM;
@@ -38,7 +38,12 @@ export function usePersistedZoom(storageKey: string) {
     });
   }, [storageKey]);
 
-  const zoomStyle = useMemo(() => ({ zoom: zoom / 100 }) as ZoomStyle, [zoom]);
+  // CSS `zoom` is not supported by older iOS Safari versions.  Expose a scale
+  // variable instead; the reader content class applies it to its type scale.
+  const zoomStyle = useMemo(
+    () => ({ "--reader-font-scale": zoom / 100 }) as ZoomStyle,
+    [zoom],
+  );
 
   return { zoom, setZoom, zoomStyle };
 }
