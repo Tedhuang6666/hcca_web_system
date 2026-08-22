@@ -333,6 +333,126 @@
   display: none;
 }
 
+/* 公開選舉列表：讓淺色模式回到清楚、可掃讀的行政清單，而不是英雄卡片堆疊。 */
+.elections-page-head {
+  padding-top: 0.25rem;
+}
+
+.election-list {
+  border-top: 1px solid var(--border-strong);
+}
+
+.election-list-item {
+  display: flex;
+  min-height: 9.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  border-bottom: 1px solid var(--public-border);
+  padding: 1.5rem 0.75rem;
+  color: var(--public-text);
+  text-decoration: none;
+  transition: background-color var(--transition), padding-inline var(--transition);
+}
+
+.election-list-item:hover,
+.election-list-item:focus-visible {
+  background: color-mix(in srgb, var(--public-accent-soft) 58%, var(--public-bg));
+  padding-inline: 1rem;
+}
+
+.election-list-item:focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: -2px;
+}
+
+.election-status {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--election-status-color) 30%, var(--public-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--election-status-color) 10%, transparent);
+  padding: 0 0.75rem;
+  color: var(--election-status-color);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.election-status-live {
+  --election-status-color: #0b6b57;
+}
+
+.election-status-paused {
+  --election-status-color: #8a5d00;
+}
+
+.election-status-closed {
+  --election-status-color: #2f619f;
+}
+
+[data-theme="dark"] .election-status-live {
+  --election-status-color: #6ee7b7;
+}
+
+[data-theme="dark"] .election-status-paused {
+  --election-status-color: #f4c96b;
+}
+
+[data-theme="dark"] .election-status-closed {
+  --election-status-color: #8bc5ff;
+}
+
+.election-list-cta {
+  display: inline-flex;
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--public-accent-text);
+  font-size: 0.875rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.election-list-cta svg {
+  transition: transform var(--transition);
+}
+
+.election-list-item:hover .election-list-cta svg,
+.election-list-item:focus-visible .election-list-cta svg {
+  transform: translateX(0.2rem);
+}
+
+.elections-empty-state {
+  border-block: 1px solid var(--public-border);
+  padding: 4rem 1.5rem;
+  text-align: center;
+}
+
+@media (max-width: 639.98px) {
+  .election-list-item {
+    min-height: 0;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.35rem 0.25rem;
+  }
+
+  .election-list-item:hover,
+  .election-list-item:focus-visible {
+    padding-inline: 0.5rem;
+  }
+
+  .election-list-cta {
+    width: 100%;
+    justify-content: space-between;
+    border-top: 1px solid var(--public-border);
+    padding-top: 0.75rem;
+  }
+}
+
 @media (min-width: 640px) {
   .public-header-actions > .public-system-button.hidden {
     display: inline-flex;
