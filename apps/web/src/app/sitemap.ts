@@ -313,6 +313,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.5,
       })),
   ];
-  lastKnownGoodSitemap = entries;
-  return entries;
+  const uniqueEntries = [...new Map(entries.map((entry) => [entry.url, entry])).values()];
+  lastKnownGoodSitemap = uniqueEntries;
+  return uniqueEntries;
 }

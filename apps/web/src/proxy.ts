@@ -441,7 +441,8 @@ export default async function proxy(req: NextRequest) {
     "Cache-Control",
     assetCacheControl ?? "private, no-store",
   );
-  if (!isIndexablePublicPath(pathname)) {
+  const isSearchMetadataRoute = pathname === "/robots.txt" || pathname === "/sitemap.xml";
+  if (!isSearchMetadataRoute && !isIndexablePublicPath(pathname)) {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   if (pathname === "/maintenance" || pathname.startsWith("/maintenance/")) {
