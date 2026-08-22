@@ -108,14 +108,16 @@ export default function HomeContent({
             },
             { href: "/surveys", title: "參與校園調查", desc: "填寫正在開放的問卷", icon: UsersRound },
             { href: "/petitions/new", title: "提出校園意見", desc: "讓你的問題進入正式回覆流程", icon: MessageCircle },
-          ].map((item) => {
+          ].map((item, index) => {
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className="public-feature-card public-home-feature-card"
+                data-entry={index}
               >
+                <span className="public-home-card-wash" aria-hidden="true" />
                 <span className="public-feature-icon"><Icon size={20} aria-hidden /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-base font-semibold">{item.title}</span>
@@ -123,7 +125,10 @@ export default function HomeContent({
                     {item.desc}
                   </span>
                 </span>
-                <ArrowRight className="public-feature-arrow" size={17} aria-hidden />
+                <span className="public-home-card-action" aria-hidden="true">
+                  前往
+                  <ArrowRight className="public-feature-arrow" size={17} />
+                </span>
               </Link>
             );
           })}

@@ -7068,3 +7068,355 @@ input[type="radio"]:checked {
     margin-top: 2cm;
   }
 }
+
+/* ── Focal civic motion: a document opens, an index resolves, a decision lands ── */
+.page-sheet-transition {
+  position: relative;
+  isolation: isolate;
+  animation: page-sheet-arrive 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.page-sheet-transition::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  width: min(16rem, 42%);
+  height: 2px;
+  transform-origin: left;
+  background: var(--primary);
+  animation: page-sheet-rule 700ms 100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  pointer-events: none;
+}
+
+@keyframes page-sheet-arrive {
+  from {
+    opacity: 0.72;
+    clip-path: inset(0 0 4% 0 round 1rem);
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 0);
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes page-sheet-rule {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.petition-submission-form {
+  position: relative;
+}
+
+.petition-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.petition-progress li {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+.petition-progress li::before {
+  content: "";
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+  transform-origin: left;
+  transition: background-color 260ms ease, transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.petition-progress li[data-complete="true"] {
+  color: var(--primary-text);
+}
+
+.petition-progress li[data-complete="true"]::before {
+  background: var(--primary);
+  transform: scaleX(1);
+}
+
+.petition-identity-choice {
+  position: relative;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease,
+    border-color 220ms ease, background-color 220ms ease;
+}
+
+.petition-identity-choice[data-selected="true"] {
+  border-color: var(--primary) !important;
+  background: var(--primary-dim) !important;
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.petition-identity-choice[data-selected="true"]::after {
+  content: "";
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--primary);
+  animation: selection-dot-arrive 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.petition-identity-choice:hover,
+.petition-identity-choice:focus-visible {
+  transform: translateY(-2px);
+}
+
+.petition-privacy-note {
+  border-radius: 0.75rem;
+  background: var(--bg-elevated);
+  animation: privacy-note-arrive 360ms 100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.petition-submit-button[aria-busy="true"] {
+  letter-spacing: 0.025em;
+}
+
+.petition-receipt-page {
+  display: grid;
+  min-height: min(60vh, 42rem);
+  place-items: center;
+}
+
+.petition-receipt {
+  position: relative;
+  width: min(100%, 43rem);
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--primary) 36%, var(--border)) !important;
+  box-shadow: 0 22px 52px color-mix(in srgb, var(--text-primary) 14%, transparent);
+  animation: receipt-unfold 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.petition-receipt::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--primary);
+  transform-origin: left;
+  animation: page-sheet-rule 720ms 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.petition-receipt-seal {
+  display: inline-grid;
+  width: 4.8rem;
+  height: 4.8rem;
+  place-items: center;
+  grid-template-rows: 1fr auto;
+  gap: 0.1rem;
+  margin-bottom: 1.1rem;
+  border: 2px solid var(--success);
+  border-radius: 50%;
+  color: var(--success);
+  background: var(--success-dim);
+  transform: rotate(-10deg);
+  animation: formal-seal-press 540ms 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.petition-receipt-seal svg {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.petition-receipt-seal span {
+  padding-bottom: 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.petition-receipt-heading h1 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.petition-receipt-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1.75rem 0;
+}
+
+.petition-receipt-code {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.8rem;
+  background: var(--bg-elevated);
+  animation: receipt-code-arrive 440ms 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.petition-receipt-code:nth-child(2) {
+  animation-delay: 470ms;
+}
+
+.petition-receipt-code--verification {
+  background: var(--primary-dim);
+}
+
+.approval-panel .approval-step-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.approval-formal-seal {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.95rem;
+  display: grid;
+  min-width: 3.35rem;
+  min-height: 2rem;
+  place-items: center;
+  border: 2px solid currentColor;
+  border-radius: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+  animation: formal-seal-press 520ms 100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.approval-formal-seal--approved {
+  color: var(--success);
+  background: var(--success-dim);
+}
+
+.approval-formal-seal--rejected {
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.approval-action-button {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms ease,
+    background-color 220ms ease !important;
+}
+
+.approval-action-button:hover:not(:disabled),
+.approval-action-button:focus-visible:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+
+.document-results-stage {
+  contain: layout paint;
+}
+
+.document-list-row,
+.document-list-card,
+.regulation-result-card {
+  animation: results-settle 420ms min(calc(var(--result-index, 0) * 38ms), 300ms)
+    cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.document-list-row {
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.document-list-row:hover {
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg-surface));
+  transform: translateX(3px);
+}
+
+.document-list-card,
+.regulation-result-card {
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease;
+}
+
+.document-list-card:hover,
+.document-list-card:focus-within,
+.regulation-result-card:hover,
+.regulation-result-card:focus-within {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--text-primary) 13%, transparent);
+}
+
+.regulation-result-card .reg-card-cta svg {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.regulation-result-card:hover .reg-card-cta svg,
+.regulation-result-card:focus-within .reg-card-cta svg {
+  transform: translateX(3px);
+}
+
+@keyframes selection-dot-arrive {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@keyframes privacy-note-arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes receipt-unfold {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 12% 0 round 0.9rem);
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 0.9rem);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes formal-seal-press {
+  0% { opacity: 0; transform: rotate(-12deg) scale(1.42); }
+  62% { opacity: 1; transform: rotate(-8deg) scale(0.92); }
+  100% { opacity: 1; transform: rotate(-8deg) scale(1); }
+}
+
+@keyframes receipt-code-arrive {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes results-settle {
+  from { opacity: 0; transform: translateY(12px); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+@media (max-width: 640px) {
+  .petition-progress li { font-size: 0.64rem; }
+  .petition-receipt-codes { grid-template-columns: 1fr; }
+  .approval-formal-seal { top: 0.7rem; right: 0.7rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-sheet-transition,
+  .page-sheet-transition::after,
+  .petition-privacy-note,
+  .petition-receipt,
+  .petition-receipt::before,
+  .petition-receipt-seal,
+  .petition-receipt-code,
+  .approval-formal-seal,
+  .document-list-row,
+  .document-list-card,
+  .regulation-result-card,
+  .petition-identity-choice[data-selected="true"]::after {
+    animation: none !important;
+  }
+}

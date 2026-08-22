@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useMemo, type ReactNode } from "react";
+import { useEffect, useState, useMemo, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { regulationsApi, regulationHref } from "@/lib/api/regulations";
@@ -284,11 +284,12 @@ export default function RegulationsClient({
         />
       ) : (
         <div
+          key={`${category}:${workflow}:${debouncedSearch}:${showAll}`}
           className="regulations-results grid gap-3"
           style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}
         >
-          {sorted.map((reg) => (
-            <RegCard key={reg.id} reg={reg} keyword={debouncedSearch.trim()} />
+          {sorted.map((reg, resultIndex) => (
+            <RegCard key={reg.id} reg={reg} keyword={debouncedSearch.trim()} resultIndex={resultIndex} />
           ))}
         </div>
       )}
@@ -297,16 +298,23 @@ export default function RegulationsClient({
 }
 
 function RegCard({
-  reg, keyword,
+  reg, keyword, resultIndex,
 }: {
   reg: RegulationListItem | RegulationSearchResult;
   keyword: string;
+  resultIndex: number;
 }) {
   const isArchived = !reg.is_active || reg.workflow_status === "archived";
   const matched = "matched_articles" in reg ? reg.matched_articles : [];
 
   return (
-    <div className="card p-5 flex flex-col gap-3 reg-card-link" style={{ opacity: isArchived ? 0.6 : 1 }}>
+    <div
+      className="card p-5 flex flex-col gap-3 reg-card-link regulation-result-card"
+      style={{
+        opacity: isArchived ? 0.6 : 1,
+        ["--result-index" as string]: resultIndex,
+      } as CSSProperties}
+    >
     <Link href={regulationHref(reg)}
       className="flex flex-col gap-3 flex-1"
       style={{
