@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiError, withFallback } from "./api-helpers";
+import { ApiError, apiErrorMessage, withFallback } from "./api-helpers";
 import { governanceApi } from "./api/governance";
 import { request } from "./api/core";
 import {
@@ -32,6 +32,11 @@ describe("API helpers", () => {
     expect(error.status).toBe(503);
     expect(error.requestId).toBe("request-1");
     expect(error.errorId).toBe("error-1");
+  });
+
+  it("uses backend messages only for ApiError instances", () => {
+    expect(apiErrorMessage(new ApiError(422, "欄位格式錯誤"), "通用錯誤")).toBe("欄位格式錯誤");
+    expect(apiErrorMessage(new Error("internal detail"), "通用錯誤")).toBe("通用錯誤");
   });
 
   it("does not double-encode an already encoded governance matter slug", async () => {
