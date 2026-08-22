@@ -352,13 +352,12 @@
   padding: 1.5rem 0.75rem;
   color: var(--public-text);
   text-decoration: none;
-  transition: background-color var(--transition), padding-inline var(--transition);
+  transition: background-color var(--transition);
 }
 
 .election-list-item:hover,
 .election-list-item:focus-visible {
   background: color-mix(in srgb, var(--public-accent-soft) 58%, var(--public-bg));
-  padding-inline: 1rem;
 }
 
 .election-list-item:focus-visible {
