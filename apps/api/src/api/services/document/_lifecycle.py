@@ -207,20 +207,15 @@ async def update_document(
     data: DocumentUpdate,
     changed_by: uuid.UUID,
 ) -> Document:
-    requested_fields = data.model_fields_set - {"change_note", "autosave"}
     update_fields = data.model_dump(
         exclude_unset=True, exclude={"change_note", "autosave", "is_public"}
     )
-    if doc.status != DocumentStatus.DRAFT:
-        if doc.status != DocumentStatus.APPROVED or doc.issued_at is None:
-            raise ValueError(
-                f"公文 {doc.serial_number} 非草稿狀態，且目前不可編輯（目前狀態：{doc.status}），無法編輯"
-            )
-        issued_at = doc.issued_at
-        if issued_at.tzinfo is None:
-            issued_at = issued_at.replace(tzinfo=UTC)
-        if datetime.now(UTC) > issued_at + timedelta(hours=6) and requested_fields != {"summary"}:
-            raise ValueError("公文發出已超過六小時，僅可編輯摘要")
+    if doc.status != DocumentStatus.DRAFT and (
+        doc.status != DocumentStatus.APPROVED or doc.issued_at is None
+    ):
+        raise ValueError(
+            f"公文 {doc.serial_number} 非草稿狀態，且目前不可編輯（目前狀態：{doc.status}），無法編輯"
+        )
 
     changed = False
     if "serial_number" in update_fields:

@@ -15,7 +15,7 @@ from __future__ import annotations
 import contextlib
 import json
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from urllib.parse import quote
 
@@ -424,11 +424,11 @@ async def update_document_visibility(
 @router.patch(
     "/{doc_id}",
     response_model=DocumentOut,
-    summary="更新公文（超過六小時僅可更新摘要）",
+    summary="更新公文（發文超過六小時仍可修改，並留下稽核紀錄）",
     responses={
         200: {"description": "更新成功，版本號遞增"},
         403: {"description": "非建立者"},
-        409: {"description": "非草稿狀態或發出已超過六小時且更新內容不只摘要"},
+        409: {"description": "非草稿狀態或目前不可編輯"},
     },
 )
 async def update_document(
@@ -457,10 +457,37 @@ async def update_document(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="只有建立者、部門最高權限者、document:edit/document:admin 或活動總召可以編輯",
             )
+    issued_at = doc.issued_at
+    if issued_at is not None and issued_at.tzinfo is None:
+        issued_at = issued_at.replace(tzinfo=UTC)
+    is_after_edit_deadline = (
+        doc.status == DocumentStatus.APPROVED
+        and issued_at is not None
+        and datetime.now(UTC) > issued_at + timedelta(hours=6)
+    )
     try:
-        return await doc_svc.update_document(session, doc, data=payload, changed_by=current_user.id)
+        updated = await doc_svc.update_document(
+            session, doc, data=payload, changed_by=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if is_after_edit_deadline:
+        await audit_svc.record(
+            session,
+            entity_type="document",
+            entity_id=str(updated.id),
+            action="update.after_6_hours",
+            actor_id=str(current_user.id),
+            actor_email=current_user.email,
+            meta={
+                "issued_at": issued_at.isoformat(),
+                "requested_fields": sorted(payload.model_fields_set - {"change_note", "autosave"}),
+                "change_note": payload.change_note,
+                "autosave": payload.autosave,
+            },
+            summary=f"公文「{updated.title}」發文超過六小時後修改",
+        )
+    return updated
 
 
 @router.delete(
