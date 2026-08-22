@@ -95,6 +95,7 @@ export default function PartnerPromoCarousel({
             alt={`${businessName} 宣傳圖 ${safeActiveIndex + 1}`}
             width={640}
             height={420}
+            unoptimized
             loading="lazy"
             sizes="(min-width: 640px) 384px, calc(100vw - 2rem)"
             className="h-52 w-full object-contain sm:h-64"
