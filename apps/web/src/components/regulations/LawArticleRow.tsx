@@ -189,7 +189,7 @@ export function LawArticleRow({
 
   const badgeChip = (
     <span
-      className="inline-flex flex-shrink-0 items-center justify-center px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide"
+      className="law-row-badge inline-flex flex-shrink-0 items-center justify-center px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide"
       style={{
         background: meta.badgeBg,
         color: meta.badgeColor,
@@ -249,10 +249,10 @@ export function LawArticleRow({
           ...borderStyle,
           ...indentStyle,
           ...interactiveStyle,
-          marginTop: showTopDivider ? "0.5rem" : 0,
-          paddingTop: "0.85rem",
+          marginTop: showTopDivider ? "0.25rem" : 0,
+          paddingTop: "0.55rem",
           paddingRight: "0.75rem",
-          paddingBottom: "0.85rem",
+          paddingBottom: "0.55rem",
           ...style,
         }}
         {...rowProps}
@@ -315,10 +315,10 @@ export function LawArticleRow({
           ...borderStyle,
           ...indentStyle,
           ...interactiveStyle,
-          paddingTop: "0.65rem",
+          paddingTop: "0.45rem",
           paddingRight: "0.75rem",
-          paddingBottom: "0.65rem",
-          lineHeight: "1.9",
+          paddingBottom: "0.45rem",
+          lineHeight: "1.7",
           ...style,
         }}
         {...rowProps}
@@ -382,10 +382,10 @@ export function LawArticleRow({
         ...borderStyle,
         ...indentStyle,
         ...interactiveStyle,
-        paddingTop: "0.45rem",
+        paddingTop: "0.35rem",
         paddingRight: "0.75rem",
-        paddingBottom: "0.45rem",
-        lineHeight: "1.8",
+        paddingBottom: "0.35rem",
+        lineHeight: "1.65",
         ...style,
       }}
       {...rowProps}
