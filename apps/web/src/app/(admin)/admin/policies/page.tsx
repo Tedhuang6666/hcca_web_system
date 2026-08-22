@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   policiesApi,
   type PolicyDocumentListItem,
@@ -126,6 +127,7 @@ function TabButton({
 // ─────────────────────────────────────────────────────────────────
 
 function DocumentsTab() {
+  const confirm = useConfirm();
   const [filter, setFilter] = useState<PolicyKind | "">("");
   const [items, setItems] = useState<PolicyDocumentListItem[]>([]);
   const [selected, setSelected] = useState<PolicyDocumentOut | null>(null);
@@ -155,13 +157,12 @@ function DocumentsTab() {
   };
 
   const activate = async (item: PolicyDocumentListItem) => {
-    if (
-      !window.confirm(
-        `啟用「${KIND_LABEL[item.kind]} v${item.version}」？\n同類別其他版本會自動失效。`,
-      )
-    ) {
-      return;
-    }
+    if (!(await confirm({
+      title: `啟用「${KIND_LABEL[item.kind]} v${item.version}」？`,
+      description: "同類別的其他版本會自動失效。",
+      confirmLabel: "啟用版本",
+      danger: true,
+    }))) return;
     setBusy(true);
     try {
       await policiesApi.activate(item.id);

@@ -5,6 +5,7 @@ import { AlertTriangle, Ban, Copy, KeyRound, Lock, Plus, RefreshCcw } from "luci
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import {
   apiKeysApi,
   type ApiKeyCreatedResponse,
@@ -12,6 +13,7 @@ import {
 
 export default function ApiKeysPage() {
   const { isAdmin } = usePermissions();
+  const prompt = usePrompt();
   const [keys, setKeys] = useState<ApiKeyOut[]>([]);
   const [includeRevoked, setIncludeRevoked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -65,11 +67,18 @@ export default function ApiKeysPage() {
   };
 
   const onRevoke = async (key: ApiKeyOut) => {
-    const reason = window.prompt(`撤銷 API key「${key.name}」（${key.key_prefix}...）的理由：`);
-    if (reason === null) return;
+    const reason = await prompt({
+      title: "撤銷 API key？",
+      description: `「${key.name}」（${key.key_prefix}…）將立即無法再存取平台 API。`,
+      inputLabel: "撤銷理由（寫入稽核紀錄）",
+      required: true,
+      confirmLabel: "撤銷 API key",
+      danger: true,
+    });
+    if (!reason?.trim()) return;
     setBusy(true);
     try {
-      await apiKeysApi.revoke(key.id, reason || "manual revoke");
+      await apiKeysApi.revoke(key.id, reason.trim());
       toast.success("已撤銷");
       await load();
     } catch (e) {

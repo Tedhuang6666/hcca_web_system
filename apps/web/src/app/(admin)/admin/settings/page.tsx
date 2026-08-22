@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import OtpInput from "@/components/auth/OtpInput";
 import {
   ApiError,
@@ -28,6 +29,7 @@ type MfaPurpose =
 
 export default function SystemSettingsPage() {
   const { isAdmin } = usePermissions();
+  const confirm = useConfirm();
   const [data, setData] = useState<AppSettingsListResponse | null>(null);
   const [disabled, setDisabled] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -120,7 +122,12 @@ export default function SystemSettingsPage() {
   };
 
   const triggerRestart = async () => {
-    if (!window.confirm("立即重啟 API 服務以套用變更？")) return;
+    if (!(await confirm({
+      title: "重啟 API 服務？",
+      description: "設定變更會在服務優雅重啟後生效。",
+      confirmLabel: "重啟服務",
+      danger: true,
+    }))) return;
     try {
       const out = await systemApi.restartService();
       toast.success(`重啟已排程（環境：${out.environment}）`);

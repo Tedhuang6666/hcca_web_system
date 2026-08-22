@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 
 import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
+import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { apiErrorMessage, supportApi } from "@/lib/api";
 import { saveImpersonationSession } from "@/lib/auth-cache";
@@ -120,6 +121,8 @@ function Panel({ title, children, action }: { title: string; children: React.Rea
 }
 
 export default function SupportConsolePage() {
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const router = useRouter();
   const { canAny, isAdmin } = usePermissions();
   const allowed = isAdmin || canAny("support.users.read", "support.tickets.read");
@@ -223,7 +226,12 @@ export default function SupportConsolePage() {
       toast.error("請先選擇使用者、工單，並填寫至少 10 字的操作原因");
       return;
     }
-    if (!window.confirm(`確定執行「${action}」？這次操作會寫入客服稽核。`)) return;
+    if (!(await confirm({
+      title: `執行「${action}」受控修復？`,
+      description: "這次操作會寫入客服稽核紀錄，並依選定使用者與工單執行。",
+      confirmLabel: "執行修復",
+      danger: true,
+    }))) return;
     try {
       await supportApi.repair(selectedUser.user.id, action, { ticket_id: ticketId, reason });
       toast.success("受控修復已完成");
@@ -285,7 +293,14 @@ export default function SupportConsolePage() {
   };
 
   const reviewApproval = async (approval: SupportApproval, approved: boolean) => {
-    const note = window.prompt(approved ? "請輸入核准理由" : "請輸入拒絕理由", reason || "已完成差異檢查") ?? "";
+    const note = await prompt({
+      title: approved ? "核准客服操作？" : "拒絕客服操作？",
+      inputLabel: approved ? "核准理由" : "拒絕理由",
+      defaultValue: reason || "已完成差異檢查",
+      required: true,
+      confirmLabel: approved ? "核准操作" : "拒絕操作",
+      danger: !approved,
+    }) ?? "";
     if (note.trim().length < 10) return toast.error("理由至少需要 10 字");
     try {
       await supportApi.reviewApproval(approval.id, { approved, note });

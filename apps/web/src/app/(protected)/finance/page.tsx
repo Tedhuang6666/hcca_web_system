@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import { financeApi, orgsApi, usersApi, type UserSummary } from "@/lib/api";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import BudgetWorkspace from "@/components/finance/BudgetWorkspace";
@@ -80,6 +81,7 @@ function claimItemTotal(item: FinanceExpenseClaimItemCreate): number {
 
 export default function FinancePage() {
   const { can } = usePermissions();
+  const prompt = usePrompt();
   const canRecord = can("finance:record");
   const canClaimExpense = canRecord || can("finance:expense_claim");
   const canManage = can("finance:manage");
@@ -439,7 +441,14 @@ export default function FinancePage() {
   };
 
   const returnEntry = async (entryId: string) => {
-    const note = window.prompt("請填寫退回原因");
+    const note = await prompt({
+      title: "退回報帳補正？",
+      description: "退回原因會通知提出報帳的人員，並保留在稽核紀錄中。",
+      inputLabel: "退回原因",
+      required: true,
+      confirmLabel: "退回報帳",
+      danger: true,
+    });
     if (!note?.trim()) return;
     try {
       await financeApi.returnClaim(entryId, note.trim());

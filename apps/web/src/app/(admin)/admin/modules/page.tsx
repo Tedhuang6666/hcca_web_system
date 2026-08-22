@@ -5,6 +5,7 @@ import { Boxes, RefreshCcw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useWS } from "@/hooks/useWS";
 import { systemApi, type ModuleStatus, apiErrorMessage } from "@/lib/api";
 
@@ -42,6 +43,7 @@ function StatusPill({ active, mode }: { active: boolean; mode?: string }) {
 
 export default function ModulesPage() {
   const { isAdmin } = usePermissions();
+  const confirm = useConfirm();
   const [modules, setModules] = useState<ModuleStatus[]>([]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -101,8 +103,12 @@ export default function ModulesPage() {
   };
 
   const restart = async (mod: ModuleStatus) => {
-    if (!window.confirm(`重啟「${mod.label}」？將清除維護狀態並重置錯誤計數，立即恢復服務。`))
-      return;
+    if (!(await confirm({
+      title: `重啟「${mod.label}」？`,
+      description: "將清除維護狀態、重置錯誤計數，並立即恢復服務。",
+      confirmLabel: "重啟模組",
+      danger: true,
+    }))) return;
     setBusy(mod.id);
     try {
       await systemApi.restartModule(mod.id);
@@ -116,12 +122,12 @@ export default function ModulesPage() {
   };
 
   const recover = async (mod: ModuleStatus) => {
-    if (
-      !window.confirm(
-        `嘗試恢復「${mod.label}」？將清除升級計數器並執行 half-open 探測，通過後自動解除維護。`,
-      )
-    )
-      return;
+    if (!(await confirm({
+      title: `嘗試恢復「${mod.label}」？`,
+      description: "將清除升級計數器並執行 half-open 探測；通過後會自動解除維護。",
+      confirmLabel: "嘗試恢復",
+      danger: true,
+    }))) return;
     setBusy(mod.id);
     try {
       const result = await systemApi.recoverModule(mod.id);

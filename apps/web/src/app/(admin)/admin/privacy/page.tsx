@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   privacyApi,
@@ -29,6 +30,7 @@ function fmtSize(bytes: number): string {
 
 export default function PrivacyPage() {
   const { isAdmin } = usePermissions();
+  const prompt = usePrompt();
   const [userId, setUserId] = useState("");
   const [busy, setBusy] = useState(false);
   const [exports, setExports] = useState<PrivacyExportFile[]>([]);
@@ -87,12 +89,14 @@ export default function PrivacyPage() {
       toast.error("請填入使用者 UUID");
       return;
     }
-    const confirm1 = window.prompt(
-      `即將假名化使用者 ${uid}\n\n` +
-        `會把：display_name / email / phone / avatar_url 等 PII 欄位替換為去識別字串，\n` +
-        `並把 is_active 設為 false。已存在的 audit log、公文、簽核、訂單等紀錄保留不動。\n\n` +
-        `此操作不可逆。請輸入「假名化」以確認：`,
-    );
+    const confirm1 = await prompt({
+      title: "假名化使用者？",
+      description: `使用者 ${uid} 的姓名、Email、電話與頭像等 PII 會被去識別化，並停用帳號。既有 audit log、公文、簽核與訂單保留；此動作不可逆。`,
+      inputLabel: "請輸入「假名化」以確認",
+      required: true,
+      confirmLabel: "執行假名化",
+      danger: true,
+    });
     if (confirm1?.trim() !== "假名化") {
       toast.info("已取消");
       return;

@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import {
   termRolloverApi,
   type DryRunBody,
@@ -54,6 +55,7 @@ function parseAssignments(text: string): { rows: NewAssignmentIn[]; errors: stri
 
 export default function TermRolloverPage() {
   const { isAdmin } = usePermissions();
+  const prompt = usePrompt();
   const [newTermStart, setNewTermStart] = useState("");
   const [terminateActive, setTerminateActive] = useState(true);
   const [assignmentsText, setAssignmentsText] = useState(SAMPLE_ASSIGNMENTS);
@@ -112,14 +114,14 @@ export default function TermRolloverPage() {
       toast.error("仍有警告未解決，請先修正試算表");
       return;
     }
-    const confirmInput = window.prompt(
-      `即將執行換屆：\n` +
-        `結束 ${dryRunResult.summary.terminations} 個任期\n` +
-        `新增 ${dryRunResult.summary.new_assignments} 個任期\n` +
-        `新任期起：${dryRunResult.new_term_start}\n\n` +
-        `此動作可透過 batch_id rollback，但請務必確認試算表正確。\n` +
-        `請輸入「換屆」以確認：`,
-    );
+    const confirmInput = await prompt({
+      title: "執行換屆？",
+      description: `將結束 ${dryRunResult.summary.terminations} 個任期、新增 ${dryRunResult.summary.new_assignments} 個任期；新任期起於 ${dryRunResult.new_term_start}。請確認試算表正確。`,
+      inputLabel: "請輸入「換屆」以確認",
+      required: true,
+      confirmLabel: "執行換屆",
+      danger: true,
+    });
     if (confirmInput?.trim() !== "換屆") {
       toast.info("已取消");
       return;
@@ -138,11 +140,14 @@ export default function TermRolloverPage() {
 
   const onRollback = async () => {
     if (!executeResult) return;
-    const confirmInput = window.prompt(
-      `即將復原 batch ${executeResult.batch_id}：\n` +
-        `會把所有結束的任期 end_date 還原，並刪除剛建立的 ${executeResult.created_count} 個新任期。\n` +
-        `請輸入「復原」以確認：`,
-    );
+    const confirmInput = await prompt({
+      title: "復原換屆批次？",
+      description: `會還原已結束任期，並刪除剛建立的 ${executeResult.created_count} 個新任期。`,
+      inputLabel: "請輸入「復原」以確認",
+      required: true,
+      confirmLabel: "復原批次",
+      danger: true,
+    });
     if (confirmInput?.trim() !== "復原") {
       toast.info("已取消");
       return;

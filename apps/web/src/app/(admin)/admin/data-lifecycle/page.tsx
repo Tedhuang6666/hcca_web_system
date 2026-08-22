@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   lifecycleApi,
@@ -44,6 +45,7 @@ function fmtSize(bytes: number): string {
 
 export default function DataLifecyclePage() {
   const { isAdmin } = usePermissions();
+  const prompt = usePrompt();
   const [rules, setRules] = useState<LifecycleRuleSummary[]>([]);
   const [archives, setArchives] = useState<LifecycleArchiveFile[]>([]);
   const [retentionOverride, setRetentionOverride] = useState<Record<string, string>>({});
@@ -103,12 +105,14 @@ export default function DataLifecyclePage() {
 
     const willPurge = action === "purge" || action === "archive_then_purge";
     if (rule.danger_level !== "safe" || willPurge) {
-      const confirmInput = window.prompt(
-        `即將對「${rule.label}」執行：${ACTION_LABEL[action]}\n` +
-          `預估處理筆數：${matched}\n` +
-          `${willPurge ? "⚠️ 此動作會永久刪除資料庫紀錄。已歸檔的資料只能從 .jsonl.gz 還原。\n" : ""}\n` +
-          `請輸入「確認」以繼續：`,
-      );
+      const confirmInput = await prompt({
+        title: `執行「${rule.label}」資料生命週期規則？`,
+        description: `將${ACTION_LABEL[action]}，預估處理 ${matched} 筆。${willPurge ? "此動作會永久刪除資料庫紀錄；已歸檔資料僅能從 .jsonl.gz 還原。" : ""}`,
+        inputLabel: "請輸入「確認」以繼續",
+        required: true,
+        confirmLabel: "執行規則",
+        danger: true,
+      });
       if (confirmInput?.trim() !== "確認") {
         toast.info("已取消");
         return;

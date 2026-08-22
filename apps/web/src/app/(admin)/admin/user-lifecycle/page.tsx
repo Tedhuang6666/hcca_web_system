@@ -5,6 +5,7 @@ import { AlertTriangle, GraduationCap, Lock, RefreshCcw, Search, ShieldOff, User
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import {
   userLifecycleApi,
   type LifecycleStatus, apiErrorMessage } from "@/lib/api";
@@ -19,6 +20,7 @@ const ACTION_LABEL: Record<ActionKind, string> = {
 
 export default function UserLifecyclePage() {
   const { isAdmin } = usePermissions();
+  const prompt = usePrompt();
   const [userId, setUserId] = useState("");
   const [status, setStatus] = useState<LifecycleStatus | null>(null);
   const [reason, setReason] = useState("");
@@ -52,12 +54,14 @@ export default function UserLifecyclePage() {
       toast.error("請先「載入狀態」確認對象");
       return;
     }
-    const confirmInput = window.prompt(
-      `即將對 ${status.email} 執行：${ACTION_LABEL[action]}\n` +
-        `當前 active 任期：${status.active_positions.length} 個\n\n` +
-        `${action === "restore" ? "" : "此動作會結束所有 active 任期。"}\n` +
-        `請輸入「確認」以繼續：`,
-    );
+    const confirmInput = await prompt({
+      title: `執行「${ACTION_LABEL[action]}」？`,
+      description: `目標為 ${status.email}，目前有 ${status.active_positions.length} 個 active 任期。${action === "restore" ? "" : "此動作會結束所有 active 任期。"}`,
+      inputLabel: "請輸入「確認」以繼續",
+      required: true,
+      confirmLabel: "執行操作",
+      danger: action !== "restore",
+    });
     if (confirmInput?.trim() !== "確認") {
       toast.info("已取消");
       return;
