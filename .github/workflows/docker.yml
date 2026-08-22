@@ -30,7 +30,7 @@ jobs:
           # 固定使用觸發此次 push 的 commit；不能在 runner 排隊期間改抓新版 main。
           ref: ${{ github.sha }}
 
-      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
