@@ -2920,6 +2920,22 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .prose ul, .prose ol { padding-left: 1.5rem; margin-bottom: 1em; }
 .prose li { color: var(--text-secondary); line-height: 1.8; }
 
+/* ── 閱讀器字級 ─────────────────────────────────────────────────────────── */
+/*
+ * CSS `zoom` 在部分 iOS Safari 版本無效。重設 Tailwind 文字 token，讓閱讀器
+ * 內的既有 text-* utility 與繼承字級都能依照使用者選擇縮放。
+ */
+.reader-font-scale {
+  font-size: calc(1rem * var(--reader-font-scale, 1));
+  --text-xs: calc(0.75rem * var(--reader-font-scale, 1));
+  --text-sm: calc(0.875rem * var(--reader-font-scale, 1));
+  --text-base: calc(1rem * var(--reader-font-scale, 1));
+  --text-lg: calc(1.125rem * var(--reader-font-scale, 1));
+  --text-xl: calc(1.25rem * var(--reader-font-scale, 1));
+  --text-2xl: calc(1.5rem * var(--reader-font-scale, 1));
+  --text-3xl: calc(1.875rem * var(--reader-font-scale, 1));
+}
+
 /* ── 頁面頂端滾動進度條（JS 控制 width） ─────────────────────────────── */
 .scroll-progress-bar {
   position: fixed;

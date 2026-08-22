@@ -699,7 +699,7 @@ export default function DocumentDetailPageClient({
         {/* 左：公文內容 */}
         <div className={doc.status === "archived" ? "space-y-4" : "lg:col-span-2 space-y-4"}>
           {/* 公文本文（官式橫書格式） */}
-          <div className="card overflow-hidden" style={zoomStyle}>
+          <div className="reader-font-scale card overflow-hidden" style={zoomStyle}>
             <div className="px-5 py-3 space-y-2" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>公文內容</span>
