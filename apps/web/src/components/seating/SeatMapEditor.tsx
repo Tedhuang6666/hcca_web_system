@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { DecorationKind, LayoutDecoration, SeatInput, SeatOut, SeatStatus, ZoneOut } from "@/lib/types";
 import { seatingApi, apiErrorMessage } from "@/lib/api";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 
 const GRID = 16;
 const SEAT = 32; // = 2×GRID，對齊格點後座位可完美貼合或留走道
@@ -166,6 +167,7 @@ export default function SeatMapEditor({
   zone: ZoneOut;
   onSaved?: (z: ZoneOut) => void;
 }) {
+  const prompt = usePrompt();
   const layout = (zone.layout || {}) as Record<string, unknown>;
   // 畫布尺寸強制對齊 SEAT=32 的倍數，讓中線落在格線上（760→768, 460→448）
   const [width, setWidth] = useState<number>(() => {
@@ -401,11 +403,28 @@ export default function SeatMapEditor({
     setSelectedDecos(new Set());
   };
 
-  const addRow = () => {
-    const prefix = window.prompt("排代號（例如 A）", "A");
+  const addRow = async () => {
+    const prefix = await prompt({
+      title: "快速產生一排座位",
+      inputLabel: "排代號（例如 A）",
+      defaultValue: "A",
+      required: true,
+      confirmLabel: "下一步",
+    });
     if (prefix === null) return;
-    const count = Number(window.prompt("此排座位數", "10"));
-    if (!Number.isFinite(count) || count <= 0) return;
+    const countValue = await prompt({
+      title: `建立 ${prefix} 排座位`,
+      inputLabel: "此排座位數",
+      defaultValue: "10",
+      required: true,
+      confirmLabel: "建立座位",
+    });
+    if (countValue === null) return;
+    const count = Number(countValue);
+    if (!Number.isSafeInteger(count) || count <= 0) {
+      toast.error("座位數必須是正整數");
+      return;
+    }
     pushUndo();
     const baseY = seats.length ? snap(Math.max(...seats.map((s) => s.y)) + SEAT + GRID) : SEAT * 2;
     const added: EditSeat[] = [];
@@ -602,8 +621,15 @@ export default function SeatMapEditor({
     setSelected(new Set());
     setSelectedDecos(new Set());
   };
-  const relabelSelected = () => {
-    const v = window.prompt("套用代號（多選時自動加序號，如 A → A1 A2 …）", selectedSeats[0]?.label ?? "");
+  const relabelSelected = async () => {
+    const v = await prompt({
+      title: "設定座位代號",
+      description: "多選時會自動加序號，例如 A → A1、A2。",
+      inputLabel: "座位代號",
+      defaultValue: selectedSeats[0]?.label ?? "",
+      required: true,
+      confirmLabel: "套用代號",
+    });
     if (v === null) return;
     pushUndo();
     const list = selectedSeats;
@@ -896,7 +922,7 @@ export default function SeatMapEditor({
       {/* 工具列 */}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-ghost text-xs" onClick={addSeat}>＋ 單一座位</button>
-        <button type="button" className="btn btn-ghost text-xs" onClick={addRow}>＋ 快速產生一排</button>
+        <button type="button" className="btn btn-ghost text-xs" onClick={() => { void addRow(); }}>＋ 快速產生一排</button>
 
         {/* 裝飾元素下拉 */}
         <div className="relative">
@@ -955,7 +981,7 @@ export default function SeatMapEditor({
         <div className="flex flex-wrap items-center gap-2 rounded-lg p-2"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
           <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>座位</span>
-          <button type="button" className="btn btn-ghost text-xs" onClick={relabelSelected}>設定代號</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => { void relabelSelected(); }}>設定代號</button>
           <button type="button" className="btn btn-ghost text-xs" onClick={duplicateSelected} title="複製所選（Ctrl/⌘+D）">複製</button>
           <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerX")} title="整組水平置中於畫布">置中X</button>
           <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerY")} title="整組垂直置中於畫布">置中Y</button>
