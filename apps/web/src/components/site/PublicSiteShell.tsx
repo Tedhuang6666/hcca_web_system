@@ -88,7 +88,6 @@ export default async function PublicSiteShell({
                 <span>校園自治公開資訊</span>
               </span>
             </Link>
-            <p>把重要的自治資訊，留在校園裡每個人都能抵達的地方。</p>
           </div>
           <nav className="public-footer-links" aria-label="頁尾導覽">
             <span className="public-footer-label">快速連結</span>
@@ -104,7 +103,6 @@ export default async function PublicSiteShell({
         </div>
         <div className="public-footer-bottom">
           <span>HCCA · {BRANDING.schoolName}</span>
-          <span>學生自治，從公開開始。</span>
         </div>
       </footer>
     </div>

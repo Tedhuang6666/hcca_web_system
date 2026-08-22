@@ -21,23 +21,20 @@ const DATABASES = [
   {
     href: "/regulations",
     title: "法規資料庫",
-    description: "查詢現行法規、條文沿革與版本差異，取得可穩定引用的公開連結。",
+    description: "現行條文與修正沿革",
     icon: BookOpenText,
-    meta: "條文、沿革、版本比對",
   },
   {
     href: "/documents",
     title: "公文資料庫",
-    description: "依字號、標題與主旨查找公開公文，查看附件與文件基本資訊。",
+    description: "公開公文、附件與基本資訊",
     icon: FileSearch,
-    meta: "字號、主旨、公開附件",
   },
   {
     href: "/public/special-agreement",
     title: "特約洽談",
-    description: "了解合作流程、洽談前準備事項與可供參考的文件。",
+    description: "合作流程與參考文件",
     icon: Handshake,
-    meta: "合作流程、洽談資訊、文件預覽",
   },
 ];
 
@@ -46,55 +43,22 @@ export default async function PublicHomePage() {
   const initialClosedModuleIds = statuses
     .filter((status) => status.on && status.mode === "closed")
     .map((status) => status.id)
-    .filter((id): id is "elections" | "announcements" | "petitions" =>
-      id === "elections" || id === "announcements" || id === "petitions",
-    );
+    .filter((id): id is "elections" | "petitions" => id === "elections" || id === "petitions");
 
   return (
     <div className="space-y-10 pb-8">
-      <section className="overflow-hidden rounded-2xl border border-[var(--public-border)] bg-[var(--public-surface)]">
-        <div className="grid gap-8 px-6 py-9 sm:px-9 sm:py-11 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)] lg:items-center">
-          <div>
-            <p className="public-section-kicker">Open Government</p>
-            <h1 className="mt-3 max-w-[13em] text-balance font-serif text-3xl font-semibold leading-[1.35] tracking-[-0.03em] sm:text-4xl xl:text-[2.75rem]">
-              公開資訊，不該藏在登入頁後面
-            </h1>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-[var(--public-secondary)] sm:text-base sm:leading-8">
-              這裡集中提供法規、公文與自治參與服務。查詢公開資料不需要帳號，
-              需要權限的自治作業與內部操作則需要登入。
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[var(--public-border)] bg-[var(--public-soft)] p-3 sm:p-4">
-            <p className="px-2 pb-2 text-xs font-semibold tracking-[0.1em] text-[var(--public-muted)]">
-              無需登入即可使用
-            </p>
-            <div className="divide-y divide-[var(--public-border)]">
-              {[
-                ["01", "公開資料", "查詢法規、公文與附件"],
-                ["02", "自治資訊", "閱讀公開公告"],
-                ["03", "公共參與", "提出陳情或查詢進度"],
-              ].map(([number, title, description]) => (
-                <div key={number} className="grid grid-cols-[2rem_1fr] gap-3 px-2 py-3.5">
-                  <span className="text-xs font-semibold text-[var(--public-accent)]">{number}</span>
-                  <span>
-                    <span className="block text-sm font-semibold">{title}</span>
-                    <span className="mt-0.5 block text-xs leading-5 text-[var(--public-secondary)]">
-                      {description}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <header className="public-page-head">
+        <h1 className="text-3xl font-semibold">公開資料與校園服務</h1>
+        <p className="mt-3 text-sm leading-7 text-[var(--public-secondary)]">
+          查詢公開資料，或直接參與校園事務。
+        </p>
+      </header>
 
       <section>
         <div className="mb-4">
-          <p className="public-section-kicker">Public Records</p>
-          <h2 className="mt-2 text-2xl font-semibold">公開資料庫</h2>
+          <h2 className="text-2xl font-semibold">查詢資料</h2>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           {DATABASES.map((item) => {
             const Icon = item.icon;
             return (
@@ -117,9 +81,6 @@ export default async function PublicHomePage() {
                 <p className="mt-2 text-sm leading-7 text-[var(--public-secondary)]">
                   {item.description}
                 </p>
-                <p className="mt-5 text-xs font-semibold tracking-wide text-[var(--public-muted)]">
-                  {item.meta}
-                </p>
               </Link>
             );
           })}
@@ -127,22 +88,6 @@ export default async function PublicHomePage() {
       </section>
 
       <PublicHomeServices initialClosedModuleIds={initialClosedModuleIds} />
-
-      <section className="flex flex-col gap-4 rounded-2xl bg-[#173654] px-6 py-7 text-[#f8f3e5] sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <div>
-          <h2 className="text-lg font-semibold">需要處理內部業務？</h2>
-          <p className="mt-1 text-sm leading-6 text-[#cdd8e0]">
-            文件建立、簽核、內容發布與系統管理會在登入後依權限開放。
-          </p>
-        </div>
-        <Link
-          href="/login?next=%2Fdashboard"
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#e8c970] px-4 text-sm font-semibold text-[#173654] transition-colors hover:bg-[#f2dc95]"
-        >
-          登入管理系統
-          <ArrowRight size={16} aria-hidden />
-        </Link>
-      </section>
     </div>
   );
 }

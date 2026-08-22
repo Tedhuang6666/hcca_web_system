@@ -29,12 +29,8 @@ export default async function LinksPage() {
       urgentAnnouncement={urgentAnnouncement}
     >
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <header className="mb-8 text-center">
-          <p className="text-sm font-semibold text-[var(--primary)]">Linktree</p>
-          <h1 className="mt-2 text-3xl font-bold">平台連結</h1>
-          <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
-            班聯會各平台、表單、社群與公開資料入口集中於此。
-          </p>
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold">平台連結</h1>
         </header>
         <div className="space-y-6">
           {groupEntries.map(([category, links]) => (

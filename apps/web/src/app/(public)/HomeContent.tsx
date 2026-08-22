@@ -3,14 +3,12 @@ import {
   ArrowRight,
   BellRing,
   Database,
-  ExternalLink,
   Megaphone,
   MessageCircle,
   UsersRound,
 } from "lucide-react";
 
 import LiveElectionCard from "@/components/site/LiveElectionCard";
-import ServerMarkdownBlock from "@/components/site/ServerMarkdownBlock";
 import type { AnnouncementListItem, AnnouncementOut, PublicSiteBundleOut } from "@/lib/types";
 
 export default function HomeContent({
@@ -23,10 +21,6 @@ export default function HomeContent({
   urgentAnnouncement: AnnouncementOut | null;
 }) {
   const settings = bundle?.settings;
-  const links = bundle?.links
-    .filter((link) => !(link.title.trim().toLocaleLowerCase() === "aaa" && link.url.trim() === "test"))
-    .slice(0, 4) ?? [];
-  const officers = bundle?.featured_officers ?? [];
   const latestAnnouncements = announcements
     .filter((item) => item.id !== urgentAnnouncement?.id)
     .slice(0, 2);
@@ -34,11 +28,6 @@ export default function HomeContent({
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, 2);
   const publicDatabaseDescription = settings?.public_database_description?.trim();
-  const aboutTitle = settings?.about_title?.trim();
-  const hasEditorialContent = Boolean(
-    aboutTitle || settings?.about_body_md?.trim() || officers.length > 0 || links.length > 0,
-  );
-  const hasEditorialSideContent = officers.length > 0 || links.length > 0;
   const hasLatestContent = latestAnnouncements.length > 0 || recentlyUpdatedPages.length > 0;
 
   return (
@@ -106,10 +95,7 @@ export default function HomeContent({
 
       <section className="public-home-entry-section" aria-labelledby="public-entry-title">
         <div className="public-home-entry-heading">
-          <div>
-            <h2 id="public-entry-title">你現在想做什麼？</h2>
-          </div>
-          <p>先完成眼前的校園事務；完整服務仍可從導覽中找到。</p>
+          <h2 id="public-entry-title">你現在想做什麼？</h2>
         </div>
         <nav className="public-quick-grid public-home-quick-grid" aria-label="公開網站主要入口">
           {[
@@ -143,72 +129,6 @@ export default function HomeContent({
           })}
         </nav>
       </section>
-
-      {hasEditorialContent && (
-        <section
-          className={`public-editorial public-home-editorial ${
-            hasEditorialSideContent ? "public-home-editorial-with-side" : "public-home-editorial-solo"
-          }`}
-        >
-          {(aboutTitle || settings?.about_body_md?.trim()) && (
-            <div className="public-panel public-about-panel public-home-about-panel" data-reveal>
-              <div className="public-home-about-intro">
-                <p className="public-home-section-label">認識我們</p>
-                {aboutTitle && <h2>{aboutTitle}</h2>}
-                <p className="public-home-about-note">讓學生的聲音成為校園裡可以被看見、被追蹤的公共紀錄。</p>
-              </div>
-              <div className="public-home-about-copy">
-                <ServerMarkdownBlock markdown={settings?.about_body_md ?? ""} />
-                <Link href="/about" className="public-home-about-link">
-                  了解班聯會的任務與沿革
-                  <ArrowRight size={16} aria-hidden />
-                </Link>
-              </div>
-            </div>
-          )}
-          {(officers.length > 0 || links.length > 0) && <aside className="public-side-stack">
-          {officers.length > 0 && (
-            <div className="public-panel public-side-panel" data-reveal style={{ "--reveal-delay": "90ms" } as React.CSSProperties}>
-              <div className="flex items-center justify-between gap-3">
-                <h2>精選幹部</h2>
-                <Link href="/officers" className="public-text-link">全部</Link>
-              </div>
-              <div className="public-mini-list" data-nosnippet>
-                {officers.map((officer) => (
-                  <div key={officer.profile_id} className="public-mini-item">
-                    <p className="font-medium">{officer.display_name}</p>
-                    <p className="text-sm text-[var(--public-muted)]">
-                      {officer.title} · {officer.org_name}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {links.length > 0 && (
-            <div className="public-panel public-side-panel" data-reveal style={{ "--reveal-delay": "160ms" } as React.CSSProperties}>
-              <div className="flex items-center justify-between gap-3">
-                <h2>常用連結</h2>
-                <Link href="/links" className="public-text-link">更多</Link>
-              </div>
-              <div className="public-link-list">
-                {links.map((link) => (
-                  <a
-                    key={link.id}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="public-link-row">
-                    <span>{link.title}</span>
-                    <ExternalLink size={14} aria-hidden />
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-          </aside>}
-        </section>
-      )}
     </>
   );
 }

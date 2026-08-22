@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  Megaphone,
   MessageSquareText,
   Radio,
   type LucideIcon,
@@ -21,21 +20,14 @@ const SERVICES: Array<{
   {
     href: "/public/elections",
     title: "即時開票",
-    description: "查看公開選舉的即時票數、開票率與票匭進度。",
+    description: "查看公開選舉票數。",
     icon: Radio,
     moduleId: "elections",
   },
   {
-    href: "/news",
-    title: "最新公告",
-    description: "掌握班聯會最新消息與公開說明。",
-    icon: Megaphone,
-    moduleId: "announcements",
-  },
-  {
     href: "/petitions",
     title: "陳情中心",
-    description: "提出陳情、用案號查詢案件進度。",
+    description: "提出陳情或查詢進度。",
     icon: MessageSquareText,
     moduleId: "petitions",
   },
@@ -56,13 +48,11 @@ export default function PublicHomeServices({
     : new Set(initialClosedModuleIds);
 
   const visibleServices = SERVICES.filter((item) => !closedModuleIds.has(item.moduleId));
+  if (visibleServices.length === 0) return null;
 
   return (
-    <section>
-      <div className="mb-4">
-        <p className="public-section-kicker">Participation</p>
-        <h2 className="mt-2 text-2xl font-semibold">公開參與服務</h2>
-      </div>
+    <section aria-labelledby="public-services-title">
+      <h2 id="public-services-title" className="mb-4 text-2xl font-semibold">參與服務</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         {visibleServices.map((item) => {
           const Icon = item.icon;
