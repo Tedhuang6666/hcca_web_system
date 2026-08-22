@@ -14,7 +14,6 @@ from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import jwt
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -22,7 +21,7 @@ from sqlalchemy.orm import selectinload
 from api.core.cache import cache_get, cache_invalidate_user_permissions
 from api.core.config import settings
 from api.core.login_lockout import admin_unlock
-from api.core.security import add_to_blacklist, redis_client, revoke_user
+from api.core.security import _create_token, add_to_blacklist, redis_client, revoke_user
 from api.email.sender import send_branded_email
 from api.models.org import Position, UserPosition
 from api.models.school_class import ClassMembership, SchoolClass
@@ -976,7 +975,7 @@ def create_support_impersonation_token(
         "iat": now,
         "exp": expires_at,
     }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM), expires_at
+    return _create_token(payload, timedelta(minutes=minutes)), expires_at
 
 
 async def start_impersonation(
