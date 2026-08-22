@@ -4,6 +4,7 @@ import asyncio
 import uuid
 from unittest.mock import AsyncMock
 
+import jwt
 import pytest
 from jwt.exceptions import InvalidTokenError
 
@@ -39,6 +40,55 @@ def test_decode_invalid_token_raises() -> None:
     """測試解碼無效 Token 時應拋出例外"""
     with pytest.raises(InvalidTokenError):
         decode_token("this.is.not.a.valid.jwt")
+
+
+def test_decode_token_rejects_legacy_token_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(security.settings, "AUTH_LEGACY_TOKEN_COMPAT_ENABLED", False)
+    token = jwt.encode(
+        {
+            "sub": "user-legacy",
+            "jti": "legacy-jti",
+            "iat": security._now_ts(),
+            "exp": security._now_ts() + 60,
+            "iss": security.settings.JWT_ISSUER,
+            "aud": security.settings.JWT_AUDIENCE,
+        },
+        security._active_signing_key(),
+        algorithm=security.settings.ALGORITHM,
+    )
+
+    with pytest.raises(InvalidTokenError, match="沒有 kid"):
+        decode_token(token)
+
+
+def test_decode_legacy_token_requires_standard_claims(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(security.settings, "AUTH_LEGACY_TOKEN_COMPAT_ENABLED", True)
+    token = jwt.encode(
+        {"sub": "user-legacy", "jti": "legacy-jti"},
+        security._active_signing_key(),
+        algorithm=security.settings.ALGORITHM,
+    )
+
+    with pytest.raises(InvalidTokenError):
+        decode_token(token)
+
+
+def test_decode_legacy_token_with_standard_claims_is_supported(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(security.settings, "AUTH_LEGACY_TOKEN_COMPAT_ENABLED", True)
+    token = jwt.encode(
+        {
+            "sub": "user-legacy",
+            "jti": "legacy-jti",
+            "iat": security._now_ts(),
+            "exp": security._now_ts() + 60,
+            "iss": security.settings.JWT_ISSUER,
+            "aud": security.settings.JWT_AUDIENCE,
+        },
+        security._active_signing_key(),
+        algorithm=security.settings.ALGORITHM,
+    )
+
+    assert decode_token(token)["sub"] == "user-legacy"
 
 
 def test_access_token_has_extra_claims() -> None:

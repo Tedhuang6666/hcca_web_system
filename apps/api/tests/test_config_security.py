@@ -34,6 +34,10 @@ def test_development_with_default_secret_warns_but_succeeds() -> None:
     assert s.SECRET_KEY == _DEFAULT_SECRET
 
 
+def test_legacy_token_compatibility_is_disabled_by_default() -> None:
+    assert _make().AUTH_LEGACY_TOKEN_COMPAT_ENABLED is False
+
+
 def test_production_rejects_default_secret() -> None:
     with pytest.raises(ValidationError) as exc:
         _make(
@@ -71,6 +75,15 @@ def test_production_rejects_superuser_emails_autograms() -> None:
 def test_production_requires_cookie_secure() -> None:
     with pytest.raises(ValidationError, match="COOKIE_SECURE"):
         _make(ENVIRONMENT="production", COOKIE_SECURE=False)
+
+
+def test_production_rejects_legacy_token_compatibility() -> None:
+    with pytest.raises(ValidationError, match="AUTH_LEGACY_TOKEN_COMPAT_ENABLED"):
+        _make(
+            ENVIRONMENT="production",
+            COOKIE_SECURE=True,
+            AUTH_LEGACY_TOKEN_COMPAT_ENABLED=True,
+        )
 
 
 def test_allowed_origins_wildcard_rejected_anywhere() -> None:

@@ -19,9 +19,33 @@ type SharedPublicConnection = {
 };
 
 const connections = new Map<string, SharedPublicConnection>();
+let pageFrozen = false;
+let pageLifecycleListenersInstalled = false;
+
+function suspendConnections() {
+  pageFrozen = true;
+  for (const connection of connections.values()) {
+    if (connection.reconnectTimer) clearTimeout(connection.reconnectTimer);
+    connection.reconnectTimer = null;
+    connection.socket?.close(1000, "page hidden");
+    connection.socket = null;
+  }
+}
+
+function resumeConnections() {
+  pageFrozen = false;
+  for (const connection of connections.values()) connect(connection);
+}
+
+function installPageLifecycleListeners() {
+  if (pageLifecycleListenersInstalled || typeof window === "undefined") return;
+  pageLifecycleListenersInstalled = true;
+  window.addEventListener("pagehide", suspendConnections);
+  window.addEventListener("pageshow", resumeConnections);
+}
 
 function scheduleReconnect(connection: SharedPublicConnection) {
-  if (connection.subscribers.size === 0 || connection.reconnectTimer) return;
+  if (pageFrozen || connection.subscribers.size === 0 || connection.reconnectTimer) return;
   const delay = Math.min(30_000, 1_000 * 2 ** connection.retries) + Math.random() * 500;
   connection.reconnectTimer = setTimeout(() => {
     connection.reconnectTimer = null;
@@ -30,7 +54,7 @@ function scheduleReconnect(connection: SharedPublicConnection) {
 }
 
 function connect(connection: SharedPublicConnection) {
-  if (connection.socket || connection.subscribers.size === 0) return;
+  if (pageFrozen || connection.socket || connection.subscribers.size === 0) return;
   const socket = new WebSocket(`${wsBase()}/ws${connection.path}`);
   connection.socket = socket;
 
@@ -51,7 +75,7 @@ function connect(connection: SharedPublicConnection) {
   };
   socket.onclose = () => {
     if (connection.socket === socket) connection.socket = null;
-    if (connection.subscribers.size === 0) return;
+    if (pageFrozen || connection.subscribers.size === 0) return;
     connection.retries += 1;
     scheduleReconnect(connection);
   };
@@ -59,6 +83,7 @@ function connect(connection: SharedPublicConnection) {
 }
 
 function subscribe(path: string, subscriber: Subscriber) {
+  installPageLifecycleListeners();
   let connection = connections.get(path);
   if (!connection) {
     connection = { path, socket: null, subscribers: new Set(), retries: 0, reconnectTimer: null };

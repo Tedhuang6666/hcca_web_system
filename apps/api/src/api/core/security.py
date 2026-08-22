@@ -162,6 +162,7 @@ def decode_token(token: str) -> dict:
 
     if not settings.AUTH_LEGACY_TOKEN_COMPAT_ENABLED:
         raise InvalidTokenError("不再接受沒有 kid 的舊版 JWT")
+    # 遷移期只相容「缺少 kid」的舊封裝，不能因此放寬 token 的到期、發行者或受眾驗證。
     legacy_keys = [_active_signing_key(), *_signing_keys().values(), settings.SECRET_KEY]
     seen: set[str] = set()
     last_error: InvalidTokenError | None = None
@@ -170,7 +171,14 @@ def decode_token(token: str) -> dict:
             continue
         seen.add(key)
         try:
-            return jwt.decode(token, key, algorithms=[settings.ALGORITHM])
+            return jwt.decode(
+                token,
+                key,
+                algorithms=[settings.ALGORITHM],
+                audience=settings.JWT_AUDIENCE,
+                issuer=settings.JWT_ISSUER,
+                options={"require": ["exp", "iat", "sub", "jti", "iss", "aud"]},
+            )
         except InvalidTokenError as exc:
             last_error = exc
     raise last_error or InvalidTokenError("無效的舊版 JWT")

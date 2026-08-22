@@ -2,7 +2,6 @@ import PublicEnhancements from "@/components/site/PublicEnhancements";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
 import { absoluteUrl, JsonLd } from "@/lib/seo";
-import "../design-system.css";
 import "../public-design-system.css";
 import "./public-footer.css";
 
