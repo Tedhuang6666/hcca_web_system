@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type { RichTextareaHandle } from "@/components/ui/RichTextarea";
 const RichTextarea = dynamic(() => import("@/components/ui/RichTextarea"), { ssr: false });
@@ -73,6 +74,7 @@ import {
 
 function ComposeInner() {
   const router = useRouter();
+  const prompt = usePrompt();
   const searchParams = useSearchParams();
   const draftId = searchParams.get("draft");
   const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId);
@@ -578,9 +580,16 @@ function ComposeInner() {
     if (template) applyTemplate(template);
   };
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
     const fallbackName = subject.trim() || heading.trim() || "未命名範本";
-    const name = window.prompt("範本名稱", fallbackName)?.trim();
+    const name = (await prompt({
+      title: "儲存本機範本",
+      description: "範本只會儲存在目前瀏覽器。",
+      inputLabel: "範本名稱",
+      defaultValue: fallbackName,
+      required: true,
+      confirmLabel: "儲存範本",
+    }))?.trim();
     if (!name) return;
     const now = new Date().toISOString();
     const template: SavedTemplate = {
@@ -699,7 +708,13 @@ function ComposeInner() {
     (selector.external_emails?.length ?? 0) > 0;
 
   const savePlatformTemplate = async () => {
-    const name = window.prompt("平台範本名稱", subject || heading || "未命名範本")?.trim();
+    const name = (await prompt({
+      title: "另存平台範本",
+      inputLabel: "平台範本名稱",
+      defaultValue: subject || heading || "未命名範本",
+      required: true,
+      confirmLabel: "儲存範本",
+    }))?.trim();
     if (!name) return;
     try {
       const template = await emailApi.createTemplate({
@@ -742,7 +757,13 @@ function ComposeInner() {
       return;
     }
     const defaultName = subject.trim() ? `${subject.trim()}收件名單` : "未命名收件名單";
-    const name = window.prompt("收件名單名稱", defaultName)?.trim();
+    const name = (await prompt({
+      title: "儲存收件名單",
+      inputLabel: "收件名單名稱",
+      defaultValue: defaultName,
+      required: true,
+      confirmLabel: "儲存名單",
+    }))?.trim();
     if (!name) return;
     try {
       const list = await emailApi.createRecipientList({

@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { governanceApi } from "@/lib/api";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import type {
   PlanningDocumentAttachmentOut,
   PlanningDocumentOut,
@@ -56,6 +57,7 @@ function PlanningDocumentCard({
   document: PlanningDocumentOut;
   onChange: (document: PlanningDocumentOut) => void;
 }) {
+  const prompt = usePrompt();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<MobileTab>("content");
   const [versionOpen, setVersionOpen] = useState(false);
@@ -105,10 +107,13 @@ function PlanningDocumentCard({
   };
 
   const rename = async (attachment: PlanningDocumentAttachmentOut) => {
-    const nextName = window.prompt(
-      "附件顯示名稱",
-      attachment.display_name || attachment.filename,
-    )?.trim();
+    const nextName = (await prompt({
+      title: "重新命名附件",
+      inputLabel: "附件顯示名稱",
+      defaultValue: attachment.display_name || attachment.filename,
+      required: true,
+      confirmLabel: "儲存名稱",
+    }))?.trim();
     if (!nextName) return;
     try {
       const updated = await governanceApi.renamePlanningAttachment(
