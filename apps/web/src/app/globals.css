@@ -2936,6 +2936,70 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   --text-3xl: calc(1.875rem * var(--reader-font-scale, 1));
 }
 
+/* ── 正式文件閱讀面：讓內容像文件，而非儀表板 ─────────────────────────── */
+.document-detail-page,
+.regulation-detail-page {
+  --official-paper: var(--bg-elevated);
+  --official-rule: var(--border-strong);
+}
+
+.document-detail-page .card,
+.regulation-detail-page .card {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.document-detail-page .reader-font-scale,
+.regulation-detail-page .reader-font-scale {
+  font-family: "Noto Serif TC", "Songti TC", "PMingLiU", ui-serif, Georgia, serif;
+  font-variant-numeric: proportional-nums;
+}
+
+.document-detail-page .reader-font-scale.card,
+.regulation-detail-page .reader-font-scale.card {
+  border-color: var(--official-rule);
+  background: var(--official-paper);
+}
+
+.document-detail-page .reader-font-scale > :first-child,
+.regulation-detail-page .reader-font-scale > :first-child {
+  border-bottom-color: var(--official-rule) !important;
+}
+
+.regulation-detail-page .glass {
+  border-color: var(--official-rule);
+  background: var(--official-paper);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.regulation-detail-page .law-row {
+  border-radius: 0;
+  background: transparent;
+  transition: background-color 140ms ease;
+}
+
+.regulation-detail-page .law-row-structural {
+  border-left-color: var(--official-rule) !important;
+  background: color-mix(in srgb, var(--official-paper) 94%, var(--bg-hover));
+}
+
+.regulation-detail-page .law-row-article,
+.regulation-detail-page .law-row-clause {
+  border-left-color: color-mix(in srgb, var(--official-rule) 72%, transparent) !important;
+}
+
+.regulation-detail-page .law-row:hover {
+  background: var(--bg-hover);
+}
+
+@media (max-width: 640px) {
+  .document-detail-page .card,
+  .regulation-detail-page .card {
+    border-inline-width: 1px;
+  }
+}
+
 /* ── 頁面頂端滾動進度條（JS 控制 width） ─────────────────────────────── */
 .scroll-progress-bar {
   position: fixed;
