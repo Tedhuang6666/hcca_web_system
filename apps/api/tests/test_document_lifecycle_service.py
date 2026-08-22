@@ -376,7 +376,7 @@ async def test_update_document_non_draft_raises(db_session: AsyncSession, make_u
         )
 
 
-async def test_update_document_after_six_hours_allows_summary_only(
+async def test_update_document_after_six_hours_allows_all_fields(
     db_session: AsyncSession, make_user
 ) -> None:
     org = await _make_org(db_session)
@@ -394,13 +394,16 @@ async def test_update_document_after_six_hours_allows_summary_only(
     )
 
     assert updated.summary == "更新後摘要"
-    with pytest.raises(ValueError, match="僅可編輯摘要"):
-        await update_document(
-            db_session,
-            doc,
-            data=DocumentUpdate(summary="更新摘要", title="不可改標題"),
-            changed_by=creator.id,
-        )
+    updated = await update_document(
+        db_session,
+        doc,
+        data=DocumentUpdate(summary="更新摘要", title="更新後標題", content="發文後修正正文"),
+        changed_by=creator.id,
+    )
+
+    assert updated.summary == "更新摘要"
+    assert updated.title == "更新後標題"
+    assert updated.content == "發文後修正正文"
 
 
 # ── submit_document / issue_document_directly ───────────────────────────────

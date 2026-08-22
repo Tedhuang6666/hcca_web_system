@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
+from api.models.audit_log import AuditLog
 from api.models.document import (
     Document,
     DocumentClassification,
@@ -267,7 +268,9 @@ async def test_get_document_authenticated_legacy_public_flag_succeeds(
     db_session: AsyncSession, authed_client_factory
 ) -> None:
     org = Org(name=f"登入公開組織-{uuid.uuid4().hex[:6]}")
-    creator = User(email="get-auth-public-creator@example.com", display_name="Creator", is_active=True)
+    creator = User(
+        email="get-auth-public-creator@example.com", display_name="Creator", is_active=True
+    )
     viewer = User(email="get-auth-public-viewer@example.com", display_name="Viewer", is_active=True)
     db_session.add_all([org, creator, viewer])
     await db_session.flush()
@@ -426,6 +429,56 @@ async def test_update_non_draft_document_returns_409(
     resp = await ac.patch(f"/documents/{doc.id}", json={"title": "不該改成功"})
 
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_issued_document_after_six_hours_succeeds_and_records_audit(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"超時修改組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="late-update-creator@example.com", display_name="Creator", is_active=True)
+    db_session.add_all([org, creator])
+    await db_session.flush()
+    await _grant_permission(db_session, creator, org, "document:draft")
+
+    doc = _make_doc(
+        org,
+        creator,
+        status=DocumentStatus.APPROVED,
+        issued_at=datetime.now(UTC) - timedelta(hours=7),
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, creator)
+    resp = await ac.patch(
+        f"/documents/{doc.id}",
+        json={
+            "title": "發文後修正標題",
+            "content": "發文後修正正文",
+            "change_note": "補正文字",
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["title"] == "發文後修正標題"
+    assert resp.json()["content"] == "發文後修正正文"
+
+    result = await db_session.execute(
+        select(AuditLog)
+        .where(
+            AuditLog.entity_type == "document",
+            AuditLog.entity_id == str(doc.id),
+            AuditLog.action == "update.after_6_hours",
+        )
+        .order_by(AuditLog.created_at.desc())
+    )
+    audit = result.scalars().first()
+    assert audit is not None
+    assert audit.actor_id == str(creator.id)
+    assert audit.meta["requested_fields"] == ["content", "title"]
+    assert audit.meta["change_note"] == "補正文字"
+    assert audit.meta["autosave"] is False
 
 
 @pytest.mark.asyncio
