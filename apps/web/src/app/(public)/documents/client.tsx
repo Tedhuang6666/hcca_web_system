@@ -2,6 +2,7 @@
 import { useState, useEffect, useReducer, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { RefreshCw, X } from "lucide-react";
 import { documentsApi } from "@/lib/api/documents";
 import { orgsApi, type OrgRead } from "@/lib/api/orgs";
 import { savedFiltersApi } from "@/lib/api/saved-filters";
@@ -182,6 +183,7 @@ export default function DocumentListClient({
   // 否則會先顯示公開筆數，再跳成登入者可見筆數。
   const [docs, setDocs] = useState<DocumentListItem[]>(initialDocs ?? []);
   const [loading, setLoading] = useState(initialDocs === null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const isMountedFetch = useRef(false);
   const [activeTab, setActiveTab] = useState<DocumentStatus | "all">(
@@ -281,6 +283,9 @@ export default function DocumentListClient({
         setDocs(docsRes as DocumentListItem[]);
         cacheSet("documents/list", docsRes);
         setHasMore((docsRes as DocumentListItem[]).length === PAGE_SIZE);
+        setLoadError(null);
+      } else {
+        setLoadError("目前無法取得公文資料，請檢查網路後再試。");
       }
       setLoading(false);
       isMountedFetch.current = true;
@@ -335,8 +340,10 @@ export default function DocumentListClient({
       setDocs(cached);
       setHasMore(cached.length === PAGE_SIZE);
       setSelectedIds(new Set());
+      setLoadError(null);
     } else {
       setLoading(true);
+      setLoadError(null);
     }
     setOffset(0);
     documentsApi
@@ -347,13 +354,25 @@ export default function DocumentListClient({
         cacheSet("documents/list", data);
         setHasMore(data.length === PAGE_SIZE);
         setSelectedIds(new Set());
+        setLoadError(null);
       })
-      .catch((e) => showErrorToast(apiErrorMessage(e, "載入失敗")))
+      .catch((e) => {
+        const message = apiErrorMessage(e, "目前無法更新公文資料，請稍後再試。");
+        setLoadError(message);
+        showErrorToast(message);
+      })
       .finally(() => setLoading(false));
   }, [activeTab, debouncedSearch, filters, queryVisibility]);
 
   const clearFilters = useCallback(() => {
     dispatchFilter({ type: "clear" });
+  }, []);
+
+  const resetDocumentQuery = useCallback(() => {
+    setSearch("");
+    setActiveTab("all");
+    dispatchFilter({ type: "clear" });
+    setShowFilters(false);
   }, []);
 
   const applySavedFilter = (sf: SavedFilterOut) => {
@@ -533,6 +552,8 @@ export default function DocumentListClient({
   };
 
   const reloadCurrent = async () => {
+    setLoading(true);
+    setLoadError(null);
     const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: "0" };
     if (activeTab !== "all") params.status = activeTab;
     if (search.trim()) params.keyword = search.trim();
@@ -550,11 +571,22 @@ export default function DocumentListClient({
     if (filters.myOnly) params.my_only = "true";
     if (filters.orgId) params.org_id = filters.orgId;
     if (filters.activityId) params.activity_id = filters.activityId;
-    const data = await documentsApi.list(params);
-    setDocs(data);
-    setOffset(0);
-    setHasMore(data.length === PAGE_SIZE);
-    setSelectedIds(new Set());
+    try {
+      const data = await documentsApi.list(params);
+      setDocs(data);
+      setOffset(0);
+      setHasMore(data.length === PAGE_SIZE);
+      setSelectedIds(new Set());
+      setLoadError(null);
+      return true;
+    } catch (e) {
+      const message = apiErrorMessage(e, "目前無法更新公文資料，請稍後再試。");
+      setLoadError(message);
+      showErrorToast(message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const runBatch = async (action: "approve" | "reject" | "archive" | "delegate") => {
@@ -648,6 +680,7 @@ export default function DocumentListClient({
     if (options.sort) setSortKey(options.sort);
     setShowFilters(false);
   };
+  const hasDocumentQuery = Boolean(search.trim() || hasActiveFilters || activeTab !== "all");
 
   return (
     <div className="documents-page app-page-width space-y-5">
@@ -699,7 +732,7 @@ export default function DocumentListClient({
               key={item.label}
               type="button"
               onClick={() => applyQuickFilter(item.tab, item)}
-              className="document-quick-filter rounded-full px-3 py-1.5 text-xs font-medium"
+              className="document-quick-filter min-h-11 rounded-full px-4 text-xs font-medium"
               style={{
                 background: "var(--bg-surface)",
                 border: "1px solid var(--border)",
@@ -716,23 +749,30 @@ export default function DocumentListClient({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>常用篩選：</span>
             {savedFilters.slice(0, 8).map(sf => (
-              <button
+              <div
                 key={sf.id}
-                onClick={() => applySavedFilter(sf)}
-                className="document-quick-filter text-xs px-2.5 py-1 rounded-full inline-flex items-center gap-1.5"
+                className="inline-flex min-h-11 overflow-hidden rounded-full"
                 style={{ color: "var(--text-secondary)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}
-                title={sf.description ?? sf.share_path ?? sf.name}
               >
-                {sf.name}
-                <span
-                  onClick={(e) => { e.stopPropagation(); deleteSavedFilter(sf.id); }}
-                  className="px-1 rounded"
-                  style={{ color: "var(--danger)" }}
-                  aria-label="刪除常用篩選"
+                <button
+                  type="button"
+                  onClick={() => applySavedFilter(sf)}
+                  className="document-quick-filter min-h-11 px-3.5 text-xs"
+                  title={sf.description ?? sf.share_path ?? sf.name}
                 >
-                  ×
-                </span>
-              </button>
+                  {sf.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteSavedFilter(sf.id)}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center border-l"
+                  style={{ color: "var(--danger)", borderColor: "var(--border)" }}
+                  aria-label={`刪除常用篩選「${sf.name}」`}
+                  title="刪除常用篩選"
+                >
+                  <X size={15} aria-hidden />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -747,7 +787,7 @@ export default function DocumentListClient({
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input type="search" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="搜尋公文標題或字號…" className="input w-full" style={{ paddingLeft: "2.25rem" }} aria-label="搜尋公文" />
+              placeholder="搜尋公文標題或字號…" className="input min-h-11 w-full" style={{ paddingLeft: "2.25rem" }} aria-label="搜尋公文" />
           </div>
 
           {/* Tab 切換 */}
@@ -759,7 +799,7 @@ export default function DocumentListClient({
               return (
                 <button key={key} role="tab" aria-selected={active}
                   onClick={() => setActiveTab(key)}
-                  className="document-tab min-w-0 flex-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
+                  className="document-tab min-h-11 min-w-0 flex-1 px-3 rounded-lg text-xs font-medium whitespace-nowrap"
                   style={active
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--primary-dim)" }
                     : { color: "var(--text-muted)", border: "1px solid transparent" }}>
@@ -772,7 +812,7 @@ export default function DocumentListClient({
           <div className="document-filter-actions flex w-full flex-wrap items-center gap-2">
             {/* 進階篩選開關 */}
             {canViewAll && <button onClick={() => setShowFilters(f => !f)}
-              className="document-filter-toggle relative px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
+              className="document-filter-toggle relative min-h-11 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
               style={showFilters || hasActiveFilters
                 ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
                 : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -788,7 +828,7 @@ export default function DocumentListClient({
 
             {canViewAll && hasActiveFilters && (
               <button onClick={clearFilters}
-                className="document-filter-toggle text-xs px-2.5 py-1.5 rounded-lg"
+                className="document-filter-toggle min-h-11 text-xs px-3 rounded-lg"
                 style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)" }}>
                 清除篩選
               </button>
@@ -796,7 +836,7 @@ export default function DocumentListClient({
 
             {canViewAll && <button
               onClick={saveCurrentFilter}
-              className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
+              className="min-h-11 text-xs px-3 rounded-lg hover:opacity-80"
               style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
               title="將目前的 Tab/搜尋/篩選保存為常用篩選"
             >
@@ -816,7 +856,7 @@ export default function DocumentListClient({
                   value={filters.serialPrefix}
                   onChange={e => dispatchFilter({ type: "set", key: "serialPrefix", value: e.target.value })}
                   placeholder="例：嶺代生字第"
-                  className="text-xs px-2 py-1.5 rounded-lg outline-none w-56"
+                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
               </div>
@@ -825,16 +865,16 @@ export default function DocumentListClient({
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>公文類別</p>
                 <div className="flex flex-wrap gap-1.5">
-                  <button onClick={() => dispatchFilter({ type: "set", key: "category", value: "" })}
-                    className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                  <button type="button" onClick={() => dispatchFilter({ type: "set", key: "category", value: "" })}
+                    className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.category
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
                   {DOC_CATEGORIES.map(c => (
-                    <button key={c.key} onClick={() => dispatchFilter({ type: "set", key: "category", value: c.key === filters.category ? "" : c.key })}
-                      className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                    <button key={c.key} type="button" onClick={() => dispatchFilter({ type: "set", key: "category", value: c.key === filters.category ? "" : c.key })}
+                      className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.category === c.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -848,16 +888,16 @@ export default function DocumentListClient({
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>密等</p>
                 <div className="flex flex-wrap gap-1.5">
-                  <button onClick={() => dispatchFilter({ type: "set", key: "classification", value: "" })}
-                    className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                  <button type="button" onClick={() => dispatchFilter({ type: "set", key: "classification", value: "" })}
+                    className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.classification
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
                   {DOC_CLASSIFICATIONS.map(c => (
-                    <button key={c.key} onClick={() => dispatchFilter({ type: "set", key: "classification", value: c.key === filters.classification ? "" : c.key })}
-                      className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                    <button key={c.key} type="button" onClick={() => dispatchFilter({ type: "set", key: "classification", value: c.key === filters.classification ? "" : c.key })}
+                      className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.classification === c.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -871,16 +911,16 @@ export default function DocumentListClient({
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>可見度</p>
                 <div className="flex flex-wrap gap-1.5">
-                  <button onClick={() => dispatchFilter({ type: "set", key: "visibility", value: "" })}
-                    className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                  <button type="button" onClick={() => dispatchFilter({ type: "set", key: "visibility", value: "" })}
+                    className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.visibility
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
                   {DOC_VISIBILITIES.map(v => (
-                    <button key={v.key} onClick={() => dispatchFilter({ type: "set", key: "visibility", value: v.key === filters.visibility ? "" : v.key })}
-                      className="text-xs px-2.5 py-1 rounded-full transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                    <button key={v.key} type="button" onClick={() => dispatchFilter({ type: "set", key: "visibility", value: v.key === filters.visibility ? "" : v.key })}
+                      className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.visibility === v.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -895,11 +935,11 @@ export default function DocumentListClient({
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>建立日期</p>
                 <div className="flex items-center gap-2">
                   <input type="date" value={filters.dateFrom} onChange={e => dispatchFilter({ type: "set", key: "dateFrom", value: e.target.value })}
-                    className="text-xs px-2 py-1.5 rounded-lg outline-none"
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>至</span>
                   <input type="date" value={filters.dateTo} onChange={e => dispatchFilter({ type: "set", key: "dateTo", value: e.target.value })}
-                    className="text-xs px-2 py-1.5 rounded-lg outline-none"
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 </div>
               </div>
@@ -909,11 +949,11 @@ export default function DocumentListClient({
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>發文日期</p>
                 <div className="flex items-center gap-2">
                   <input type="date" value={filters.issuedFrom} onChange={e => dispatchFilter({ type: "set", key: "issuedFrom", value: e.target.value })}
-                    className="text-xs px-2 py-1.5 rounded-lg outline-none"
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>至</span>
                   <input type="date" value={filters.issuedTo} onChange={e => dispatchFilter({ type: "set", key: "issuedTo", value: e.target.value })}
-                    className="text-xs px-2 py-1.5 rounded-lg outline-none"
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 </div>
               </div>
@@ -926,7 +966,7 @@ export default function DocumentListClient({
                   value={filters.rocYear}
                   onChange={e => dispatchFilter({ type: "set", key: "rocYear", value: e.target.value.replace(/[^\d]/g, "").slice(0, 3) })}
                   placeholder="例：115"
-                  className="text-xs px-2 py-1.5 rounded-lg outline-none w-28"
+                  className="min-h-11 w-28 rounded-lg px-3 text-sm outline-none"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
               </div>
@@ -938,7 +978,7 @@ export default function DocumentListClient({
                   value={filters.recipientKeyword}
                   onChange={e => dispatchFilter({ type: "set", key: "recipientKeyword", value: e.target.value })}
                   placeholder="搜尋受文者名稱"
-                  className="text-xs px-2 py-1.5 rounded-lg outline-none w-56"
+                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
               </div>
@@ -950,7 +990,7 @@ export default function DocumentListClient({
                   value={filters.handlerKeyword}
                   onChange={e => dispatchFilter({ type: "set", key: "handlerKeyword", value: e.target.value })}
                   placeholder="姓名/單位/Email"
-                  className="text-xs px-2 py-1.5 rounded-lg outline-none w-56"
+                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
               </div>
@@ -962,7 +1002,7 @@ export default function DocumentListClient({
                   <select
                     value={filters.orgId}
                     onChange={e => dispatchFilter({ type: "set", key: "orgId", value: e.target.value })}
-                    className="text-xs px-2 py-1.5 rounded-lg outline-none"
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                     <option value="">全部組織</option>
                     {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
@@ -984,8 +1024,8 @@ export default function DocumentListClient({
               {/* 僅顯示我的 */}
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>其他</p>
-                <button onClick={() => dispatchFilter({ type: "toggleMyOnly" })}
-                  className="text-xs px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                <button type="button" onClick={() => dispatchFilter({ type: "toggleMyOnly" })}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   style={filters.myOnly
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -1101,15 +1141,53 @@ export default function DocumentListClient({
             <ListPageSkeleton rows={6} showHeader={false} showFilters={false} />
           </div>
         ) : docs.length === 0 ? (
-          <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
+          <div className="px-5 py-20 text-center" style={{ color: "var(--text-muted)" }} aria-live="polite">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="1.5" className="mx-auto mb-3 opacity-40" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
-            <p className="text-sm">
-              {search ? `找不到「${search}」相關公文` : "尚無公文記錄"}
-            </p>
+            {loadError ? (
+              <>
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  暫時無法載入公文
+                </p>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6">{loadError}</p>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  <button type="button" className="btn btn-primary min-h-11" onClick={() => void reloadCurrent()}>
+                    <RefreshCw size={16} aria-hidden />
+                    重新載入
+                  </button>
+                  <Link href="/contact" className="btn btn-ghost min-h-11">
+                    聯絡班聯會
+                  </Link>
+                </div>
+              </>
+            ) : hasDocumentQuery ? (
+              <>
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {search ? `找不到「${search}」相關公文` : "沒有符合目前條件的公文"}
+                </p>
+                <p className="mt-2 text-sm leading-6">清除搜尋與篩選後，查看全部可見公文。</p>
+                <button type="button" className="btn btn-ghost mt-5 min-h-11" onClick={resetDocumentQuery}>
+                  清除所有查詢條件
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {canViewAll ? "尚無可查看的公文" : "目前尚未公開任何公文"}
+                </p>
+                <p className="mt-2 text-sm leading-6">
+                  {canViewAll ? "新的公文會在取得查看權限或完成建立後顯示於此。" : "可先查看最新公告，或稍後再回來查詢。"}
+                </p>
+                {!canViewAll && (
+                  <Link href="/news" className="btn btn-ghost mt-5 min-h-11">
+                    查看最新公告
+                  </Link>
+                )}
+              </>
+            )}
           </div>
         ) : (
           /* 桌機版表格 / 手機版卡片列表 */

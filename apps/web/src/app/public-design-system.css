@@ -213,18 +213,30 @@
 }
 
 @media (max-width: 767px) {
+  .public-hero-inner {
+    gap: 1.25rem;
+    padding-top: 2.25rem;
+    padding-bottom: 1.75rem;
+  }
+
   .public-hero-copy {
     max-width: 40rem;
     margin-inline: auto;
     text-align: center;
   }
 
-  .public-hero-subtitle {
-    margin-inline: auto;
+  .public-hero-copy h1 {
+    font-size: clamp(2.2rem, 11vw, 3.25rem);
+    line-height: 1.12;
   }
 
+.public-hero-subtitle {
+  margin-inline: auto;
+  text-wrap: balance;
+}
+
   .public-signboard.public-identity-panel {
-    width: min(82vw, 20rem);
+    width: min(38vw, 9rem);
     justify-self: center;
     margin-inline: auto;
   }
@@ -234,13 +246,13 @@
   }
 
   .public-identity-panel .public-signboard-emblem > picture {
-    width: min(100%, 18rem);
+    width: min(100%, 7.5rem);
   }
 
   .public-identity-panel .public-signboard-emblem img,
   .public-identity-panel .public-signboard-emblem svg {
-    max-width: 18rem;
-    max-height: 18rem;
+    max-width: 7.5rem;
+    max-height: 7.5rem;
   }
 }
 

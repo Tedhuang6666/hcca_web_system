@@ -65,7 +65,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
 
       <Link
         href="/"
-        className="fixed right-4 top-4 z-20 inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors hover:bg-[var(--bg-surface)] sm:right-6 sm:top-6"
+        className="fixed right-4 top-4 z-20 inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors hover:bg-[var(--bg-surface)] sm:right-6 sm:top-6"
         style={{
           background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)",
           border: "1px solid var(--border-strong)",
@@ -139,7 +139,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 登入管理系統
               </h1>
               <p className="mt-3 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-                請使用竹中 Google 帳戶；已完成綁定者也可使用 Discord。
+                請先使用竹中 Google 帳戶登入；已完成綁定者可改用 Discord。
               </p>
             </div>
 
@@ -179,10 +179,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               data-full-navigation="true"
               className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
-                background: "var(--bg-elevated)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-strong)",
-                boxShadow: "var(--shadow-sm)",
+                background: "var(--primary)",
+                color: "var(--primary-fg)",
+                border: "1px solid var(--primary)",
                 textDecoration: "none",
               }}
             >
@@ -193,7 +192,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                 </svg>
-                使用 Google 登入
+                使用竹中 Google 帳戶登入
               </span>
               <ArrowRight
                 size={17}
@@ -205,7 +204,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
             <div className="my-7 flex items-center gap-4">
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
               <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
-                其他登入方式
+                已綁定帳號才使用
               </span>
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
             </div>
@@ -214,10 +213,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               href={discordLoginHref}
               data-no-prefetch="true"
               data-full-navigation="true"
-              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
-                background: "#5865f2",
-                boxShadow: "0 8px 24px rgba(88, 101, 242, 0.24)",
+                background: "var(--bg-elevated)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-strong)",
                 textDecoration: "none",
               }}
             >
@@ -225,7 +225,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 <svg width="20" height="16" viewBox="0 0 24 18" fill="currentColor" aria-hidden="true">
                   <path d="M20.3 1.5A18.4 18.4 0 0 0 15.8.1l-.6 1.2a16.8 16.8 0 0 0-6.4 0L8.2.1a18.7 18.7 0 0 0-4.5 1.4C.9 5.6.1 9.6.5 13.5a18.2 18.2 0 0 0 5.6 2.8l1.4-1.9a11.8 11.8 0 0 1-2.1-1l.5-.4a13.1 13.1 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l1.4 1.9a18.2 18.2 0 0 0 5.6-2.8c.5-4.5-.8-8.5-3.2-12ZM8.2 11.1c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
                 </svg>
-                使用 Discord 登入
+                使用已綁定的 Discord 登入
               </span>
               <ArrowRight
                 size={17}
@@ -234,7 +234,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               />
             </a>
             <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-              須先在個人資料完成帳號綁定。
+              尚未綁定帳號時，請改用 Google 登入。
             </p>
 
             <PasskeyLogin nextPath={nextPath} />
@@ -242,14 +242,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
             <p className="mt-8 text-center text-xs leading-6" style={{ color: "var(--text-muted)" }}>
               登入即表示你同意
               <Link
-                className="mx-1 underline underline-offset-4 hover:text-[var(--text-primary)]"
+                className="mx-1 inline-flex min-h-11 items-center underline underline-offset-4 hover:text-[var(--text-primary)]"
                 href="/legal/terms"
               >
                 服務條款
               </Link>
               與
               <Link
-                className="ml-1 underline underline-offset-4 hover:text-[var(--text-primary)]"
+                className="ml-1 inline-flex min-h-11 items-center underline underline-offset-4 hover:text-[var(--text-primary)]"
                 href="/legal/privacy"
               >
                 隱私權政策
