@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardList,
   FilePenLine,
+  Printer,
   ScrollText,
   Trash2,
   Undo2 } from "lucide-react";
@@ -710,11 +711,17 @@ export default function RegulationDetailPageClient({
                 <AnimatedDownloadButton
                   request={() => authFetch(apiUrl(`${currentRegHref}/print`), { credentials: "include" })}
                   filename={`${reg.title || "法規"}.pdf`}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 transition-colors hover:opacity-80 disabled:opacity-60 disabled:cursor-wait"
+                  className="regulation-detail-print-button px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 transition-colors hover:opacity-80 disabled:opacity-60 disabled:cursor-wait"
                   style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-                  label="匯出 PDF"
+                  aria-label="列印 PDF"
+                  label={(
+                    <span className="regulation-detail-print-label">
+                      <Printer size={14} strokeWidth={1.8} aria-hidden="true" />
+                      列印
+                    </span>
+                  )}
                   onComplete={() => showSuccessToast("PDF 已下載")}
-                  onError={(error) => showErrorToast(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
+                  onError={(error) => showErrorToast(`PDF 匯出失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
                 </div>
 
                 <div className="regulation-detail-management-group" role="group" aria-label="法規管理">

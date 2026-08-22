@@ -3079,17 +3079,124 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .regulation-detail-page .law-row-structural {
+  border-left-width: 1px !important;
   border-left-color: var(--official-rule) !important;
-  background: color-mix(in srgb, var(--official-paper) 94%, var(--bg-hover));
+  background: transparent;
 }
 
 .regulation-detail-page .law-row-article,
 .regulation-detail-page .law-row-clause {
+  border-left-width: 1px !important;
   border-left-color: color-mix(in srgb, var(--official-rule) 72%, transparent) !important;
+}
+
+.regulation-detail-page .law-row-structural .law-row-badge {
+  border-color: var(--official-rule) !important;
+  border-radius: 3px;
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  font-weight: 600;
 }
 
 .regulation-detail-page .law-row:hover {
   background: var(--bg-hover);
+}
+
+/* 閱讀工具維持同一列；窄螢幕時以橫向捲動保留所有控制。 */
+.regulation-detail-page .regulation-detail-tool-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.regulation-detail-page .regulation-detail-tool-group > * {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+
+.regulation-detail-page .regulation-detail-tool-group .regulation-detail-zoom-control {
+  height: 1.875rem;
+  min-height: 1.875rem;
+}
+
+/* PDF 是文件操作，不應比閱讀與分享工具更醒目。 */
+.regulation-detail-page .regulation-detail-print-button {
+  --download-accent: var(--text-muted);
+  --download-surface: var(--bg-surface);
+  --download-ink: var(--text-secondary);
+  height: 1.875rem;
+  min-width: 0;
+  min-height: 1.875rem;
+  padding: 0 0.625rem;
+  border-color: var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  box-shadow: none;
+  line-height: 1;
+}
+
+.regulation-detail-page .regulation-detail-print-button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="starting"],
+.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="downloading"],
+.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="finishing"],
+.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="complete"],
+.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="error"] {
+  gap: 0.35rem;
+  width: auto;
+  min-width: 0;
+  min-height: 1.875rem !important;
+  height: 1.875rem !important;
+  padding: 0 0.625rem;
+  border-color: var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-hover);
+  box-shadow: none;
+}
+
+.regulation-detail-page .regulation-detail-print-button .animated-download__visual,
+.regulation-detail-page .regulation-detail-print-button[data-download-state="starting"] .animated-download__visual,
+.regulation-detail-page .regulation-detail-print-button[data-download-state="downloading"] .animated-download__visual,
+.regulation-detail-page .regulation-detail-print-button[data-download-state="finishing"] .animated-download__visual,
+.regulation-detail-page .regulation-detail-print-button[data-download-state="complete"] .animated-download__visual,
+.regulation-detail-page .regulation-detail-print-button[data-download-state="error"] .animated-download__visual {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-basis: 1.75rem;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.regulation-detail-page .regulation-detail-print-button .animated-download__copy,
+.regulation-detail-page .regulation-detail-print-button[data-download-state] .animated-download__copy {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.regulation-detail-page .regulation-detail-print-button .animated-download__visual {
+  display: none;
+}
+
+.regulation-detail-print-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.regulation-detail-page .regulation-detail-print-button .animated-download__fill {
+  filter: none;
 }
 
 @media (max-width: 640px) {
