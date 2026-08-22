@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { usersApi, apiErrorMessage } from "@/lib/api";
 import { clearAuthCache } from "@/lib/auth-cache";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { SecurityEventRead, UserSessionRead } from "@/lib/types";
 
 function formatDate(value: string): string {
@@ -30,6 +31,7 @@ function authMethodLabel(value: string): string {
 }
 
 export default function SessionManagement() {
+  const confirm = useConfirm();
   const [sessions, setSessions] = useState<UserSessionRead[]>([]);
   const [events, setEvents] = useState<SecurityEventRead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,12 @@ export default function SessionManagement() {
   }
 
   async function revokeAll() {
-    if (!window.confirm("這會登出所有裝置，並需要重新登入。確定要繼續嗎？")) return;
+    if (!(await confirm({
+      title: "登出全部裝置？",
+      description: "這會撤銷所有登入工作階段，您需要重新登入。",
+      confirmLabel: "登出全部裝置",
+      danger: true,
+    }))) return;
     setBusy("all");
     try {
       await usersApi.revokeAllSessions();

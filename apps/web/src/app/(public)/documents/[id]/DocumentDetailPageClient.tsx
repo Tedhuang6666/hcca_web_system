@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { authFetch, documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
@@ -18,6 +19,7 @@ import { apiUrl } from "@/lib/config";
 import { recordRecent } from "@/lib/recents";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const DeferredPanel = () => <div className="card min-h-24 animate-pulse" aria-hidden="true" />;
 const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
@@ -173,6 +175,7 @@ export default function DocumentDetailPageClient({
 }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const confirm = useConfirm();
   const [doc, setDoc] = useState<DocumentWithArchive | null>(initialDoc);
   const [loading, setLoading] = useState(!initialDoc);
   const [forbidden, setForbidden] = useState(false);
@@ -317,7 +320,12 @@ export default function DocumentDetailPageClient({
   };
 
   const handleIssueDirect = async () => {
-    if (!confirm("確定要直接發文嗎？此操作將跳過審核流程，公文將直接設為「已核准」。")) return;
+    if (!(await confirm({
+      title: "直接發文？",
+      description: "此操作會跳過審核流程，並將公文直接設為「已核准」。",
+      confirmLabel: "直接發文",
+      danger: true,
+    }))) return;
     try {
       await documentsApi.issueDirect(id);
       toast.success("已直接發文");
@@ -566,7 +574,12 @@ export default function DocumentDetailPageClient({
               type="button"
               className="btn btn-ghost text-sm gap-1.5"
               onClick={async () => {
-                if (!window.confirm("確定刪除此公文？此操作無法復原。")) return;
+                if (!(await confirm({
+                  title: "刪除此公文？",
+                  description: "此動作無法復原。",
+                  confirmLabel: "刪除公文",
+                  danger: true,
+                }))) return;
                 try {
                   await documentsApi.delete(id);
                   toast.success("公文已刪除");
@@ -1196,8 +1209,11 @@ export default function DocumentDetailPageClient({
                           </div>
                         </div>
                         {isImg && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={previewUrl} alt={a.display_name || a.filename}
+                          <Image src={previewUrl} alt={a.display_name || a.filename}
+                            width={1600}
+                            height={1000}
+                            unoptimized
+                            sizes="(max-width: 768px) 100vw, 768px"
                             className="w-full object-contain"
                             style={{
                               maxHeight: doc.attachments.length <= 2 ? "520px" : "320px",

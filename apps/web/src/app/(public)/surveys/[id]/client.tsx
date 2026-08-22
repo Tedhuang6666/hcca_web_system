@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import QRCode from "qrcode";
@@ -238,13 +239,14 @@ function QuestionInput({
     return (
       <span className="mt-2 flex flex-wrap gap-2">
         {images.map((image) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             key={image}
             src={uploadUrl(image)}
             alt="投稿圖稿預覽"
             width={80}
             height={80}
+            unoptimized
+            sizes="80px"
             className="h-20 w-20 rounded-lg object-cover"
           />
         ))}
@@ -267,10 +269,11 @@ function QuestionInput({
     return (
       <figure className="space-y-2">
         {src && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt={question.question_text || "問卷圖片"}
+          <Image src={src} alt={question.question_text || "問卷圖片"}
             width={640}
             height={360}
+            unoptimized
+            sizes="(max-width: 640px) 100vw, 640px"
             className="max-h-80 w-full rounded-lg object-contain" />
         )}
         {question.question_text && (
@@ -1105,10 +1108,11 @@ export default function SurveyDetailClient({
                 </div>
               </div>
               {q.image_url && q.question_type !== "image" && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={uploadUrl(q.image_url)} alt=""
+                <Image src={uploadUrl(q.image_url)} alt=""
                   width={640}
                   height={360}
+                  unoptimized
+                  sizes="(max-width: 640px) 100vw, 640px"
                   className="max-h-72 w-full rounded-lg object-contain"
                   style={{ border: "1px solid var(--border)" }} />
               )}

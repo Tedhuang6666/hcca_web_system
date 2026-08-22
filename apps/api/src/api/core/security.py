@@ -270,18 +270,24 @@ async def revoke_user(user_id: str, *, ttl_seconds: int | None = None) -> int:
     ttl = ttl_seconds if ttl_seconds is not None else settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
     try:
         jtis = await redis_client.smembers(key)
-    except Exception:
-        logger.warning("黑名單撤銷查詢失敗", exc_info=True)
-        return 0
+    except Exception as exc:
+        # 強制登出不能把 Redis 故障誤報成「沒有可撤銷的 token」。否則管理員會
+        # 看見成功回應，實際上舊 access token 仍可在效期內繼續使用。
+        logger.error("黑名單撤銷查詢失敗", exc_info=True)
+        raise RedisUnavailableError("Redis unavailable while revoking user tokens") from exc
 
     if not jtis:
         return 0
 
-    pipe = redis_client.pipeline()
-    for j in jtis:
-        pipe.setex(f"{BLACKLIST_JTI_PREFIX}{j}", ttl, "1")
-    pipe.delete(key)
-    await pipe.execute()
+    try:
+        pipe = redis_client.pipeline()
+        for j in jtis:
+            pipe.setex(f"{BLACKLIST_JTI_PREFIX}{j}", ttl, "1")
+        pipe.delete(key)
+        await pipe.execute()
+    except Exception as exc:
+        logger.error("黑名單撤銷寫入失敗", exc_info=True)
+        raise RedisUnavailableError("Redis unavailable while revoking user tokens") from exc
     logger.info("已撤銷 %d 個 jti uid=%s", len(jtis), user_id)
     return len(jtis)
 

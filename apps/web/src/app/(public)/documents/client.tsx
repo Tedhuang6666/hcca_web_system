@@ -14,6 +14,7 @@ import type { Activity, BatchDocumentOperationOut, DocumentListItem, DocumentSta
 import { orgDisplayName } from "@/lib/orgs";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 
@@ -168,6 +169,8 @@ export default function DocumentListClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const { can } = usePermissions();
   const canReview = can("document:approve") || can("document:reject");
   const canBatch = canReview || can("document:archive") || can("document:forward");
@@ -403,7 +406,14 @@ export default function DocumentListClient({
   };
 
   const saveCurrentFilter = async () => {
-    const name = prompt("請輸入常用篩選名稱：", "我的公文查詢");
+    const name = await prompt({
+      title: "儲存常用篩選",
+      description: "輸入名稱後，之後可快速套用目前的查詢條件。",
+      inputLabel: "篩選名稱",
+      defaultValue: "我的公文查詢",
+      required: true,
+      confirmLabel: "儲存",
+    });
     if (!name?.trim()) return;
     const params: Record<string, unknown> = {};
     if (activeTab !== "all") params.status = activeTab;
@@ -436,7 +446,12 @@ export default function DocumentListClient({
   };
 
   const deleteSavedFilter = async (id: string) => {
-    if (!confirm("刪除此常用篩選？")) return;
+    if (!(await confirm({
+      title: "刪除此常用篩選？",
+      description: "此動作無法復原。",
+      confirmLabel: "刪除",
+      danger: true,
+    }))) return;
     try {
       await savedFiltersApi.delete(id);
       setSavedFilters(prev => prev.filter(x => x.id !== id));
@@ -603,14 +618,32 @@ export default function DocumentListClient({
     try {
       let result: BatchDocumentOperationOut;
       if (action === "approve") {
-        const comment = prompt("批量核准意見（可留空）：", "") ?? undefined;
+        const comment = await prompt({
+          title: "批量核准公文",
+          description: `將核准 ${targetIds.length} 份待審公文。可留下意見供稽核。`,
+          inputLabel: "核准意見（可留空）",
+          confirmLabel: "核准公文",
+        });
+        if (comment === null) return;
         result = await documentsApi.batchApprove(targetIds, comment);
       } else if (action === "reject") {
-        const comment = prompt("請輸入批量退件原因：", "");
+        const comment = await prompt({
+          title: "批量退件",
+          description: `將退回 ${targetIds.length} 份待審公文。退件原因會通知承辦人。`,
+          inputLabel: "退件原因",
+          required: true,
+          confirmLabel: "退回公文",
+          danger: true,
+        });
         if (!comment?.trim()) return;
         result = await documentsApi.batchReject(targetIds, comment.trim());
       } else if (action === "archive") {
-        if (!confirm(`封存 ${targetIds.length} 份已核准公文？`)) return;
+        if (!(await confirm({
+          title: `封存 ${targetIds.length} 份已核准公文？`,
+          description: "封存後會從日常作業清單移除，但仍保留稽核紀錄。",
+          confirmLabel: "封存公文",
+          danger: true,
+        }))) return;
         result = await documentsApi.batchArchive(targetIds);
       } else {
         if (!delegateId) {

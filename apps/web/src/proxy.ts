@@ -166,6 +166,29 @@ function buildCsp(nonce: string): string {
   ].join("; ");
 }
 
+function isSecureRequest(req: NextRequest): boolean {
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim();
+  return forwardedProto === "https" || req.nextUrl.protocol === "https:";
+}
+
+/**
+ * CSP 只適用 HTML，但其他瀏覽器層保護也必須涵蓋公開資產與非 App Router 回應。
+ * HTTPS 終結於反向代理時，x-forwarded-proto 讓 HSTS 仍只在安全連線上送出。
+ */
+function applyFrontendSecurityHeaders(req: NextRequest, response: NextResponse): void {
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set(
+    "Permissions-Policy",
+    "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()",
+  );
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  if (process.env.NODE_ENV === "production" && isSecureRequest(req)) {
+    response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+}
+
 /**
  * 把 nonce 經 request header 傳給 Next，讓框架產生的 inline script
  * 帶上同一個 nonce；回應也必須禁止快取，避免 nonce 與 HTML 脫鉤。
@@ -178,6 +201,7 @@ function withCsp(req: NextRequest): NextResponse {
   requestHeaders.set("content-security-policy", csp);
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("content-security-policy", csp);
+  applyFrontendSecurityHeaders(req, res);
   return res;
 }
 
@@ -396,6 +420,7 @@ export default async function proxy(req: NextRequest) {
   if (assetCacheControl) {
     const response = NextResponse.next();
     response.headers.set("Cache-Control", assetCacheControl);
+    applyFrontendSecurityHeaders(req, response);
     return response;
   }
 

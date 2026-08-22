@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import "./globals.css";
 import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import ClientErrorReporter from "@/components/providers/ClientErrorReporter";
 import WebVitalsReporter from "@/components/providers/WebVitalsReporter";
 import { BRANDING } from "@/lib/branding";
@@ -118,7 +119,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="antialiased">
         <ClientErrorReporter />
         <WebVitalsReporter />
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

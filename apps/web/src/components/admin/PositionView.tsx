@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PermCheckboxes } from "@/components/admin/PermissionCatalog";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { adminApi, apiErrorMessage } from "@/lib/api";
 import type { AdminUserDetail, PermissionCodeInfo, PositionSummary } from "@/lib/types";
 
@@ -17,6 +18,7 @@ export default function PositionView({
   permCodes: PermissionCodeInfo[];
   onUpdated: () => void;
 }) {
+  const confirm = useConfirm();
   const pos = allPositions.find(p => p.id === positionId);
   const [editingPerms, setEditingPerms] = useState(false);
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
@@ -90,7 +92,12 @@ export default function PositionView({
   const removeMember = async (user: AdminUserDetail) => {
     const up = user.positions.find(p => p.id === positionId);
     if (!up?.user_position_id) return;
-    if (!confirm(`確定移除「${user.display_name}」的此職位？`)) return;
+    if (!(await confirm({
+      title: "移除此職位？",
+      description: `「${user.display_name}」將失去「${pos.name}」職位。`,
+      confirmLabel: "移除職位",
+      danger: true,
+    }))) return;
     try {
       await adminApi.removeUserPosition(user.id, up.user_position_id);
       toast.success("已移除");
@@ -99,7 +106,12 @@ export default function PositionView({
   };
 
   const deletePos = async () => {
-    if (!confirm(`確定刪除職位「${pos.name}」？\n目前有 ${members.length} 位成員將失去此職位。`)) return;
+    if (!(await confirm({
+      title: `刪除職位「${pos.name}」？`,
+      description: `目前有 ${members.length} 位成員將失去此職位，此動作無法復原。`,
+      confirmLabel: "刪除職位",
+      danger: true,
+    }))) return;
     try {
       await adminApi.deletePosition(positionId);
       toast.success("職位已刪除");

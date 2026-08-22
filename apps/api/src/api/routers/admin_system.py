@@ -1274,6 +1274,9 @@ async def block_user(
     if body.include_ips:
         targets.extend(("ip_block", ip) for ip in ips)
 
+    # 先確認撤銷標記能持久寫入，避免 Redis 故障時已建立封鎖規則、卻無法立即
+    # 使既有 access token 失效的半完成狀態。
+    legacy_revoked_count = await revoke_user(str(user.id))
     rules = [
         await defense_svc.create_rule(
             session,
@@ -1286,7 +1289,6 @@ async def block_user(
         )
         for rule_type, target in targets
     ]
-    legacy_revoked_count = await revoke_user(str(user.id))
     revoked_count = legacy_revoked_count + await user_session_svc.revoke_all(
         session, user.id, reason="account_blocked"
     )

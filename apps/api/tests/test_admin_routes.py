@@ -352,6 +352,28 @@ async def test_admin_can_revoke_user_sessions(
 
 
 @pytest.mark.asyncio
+async def test_admin_revoke_sessions_reports_unavailable_security_service(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.core.security import RedisUnavailableError
+
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+    monkeypatch.setattr(
+        "api.routers.admin.revoke_user",
+        AsyncMock(side_effect=RedisUnavailableError("redis unavailable")),
+    )
+
+    response = await client.post(f"/admin/users/{member.id}/sessions/revoke")
+
+    assert response.status_code == 503, response.text
+    assert response.headers["retry-after"] == "3"
+    assert response.json()["detail"] == "安全性服務暫時不可用，請稍後再試"
+
+
+@pytest.mark.asyncio
 async def test_update_missing_user_position_returns_404(
     client: AsyncClient,
     db_session: AsyncSession,

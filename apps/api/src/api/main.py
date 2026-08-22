@@ -44,6 +44,7 @@ from api.core.query_audit import (
 )
 from api.core.rate_limit import SimpleRateLimitMiddleware
 from api.core.request_id import RequestIDMiddleware
+from api.core.security import RedisUnavailableError
 from api.core.security_headers import SecurityHeadersMiddleware
 from api.core.sentry import init_sentry
 from api.core.structured_logging import configure_logging
@@ -731,6 +732,29 @@ def create_app() -> FastAPI:
             },
             status_code=exc.status_code,
             headers=getattr(exc, "headers", None) or {},
+        )
+
+    @app.exception_handler(RedisUnavailableError)
+    async def _redis_unavailable_exception_handler(
+        request: Request, exc: RedisUnavailableError
+    ) -> JSONResponse:
+        """需要即時撤銷狀態的操作，在 Redis 故障時明確拒絕而非假裝成功。"""
+        err_id = await _record_request_error(request, exc, status_code=503, category="redis")
+        logger.error(
+            "Redis unavailable id=%s path=%s method=%s",
+            err_id,
+            request.url.path,
+            request.method,
+            exc_info=True,
+        )
+        return JSONResponse(
+            {
+                "detail": "安全性服務暫時不可用，請稍後再試",
+                "error_id": err_id,
+                "trace_id": getattr(request.state, "trace_id", None),
+            },
+            status_code=503,
+            headers={"Retry-After": "3"},
         )
 
     @app.exception_handler(RequestValidationError)
