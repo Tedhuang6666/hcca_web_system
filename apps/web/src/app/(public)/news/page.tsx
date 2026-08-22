@@ -34,11 +34,7 @@ export default async function NewsPage() {
     >
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <header className="public-page-head mb-8">
-          <p className="public-section-kicker">News</p>
-          <h1 className="mt-2 text-3xl font-bold">最新公告</h1>
-          <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
-            對外公開的班聯會公告、活動消息與重要通知。
-          </p>
+          <h1 className="text-3xl font-bold">最新公告</h1>
         </header>
         <div className="space-y-3">
           {sorted.map((item) => (

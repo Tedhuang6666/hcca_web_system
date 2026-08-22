@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicShellData } from "@/lib/serverFetch";
@@ -26,11 +24,7 @@ export default async function SystemInfoPage() {
     >
       <div className="mx-auto max-w-5xl px-4 pb-16 pt-10 sm:px-6 lg:pt-12">
         <header className="public-page-head mb-8">
-          <p className="public-section-kicker">System information</p>
-          <h1 className="mt-2 text-3xl font-bold">關於本系統</h1>
-          <p className="mt-3 max-w-2xl text-base leading-8 text-[var(--text-secondary)]">
-            使用平台前後需要知道的協助方式、回報管道與公開說明，都整理在這裡。
-          </p>
+          <h1 className="text-3xl font-bold">關於本系統</h1>
         </header>
 
         {systemInfoMarkdown ? (
@@ -43,9 +37,6 @@ export default async function SystemInfoPage() {
           </section>
         )}
 
-        <Link href="/about" className="public-text-link mt-8 inline-flex">
-          查看關於班聯會與幹部名單
-        </Link>
       </div>
     </PublicSiteShell>
   );
