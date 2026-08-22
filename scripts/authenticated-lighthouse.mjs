@@ -196,12 +196,14 @@ const targetsResponse = await requestJson(
     : "/api/internal/observability/public-targets",
 );
 let staticRoutes = [];
-try {
-  staticRoutes = await discoverStaticRoutes(appDirectory, [], !authenticated);
-} catch (error) {
-  process.stdout.write(
-    `static route discovery unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+if (!authenticated) {
+  try {
+    staticRoutes = await discoverStaticRoutes(appDirectory, [], true);
+  } catch (error) {
+    process.stdout.write(
+      `static route discovery unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
 }
 const staticTargets = staticRoutes
   .filter((route) => !performanceRedirectAliases.has(route))
