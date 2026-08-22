@@ -4707,7 +4707,7 @@ details[open] > :not(summary) {
   z-index: 1;
 }
 @media (prefers-reduced-motion: reduce) {
-  .article-arrive { animation: article-arrive-reduced 4.2s ease-out both; }
+  .article-arrive { animation: article-arrive-reduced 4.2s ease-out both !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
