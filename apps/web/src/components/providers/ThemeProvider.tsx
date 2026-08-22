@@ -39,7 +39,7 @@ function applyTheme(theme: Theme) {
 }
 
 type ThemeViewTransition = {
-  finished: Promise<void>;
+  ready: Promise<void>;
 };
 
 type DocumentWithViewTransition = Document & {
@@ -72,36 +72,29 @@ function animateThemeToggleControl(target: HTMLElement) {
   });
 }
 
-interface ThemeTransitionStyle {
-  root: HTMLElement;
-  previous: Record<string, string>;
-}
-
-function installThemeTransitionStyles(
+async function animateThemeReveal(
+  transition: ThemeViewTransition,
   x: number,
   y: number,
   radius: number,
-): ThemeTransitionStyle {
-  const root = document.documentElement;
-  const properties = {
-    "--theme-transition-x": `${x}px`,
-    "--theme-transition-y": `${y}px`,
-    "--theme-transition-radius": `${radius}px`,
-  };
-  const previous = Object.fromEntries(
-    Object.keys(properties).map((property) => [property, root.style.getPropertyValue(property)]),
-  );
-
-  for (const [property, value] of Object.entries(properties)) {
-    root.style.setProperty(property, value);
-  }
-  return { root, previous };
-}
-
-function clearThemeTransition(style: ThemeTransitionStyle) {
-  for (const [property, value] of Object.entries(style.previous)) {
-    if (value) style.root.style.setProperty(property, value);
-    else style.root.style.removeProperty(property);
+): Promise<void> {
+  try {
+    await transition.ready;
+    document.documentElement.animate(
+      {
+        clipPath: [
+          `circle(0 at ${x}px ${y}px)`,
+          `circle(${radius}px at ${x}px ${y}px)`,
+        ],
+      },
+      {
+        duration: 420,
+        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+        pseudoElement: "::view-transition-new(root)",
+      },
+    );
+  } catch {
+    // View transitions are progressive enhancement; the theme has already changed.
   }
 }
 
@@ -166,7 +159,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       Math.max(x, window.innerWidth - x),
       Math.max(y, window.innerHeight - y),
     );
-    const transitionStyle = installThemeTransitionStyles(x, y, radius);
 
     try {
       const transition = startViewTransition.call(document, () => {
@@ -175,12 +167,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           applyTheme(t);
         });
       });
-      void transition.finished.then(
-        () => clearThemeTransition(transitionStyle),
-        () => clearThemeTransition(transitionStyle),
-      );
+      void animateThemeReveal(transition, x, y, radius);
     } catch {
-      clearThemeTransition(transitionStyle);
       setThemeState(t);
       applyTheme(t);
     }
