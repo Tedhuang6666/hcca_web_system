@@ -257,18 +257,19 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         <div className="relative" ref={bellRef}>
           <button
             onClick={openBell}
-            className="topbar-icon-btn relative"
+            className="topbar-icon-btn topbar-notification-trigger relative"
             aria-label={`通知與待辦${(unreadCount + visibleTaskCount) > 0 ? `（${unreadCount} 則未讀通知、${visibleTaskCount} 件待辦）` : ""}`}
             aria-expanded={showBell}
             aria-haspopup="true">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            <svg className="topbar-bell-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
             {(unreadCount + visibleTaskCount) > 0 && (
               <span
-                className="absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-[10px] font-bold px-1"
+                key={unreadCount + visibleTaskCount}
+                className="notification-badge absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-[10px] font-bold px-1"
                 style={{ background: "var(--danger)", color: "#fff" }}
                 aria-hidden="true">
                 {(unreadCount + visibleTaskCount) > 99 ? "99+" : (unreadCount + visibleTaskCount)}
@@ -280,7 +281,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <div
               role="dialog"
               aria-label="通知預覽"
-              className="absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 animate-scale-in overflow-hidden"
+              className="motion-popover absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden"
               style={{
                 background: "var(--bg-elevated)",
                 border: "1px solid var(--border-strong)",
@@ -312,7 +313,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <Link
                         href={t.href}
                         onClick={() => setShowBell(false)}
-                        className="flex items-start gap-2 px-4 py-2.5 transition-colors"
+                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors"
                         style={{ textDecoration: "none", display: "flex" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
@@ -386,12 +387,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <Link
                         href={n.link ?? "/"}
                         onClick={() => setShowBell(false)}
-                        className="flex items-start gap-2 px-4 py-2.5 transition-colors"
+                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors"
                         style={{ textDecoration: "none", display: "flex" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                         {!n.is_read && (
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                          <span className="notification-unread-dot w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
                             style={{ background: "var(--primary)" }} aria-hidden="true" />
                         )}
                         <div className={`flex-1 min-w-0 ${n.is_read ? "pl-3" : ""}`}>
@@ -495,7 +496,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             {showMenu && (
               <div
                 role="menu"
-                className="absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-xl z-50 animate-scale-in overflow-hidden"
+                className="motion-popover absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden"
                 style={{
                   background: "var(--bg-elevated)",
                   border: "1px solid var(--border-strong)",

@@ -144,7 +144,8 @@ function MobileNavSlot({
       onClick={onClick}
       aria-pressed={selected}
       aria-label={`第 ${slotIndex + 1} 格：${item.label}，點擊設定功能或拖曳排序`}
-      className="relative flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center transition-colors"
+      className="mobile-nav-slot relative flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center transition-colors"
+      data-dragging={sortable.isDragging || undefined}
       style={{
         ...style,
         borderColor: selected ? "var(--primary)" : "var(--border)",

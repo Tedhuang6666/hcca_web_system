@@ -88,7 +88,7 @@ function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; do
   return (
     <Link
       href={href}
-      className="sidebar-nav-item"
+      className="sidebar-nav-item motion-nav-link"
       aria-current={active ? "page" : undefined}>
       <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
       <span className="flex-1 truncate">{item.label}</span>
@@ -406,7 +406,7 @@ export default function Sidebar() {
               <button
                 type="button"
                 onClick={() => window.dispatchEvent(new Event("hcca:open-command-menu"))}
-                className="sidebar-nav-item w-full text-left"
+                className="sidebar-nav-item motion-nav-link w-full text-left"
                 style={{ background: "var(--sidebar-hover)", color: "var(--sidebar-text-hover)" }}
                 aria-label="開啟所有功能">
                 <span className="flex-shrink-0"><NavIcon iconKey="modules" size={15} /></span>
@@ -449,7 +449,7 @@ export default function Sidebar() {
                       <p className="sidebar-section-label px-3 pb-1">{entry.heading}</p>
                     )}
                     {!isCollapsed && (
-                      <div id={sectionId} className="space-y-0.5">
+                      <div id={sectionId} className="sidebar-section-content space-y-0.5">
                         {entry.items.map((item) => (
                           <NavLink
                             key={item.href}
