@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import { seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import MultiCombobox from "@/components/ui/MultiCombobox";
 import { ModeTabs, useOrgOptions, usePositionOptions, useUserSearch } from "@/components/ui/targeting";
@@ -149,6 +150,7 @@ function WaveEditor({ zone, onSaved }: { zone: ZoneOut; onSaved: (z: ZoneOut) =>
 }
 
 function AssignmentsPanel({ zone }: { zone: ZoneOut }) {
+  const confirm = useConfirm();
   const [rows, setRows] = useState<SeatBookingOut[]>([]);
   const [loading, setLoading] = useState(true);
   const load = useCallback(() => {
@@ -158,7 +160,12 @@ function AssignmentsPanel({ zone }: { zone: ZoneOut }) {
   useEffect(load, [load]);
 
   const release = async (id: string) => {
-    if (!window.confirm("確定釋放此劃位？座位將回到可選狀態。")) return;
+    if (!(await confirm({
+      title: "釋放此劃位？",
+      description: "座位會回到可選狀態，並可能被其他人重新選取。",
+      confirmLabel: "釋放座位",
+      danger: true,
+    }))) return;
     try {
       await seatingApi.releaseAssignment(id);
       toast.success("已釋放");
@@ -188,6 +195,7 @@ function AssignmentsPanel({ zone }: { zone: ZoneOut }) {
 }
 
 export default function ProductSeatingPage() {
+  const confirm = useConfirm();
   const { productId } = useParams<{ productId: string }>();
   const { can } = usePermissions();
   const allowed = can("seating:manage");
@@ -240,7 +248,12 @@ export default function ProductSeatingPage() {
   };
 
   const deleteZone = async (zoneId: string) => {
-    if (!window.confirm("確定刪除此場次？")) return;
+    if (!(await confirm({
+      title: "刪除此場次？",
+      description: "場次與相關劃位設定將被移除，無法復原。",
+      confirmLabel: "刪除場次",
+      danger: true,
+    }))) return;
     try {
       await seatingApi.deleteZone(zoneId);
       if (activeZone?.id === zoneId) setActiveZone(null);

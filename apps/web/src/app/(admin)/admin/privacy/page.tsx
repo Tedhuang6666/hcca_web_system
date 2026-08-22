@@ -287,8 +287,16 @@ export default function PrivacyPage() {
                       className="btn-sm btn-primary"
                       disabled={requestBusy === item.id || item.status === "completed"}
                       onClick={() => {
-                        const msg = window.prompt("回覆給使用者的處理說明：", item.response_message ?? "");
-                        if (msg !== null) void updateRequest(item.id, "completed", msg);
+                        void (async () => {
+                          const msg = await prompt({
+                            title: "完成個資請求？",
+                            inputLabel: "回覆給使用者的處理說明",
+                            defaultValue: item.response_message ?? "",
+                            required: true,
+                            confirmLabel: "完成請求",
+                          });
+                          if (msg !== null) await updateRequest(item.id, "completed", msg);
+                        })();
                       }}>
                       完成
                     </button>
@@ -297,8 +305,17 @@ export default function PrivacyPage() {
                       className="btn-sm btn-danger-ghost"
                       disabled={requestBusy === item.id || item.status === "rejected"}
                       onClick={() => {
-                        const msg = window.prompt("請填寫駁回原因：", item.response_message ?? "");
-                        if (msg !== null) void updateRequest(item.id, "rejected", msg);
+                        void (async () => {
+                          const msg = await prompt({
+                            title: "駁回個資請求？",
+                            inputLabel: "駁回原因",
+                            defaultValue: item.response_message ?? "",
+                            required: true,
+                            confirmLabel: "駁回請求",
+                            danger: true,
+                          });
+                          if (msg !== null) await updateRequest(item.id, "rejected", msg);
+                        })();
                       }}>
                       駁回
                     </button>

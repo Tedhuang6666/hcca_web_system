@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Download, FileCheck2, RefreshCcw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { policiesApi, privacyRequestsApi, apiErrorMessage } from "@/lib/api";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
 import type {
   PolicyConsentOut,
   PrivacyRequestOut,
@@ -33,6 +34,7 @@ function fmtDate(value: string) {
 }
 
 export default function PrivacySettingsPage() {
+  const prompt = usePrompt();
   const [items, setItems] = useState<PrivacyRequestOut[]>([]);
   const [consents, setConsents] = useState<PolicyConsentOut[]>([]);
   const [requestType, setRequestType] = useState<PrivacyRequestType>("access");
@@ -85,7 +87,13 @@ export default function PrivacySettingsPage() {
   };
 
   const cancelRequest = async (id: string) => {
-    const reason = window.prompt("取消原因（可留空）：");
+    const reason = await prompt({
+      title: "取消個資請求？",
+      description: "取消後，管理端不會繼續處理這筆請求。",
+      inputLabel: "取消原因（可留空）",
+      confirmLabel: "取消請求",
+      danger: true,
+    });
     if (reason === null) return;
     try {
       const row = await privacyRequestsApi.cancelMine(id, reason);

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { usersApi, classApi, apiErrorMessage } from "@/lib/api";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import SessionManagement from "@/components/profile/SessionManagement";
 import { usePermissions } from "@/hooks/usePermissions";
 import type {
@@ -113,6 +114,7 @@ const PROFILE_EMAILS_KEY = "profile/emails";
 const PROFILE_CLASS_KEY = "profile/class";
 
 export default function ProfilePage() {
+  const confirm = useConfirm();
   const pathname = usePathname();
   const { permissions: authPermissions, isAdmin, isOwner } = usePermissions();
   const [activeTab, setActiveTab] = useState<ProfileTab>("account");
@@ -247,7 +249,12 @@ export default function ProfilePage() {
   }
 
   async function unlinkEmail(email: string) {
-    if (!window.confirm(`確定要解除 ${email} 的登入連結嗎？`)) return;
+    if (!(await confirm({
+      title: "解除登入 Email 連結？",
+      description: `${email} 將不能再用於登入此帳號。`,
+      confirmLabel: "解除連結",
+      danger: true,
+    }))) return;
     setEmailBusy(true);
     try {
       const result = await usersApi.unlinkEmail(email);
