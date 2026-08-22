@@ -8,5 +8,8 @@
   },
   "overrides": {
     "pdfjs-dist": "^6.2.108"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }
