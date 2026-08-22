@@ -94,7 +94,11 @@ export default function Combobox({
     : undefined;
 
   return (
-    <div className={`relative ${className}`}>
+    <div
+      className={`combobox relative ${className}`}
+      data-state={open ? "open" : "closed"}
+      data-disabled={disabled || undefined}
+    >
       <input
         ref={inputRef}
         type="text"
@@ -127,7 +131,7 @@ export default function Combobox({
             inputRef.current?.blur();
           }
         }}
-        className="w-full text-sm px-3 py-2 pr-8 rounded-lg outline-none disabled:opacity-50"
+        className="combobox-input w-full text-sm px-3 py-2 pr-8 rounded-lg outline-none disabled:opacity-50"
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
@@ -140,7 +144,7 @@ export default function Combobox({
           type="button"
           onMouseDown={(e) => { e.preventDefault(); clear(); }}
           aria-label="清除選擇"
-          className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm hover:opacity-70"
+          className="combobox-clear absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm"
           style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
         >
           ×
@@ -150,7 +154,7 @@ export default function Combobox({
         <ul
             id={listboxId}
           role="listbox"
-          className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl shadow-lg overflow-y-auto"
+          className="combobox-menu absolute z-30 left-0 right-0 top-full mt-1 rounded-xl shadow-lg overflow-y-auto"
           style={{
             background: "var(--bg-elevated)",
             border: "1px solid var(--border)",
@@ -170,7 +174,7 @@ export default function Combobox({
                   type="button"
                   onMouseEnter={() => setActiveIndex(idx)}
                   onMouseDown={(e) => { e.preventDefault(); commit(opt); }}
-                  className="w-full text-left px-3 py-2 transition-colors"
+                  className={`combobox-option w-full text-left px-3 py-2 transition-colors ${isActive ? "is-active" : ""} ${value === opt.value ? "is-selected" : ""}`}
                   style={{
                     background: isActive ? "var(--primary-dim)" : "transparent",
                     color: value === opt.value ? "var(--primary)" : "var(--text-primary)",
@@ -195,7 +199,7 @@ export default function Combobox({
       )}
       {open && filtered.length === 0 && (
         <div
-          className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl px-3 py-2 text-xs text-center"
+          className="combobox-empty absolute z-30 left-0 right-0 top-full mt-1 rounded-xl px-3 py-2 text-xs text-center"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
         >
           無相符選項

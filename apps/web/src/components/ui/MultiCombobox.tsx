@@ -74,13 +74,13 @@ export default function MultiCombobox({
   };
 
   return (
-    <div className="relative">
+    <div className="multi-combobox relative" data-state={open ? "open" : "closed"}>
       {selected.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5">
           {selected.map((s) => (
             <span
               key={s.value}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs"
+              className="multi-combobox-chip inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs"
               style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
             >
               {s.label}
@@ -92,7 +92,7 @@ export default function MultiCombobox({
                   e.preventDefault();
                   remove(s.value);
                 }}
-                className="flex h-11 w-11 items-center justify-center text-base leading-none hover:opacity-60"
+                className="multi-combobox-chip-remove flex h-11 w-11 items-center justify-center text-base leading-none"
               >
                 ×
               </button>
@@ -137,7 +137,7 @@ export default function MultiCombobox({
             inputRef.current?.blur();
           }
         }}
-        className="w-full rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50"
+        className="multi-combobox-input w-full rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50"
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
@@ -149,7 +149,7 @@ export default function MultiCombobox({
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute left-0 right-0 top-full z-30 mt-1 overflow-y-auto rounded-xl shadow-lg"
+          className="multi-combobox-menu absolute left-0 right-0 top-full z-30 mt-1 overflow-y-auto rounded-xl shadow-lg"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", maxHeight }}
         >
           {candidates.map((opt, idx) => (
@@ -166,7 +166,7 @@ export default function MultiCombobox({
                   e.preventDefault();
                   add(opt);
                 }}
-                className="w-full px-3 py-2 text-left transition-colors"
+                className={`multi-combobox-option w-full px-3 py-2 text-left transition-colors ${idx === activeIndex ? "is-active" : ""}`}
                 style={{
                   background: idx === activeIndex ? "var(--primary-dim)" : "transparent",
                   color: "var(--text-primary)",
@@ -186,7 +186,7 @@ export default function MultiCombobox({
       )}
       {open && keyword.trim() && candidates.length === 0 && (
         <div
-          className="absolute left-0 right-0 top-full z-30 mt-1 rounded-xl px-3 py-2 text-center text-xs"
+          className="multi-combobox-empty absolute left-0 right-0 top-full z-30 mt-1 rounded-xl px-3 py-2 text-center text-xs"
           style={{
             background: "var(--bg-elevated)",
             border: "1px solid var(--border)",

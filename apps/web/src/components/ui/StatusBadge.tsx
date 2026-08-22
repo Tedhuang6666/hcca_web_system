@@ -6,7 +6,7 @@ interface BadgeDef { label: string; color: string; bg: string; border: string }
 function StatusDot({ color }: { color: string }) {
   return (
     <span
-      className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+      className="status-badge-dot inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
       style={{ background: color }}
       aria-hidden="true"
     />
@@ -16,7 +16,7 @@ function StatusDot({ color }: { color: string }) {
 function Badge({ label, color, bg, border }: BadgeDef) {
   return (
     <span
-      className="badge"
+      className="badge status-badge"
       style={{ color, background: bg, borderColor: border }}>
       <StatusDot color={color} />
       {label}
@@ -218,7 +218,7 @@ export function RegulationCategoryBadge({ category }: { category: string }) {
   const { label, color } = REG_CATEGORY_MAP[category] ?? { label: category, color: "#64748B" };
   return (
     <span
-      className="badge"
+      className="badge regulation-category-badge"
       style={{
         color: "var(--text-primary)",
         background: `${color}18`,

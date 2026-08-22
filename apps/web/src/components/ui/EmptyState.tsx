@@ -14,21 +14,29 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="py-20 text-center flex flex-col items-center gap-3">
+    <div className="empty-state py-20 text-center flex flex-col items-center gap-3">
       {icon && (
-        <div className="opacity-40" style={{ color: "var(--text-muted)" }}>
+        <div className="empty-state-icon" style={{ color: "var(--text-muted)" }} aria-hidden="true">
           {icon}
         </div>
       )}
-      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{title}</p>
+      <p className="empty-state-title text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+        {title}
+      </p>
       {description && (
-        <p className="text-xs max-w-xs" style={{ color: "var(--text-muted)" }}>{description}</p>
+        <p className="empty-state-description text-xs max-w-xs" style={{ color: "var(--text-muted)" }}>
+          {description}
+        </p>
       )}
       {action && (
         action.href ? (
-          <Link href={action.href} className="btn btn-primary mt-1">{action.label}</Link>
+          <Link href={action.href} className="empty-state-action btn btn-primary mt-1">
+            {action.label}
+          </Link>
         ) : (
-          <button onClick={action.onClick} className="btn btn-primary mt-1">{action.label}</button>
+          <button type="button" onClick={action.onClick} className="empty-state-action btn btn-primary mt-1">
+            {action.label}
+          </button>
         )
       )}
     </div>
