@@ -178,7 +178,7 @@ export default function PublicDocumentView({ document }: { document: DocumentOut
   const isDecree = document.category === "decree";
 
   return (
-    <div className="app-page-width space-y-5" aria-labelledby="public-document-title">
+    <div className="document-detail-page app-page-width space-y-5" aria-labelledby="public-document-title">
       <nav aria-label="目前位置" className="text-xs" style={{ color: "var(--text-muted)" }}>
         <Link href="/documents" className="hover:underline">公文</Link>
         <span className="mx-2" aria-hidden="true">/</span>
