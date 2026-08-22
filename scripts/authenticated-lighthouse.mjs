@@ -121,6 +121,8 @@ async function isHtmlPage(url, cookieHeader) {
 
 const appDirectory = fileURLToPath(new URL("../apps/web/src/app/", import.meta.url));
 const pageFilePattern = /^page\.(?:tsx?|jsx?|mjs)$/u;
+// These legacy paths permanently redirect to canonical routes that are already monitored.
+const performanceRedirectAliases = new Set(["/public/documents", "/public/regulations"]);
 
 async function discoverStaticRoutes(directory = appDirectory, segments = [], publicOnly = false) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -201,9 +203,14 @@ try {
     `static route discovery unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
   );
 }
-const staticTargets = staticRoutes.map((route) => `${baseUrl}${route}`);
+const staticTargets = staticRoutes
+  .filter((route) => !performanceRedirectAliases.has(route))
+  .map((route) => `${baseUrl}${route}`);
+const reportedTargets = (targetsResponse.urls || [])
+  .map((value) => String(value))
+  .filter((target) => !performanceRedirectAliases.has(new URL(target, baseUrl).pathname));
 const allTargets = [
-  ...new Set([...staticTargets, ...(targetsResponse.urls || []).map((value) => String(value))]),
+  ...new Set([...staticTargets, ...reportedTargets]),
 ].sort();
 const explicitTargetOffset = Math.max(0, Number.parseInt(process.env.TARGET_OFFSET || "0", 10) || 0);
 const explicitTargetLimit = Math.max(0, Number.parseInt(process.env.TARGET_LIMIT || "0", 10) || 0);
