@@ -435,11 +435,20 @@ export default async function proxy(req: NextRequest) {
     }
   }
 
-  // nonce 會隨每個 request 改變；不能讓 CDN、瀏覽器或 304 重用舊 HTML。
+  // nonce 會隨每個 request 改變；不可讓 CDN 或一般 HTTP cache 重用 HTML。匿名的
+  // indexable 公開頁改用 no-cache：每次一般導覽仍會重新驗證，但瀏覽器可安全保留
+  // 同一份文件供上一頁／下一頁的 bfcache 還原，避免把返回導覽變成完整重載。
   const response = withCsp(req);
+  const isAnonymousPublicPage =
+    isIndexablePublicPath(pathname)
+    && !req.headers.get("cookie")
+    && !req.headers.get("authorization");
   response.headers.set(
     "Cache-Control",
-    assetCacheControl ?? "private, no-store",
+    assetCacheControl
+      ?? (isAnonymousPublicPage
+        ? "private, no-cache, max-age=0, must-revalidate"
+        : "private, no-store"),
   );
   const isSearchMetadataRoute = pathname === "/robots.txt" || pathname === "/sitemap.xml";
   if (!isSearchMetadataRoute && !isIndexablePublicPath(pathname)) {

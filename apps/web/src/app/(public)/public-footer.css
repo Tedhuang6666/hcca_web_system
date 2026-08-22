@@ -14,6 +14,7 @@
 
 .public-footer-brand-link {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
   gap: 0.7rem;
   color: var(--public-text);
@@ -59,6 +60,10 @@
 }
 
 .public-footer-links a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding-inline: 0.25rem;
   color: var(--public-secondary);
   text-decoration: none;
 }

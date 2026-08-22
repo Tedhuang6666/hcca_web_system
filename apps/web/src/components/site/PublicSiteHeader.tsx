@@ -318,7 +318,6 @@ function PublicSiteHeaderContent({
         </nav>
         <div className="public-header-actions">
           <button
-            ref={menuButtonRef}
             type="button"
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
@@ -338,6 +337,7 @@ function PublicSiteHeaderContent({
             {systemLabel}
           </Link>
           <button
+            ref={menuButtonRef}
             type="button"
             className="public-menu-button"
             onClick={() => {

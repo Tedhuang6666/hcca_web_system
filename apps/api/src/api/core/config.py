@@ -274,7 +274,8 @@ class Settings(BaseSettings):
     JWT_SIGNING_KEY: str = ""
     JWT_PREVIOUS_SIGNING_KEYS: Annotated[list[str], NoDecode] = Field(default_factory=list)
     JWT_SESSION_HASH_KEY: str = ""
-    AUTH_LEGACY_TOKEN_COMPAT_ENABLED: bool = True
+    # 無 kid 的舊 JWT 僅能在受控遷移期間於非正式環境暫時開啟；正式環境一律拒絕。
+    AUTH_LEGACY_TOKEN_COMPAT_ENABLED: bool = False
     OAUTH_SESSION_SECRET: str = ""
     OAUTH_SESSION_MAX_AGE_SECONDS: int = Field(default=600, ge=60, le=3600)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
@@ -678,6 +679,8 @@ class Settings(BaseSettings):
             raise ValueError("生產環境不可啟用 DEBUG")
         if is_prod and self.ENABLE_API_DOCS:
             raise ValueError("生產環境不可公開 API 文件；請關閉 ENABLE_API_DOCS")
+        if is_prod and self.AUTH_LEGACY_TOKEN_COMPAT_ENABLED:
+            raise ValueError("生產環境不可啟用 AUTH_LEGACY_TOKEN_COMPAT_ENABLED")
         if is_prod and self.SUPERUSER_EMAILS:
             raise ValueError("生產環境不可使用 SUPERUSER_EMAILS 自動繞過 RBAC")
         if is_prod and not self.COOKIE_SECURE:

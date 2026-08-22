@@ -7,6 +7,7 @@ const webRoot = resolve(__dirname);
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  poweredByHeader: false,
   output: "standalone",
   outputFileTracingRoot: webRoot,
   allowedDevOrigins: [
