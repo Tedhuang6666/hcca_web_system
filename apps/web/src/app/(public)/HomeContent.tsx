@@ -4,8 +4,8 @@ import {
   BellRing,
   Database,
   ExternalLink,
-  Landmark,
   Megaphone,
+  MessageCircle,
   UsersRound,
 } from "lucide-react";
 
@@ -23,7 +23,9 @@ export default function HomeContent({
   urgentAnnouncement: AnnouncementOut | null;
 }) {
   const settings = bundle?.settings;
-  const links = bundle?.links.slice(0, 4) ?? [];
+  const links = bundle?.links
+    .filter((link) => !(link.title.trim().toLocaleLowerCase() === "aaa" && link.url.trim() === "test"))
+    .slice(0, 4) ?? [];
   const officers = bundle?.featured_officers ?? [];
   const latestAnnouncements = announcements
     .filter((item) => item.id !== urgentAnnouncement?.id)
@@ -105,23 +107,22 @@ export default function HomeContent({
       <section className="public-home-entry-section" aria-labelledby="public-entry-title">
         <div className="public-home-entry-heading">
           <div>
-            <p className="public-home-section-label">快速進入</p>
-            <h2 id="public-entry-title">從這裡開始了解班聯會</h2>
+            <h2 id="public-entry-title">你現在想做什麼？</h2>
           </div>
-          <p>公開消息、組織資訊與治理資料，集中在幾個清楚的入口。</p>
+          <p>先完成眼前的校園事務；完整服務仍可從導覽中找到。</p>
         </div>
         <nav className="public-quick-grid public-home-quick-grid" aria-label="公開網站主要入口">
           {[
-            { href: "/news", title: "最新公告", desc: "班聯會公開消息", icon: Megaphone },
-            { href: "/officers", title: "幹部名單", desc: "本屆幹部與職務", icon: UsersRound },
+            { href: "/news", title: "查看校園公告", desc: "掌握班聯會公開消息", icon: Megaphone },
             {
               href: "/public",
-              title: "公開資料庫",
-              desc: publicDatabaseDescription || "法規、公文與治理資料",
+              title: "查詢公開資料",
+              desc: publicDatabaseDescription || "法規、公文與治理紀錄",
               icon: Database,
             },
-            { href: "/about", title: "關於班聯會", desc: "任務、組織與沿革", icon: Landmark },
-          ].map((item, index) => {
+            { href: "/surveys", title: "參與校園調查", desc: "填寫正在開放的問卷", icon: UsersRound },
+            { href: "/petitions/new", title: "提出校園意見", desc: "讓你的問題進入正式回覆流程", icon: MessageCircle },
+          ].map((item) => {
             const Icon = item.icon;
             return (
               <Link
@@ -129,7 +130,6 @@ export default function HomeContent({
                 href={item.href}
                 className="public-feature-card public-home-feature-card"
               >
-                <span className="public-home-feature-index">0{index + 1}</span>
                 <span className="public-feature-icon"><Icon size={20} aria-hidden /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-base font-semibold">{item.title}</span>

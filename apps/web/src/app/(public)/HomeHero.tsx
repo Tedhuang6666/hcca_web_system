@@ -15,7 +15,10 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
   const heroSubtitle = settings?.hero_subtitle?.trim()
     || (!settings ? "公開資料暫時無法取得；您仍可瀏覽最新公告與班聯會公開服務。" : "");
   const ctaHref = settings?.cta_href?.trim() || "/links";
-  const ctaLabel = settings?.cta_label?.trim() || "查看連結";
+  const configuredCtaLabel = settings?.cta_label?.trim();
+  const ctaLabel = configuredCtaLabel && !["查看連結", "查看平台連結"].includes(configuredCtaLabel)
+    ? configuredCtaLabel
+    : "查看學生服務";
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const emblemAlt = settings?.site_logo_alt?.trim() || (siteTitle ? `${siteTitle}會徽` : "網站會徽");
 
@@ -30,16 +33,6 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
             <h1>{heroTitle}</h1>
             {heroSubtitle && <p className="public-hero-subtitle">{heroSubtitle}</p>}
           </div>
-          <div className="public-signboard public-identity-panel" aria-label={`${siteTitle}識別標誌`}>
-            <div className="public-signboard-emblem">
-              <PublicEmblem
-                src={publicEmblemUrl}
-                alt={emblemAlt}
-                sizes="(max-width: 767px) 240px, 322px"
-                priority
-              />
-            </div>
-          </div>
           <div className="public-hero-actions">
             <Link href={ctaHref} className="public-cta-primary">
               {ctaLabel}
@@ -48,6 +41,16 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
             <Link href="/news" className="public-cta-secondary">
               最新公告
             </Link>
+          </div>
+          <div className="public-signboard public-identity-panel" aria-label={`${siteTitle}識別標誌`}>
+            <div className="public-signboard-emblem">
+              <PublicEmblem
+                src={publicEmblemUrl}
+                alt={emblemAlt}
+                sizes="(max-width: 767px) 128px, 322px"
+                priority
+              />
+            </div>
           </div>
         </div>
       </section>

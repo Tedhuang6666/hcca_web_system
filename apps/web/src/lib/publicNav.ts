@@ -7,7 +7,7 @@
  */
 import type { ModuleId } from "./modules";
 
-/** primary 顯示在頂列；其餘三組收進「所有公開服務」選單。每個項目只屬於一組，從結構上杜絕重複。 */
+/** 每個項目只屬於一組；公開站以高頻任務作頂列，完整清單收進「所有公開服務」。 */
 export type PublicNavGroupId = "primary" | "info" | "data" | "participation";
 
 export interface PublicNavItemDef {

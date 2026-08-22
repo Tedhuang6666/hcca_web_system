@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, LogIn, Menu, Moon, Sun, X } from "lucide-react";
+import { ChevronDown, LogIn, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
@@ -21,7 +21,7 @@ import {
 } from "@/lib/publicNav";
 import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 
-const MENU_GROUP_ORDER: PublicNavGroupId[] = ["info", "data", "participation"];
+const MENU_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
 const DeferredLiveElectionBanner = lazy(() => import("@/components/site/LiveElectionBanner"));
 
 type PublicHeaderSettings = Pick<
@@ -29,6 +29,10 @@ type PublicHeaderSettings = Pick<
   "site_logo_url" | "site_logo_alt" | "theme_config"
 >;
 type PublicHeaderNavPage = Pick<PublicSitePageOut, "id" | "slug" | "title" | "nav_label">;
+
+function isCurrentPath(pathname: string, href: string): boolean {
+  return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
 
 function PublicSiteHeaderContent({
   navPages,
@@ -42,11 +46,14 @@ function PublicSiteHeaderContent({
   const [open, setOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [liveBannerReady, setLiveBannerReady] = useState(false);
+  const [serviceQuery, setServiceQuery] = useState("");
   const { theme, toggleTheme } = useTheme();
   const { statuses } = usePublicModuleStatus();
   const pathname = usePathname();
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const menuRef = useRef<HTMLDetailsElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileNavRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const moduleStatusReady = Object.keys(statuses).length > 0;
   const closedModuleIds = new Set(
@@ -57,6 +64,7 @@ function PublicSiteHeaderContent({
 
   useEffect(() => {
     setOpen(false);
+    setServiceQuery("");
     if (menuRef.current) menuRef.current.open = false;
   }, [pathname]);
 
@@ -70,6 +78,53 @@ function PublicSiteHeaderContent({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
+    const focusFirstMenuControl = () => {
+      mobileNavRef.current
+        ?.querySelector<HTMLElement>("a[href], button:not([disabled]), input:not([disabled]), summary")
+        ?.focus();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        menuButtonRef.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = [...(mobileNavRef.current?.querySelectorAll<HTMLElement>(
+        "a[href], button:not([disabled]), input:not([disabled]), summary",
+      ) ?? [])];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "contain";
+    const frame = window.requestAnimationFrame(focusFirstMenuControl);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   const resolvedGroups = groupResolvedNav(
     resolvePublicNav(settings?.theme_config as Record<string, unknown> | undefined),
@@ -88,24 +143,38 @@ function PublicSiteHeaderContent({
       (item) => !moduleStatusReady || !item.moduleId || !closedModuleIds.has(item.moduleId),
     ),
   };
-  const topLevel = [
-    { key: "__home", href: "/", label: "首頁", guestUsable: false },
-    ...groups.primary.map((item) => ({
-      key: item.key,
-      href: item.href,
-      label: item.label,
-      guestUsable: item.guestUsable === true,
-    })),
-    ...navPages.map((page) => ({
-      key: `page-${page.slug}`,
-      href: `/pages/${page.slug}`,
-      label: page.nav_label || page.title,
-      guestUsable: true,
-    })),
-  ];
+  const itemByKey = new Map(Object.values(groups).flat().map((item) => [item.key, item]));
+  const taskNav = [
+    ["news", "最新公告"],
+    ["public-db", "找公開資料"],
+    ["surveys", "參與校園"],
+    ["contact", "聯絡班聯會"],
+  ].flatMap(([key, label]) => {
+    const item = itemByKey.get(key);
+    return item ? [{ ...item, label }] : [];
+  });
+  const taskNavKeys = new Set(taskNav.map((item) => item.key));
   const menuGroups = MENU_GROUP_ORDER
-    .map((id) => ({ id, meta: PUBLIC_NAV_GROUP_META[id], items: groups[id] }))
+    .map((id) => ({
+      id,
+      meta: PUBLIC_NAV_GROUP_META[id],
+      items: groups[id].filter((item) => !taskNavKeys.has(item.key)),
+    }))
     .filter((group) => group.items.length > 0);
+  const normalizedQuery = serviceQuery.trim().toLocaleLowerCase();
+  const matchesServiceQuery = (item: { label: string; description?: string }) => {
+    if (!normalizedQuery) return true;
+    return `${item.label} ${item.description ?? ""}`.toLocaleLowerCase().includes(normalizedQuery);
+  };
+  const filteredMenuGroups = menuGroups
+    .map((group) => ({ ...group, items: group.items.filter(matchesServiceQuery) }))
+    .filter((group) => group.items.length > 0);
+  const filteredNavPages = navPages.filter((page) => matchesServiceQuery({
+    label: page.nav_label || page.title,
+    description: page.title,
+  }));
+  const serviceResultCount = filteredMenuGroups.reduce((count, group) => count + group.items.length, 0)
+    + filteredNavPages.length;
   const systemHref = isLoggedIn ? "/dashboard" : "/login?next=%2Fdashboard";
   const systemLabel = isLoggedIn ? "管理系統" : "登入管理";
 
@@ -153,8 +222,13 @@ function PublicSiteHeaderContent({
           </span>
         </Link>
         <nav className="public-desktop-nav" aria-label="公開網站導覽">
-          {topLevel.map((item) => (
-            <Link key={item.key} href={item.href} className="public-nav-link">
+          {taskNav.map((item) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              className="public-nav-link"
+              aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
+            >
               {item.label}
               {item.guestUsable && <span className="public-nav-badge">免登入</span>}
             </Link>
@@ -172,7 +246,18 @@ function PublicSiteHeaderContent({
                 <ChevronDown size={15} aria-hidden />
               </summary>
               <div className="public-nav-dropdown-panel">
-                {menuGroups.map((group) => (
+                <label className="public-nav-service-search">
+                  <Search size={16} aria-hidden />
+                  <span className="sr-only">搜尋公開服務</span>
+                  <input
+                    type="search"
+                    value={serviceQuery}
+                    onChange={(event) => setServiceQuery(event.target.value)}
+                    placeholder="搜尋公開服務，例如：公文、問卷、優惠"
+                  />
+                  {normalizedQuery && <span aria-live="polite">{serviceResultCount} 項結果</span>}
+                </label>
+                {filteredMenuGroups.map((group) => (
                   <section key={group.id}>
                     <p className="public-nav-dropdown-label">
                       <span>{group.meta.label}</span>
@@ -182,7 +267,12 @@ function PublicSiteHeaderContent({
                     </p>
                     <div className="grid gap-0.5">
                       {group.items.map((item) => (
-                        <Link key={item.key} href={item.href} className="public-nav-dropdown-link">
+                        <Link
+                          key={item.key}
+                          href={item.href}
+                          className="public-nav-dropdown-link"
+                          aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
+                        >
                           <span className="public-nav-dropdown-icon" aria-hidden="true">
                             <PublicNavIcon iconKey={item.iconKey} size={18} />
                           </span>
@@ -202,12 +292,33 @@ function PublicSiteHeaderContent({
                     </div>
                   </section>
                 ))}
+                {filteredNavPages.length > 0 && (
+                  <section>
+                    <p className="public-nav-dropdown-label">其他公開頁面</p>
+                    <div className="grid gap-0.5">
+                      {filteredNavPages.map((page) => (
+                        <Link
+                          key={page.id}
+                          href={`/pages/${page.slug}`}
+                          className="public-nav-dropdown-link"
+                          aria-current={isCurrentPath(pathname, `/pages/${page.slug}`) ? "page" : undefined}
+                        >
+                          <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {normalizedQuery && serviceResultCount === 0 && (
+                  <p className="public-nav-empty">找不到相符服務；請改用其他關鍵字。</p>
+                )}
               </div>
             </details>
           )}
         </nav>
         <div className="public-header-actions">
           <button
+            ref={menuButtonRef}
             type="button"
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
@@ -249,36 +360,52 @@ function PublicSiteHeaderContent({
             aria-label="關閉導覽"
             onClick={() => setOpen(false)}
           />
-          <nav id="public-mobile-nav" className="public-mobile-nav" aria-label="公開網站行動導覽">
+          <nav
+            id="public-mobile-nav"
+            ref={mobileNavRef}
+            className="public-mobile-nav"
+            aria-label="公開網站行動導覽"
+          >
+            <p className="public-mobile-nav-heading">你想先做什麼？</p>
             <div className="grid gap-2">
-              {topLevel.map((item) => (
+              {taskNav.map((item) => (
                 <Link
                   key={item.key}
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className="public-mobile-link"
+                  aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
                 >
                   {item.label}
                   {item.guestUsable && <span className="public-nav-badge">免登入</span>}
                 </Link>
               ))}
             </div>
-            <div className="mt-4 grid gap-4">
-              {menuGroups.map((group) => (
-                <section key={group.id}>
-                  <p className="public-mobile-group-label">
+            <label className="public-mobile-service-search">
+              <Search size={16} aria-hidden />
+              <span className="sr-only">搜尋所有公開服務</span>
+              <input
+                type="search"
+                value={serviceQuery}
+                onChange={(event) => setServiceQuery(event.target.value)}
+                placeholder="搜尋所有公開服務"
+              />
+            </label>
+            <div className="mt-4 grid gap-3">
+              {filteredMenuGroups.map((group) => (
+                <details key={group.id} className="public-mobile-service-group" open={Boolean(normalizedQuery)}>
+                  <summary className="public-mobile-group-label">
                     <span>{group.meta.label}</span>
-                    {group.meta.hint && (
-                      <span className="public-nav-dropdown-hint">{group.meta.hint}</span>
-                    )}
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                    <ChevronDown size={16} aria-hidden />
+                  </summary>
+                  <div className="grid gap-2 pt-2 sm:grid-cols-2">
                     {group.items.map((item) => (
                       <Link
                         key={item.key}
                         href={item.href}
                         onClick={() => setOpen(false)}
                         className="public-mobile-service-link"
+                        aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
                       >
                         <span className="public-nav-dropdown-icon" aria-hidden="true">
                           <PublicNavIcon iconKey={item.iconKey} size={18} />
@@ -294,8 +421,32 @@ function PublicSiteHeaderContent({
                       </Link>
                     ))}
                   </div>
-                </section>
+                </details>
               ))}
+              {filteredNavPages.length > 0 && (
+                <details className="public-mobile-service-group" open={Boolean(normalizedQuery)}>
+                  <summary className="public-mobile-group-label">
+                    <span>其他公開頁面</span>
+                    <ChevronDown size={16} aria-hidden />
+                  </summary>
+                  <div className="grid gap-2 pt-2 sm:grid-cols-2">
+                    {filteredNavPages.map((page) => (
+                      <Link
+                        key={page.id}
+                        href={`/pages/${page.slug}`}
+                        onClick={() => setOpen(false)}
+                        className="public-mobile-service-link"
+                        aria-current={isCurrentPath(pathname, `/pages/${page.slug}`) ? "page" : undefined}
+                      >
+                        <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </details>
+              )}
+              {normalizedQuery && serviceResultCount === 0 && (
+                <p className="public-nav-empty" aria-live="polite">找不到相符服務；請改用其他關鍵字。</p>
+              )}
               <Link href={systemHref} className="public-system-button">
                 <LogIn size={15} aria-hidden />
                 {systemLabel}
