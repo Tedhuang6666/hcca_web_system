@@ -100,6 +100,11 @@ def _create_token(data: dict, expire_delta: timedelta) -> str:
     )
 
 
+def create_signed_token(data: dict, expire_delta: timedelta) -> str:
+    """建立帶有目前 JWT metadata 與簽章設定的自訂期限 token。"""
+    return _create_token(data, expire_delta)
+
+
 def create_access_token(
     subject: str,
     extra_claims: dict | None = None,
