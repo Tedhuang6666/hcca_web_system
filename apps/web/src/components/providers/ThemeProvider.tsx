@@ -7,6 +7,7 @@ export type Theme = "light" | "dark";
 export interface ThemeTransitionOrigin {
   x: number;
   y: number;
+  target?: HTMLElement;
 }
 
 export interface A11ySettings {
@@ -47,6 +48,28 @@ type DocumentWithViewTransition = Document & {
 
 function shouldReduceThemeMotion(a11yMotion: boolean) {
   return a11yMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function hasReliableThemeTransitionOrigin() {
+  // iOS/iPadOS WebKit can offset the snapshot when browser chrome moves or the page scrolls.
+  const isTouchWebKit = navigator.maxTouchPoints > 0
+    && CSS.supports("-webkit-touch-callout", "none");
+  return !isTouchWebKit;
+}
+
+function animateThemeToggleControl(target: HTMLElement) {
+  window.requestAnimationFrame(() => {
+    const icon = target.querySelector("svg");
+    if (!icon) return;
+
+    icon.animate(
+      [
+        { opacity: 0.45, transform: "scale(0.72) rotate(-12deg)" },
+        { opacity: 1, transform: "scale(1) rotate(0deg)" },
+      ],
+      { duration: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+    );
+  });
 }
 
 interface ThemeTransitionStyle {
@@ -127,10 +150,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setTheme = useCallback((t: Theme, origin?: ThemeTransitionOrigin) => {
     const startViewTransition = (document as DocumentWithViewTransition).startViewTransition;
+    const shouldReduceMotion = shouldReduceThemeMotion(a11y.motion);
+    const canRevealFromOrigin = hasReliableThemeTransitionOrigin();
 
-    if (!origin || !startViewTransition || shouldReduceThemeMotion(a11y.motion)) {
+    if (!origin || !startViewTransition || shouldReduceMotion || !canRevealFromOrigin) {
       setThemeState(t);
       applyTheme(t);
+      if (origin?.target && !shouldReduceMotion) animateThemeToggleControl(origin.target);
       return;
     }
 
