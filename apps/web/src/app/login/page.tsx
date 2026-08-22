@@ -118,8 +118,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
           className="relative flex min-h-screen items-center justify-center px-5 py-24 sm:px-10 lg:py-16"
           style={{ background: "var(--bg-base)" }}
         >
-          <main className="relative z-10 w-full max-w-md">
-            <div className="mb-12 flex items-center gap-3 lg:hidden">
+          <main className="relative z-10 w-full max-w-md text-center">
+            <div className="mb-12 flex items-center justify-center gap-3 text-center lg:hidden">
               <BrandEmblem size={44} priority />
               <div>
                 <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -145,7 +145,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
 
             {error && (
               <div
-                className="mb-5 flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm"
+                className="mb-5 flex items-start gap-2.5 rounded-xl px-4 py-3 text-left text-sm"
                 style={{
                   background: "var(--danger-dim)",
                   border: "1px solid var(--danger-border)",
