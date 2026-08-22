@@ -35,4 +35,65 @@ describe("FormShell", () => {
       block: "center",
     });
   });
+
+  it("marks the shell while the visual viewport is covered by the keyboard", () => {
+    let resizeHandler: (() => void) | undefined;
+    const addEventListener = vi.fn((_type: string, listener: EventListener) => {
+      resizeHandler = listener as unknown as () => void;
+    });
+    const removeEventListener = vi.fn();
+    const fakeVisualViewport = {
+      height: 600,
+      addEventListener,
+      removeEventListener,
+    };
+    const visualViewport = fakeVisualViewport as unknown as VisualViewport;
+    const previousViewport = window.visualViewport;
+    const previousInnerHeight = window.innerHeight;
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: visualViewport });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 1_000 });
+
+    try {
+      const { container, unmount } = render(
+        <FormShell hideFooterOnKeyboard footer={<button type="submit">儲存</button>}>
+          <input aria-label="內容" />
+        </FormShell>,
+      );
+      const shell = container.firstElementChild as HTMLElement;
+
+      expect(addEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
+      resizeHandler?.();
+      expect(shell.dataset.keyboardOpen).toBe("true");
+
+      fakeVisualViewport.height = 800;
+      resizeHandler?.();
+      expect(shell.dataset.keyboardOpen).toBe("false");
+
+      unmount();
+      expect(removeEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
+    } finally {
+      Object.defineProperty(window, "visualViewport", {
+        configurable: true,
+        value: previousViewport,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: previousInnerHeight,
+      });
+    }
+  });
+
+  it("ignores focus events from non-form elements", () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    render(
+      <FormShell>
+        <div tabIndex={0}>說明</div>
+      </FormShell>,
+    );
+
+    fireEvent.focusIn(screen.getByText("說明"));
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
 });

@@ -81,4 +81,24 @@ describe("usePermissions", () => {
       });
     }
   });
+
+  it("supports the global permission and audit compatibility aliases", () => {
+    sessionStorage.setItem("permissions", JSON.stringify(["admin:all"]));
+
+    const { result } = renderPermissions();
+
+    expect(result.current.can("anything:at-all")).toBe(true);
+    expect(result.current.canAny("anything:at-all")).toBe(true);
+
+    sessionStorage.setItem("permissions", JSON.stringify(["audit:view_all"]));
+    act(() => window.dispatchEvent(new Event(AUTH_CACHE_EVENT)));
+    expect(result.current.can("audit:view_org")).toBe(true);
+    expect(result.current.canAny("audit:view_org")).toBe(true);
+  });
+
+  it("returns false when no requested permission matches", () => {
+    const { result } = renderPermissions();
+
+    expect(result.current.canAny("shop:manage", "finance:view")).toBe(false);
+  });
 });
