@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from typing import Annotated
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -84,6 +84,23 @@ _DISCORD_IMAGE_SERIALIZER = URLSafeTimedSerializer(
 
 def _upload_preview_url(storage_key: str) -> str:
     return f"/merchandise-submissions/uploads/{storage_key}"
+
+
+def _presigned_storage_redirect(url: str) -> RedirectResponse:
+    """只重導向至目前 S3 bucket 所產生的 HTTPS 預簽網址。"""
+    parsed = urlsplit(url)
+    region = settings.S3_REGION
+    bucket = settings.S3_BUCKET
+    allowed_hosts = {
+        f"{bucket}.s3.{region}.amazonaws.com",
+        f"s3.{region}.amazonaws.com",
+    }
+    if region == "us-east-1":
+        allowed_hosts.update({f"{bucket}.s3.amazonaws.com", "s3.amazonaws.com"})
+    if parsed.scheme != "https" or parsed.hostname not in allowed_hosts:
+        logger.error("Rejected untrusted presigned storage URL host=%s", parsed.hostname)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="無效的檔案儲存網址")
+    return RedirectResponse(url)
 
 
 def _discord_image_url(file) -> str:
@@ -317,7 +334,7 @@ async def preview_submission_file(storage_key: str, session: DbDep, current_user
             filename=filename,
             content_disposition_type="inline",
         )
-    return RedirectResponse(
+    return _presigned_storage_redirect(
         await storage.get_url(storage_key, disposition="inline", download_name=filename)
     )
 
@@ -346,7 +363,7 @@ async def preview_submission_image_for_discord(file_id: uuid.UUID, token: str, s
             filename=stored_file.filename,
             content_disposition_type="inline",
         )
-    return RedirectResponse(
+    return _presigned_storage_redirect(
         await storage.get_url(
             stored_file.storage_key,
             disposition="inline",
