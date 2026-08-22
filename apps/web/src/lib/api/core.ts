@@ -148,7 +148,7 @@ export async function request<T>(
           kind: payload.maintenance ? "maintenance" : "busy",
         });
         if (payload.until) params.set("until", String(payload.until));
-        if (!isProtectionRecoveryPath(window.location.pathname)) window.location.assign(`/maintenance?${params}`);
+        if (!isProtectionRecoveryPath(window.location.pathname)) window.location.replace(`/maintenance?${params}`);
       }
     } catch {
       // 非 JSON 維護回應直接沿用一般錯誤呈現。

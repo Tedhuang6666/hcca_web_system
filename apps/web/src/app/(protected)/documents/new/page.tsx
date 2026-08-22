@@ -529,6 +529,7 @@ export default function NewDocumentPage() {
     sourceDocumentDate,
     sourceDocumentNumber,
     retentionPeriod,
+    summary,
     subject,
     title,
     urgency,
