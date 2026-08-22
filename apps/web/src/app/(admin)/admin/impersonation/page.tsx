@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 
 import { UserPicker } from "@/components/meal/UserPicker";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   authApi,
@@ -24,6 +25,7 @@ import { cacheCurrentUser, clearImpersonationSession, saveImpersonationSession }
 
 export default function ImpersonationPage() {
   const { can } = usePermissions();
+  const confirm = useConfirm();
   const router = useRouter();
   const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
   const [minutes, setMinutes] = useState(30);
@@ -36,14 +38,12 @@ export default function ImpersonationPage() {
       return;
     }
     const id = selectedUser.id;
-    if (
-      !window.confirm(
-        `將以「${selectedUser.display_name}」身分檢視 ${minutes} 分鐘。\n` +
-          `所有修改會被記為「以 ${selectedUser.display_name} 身分，由你管理員代行」。\n\n` +
-          `繼續？`,
-      )
-    )
-      return;
+    if (!(await confirm({
+      title: "啟動管理員代理登入？",
+      description: `將以「${selectedUser.display_name}」身分檢視 ${minutes} 分鐘；所有修改都會記錄為管理員代行。`,
+      confirmLabel: "啟動代理",
+      danger: true,
+    }))) return;
     setBusy(true);
     try {
       const r = await impersonationApi.start(id, minutes);
