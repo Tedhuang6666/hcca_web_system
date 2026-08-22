@@ -155,7 +155,6 @@ export default function EditDocumentPage() {
   const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [doc, setDoc] = useState<DocumentOut | null>(null);
-  const [summaryOnly, setSummaryOnly] = useState(false);
   const draftValue = useMemo<DocumentEditDraft>(() => ({
     serialNumber,
     title,
@@ -236,7 +235,7 @@ export default function EditDocumentPage() {
       confidentialityExpiresAt: doc.confidentiality_expires_at ? doc.confidentiality_expires_at.slice(0, 10) : "",
       issuerPostalCode: doc.issuer_postal_code ?? "",
       issuerAddress: doc.issuer_address ?? "",
-      docDescription: doc.doc_description ?? "",
+      docDescription: doc.doc_description ?? doc.content ?? "",
       actionRequired: doc.action_required ?? "",
       meetingPurpose: doc.meeting_purpose ?? "",
       meetingTime: doc.meeting_time ? doc.meeting_time.slice(0, 16) : "",
@@ -313,14 +312,6 @@ export default function EditDocumentPage() {
   });
 
   const buildUpdatePayload = useCallback((autosave = false) => {
-    if (summaryOnly) {
-      return {
-        summary,
-        change_note: autosave ? undefined : changeNote || undefined,
-        autosave,
-      };
-    }
-
     return {
       serial_number: serialNumber.trim() || undefined,
       title, urgency, classification, category,
@@ -379,7 +370,6 @@ export default function EditDocumentPage() {
     sourceDocumentNumber,
     retentionPeriod,
     summary,
-    summaryOnly,
     subject,
     title,
     urgency,
@@ -394,7 +384,7 @@ export default function EditDocumentPage() {
     }, [originalDraft]),
     save: useCallback(async () => {
       await documentsApi.update(id, buildUpdatePayload(true));
-      if (!summaryOnly) {
+      if (doc?.status === "draft") {
         await documentsRecipientsApi.update(id, recipients.map(r => ({
           recipient_type: r.recipient_type,
           name: r.name,
@@ -404,29 +394,19 @@ export default function EditDocumentPage() {
           target_class_id: r.target_class_id,
         })));
       }
-    }, [buildUpdatePayload, id, recipients, summaryOnly]),
+    }, [buildUpdatePayload, doc?.status, id, recipients]),
   });
 
   const fetchDoc = useCallback(async () => {
     try {
       const d = await documentsApi.get(id);
-      const canEditIssued = Boolean(
-        d.status === "approved"
-          && d.issued_at
-          && Date.now() <= new Date(d.issued_at).getTime() + 6 * 60 * 60 * 1000,
-      );
-      const canEditSummaryOnly = Boolean(
-        d.status === "approved"
-          && d.issued_at
-          && Date.now() > new Date(d.issued_at).getTime() + 6 * 60 * 60 * 1000,
-      );
-      if (d.status !== "draft" && !canEditIssued && !canEditSummaryOnly) {
-        toast.error("只能編輯草稿、發出六小時內的公文，或更新逾時公文的摘要");
+      const canEdit = d.status === "draft" || (d.status === "approved" && Boolean(d.issued_at));
+      if (!canEdit) {
+        toast.error("只能編輯草稿或已發文的核准公文");
         router.push(`/documents/${id}`);
         return;
       }
       setDoc(d);
-      setSummaryOnly(canEditSummaryOnly);
       setSerialNumber(d.serial_number ?? "");
       setTitle(d.title);
       setUrgency(d.urgency);
@@ -438,7 +418,7 @@ export default function EditDocumentPage() {
       setConfidentialityExpiresAt(d.confidentiality_expires_at ? d.confidentiality_expires_at.slice(0, 10) : "");
       setIssuerPostalCode(d.issuer_postal_code ?? "");
       setIssuerAddress(d.issuer_address ?? "");
-      setDocDescription(d.doc_description ?? "");
+      setDocDescription(d.doc_description ?? d.content ?? "");
       setActionRequired(d.action_required ?? "");
       setMeetingPurpose(d.meeting_purpose ?? "");
       setMeetingTime(d.meeting_time ? d.meeting_time.slice(0, 16) : "");
@@ -495,11 +475,11 @@ export default function EditDocumentPage() {
   };
 
   const save = async () => {
-    if (!summaryOnly && !title.trim()) { toast.error("請輸入公文標題"); return; }
+    if (!title.trim()) { toast.error("請輸入公文標題"); return; }
     setSaving(true);
     try {
       await documentsApi.update(id, buildUpdatePayload(false));
-      if (!summaryOnly) {
+      if (doc?.status === "draft") {
         // 更新受文者（整批覆寫）
         await documentsRecipientsApi.update(id, recipients.map(r => ({
           recipient_type: r.recipient_type, name: r.name, email: r.email || undefined,
@@ -554,7 +534,7 @@ export default function EditDocumentPage() {
           className="w-8 h-8 rounded-lg flex items-center justify-center  hover:"
           style={{ border: "1px solid var(--border)" }}>←</Link>
         <div>
-          <h1 className="text-xl font-semibold ">{summaryOnly ? "編輯公文摘要" : "編輯公文"}</h1>
+          <h1 className="text-xl font-semibold ">編輯公文</h1>
           <p className="text-sm font-mono" style={{ color: "var(--primary)" }}>
             {doc.serial_number || "（草稿，尚未發文）"}
           </p>
@@ -570,7 +550,7 @@ export default function EditDocumentPage() {
                 ? `線上已儲存：${new Date(onlineAutosave.lastSavedAt).toLocaleTimeString("zh-TW")}`
                 : onlineAutosave.status === "error"
                   ? onlineAutosave.error
-                  : summaryOnly ? "僅能修改已發文公文的列表摘要" : "編輯時會自動線上儲存草稿"}
+                  : "編輯時會自動線上儲存草稿"}
           </p>
         </div>
       </div>
@@ -582,51 +562,7 @@ export default function EditDocumentPage() {
         href={`/documents/${encodeURIComponent(doc.serial_number)}`}
       />
 
-      {summaryOnly && (
-        <div className="card space-y-4 p-4">
-          <div>
-            <h2 className="text-sm font-semibold">已發文公文摘要</h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              此公文發出已超過六小時，正文與流程欄位已鎖定；僅可更新列表摘要。
-            </p>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs" style={{ color: "var(--text-muted)" }}>
-              列表摘要（可選）
-            </label>
-            <input
-              value={summary}
-              onChange={e => setSummary(e.target.value)}
-              maxLength={500}
-              placeholder="提供列表辨識用摘要..."
-              className="w-full bg-transparent text-sm outline-none"
-              style={{ ...inputStyle, padding: "0.5rem" }}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs" style={{ color: "var(--text-muted)" }}>
-              修訂備註（選填）
-            </label>
-            <input
-              value={changeNote}
-              onChange={e => setChangeNote(e.target.value)}
-              placeholder="說明本次修改原因..."
-              className="w-full bg-transparent text-xs outline-none"
-              style={{ ...inputStyle, padding: "0.5rem" }}
-            />
-          </div>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="w-full rounded-lg py-2.5 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-50"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
-          >
-            {saving ? "儲存中..." : "儲存摘要"}
-          </button>
-        </div>
-      )}
-
-      <fieldset disabled={summaryOnly} className="min-w-0 border-0 p-0">
+      <fieldset className="min-w-0 border-0 p-0">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
           {/* 基本資訊 */}
@@ -644,13 +580,13 @@ export default function EditDocumentPage() {
                 className="w-full bg-transparent  text-sm outline-none border-b pb-1"
                 style={{ borderColor: "var(--border)" }} />
             </div>
-            {!summaryOnly && <div>
+            <div>
               <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>列表摘要（可選）</label>
               <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500}
                 placeholder="主旨為空或過於相同時，提供列表辨識用摘要..."
                 className="w-full bg-transparent text-sm outline-none border-b pb-1"
                 style={{ borderColor: "var(--border)" }} />
-            </div>}
+            </div>
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: "速別", value: urgency, setter: setUrgency as (v: string) => void,
