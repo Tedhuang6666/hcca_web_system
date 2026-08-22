@@ -915,6 +915,8 @@
 
 .public-site > main {
   flex: 1 0 auto;
+  /* Keep hash targets visible below the sticky public header and announcements. */
+  scroll-margin-top: 10rem;
 }
 
 [data-theme="dark"] .public-site {
