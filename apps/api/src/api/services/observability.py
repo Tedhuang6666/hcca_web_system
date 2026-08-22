@@ -8,9 +8,9 @@ import time
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin
-from xml.etree import ElementTree
 
 import httpx
+from defusedxml import ElementTree
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
