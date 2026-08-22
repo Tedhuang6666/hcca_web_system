@@ -13,12 +13,25 @@ permissions:
 
 concurrency:
   # Serialize all production browser fleets; synthetic traffic must not
-  # compete with real users or each other for API/DB capacity.
-  group: production-performance
+  # compete with real users or each other for API/DB capacity. A cancelled
+  # public scan still emits workflow_run, so its skipped follow-up must not
+  # contend for this shared lock and cancel the next public scan.
+  group: >-
+    ${{
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main')) &&
+      'production-performance' ||
+      format('authenticated-performance-skip-{0}', github.run_id)
+    }}
   cancel-in-progress: false
 
 jobs:
   lighthouse:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main')
     name: Authenticated Lighthouse (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
