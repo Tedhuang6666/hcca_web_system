@@ -30,8 +30,6 @@ from api.schemas.governance import (
 from api.services import audit as audit_svc
 from api.services import matter as matter_svc
 
-router = APIRouter(prefix="/matters", tags=["事項整合工作台"])
-
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 MatterManagerDep = Depends(
@@ -41,6 +39,11 @@ MatterManagerDep = Depends(
         PermissionCode.DOCUMENT_ADMIN,
         PermissionCode.ADMIN_ALL,
     )
+)
+router = APIRouter(
+    prefix="/matters",
+    tags=["事項整合工作台"],
+    dependencies=[MatterManagerDep],
 )
 
 

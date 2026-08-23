@@ -15,7 +15,7 @@ def _override_user(user: User) -> None:
     app.dependency_overrides[get_current_active_user] = override
 
 
-async def test_dashboard_composite_returns_all_requested_sections(
+async def test_dashboard_composite_excludes_matters_by_default(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
@@ -36,8 +36,27 @@ async def test_dashboard_composite_returns_all_requested_sections(
     assert set(payload) == {"dashboard", "tasks", "matters", "announcements"}
     assert payload["dashboard"]["layout_hint"] == "student"
     assert payload["tasks"]["total"] == 0
-    assert payload["matters"] == []
+    assert payload["matters"] is None
     assert payload["announcements"] == []
+
+
+async def test_dashboard_composite_with_matters_requires_governance_permission(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email="dashboard-no-governance@school.edu",
+        display_name="儀表板測試",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    _override_user(user)
+
+    response = await client.get("/dashboard/composite?include_matters=true")
+
+    assert response.status_code == 403
 
 
 async def test_dashboard_composite_requires_auth(client: AsyncClient) -> None:

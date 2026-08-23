@@ -5,6 +5,7 @@ import {
   NAV_DEF_LOGGED_OUT,
   NAV_ITEMS,
   NAVIGATION_PROFILES,
+  filterNavItems,
   navItemsFromEntries,
   navProfileFromApi,
   resolveNavigationProfile,
@@ -61,6 +62,16 @@ describe("navigation visibility", () => {
     expect(resolveNavigationProfile(new Set(["merchandise_submission:manage"]), false))
       .toBe("default");
     expect(resolveNavigationProfile(new Set(["shop:manage"]), false)).toBe("default");
+  });
+
+  it("restricts governance workspaces to their managers", () => {
+    const can = (code: string) => code === "governance:manage";
+    const hasPrefix = () => false;
+
+    const visibleIds = filterNavItems(NAV_ITEMS, can, hasPrefix).map((item) => item.id);
+
+    expect(visibleIds).toContain("governanceHub");
+    expect(visibleIds).not.toContain("matters");
   });
 
   it("resolves specialized navigation profiles without loading full navigation definitions", () => {

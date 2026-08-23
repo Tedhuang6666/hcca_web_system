@@ -83,8 +83,6 @@ from api.services import survey as survey_svc
 from api.services import work_item as work_item_svc
 from api.services.storage import StorageBackend, get_storage
 
-router = APIRouter(prefix="/governance", tags=["事情治理中樞"])
-
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 GovernanceManagerDep = Depends(
@@ -95,6 +93,11 @@ GovernanceManagerDep = Depends(
         PermissionCode.DOCUMENT_ADMIN,
         PermissionCode.ADMIN_ALL,
     )
+)
+router = APIRouter(
+    prefix="/governance",
+    tags=["事情治理中樞"],
+    dependencies=[GovernanceManagerDep],
 )
 
 

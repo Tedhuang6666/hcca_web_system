@@ -67,6 +67,7 @@ async def _make_matter(db, creator: User, **overrides) -> Matter:
 async def test_get_dashboard_returns_stats_and_matters(
     db_session, member_user, authed_client_factory
 ) -> None:
+    await _grant_permission(db_session, member_user, "governance:manage")
     await _make_matter(db_session, member_user)
     ac = authed_client_factory(member_user)
     resp = await ac.get("/governance/dashboard")
@@ -99,7 +100,10 @@ async def test_create_matter_with_permission_returns_201_and_slug(
     assert payload["slug"]
 
 
-async def test_get_matter_unknown_id_returns_404(member_user, authed_client_factory) -> None:
+async def test_get_matter_unknown_id_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "governance:manage")
     ac = authed_client_factory(member_user)
     resp = await ac.get(f"/governance/matters/{uuid.uuid4()}")
     assert resp.status_code == 404
@@ -108,6 +112,7 @@ async def test_get_matter_unknown_id_returns_404(member_user, authed_client_fact
 async def test_get_matter_by_slug_returns_matching_matter(
     db_session, member_user, authed_client_factory
 ) -> None:
+    await _grant_permission(db_session, member_user, "governance:manage")
     matter = await _make_matter(db_session, member_user, slug="orientation-camp")
     ac = authed_client_factory(member_user)
     resp = await ac.get(f"/governance/matters/by-slug/{matter.slug}")
@@ -115,7 +120,10 @@ async def test_get_matter_by_slug_returns_matching_matter(
     assert resp.json()["id"] == str(matter.id)
 
 
-async def test_get_matter_by_slug_unknown_returns_404(member_user, authed_client_factory) -> None:
+async def test_get_matter_by_slug_unknown_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "governance:manage")
     ac = authed_client_factory(member_user)
     resp = await ac.get("/governance/matters/by-slug/does-not-exist")
     assert resp.status_code == 404
@@ -302,9 +310,10 @@ async def test_entity_relations_list_and_create_and_graph(
 # ── 模組能力 / 資源搜尋 ────────────────────────────────────────────────────────
 
 
-async def test_list_module_capabilities_only_requires_login(
-    member_user, authed_client_factory
+async def test_list_module_capabilities_requires_governance_permission(
+    db_session, member_user, authed_client_factory
 ) -> None:
+    await _grant_permission(db_session, member_user, "governance:manage")
     ac = authed_client_factory(member_user)
     resp = await ac.get("/governance/module-capabilities")
     assert resp.status_code == 200
@@ -603,7 +612,10 @@ async def test_update_unknown_automation_rule_returns_404(
     assert resp.status_code == 404
 
 
-async def test_get_automation_meta_returns_option_lists(member_user, authed_client_factory) -> None:
+async def test_get_automation_meta_returns_option_lists(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "governance:manage")
     ac = authed_client_factory(member_user)
     resp = await ac.get("/governance/automation-meta")
     assert resp.status_code == 200
