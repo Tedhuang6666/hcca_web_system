@@ -50,6 +50,14 @@ function validationHint(q: SurveyQuestionOut): string {
 type AnswerValue = { text: string; options: string[]; other_text?: string };
 type AnswerMap = Record<string, AnswerValue>;
 
+function hasAnswerContent(answer: AnswerValue | undefined): boolean {
+  return Boolean(
+    answer?.text.trim()
+    || answer?.options.length
+    || answer?.other_text?.trim(),
+  );
+}
+
 /** 評估單一條件規則。 */
 function evalRule(rule: ConditionRule, answers: AnswerMap): boolean {
   const ans = answers[rule.question_id];
@@ -974,7 +982,14 @@ export default function SurveyDetailClient({
 
   const isAdmin = can("survey:manage");
   const isOpen = survey.status === "open";
-  const questionCount = survey.questions.filter(q => !DISPLAY_TYPES.has(q.question_type)).length;
+  const responseQuestions = survey.questions.filter(
+    (question) => !DISPLAY_TYPES.has(question.question_type) && !hiddenIds.has(question.id),
+  );
+  const questionCount = responseQuestions.length;
+  const answeredQuestionCount = responseQuestions.filter(
+    (question) => hasAnswerContent(answers[question.id]),
+  ).length;
+  const responseProgress = questionCount > 0 ? answeredQuestionCount / questionCount : 0;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
@@ -1072,29 +1087,50 @@ export default function SurveyDetailClient({
       {isAdmin && viewStats ? (
         <StatsView surveyId={id} />
       ) : submitted ? (
-        <div className="card p-8 text-center space-y-3">
-          <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center"
-            style={{ background: "var(--success-dim)" }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2.5" strokeLinecap="round" style={{ color: "var(--success)" }} aria-hidden="true">
+        <section className="survey-response-receipt card p-8 text-center space-y-3" aria-live="polite">
+          <div className="survey-response-receipt-seal" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
-          <p className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>感謝您的填答！</p>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>您的回應已成功提交。</p>
+          <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>你的回應已送出</h2>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            感謝你的填答。這份回應已成功提交至本次問卷。
+          </p>
+          {survey.is_anonymous && (
+            <p className="survey-response-receipt-note text-xs">此份填答不會與你的身分連結。</p>
+          )}
           <Link href="/surveys" className="btn btn-ghost inline-flex">返回問卷列表</Link>
-        </div>
+        </section>
       ) : !isOpen ? (
         <div className="card p-8 text-center">
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>此問卷目前不開放填答</p>
         </div>
       ) : (
-        <form onSubmit={e => { e.preventDefault(); submit(); }} className="space-y-4">
+        <form onSubmit={e => { e.preventDefault(); submit(); }} className="survey-response-form space-y-4">
+          <aside className="survey-response-meter" aria-label="填答進度" aria-live="polite">
+            <div className="flex items-center justify-between gap-4">
+              <span>填答進度</span>
+              <strong className="tabular-nums">{answeredQuestionCount} / {questionCount} 題</strong>
+            </div>
+            <div className="survey-response-meter-track" aria-hidden="true">
+              <span style={{ transform: `scaleX(${responseProgress})` }} />
+            </div>
+            {answeredQuestionCount === questionCount && questionCount > 0 && (
+              <p>所有題目都已整理完成，可以送出了。</p>
+            )}
+          </aside>
           {survey.questions.map((q) => {
             if (hiddenIds.has(q.id)) return null;
             const isDisplay = DISPLAY_TYPES.has(q.question_type);
+            const isAnswered = hasAnswerContent(answers[q.id]);
             return (
-            <div key={q.id} className={isDisplay ? "py-2 space-y-3" : "card p-5 space-y-3"}>
+            <div
+              key={q.id}
+              className={isDisplay ? "py-2 space-y-3" : "survey-question-card card p-5 space-y-3"}
+              data-answered={!isDisplay && isAnswered ? "true" : undefined}
+            >
               <div className="flex items-start gap-2">
                 {!isDisplay && (
                   <span className="text-xs font-bold mt-0.5 flex-shrink-0"
@@ -1104,6 +1140,7 @@ export default function SurveyDetailClient({
                   <p className={isDisplay ? "sr-only" : "text-sm font-medium"} style={{ color: "var(--text-primary)" }}>
                     {q.question_text}
                     {q.is_required && <span className="ml-1" style={{ color: "var(--danger)" }}>*</span>}
+                    {!isDisplay && isAnswered && <span className="survey-question-recorded">已記錄</span>}
                   </p>
                 </div>
               </div>

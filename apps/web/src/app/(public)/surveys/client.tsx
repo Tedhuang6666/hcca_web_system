@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { surveysApi } from "@/lib/api/surveys";
 import { useFetch } from "@/hooks/useFetch";
@@ -151,16 +151,22 @@ export default function SurveysClient({
           message={!search && tab === "open" ? "目前沒有開放填答的問卷" : undefined}
         />
       ) : (
-        <div className="space-y-3">
-          {displayed.map(survey => {
+        <div
+          key={`${tab}:${sortKey}:${search}:${activityId}`}
+          className="survey-list-results space-y-3"
+        >
+          {displayed.map((survey, index) => {
             const cfg = STATUS_CFG[survey.status];
             const isOpen = survey.status === "open";
             return (
               <Link
                 key={survey.id}
                 href={`/surveys/${encodeURIComponent(survey.title)}`}
-                className="card card-hover flex items-center gap-4 px-5 py-4"
-                style={{ textDecoration: "none" }}>
+                className="survey-list-card card card-hover flex items-center gap-4 px-5 py-4"
+                style={{
+                  textDecoration: "none",
+                  ["--survey-index" as string]: index,
+                } as CSSProperties}>
 
                 {/* 狀態圓點 */}
                 <div
@@ -173,6 +179,11 @@ export default function SurveysClient({
                     <h3 className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
                       {survey.title}
                     </h3>
+                    {isOpen && (
+                      <span className="survey-live-indicator">
+                        正在收集
+                      </span>
+                    )}
                     {survey.is_anonymous && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
                         style={{ background: "var(--info-dim)", color: "var(--info)" }}>
@@ -198,10 +209,13 @@ export default function SurveysClient({
                   {cfg.label}
                 </span>
 
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2" strokeLinecap="round" className="flex-shrink-0 opacity-30" aria-hidden="true">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
+                <span className="survey-list-card-route" aria-hidden="true">
+                  填答
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
               </Link>
             );
           })}
