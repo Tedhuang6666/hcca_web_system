@@ -3118,6 +3118,111 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   background: var(--bg-hover);
 }
 
+/* 法規條文採正式文件的密度：編號是定位文字，不是互動元件。 */
+.regulation-detail-page .legal-text-reader .law-row {
+  position: relative;
+  padding-right: 3rem !important;
+  background: transparent;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-shell,
+.regulation-detail-page .legal-text-reader .law-row-shell > .flex {
+  gap: 0 !important;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-structural {
+  margin-top: 0.85rem !important;
+  padding-top: 0.55rem !important;
+  padding-bottom: 0.35rem !important;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-article {
+  padding-top: 0.28rem !important;
+  padding-bottom: 0.28rem !important;
+  line-height: 1.72 !important;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-clause {
+  padding-top: 0.08rem !important;
+  padding-bottom: 0.08rem !important;
+  line-height: 1.62 !important;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-article,
+.regulation-detail-page .legal-text-reader .law-row-clause {
+  border-left-color: transparent !important;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-badge {
+  min-width: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.875em;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-badge > a {
+  text-decoration: none;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-badge > a:hover,
+.regulation-detail-page .legal-text-reader .law-row-badge > a:focus-visible {
+  color: var(--primary) !important;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-structural .law-row-badge {
+  margin-right: 0.45rem;
+  color: var(--text-primary) !important;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-article .law-row-badge {
+  min-width: 4.5rem !important;
+  justify-content: flex-start;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-clause .law-row-badge {
+  min-width: 1.75rem !important;
+  justify-content: flex-start;
+}
+
+.regulation-detail-page .legal-text-reader .law-row-copy-link {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  width: 1.75rem !important;
+  height: 1.75rem !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.9) !important;
+}
+
+.regulation-detail-page .legal-text-reader .law-row:hover .law-row-copy-link,
+.regulation-detail-page .legal-text-reader .law-row:focus-within .law-row-copy-link {
+  border-color: var(--border) !important;
+  background: var(--bg-elevated) !important;
+  opacity: 1 !important;
+  pointer-events: auto;
+  transform: translateY(-50%) scale(1) !important;
+}
+
+@media (pointer: coarse) {
+  .regulation-detail-page .legal-text-reader .law-row-copy-link {
+    border-color: var(--border) !important;
+    background: var(--bg-elevated) !important;
+    opacity: 1 !important;
+    pointer-events: auto;
+    transform: translateY(-50%) scale(1) !important;
+  }
+}
+
 /* 閱讀工具維持同一列；窄螢幕時以橫向捲動保留所有控制。 */
 .regulation-detail-page .regulation-detail-tool-group {
   display: flex;

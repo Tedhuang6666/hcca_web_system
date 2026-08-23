@@ -1008,7 +1008,7 @@ export default function RegulationDetailPageClient({
                     </aside>
                   )}
                   <div
-                    className="reader-font-scale w-full min-w-0 flex-1 glass overflow-hidden"
+                    className="legal-text-reader reader-font-scale w-full min-w-0 flex-1 glass overflow-hidden"
                     style={zoomStyle}
                   >
                     {activeArticles.length === 0

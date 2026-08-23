@@ -149,7 +149,7 @@ export function LawArticleRow({
     <button
       type="button"
       onClick={handleCopy}
-      className="no-print inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md transition-[color,background-color,border-color,opacity,transform]"
+      className="law-row-copy-link no-print inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md transition-[color,background-color,border-color,opacity,transform]"
       style={{
         color: copied ? "#10b981" : "var(--text-muted)",
         border: `1px solid ${copied ? "rgba(16,185,129,0.4)" : "var(--border)"}`,
