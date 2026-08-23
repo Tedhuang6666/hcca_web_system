@@ -393,4 +393,11 @@ const summary = {
 await mkdir(dirname(outputFile), { recursive: true });
 await writeFile(outputFile, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 console.log(JSON.stringify(summary, null, 2));
-if (collectionFailures.length > 0 || budgetFailures.length > 0) process.exitCode = 1;
+if (budgetFailures.length > 0) {
+  const lowestScore = Math.min(...budgetFailures.map((run) => run.performance_score));
+  console.warn(
+    `::warning title=Lighthouse performance budget::${budgetFailures.length} run(s) scored below ` +
+      `${minimumScore}; lowest score: ${lowestScore}. See ${outputFile} for details.`,
+  );
+}
+if (collectionFailures.length > 0) process.exitCode = 1;
