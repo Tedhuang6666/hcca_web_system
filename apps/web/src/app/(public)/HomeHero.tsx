@@ -5,53 +5,97 @@ import { headers } from "next/headers";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 import { sanitizeCustomCss } from "@/lib/sanitize";
-import type { PublicSiteBundleOut } from "@/lib/types";
+import type { AnnouncementOut, PublicSiteBundleOut, SurveyListItem } from "@/lib/types";
 
-export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut | null }) {
+const LEGACY_HERO_SUBTITLE = "連結學生、整理公共資訊，讓校園自治被更多人看見。";
+
+function formatShortDate(value: string | null): string | null {
+  if (!value) return null;
+
+  return new Intl.DateTimeFormat("zh-TW", { month: "numeric", day: "numeric" }).format(
+    new Date(value),
+  );
+}
+
+export default async function HomeHero({
+  bundle,
+  urgentAnnouncement,
+  openSurvey,
+}: {
+  bundle: PublicSiteBundleOut | null;
+  urgentAnnouncement: AnnouncementOut | null;
+  openSurvey: SurveyListItem | null;
+}) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   const settings = bundle?.settings;
   const siteTitle = settings?.site_title?.trim() || "新竹高中班聯會";
-  const heroTitle = settings?.hero_title?.trim() || siteTitle;
-  const heroSubtitle = settings?.hero_subtitle?.trim()
-    || (!settings ? "公開資料暫時無法取得；您仍可瀏覽最新公告與班聯會公開服務。" : "");
-  const ctaHref = settings?.cta_href?.trim() || "/links";
-  const configuredCtaLabel = settings?.cta_label?.trim();
-  const ctaLabel = configuredCtaLabel && !["查看連結", "查看平台連結"].includes(configuredCtaLabel)
-    ? configuredCtaLabel
-    : "查看學生服務";
+  const configuredHeroTitle = settings?.hero_title?.trim();
+  const heroTitle = configuredHeroTitle && configuredHeroTitle !== siteTitle
+    ? configuredHeroTitle
+    : "校園的事，現在就能參與。";
+  const configuredHeroSubtitle = settings?.hero_subtitle?.trim();
+  const heroSubtitle = configuredHeroSubtitle && configuredHeroSubtitle !== LEGACY_HERO_SUBTITLE
+    ? configuredHeroSubtitle
+    : "查看正在發生的校園事，表達你的意見，讓每一件事都有下一步。";
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
-  const emblemAlt = settings?.site_logo_alt?.trim() || (siteTitle ? `${siteTitle}會徽` : "網站會徽");
+  const surveyDeadline = formatShortDate(openSurvey?.closes_at ?? null);
+  const primaryAction = urgentAnnouncement
+    ? {
+        href: urgentAnnouncement.link_url?.trim() || `/news/${urgentAnnouncement.id}`,
+        label: "查看重要公告",
+        status: "重要公告",
+        title: urgentAnnouncement.title,
+        detail: "請先查看這則校園訊息",
+      }
+    : openSurvey
+      ? {
+          href: `/surveys/${encodeURIComponent(openSurvey.title)}`,
+          label: "填寫校園調查",
+          status: "正在收集意見",
+          title: openSurvey.title,
+          detail: surveyDeadline ? `截止 ${surveyDeadline}` : "開放填答中",
+        }
+      : {
+          href: "/news",
+          label: "查看最新公告",
+          status: "最新校園動態",
+          title: "公告、公開資料與校園意見都在這裡。",
+          detail: "先從最新消息開始",
+        };
 
   return (
     <>
       {settings?.custom_css && (
         <style nonce={nonce} dangerouslySetInnerHTML={{ __html: sanitizeCustomCss(settings.custom_css) }} />
       )}
-      <section className="public-hero">
+      <section className="public-hero public-home-hero">
         <div className="public-hero-inner">
           <div className="public-hero-copy">
             <h1>{heroTitle}</h1>
-            {heroSubtitle && <p className="public-hero-subtitle">{heroSubtitle}</p>}
+            <p className="public-hero-subtitle">{heroSubtitle}</p>
           </div>
           <div className="public-hero-actions">
-            <Link href={ctaHref} className="public-cta-primary">
-              {ctaLabel}
+            <Link href={primaryAction.href} className="public-cta-primary">
+              {primaryAction.label}
               <ArrowRight size={16} aria-hidden />
             </Link>
-            <Link href="/news" className="public-cta-secondary">
-              最新公告
+            <Link href="/petitions/new" className="public-cta-secondary">
+              提出校園意見
             </Link>
           </div>
-          <div className="public-signboard public-identity-panel" aria-label={`${siteTitle}識別標誌`}>
-            <div className="public-signboard-emblem">
+          <aside className="public-hero-status" aria-label="目前最重要的校園事項">
+            <span className="public-hero-status-label">{primaryAction.status}</span>
+            <p>{primaryAction.title}</p>
+            <span className="public-hero-status-detail">{primaryAction.detail}</span>
+            <div className="public-hero-status-brand">
               <PublicEmblem
                 src={publicEmblemUrl}
-                alt={emblemAlt}
-                sizes="(max-width: 767px) 128px, 322px"
+                alt=""
+                sizes="44px"
                 priority
               />
             </div>
-          </div>
+          </aside>
         </div>
       </section>
     </>

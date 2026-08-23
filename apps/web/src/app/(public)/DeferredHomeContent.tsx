@@ -1,22 +1,24 @@
-import { fetchActiveUrgentAnnouncement, fetchAnnouncements } from "@/lib/serverFetch";
-import type { PublicSiteBundleOut } from "@/lib/types";
+import { fetchAnnouncements } from "@/lib/serverFetch";
+import type { AnnouncementOut, PublicSiteBundleOut, SurveyListItem } from "@/lib/types";
 import HomeContent from "./HomeContent";
 
 export default async function DeferredHomeContent({
   bundle,
+  urgentAnnouncement,
+  openSurveys,
 }: {
   bundle: PublicSiteBundleOut | null;
+  urgentAnnouncement: AnnouncementOut | null;
+  openSurveys: SurveyListItem[];
 }) {
-  const [announcements, urgentAnnouncement] = await Promise.all([
-    fetchAnnouncements(6),
-    fetchActiveUrgentAnnouncement(),
-  ]);
+  const announcements = await fetchAnnouncements(6);
 
   return (
     <HomeContent
       bundle={bundle}
       announcements={announcements}
       urgentAnnouncement={urgentAnnouncement}
+      openSurveys={openSurveys}
     />
   );
 }

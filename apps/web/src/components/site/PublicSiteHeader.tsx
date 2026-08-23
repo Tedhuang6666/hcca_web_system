@@ -146,9 +146,8 @@ function PublicSiteHeaderContent({
   const itemByKey = new Map(Object.values(groups).flat().map((item) => [item.key, item]));
   const taskNav = [
     ["news", "最新公告"],
-    ["public-db", "找公開資料"],
-    ["surveys", "參與校園"],
-    ["contact", "聯絡班聯會"],
+    ["public-db", "公開資料"],
+    ["surveys", "校園調查"],
   ].flatMap(([key, label]) => {
     const item = itemByKey.get(key);
     return item ? [{ ...item, label }] : [];
