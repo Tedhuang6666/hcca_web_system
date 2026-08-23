@@ -31,7 +31,11 @@ async def list_work_items(
     include_done: bool = False,
     limit: int = Query(100, ge=1, le=200),
 ) -> list[WorkItemOut]:
-    target_id = assigned_to_id if current_user.is_superuser else assigned_to_id or current_user.id
+    target_id = assigned_to_id or current_user.id
+    if not current_user.is_superuser and target_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="無權查看其他使用者的工作項目"
+        )
     rows = await work_item_svc.list_work_items(
         db, user_id=target_id, include_done=include_done, limit=limit
     )

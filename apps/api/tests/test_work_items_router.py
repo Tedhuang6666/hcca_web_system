@@ -26,6 +26,17 @@ async def test_create_and_list_own_work_item(member_user, authed_client_factory)
     assert any(row["id"] == item_id for row in listed.json())
 
 
+async def test_list_other_users_work_items_returns_403(
+    member_user, make_user, authed_client_factory
+) -> None:
+    other_user = await make_user(email="other-work-items@school.edu")
+    ac = authed_client_factory(member_user)
+
+    response = await ac.get(f"/work-items?assigned_to_id={other_user.id}")
+
+    assert response.status_code == 403
+
+
 async def test_create_work_item_assigned_to_other_user_notifies_them(
     member_user, make_user, authed_client_factory
 ) -> None:
