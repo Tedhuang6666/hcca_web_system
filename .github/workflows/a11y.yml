@@ -198,14 +198,38 @@ jobs:
           node --version
           google-chrome --version || true
           mkdir -p .lighthouseci/reports
+
+          run_lighthouse() {
+            local url="$1"
+            local report_path="$2"
+
+            for attempt in 1 2; do
+              if npx --yes lighthouse@13.4.0 "$url" \
+                --config-path=.lighthouseci/config.json \
+                --output=json \
+                --output-path="$report_path" \
+                --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"; then
+                return 0
+              fi
+
+              # Chrome occasionally reports NO_FCP on its first headless navigation even though
+              # the standalone server has already returned SSR content. Retry that transient only;
+              # all other Lighthouse failures, and a second NO_FCP, still fail the job.
+              if ! grep -q '"code": "NO_FCP"' "$report_path" || [ "$attempt" -eq 2 ]; then
+                return 1
+              fi
+
+              echo "::warning::Lighthouse returned NO_FCP; retrying once after the server settles."
+              sleep 2
+            done
+          }
+
           for path in / /legal/privacy; do
             name=$(echo "$path" | tr '/' '-' | sed 's/^-//; s/-$//' | sed 's/^$/home/')
             for run in 1 2; do
-              npx --yes lighthouse@13.4.0 "http://127.0.0.1:3000$path" \
-                --config-path=.lighthouseci/config.json \
-                --output=json \
-                --output-path=".lighthouseci/reports/$name-$run.json" \
-                --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
+              run_lighthouse \
+                "http://127.0.0.1:3000$path" \
+                ".lighthouseci/reports/$name-$run.json"
             done
           done
 
