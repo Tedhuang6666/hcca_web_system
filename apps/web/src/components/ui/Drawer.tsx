@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
+import styles from "./InteractionMotion.module.css";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -169,7 +170,7 @@ export default function Drawer({
       tabIndex={-1}
     >
       <div
-        className="absolute inset-0 transition-opacity"
+        className={`${styles.drawerBackdrop} absolute inset-0 transition-opacity`}
         style={{
           background: "rgba(0,0,0,0.55)",
           backdropFilter: "blur(4px)",
@@ -182,7 +183,7 @@ export default function Drawer({
       <aside
         data-side={side}
         data-entered={entered ? "true" : "false"}
-        className="drawer-panel flex flex-col overflow-hidden shadow-2xl"
+        className={`${styles.drawerPanel} drawer-panel flex flex-col overflow-hidden shadow-2xl`}
         style={panelStyle}
       >
         {/* Sheet handle bar (僅 bottom / auto-mobile) */}
@@ -196,7 +197,7 @@ export default function Drawer({
           </div>
         )}
         <header
-          className="flex flex-shrink-0 items-center justify-between gap-3 px-5 py-3.5"
+          className={`${styles.drawerHeader} flex flex-shrink-0 items-center justify-between gap-3 px-5 py-3.5`}
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <h2 id={titleId} className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -217,10 +218,10 @@ export default function Drawer({
             </svg>
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className={`${styles.drawerContent} min-h-0 flex-1 overflow-y-auto px-5 py-4`}>{children}</div>
         {footer && (
           <div
-            className="flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap"
+            className={`${styles.drawerFooter} flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap`}
             style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
           >
             {footer}

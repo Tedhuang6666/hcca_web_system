@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import styles from "./InteractionMotion.module.css";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -47,6 +48,7 @@ export default function Modal({
   footer,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
+  const [entered, setEntered] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -55,6 +57,12 @@ export default function Modal({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const frame = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(frame);
+  }, [mounted]);
 
   useEffect(() => {
     if (!mounted || !dialogRef.current) return;
@@ -138,7 +146,8 @@ export default function Modal({
     <div
       ref={dialogRef}
       data-modal-root="true"
-      className={`modal-root fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
+      data-entered={entered ? "true" : "false"}
+      className={`${styles.modalRoot} modal-root fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       role="dialog"
       aria-modal="true"
@@ -147,11 +156,11 @@ export default function Modal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className={`modal-surface ${mobileFullscreen ? "modal-surface-mobile" : ""} flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
+        className={`${styles.modalSurface} modal-surface ${mobileFullscreen ? "modal-surface-mobile" : ""} flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         <div
-          className="modal-header flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3"
+          className={`${styles.modalHeader} modal-header flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3`}
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <h2 id={titleId} className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -180,10 +189,10 @@ export default function Modal({
             </svg>
           </button>
         </div>
-        <div className="modal-content min-h-0 flex-1 overflow-y-auto p-5 pt-4">{children}</div>
+        <div className={`${styles.modalContent} modal-content min-h-0 flex-1 overflow-y-auto p-5 pt-4`}>{children}</div>
         {footer && (
           <div
-            className="modal-footer flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap"
+            className={`${styles.modalFooter} modal-footer flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap`}
             style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
           >
             {footer}
