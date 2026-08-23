@@ -1,4 +1,5 @@
 import PublicEnhancements from "@/components/site/PublicEnhancements";
+import PageTransition from "@/components/layout/PageTransition";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
 import { absoluteUrl, JsonLd } from "@/lib/seo";
@@ -36,7 +37,9 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         }}
       />
       <PublicEnhancements />
-      <PublicModuleStatusProvider>{children}</PublicModuleStatusProvider>
+      <PublicModuleStatusProvider>
+        <PageTransition>{children}</PageTransition>
+      </PublicModuleStatusProvider>
     </>
   );
 }
