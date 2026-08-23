@@ -11,6 +11,7 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ChangeEvent, ClipboardEvent } from "react";
+import styles from "./InteractionMotion.module.css";
 
 export type UploadProgressReporter = (progress: number) => void;
 export type AnimatedUploadStatus = "queued" | "uploading" | "success" | "error";
@@ -100,13 +101,13 @@ function UploadFileRow({
   const statusLabel = item.status === "uploading"
     ? `${Math.round(item.progress * 100)}%`
     : item.status === "success"
-      ? "完成"
+      ? "已上傳"
       : item.status === "error"
         ? "失敗"
-        : "待處理";
+        : "已加入清單";
 
   return (
-    <li ref={rowRef} className={`animated-upload__row is-${item.status}`} style={dropStyle}>
+    <li ref={rowRef} className={`${styles.uploadRow} animated-upload__row is-${item.status}`} style={dropStyle}>
       <div className="animated-upload__thumb" aria-hidden="true">
         {item.preview ? (
           <>
@@ -246,9 +247,9 @@ export function AnimatedFileUpload<TResult = unknown>({
   };
 
   return (
-    <div className={`animated-upload ${className}`}>
+    <div className={`${styles.uploadRoot} animated-upload ${className}`}>
       <div
-        className={`animated-upload__zone${isDragging ? " is-dragging" : ""}${disabled ? " is-disabled" : ""}`}
+        className={`${styles.uploadZone} animated-upload__zone${isDragging ? " is-dragging" : ""}${disabled ? " is-disabled" : ""}`}
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
@@ -282,16 +283,19 @@ export function AnimatedFileUpload<TResult = unknown>({
       </div>
 
       {items.length > 0 && (
-        <ul className="animated-upload__list" aria-live="polite">
-          {items.map((item) => (
-            <UploadFileRow
-              key={item.id}
-              item={item}
-              onRetry={() => void runUpload(item)}
-              onRemove={() => removeItem(item)}
-            />
-          ))}
-        </ul>
+        <>
+          <p className={styles.uploadReceipt} role="status">已加入 {items.length} 個附件</p>
+          <ul className={`${styles.uploadList} animated-upload__list`} aria-live="polite">
+            {items.map((item) => (
+              <UploadFileRow
+                key={item.id}
+                item={item}
+                onRetry={() => void runUpload(item)}
+                onRemove={() => removeItem(item)}
+              />
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );

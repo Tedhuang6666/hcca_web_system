@@ -1,6 +1,8 @@
 "use client";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { CircleHelp, Pencil, TriangleAlert } from "lucide-react";
 import Modal from "./Modal";
+import styles from "./InteractionMotion.module.css";
 
 interface ConfirmOptions {
   title: string;
@@ -117,10 +119,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             </>
           }>
           <div
-            className="confirm-dialog-content space-y-3 text-sm"
+            className={`${styles.confirmContent} confirm-dialog-content space-y-3 text-sm`}
             data-dialog-kind={state.kind}
             style={{ color: "var(--text-secondary)" }}
           >
+            <span
+              className={styles.confirmMarker}
+              data-tone={state.danger ? "danger" : state.kind === "prompt" ? "prompt" : "neutral"}
+              aria-hidden="true"
+            >
+              {state.danger ? <TriangleAlert size={17} /> : state.kind === "prompt" ? <Pencil size={16} /> : <CircleHelp size={17} />}
+            </span>
             {state.description && <div>{state.description}</div>}
             {state.kind === "prompt" && (
               <label className="block space-y-1.5">

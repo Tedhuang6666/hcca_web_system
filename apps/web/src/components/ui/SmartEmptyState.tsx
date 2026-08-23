@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Inbox, Filter, Lock, Sparkles, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import styles from "./InteractionMotion.module.css";
 
 export type EmptyReason = "new" | "filtered" | "denied" | "none";
 
@@ -72,17 +73,14 @@ export default function SmartEmptyState({
 
   return (
     <div
-      className="text-center py-12 px-4"
+      className={`${styles.smartEmptyState} text-center py-12 px-4`}
+      data-reason={reason}
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
         borderRadius: "var(--radius-lg)",
       }}>
-      <Icon
-        size={36}
-        aria-hidden={true}
-        style={{ color: "var(--text-disabled)", display: "inline-block", marginBottom: 12 }}
-      />
+      <span className={styles.smartEmptyMark} aria-hidden="true"><Icon size={36} /></span>
       <p className="text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
         {title}
       </p>
@@ -99,7 +97,7 @@ export default function SmartEmptyState({
         </p>
       )}
 
-      <div className="flex flex-wrap gap-2 justify-center">
+      <div className={`${styles.smartEmptyAction} flex flex-wrap gap-2 justify-center`}>
         {reason === "new" && createHref && canCreate && (
           <Link
             href={createHref}

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import FormShell from "./FormShell";
+import styles from "./InteractionMotion.module.css";
 
 export type GuidedFormStepDefinition = {
   label: string;
@@ -33,7 +34,10 @@ type GuidedFormStepProps = {
 
 export function GuidedFormStep({ children, step, activeStep, className }: GuidedFormStepProps) {
   return (
-    <section className={`${step === activeStep ? "block" : "hidden"} md:block ${className ?? ""}`}>
+    <section
+      className={`${styles.guidedStep} ${step === activeStep ? "block" : "hidden"} md:block ${className ?? ""}`}
+      data-active={step === activeStep ? "true" : "false"}
+    >
       {children}
     </section>
   );
@@ -89,7 +93,7 @@ export default function GuidedForm({
           )}
         </div>
       )}>
-      <nav className="mb-4 md:hidden" aria-label="建立步驟">
+      <nav className={`${styles.guidedNavigator} mb-4 md:hidden`} aria-label="建立步驟">
         <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
           第 {activeStep + 1} 步，共 {steps.length} 步 · {active.label}
         </p>
@@ -99,7 +103,8 @@ export default function GuidedForm({
             <li key={step.label} className="flex-1">
               <button
                 type="button"
-                className="h-2 w-full rounded-full transition-colors"
+                className={`${styles.guidedRailSegment} h-2 w-full rounded-full transition-colors`}
+                data-active={index <= activeStep ? "true" : "false"}
                 style={{
                   background: index <= activeStep ? "var(--primary)" : "var(--border)",
                 }}
@@ -112,7 +117,7 @@ export default function GuidedForm({
           ))}
         </ol>
         {draftStatus && (
-          <p className="mt-2 text-xs" role="status" style={{ color: "var(--text-muted)" }}>
+          <p className={`${styles.guidedDraft} mt-2 text-xs`} role="status" style={{ color: "var(--text-muted)" }}>
             {draftStatus}
           </p>
         )}

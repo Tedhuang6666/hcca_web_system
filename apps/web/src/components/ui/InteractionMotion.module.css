@@ -1,0 +1,309 @@
+.modalRoot {
+  --motion-enter: 360ms;
+}
+
+.modalSurface,
+.drawerPanel,
+.smartEmptyState {
+  position: relative;
+}
+
+.modalSurface {
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(14px) scale(0.988);
+}
+
+.modalSurface::before,
+.drawerPanel::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  content: "";
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.modalRoot[data-entered="true"] .modalSurface {
+  animation: document-sheet-arrive var(--motion-enter) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.modalRoot[data-entered="true"] .modalSurface::before,
+.drawerPanel[data-entered="true"]::before {
+  animation: document-rule-draw 300ms 70ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.modalHeader,
+.modalContent,
+.modalFooter,
+.drawerHeader,
+.drawerContent,
+.drawerFooter {
+  position: relative;
+  z-index: 1;
+}
+
+.modalRoot[data-entered="true"] .modalHeader,
+.modalRoot[data-entered="true"] .modalContent,
+.modalRoot[data-entered="true"] .modalFooter,
+.drawerPanel[data-entered="true"] .drawerHeader,
+.drawerPanel[data-entered="true"] .drawerContent,
+.drawerPanel[data-entered="true"] .drawerFooter {
+  animation: document-contents-arrive 320ms 70ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.drawerBackdrop {
+  animation: context-veil-arrive 240ms ease-out both;
+}
+
+.confirmContent {
+  position: relative;
+}
+
+.confirmMarker {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+}
+
+.confirmMarker[data-tone="prompt"] {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-elevated));
+}
+
+.confirmMarker[data-tone="danger"] {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-elevated));
+}
+
+.uploadRoot {
+  position: relative;
+}
+
+.uploadZone {
+  transform-origin: center;
+}
+
+.uploadZone:global(.is-dragging) {
+  animation: attachment-zone-ready 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.uploadReceipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.uploadReceipt::before {
+  width: 6px;
+  height: 6px;
+  content: "";
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.uploadList {
+  transform-origin: top center;
+}
+
+.uploadRow:global(.is-success) {
+  animation: attachment-recorded 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.smartEmptyState {
+  overflow: hidden;
+}
+
+.smartEmptyMark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+  color: var(--text-disabled);
+}
+
+.smartEmptyMark::after {
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  width: 26px;
+  height: 1px;
+  content: "";
+  background: currentColor;
+  transform: translateX(-50%);
+  opacity: 0.65;
+}
+
+.smartEmptyState[data-reason="new"] .smartEmptyMark {
+  color: var(--primary);
+}
+
+.smartEmptyState[data-reason="filtered"] .smartEmptyMark {
+  color: var(--text-secondary);
+}
+
+.smartEmptyState[data-reason="denied"] .smartEmptyMark {
+  color: var(--danger);
+}
+
+.smartEmptyState[data-reason="new"] .smartEmptyMark,
+.smartEmptyState[data-reason="filtered"] .smartEmptyMark,
+.smartEmptyState[data-reason="denied"] .smartEmptyMark {
+  animation: empty-mark-arrive 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.smartEmptyAction {
+  position: relative;
+}
+
+.guidedNavigator {
+  position: relative;
+}
+
+.guidedRailSegment {
+  position: relative;
+  overflow: hidden;
+}
+
+.guidedRailSegment[data-active="true"] {
+  animation: guided-segment-mark 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: left center;
+}
+
+.guidedStep[data-active="true"] {
+  animation: guided-step-extract 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.guidedDraft {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.guidedDraft::before {
+  width: 5px;
+  height: 5px;
+  content: "";
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+@keyframes document-sheet-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.988);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes document-rule-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes document-contents-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes context-veil-arrive {
+  from { backdrop-filter: blur(0); }
+  to { backdrop-filter: blur(4px); }
+}
+
+@keyframes attachment-zone-ready {
+  0% { transform: scale(1); }
+  52% { transform: scale(1.012); }
+  100% { transform: scale(1); }
+}
+
+@keyframes attachment-recorded {
+  0% { transform: translateX(-6px); }
+  72% { transform: translateX(1px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes empty-mark-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes guided-segment-mark {
+  from { transform: scaleX(0.55); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes guided-step-extract {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 768px) {
+  .guidedStep[data-active="true"] {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modalSurface,
+  .modalRoot[data-entered="true"] .modalSurface,
+  .modalRoot[data-entered="true"] .modalSurface::before,
+  .drawerPanel[data-entered="true"]::before,
+  .modalRoot[data-entered="true"] .modalHeader,
+  .modalRoot[data-entered="true"] .modalContent,
+  .modalRoot[data-entered="true"] .modalFooter,
+  .drawerPanel[data-entered="true"] .drawerHeader,
+  .drawerPanel[data-entered="true"] .drawerContent,
+  .drawerPanel[data-entered="true"] .drawerFooter,
+  .drawerBackdrop,
+  .uploadZone:global(.is-dragging),
+  .uploadRow:global(.is-success),
+  .smartEmptyMark,
+  .guidedRailSegment[data-active="true"],
+  .guidedStep[data-active="true"] {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
