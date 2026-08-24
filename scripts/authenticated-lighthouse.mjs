@@ -16,6 +16,10 @@ const authenticated = process.env.AUTHENTICATED !== "false";
 const release = process.env.GITHUB_SHA || process.env.APP_RELEASE || "local";
 const outputFile = process.env.OUTPUT_FILE || "authenticated-lighthouse-results.json";
 const minimumScore = Number(process.env.MIN_SCORE || "95");
+const lighthouseAttempts = Math.max(
+  1,
+  Number.parseInt(process.env.LIGHTHOUSE_ATTEMPTS || "2", 10) || 2,
+);
 
 if (!monitorToken) {
   throw new Error("PERFORMANCE_MONITOR_TOKEN is required");
@@ -184,6 +188,27 @@ async function runLighthouse(chrome, url, strategy, cookieHeader) {
   };
 }
 
+async function runLighthouseWithRetry(chrome, url, strategy, cookieHeader) {
+  for (let attempt = 1; attempt <= lighthouseAttempts; attempt += 1) {
+    try {
+      return await runLighthouse(chrome, url, strategy, cookieHeader);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isMissingScore = message === "Lighthouse returned no performance score";
+      if (!isMissingScore || attempt === lighthouseAttempts) throw error;
+
+      // Chrome occasionally produces a report without FCP during a headless
+      // navigation. Retrying this transient result avoids failing the whole
+      // monitoring run while preserving failures for real collection errors.
+      process.stdout.write(
+        `retry Lighthouse ${strategy} ${url} attempt=${attempt + 1}/${lighthouseAttempts}\n`,
+      );
+      await delay(2_000);
+    }
+  }
+  throw new Error("Lighthouse retry loop exhausted");
+}
+
 // `/api/*` is the Cloudflare-approved API ingress; Caddy strips this prefix
 // before forwarding to the token-protected FastAPI internal route.
 const authSession = authenticated
@@ -319,7 +344,7 @@ try {
       process.stdout.write(`${authenticated ? "authenticated" : "public"} ${strategy} ${url}\n`);
       try {
         if (authenticated) await assertAuthenticated(url, cookieHeader);
-        runs.push(await runLighthouse(chrome, url, strategy, cookieHeader));
+        runs.push(await runLighthouseWithRetry(chrome, url, strategy, cookieHeader));
       } catch (error) {
         runs.push({
           url,
