@@ -12,8 +12,10 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.email_message import EmailAttachment, EmailMessage
 from api.models.meeting import (
     AttendanceRole,
     AttendanceStatus,
@@ -359,6 +361,55 @@ async def test_confirm_meeting_success_generates_notice_document(
     body = resp.json()
     assert body["status"] == "confirmed"
     assert body["notice_document_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_confirm_meeting_auto_sends_notice_pdf_to_imported_org_members(
+    db_session: AsyncSession,
+    authed_client_factory,
+    admin_user: User,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.core import config as config_module
+    from api.services import email_dispatch
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    queued_message_ids: list[uuid.UUID] = []
+
+    async def fake_send_now(_db: AsyncSession, _user: User, message: EmailMessage) -> None:
+        queued_message_ids.append(message.id)
+
+    monkeypatch.setattr(email_dispatch, "send_now", fake_send_now)
+    org = await _make_org(db_session)
+    attendee = User(
+        email=f"meeting-attendee-{uuid.uuid4().hex[:8]}@example.edu", display_name="組織成員"
+    )
+    db_session.add(attendee)
+    await db_session.flush()
+    meeting = await _make_meeting(
+        db_session,
+        org,
+        admin_user,
+        starts_at=datetime.now(UTC) + timedelta(days=1),
+        location="學生活動中心",
+    )
+    await _make_attendance(db_session, meeting, attendee)
+    await _make_agenda_item(db_session, meeting, title="通過本學期預算案")
+
+    response = await authed_client_factory(admin_user).post(f"/meetings/{meeting.id}/confirm")
+
+    assert response.status_code == 200, response.text
+    email_message_id = uuid.UUID(response.json()["notice_email_message_id"])
+    assert queued_message_ids == [email_message_id]
+    attachment = await db_session.scalar(
+        select(EmailAttachment).where(EmailAttachment.message_id == email_message_id)
+    )
+    assert attachment is not None
+    assert attachment.content_type == "application/pdf"
+    from api.services.storage import get_storage
+
+    assert (await get_storage().read_bytes(attachment.storage_key)).startswith(b"%PDF")
 
 
 @pytest.mark.asyncio

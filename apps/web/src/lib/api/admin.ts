@@ -1,10 +1,25 @@
 import type {
-  AccountMergePreview, AdminUserDetail, MeetingBillStage, OrgRead, OrgWithPositions, PermissionCodeInfo, PositionCategory, PositionSummary, UserBatchPreRegisterResult,
+  AccountMergePreview, AdminUserDetail, CadreDirectoryImportOut, MeetingBillStage, OrgRead, OrgWithPositions, PermissionCodeInfo, PositionCategory, PositionSummary, UserBatchPreRegisterResult,
 } from "../types";
-import { get, post, patch, del, request } from "./core";
+import { csrfHeaders, get, post, patch, del, request } from "./core";
 
 export const adminApi = {
   dashboardStats: () => get<{ active_user_count: number; position_count: number }>("/admin/dashboard-stats"),
+  importHchsCadreDirectory: (
+    file: File,
+    body: { academicYear: number; termStart: string; termEnd: string | null },
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("academic_year", String(body.academicYear));
+    form.append("term_start", body.termStart);
+    if (body.termEnd) form.append("term_end", body.termEnd);
+    return request<CadreDirectoryImportOut>("/admin/imports/hchs-cadre-directory", {
+      method: "POST",
+      headers: csrfHeaders("POST"),
+      body: form,
+    });
+  },
   // 使用者
   listUsers: (params?: { keyword?: string; active_only?: boolean; limit?: number; offset?: number }) => {
     const p: Record<string, string> = {};

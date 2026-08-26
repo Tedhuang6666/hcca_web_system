@@ -8,6 +8,7 @@ from api.models.user import User
 from api.services import school_class as class_svc
 from api.services.school_class_import import (
     import_roster_pdf,
+    parse_contact_directory_text,
     parse_roster_csv_text,
     parse_roster_pdf_text,
 )
@@ -38,6 +39,14 @@ def test_parse_roster_csv_text_accepts_import_file_headers() -> None:
     assert len(rows) == 1
     assert rows[0].display_name == "王○勛"
     assert rows[0].student_id == "510001"
+
+
+def test_parse_contact_directory_text_removes_interleaved_birthday_prefix() -> None:
+    rows = parse_contact_directory_text("2010/4/8sky0621218@gmail.com張軒睿410520204 17 0966023718")
+
+    assert len(rows) == 1
+    assert rows[0].email == "sky0621218@gmail.com"
+    assert (rows[0].display_name, rows[0].class_code, rows[0].seat_number) == ("張軒睿", "204", 17)
 
 
 async def test_import_roster_file_creates_classes_people_and_seats(

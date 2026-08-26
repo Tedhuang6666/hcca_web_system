@@ -40,6 +40,13 @@ _ROSTER_LINE = re.compile(
     r"(?:\s+\d+)?\s*$"
 )
 _ACADEMIC_YEAR_IN_FILENAME = re.compile(r"(?<!\d)(\d{2,3})[-－]")
+_CONTACT_DIRECTORY_ROW = re.compile(
+    r"(?P<email>[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})"
+    r"(?P<display_name>[\u4e00-\u9fff]{2,8})\s*"
+    r"(?P<student_id>\d{5,20})\s*"
+    r"(?P<class_code>\d{3})\s*"
+    r"(?P<seat_number>\d{1,3})\s+09\d{8}"
+)
 
 
 @dataclass(frozen=True)
@@ -50,8 +57,52 @@ class ParsedRosterRow:
     student_id: str
 
 
+@dataclass(frozen=True)
+class ParsedContactDirectoryRow(ParsedRosterRow):
+    email: str
+
+
+def parse_contact_directory_text(text: str) -> list[ParsedContactDirectoryRow]:
+    """解析 Google 表單匯出的幹部通訊錄 PDF 文字。"""
+    rows: list[ParsedContactDirectoryRow] = []
+    seen_student_ids: set[str] = set()
+    seen_emails: set[str] = set()
+
+    for match in _CONTACT_DIRECTORY_ROW.finditer(text):
+        email = re.sub(r"^\d{4}/\d{1,2}/\d{1,2}", "", match.group("email")).lower()
+        student_id = match.group("student_id")
+        if student_id in seen_student_ids:
+            raise ValueError(f"通訊錄中的學號 {student_id} 重複")
+        if email in seen_emails:
+            raise ValueError(f"通訊錄中的 Email {email} 重複")
+        seen_student_ids.add(student_id)
+        seen_emails.add(email)
+        rows.append(
+            ParsedContactDirectoryRow(
+                display_name=match.group("display_name"),
+                class_code=match.group("class_code"),
+                seat_number=int(match.group("seat_number")),
+                student_id=student_id,
+                email=email,
+            )
+        )
+    return rows
+
+
 def parse_roster_pdf_text(text: str) -> list[ParsedRosterRow]:
     """解析校方編班 PDF 的文字表格，忽略頁首與頁尾。"""
+    directory_rows = parse_contact_directory_text(text)
+    if directory_rows:
+        return [
+            ParsedRosterRow(
+                display_name=row.display_name,
+                class_code=row.class_code,
+                seat_number=row.seat_number,
+                student_id=row.student_id,
+            )
+            for row in directory_rows
+        ]
+
     rows: list[ParsedRosterRow] = []
     seen_seats: set[tuple[str, int]] = set()
     seen_student_ids: set[str] = set()
@@ -101,6 +152,25 @@ def parse_roster_pdf(file_bytes: bytes) -> list[ParsedRosterRow]:
     except PdfReadError as exc:
         raise ValueError("無法讀取 PDF，請確認檔案未損毀") from exc
     return parse_roster_pdf_text(text)
+
+
+def parse_contact_directory_pdf(file_bytes: bytes) -> list[ParsedContactDirectoryRow]:
+    """讀取幹部通訊錄 PDF，保留寄送通知所需的 Email。"""
+    if not file_bytes.startswith(b"%PDF"):
+        raise ValueError("上傳檔案不是有效的 PDF")
+    try:
+        reader = PdfReader(BytesIO(file_bytes), strict=False)
+        if reader.is_encrypted:
+            raise ValueError("不支援有密碼的 PDF")
+        if len(reader.pages) > 100:
+            raise ValueError("PDF 頁數過多，請確認上傳的是幹部通訊錄")
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    except PdfReadError as exc:
+        raise ValueError("無法讀取 PDF，請確認檔案未損毀") from exc
+    rows = parse_contact_directory_text(text)
+    if not rows:
+        raise ValueError("PDF 中找不到可辨識的幹部通訊錄資料")
+    return rows
 
 
 def parse_roster_csv_text(text: str) -> list[ParsedRosterRow]:
