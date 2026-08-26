@@ -233,5 +233,10 @@ async def test_meeting_notice_seal_stays_on_one_page_with_handwritten_font() -> 
 
     assert "國立新竹高級中學班聯會設計部開會通知單</header>" in rendered
     assert 'font-family: "OfficialLishu"' in rendered
+    seal = rendered.split('<section class="meeting-seal"', maxsplit=1)[1].split(
+        "</section>", maxsplit=1
+    )[0]
+    assert "國立新竹高級中學班聯會設計部" in seal
+    assert "黃丞廷" not in seal
     assert "white-space: nowrap" in rendered
     assert len(PdfReader(BytesIO(pdf)).pages) == 1

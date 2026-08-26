@@ -780,6 +780,21 @@ export interface ClassRosterPdfImportOut {
   roster_updated: number;
 }
 
+export interface CadreDirectoryImportOut {
+  academic_year: number;
+  source_rows: number;
+  cadre_members: number;
+  users_created: number;
+  users_reused: number;
+  orgs_created: number;
+  positions_created: number;
+  permissions_added: number;
+  assignments_created: number;
+  roster_created: number;
+  roster_updated: number;
+  class_codes: string[];
+}
+
 
 // ── 人員與身分總表 ────────────────────────────────────────────────────────────
 

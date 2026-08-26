@@ -13,7 +13,7 @@ from collections import defaultdict
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -35,7 +35,9 @@ from api.models.org import Org, Permission, Position, PositionCategory, UserPosi
 from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
 from api.models.user_identity import UserIdentity
+from api.schemas.cadre_import import CadreDirectoryImportOut
 from api.services import audit as audit_svc
+from api.services import cadre_import as cadre_import_svc
 from api.services import mfa as mfa_svc
 from api.services import org as org_svc
 from api.services import person as person_svc
@@ -62,6 +64,7 @@ router = APIRouter(
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 AdminUser = Annotated[User, Depends(require_permission(PermissionCode.ADMIN_ALL))]
+MAX_CADRE_DIRECTORY_IMPORT_BYTES = 10 * 1024 * 1024
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -257,6 +260,53 @@ class PermissionCatalogItem(BaseModel):
 class AdminDashboardStats(BaseModel):
     active_user_count: int
     position_count: int
+
+
+@router.post(
+    "/imports/hchs-cadre-directory",
+    response_model=CadreDirectoryImportOut,
+    summary="一鍵匯入新竹高中班聯會幹部通訊錄",
+)
+async def import_hchs_cadre_directory(
+    db: DbDep,
+    admin_user: AdminUser,
+    file: UploadFile = File(..., description="Google 表單匯出的幹部通訊錄 PDF"),
+    academic_year: int = Form(115, ge=1, le=999),
+    term_start: date = Form(date(2026, 8, 1)),
+    term_end: date | None = Form(date(2027, 7, 31)),
+) -> CadreDirectoryImportOut:
+    """以 PDF 的班級與座號建立名冊，再套用已核對的班聯會職務與權限。"""
+    file_bytes = await file.read(MAX_CADRE_DIRECTORY_IMPORT_BYTES + 1)
+    if len(file_bytes) > MAX_CADRE_DIRECTORY_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="匯入檔不可超過 10 MB",
+        )
+    try:
+        result = await cadre_import_svc.import_hchs_cadre_directory(
+            db,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            academic_year=academic_year,
+            term_start=term_start,
+            term_end=term_end,
+            actor=admin_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        db,
+        entity_type="cadre_directory_import",
+        entity_id=str(academic_year),
+        action="cadre_directory.import",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta=result.model_dump(),
+        summary=f"匯入 {academic_year} 學年度新竹高中班聯會幹部通訊錄",
+    )
+    return result
 
 
 # ── 輔助 ─────────────────────────────────────────────────────────────────────

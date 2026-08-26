@@ -6,10 +6,14 @@ import logging
 import secrets
 import uuid
 from datetime import UTC, datetime
+from io import BytesIO
 
+import anyio
+from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from starlette.datastructures import Headers
 
 from api.core.cache import cache_invalidate_dashboard
 from api.models.email_message import EmailMessage
@@ -403,6 +407,48 @@ async def _create_notice_email_draft(
     return msg
 
 
+async def _attach_notice_pdf(
+    session: AsyncSession,
+    *,
+    meeting: Meeting,
+    notice,
+    email_message: EmailMessage,
+    uploaded_by_id: uuid.UUID,
+) -> None:
+    """把正式開會通知單 PDF 附在系統自動寄送的通知信上。"""
+    from api.models.email_message import EmailAttachment, EmailAttachmentMode
+    from api.services.official_print import render_document_print_html, render_print_pdf
+    from api.services.storage import get_storage
+
+    html = await render_document_print_html(session, notice)
+    pdf_bytes = await anyio.to_thread.run_sync(render_print_pdf, html)
+    upload = UploadFile(
+        file=BytesIO(pdf_bytes),
+        filename=f"{meeting.title}開會通知單.pdf",
+        headers=Headers({"content-type": "application/pdf"}),
+    )
+    try:
+        stored = await get_storage().save(
+            upload,
+            prefix=f"meeting-notices/{meeting.id}",
+            allowed_content_types={"application/pdf"},
+        )
+    finally:
+        await upload.close()
+    session.add(
+        EmailAttachment(
+            message_id=email_message.id,
+            uploaded_by_id=uploaded_by_id,
+            storage_key=stored.storage_key,
+            filename=stored.filename,
+            content_type=stored.content_type,
+            file_size=stored.file_size,
+            delivery_mode=EmailAttachmentMode.ATTACHMENT,
+        )
+    )
+    await session.flush()
+
+
 async def confirm_meeting(
     session: AsyncSession,
     meeting: Meeting,
@@ -461,9 +507,19 @@ async def confirm_meeting(
     try:
         email_draft = await _create_notice_email_draft(session, meeting, actor_id=actor.id)
         meeting.notice_email_message_id = email_draft.id
+        await _attach_notice_pdf(
+            session,
+            meeting=meeting,
+            notice=notice,
+            email_message=email_draft,
+            uploaded_by_id=actor.id,
+        )
+        from api.services.email_dispatch import send_now
+
+        await send_now(session, actor, email_draft)
         await session.flush()
     except Exception:
-        logger.warning("create meeting notice email draft failed", exc_info=True)
+        logger.warning("create and send meeting notice email failed", exc_info=True)
 
     await cache_invalidate_dashboard()
     return meeting
