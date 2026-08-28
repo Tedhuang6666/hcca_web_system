@@ -236,7 +236,7 @@ async def _create_notice_document(
     agenda_text = "\n".join(f"{i + 1}. {item.title}" for i, item in enumerate(ordered))
     recipients = [
         RecipientCreate(
-            recipient_type=RecipientType.MAIN,
+            recipient_type=RecipientType.ATTENDEE,
             name=record.user.display_name,
             email=record.user.email,
         )
