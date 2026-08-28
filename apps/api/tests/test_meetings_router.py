@@ -353,6 +353,7 @@ async def test_confirm_meeting_success_generates_notice_document(
         location="學生活動中心",
     )
     await _make_agenda_item(db_session, meeting, title="通過本學期預算案")
+    await _make_attendance(db_session, meeting, admin_user)
 
     ac = authed_client_factory(admin_user)
     resp = await ac.post(f"/meetings/{meeting.id}/confirm")
@@ -361,6 +362,26 @@ async def test_confirm_meeting_success_generates_notice_document(
     body = resp.json()
     assert body["status"] == "confirmed"
     assert body["notice_document_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_confirm_meeting_without_attendee_returns_422(
+    db_session: AsyncSession, authed_client_factory, admin_user: User
+) -> None:
+    org = await _make_org(db_session)
+    meeting = await _make_meeting(
+        db_session,
+        org,
+        admin_user,
+        starts_at=datetime.now(UTC) + timedelta(days=1),
+        location="學生活動中心",
+    )
+    await _make_agenda_item(db_session, meeting, title="通過本學期預算案")
+
+    resp = await authed_client_factory(admin_user).post(f"/meetings/{meeting.id}/confirm")
+
+    assert resp.status_code == 422
+    assert "至少設定一位出席者" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

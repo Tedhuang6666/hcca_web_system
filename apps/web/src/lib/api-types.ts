@@ -403,6 +403,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/imports/hchs-cadre-directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 一鍵匯入新竹高中班聯會幹部通訊錄
+         * @description 以 PDF 的班級與座號建立名冊，再套用已核對的班聯會職務與權限。
+         */
+        post: operations["import_hchs_cadre_directory_admin_imports_hchs_cadre_directory_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/lifecycle/archives": {
         parameters: {
             query?: never;
@@ -17079,6 +17099,30 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** Body_import_hchs_cadre_directory_admin_imports_hchs_cadre_directory_post */
+        Body_import_hchs_cadre_directory_admin_imports_hchs_cadre_directory_post: {
+            /**
+             * Academic Year
+             * @default 115
+             */
+            academic_year: number;
+            /**
+             * File
+             * @description Google 表單匯出的幹部通訊錄 PDF
+             */
+            file: string;
+            /**
+             * Term End
+             * @default 2027-07-31
+             */
+            term_end: string | null;
+            /**
+             * Term Start
+             * Format: date
+             * @default 2026-08-01
+             */
+            term_start: string;
+        };
         /** Body_import_regulation_documents_regulations_import_documents_post */
         Body_import_regulation_documents_regulations_import_documents_post: {
             /**
@@ -17479,6 +17523,33 @@ export interface components {
             close: string;
             /** Open */
             open: string;
+        };
+        /** CadreDirectoryImportOut */
+        CadreDirectoryImportOut: {
+            /** Academic Year */
+            academic_year: number;
+            /** Assignments Created */
+            assignments_created: number;
+            /** Cadre Members */
+            cadre_members: number;
+            /** Class Codes */
+            class_codes?: string[];
+            /** Orgs Created */
+            orgs_created: number;
+            /** Permissions Added */
+            permissions_added: number;
+            /** Positions Created */
+            positions_created: number;
+            /** Roster Created */
+            roster_created: number;
+            /** Roster Updated */
+            roster_updated: number;
+            /** Source Rows */
+            source_rows: number;
+            /** Users Created */
+            users_created: number;
+            /** Users Reused */
+            users_reused: number;
         };
         /** CalendarChecklistCreate */
         CalendarChecklistCreate: {
@@ -39228,6 +39299,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImpersonationStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_hchs_cadre_directory_admin_imports_hchs_cadre_directory_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_hchs_cadre_directory_admin_imports_hchs_cadre_directory_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CadreDirectoryImportOut"];
                 };
             };
             /** @description Validation Error */
