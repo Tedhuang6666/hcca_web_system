@@ -655,6 +655,10 @@ class DocumentCreate(BaseModel):
         if self.category in notice_categories:
             if not self.meeting_purpose or not self.meeting_time or not self.meeting_location:
                 raise ValueError("通知單需填寫事由、時間與地點")
+            if self.category == DocumentCategory.MEETING_NOTICE and not any(
+                recipient.recipient_type == RecipientType.ATTENDEE for recipient in self.recipients
+            ):
+                raise ValueError("開會通知單需至少設定一位出席者")
         elif self.category == DocumentCategory.RECORD:
             if not self.meeting_time or not self.meeting_location:
                 raise ValueError("紀錄需填寫時間與地點")

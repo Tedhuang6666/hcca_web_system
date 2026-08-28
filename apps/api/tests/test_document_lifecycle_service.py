@@ -21,6 +21,7 @@ from api.core.clock import local_today
 from api.models.document import (
     ApprovalStepStatus,
     Document,
+    DocumentCategory,
     DocumentSerialTemplate,
     DocumentStatus,
     DocumentVisibility,
@@ -650,6 +651,20 @@ async def test_upsert_recipients_non_draft_raises(db_session: AsyncSession, make
     with pytest.raises(ValueError, match="草稿狀態"):
         await upsert_recipients(
             db_session, doc, recipients=[RecipientCreate(recipient_type="main", name="x")]
+        )
+
+
+async def test_upsert_meeting_notice_recipients_requires_attendee(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = await _make_draft(db_session, org, creator)
+    doc.category = DocumentCategory.MEETING_NOTICE
+
+    with pytest.raises(ValueError, match="至少設定一位出席者"):
+        await upsert_recipients(
+            db_session, doc, recipients=[RecipientCreate(recipient_type="main", name="僅受文者")]
         )
 
 

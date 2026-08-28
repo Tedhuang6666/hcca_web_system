@@ -699,7 +699,7 @@ async def render_document_print_html(
             meeting_body += '<div class="agenda-title">議事日程：</div>'
             meeting_body += f'<div class="agenda-body">{_hanging_text(doc.doc_description)}</div>'
         if issuer:
-            seal_font_size = min(22.0, max(14.0, 395 / max(len(issuer), 1)))
+            seal_font_size = min(30.0, max(16.0, 410 / max(len(issuer), 1)))
             meeting_body += (
                 f'<section class="meeting-seal" style="font-size:{seal_font_size:.1f}pt">'
                 f"{issuer}</section>"
@@ -998,15 +998,15 @@ async def render_document_print_html(
     }}
     .meeting-seal {{
       display: block;
-      width: auto;
-      max-width: 100%;
-      margin-top: 7mm;
+      width: 100%;
+      margin: 9mm auto 0;
       break-inside: avoid;
       color: #003aa7;
       font-family: "OfficialLishu","OfficialKai","OfficialSerifTC","LiSu","STLiti",serif;
       font-size: 22pt;
       line-height: 1.2;
-      letter-spacing: .04em;
+      letter-spacing: .03em;
+      text-align: center;
       white-space: nowrap;
     }}
     .signature-title {{

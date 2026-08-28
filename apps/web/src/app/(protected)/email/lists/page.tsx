@@ -11,6 +11,15 @@ const EMPTY_RECIPIENTS = {
   user_ids: [], position_ids: [], org_ids: [], external_emails: [],
   include_all: false, include_school: false,
 };
+const SCHOOL_EMAIL_DOMAIN = "hchs.hc.edu.tw";
+
+function toSchoolEmail(value: string): { email: string; converted: boolean } {
+  const input = value.trim();
+  const studentId = input.match(/^(?:g0)?(\d{6,12})$/i)?.[1];
+  return studentId
+    ? { email: `g0${studentId}@${SCHOOL_EMAIL_DOMAIN}`, converted: true }
+    : { email: input, converted: false };
+}
 
 export default function EmailListsPage() {
   const orgs = useOrgOptions();
@@ -30,11 +39,16 @@ export default function EmailListsPage() {
   }, []);
 
   const create = async () => {
+    let convertedCount = 0;
     const members = raw
       .split(/\r?\n/)
       .map((line) => line.split(/[\t,]/).map((cell) => cell.trim()))
-      .filter(([email]) => email)
-      .map(([email, memberName]) => ({ email, name: memberName || null, variables: {} }));
+      .filter(([address]) => address && !["學號", "email", "電子郵件"].includes(address.toLowerCase()))
+      .map(([address, memberName]) => {
+        const resolved = toSchoolEmail(address);
+        if (resolved.converted) convertedCount += 1;
+        return { email: resolved.email, name: memberName || null, variables: {} };
+      });
     if (!name.trim() || members.length === 0) return toast.error("請填寫名稱與至少一位收件人");
     try {
       await emailApi.createRecipientList({
@@ -48,7 +62,11 @@ export default function EmailListsPage() {
       setName("");
       setRaw("");
       load();
-      toast.success("名單已建立並自動去除重複 Email");
+      toast.success(
+        convertedCount
+          ? `名單已建立：${convertedCount} 筆學號已換為校務信箱，並自動去除重複 Email`
+          : "名單已建立並自動去除重複 Email",
+      );
     } catch (e) {
       toast.error(apiErrorMessage(e, "建立名單失敗"));
     }
@@ -69,8 +87,11 @@ export default function EmailListsPage() {
           className="input min-h-36 font-mono text-xs"
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
-          placeholder={"每行一位，可使用 Email,姓名 或從試算表貼上\nuser@example.com,王小明"}
+          placeholder={"每行一位，可使用 Email 或學號,姓名，也可從試算表貼上\ng0108123456@hchs.hc.edu.tw,王小明\n108123456,王小明"}
         />
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          純學號會自動轉為 g0＋學號＠{SCHOOL_EMAIL_DOMAIN}。
+        </p>
         <div className="grid gap-2 sm:grid-cols-2">
           <select className="input" value={visibility} onChange={(e) => setVisibility(e.target.value as EmailResourceVisibility)}>
             <option value="private">私人名單</option>

@@ -177,6 +177,16 @@ def test_decree_update_defaults_issuer_title() -> None:
     assert payload.issuer_full_name == "主席"
 
 
+def test_meeting_notice_create_without_attendee_is_rejected() -> None:
+    with pytest.raises(ValueError, match="至少設定一位出席者"):
+        _make_create_payload(
+            category=DocumentCategory.MEETING_NOTICE,
+            meeting_purpose="召開幹部會議",
+            meeting_time=datetime(2026, 8, 31, 18, tzinfo=UTC),
+            meeting_location="第一會議室",
+        )
+
+
 @pytest.mark.asyncio
 async def test_decree_print_hides_empty_recipient_and_subject() -> None:
     """令列印格式不輸出空受文者，也不顯示主旨段落。"""
