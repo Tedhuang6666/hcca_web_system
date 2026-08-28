@@ -238,5 +238,7 @@ async def test_meeting_notice_seal_stays_on_one_page_with_handwritten_font() -> 
     )[0]
     assert "國立新竹高級中學班聯會設計部" in seal
     assert "黃丞廷" not in seal
+    assert 'style="font-size:27.3pt"' in rendered
+    assert "text-align: center;" in rendered
     assert "white-space: nowrap" in rendered
     assert len(PdfReader(BytesIO(pdf)).pages) == 1

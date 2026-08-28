@@ -524,6 +524,10 @@ async def upsert_recipients(
 ) -> list[DocumentRecipient]:
     if doc.status != DocumentStatus.DRAFT:
         raise ValueError("只有草稿狀態的公文可以修改受文者")
+    if doc.category == DocumentCategory.MEETING_NOTICE and not any(
+        recipient.recipient_type == RecipientType.ATTENDEE for recipient in recipients
+    ):
+        raise ValueError("開會通知單需至少設定一位出席者")
     await _validate_recipient_targets(session, recipients)
 
     old_result = await session.execute(

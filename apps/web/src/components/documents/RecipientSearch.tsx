@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { OrgRead, UserSummary } from "@/lib/api";
-import { usersApi } from "@/lib/api";
-import type { RecipientType, SchoolClassListItem } from "@/lib/types";
+import { emailApi, usersApi } from "@/lib/api";
+import type { EmailRecipientListOut, RecipientType, SchoolClassListItem } from "@/lib/types";
 import { getRecentRecipients, pushRecentRecipients, type RecentRecipient } from "@/lib/recentRecipients";
 
 // 收件者沒有穩定 id（可自由輸入），用 name + email 以 JSON 編碼成去重鍵。
@@ -59,6 +59,7 @@ export type RecipientDraft = {
 
 export function RecipientSearch({
   onAdd,
+  onAddMany,
   inputStyle,
   selectStyle,
   isMeetingNotice,
@@ -68,6 +69,7 @@ export function RecipientSearch({
   classes,
 }: {
   onAdd: (r: RecipientDraft) => void;
+  onAddMany: (recipients: RecipientDraft[]) => void;
   inputStyle: React.CSSProperties;
   selectStyle: React.CSSProperties;
   isMeetingNotice: boolean;
@@ -82,6 +84,8 @@ export function RecipientSearch({
   const [email, setEmail] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [recents, setRecents] = useState<RecentRecipient[]>([]);
+  const [recipientLists, setRecipientLists] = useState<EmailRecipientListOut[]>([]);
+  const [recipientListError, setRecipientListError] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<
     Pick<RecipientDraft, "target_user_id" | "target_org_id" | "target_class_id">
   >({});
@@ -89,6 +93,21 @@ export function RecipientSearch({
   useEffect(() => {
     setRecents(getRecentRecipients());
   }, []);
+
+  useEffect(() => {
+    if (!isMeetingNotice) return;
+    let active = true;
+    emailApi.listRecipientLists()
+      .then((lists) => {
+        if (active) setRecipientLists(lists);
+      })
+      .catch(() => {
+        if (active) setRecipientListError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isMeetingNotice]);
 
   const suggestions = useDebouncedUserSuggestions(query);
 
@@ -163,6 +182,15 @@ export function RecipientSearch({
     remember(name, mail);
   };
 
+  const addRecipientList = (list: EmailRecipientListOut) => {
+    const attendees = list.members.map((member) => ({
+      recipient_type: "attendee" as const,
+      name: member.name?.trim() || member.email,
+      email: member.email,
+    }));
+    onAddMany(attendees);
+  };
+
   return (
     <div className="space-y-2">
       {recents.length > 0 && (
@@ -186,6 +214,34 @@ export function RecipientSearch({
               {r.label}
             </button>
           ))}
+        </div>
+      )}
+      {isMeetingNotice && (recipientLists.length > 0 || recipientListError) && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
+            通知群組（加入全部出席者）
+          </p>
+          {recipientListError ? (
+            <p className="text-xs" style={{ color: "var(--danger)" }}>無法載入通知群組，請稍後再試。</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {recipientLists.map((list) => (
+                <button
+                  key={list.id}
+                  type="button"
+                  onClick={() => addRecipientList(list)}
+                  className="rounded-full border px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80"
+                  style={{
+                    background: "var(--primary-dim)",
+                    borderColor: "var(--primary-dim)",
+                    color: "var(--primary)",
+                  }}
+                >
+                  {list.name} · {list.members.length} 人
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="flex flex-wrap gap-2">

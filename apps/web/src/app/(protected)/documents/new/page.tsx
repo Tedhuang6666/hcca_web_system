@@ -16,7 +16,7 @@ import SmartTextarea from "@/components/ui/SmartTextarea";
 import Toggle from "@/components/ui/Toggle";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
-import { RecipientSearch } from "@/components/documents/RecipientSearch";
+import { RecipientSearch, type RecipientDraft } from "@/components/documents/RecipientSearch";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import {
@@ -444,6 +444,10 @@ export default function NewDocumentPage() {
       ? "請選擇字號前綴"
       : "",
     recordChairperson: isRecord && !meetingChairperson.trim() ? "紀錄需填寫主席" : "",
+    meetingNoticeAttendees: isMeetingNotice
+      && !recipients.some((recipient) => recipient.recipient_type === "attendee")
+      ? "開會通知單需至少設定一位出席者"
+      : "",
     recordAttendees: isRecord && recipients.length === 0 ? "紀錄需填寫出席者" : "",
     recordDiscussion: isRecord && !docDescription.trim() ? "紀錄需填寫討論事項" : "",
     recordDecision: isRecord && !actionRequired.trim() ? "紀錄需填寫決議" : "",
@@ -692,6 +696,7 @@ export default function NewDocumentPage() {
       meetingLocation: true,
       serialTemplate: true,
       recordChairperson: true,
+      meetingNoticeAttendees: true,
       recordAttendees: true,
       recordDiscussion: true,
       recordDecision: true,
@@ -813,8 +818,12 @@ export default function NewDocumentPage() {
       toast.error("請先完成此步驟的必填欄位");
       return;
     }
-    if (activeStep === 2 && fieldError.recordAttendees) {
-      setTouched((current) => ({ ...current, recordAttendees: true }));
+    if (activeStep === 2 && (fieldError.meetingNoticeAttendees || fieldError.recordAttendees)) {
+      setTouched((current) => ({
+        ...current,
+        meetingNoticeAttendees: true,
+        recordAttendees: true,
+      }));
       toast.error("請先完成此步驟的必填欄位");
       return;
     }
@@ -833,6 +842,24 @@ export default function NewDocumentPage() {
   } as React.CSSProperties;
 
   const selectStyle = { ...inputStyle, cursor: "pointer" } as React.CSSProperties;
+
+  const addRecipients = (newRecipients: RecipientDraft[]) => {
+    setRecipients((current) => {
+      const emailKeys = new Set(
+        current
+          .map((recipient) => recipient.email.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const additions = newRecipients.filter((recipient) => {
+        const email = recipient.email.trim().toLowerCase();
+        if (!email) return true;
+        if (emailKeys.has(email)) return false;
+        emailKeys.add(email);
+        return true;
+      });
+      return [...current, ...additions.map((recipient) => ({ ...recipient, id: crypto.randomUUID() }))];
+    });
+  };
 
   return (
     <div className="app-page-width space-y-5">
@@ -1169,7 +1196,8 @@ export default function NewDocumentPage() {
               </ul>
             )}
             <RecipientSearch
-              onAdd={(r) => setRecipients(p => [...p, { ...r, id: crypto.randomUUID() }])}
+              onAdd={(recipient) => addRecipients([recipient])}
+              onAddMany={addRecipients}
               inputStyle={inputStyle}
               selectStyle={selectStyle}
               isMeetingNotice={isMeetingNotice}
@@ -1178,8 +1206,10 @@ export default function NewDocumentPage() {
               orgs={orgs}
               classes={classes}
             />
-            {showErr("recordAttendees") && (
-              <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordAttendees}</p>
+            {(showErr("meetingNoticeAttendees") || showErr("recordAttendees")) && (
+              <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
+                {fieldError.meetingNoticeAttendees || fieldError.recordAttendees}
+              </p>
             )}
           </FormSection>
           )}
