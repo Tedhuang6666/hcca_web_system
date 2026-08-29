@@ -801,10 +801,12 @@ def _looks_like_history(line: str) -> bool:
 # 用於把整段沿革切成「逐筆事件」，即使事件之間沒有空白分隔
 # （例：「…112學年度…修訂113學年度…修訂」需切成兩筆）。
 _HISTORY_EVENT_START_RE = re.compile(
-    r"(?:中華民國|民國)?\s*\d{2,4}\s*學年度"  # 102學年度…
-    r"|(?:中華民國|民國)\s*\d{2,4}\s*年"  # 民國114年…
-    r"|(?<!學)\d{2,4}\s*年\s*\d{1,2}\s*月"  # 114年5月…（排除「學年度」誤判）
-    r"|\d{2,4}[./-]\d{1,2}[./-]\d{1,2}"  # 2025/5/19
+    # _normalize_spacing() leaves at most one ASCII space between tokens. Keep
+    # these spaces bounded so matching untrusted imported text stays linear.
+    r"(?:中華民國|民國)?+ ?+\d{2,4}+ ?+學年度"  # 102學年度…
+    r"|(?:中華民國|民國) ?+\d{2,4}+ ?+年"  # 民國114年…
+    r"|(?<!學)\d{2,4}+ ?+年 ?+\d{1,2}+ ?+月"  # 114年5月…（排除「學年度」誤判）
+    r"|\d{2,4}+[./-]\d{1,2}+[./-]\d{1,2}+"  # 2025/5/19
 )
 
 
