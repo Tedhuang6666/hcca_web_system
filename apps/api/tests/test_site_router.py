@@ -369,7 +369,14 @@ async def test_admin_upload_image_succeeds(
         files={"file": ("logo.png", png_magic, "image/png")},
     )
     assert resp.status_code == 201
-    assert resp.json()["content_type"] == "image/png"
+    body = resp.json()
+    assert body["content_type"] == "image/png"
+    assert body["url"].startswith("/site/public/images/public-site/")
+
+    image_resp = await ac.get(body["url"])
+    assert image_resp.status_code == 200
+    assert image_resp.headers["content-type"].startswith("image/png")
+    assert image_resp.content.startswith(b"\x89PNG")
 
 
 async def test_admin_upload_public_file_succeeds(

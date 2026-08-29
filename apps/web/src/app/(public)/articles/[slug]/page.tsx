@@ -39,7 +39,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
   const path = `/articles/${encodeURIComponent(slug)}`;
   const canonical = absoluteUrl(path);
   const coverImageUrl = uploadUrl(page.cover_image_url);
-  const headings = extractArticleHeadings(page.body_md);
+  const headings = extractArticleHeadings(page.body_md, [2]);
   const readingTime = articleReadingTime(page.body_md);
 
   return (

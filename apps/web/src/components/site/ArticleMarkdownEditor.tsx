@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, ImagePlus, Pencil } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { siteApi } from "@/lib/api/site";
@@ -21,16 +21,44 @@ export default function ArticleMarkdownEditor({
   const [showImageTools, setShowImageTools] = useState(false);
   const [imageAlt, setImageAlt] = useState("");
   const [imageWidth, setImageWidth] = useState("960");
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const latestValueRef = useRef(value);
+  const insertionPointRef = useRef<{ start: number; end: number } | null>(null);
+  latestValueRef.current = value;
 
   const insertImage = (url: string, filename?: string) => {
     const cleanUrl = url.trim();
     if (!cleanUrl) return;
+    if (preview) {
+      toast.error("請先切回撰寫模式，把游標放在要插入的位置");
+      return;
+    }
     const label = (imageAlt.trim() || filename || "文章圖片").replaceAll("|", "");
     const width = Number(imageWidth);
     const size = Number.isFinite(width) && width > 0 ? `|w=${Math.min(width, 1600)}` : "";
-    onChange(`${value.trimEnd()}\n\n![${label}${size}](${cleanUrl})\n`);
+    const block = `![${label}${size}](${cleanUrl})`;
+    const current = latestValueRef.current;
+    const point = insertionPointRef.current ?? { start: current.length, end: current.length };
+    const start = Math.max(0, Math.min(point.start, current.length));
+    const end = Math.max(start, Math.min(point.end, current.length));
+    const before = current.slice(0, start);
+    const after = current.slice(end);
+    const prefix = before
+      ? before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n"
+      : "";
+    const suffix = after
+      ? after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n"
+      : "\n";
+    const nextValue = `${before}${prefix}${block}${suffix}${after}`;
+    const caretPosition = start + prefix.length + block.length;
+    insertionPointRef.current = { start: caretPosition, end: caretPosition };
+    onChange(nextValue);
     setImageAlt("");
-    toast.success("圖片已插入文章");
+    toast.success("圖片已插入游標位置");
+    requestAnimationFrame(() => {
+      editorRef.current?.focus();
+      editorRef.current?.setSelectionRange(caretPosition, caretPosition);
+    });
   };
 
   return (
@@ -63,8 +91,9 @@ export default function ArticleMarkdownEditor({
           </div>
           <AnimatedFileUpload
             accept="image/png,image/jpeg,image/gif,image/webp"
+            disabled={preview}
             label="拖曳照片到這裡"
-            hint="支援點擊選取或貼上圖片；上傳後會自動插入文章末端"
+            hint={preview ? "請切回撰寫模式後再上傳，圖片會插入游標位置" : "先在文章內文放置游標，再上傳照片"}
             onUpload={(file, reportProgress) => siteApi.uploadImage(file, reportProgress)}
             onUploaded={(uploaded) => insertImage(uploaded.url, uploaded.filename)}
           />
@@ -78,8 +107,21 @@ export default function ArticleMarkdownEditor({
         </div>
       ) : (
         <textarea
+          ref={editorRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onBlur={(event) => {
+            insertionPointRef.current = {
+              start: event.currentTarget.selectionStart,
+              end: event.currentTarget.selectionEnd,
+            };
+          }}
+          onSelect={(event) => {
+            insertionPointRef.current = {
+              start: event.currentTarget.selectionStart,
+              end: event.currentTarget.selectionEnd,
+            };
+          }}
           className="input article-editor-textarea"
           rows={rows}
           placeholder="# 文章標題\n\n文章開頭摘要...\n\n## 第一個重點\n\n內容與圖片..."

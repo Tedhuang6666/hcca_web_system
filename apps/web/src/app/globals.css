@@ -2741,8 +2741,149 @@ select.input-field {
 }
 
 .article-editor-preview {
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.9;
   min-height: 28rem;
+  overflow-x: auto;
   padding: 1.25rem;
+}
+
+.article-editor-preview .article-markdown > * {
+  margin: 0;
+}
+
+.article-editor-preview .article-markdown {
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
+.article-editor-preview .article-markdown > * + * {
+  margin-top: 1.05rem;
+}
+
+.article-editor-preview .article-markdown-media-paragraph {
+  margin-top: 1.75rem;
+}
+
+.article-editor-preview .article-markdown h1 {
+  margin-bottom: 2rem;
+  color: var(--text-primary);
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 1.2;
+}
+
+.article-editor-preview .article-markdown h2 {
+  margin-top: 3rem;
+  margin-bottom: 0.15rem;
+  color: var(--text-primary);
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+
+.article-editor-preview .article-markdown h3 {
+  margin-top: 1.9rem;
+  margin-bottom: 0.1rem;
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  line-height: 1.4;
+}
+
+.article-editor-preview .article-markdown p {
+  margin: 0;
+}
+
+.article-editor-preview .article-markdown strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.article-editor-preview .article-markdown a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+}
+
+.article-editor-preview .article-markdown ul,
+.article-editor-preview .article-markdown ol {
+  margin: 0;
+  padding-left: 1.45rem;
+}
+
+.article-editor-preview .article-markdown ul { list-style: disc; }
+.article-editor-preview .article-markdown ol { list-style: decimal; }
+
+.article-editor-preview .article-markdown blockquote {
+  margin: 0;
+  border-block: 1px solid var(--border);
+  padding: 1rem 0;
+  color: var(--text-secondary);
+}
+
+.article-editor-preview .article-markdown hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.article-editor-preview .article-markdown-image {
+  margin: 0;
+}
+
+.article-editor-preview .article-markdown-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.article-editor-preview .article-markdown-image-caption {
+  display: block;
+  margin-top: 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.article-editor-preview .article-markdown code {
+  border-radius: var(--radius-sm);
+  padding: 0.12rem 0.3rem;
+  background: var(--bg-elevated);
+  font-size: 0.9em;
+}
+
+.article-editor-preview .article-markdown pre {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  padding: 1rem;
+}
+
+.article-editor-preview .article-markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.article-editor-preview .article-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.article-editor-preview .article-markdown th,
+.article-editor-preview .article-markdown td {
+  border: 1px solid var(--border);
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.article-editor-preview .article-markdown th {
+  background: var(--bg-elevated);
+  font-weight: 700;
 }
 
 /* ── 徽章 ─────────────────────────────────────────────────────────────── */

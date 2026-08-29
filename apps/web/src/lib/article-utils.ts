@@ -14,21 +14,28 @@ function cleanHeadingLabel(value: string): string {
 }
 
 /** 從文章 Markdown 取出可供目錄與標題共用的錨點。 */
-export function extractArticleHeadings(markdown: string | null | undefined): ArticleHeading[] {
+export function extractArticleHeadings(
+  markdown: string | null | undefined,
+  levels: ReadonlyArray<2 | 3> = [2, 3],
+): ArticleHeading[] {
   if (!markdown) return [];
 
   const headings: ArticleHeading[] = [];
   const pattern = /^(#{2,3})[ \t]+(.+?)[ \t]*$/gmu;
   let match: RegExpExecArray | null;
+  let headingIndex = 0;
 
   while ((match = pattern.exec(markdown)) !== null) {
     const label = cleanHeadingLabel(match[2]);
     if (!label) continue;
-    headings.push({
-      id: `article-section-${headings.length}`,
-      level: match[1].length as 2 | 3,
+    const level = match[1].length as 2 | 3;
+    const heading = {
+      id: `article-section-${headingIndex}`,
+      level,
       label,
-    });
+    } satisfies ArticleHeading;
+    headingIndex += 1;
+    if (levels.includes(level)) headings.push(heading);
   }
 
   return headings;

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import mimetypes
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +40,7 @@ from api.schemas.site import (
 )
 from api.services import audit as audit_svc
 from api.services import site as site_svc
-from api.services.storage import get_storage
+from api.services.storage import get_storage, validate_storage_key
 
 router = APIRouter(prefix="/site", tags=["公開官網"])
 
@@ -164,6 +166,52 @@ class UploadedPublicFileOut(BaseModel):
     file_size: int
 
 
+_PUBLIC_IMAGE_EXTENSIONS = frozenset({".gif", ".jpeg", ".jpg", ".png", ".webp"})
+
+
+def _public_site_image_url(storage_key: str) -> str:
+    """回傳不會暴露儲存後端細節、可長期使用的公開圖片路徑。"""
+    return f"/site/public/images/{storage_key}"
+
+
+def _public_image_key(storage_key: str) -> str:
+    try:
+        key = validate_storage_key(storage_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在") from exc
+    if not key.startswith("public-site/") or "." not in key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在")
+    suffix = "." + key.rsplit(".", 1)[-1].lower()
+    if suffix not in _PUBLIC_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在")
+    return key
+
+
+@router.get(
+    "/public/images/{storage_key:path}",
+    summary="讀取公開官網圖片",
+    response_class=Response,
+)
+async def get_public_site_image(storage_key: str) -> Response:
+    """以同源網址提供官網圖片，讓本地與 S3 儲存都能嵌入公開文章。"""
+    key = _public_image_key(storage_key)
+    storage = get_storage()
+    local_path = storage.local_path(key)
+    media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在")
+        return FileResponse(local_path, media_type=media_type, headers=headers)
+
+    try:
+        content = await storage.read_bytes(key)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在") from exc
+    return Response(content=content, media_type=media_type, headers=headers)
+
+
 @router.post(
     "/admin/images",
     response_model=UploadedImageOut,
@@ -188,7 +236,7 @@ async def admin_upload_image(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
     return UploadedImageOut(
-        url=stored.url or f"/uploads/{stored.storage_key}",
+        url=_public_site_image_url(stored.storage_key),
         filename=stored.filename,
         content_type=stored.content_type,
         file_size=stored.file_size,
