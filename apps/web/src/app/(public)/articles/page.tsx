@@ -35,11 +35,11 @@ export default async function ArticlesPage() {
       <div className="public-articles-page">
         <header className="public-articles-heading">
           <div>
-            <p className="public-articles-mark"><BookOpenText size={16} aria-hidden /> 校園文章</p>
-            <h1>把校園裡的<br className="sm:hidden" />實用經驗留下來</h1>
+            <p className="public-articles-mark"><BookOpenText size={16} aria-hidden /> 校園專刊</p>
+            <h1>歡迎瀏覽資訊專刊</h1>
           </div>
           <p className="public-articles-intro">
-            從第一次訂午餐，到理解學生自治的運作方式。這裡整理給每一位竹中人的生活指南與公共資訊。
+            這裡整理給竹中人的生活指南與公共資訊
           </p>
         </header>
 
@@ -80,7 +80,7 @@ export default async function ArticlesPage() {
             <BookOpenText size={26} aria-hidden />
             <div>
               <h2 id="articles-empty-title">文章專欄準備中</h2>
-              <p>管理員可以從公開網站工作台匯入 Markdown 文章，發布後會出現在這裡。</p>
+              <p>目前尚無已發布文章</p>
             </div>
           </section>
         )}
