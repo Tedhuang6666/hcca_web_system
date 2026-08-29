@@ -42,6 +42,7 @@ export default async function PublicSiteShell({
     slug: page.slug,
     title: page.title,
     nav_label: page.nav_label,
+    page_kind: page.page_kind,
   }));
   const resolvedHeaderAnnouncement = urgentAnnouncement ?? resolvedUrgentAnnouncement;
   const headerUrgentAnnouncement = resolvedHeaderAnnouncement
@@ -93,6 +94,7 @@ export default async function PublicSiteShell({
           <nav className="public-footer-links" aria-label="頁尾導覽">
             <span className="public-footer-label">快速連結</span>
             <Link href="/news">最新公告</Link>
+            <Link href="/articles">文章專欄</Link>
             <Link href="/about">關於班聯會</Link>
             <Link href="/public">公開資料庫</Link>
           </nav>

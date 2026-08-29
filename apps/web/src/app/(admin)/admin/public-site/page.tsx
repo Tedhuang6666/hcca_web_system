@@ -23,6 +23,7 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
@@ -30,8 +31,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, partnerApplicationApi, siteApi } from "@/lib/api";
-import { safeImageUrl } from "@/lib/config";
+import { uploadUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
+import ArticleImportPanel from "@/components/site/ArticleImportPanel";
+import ArticleMarkdownEditor from "@/components/site/ArticleMarkdownEditor";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -61,8 +64,24 @@ import {
   DEFAULT_SPECIAL_AGREEMENT_CONTENT,
   readSpecialAgreementContent,
 } from "@/lib/specialAgreement";
+import { LUNCH_GUIDE_MARKDOWN } from "@/lib/article-content";
 
 type Tab = "homepage" | "system" | "contact" | "special" | "nav" | "pages" | "links" | "officers" | "advanced";
+
+const EMPTY_PAGE_DRAFT = {
+  slug: "",
+  title: "",
+  summary: "",
+  body_md: "",
+  page_kind: "standard",
+  nav_label: "",
+  nav_order: 0,
+  sort_order: 0,
+  show_in_nav: false,
+  is_published: false,
+  cover_image_url: "",
+  cover_image_alt: "",
+};
 
 /** 後台導覽列分頁的群組顯示順序。 */
 const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
@@ -276,7 +295,7 @@ function ImageField({
   alt?: string;
   onChange: (url: string) => void;
 }) {
-  const previewUrl = safeImageUrl(value);
+  const previewUrl = uploadUrl(value);
   const upload = (file: File, reportProgress: (progress: number) => void) =>
     siteApi.uploadImage(file, reportProgress);
   return (
@@ -445,19 +464,9 @@ export default function PublicSiteAdminPage() {
   const [newRosterTabLabel, setNewRosterTabLabel] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
   const [navItems, setNavItems] = useState<ResolvedNavItem[]>([]);
+  const [editingPageId, setEditingPageId] = useState<string | null>(null);
 
-  const [pageDraft, setPageDraft] = useState({
-    slug: "",
-    title: "",
-    summary: "",
-    body_md: "",
-    page_kind: "standard",
-    nav_label: "",
-    nav_order: 0,
-    sort_order: 0,
-    show_in_nav: false,
-    is_published: false,
-  });
+  const [pageDraft, setPageDraft] = useState(EMPTY_PAGE_DRAFT);
   const [categoryDraft, setCategoryDraft] = useState({
     slug: "",
     title: "",
@@ -762,24 +771,71 @@ export default function PublicSiteAdminPage() {
     }
   };
 
+  const resetPageDraft = () => {
+    setEditingPageId(null);
+    setPageDraft({ ...EMPTY_PAGE_DRAFT });
+  };
+
+  const startEditPage = (page: PublicSitePageOut) => {
+    setEditingPageId(page.id);
+    setPageDraft({
+      slug: page.slug,
+      title: page.title,
+      summary: page.summary ?? "",
+      body_md: page.body_md,
+      page_kind: page.page_kind,
+      nav_label: page.nav_label ?? "",
+      nav_order: page.nav_order,
+      sort_order: page.sort_order,
+      show_in_nav: page.show_in_nav,
+      is_published: page.is_published,
+      cover_image_url: page.cover_image_url ?? "",
+      cover_image_alt: page.cover_image_alt ?? "",
+    });
+  };
+
+  const useLunchGuideExample = () => {
+    setEditingPageId(null);
+    setPageDraft({
+      ...EMPTY_PAGE_DRAFT,
+      slug: "zhuzhong-lunch-guide",
+      title: "🍱 竹中訂餐指南",
+      summary: "整理竹中校內學餐、校外業者、外送與外出用餐的午餐選擇。",
+      body_md: LUNCH_GUIDE_MARKDOWN,
+      page_kind: "article",
+    });
+  };
+
   const createPage = async () => {
+    if (!pageDraft.slug.trim() || !pageDraft.title.trim() || !pageDraft.body_md.trim()) {
+      toast.error("請填寫 Slug、標題與文章內容");
+      return;
+    }
     try {
-      await siteApi.createPage({
+      const body = {
         ...pageDraft,
+        slug: pageDraft.slug.trim(),
+        title: pageDraft.title.trim(),
         summary: pageDraft.summary || null,
         nav_label: pageDraft.nav_label || null,
         layout_config: {},
         content_blocks: {},
-        cover_image_url: null,
-        cover_image_alt: null,
+        cover_image_url: pageDraft.cover_image_url || null,
+        cover_image_alt: pageDraft.cover_image_alt || null,
         seo_title: null,
         seo_description: null,
-      });
-      toast.success("頁面已新增");
-      setPageDraft({ slug: "", title: "", summary: "", body_md: "", page_kind: "standard", nav_label: "", nav_order: 0, sort_order: 0, show_in_nav: false, is_published: false });
+      };
+      if (editingPageId) {
+        await siteApi.updatePage(editingPageId, body);
+        toast.success("頁面已更新");
+      } else {
+        await siteApi.createPage(body);
+        toast.success("頁面已新增");
+      }
+      resetPageDraft();
       await load();
     } catch (error) {
-      displayError(error, "新增頁面失敗");
+      displayError(error, editingPageId ? "更新頁面失敗" : "新增頁面失敗");
     }
   };
 
@@ -1525,16 +1581,41 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "pages" && (
-        <section key="pages" className="tab-panel-transition grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <section key="pages" className="tab-panel-transition space-y-4">
+          <ArticleImportPanel onImported={() => void load()} />
+          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="card space-y-4 p-5">
-            <h2 className="font-semibold">新增 CMS 頁面</h2>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">{editingPageId ? "編輯公開頁面" : "新增公開頁面"}</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                  文章類別會進入文章專欄；內文支援 Markdown、段落標題與圖片上傳。
+                </p>
+              </div>
+              {editingPageId && <button type="button" className="btn btn-sm btn-ghost" onClick={resetPageDraft}>取消編輯</button>}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Slug"><TextInput value={pageDraft.slug} onChange={(e) => setPageDraft({ ...pageDraft, slug: e.target.value })} placeholder="history" /></Field>
-              <Field label="頁面類別"><TextInput value={pageDraft.page_kind} onChange={(e) => setPageDraft({ ...pageDraft, page_kind: e.target.value })} placeholder="standard" /></Field>
+              <Field label="頁面類別">
+                <Select value={pageDraft.page_kind} onChange={(e) => setPageDraft({ ...pageDraft, page_kind: e.target.value })}>
+                  <option value="standard">一般頁面</option>
+                  <option value="article">文章</option>
+                </Select>
+              </Field>
             </div>
             <Field label="標題"><TextInput value={pageDraft.title} onChange={(e) => setPageDraft({ ...pageDraft, title: e.target.value })} /></Field>
             <Field label="摘要"><TextArea value={pageDraft.summary} onChange={(e) => setPageDraft({ ...pageDraft, summary: e.target.value })} /></Field>
-            <Field label="內文 Markdown"><TextArea rows={8} value={pageDraft.body_md} onChange={(e) => setPageDraft({ ...pageDraft, body_md: e.target.value })} /></Field>
+            <Field label="內文 Markdown" hint="用 ## 建立可跳轉的主要段落；按「加入照片」即可上傳並插入圖片。">
+              <ArticleMarkdownEditor value={pageDraft.body_md} onChange={(value) => setPageDraft({ ...pageDraft, body_md: value })} rows={18} />
+            </Field>
+            <ImageField
+              label="封面照片"
+              hint="選填。會顯示在文章專欄首圖與文章頁首；可貼網址或直接上傳。"
+              value={pageDraft.cover_image_url}
+              alt={pageDraft.cover_image_alt}
+              onChange={(url) => setPageDraft({ ...pageDraft, cover_image_url: url })}
+            />
+            <Field label="封面替代文字"><TextInput value={pageDraft.cover_image_alt} onChange={(e) => setPageDraft({ ...pageDraft, cover_image_alt: e.target.value })} placeholder="照片內容說明" /></Field>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="導覽名稱"><TextInput value={pageDraft.nav_label} onChange={(e) => setPageDraft({ ...pageDraft, nav_label: e.target.value })} /></Field>
               <Field label="排序"><TextInput type="number" value={pageDraft.sort_order} onChange={(e) => setPageDraft({ ...pageDraft, sort_order: Number(e.target.value) })} /></Field>
@@ -1543,7 +1624,10 @@ export default function PublicSiteAdminPage() {
               <Toggle label="發布" checked={pageDraft.is_published} onChange={(value) => setPageDraft({ ...pageDraft, is_published: value })} />
               <Toggle label="顯示在導覽" checked={pageDraft.show_in_nav} onChange={(value) => setPageDraft({ ...pageDraft, show_in_nav: value })} />
             </div>
-            <button type="button" onClick={createPage} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增頁面</button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={createPage} className="btn btn-primary"><Save size={16} aria-hidden /> {editingPageId ? "儲存頁面" : "新增頁面"}</button>
+              {!editingPageId && <button type="button" onClick={useLunchGuideExample} className="btn btn-secondary"><Sparkles size={15} aria-hidden /> 帶入訂餐指南</button>}
+            </div>
           </div>
           <div className="space-y-3">
             {pages.length === 0 ? (
@@ -1556,9 +1640,12 @@ export default function PublicSiteAdminPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h3 className="font-semibold">{page.title}</h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">/{page.slug} / {page.page_kind}</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">/{page.slug} / {page.page_kind === "article" ? "文章" : "一般頁面"}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => startEditPage(page)}>
+                      <Pencil size={14} aria-hidden /> 編輯
+                    </button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchPage(page, { is_published: !page.is_published }).catch((e) => displayError(e, "更新頁面失敗"))}>
                       {page.is_published ? "取消發布" : "發布"}
                     </button>
@@ -1572,6 +1659,7 @@ export default function PublicSiteAdminPage() {
                 </div>
               </div>
             ))}
+          </div>
           </div>
         </section>
       )}

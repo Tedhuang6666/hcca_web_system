@@ -160,7 +160,11 @@ export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {
 }
 
 export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut | null> {
-  return getCachedPublicJson<PublicSitePageOut>(`/site/pages/${encodeURIComponent(slug)}`);
+  return fetchPublicJson<PublicSitePageOut>(`/site/pages/${encodeURIComponent(slug)}`, { revalidate: 15 });
+}
+
+export async function fetchPublicPages(): Promise<PublicSitePageOut[]> {
+  return (await fetchPublicJson<PublicSitePageOut[]>("/site/pages", { revalidate: 15 })) ?? [];
 }
 
 export async function fetchAnnouncement(id: string): Promise<import("./types").AnnouncementOut | null> {

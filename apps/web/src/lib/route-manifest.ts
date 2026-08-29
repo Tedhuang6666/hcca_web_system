@@ -34,7 +34,7 @@ export const MODULE_MANIFEST = {
 export const MODULE_IDS = Object.keys(MODULE_MANIFEST) as Array<keyof typeof MODULE_MANIFEST>;
 
 export const PUBLIC_ROUTE_MANIFEST = {
-  prefixes: ["/about", "/auth", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/officers", "/pages", "/public", "/unsubscribe"],
+  prefixes: ["/about", "/articles", "/auth", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/officers", "/pages", "/public", "/unsubscribe"],
   exact: ["/", "/announcements", "/documents", "/partner-map", "/petitions", "/petitions/new", "/petitions/share", "/petitions/public", "/profile/complete", "/regulations", "/surveys", "/raffle", "/blocked", "/contact", "/system-info"],
   patterns: [
     /^\/announcements\/(?!new$)[^/]+$/,

@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 import { regulationHref } from "@/lib/api/regulations";
 import { BRANDING } from "@/lib/branding";
 import { serverApiUrl } from "@/lib/config";
-import { resolvePublicNav } from "@/lib/publicNav";
+import { publicPageHref, resolvePublicNav } from "@/lib/publicNav";
 import { isSitemapRoute } from "@/lib/route-access";
 import type { PublicSiteBundleOut } from "@/lib/types";
 
@@ -54,6 +54,7 @@ type PublicModuleStatusListItem = {
 
 type PublicSitePageListItem = {
   slug: string;
+  page_kind?: string | null;
   updated_at: string;
   is_published: boolean;
 };
@@ -65,6 +66,7 @@ function fallbackSitemap(site: string): MetadataRoute.Sitemap {
   const entries: Array<[string, "daily" | "weekly" | "monthly", number]> = [
     ["/", "daily", 1],
     ["/about", "monthly", 0.7],
+    ["/articles", "weekly", 0.7],
     ["/news", "daily", 0.8],
     ["/announcements", "daily", 0.8],
     ["/regulations", "daily", 0.7],
@@ -307,7 +309,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...(publicPages ?? [])
       .filter((page) => page.is_published && page.slug)
       .map((page) => ({
-        url: `${site}/pages/${encodeURIComponent(page.slug)}`,
+        url: `${site}${publicPageHref(page)}`,
         lastModified: new Date(page.updated_at),
         changeFrequency: "monthly" as const,
         priority: 0.5,

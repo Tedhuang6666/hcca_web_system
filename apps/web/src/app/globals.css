@@ -2703,6 +2703,48 @@ select.input-field {
 }
 .announcement-markdown th { background: var(--bg-elevated); }
 
+/* 公開文章編輯器也會在後台預覽，維持與公開閱讀頁相同的圖片插入節奏。 */
+.article-editor {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.article-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 0.65rem 0.75rem;
+}
+
+.article-editor-images {
+  display: grid;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 0.9rem;
+}
+
+.article-editor-textarea {
+  min-height: 28rem;
+  resize: vertical;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--bg-surface) !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.84rem;
+  line-height: 1.75;
+}
+
+.article-editor-preview {
+  min-height: 28rem;
+  padding: 1.25rem;
+}
+
 /* ── 徽章 ─────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;

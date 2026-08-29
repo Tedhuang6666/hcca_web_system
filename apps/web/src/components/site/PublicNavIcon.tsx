@@ -18,6 +18,7 @@ import {
 
 const ICONS: Record<string, LucideIcon> = {
   news: Megaphone,
+  articles: BookOpenText,
   about: Landmark,
   "system-info": Info,
   officers: UsersRound,
