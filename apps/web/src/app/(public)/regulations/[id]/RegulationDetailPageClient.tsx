@@ -553,7 +553,6 @@ export default function RegulationDetailPageClient({
     if (initialTitle) {
       return (
         <div className="regulation-detail-loading regulation-detail-page app-page-width space-y-5">
-          <style>{`.regulation-detail-loading [data-skeleton="true"] { animation: none; background: var(--bg-hover) !important; }`}</style>
           <div className="regulation-detail-heading flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <h1
@@ -573,7 +572,6 @@ export default function RegulationDetailPageClient({
     }
     return (
       <div className="regulation-detail-loading">
-        <style>{`.regulation-detail-loading [data-skeleton="true"] { animation: none; background: var(--bg-hover) !important; }`}</style>
         <DetailPageLoading
           title="法規詳情載入中"
           description="正在準備條文、版本與修正紀錄。"
@@ -604,14 +602,6 @@ export default function RegulationDetailPageClient({
 
   return (
     <>
-      {/* 列印樣式 */}
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          .print-content { break-inside: avoid; }
-        }
-      `}</style>
-
       <div className="regulation-detail-page app-page-width space-y-5">
         {/* ── 頂部標題列 ───────────────────────────────────────────────────── */}
         <div className="regulation-detail-heading flex items-start gap-3">

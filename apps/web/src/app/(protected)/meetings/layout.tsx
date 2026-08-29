@@ -12,7 +12,7 @@ export default function MeetingsLayout({ children }: { children: React.ReactNode
         label="議事分頁"
         tabs={[
           { href: "/meetings", label: "會議", icon: Landmark, end: true },
-          { href: "/meetings/calendar", label: "月曆", icon: CalendarDays },
+          { href: "/calendar", label: "月曆", icon: CalendarDays },
         ]}
       />
       {children}

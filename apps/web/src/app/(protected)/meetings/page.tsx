@@ -166,7 +166,7 @@ export default function MeetingsPage() {
           <p className="mt-1 text-sm text-[var(--muted)]">安排議程、出席與表決。</p>
         </div>
         <Link
-          href="/meetings/calendar"
+          href="/calendar"
           className="inline-flex items-center gap-2 self-start rounded-md border border-[var(--border)] px-3 py-2 text-sm">
           <CalendarDays size={16} aria-hidden="true" />
           行事曆
