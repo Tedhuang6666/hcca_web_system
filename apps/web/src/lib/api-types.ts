@@ -13858,6 +13858,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/site/public/images/{storage_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 讀取公開官網圖片
+         * @description 以同源網址提供官網圖片，讓本地與 S3 儲存都能嵌入公開文章。
+         */
+        get: operations["get_public_site_image_site_public_images__storage_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support/approvals": {
         parameters: {
             query?: never;
@@ -69964,6 +69984,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicSiteBundleOut"];
+                };
+            };
+        };
+    };
+    get_public_site_image_site_public_images__storage_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storage_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
