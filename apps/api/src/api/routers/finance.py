@@ -40,6 +40,7 @@ from api.schemas.finance import (
     BudgetNodeCreate,
     BudgetNodeOut,
     BudgetOut,
+    BudgetPublicationUpdate,
     BudgetReview,
     BudgetSubmissionCreate,
     BudgetSubmissionOut,
@@ -52,6 +53,7 @@ from api.schemas.finance import (
     ExpenseReimbursementCreate,
     ExpenseReturnCreate,
     FinanceEvidenceUploadOut,
+    FinanceSettlementOut,
     FundAccountCreate,
     FundAccountOut,
     GoogleSheetsExportIn,
@@ -61,6 +63,10 @@ from api.schemas.finance import (
     LedgerOut,
     PeriodCreate,
     PeriodOut,
+    PublicBudgetAllocationOut,
+    PublicBudgetDetailOut,
+    PublicBudgetListItem,
+    PublicBudgetSubmissionOut,
     TransferCreate,
 )
 from api.services import audit as audit_svc
@@ -332,6 +338,36 @@ async def get_budget_detail(budget_id: uuid.UUID, db: DbDep, _: CurrentUser) -> 
     )
 
 
+@router.patch(
+    "/budgets/{budget_id}/publication",
+    response_model=BudgetOut,
+    dependencies=[
+        Depends(
+            require_budget_permission(
+                PermissionCode.FINANCE_BUDGET, PermissionCode.FINANCE_BUDGET_REVIEW
+            )
+        )
+    ],
+)
+async def update_budget_publication(
+    budget_id: uuid.UUID, body: BudgetPublicationUpdate, db: DbDep, user: CurrentUser
+) -> BudgetOut:
+    budget = await service.set_budget_publication(
+        db, await service.get_budget(db, budget_id), body.is_public
+    )
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget",
+        entity_id=str(budget.id),
+        action="finance.budget_publication",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"{'開放' if body.is_public else '停止'}議員檢視：{budget.name}",
+    )
+    await db.commit()
+    return BudgetOut.model_validate(budget)
+
+
 @router.post(
     "/budgets/{budget_id}/submissions",
     response_model=BudgetSubmissionOut,
@@ -425,6 +461,19 @@ async def update_budget_allocation(
     allocation = await service.update_budget_allocation(db, allocation_id, body, user.id)
     await db.commit()
     return BudgetAllocationOut.model_validate(allocation)
+
+
+@router.get(
+    "/ledgers/{ledger_id}/periods/{period_id}/settlement",
+    response_model=FinanceSettlementOut,
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def get_settlement_report(
+    ledger_id: uuid.UUID, period_id: uuid.UUID, db: DbDep, _: CurrentUser
+) -> FinanceSettlementOut:
+    return FinanceSettlementOut.model_validate(
+        await service.settlement_report(db, ledger_id, period_id)
+    )
 
 
 @router.get(
@@ -798,6 +847,35 @@ async def update_expense_budget(
     return _journal_out(await service.journal_with_lines(db, entry))
 
 
+@router.post(
+    "/journals/{entry_id}/complete",
+    response_model=JournalOut,
+    dependencies=[
+        Depends(
+            require_journal_permission(
+                PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_REVIEW
+            )
+        )
+    ],
+)
+async def complete_expense_claim(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    await service.complete_expense_claim(db, entry)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action="finance.expense_complete",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"完成核銷：{entry.description}",
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
 @router.get(
     "/journals/{entry_id}/evidence",
     dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_VIEW))],
@@ -859,12 +937,49 @@ async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> li
             "unit_price": item.unit_price,
             "tax_rate": item.tax_rate,
             "quantity": item.quantity,
+            "unit": item.unit,
             "budget_node_id": item.budget_node_id,
             "budget_exception_note": item.budget_exception_note,
             "evidence_count": len(by_item.get(item.id, [])),
         }
         for item in items
     ]
+
+
+@router.get("/public/budgets", response_model=list[PublicBudgetListItem])
+async def list_public_budgets(db: DbDep) -> list[PublicBudgetListItem]:
+    return [
+        PublicBudgetListItem(id=budget.id, name=budget.name, period_name=period.name)
+        for budget, period in await service.list_public_budgets(db)
+    ]
+
+
+@router.get("/public/budgets/{budget_id}", response_model=PublicBudgetDetailOut)
+async def get_public_budget_detail(budget_id: uuid.UUID, db: DbDep) -> PublicBudgetDetailOut:
+    detail, period = await service.public_budget_detail(db, budget_id)
+    approved_submissions = [item for item in detail["submissions"] if item.status == "approved"]
+    approved_submission_ids = {item.id for item in approved_submissions}
+    return PublicBudgetDetailOut(
+        id=detail["id"],
+        name=detail["name"],
+        period_name=period.name,
+        submissions=[
+            PublicBudgetSubmissionOut(
+                id=item.id,
+                kind=item.kind,
+                title=item.title,
+                reviewed_at=item.reviewed_at,
+                review_note=item.review_note,
+            )
+            for item in approved_submissions
+        ],
+        nodes=[BudgetNodeOut.model_validate(item) for item in detail["nodes"]],
+        allocations=[
+            PublicBudgetAllocationOut.model_validate(item)
+            for item in detail["allocations"]
+            if item.submission_id in approved_submission_ids
+        ],
+    )
 
 
 @router.get("/expense-evidence/{evidence_id}")

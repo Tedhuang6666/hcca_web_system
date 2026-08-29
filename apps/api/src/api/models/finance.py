@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -260,7 +262,8 @@ class ExpenseClaimItem(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
     tax_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False, default="項")
     budget_node_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id"), nullable=True
     )
@@ -283,6 +286,7 @@ class FinanceBudget(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("finance_fiscal_periods.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(160), nullable=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class FinanceBudgetSubmission(Base, TimestampMixin):
@@ -345,6 +349,9 @@ class FinanceBudgetAllocation(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id"), nullable=False
     )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    unit_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     proposed_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False

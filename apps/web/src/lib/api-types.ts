@@ -5561,6 +5561,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/budgets/{budget_id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Budget Publication */
+        patch: operations["update_budget_publication_finance_budgets__budget_id__publication_patch"];
+        trace?: never;
+    };
     "/finance/budgets/{budget_id}/submissions": {
         parameters: {
             query?: never;
@@ -5623,6 +5640,23 @@ export interface paths {
         get: operations["list_claim_items_finance_journals__entry_id__claim_items_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/journals/{entry_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Expense Claim */
+        post: operations["complete_expense_claim_finance_journals__entry_id__complete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5957,6 +5991,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/ledgers/{ledger_id}/periods/{period_id}/settlement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settlement Report */
+        get: operations["get_settlement_report_finance_ledgers__ledger_id__periods__period_id__settlement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finance/ledgers/{ledger_id}/transfers": {
         parameters: {
             query?: never;
@@ -5985,6 +6036,40 @@ export interface paths {
         put?: never;
         /** Close Period */
         post: operations["close_period_finance_periods__period_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/public/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Public Budgets */
+        get: operations["list_public_budgets_finance_public_budgets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/public/budgets/{budget_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Budget Detail */
+        get: operations["get_public_budget_detail_finance_public_budgets__budget_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -17299,7 +17384,7 @@ export interface components {
         /** BudgetAllocationCreate */
         BudgetAllocationCreate: {
             /** Amount */
-            amount: number;
+            amount?: number | null;
             /**
              * Node Id
              * Format: uuid
@@ -17312,6 +17397,12 @@ export interface components {
              * Format: uuid
              */
             proposing_org_id: string;
+            /** Quantity */
+            quantity?: number | string | null;
+            /** Unit */
+            unit?: string | null;
+            /** Unit Price */
+            unit_price?: number | null;
         };
         /** BudgetAllocationOut */
         BudgetAllocationOut: {
@@ -17339,11 +17430,17 @@ export interface components {
              * Format: uuid
              */
             proposing_org_id: string;
+            /** Quantity */
+            quantity: number | null;
             /**
              * Submission Id
              * Format: uuid
              */
             submission_id: string;
+            /** Unit */
+            unit: string | null;
+            /** Unit Price */
+            unit_price: number | null;
         };
         /** BudgetAllocationUpdate */
         BudgetAllocationUpdate: {
@@ -17371,6 +17468,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Public */
+            is_public: boolean;
             /**
              * Ledger Id
              * Format: uuid
@@ -17441,6 +17540,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Public */
+            is_public: boolean;
             /**
              * Ledger Id
              * Format: uuid
@@ -17453,6 +17554,11 @@ export interface components {
              * Format: uuid
              */
             period_id: string;
+        };
+        /** BudgetPublicationUpdate */
+        BudgetPublicationUpdate: {
+            /** Is Public */
+            is_public: boolean;
         };
         /** BudgetReview */
         BudgetReview: {
@@ -22742,12 +22848,17 @@ export interface components {
             /** Name */
             name: string;
             /** Quantity */
-            quantity: number;
+            quantity: number | string;
             /**
              * Tax Rate
              * @default 0
              */
             tax_rate: number;
+            /**
+             * Unit
+             * @default 項
+             */
+            unit: string;
             /** Unit Price */
             unit_price: number;
         };
@@ -22920,6 +23031,40 @@ export interface components {
             filename: string;
             /** Storage Key */
             storage_key: string;
+        };
+        /** FinanceSettlementLineOut */
+        FinanceSettlementLineOut: {
+            /** Budgeted Amount */
+            budgeted_amount: number;
+            /** Difference Amount */
+            difference_amount: number;
+            /** Name */
+            name: string;
+            /**
+             * Node Id
+             * Format: uuid
+             */
+            node_id: string;
+            /** Settled Amount */
+            settled_amount: number;
+        };
+        /** FinanceSettlementOut */
+        FinanceSettlementOut: {
+            /** Budgeted Total */
+            budgeted_total: number;
+            /** Lines */
+            lines: components["schemas"]["FinanceSettlementLineOut"][];
+            /**
+             * Period Id
+             * Format: uuid
+             */
+            period_id: string;
+            /** Period Name */
+            period_name: string;
+            /** Settled Total */
+            settled_total: number;
+            /** Unsettled Claim Count */
+            unsettled_claim_count: number;
         };
         /** FreezeRequest */
         FreezeRequest: {
@@ -24008,6 +24153,11 @@ export interface components {
              * Format: date
              */
             entry_date: string;
+            /**
+             * Evidence Complete
+             * @default false
+             */
+            evidence_complete: boolean;
             /** Evidence Url */
             evidence_url: string | null;
             /**
@@ -31439,6 +31589,74 @@ export interface components {
             org_id: string | null;
             /** Published At */
             published_at: string | null;
+            /** Title */
+            title: string;
+        };
+        /** PublicBudgetAllocationOut */
+        PublicBudgetAllocationOut: {
+            /** Amount */
+            amount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Node Id
+             * Format: uuid
+             */
+            node_id: string;
+            /** Note */
+            note: string | null;
+            /** Quantity */
+            quantity: number | null;
+            /** Unit */
+            unit: string | null;
+            /** Unit Price */
+            unit_price: number | null;
+        };
+        /** PublicBudgetDetailOut */
+        PublicBudgetDetailOut: {
+            /** Allocations */
+            allocations: components["schemas"]["PublicBudgetAllocationOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Nodes */
+            nodes: components["schemas"]["BudgetNodeOut"][];
+            /** Period Name */
+            period_name: string;
+            /** Submissions */
+            submissions: components["schemas"]["PublicBudgetSubmissionOut"][];
+        };
+        /** PublicBudgetListItem */
+        PublicBudgetListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Period Name */
+            period_name: string;
+        };
+        /** PublicBudgetSubmissionOut */
+        PublicBudgetSubmissionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["BudgetSubmissionKind"];
+            /** Review Note */
+            review_note: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
             /** Title */
             title: string;
         };
@@ -50680,6 +50898,41 @@ export interface operations {
             };
         };
     };
+    update_budget_publication_finance_budgets__budget_id__publication_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetPublicationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_budget_submission_finance_budgets__budget_id__submissions_post: {
         parameters: {
             query?: never;
@@ -50801,6 +51054,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_expense_claim_finance_journals__entry_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
                 };
             };
             /** @description Validation Error */
@@ -51613,6 +51897,38 @@ export interface operations {
             };
         };
     };
+    get_settlement_report_finance_ledgers__ledger_id__periods__period_id__settlement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+                period_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceSettlementOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_transfer_finance_ledgers__ledger_id__transfers_post: {
         parameters: {
             query?: never;
@@ -51666,6 +51982,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PeriodOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_public_budgets_finance_public_budgets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBudgetListItem"][];
+                };
+            };
+        };
+    };
+    get_public_budget_detail_finance_public_budgets__budget_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBudgetDetailOut"];
                 };
             };
             /** @description Validation Error */

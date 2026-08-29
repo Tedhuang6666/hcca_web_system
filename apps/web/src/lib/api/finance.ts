@@ -11,6 +11,7 @@ import type {
   FinanceJournalOut,
   ExpenseProcurementUpdate,
   FinanceEvidenceUploadOut,
+  FinanceSettlement,
   FundAccountOut,
   JournalCreate,
   LedgerOut,
@@ -64,23 +65,30 @@ export const financeApi = {
     post<FinanceJournalOut>(`/finance/journals/${entryId}/school-payment`, {}),
   markDuesPaid: (entryId: string) =>
     post<FinanceJournalOut>(`/finance/journals/${entryId}/dues-payment`, {}),
+  completeClaim: (entryId: string) => post<FinanceJournalOut>(`/finance/journals/${entryId}/complete`, {}),
   updateBudget: (entryId: string, body: ExpenseBudgetUpdate) =>
     patch<FinanceJournalOut>(`/finance/journals/${entryId}/budget`, body),
   listBudgets: (ledgerId: string) => get<FinanceBudget[]>(`/finance/ledgers/${ledgerId}/budgets`),
   createBudget: (ledgerId: string, body: { period_id: string; name: string }) =>
     post<FinanceBudget>(`/finance/ledgers/${ledgerId}/budgets`, body),
   getBudget: (budgetId: string) => get<FinanceBudgetDetail>(`/finance/budgets/${budgetId}`),
+  updateBudgetPublication: (budgetId: string, isPublic: boolean) =>
+    patch<FinanceBudget>(`/finance/budgets/${budgetId}/publication`, { is_public: isPublic }),
   createBudgetSubmission: (budgetId: string, body: { kind: 'initial' | 'supplemental'; title: string; note?: string }) =>
     post<FinanceBudgetSubmission>(`/finance/budgets/${budgetId}/submissions`, body),
   createBudgetNode: (submissionId: string, body: { parent_id?: string | null; name: string; sort_order?: number }) =>
     post(`/finance/budget-submissions/${submissionId}/nodes`, body),
-  createBudgetAllocation: (submissionId: string, body: { node_id: string; amount: number; proposing_org_id: string; note?: string }) =>
+  createBudgetAllocation: (submissionId: string, body: {
+    node_id: string; proposing_org_id: string; amount?: number; quantity?: number; unit?: string; unit_price?: number; note?: string
+  }) =>
     post<FinanceBudgetAllocation>(`/finance/budget-submissions/${submissionId}/allocations`, body),
   submitBudget: (submissionId: string) => post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/submit`, {}),
   reviewBudget: (submissionId: string, body: { status: 'approved' | 'returned' | 'rejected'; note?: string }) =>
     post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/review`, body),
   updateBudgetAllocation: (allocationId: string, body: { amount: number; reason: string }) =>
     patch<FinanceBudgetAllocation>(`/finance/budget-allocations/${allocationId}`, body),
+  getSettlement: (ledgerId: string, periodId: string) =>
+    get<FinanceSettlement>(`/finance/ledgers/${ledgerId}/periods/${periodId}/settlement`),
   reimburseAdvance: (entryId: string, body: { period_id: string; entry_date: string; fund_account_id: string; payment_status?: 'school_paid' | 'dues_paid'; note?: string }) =>
     post<FinanceJournalOut>(`/finance/journals/${entryId}/reimburse-advance`, body),
 };

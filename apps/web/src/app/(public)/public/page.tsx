@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BookOpenText,
   FileSearch,
+  Landmark,
   Handshake,
 } from "lucide-react";
 
@@ -31,6 +32,12 @@ const DATABASES = [
     icon: FileSearch,
   },
   {
+    href: "/public/budgets",
+    title: "預算與決算",
+    description: "已核准的預算明細與執行情況",
+    icon: Landmark,
+  },
+  {
     href: "/public/special-agreement",
     title: "特約洽談",
     description: "合作流程與參考文件",
@@ -55,7 +62,7 @@ export default async function PublicHomePage() {
         <div className="mb-4">
           <h2 className="text-2xl font-semibold">查詢資料</h2>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {DATABASES.map((item) => {
             const Icon = item.icon;
             return (

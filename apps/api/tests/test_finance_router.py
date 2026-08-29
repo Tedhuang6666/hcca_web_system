@@ -146,10 +146,12 @@ async def test_expense_claim_with_multiple_items_creates_pending_journal(
             )
         ).scalars()
     )
-    assert [(item.name, item.unit_price, item.tax_rate, item.quantity) for item in items] == [
-        ("原子筆", 200, 5, 1),
-        ("立可帶", 35, 0, 2),
-        ("膠帶", 20, 0, 1),
+    assert [
+        (item.name, item.unit_price, item.tax_rate, item.quantity, item.unit) for item in items
+    ] == [
+        ("原子筆", 200, 5, 1, "項"),
+        ("立可帶", 35, 0, 2, "項"),
+        ("膠帶", 20, 0, 1, "項"),
     ]
 
 
@@ -202,10 +204,12 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
         [member_user, reviewer],
         [
             "finance:expense_claim",
+            "finance:view",
             "finance:review",
             "finance:procurement",
             "finance:school_payment",
             "finance:budget",
+            "finance:budget_review",
         ],
     )
     ledger, period, fund, expense = await _make_ledger(db_session, org)
@@ -214,6 +218,42 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
     )
     creator_client = authed_client_factory(member_user)
     reviewer_client = authed_client_factory(reviewer)
+
+    budget = await creator_client.post(
+        f"/finance/ledgers/{ledger.id}/budgets",
+        json={"period_id": str(period.id), "name": "文具預算"},
+    )
+    submission = await creator_client.post(
+        f"/finance/budgets/{budget.json()['id']}/submissions",
+        json={"kind": "initial", "title": "文具初始預算案"},
+    )
+    node = await creator_client.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/nodes",
+        json={"name": "文具購買"},
+    )
+    allocation = await creator_client.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/allocations",
+        json={
+            "node_id": node.json()["id"],
+            "quantity": 2.5,
+            "unit": "盒",
+            "unit_price": 120,
+            "proposing_org_id": str(org.id),
+        },
+    )
+    assert allocation.status_code == 201
+    assert allocation.json()["amount"] == 300
+    assert allocation.json()["unit"] == "盒"
+    assert allocation.json()["quantity"] == 2.5
+    assert (
+        await creator_client.post(f"/finance/budget-submissions/{submission.json()['id']}/submit")
+    ).status_code == 200
+    assert (
+        await reviewer_client.post(
+            f"/finance/budget-submissions/{submission.json()['id']}/review",
+            json={"status": "approved"},
+        )
+    ).status_code == 200
 
     created = await creator_client.post(
         f"/finance/ledgers/{ledger.id}/expense-claims",
@@ -229,7 +269,16 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
                     "name": "原子筆",
                     "unit_price": 120,
                     "quantity": 2,
-                    "budget_exception_note": "尚未編列",
+                    "unit": "支",
+                    "budget_node_id": node.json()["id"],
+                    "evidence": [
+                        {
+                            "storage_key": f"finance/evidence/{ledger.id}/{'a' * 32}.pdf",
+                            "filename": "receipt.pdf",
+                            "content_type": "application/pdf",
+                            "file_size": 100,
+                        }
+                    ],
                 }
             ],
         },
@@ -248,8 +297,7 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
         f"/finance/journals/{entry_id}/procurement",
         json={"status": ExpenseProcurementStatus.REQUESTED},
     )
-    assert procurement.status_code == 200
-    assert procurement.json()["procurement_status"] == "requested"
+    assert procurement.status_code == 400
 
     budget = await reviewer_client.patch(
         f"/finance/journals/{entry_id}/budget", json={"included": True}
@@ -257,9 +305,27 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
     assert budget.status_code == 200
     assert budget.json()["budget_included"] is True
 
+    procurement = await reviewer_client.patch(
+        f"/finance/journals/{entry_id}/procurement",
+        json={"status": ExpenseProcurementStatus.REQUESTED},
+    )
+    assert procurement.status_code == 200
+    assert procurement.json()["procurement_status"] == "requested"
+
     paid = await reviewer_client.post(f"/finance/journals/{entry_id}/school-payment")
     assert paid.status_code == 200
     assert paid.json()["payment_status"] == ExpensePaymentStatus.SCHOOL_PAID
+
+    completed = await reviewer_client.post(f"/finance/journals/{entry_id}/complete")
+    assert completed.status_code == 200
+    assert completed.json()["claim_status"] == "completed"
+    settlement = await reviewer_client.get(
+        f"/finance/ledgers/{ledger.id}/periods/{period.id}/settlement"
+    )
+    assert settlement.status_code == 200
+    assert settlement.json()["budgeted_total"] == 300
+    assert settlement.json()["settled_total"] == 240
+    assert settlement.json()["unsettled_claim_count"] == 0
 
     duplicate_payment = await reviewer_client.post(f"/finance/journals/{entry_id}/school-payment")
     assert duplicate_payment.status_code == 400
@@ -333,7 +399,13 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     )
     allocation = await creator.post(
         f"/finance/budget-submissions/{submission.json()['id']}/allocations",
-        json={"node_id": leaf.json()["id"], "amount": 5000, "proposing_org_id": str(org.id)},
+        json={
+            "node_id": leaf.json()["id"],
+            "quantity": 25,
+            "unit": "件",
+            "unit_price": 200,
+            "proposing_org_id": str(org.id),
+        },
     )
     assert allocation.status_code == 201
     submitted = await creator.post(f"/finance/budget-submissions/{submission.json()['id']}/submit")
@@ -347,3 +419,16 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     assert detail.status_code == 200
     leaf_detail = next(item for item in detail.json()["nodes"] if item["id"] == leaf.json()["id"])
     assert leaf_detail["allocated_amount"] == 5000
+    published = await reviewer_client.patch(
+        f"/finance/budgets/{budget.json()['id']}/publication",
+        json={"is_public": True},
+    )
+    assert published.status_code == 200
+    assert published.json()["is_public"] is True
+    public_list = await creator.get("/finance/public/budgets")
+    assert public_list.status_code == 200
+    assert public_list.json()[0]["id"] == budget.json()["id"]
+    public_detail = await creator.get(f"/finance/public/budgets/{budget.json()['id']}")
+    assert public_detail.status_code == 200
+    assert public_detail.json()["allocations"][0]["unit"] == "件"
+    assert "proposed_by_id" not in public_detail.json()["allocations"][0]
