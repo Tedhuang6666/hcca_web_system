@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
-import type { FinanceBudget, FinanceBudgetDetail, OrgRead, PeriodOut } from "@/lib/types";
+import type {
+  FinanceBudget,
+  FinanceBudgetDetail,
+  FinanceSettlement,
+  OrgRead,
+  PeriodOut,
+} from "@/lib/types";
 
 type Props = {
   ledgerId: string;
@@ -12,6 +18,7 @@ type Props = {
   canManage: boolean;
   canPropose: boolean;
   canReview: boolean;
+  canPublish: boolean;
 };
 
 const statusLabel = {
@@ -29,6 +36,7 @@ export default function BudgetWorkspace({
   canManage,
   canPropose,
   canReview,
+  canPublish,
 }: Props) {
   const [budgets, setBudgets] = useState<FinanceBudget[]>([]);
   const [detail, setDetail] = useState<FinanceBudgetDetail | null>(null);
@@ -39,8 +47,11 @@ export default function BudgetWorkspace({
   const [nodeParentId, setNodeParentId] = useState("");
   const [allocationNodeId, setAllocationNodeId] = useState("");
   const [allocationOrgId, setAllocationOrgId] = useState("");
-  const [allocationAmount, setAllocationAmount] = useState("");
+  const [allocationQuantity, setAllocationQuantity] = useState("1");
+  const [allocationUnit, setAllocationUnit] = useState("項");
+  const [allocationUnitPrice, setAllocationUnitPrice] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
+  const [settlement, setSettlement] = useState<FinanceSettlement | null>(null);
 
   const load = useCallback(async (selectedId?: string) => {
     const next = await financeApi.listBudgets(ledgerId);
@@ -60,6 +71,17 @@ export default function BudgetWorkspace({
     setPeriodId((current) => current || periods.find((item) => !item.is_closed)?.id || "");
     setAllocationOrgId((current) => current || orgs[0]?.id || "");
   }, [orgs, periods]);
+
+  useEffect(() => {
+    if (!detail) {
+      setSettlement(null);
+      return;
+    }
+    void financeApi
+      .getSettlement(ledgerId, detail.period_id)
+      .then(setSettlement)
+      .catch(() => setSettlement(null));
+  }, [detail, ledgerId]);
 
   const nodes = useMemo(() => {
     if (!detail) return [];
@@ -127,19 +149,42 @@ export default function BudgetWorkspace({
   };
 
   const createAllocation = async () => {
-    if (!activeSubmission || !allocationNodeId || !allocationOrgId || Number(allocationAmount) <= 0) {
-      return toast.error("請選擇最末層條目、提出部門並填寫金額");
+    if (
+      !activeSubmission
+      || !allocationNodeId
+      || !allocationOrgId
+      || Number(allocationQuantity) <= 0
+      || !allocationUnit.trim()
+      || Number(allocationUnitPrice) <= 0
+    ) {
+      return toast.error("請填寫最末層條目、提出部門、數量、單位與單價");
     }
     try {
       await financeApi.createBudgetAllocation(activeSubmission.id, {
         node_id: allocationNodeId,
         proposing_org_id: allocationOrgId,
-        amount: Number(allocationAmount),
+        quantity: Number(allocationQuantity),
+        unit: allocationUnit.trim(),
+        unit_price: Number(allocationUnitPrice),
       });
-      setAllocationAmount("");
+      setAllocationQuantity("1");
+      setAllocationUnit("項");
+      setAllocationUnitPrice("");
       await refreshDetail();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "新增預算配置失敗");
+    }
+  };
+
+  const togglePublication = async () => {
+    if (!detail) return;
+    try {
+      const updated = await financeApi.updateBudgetPublication(detail.id, !detail.is_public);
+      setDetail((current) => current && { ...current, is_public: updated.is_public });
+      await load(detail.id);
+      toast.success(updated.is_public ? "已開放議員唯讀檢視" : "已停止公開檢視");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新公開設定失敗");
     }
   };
 
@@ -167,17 +212,29 @@ export default function BudgetWorkspace({
 
   const total = detail?.nodes.reduce((sum, node) => sum + node.allocated_amount, 0) || 0;
   const used = detail?.nodes.reduce((sum, node) => sum + node.used_amount, 0) || 0;
+  const activeAllocations = detail?.allocations.filter(
+    (item) => item.submission_id === activeSubmission?.id,
+  ) || [];
+  const nodeLabels = new Map(nodes.map((node) => [node.id, node.label]));
+  const canOpenPublic = detail?.submissions.some(
+    (item) => item.kind === "initial" && item.status === "approved",
+  );
 
   return (
     <section className="space-y-5" aria-labelledby="budget-heading">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 id="budget-heading" className="font-semibold">共同預算與追加</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            以同一會計期間共同編列；核准後才能成為報帳對應依據。
-          </p>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>以同一會計期間共同編列；核准後才能成為報帳對應依據。</p>
         </div>
-        {canManage && !detail && (
+        {detail && canPublish && (canOpenPublic || detail.is_public) ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="btn btn-secondary" onClick={() => void togglePublication()}>
+              {detail.is_public ? "停止議員檢視" : "開放議員檢視"}
+            </button>
+            {detail.is_public && <a className="btn btn-primary" href={`/public/budgets/${detail.id}`} target="_blank" rel="noreferrer">開啟唯讀頁</a>}
+          </div>
+        ) : canManage && !detail && (
           <div className="flex flex-wrap gap-2">
             <select className="input" value={periodId} onChange={(event) => setPeriodId(event.target.value)}>
               <option value="">選擇會計期間</option>
@@ -220,11 +277,14 @@ export default function BudgetWorkspace({
             <div className="mt-4 flex flex-wrap gap-2">{detail.submissions.map((submission) => <button key={submission.id} className={`btn ${activeSubmission?.id === submission.id ? "btn-primary" : "btn-secondary"}`} onClick={() => setSelectedSubmissionId(submission.id)}>{submission.title}・{statusLabel[submission.status]}</button>)}</div>
             {activeSubmission && (canPropose || canManage) && (activeSubmission.status === "draft" || activeSubmission.status === "returned") && <div className="mt-5 grid gap-3 border-t pt-5 lg:grid-cols-2" style={{ borderColor: "var(--border)" }}>
               <div className="space-y-2"><p className="text-sm font-medium">新增階層條目</p><div className="flex gap-2"><select className="input" value={nodeParentId} onChange={(event) => setNodeParentId(event.target.value)}><option value="">最上層</option>{nodes.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select><input className="input" value={nodeName} onChange={(event) => setNodeName(event.target.value)} placeholder="例如：文書費" /><button className="btn btn-secondary" onClick={() => void createNode()}>新增</button></div></div>
-              <div className="space-y-2"><p className="text-sm font-medium">配置最末層額度</p><div className="grid gap-2 sm:grid-cols-4"><select className="input" value={allocationNodeId} onChange={(event) => setAllocationNodeId(event.target.value)}><option value="">選擇條目</option>{nodes.filter((node) => node.leaf).map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select><select className="input" value={allocationOrgId} onChange={(event) => setAllocationOrgId(event.target.value)}><option value="">提出部門</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</select><input className="input" type="number" min="1" value={allocationAmount} onChange={(event) => setAllocationAmount(event.target.value)} placeholder="金額" /><button className="btn btn-secondary" onClick={() => void createAllocation()}>配置</button></div></div>
+              <div className="space-y-2"><p className="text-sm font-medium">配置最末層額度</p><div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6"><select className="input" value={allocationNodeId} onChange={(event) => setAllocationNodeId(event.target.value)}><option value="">選擇條目</option>{nodes.filter((node) => node.leaf).map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select><select className="input" value={allocationOrgId} onChange={(event) => setAllocationOrgId(event.target.value)}><option value="">提出部門</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</select><input className="input" type="number" min="0.01" step="0.01" value={allocationQuantity} onChange={(event) => setAllocationQuantity(event.target.value)} placeholder="數量" /><input className="input" value={allocationUnit} onChange={(event) => setAllocationUnit(event.target.value)} placeholder="單位，例如：張" /><input className="input" type="number" min="1" value={allocationUnitPrice} onChange={(event) => setAllocationUnitPrice(event.target.value)} placeholder="單價" /><button className="btn btn-secondary" onClick={() => void createAllocation()}>加入明細</button></div></div>
               {canManage && <button className="btn btn-primary justify-self-start" onClick={() => void submit()}>送內部審核</button>}
             </div>}
             {activeSubmission?.status === "submitted" && canReview && <div className="mt-5 flex flex-wrap gap-2 border-t pt-5" style={{ borderColor: "var(--border)" }}><button className="btn btn-primary" onClick={() => void review("approved")}>核准預算案</button><button className="btn btn-secondary" onClick={() => void review("returned")}>退回補正</button><button className="btn btn-secondary" onClick={() => void review("rejected")}>否決</button></div>}
+            {activeAllocations.length > 0 && <div className="mt-5 overflow-x-auto border-t pt-5" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[680px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">預算細項</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-left">單位</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">總額</th></tr></thead><tbody>{activeAllocations.map((allocation) => <tr key={allocation.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{nodeLabels.get(allocation.node_id) || "已刪除條目"}</td><td className="px-3 py-2 text-right tabular-nums">{allocation.quantity ?? "—"}</td><td className="px-3 py-2">{allocation.unit || "—"}</td><td className="px-3 py-2 text-right tabular-nums">{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "—"}</td><td className="px-3 py-2 text-right tabular-nums">NT${allocation.amount.toLocaleString()}</td></tr>)}</tbody></table></div>}
           </section>
+
+          {settlement && <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><div><h3 className="font-semibold">期末決算</h3><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>僅統計已完成核銷的支出；尚有 {settlement.unsettled_claim_count} 件已過帳報帳等待憑證或完成核銷。</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><p className="text-sm">核准預算 <strong className="ml-2 tabular-nums">NT${settlement.budgeted_total.toLocaleString()}</strong></p><p className="text-sm">決算支出 <strong className="ml-2 tabular-nums">NT${settlement.settled_total.toLocaleString()}</strong></p></div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">預算條目</th><th className="px-3 py-2 text-right">核准</th><th className="px-3 py-2 text-right">決算</th><th className="px-3 py-2 text-right">差額</th></tr></thead><tbody>{settlement.lines.map((line) => <tr key={line.node_id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{line.name}</td><td className="px-3 py-2 text-right tabular-nums">NT${line.budgeted_amount.toLocaleString()}</td><td className="px-3 py-2 text-right tabular-nums">NT${line.settled_amount.toLocaleString()}</td><td className="px-3 py-2 text-right tabular-nums">NT${line.difference_amount.toLocaleString()}</td></tr>)}</tbody></table></div></section>}
         </>
       )}
     </section>

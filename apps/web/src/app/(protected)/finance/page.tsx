@@ -68,6 +68,7 @@ const emptyClaimItem = (): FinanceExpenseClaimItemCreate => ({
   unit_price: 0,
   tax_rate: 0,
   quantity: 1,
+  unit: "項",
   budget_exception_note: "尚未編列預算",
 });
 const today = new Date().toISOString().slice(0, 10);
@@ -85,7 +86,9 @@ type ExpenseClaimDraft = {
 };
 
 function claimItemTotal(item: FinanceExpenseClaimItemCreate): number {
-  return Math.round(item.unit_price * (1 + (item.tax_rate || 0) / 100)) * item.quantity;
+  return Math.round(
+    Number(item.unit_price) * (1 + Number(item.tax_rate || 0) / 100) * Number(item.quantity),
+  );
 }
 
 export default function FinancePage() {
@@ -101,6 +104,7 @@ export default function FinancePage() {
   const canBudget = can("finance:budget");
   const canBudgetPropose = canBudget || can("finance:budget_propose");
   const canBudgetReview = can("finance:budget_review");
+  const canCompleteClaim = canReview || canClaimExpense;
   const [ledger, setLedger] = useState<LedgerOut | null>(null);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [orgId, setOrgId] = useState("");
@@ -332,8 +336,13 @@ export default function FinancePage() {
         finalEvidenceKey = (await financeApi.uploadEvidence(ledger.id, evidenceFile)).storage_key;
       }
       if (entryType === "expense") {
-        if (!claimItems.every((item) => item.name.trim() && item.unit_price > 0 && item.quantity > 0)) {
-          return toast.error("請完整填寫每個品項、單價與數量");
+        if (!claimItems.every((item) => (
+          item.name.trim()
+          && Number(item.unit_price) > 0
+          && Number(item.quantity) > 0
+          && item.unit?.trim()
+        ))) {
+          return toast.error("請完整填寫每個品項、單價、數量與單位");
         }
         if (!claimOrgId) return toast.error("請選擇提出部門");
         if (paymentMethod === "advance" && !advancedById) return toast.error("請選擇代墊人");
@@ -521,6 +530,16 @@ export default function FinancePage() {
     }
   };
 
+  const completeClaim = async (entryId: string) => {
+    try {
+      await financeApi.completeClaim(entryId);
+      toast.success("報帳已完成核銷，會納入期末決算");
+      if (ledger) await load(ledger.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "完成核銷失敗");
+    }
+  };
+
   const updateClaimItem = (index: number, patch: Partial<FinanceExpenseClaimItemCreate>) => {
     setClaimItems((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   };
@@ -667,7 +686,7 @@ export default function FinancePage() {
                 <div className="text-sm md:col-span-2"><span>上傳憑證（選填）</span><AnimatedFileUpload accept="image/jpeg,image/png,image/webp,application/pdf" label="拖曳憑證到這裡" hint="支援 JPG、PNG、WebP 或 PDF，最大 20 MB；送出報帳時一併上傳" onFiles={(selected) => setEvidenceFile(selected[0] ?? null)} onRemove={() => setEvidenceFile(null)} />{evidenceFile && <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>已選擇：{evidenceFile.name}</span>}</div>
                 <label className="text-sm md:col-span-2">外部憑證連結（選填）<input className="input mt-1" type="url" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="若憑證已存放於雲端，可貼上連結" /></label>
               </div>
-              {entryType === "expense" && <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">未稅單價</th><th className="px-3 py-2 text-right">稅率（選填）</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">含稅小計</th><th className="w-20 px-3 py-2" aria-label="移除品項" /></tr></thead><tbody>{claimItems.map((item, index) => <tr key={index} className="border-t" style={{ borderColor: "var(--border)" }}><td className="p-2"><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項未稅單價`} className="input text-right" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項稅率`} className="input text-right" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項數量`} className="input text-right" type="number" min="1" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td className="px-3 text-right tabular-nums">NT${claimItemTotal(item).toLocaleString()}</td><td className="p-2 text-center"><button className="btn btn-secondary" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody><tfoot><tr className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-3" colSpan={4}>合計</td><td className="px-3 py-3 text-right text-base font-semibold tabular-nums">NT${claimTotal.toLocaleString()}</td><td /></tr></tfoot></table><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button className="btn btn-secondary" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增品項</button>{expenseDraftSavedAt && <span className="text-xs" style={{ color: "var(--text-muted)" }}>草稿已自動暫存</span>}</div></div>}
+              {entryType === "expense" && <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">未稅單價</th><th className="px-3 py-2 text-right">稅率（選填）</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-left">單位</th><th className="px-3 py-2 text-right">含稅小計</th><th className="w-20 px-3 py-2" aria-label="移除品項" /></tr></thead><tbody>{claimItems.map((item, index) => <tr key={index} className="border-t" style={{ borderColor: "var(--border)" }}><td className="p-2"><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項未稅單價`} className="input text-right" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項稅率`} className="input text-right" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項數量`} className="input text-right" type="number" min="0.01" step="0.01" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項單位`} className="input" value={item.unit || ""} onChange={(event) => updateClaimItem(index, { unit: event.target.value })} placeholder="例如：張" /></td><td className="px-3 text-right tabular-nums">NT${claimItemTotal(item).toLocaleString()}</td><td className="p-2 text-center"><button className="btn btn-secondary" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody><tfoot><tr className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-3" colSpan={5}>合計</td><td className="px-3 py-3 text-right text-base font-semibold tabular-nums">NT${claimTotal.toLocaleString()}</td><td /></tr></tfoot></table><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button className="btn btn-secondary" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增品項</button>{expenseDraftSavedAt && <span className="text-xs" style={{ color: "var(--text-muted)" }}>草稿已自動暫存</span>}</div></div>}
               {entryType === "expense" && <div className="mt-4 grid gap-3 md:grid-cols-2">{claimItems.map((item, index) => <label key={`${item.name}-${index}`} className="text-sm">第 {index + 1} 項憑證（收據／發票／其他文件）<input className="input mt-1" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setItemEvidenceFiles((files) => { const next = [...files]; next[index] = Array.from(event.target.files || []); return next; })} />{itemEvidenceFiles[index]?.length ? <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>已選擇 {itemEvidenceFiles[index].length} 份文件</span> : null}</label>)}</div>}
               {entryType === "expense" && <label className="mt-4 block text-sm">報帳備註（選填）<textarea className="input mt-1 min-h-24" value={claimNote} onChange={(event) => setClaimNote(event.target.value)} placeholder="例如：採購用途、核銷注意事項或其他內部說明" /></label>}
               <button className="btn btn-primary mt-4" disabled={isEvidenceUploading} onClick={() => void createEntry()}>{isEvidenceUploading ? "上傳憑證中…" : entryType === "expense" ? `送出報帳（NT$${claimTotal.toLocaleString()}）` : `${entryTypes[entryType].label}並送覆核`}</button>
@@ -776,14 +795,14 @@ export default function FinancePage() {
                 </ol>
                 <div className="finance-case-list__actions finance-case-list__actions--claim">
                   {item.claim_status === "pending_review" && (canReview ? <><button className="btn btn-primary" onClick={() => void reviewEntry(item.id)}>第二人確認</button><button className="btn btn-secondary" onClick={() => void returnEntry(item.id)}>退回補正</button></> : <span className="finance-case-list__owner">等待具有「第二人覆核」權限者</span>)}
-                  {item.claim_status === "approved" && <>{canProcurement && <label className="finance-case-list__select">請購<select className="input" value={item.procurement_status || "not_required"} onChange={(event) => void updateProcurement(item.id, event.target.value as ExpenseProcurementStatus)}>{Object.entries(procurementStatusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}{item.payment_status === "unpaid" && <span className="flex flex-wrap gap-2">{canSchoolPayment && <button className="btn btn-secondary" onClick={() => void markPayment(item.id, "school")}>校方已付</button>}{canDuesPayment && <button className="btn btn-secondary" onClick={() => void markPayment(item.id, "dues")}>會費已付</button>}</span>}{canBudget && <button className="btn btn-secondary" onClick={() => void updateBudget(item.id, !item.budget_included)}>{item.budget_included ? "取消預算列管" : "列入預算"}</button>}</>}
+                  {item.claim_status === "approved" && <>{!item.budget_included ? (canBudget ? <button className="btn btn-primary" onClick={() => void updateBudget(item.id, true)}>列入已核准預算</button> : <span className="finance-case-list__owner">等待具有「管理預算」權限者列管</span>) : <>{canProcurement && <label className="finance-case-list__select">請購<select className="input" value={item.procurement_status || "not_required"} onChange={(event) => void updateProcurement(item.id, event.target.value as ExpenseProcurementStatus)}>{Object.entries(procurementStatusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}{item.payment_status === "unpaid" && <span className="flex flex-wrap gap-2">{canSchoolPayment && <button className="btn btn-secondary" onClick={() => void markPayment(item.id, "school")}>校方已付</button>}{canDuesPayment && <button className="btn btn-secondary" onClick={() => void markPayment(item.id, "dues")}>會費已付</button>}</span>}{item.payment_status !== "unpaid" && !item.evidence_complete && <span className="finance-case-list__owner">請先上傳憑證，再完成核銷</span>}{item.payment_status !== "unpaid" && item.evidence_complete && canCompleteClaim && <button className="btn btn-primary" onClick={() => void completeClaim(item.id)}>完成核銷</button>}</>}</>}
                   {item.claim_status === "returned" && <span className="finance-case-list__owner">等待提出人補正後重新送出</span>}
                 </div>
               </article>;
             })}</div> : <div className="finance-workspace__empty"><ReceiptText size={18} aria-hidden="true" />目前沒有你可查閱的報帳案件。</div>}
           </section>}
 
-           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} />}
+           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} />}
         </>
       )}
     </main>
@@ -814,25 +833,23 @@ function claimNextStep(entry: FinanceJournalOut): { title: string; detail: strin
   if (!isApprovedClaim(entry)) {
     return { title: "等待第二人覆核", detail: "具有「第二人覆核」權限的人員確認後才能繼續處理。" };
   }
+  if (entry.claim_status === "completed") {
+    return { title: "流程已完成", detail: "已完成核銷，這筆支出已計入期末決算。" };
+  }
 
-  const pending: string[] = [];
+  if (!entry.budget_included) {
+    return { title: "列入已核准預算", detail: "預算案核准且報帳品項完成對應後，才能請購或付款。" };
+  }
   if (["requested", "ordered"].includes(entry.procurement_status || "not_required")) {
-    pending.push("校商請購追蹤");
+    return { title: "校商請購追蹤", detail: "請持續更新請購狀態，直到收貨完成。" };
   }
   if ((entry.payment_status || "unpaid") === "unpaid") {
-    pending.push(entry.payment_method === "advance" ? "償還個人代墊" : "登錄付款");
+    return { title: entry.payment_method === "advance" ? "償還個人代墊" : "登錄付款", detail: "請由具備付款權限的人員完成付款。" };
   }
-  if (entry.budget_included === null) pending.push("確認預算列管");
-
-  if (pending.length > 0) {
-    return {
-      title: pending[0],
-      detail: pending.length > 1
-        ? `${pending.join("、")}可由各自具備權限的人員分別處理。`
-        : "請由具備對應財務權限的人員完成處理。",
-    };
+  if (!entry.evidence_complete) {
+    return { title: "上傳憑證", detail: "完成付款後，至少需附上一份收據、發票或其他憑證。" };
   }
-  return { title: "流程已完成", detail: "覆核、付款與預算列管狀態已完整記錄，可隨時查閱。" };
+  return { title: "完成核銷", detail: "確認憑證後完成核銷，這筆支出才會計入期末決算。" };
 }
 
 function claimFlowFor(entry: FinanceJournalOut): ClaimFlowStep[] {
@@ -840,6 +857,9 @@ function claimFlowFor(entry: FinanceJournalOut): ClaimFlowStep[] {
   const approved = isApprovedClaim(entry);
   const procurementStatus = entry.procurement_status || "not_required";
   const paymentStatus = entry.payment_status || "unpaid";
+  const budgetIncluded = entry.budget_included === true;
+  const paid = paymentStatus !== "unpaid";
+  const completed = entry.claim_status === "completed";
 
   return [
     {
@@ -856,21 +876,27 @@ function claimFlowFor(entry: FinanceJournalOut): ClaimFlowStep[] {
     },
     {
       order: 3,
-      label: "校商請購",
-      detail: !approved ? "覆核後處理" : procurementStatus === "not_required" ? "不需請購" : procurementStatusLabel[procurementStatus],
-      state: !approved ? "waiting" : procurementStatus === "requested" || procurementStatus === "ordered" ? "active" : "done",
+      label: "列入預算",
+      detail: !approved ? "覆核後處理" : budgetIncluded ? "已對應已核准預算" : "等待預算案核准與列管",
+      state: !approved ? "waiting" : budgetIncluded ? "done" : "active",
     },
     {
       order: 4,
-      label: entry.payment_method === "advance" ? "代墊償還" : "付款",
-      detail: !approved ? "覆核後處理" : paymentStatusLabel[paymentStatus],
-      state: !approved ? "waiting" : paymentStatus === "unpaid" ? "active" : "done",
+      label: "請購／付款",
+      detail: !budgetIncluded ? "列入預算後處理" : paymentStatus === "unpaid" ? (procurementStatus === "not_required" ? "等待付款" : procurementStatusLabel[procurementStatus]) : paymentStatusLabel[paymentStatus],
+      state: !budgetIncluded ? "waiting" : paymentStatus === "unpaid" ? "active" : "done",
     },
     {
       order: 5,
-      label: "預算列管",
-      detail: !approved ? "覆核後處理" : entry.budget_included === null ? "待確認" : entry.budget_included ? "已列入" : "不列入",
-      state: !approved ? "waiting" : entry.budget_included === null ? "active" : "done",
+      label: "上傳憑證",
+      detail: !paid ? "付款後確認" : entry.evidence_complete ? "憑證已附" : "等待憑證",
+      state: !paid ? "waiting" : entry.evidence_complete ? "done" : "active",
+    },
+    {
+      order: 6,
+      label: "完成核銷",
+      detail: !entry.evidence_complete ? "憑證確認後完成" : completed ? "已計入期末決算" : "等待完成核銷",
+      state: completed ? "done" : entry.evidence_complete ? "active" : "waiting",
     },
   ];
 }

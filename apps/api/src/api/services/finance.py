@@ -6,9 +6,10 @@ import asyncio
 import re
 import uuid
 from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.finance import (
@@ -80,6 +81,11 @@ def validate_evidence_key(evidence_key: str | None, ledger_id: uuid.UUID) -> Non
         or not _EVIDENCE_KEY_RE.fullmatch(filename)
     ):
         raise HTTPException(400, "憑證必須透過本帳本的私有上傳端點取得")
+
+
+def _claim_item_total(unit_price: int, tax_rate: int, quantity: Decimal | float) -> int:
+    total = Decimal(unit_price) * (Decimal(100 + tax_rate) / Decimal(100)) * Decimal(quantity)
+    return int(total.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 async def initialize_ledger(db: AsyncSession, org_id: uuid.UUID, name: str) -> FinanceLedger:
@@ -330,11 +336,11 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
                 ExpenseClaimItem.budget_node_id,
                 func.coalesce(
                     func.sum(
-                        (
-                            (ExpenseClaimItem.unit_price * (100 + ExpenseClaimItem.tax_rate) + 50)
-                            / 100
+                        func.round(
+                            ExpenseClaimItem.unit_price
+                            * ((100 + ExpenseClaimItem.tax_rate) / 100)
+                            * ExpenseClaimItem.quantity
                         )
-                        * ExpenseClaimItem.quantity
                     ),
                     0,
                 ),
@@ -354,6 +360,7 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
         "ledger_id": budget.ledger_id,
         "period_id": budget.period_id,
         "name": budget.name,
+        "is_public": budget.is_public,
         "submissions": submissions,
         "allocations": allocations,
         "nodes": [
@@ -369,6 +376,139 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
             }
             for node in nodes
         ],
+    }
+
+
+async def set_budget_publication(
+    db: AsyncSession, budget: FinanceBudget, is_public: bool
+) -> FinanceBudget:
+    if is_public:
+        approved_initial = await db.scalar(
+            select(FinanceBudgetSubmission.id).where(
+                FinanceBudgetSubmission.budget_id == budget.id,
+                FinanceBudgetSubmission.kind == "initial",
+                FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+            )
+        )
+        if not approved_initial:
+            raise HTTPException(400, "初始預算案核准後才能開放議員檢視")
+    budget.is_public = is_public
+    await db.flush()
+    return budget
+
+
+async def list_public_budgets(db: AsyncSession) -> list[tuple[FinanceBudget, FiscalPeriod]]:
+    approved_initial = exists().where(
+        FinanceBudgetSubmission.budget_id == FinanceBudget.id,
+        FinanceBudgetSubmission.kind == "initial",
+        FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+    )
+    return list(
+        (
+            await db.execute(
+                select(FinanceBudget, FiscalPeriod)
+                .join(FiscalPeriod, FiscalPeriod.id == FinanceBudget.period_id)
+                .where(FinanceBudget.is_public, approved_initial)
+                .order_by(FiscalPeriod.starts_on.desc(), FinanceBudget.name)
+            )
+        ).all()
+    )
+
+
+async def public_budget_detail(db: AsyncSession, budget_id: uuid.UUID) -> tuple[dict, FiscalPeriod]:
+    budget = await db.get(FinanceBudget, budget_id)
+    if not budget or not budget.is_public:
+        raise HTTPException(404, "公開預算不存在")
+    approved_initial = await db.scalar(
+        select(FinanceBudgetSubmission.id).where(
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.kind == "initial",
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not approved_initial:
+        raise HTTPException(404, "公開預算不存在")
+    period = await db.get(FiscalPeriod, budget.period_id)
+    if not period:
+        raise HTTPException(404, "會計期間不存在")
+    return await budget_detail(db, budget), period
+
+
+async def settlement_report(db: AsyncSession, ledger_id: uuid.UUID, period_id: uuid.UUID) -> dict:
+    period = await db.get(FiscalPeriod, period_id)
+    if not period or period.ledger_id != ledger_id:
+        raise HTTPException(404, "會計期間不存在")
+    budget = await db.scalar(
+        select(FinanceBudget).where(
+            FinanceBudget.ledger_id == ledger_id, FinanceBudget.period_id == period_id
+        )
+    )
+    if not budget:
+        return {
+            "period_id": period.id,
+            "period_name": period.name,
+            "budgeted_total": 0,
+            "settled_total": 0,
+            "unsettled_claim_count": 0,
+            "lines": [],
+        }
+    detail = await budget_detail(db, budget)
+    settled_rows = (
+        await db.execute(
+            select(
+                ExpenseClaimItem.budget_node_id,
+                func.coalesce(
+                    func.sum(
+                        func.round(
+                            ExpenseClaimItem.unit_price
+                            * ((100 + ExpenseClaimItem.tax_rate) / 100)
+                            * ExpenseClaimItem.quantity
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .join(JournalEntry, JournalEntry.id == ExpenseClaimItem.journal_entry_id)
+            .where(
+                ExpenseClaimItem.budget_node_id.is_not(None),
+                JournalEntry.ledger_id == ledger_id,
+                JournalEntry.period_id == period_id,
+                JournalEntry.status == JournalStatus.POSTED,
+                JournalEntry.claim_status == ExpenseClaimStatus.COMPLETED,
+            )
+            .group_by(ExpenseClaimItem.budget_node_id)
+        )
+    ).all()
+    settled = {row[0]: int(row[1]) for row in settled_rows if row[0] is not None}
+    unsettled_claim_count = await db.scalar(
+        select(func.count())
+        .select_from(JournalEntry)
+        .where(
+            JournalEntry.ledger_id == ledger_id,
+            JournalEntry.period_id == period_id,
+            JournalEntry.source_type == "expense_claim",
+            JournalEntry.status == JournalStatus.POSTED,
+            JournalEntry.claim_status != ExpenseClaimStatus.COMPLETED,
+        )
+    )
+    lines = [
+        {
+            "node_id": node["id"],
+            "name": node["name"],
+            "budgeted_amount": node["allocated_amount"],
+            "settled_amount": settled.get(node["id"], 0),
+            "difference_amount": node["allocated_amount"] - settled.get(node["id"], 0),
+        }
+        for node in detail["nodes"]
+        if not any(child["parent_id"] == node["id"] for child in detail["nodes"])
+    ]
+    return {
+        "period_id": period.id,
+        "period_name": period.name,
+        "budgeted_total": sum(line["budgeted_amount"] for line in lines),
+        "settled_total": sum(line["settled_amount"] for line in lines),
+        "unsettled_claim_count": int(unsettled_claim_count or 0),
+        "lines": lines,
     }
 
 
@@ -510,6 +650,8 @@ async def update_expense_procurement(
         raise HTTPException(400, "只有報帳案件可以管理校商請購")
     if entry.claim_status != ExpenseClaimStatus.APPROVED:
         raise HTTPException(400, "報帳必須先完成第二人覆核")
+    if entry.budget_included is not True:
+        raise HTTPException(400, "報帳必須先列入已核准預算")
     current = ExpenseProcurementStatus(
         entry.procurement_status or ExpenseProcurementStatus.NOT_REQUIRED
     )
@@ -547,6 +689,8 @@ async def mark_expense_paid(
         raise HTTPException(400, "只有報帳案件可以登錄付款")
     if entry.claim_status != ExpenseClaimStatus.APPROVED or entry.status != JournalStatus.POSTED:
         raise HTTPException(400, "報帳必須先完成第二人覆核並過帳")
+    if entry.budget_included is not True:
+        raise HTTPException(400, "報帳必須先列入已核准預算")
     if entry.payment_status not in (None, ExpensePaymentStatus.UNPAID):
         raise HTTPException(400, "此報帳已登錄付款，不可重複付款")
     entry.payment_status = payment_status
@@ -566,6 +710,8 @@ async def reimburse_expense_claim(
         raise HTTPException(400, "只有代墊報帳可以建立償還付款")
     if entry.claim_status != ExpenseClaimStatus.APPROVED or entry.status != JournalStatus.POSTED:
         raise HTTPException(400, "代墊報帳必須先完成第二人覆核並過帳")
+    if entry.budget_included is not True:
+        raise HTTPException(400, "代墊報帳必須先列入已核准預算")
     if entry.reimbursement_entry_id is not None:
         raise HTTPException(400, "此代墊報帳已完成償還")
     fund = await db.get(FundAccount, body.fund_account_id)
@@ -626,11 +772,59 @@ async def update_expense_budget(
         raise HTTPException(400, "只有報帳案件可以管理預算列管")
     if entry.claim_status != ExpenseClaimStatus.APPROVED:
         raise HTTPException(400, "報帳必須先完成第二人覆核")
+    if body.included:
+        item_node_ids = set(
+            (
+                await db.execute(
+                    select(ExpenseClaimItem.budget_node_id).where(
+                        ExpenseClaimItem.journal_entry_id == entry.id
+                    )
+                )
+            ).scalars()
+        )
+        if None in item_node_ids or not item_node_ids:
+            raise HTTPException(400, "所有報帳品項都必須對應已核准的預算條目")
+        approved_node_ids = set(
+            (
+                await db.execute(
+                    select(FinanceBudgetAllocation.node_id)
+                    .join(FinanceBudgetSubmission)
+                    .where(
+                        FinanceBudgetAllocation.node_id.in_(item_node_ids),
+                        FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+                    )
+                )
+            ).scalars()
+        )
+        if not item_node_ids.issubset(approved_node_ids):
+            raise HTTPException(400, "報帳只能列入已核准且已有額度的預算條目")
     entry.budget_included = body.included
     entry.budget_included_by_id = user_id
     entry.budget_included_at = datetime.now(UTC)
     if body.note:
         entry.note = body.note
+    await db.flush()
+    return entry
+
+
+async def complete_expense_claim(db: AsyncSession, entry: JournalEntry) -> JournalEntry:
+    if entry.source_type != "expense_claim":
+        raise HTTPException(400, "只有報帳案件可以完成核銷")
+    if entry.claim_status != ExpenseClaimStatus.APPROVED:
+        raise HTTPException(400, "報帳尚未完成覆核")
+    if entry.budget_included is not True:
+        raise HTTPException(400, "報帳尚未列入已核准預算")
+    if entry.payment_status in (None, ExpensePaymentStatus.UNPAID):
+        raise HTTPException(400, "請先登錄付款或代墊償還")
+    evidence_count = await db.scalar(
+        select(func.count())
+        .select_from(ExpenseClaimItemEvidence)
+        .join(ExpenseClaimItem)
+        .where(ExpenseClaimItem.journal_entry_id == entry.id)
+    )
+    if not entry.evidence_url and not evidence_count:
+        raise HTTPException(400, "至少上傳一份憑證後才能完成核銷")
+    entry.claim_status = ExpenseClaimStatus.COMPLETED
     await db.flush()
     return entry
 
@@ -694,8 +888,7 @@ async def create_expense_claim(
     ):
         raise HTTPException(400, "支出科目不存在、非支出科目或已停用")
     amount = sum(
-        ((item.unit_price * (100 + item.tax_rate) + 50) // 100) * item.quantity
-        for item in body.items
+        _claim_item_total(item.unit_price, item.tax_rate, item.quantity) for item in body.items
     )
     payment_account_id = fund.chart_account_id
     if body.payment_method == ExpensePaymentMethod.ADVANCE:
@@ -760,6 +953,7 @@ async def create_expense_claim(
             unit_price=item.unit_price,
             tax_rate=item.tax_rate,
             quantity=item.quantity,
+            unit=item.unit,
             budget_node_id=item.budget_node_id,
             budget_exception_note=item.budget_exception_note,
         )
@@ -809,6 +1003,17 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
             )
         ).all()
     )
+    evidence_count = 0
+    if entry.source_type == "expense_claim":
+        evidence_count = int(
+            await db.scalar(
+                select(func.count())
+                .select_from(ExpenseClaimItemEvidence)
+                .join(ExpenseClaimItem)
+                .where(ExpenseClaimItem.journal_entry_id == entry.id)
+            )
+            or 0
+        )
     return {
         "id": entry.id,
         "ledger_id": entry.ledger_id,
@@ -839,6 +1044,7 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
         "advanced_by_id": entry.advanced_by_id,
         "payment_method": entry.payment_method,
         "reimbursement_entry_id": entry.reimbursement_entry_id,
+        "evidence_complete": bool(entry.evidence_url) or evidence_count > 0,
         "lines": [
             {
                 "id": line.id,

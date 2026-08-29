@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -133,13 +134,17 @@ class ExpenseClaimItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     unit_price: int = Field(gt=0, le=2_000_000_000)
     tax_rate: int = Field(default=0, ge=0, le=100)
-    quantity: int = Field(gt=0, le=100_000)
+    quantity: Decimal = Field(gt=0, le=100_000, max_digits=12, decimal_places=2)
+    unit: str = Field(default="項", min_length=1, max_length=32)
     budget_node_id: uuid.UUID | None = None
     budget_exception_note: str | None = Field(None, max_length=500)
     evidence: list[ExpenseClaimEvidenceIn] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def budget_reason_required(self) -> ExpenseClaimItemCreate:
+        self.unit = self.unit.strip()
+        if not self.unit:
+            raise ValueError("請填寫數量單位")
         if self.budget_node_id is None and not (self.budget_exception_note or "").strip():
             raise ValueError("未對應預算的品項必須說明原因")
         return self
@@ -218,9 +223,33 @@ class BudgetNodeCreate(BaseModel):
 
 class BudgetAllocationCreate(BaseModel):
     node_id: uuid.UUID
-    amount: int = Field(gt=0, le=2_000_000_000)
+    amount: int | None = Field(default=None, gt=0, le=2_000_000_000)
+    quantity: Decimal | None = Field(
+        default=None, gt=0, le=100_000, max_digits=12, decimal_places=2
+    )
+    unit: str | None = Field(default=None, max_length=32)
+    unit_price: int | None = Field(default=None, gt=0, le=2_000_000_000)
     proposing_org_id: uuid.UUID
     note: str | None = None
+
+    @model_validator(mode="after")
+    def amount_or_quantity_required(self) -> BudgetAllocationCreate:
+        has_line_detail = any(
+            value is not None for value in (self.quantity, self.unit, self.unit_price)
+        )
+        if has_line_detail:
+            self.unit = (self.unit or "").strip()
+            if self.quantity is None or not self.unit or self.unit_price is None:
+                raise ValueError("填寫數量時，必須同時填寫單位與單價")
+            calculated = int(
+                (self.quantity * self.unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            )
+            if self.amount is not None and self.amount != calculated:
+                raise ValueError("預算總額必須等於數量乘以單價")
+            self.amount = calculated
+        if self.amount is None:
+            raise ValueError("請填寫預算總額，或完整填寫數量、單位與單價")
+        return self
 
 
 class BudgetAllocationUpdate(BaseModel):
@@ -243,6 +272,10 @@ class BudgetReview(BaseModel):
         return self
 
 
+class BudgetPublicationUpdate(BaseModel):
+    is_public: bool
+
+
 class FinanceEvidenceUploadOut(BaseModel):
     storage_key: str
     filename: str
@@ -256,6 +289,7 @@ class BudgetOut(BaseModel):
     ledger_id: uuid.UUID
     period_id: uuid.UUID
     name: str
+    is_public: bool
 
 
 class BudgetSubmissionOut(BaseModel):
@@ -291,6 +325,9 @@ class BudgetAllocationOut(BaseModel):
     submission_id: uuid.UUID
     node_id: uuid.UUID
     amount: int
+    quantity: float | None
+    unit: str | None
+    unit_price: int | None
     note: str | None
     proposed_by_id: uuid.UUID
     proposing_org_id: uuid.UUID
@@ -300,6 +337,58 @@ class BudgetDetailOut(BudgetOut):
     submissions: list[BudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[BudgetAllocationOut]
+
+
+class PublicBudgetListItem(BaseModel):
+    id: uuid.UUID
+    name: str
+    period_name: str
+
+
+class PublicBudgetSubmissionOut(BaseModel):
+    id: uuid.UUID
+    kind: BudgetSubmissionKind
+    title: str
+    reviewed_at: datetime | None
+    review_note: str | None
+
+
+class PublicBudgetAllocationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    node_id: uuid.UUID
+    amount: int
+    quantity: float | None
+    unit: str | None
+    unit_price: int | None
+    note: str | None
+
+
+class PublicBudgetDetailOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    period_name: str
+    submissions: list[PublicBudgetSubmissionOut]
+    nodes: list[BudgetNodeOut]
+    allocations: list[PublicBudgetAllocationOut]
+
+
+class FinanceSettlementLineOut(BaseModel):
+    node_id: uuid.UUID
+    name: str
+    budgeted_amount: int
+    settled_amount: int
+    difference_amount: int
+
+
+class FinanceSettlementOut(BaseModel):
+    period_id: uuid.UUID
+    period_name: str
+    budgeted_total: int
+    settled_total: int
+    unsettled_claim_count: int
+    lines: list[FinanceSettlementLineOut]
 
 
 class JournalLineOut(JournalLineIn):
@@ -339,6 +428,7 @@ class JournalOut(BaseModel):
     advanced_by_id: uuid.UUID | None = None
     payment_method: ExpensePaymentMethod = ExpensePaymentMethod.DIRECT
     reimbursement_entry_id: uuid.UUID | None = None
+    evidence_complete: bool = False
     lines: list[JournalLineOut]
 
 

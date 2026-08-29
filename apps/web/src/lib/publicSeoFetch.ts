@@ -2,6 +2,8 @@ import type {
   DocumentOut,
   PetitionPublicListItem,
   PetitionPublicOut,
+  PublicBudgetDetail,
+  PublicBudgetListItem,
   RegulationOut,
 } from "@/lib/types";
 import { fetchPublicJson as fetchCachedPublicJson } from "@/lib/serverFetch";
@@ -35,4 +37,12 @@ export async function fetchPublicPetitions(
 
 export async function fetchPublicPetition(id: string): Promise<PetitionPublicOut | null> {
   return fetchPublicJson<PetitionPublicOut>(`/petitions/public/${encodeURIComponent(id)}`);
+}
+
+export async function fetchPublicBudgets(): Promise<PublicBudgetListItem[]> {
+  return (await fetchPublicJson<PublicBudgetListItem[]>("/finance/public/budgets")) ?? [];
+}
+
+export async function fetchPublicBudget(id: string): Promise<PublicBudgetDetail | null> {
+  return fetchPublicJson<PublicBudgetDetail>(`/finance/public/budgets/${encodeURIComponent(id)}`);
 }
