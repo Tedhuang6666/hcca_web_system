@@ -184,6 +184,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/site/pages", "GET"),
     ("/site/pages/{slug}", "GET"),
     ("/site/public", "GET"),
+    # 公開官網圖片需支援未登入頁面與 Markdown 文章直接載入。
+    ("/site/public/images/{storage_key:path}", "GET"),
     # 現場抽獎：入口由活動碼、驗證碼或 session token 保護，不使用平台登入。
     ("/raffles/ping", "GET"),
     ("/raffles/session", "GET"),
