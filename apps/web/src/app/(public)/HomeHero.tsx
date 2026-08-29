@@ -7,7 +7,7 @@ import { BRANDING } from "@/lib/branding";
 import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { AnnouncementOut, PublicSiteBundleOut, SurveyListItem } from "@/lib/types";
 
-const LEGACY_HERO_SUBTITLE = "連結學生、整理公共資訊，讓校園自治被更多人看見。";
+const LEGACY_HERO_SUBTITLE = "連結學生、整理公共資訊，讓資訊能被更多人看見";
 
 function formatShortDate(value: string | null): string | null {
   if (!value) return null;
@@ -32,11 +32,11 @@ export default async function HomeHero({
   const configuredHeroTitle = settings?.hero_title?.trim();
   const heroTitle = configuredHeroTitle && configuredHeroTitle !== siteTitle
     ? configuredHeroTitle
-    : "校園的事，現在就能參與。";
+    : "竹嶺班聯";
   const configuredHeroSubtitle = settings?.hero_subtitle?.trim();
   const heroSubtitle = configuredHeroSubtitle && configuredHeroSubtitle !== LEGACY_HERO_SUBTITLE
     ? configuredHeroSubtitle
-    : "查看正在發生的校園事，表達你的意見，讓每一件事都有下一步。";
+    : "查看正在發生的事件，並表達你的意見！";
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const surveyDeadline = formatShortDate(openSurvey?.closes_at ?? null);
   const primaryAction = urgentAnnouncement
@@ -45,7 +45,7 @@ export default async function HomeHero({
         label: "查看重要公告",
         status: "重要公告",
         title: urgentAnnouncement.title,
-        detail: "請先查看這則校園訊息",
+        detail: "請先查看這則重要公告",
       }
     : openSurvey
       ? {
@@ -83,7 +83,7 @@ export default async function HomeHero({
               提出校園意見
             </Link>
           </div>
-          <aside className="public-hero-status" aria-label="目前最重要的校園事項">
+          <aside className="public-hero-status" aria-label="目前最重要的事項">
             <span className="public-hero-status-label">{primaryAction.status}</span>
             <p>{primaryAction.title}</p>
             <span className="public-hero-status-detail">{primaryAction.detail}</span>

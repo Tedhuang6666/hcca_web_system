@@ -49,9 +49,6 @@ export default async function PublicHomePage() {
     <div className="space-y-10 pb-8">
       <header className="public-page-head">
         <h1 className="text-3xl font-semibold">公開資料與校園服務</h1>
-        <p className="mt-3 text-sm leading-7 text-[var(--public-secondary)]">
-          查詢公開資料，或直接參與校園事務。
-        </p>
       </header>
 
       <section>

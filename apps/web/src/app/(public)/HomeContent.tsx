@@ -50,7 +50,7 @@ export default function HomeContent({
       href: urgentAnnouncement.link_url?.trim() || `/news/${urgentAnnouncement.id}`,
       label: "重要公告",
       title: urgentAnnouncement.title,
-      detail: "請先查看這則校園訊息",
+      detail: "請先查看這則重要公告",
       icon: Megaphone,
     },
     openSurvey && {
@@ -75,8 +75,8 @@ export default function HomeContent({
         <section className="public-home-now-section" aria-labelledby="public-now-title" data-reveal>
           <div className="public-home-now-heading">
             <div>
-              <h2 id="public-now-title">現在可做</h2>
-              <p>用一件正在發生的校園事，開始參與。</p>
+              <h2 id="public-now-title">即時重點</h2>
+              <p>同步目前最即時的更新</p>
             </div>
             <Link href="/news" className="public-text-link">查看全部公告</Link>
           </div>
@@ -162,7 +162,7 @@ export default function HomeContent({
           <FileText size={22} aria-hidden />
           <div>
             <h2 id="public-empty-title">目前沒有新的校園動態</h2>
-            <p>你仍可查看公開資料、填寫問卷，或提出需要正式回覆的校園意見。</p>
+            <p>你仍可查看公開資料、填寫問卷，或提出意見陳情</p>
           </div>
           <Link href="/public" className="public-text-link">查詢公開資料</Link>
         </section>
@@ -171,14 +171,14 @@ export default function HomeContent({
       <section className="public-home-entry-section" aria-labelledby="public-entry-title">
         <div className="public-home-entry-heading">
           <h2 id="public-entry-title">所有校園服務</h2>
-          <p>選一件你想完成的事，我們會帶你到正確的地方。</p>
+          <p>挑選想要查看的內容，所有資訊已整理在本數位系統中！</p>
         </div>
         <nav className="public-quick-grid public-home-quick-grid" aria-label="公開網站主要入口">
           {[
             {
               href: "/news",
               title: "最新公告",
-              desc: "掌握班聯會公開消息",
+              desc: "掌握最新消息",
               action: "查看公告",
               icon: Megaphone,
             },
@@ -198,9 +198,9 @@ export default function HomeContent({
             },
             {
               href: "/petitions/new",
-              title: "提出意見",
-              desc: "讓你的問題進入正式回覆流程",
-              action: "提出意見",
+              title: "提出陳情",
+              desc: "讓你的意見正式傳達",
+              action: "提出陳情",
               icon: MessageCircle,
             },
           ].map((item, index) => {
