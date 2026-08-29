@@ -163,7 +163,6 @@ export default function DiagnosticsPage() {
                 <div className="rounded-xl border border-[var(--primary)] bg-[var(--primary-dim)] p-4">
                   <p className="text-xs font-medium text-[var(--text-secondary)]">系統版本</p>
                   <p className="mt-1 max-w-full break-all font-mono text-xl font-bold leading-tight tracking-wide text-[var(--text-primary)] sm:text-2xl">{version.runtime.app_version}</p>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">前四段由 VERSION 管理；最後一段是 Git commit 總數。</p>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
                   <div className="rounded-lg border border-[var(--border)] p-4">
