@@ -24,6 +24,7 @@ from api.services.regulation_import import (
     parse_regulation_document,
     parse_regulation_docx,
     parse_regulation_text,
+    split_history_events,
 )
 
 
@@ -253,6 +254,12 @@ def test_parse_regulation_docx_collects_history_heading_block() -> None:
         ]
     )
     assert draft.articles[0].legal_number == "1"
+
+
+def test_split_history_events_handles_long_whitespace_runs() -> None:
+    history = "112" + " " * 10_000 + "學年度修訂113" + " " * 10_000 + "學年度修訂"
+
+    assert split_history_events(history) == ["112 學年度修訂", "113 學年度修訂"]
 
 
 def test_regulation_print_renders_title_history_and_nested_numbering() -> None:
