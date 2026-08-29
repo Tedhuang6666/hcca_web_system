@@ -18,6 +18,9 @@ describe("safeImageUrl", () => {
 
   it("sanitizes upload URLs after resolving the API prefix", () => {
     expect(uploadUrl("/uploads/image.png")).toBe("/api/uploads/image.png");
+    expect(uploadUrl("/site/public/images/public-site/image.png")).toBe(
+      "/api/site/public/images/public-site/image.png",
+    );
     expect(uploadUrl("javascript:alert(1)")).toBe("");
   });
 });

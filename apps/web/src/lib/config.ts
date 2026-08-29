@@ -79,11 +79,13 @@ export function safeInternalHref(href: string | null | undefined, fallback = "/"
   return value;
 }
 
-/** 將後端回傳的 /uploads/... 相對路徑解析成可在瀏覽器顯示的完整 URL。 */
+/** 將後端回傳的公開檔案相對路徑解析成可在瀏覽器顯示的 URL。 */
 export function uploadUrl(url: string | null | undefined): string {
   if (!url) return "";
   const resolved =
-    url.startsWith("/uploads/") || url.startsWith("/merchandise-submissions/uploads/")
+    url.startsWith("/uploads/") ||
+    url.startsWith("/merchandise-submissions/uploads/") ||
+    url.startsWith("/site/public/images/")
       ? `${API_BASE}${url}`
       : url;
   return safeImageUrl(resolved);
