@@ -3058,6 +3058,11 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   --official-rule: var(--border-strong);
 }
 
+.regulation-detail-loading [data-skeleton="true"] {
+  animation: none;
+  background: var(--bg-hover) !important;
+}
+
 .document-detail-page .card,
 .regulation-detail-page .card {
   border-radius: 6px;
@@ -7117,6 +7122,9 @@ input[type="radio"]:checked {
   }
   .law-article-number {
     font-weight: bold;
+  }
+  .regulation-detail-page .print-content {
+    break-inside: avoid;
   }
 
   /* ── 會議紀錄（Meeting）列印樣式 ── */

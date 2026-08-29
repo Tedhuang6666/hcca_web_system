@@ -1,5 +1,5 @@
 import { decodeRouteSegment } from "@/lib/regulationLawRefs";
-import { fetchPublicJson } from "@/lib/serverFetch";
+import { fetchPublicJson, fetchPublicRegulations } from "@/lib/serverFetch";
 import type { RegulationOut } from "@/lib/types";
 
 export type RegulationDetailSearchParams = Record<string, string | string[] | undefined>;
@@ -14,9 +14,20 @@ export function firstSearchParam(
 }
 
 export async function fetchPublicRegulation(id: string): Promise<RegulationOut | null> {
-  return fetchPublicJson<RegulationOut>(
-    `/regulations/${encodeURIComponent(decodeRouteSegment(id))}`,
+  const identifier = decodeRouteSegment(id);
+  const direct = await fetchPublicJson<RegulationOut>(
+    `/regulations/${encodeURIComponent(identifier)}`,
   );
+  if (direct) return direct;
+
+  // Title URL 在多個 API instance 或部署切換期間可能暫時查不到；
+  // 先從公開列表解析穩定 UUID，再重試詳情，避免頁面停在 loading fallback。
+  const match = (await fetchPublicRegulations()).find(
+    (regulation) => regulation.title.trim() === identifier.trim(),
+  );
+  if (!match) return null;
+
+  return fetchPublicJson<RegulationOut>(`/regulations/${encodeURIComponent(match.id)}`);
 }
 
 export const fetchRegulationMeta = fetchPublicRegulation;
