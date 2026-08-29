@@ -4,6 +4,7 @@ import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
 import { absoluteUrl, JsonLd } from "@/lib/seo";
 import "../public-design-system.css";
+import "./articles.css";
 import "./public-footer.css";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {

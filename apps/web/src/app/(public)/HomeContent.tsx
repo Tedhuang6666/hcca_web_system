@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import LiveElectionCard from "@/components/site/LiveElectionCard";
+import { publicPageHref } from "@/lib/publicNav";
 import type {
   AnnouncementListItem,
   AnnouncementOut,
@@ -137,7 +138,7 @@ export default function HomeContent({
                 {recentlyUpdatedPages.map((page) => (
                   <Link
                     key={page.id}
-                    href={`/pages/${page.slug}`}
+                    href={publicPageHref(page)}
                     className="public-home-update-row"
                   >
                     <span className="min-w-0">
@@ -181,6 +182,13 @@ export default function HomeContent({
               desc: "掌握最新消息",
               action: "查看公告",
               icon: Megaphone,
+            },
+            {
+              href: "/articles",
+              title: "文章專欄",
+              desc: "校園生活指南與實用文章",
+              action: "閱讀文章",
+              icon: FileText,
             },
             {
               href: "/public",

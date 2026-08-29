@@ -26,6 +26,7 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
 const BARE_ROUTE_PATHS = [
   "/",
   "/about",
+  "/articles",
   "/system-info",
   "/links",
   "/news",
@@ -45,6 +46,7 @@ const BARE_ROUTE_PATHS = [
 const INDEXABLE_EXACT_PATHS = new Set([
   "/",
   "/about",
+  "/articles",
   "/contact",
   "/links",
   "/live",
@@ -65,6 +67,7 @@ const INDEXABLE_EXACT_PATHS = new Set([
 
 const INDEXABLE_PREFIXES = [
   "/about/",
+  "/articles/",
   "/announcements/",
   "/documents/",
   "/legal/",
@@ -142,6 +145,7 @@ const ROBOTS_DISALLOW_PATHS = [
 
 const ROBOTS_ALLOW_PATHS = [
   "/about",
+  "/articles",
   "/announcements",
   "/documents",
   "/live/elections/",

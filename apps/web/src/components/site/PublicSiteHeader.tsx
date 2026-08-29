@@ -17,6 +17,7 @@ import {
   PUBLIC_NAV_GROUP_META,
   type PublicNavGroupId,
   groupResolvedNav,
+  publicPageHref,
   resolvePublicNav,
 } from "@/lib/publicNav";
 import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
@@ -28,7 +29,7 @@ type PublicHeaderSettings = Pick<
   PublicSiteSettingsOut,
   "site_logo_url" | "site_logo_alt" | "theme_config"
 >;
-type PublicHeaderNavPage = Pick<PublicSitePageOut, "id" | "slug" | "title" | "nav_label">;
+type PublicHeaderNavPage = Pick<PublicSitePageOut, "id" | "slug" | "title" | "nav_label" | "page_kind">;
 
 function isCurrentPath(pathname: string, href: string): boolean {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -298,9 +299,9 @@ function PublicSiteHeaderContent({
                       {filteredNavPages.map((page) => (
                         <Link
                           key={page.id}
-                          href={`/pages/${page.slug}`}
+                          href={publicPageHref(page)}
                           className="public-nav-dropdown-link"
-                          aria-current={isCurrentPath(pathname, `/pages/${page.slug}`) ? "page" : undefined}
+                          aria-current={isCurrentPath(pathname, publicPageHref(page)) ? "page" : undefined}
                         >
                           <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
                         </Link>
@@ -433,10 +434,10 @@ function PublicSiteHeaderContent({
                     {filteredNavPages.map((page) => (
                       <Link
                         key={page.id}
-                        href={`/pages/${page.slug}`}
+                        href={publicPageHref(page)}
                         onClick={() => setOpen(false)}
                         className="public-mobile-service-link"
-                        aria-current={isCurrentPath(pathname, `/pages/${page.slug}`) ? "page" : undefined}
+                        aria-current={isCurrentPath(pathname, publicPageHref(page)) ? "page" : undefined}
                       >
                         <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
                       </Link>
