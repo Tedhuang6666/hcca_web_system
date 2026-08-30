@@ -45,14 +45,34 @@ export default function HomeContent({
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, 2);
   const publicDatabaseDescription = settings?.public_database_description?.trim();
-  const hasLatestContent = latestAnnouncements.length > 0 || recentlyUpdatedPages.length > 0;
-  const nowItems = [
+  const recentItems = [
+    ...latestAnnouncements.map((item) => ({
+      href: `/news/${item.id}`,
+      label: "公告",
+      title: item.title,
+      detail: `${formatDate(item.published_at ?? item.created_at)} 發布`,
+      timestamp: item.published_at ?? item.created_at,
+      icon: BellRing,
+      priority: false,
+    })),
+    ...recentlyUpdatedPages.map((page) => ({
+      href: publicPageHref(page),
+      label: "公開內容",
+      title: page.title,
+      detail: `${formatDate(page.updated_at)} 更新`,
+      timestamp: page.updated_at,
+      icon: FileText,
+      priority: false,
+    })),
+  ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const activityItems = [
     urgentAnnouncement && {
       href: urgentAnnouncement.link_url?.trim() || `/news/${urgentAnnouncement.id}`,
       label: "重要公告",
       title: urgentAnnouncement.title,
-      detail: "請先查看這則重要公告",
+      detail: "請優先查看",
       icon: Megaphone,
+      priority: true,
     },
     openSurvey && {
       href: `/surveys/${encodeURIComponent(openSurvey.title)}`,
@@ -60,105 +80,62 @@ export default function HomeContent({
       title: openSurvey.title,
       detail: openSurvey.closes_at ? `截止 ${formatDate(openSurvey.closes_at)}` : "正在收集意見",
       icon: UsersRound,
+      priority: false,
     },
-    latestAnnouncements[0] && {
-      href: `/news/${latestAnnouncements[0].id}`,
-      label: "最新公告",
-      title: latestAnnouncements[0].title,
-      detail: `${formatDate(latestAnnouncements[0].published_at ?? latestAnnouncements[0].created_at)} 發布`,
-      icon: BellRing,
-    },
+    ...recentItems,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const hasActivityContent = activityItems.length > 0;
 
   return (
     <>
-      {nowItems.length > 0 && (
-        <section className="public-home-now-section" aria-labelledby="public-now-title" data-reveal>
-          <div className="public-home-now-heading">
+      {hasActivityContent && (
+        <section className="public-home-dynamics" aria-labelledby="public-dynamics-title" data-reveal>
+          <div className="public-home-dynamics-heading">
             <div>
-              <h2 id="public-now-title">即時重點</h2>
-              <p>同步目前最即時的更新</p>
+              <h2 id="public-dynamics-title">校園動態</h2>
+              <p>先處理需要你注意的事項，再接著瀏覽最近更新。</p>
             </div>
-            <Link href="/news" className="public-text-link">查看全部公告</Link>
-          </div>
-          <div className="public-home-now-list">
-            {nowItems.slice(0, 3).map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link key={`${item.label}-${item.href}`} href={item.href} className="public-home-now-row">
-                  <span className="public-home-now-icon" aria-hidden="true"><Icon size={18} /></span>
-                  <span className="min-w-0">
-                    <span className="public-home-now-label">{item.label}</span>
-                    <span className="public-home-now-title">{item.title}</span>
-                  </span>
-                  <span className="public-home-now-detail">{item.detail}</span>
-                  <ArrowRight size={18} aria-hidden="true" />
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {hasLatestContent && (
-        <section className="public-home-updates" aria-labelledby="public-updates-title" data-reveal>
-          <div className="public-home-updates-heading">
-            <div>
-              <h2 id="public-updates-title">最近更新</h2>
-              <p>公開資料會持續整理，方便你回來接著看。</p>
+            <div className="public-home-dynamics-actions" aria-label="校園動態導覽">
+              <Link href="/news" className="public-text-link">所有公告</Link>
+              <Link href="/public" className="public-text-link">公開資料庫</Link>
             </div>
-            <Link href="/news" className="public-text-link">查看全部公告</Link>
           </div>
 
-          <div className="public-home-updates-grid">
-            <LiveElectionCard />
-            <div className="public-home-update-list">
-              <div className="public-home-update-list-heading">
+          <div className="public-home-dynamics-layout">
+            <div className="public-home-activity-feed">
+              <div className="public-home-feed-heading">
                 <BellRing size={18} aria-hidden />
-                <h3>最新消息</h3>
+                <h3>最新動態</h3>
+                <span>{activityItems.length} 則</span>
               </div>
               <div>
-                {latestAnnouncements.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={`/news/${item.id}`}
-                    className="public-home-update-row"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold">
-                        {item.title}
+                {activityItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={`${item.label}-${item.href}`}
+                      href={item.href}
+                      className="public-home-activity-row"
+                      data-priority={item.priority ? "true" : undefined}
+                    >
+                      <span className="public-home-activity-icon" aria-hidden="true"><Icon size={17} /></span>
+                      <span className="min-w-0">
+                        <span className="public-home-activity-label">{item.label}</span>
+                        <span className="public-home-activity-title">{item.title}</span>
                       </span>
-                      <time className="mt-1 block text-xs text-[var(--public-muted)]">
-                        {formatDate(item.published_at ?? item.created_at)} 發布
-                      </time>
-                    </span>
-                    <ArrowRight size={15} className="mt-1 shrink-0" aria-hidden />
-                  </Link>
-                ))}
-                {recentlyUpdatedPages.map((page) => (
-                  <Link
-                    key={page.id}
-                    href={publicPageHref(page)}
-                    className="public-home-update-row"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold">
-                        {page.title}
-                      </span>
-                      <span className="mt-1 block text-xs text-[var(--public-muted)]">
-                        {formatDate(page.updated_at)} 更新
-                      </span>
-                    </span>
-                    <ArrowRight size={15} className="mt-1 shrink-0" aria-hidden />
-                  </Link>
-                ))}
+                      <span className="public-home-activity-detail">{item.detail}</span>
+                      <ArrowRight size={18} aria-hidden="true" />
+                    </Link>
+                  );
+                })}
               </div>
             </div>
+            <LiveElectionCard />
           </div>
         </section>
       )}
 
-      {!hasLatestContent && nowItems.length === 0 && (
+      {!hasActivityContent && (
         <section className="public-home-empty" aria-labelledby="public-empty-title">
           <FileText size={22} aria-hidden />
           <div>
