@@ -19,6 +19,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.site import PublicLinkCategory, PublicSitePage
 from api.models.user import User
+from api.schemas.analytics import PublicArticleViewCreate
 from api.schemas.site import (
     PublicLinkCategoryCreate,
     PublicLinkCategoryOut,
@@ -40,6 +41,7 @@ from api.schemas.site import (
 )
 from api.services import audit as audit_svc
 from api.services import site as site_svc
+from api.services.analytics import record_public_article_view
 from api.services.storage import get_storage, validate_storage_key
 
 router = APIRouter(prefix="/site", tags=["公開官網"])
@@ -110,6 +112,16 @@ async def get_public_page(slug: str, db: DbDep) -> object:
     if not page or not page.is_published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="頁面不存在")
     return page
+
+
+@router.post(
+    "/pages/{slug}/view",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="記錄公開文章閱讀",
+)
+async def create_public_article_view(slug: str, data: PublicArticleViewCreate, db: DbDep) -> None:
+    await record_public_article_view(db, slug, data)
+    await db.commit()
 
 
 @router.get("/admin/settings", response_model=PublicSiteSettingsOut, dependencies=[SiteAdminDep])

@@ -91,6 +91,8 @@ class CSRFMiddleware:
             # 匿名遙測使用 sendBeacon，無法附加 X-CSRF-Token header；端點只接收
             # Web Vitals／API latency，並受 rate limit / payload limit 保護。
             "/analytics/client-metrics",
+            # 公開文章閱讀事件不帶登入狀態，僅保存匿名化訪客雜湊與裝置類型。
+            "/site/pages",
         ]
 
     def _is_exempt(self, path: str) -> bool:

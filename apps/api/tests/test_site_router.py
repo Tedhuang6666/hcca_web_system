@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 
+from sqlalchemy import select
+
 
 async def _grant(db_session, user, code: str) -> None:
     from api.core.clock import local_today
@@ -110,6 +112,63 @@ async def test_get_public_page_published_succeeds(db_session, client) -> None:
     resp = await client.get("/site/pages/published-page")
     assert resp.status_code == 200
     assert resp.json()["title"] == "公開頁"
+
+
+async def test_public_article_view_records_anonymized_event(db_session, client) -> None:
+    from api.models.public_site_page_view import PublicSitePageView
+    from api.models.site import PublicSitePage
+
+    page = PublicSitePage(
+        slug="lunch-guide",
+        title="竹中訂餐指南",
+        body_md="# 內容",
+        page_kind="article",
+        is_published=True,
+    )
+    db_session.add(page)
+    await db_session.flush()
+    client.cookies.clear()
+
+    resp = await client.post(
+        "/site/pages/lunch-guide/view",
+        json={"visitor_id": "visitor-id-123456", "device_class": "mobile"},
+    )
+
+    assert resp.status_code == 204
+    event = await db_session.scalar(
+        select(PublicSitePageView).where(PublicSitePageView.page_id == page.id)
+    )
+    assert event is not None
+    assert event.visitor_hash != "visitor-id-123456"
+    assert len(event.visitor_hash) == 64
+    assert event.device_class == "mobile"
+
+
+async def test_public_article_view_ignores_unpublished_page(db_session, client) -> None:
+    from api.models.public_site_page_view import PublicSitePageView
+    from api.models.site import PublicSitePage
+
+    page = PublicSitePage(
+        slug="draft-article",
+        title="草稿文章",
+        body_md="# 草稿",
+        page_kind="article",
+        is_published=False,
+    )
+    db_session.add(page)
+    await db_session.flush()
+    client.cookies.clear()
+
+    resp = await client.post(
+        "/site/pages/draft-article/view",
+        json={"visitor_id": "visitor-id-123456", "device_class": "desktop"},
+    )
+
+    assert resp.status_code == 204
+    event = await db_session.scalar(
+        select(PublicSitePageView).where(PublicSitePageView.page_id == page.id)
+    )
+    assert event is None
 
 
 async def test_get_public_page_missing_returns_404(client) -> None:

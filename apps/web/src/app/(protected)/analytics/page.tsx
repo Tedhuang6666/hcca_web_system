@@ -8,6 +8,7 @@ import { safeInternalHref } from "@/lib/config";
 import type {
   AnalyticsInsightItem,
   AnnouncementParticipationItem,
+  ArticleAnalyticsOut,
   DeptRankingItem,
   DocumentEfficiencyOut,
   PendingAlertItem,
@@ -54,6 +55,10 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(!cacheHas(ANALYTICS_KEY));
   const [productLoading, setProductLoading] = useState(true);
   const [product, setProduct] = useState<ProductAnalyticsOut | null>(null);
+  const [articleLoading, setArticleLoading] = useState(true);
+  const [articleAnalytics, setArticleAnalytics] = useState<ArticleAnalyticsOut | null>(() =>
+    cacheGet<ArticleAnalyticsOut>(ANALYTICS_KEY + "/articles") ?? null
+  );
   const [efficiency, setEfficiency] = useState<DocumentEfficiencyOut | null>(() => cacheGet<DocumentEfficiencyOut>(ANALYTICS_KEY + "/efficiency") ?? null);
   const [ranking, setRanking] = useState<DeptRankingItem[]>(() => cacheGet<DeptRankingItem[]>(ANALYTICS_KEY + "/ranking") ?? []);
   const [pending, setPending] = useState<PendingAlertItem[]>(() => cacheGet<PendingAlertItem[]>(ANALYTICS_KEY + "/pending") ?? []);
@@ -75,8 +80,10 @@ export default function AnalyticsPage() {
     const hasCached = cacheHas(ANALYTICS_KEY) && !dateFrom && !dateTo;
     if (!hasCached) setLoading(true);
     setProductLoading(true);
+    setArticleLoading(true);
     const results = await Promise.allSettled([
       analyticsApi.product({ date_from: dateFrom || undefined, date_to: dateTo || undefined }),
+      analyticsApi.article({ date_from: dateFrom || undefined, date_to: dateTo || undefined }),
       analyticsApi.documentEfficiency(filterParams),
       analyticsApi.deptRanking(filterParams),
       analyticsApi.insights(12).then((res) => res.items),
@@ -86,9 +93,18 @@ export default function AnalyticsPage() {
         ? analyticsApi.pendingAlerts(48)
         : Promise.resolve([]),
     ] as const);
-    const [productResult, effResult, ranksResult, insightsResult, annResult, surveyResult, alertsResult] =
-      results;
+    const [
+      productResult,
+      articleResult,
+      effResult,
+      ranksResult,
+      insightsResult,
+      annResult,
+      surveyResult,
+      alertsResult,
+    ] = results;
     const productData = settledValue(productResult, null);
+    const articleData = settledValue(articleResult, null);
     const eff = settledValue(effResult, null);
     const ranks = settledValue(ranksResult, []);
     const insightRows = settledValue(insightsResult, []);
@@ -97,6 +113,8 @@ export default function AnalyticsPage() {
     const alerts = settledValue(alertsResult, []);
     setProduct(productData);
     setProductLoading(false);
+    setArticleAnalytics(articleData);
+    setArticleLoading(false);
     setEfficiency(eff);
     setRanking(ranks);
     setInsights(insightRows);
@@ -106,6 +124,7 @@ export default function AnalyticsPage() {
     if (!dateFrom && !dateTo) {
       // 只在無篩選條件時快取（有條件的結果不適合快取為預設值）
       cacheSet(ANALYTICS_KEY, true);
+      cacheSet(ANALYTICS_KEY + "/articles", articleData);
       cacheSet(ANALYTICS_KEY + "/efficiency", eff);
       cacheSet(ANALYTICS_KEY + "/ranking", ranks);
       cacheSet(ANALYTICS_KEY + "/insights", insightRows);
@@ -147,7 +166,7 @@ export default function AnalyticsPage() {
           </p>
           <h1 className="mt-1 text-xl font-semibold">績效統計儀表板</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            公文效率、公告閱讀與問卷回應概覽
+            公開文章閱讀、公文效率與參與度概覽
           </p>
         </div>
         <button className="btn btn-secondary" onClick={load} disabled={loading}>
@@ -182,6 +201,7 @@ export default function AnalyticsPage() {
       </section>
 
       <ProductAnalyticsSection data={product} loading={loading || productLoading} />
+      <ArticleAnalyticsSection data={articleAnalytics} loading={loading || articleLoading} />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="公文效率摘要">
         {[
@@ -355,6 +375,198 @@ export default function AnalyticsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+const ARTICLE_DEVICE_LABEL: Record<"mobile" | "tablet" | "desktop", string> = {
+  mobile: "手機",
+  tablet: "平板",
+  desktop: "電腦",
+};
+
+function ArticleAnalyticsSection({
+  data,
+  loading,
+}: {
+  data: ArticleAnalyticsOut | null;
+  loading: boolean;
+}) {
+  const recentDays = data?.daily_views.slice(-14) ?? [];
+  const maxViews = Math.max(...recentDays.map((item) => item.views), 1);
+  const maxArticleViews = Math.max(...(data?.top_articles.map((item) => item.views) ?? []), 1);
+  const number = new Intl.NumberFormat("zh-TW");
+  const peakDay = recentDays.reduce(
+    (peak, item) => (item.views > peak.views ? item : peak),
+    { date: "", views: 0, unique_visitors: 0 }
+  );
+
+  return (
+    <section aria-labelledby="article-analytics-heading" className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 id="article-analytics-heading" className="text-base font-semibold">公開文章閱讀統計</h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            追蹤文章瀏覽量、匿名訪客、裝置分布與熱門內容
+          </p>
+        </div>
+        {data && (
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {data.date_from} – {data.date_to} · 僅統計已發布文章
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3" aria-label="文章閱讀摘要">
+        {[
+          ["文章總瀏覽", number.format(data?.total_views ?? 0), "符合目前日期範圍的閱讀次數"],
+          ["不重複訪客", number.format(data?.unique_visitors ?? 0), "以匿名識別碼去重"],
+          ["已發布文章", number.format(data?.published_articles ?? 0), "目前公開可閱讀的文章"],
+        ].map(([label, value, description]) => (
+          <div key={label} className="card p-5">
+            <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</p>
+            <p className="mt-2 text-3xl font-bold leading-none tabular-nums">
+              {loading && !data ? "..." : value}
+            </p>
+            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{description}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <section className="card p-5" aria-labelledby="article-daily-heading">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 id="article-daily-heading" className="text-sm font-semibold">每日閱讀量</h3>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最近 14 天</p>
+            </div>
+            <span className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>
+              {peakDay.views ? `最高 ${number.format(peakDay.views)} 次` : "尚無閱讀"}
+            </span>
+          </div>
+          <div className="mt-6 flex h-44 items-end gap-1.5 sm:gap-2" aria-label="每日文章閱讀量圖表">
+            {loading && !data ? (
+              Array.from({ length: 14 }, (_, index) => (
+                <div key={index} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                  <div
+                    className="w-full animate-pulse rounded-sm"
+                    style={{ height: `${24 + (index % 4) * 16}px`, background: "var(--bg-hover)" }}
+                  />
+                  <span className="h-3 w-7 animate-pulse rounded" style={{ background: "var(--bg-hover)" }} />
+                </div>
+              ))
+            ) : recentDays.length === 0 ? (
+              <p className="self-center text-sm" style={{ color: "var(--text-muted)" }}>
+                尚未收集到文章閱讀資料。
+              </p>
+            ) : recentDays.map((item) => (
+              <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                  {item.views}
+                </span>
+                <div
+                  className="w-full rounded-sm transition-[height] duration-200"
+                  style={{
+                    height: `${Math.max((item.views / maxViews) * 112, item.views ? 8 : 3)}px`,
+                    background: item.views ? "var(--primary)" : "var(--bg-active)",
+                  }}
+                  title={`${item.date}：${item.views} 次閱讀，${item.unique_visitors} 位訪客`}
+                />
+                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                  {item.date.slice(5)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="card overflow-hidden" aria-labelledby="article-device-heading">
+          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+            <h3 id="article-device-heading" className="text-sm font-semibold">閱讀裝置分布</h3>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              依瀏覽器視窗寬度判斷
+            </p>
+          </div>
+          {data?.device_metrics.length ? (
+            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {data.device_metrics.map((item) => (
+                <div key={item.device_class} className="px-5 py-3.5">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium">{ARTICLE_DEVICE_LABEL[item.device_class]}</span>
+                    <span className="tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                      {number.format(item.views)} 次 · {(item.share * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.max(item.share * 100, 2)}%`, background: "var(--primary)" }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="px-5 py-10 text-sm" style={{ color: "var(--text-muted)" }}>
+              尚未收集到裝置分布資料。
+            </p>
+          )}
+        </section>
+      </div>
+
+      <section className="card overflow-hidden" aria-labelledby="article-top-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <h3 id="article-top-heading" className="text-sm font-semibold">熱門文章</h3>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>依目前日期範圍的閱讀量排序</p>
+          </div>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            前 {data?.top_articles.length ?? 0} 篇
+          </span>
+        </div>
+        {loading && !data ? (
+          <div className="space-y-4 px-5 py-5">
+            {Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="h-12 animate-pulse rounded" style={{ background: "var(--bg-hover)" }} />
+            ))}
+          </div>
+        ) : data?.top_articles.length ? (
+          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {data.top_articles.map((item) => (
+              <div key={item.page_id} className="px-5 py-3.5">
+                <div className="flex items-start justify-between gap-4">
+                  <Link
+                    href={safeInternalHref(`/articles/${encodeURIComponent(item.slug)}`, "/analytics")}
+                    className="min-w-0 flex-1"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <p className="truncate text-sm font-medium">{item.title}</p>
+                    <p className="mt-0.5 truncate font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      /articles/{item.slug}
+                    </p>
+                  </Link>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold tabular-nums">{number.format(item.views)} 次</p>
+                    <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      {number.format(item.unique_visitors)} 位訪客
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.max((item.views / maxArticleViews) * 100, 3)}%`, background: "var(--primary)" }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="px-5 py-10 text-sm" style={{ color: "var(--text-muted)" }}>
+            尚未收集到文章閱讀資料；文章公開後，訪客開啟文章頁就會開始累積。
+          </p>
+        )}
+      </section>
+    </section>
   );
 }
 

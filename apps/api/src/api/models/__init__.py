@@ -302,6 +302,7 @@ from api.models.policy import (  # noqa: F401
     PrivacyRequestStatus,
     PrivacyRequestType,
 )
+from api.models.public_site_page_view import PublicSitePageView  # noqa: F401
 from api.models.publication import (  # noqa: F401
     PublicationCampaign,
     PublicationDelivery,
