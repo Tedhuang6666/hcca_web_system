@@ -84,11 +84,12 @@ def _reg_query_with_relations():
 
 
 def _reg_query_for_public_detail():
-    """公開法規詳情查詢，不載入回應未使用的組織與公布公文 ORM。"""
+    """公開法規詳情查詢，載入版本所連結的公布公文摘要。"""
     return select(Regulation).options(
         selectinload(Regulation.creator),
         selectinload(Regulation.articles),
         selectinload(Regulation.revisions).selectinload(RegulationRevision.amender),
+        selectinload(Regulation.revisions).selectinload(RegulationRevision.published_document),
         selectinload(Regulation.workflow_logs),
     )
 

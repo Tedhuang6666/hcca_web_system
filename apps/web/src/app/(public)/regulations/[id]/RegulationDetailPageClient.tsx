@@ -357,7 +357,7 @@ export default function RegulationDetailPageClient({
     if (!reg) return {};
     const byId = new Map(activeArticles.map((article) => [article.id, article]));
     const rowById = new Map(articleDisplayRows.map((row) => [row.article.id, row]));
-    // regulationHref 內部已用 encodeURIComponent 處理標題（含空白/#/?/% 等特殊字元）
+    // 使用 UUID 建立穩定連結，避免同名法規誤導向其他版本
     const basePath = regulationHref(reg);
 
     const chainForArticle = (article: RegulationArticleOut) => {
@@ -1054,13 +1054,20 @@ export default function RegulationDetailPageClient({
                 <div>
                   <p style={{ color: "var(--text-muted)" }}>主席公布字號</p>
                   {publishedDoc ? (
-                    <Link
-                      href={`/documents/${publishedDoc.id}`}
-                      className="mt-1 inline-flex font-medium hover:opacity-80"
-                      style={{ color: "var(--primary)" }}
-                    >
-                      {publishedDoc.serial_number}
-                    </Link>
+                    <div className="mt-1 flex flex-col items-start gap-0.5">
+                      <Link
+                        href={`/documents/${publishedDoc.id}`}
+                        className="inline-flex font-medium hover:opacity-80"
+                        style={{ color: "var(--primary)" }}
+                      >
+                        {publishedDoc.serial_number}
+                      </Link>
+                      {publishedDoc.summary?.trim() && (
+                        <span className="whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>
+                          摘要：{publishedDoc.summary}
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>尚未公布</p>
                   )}

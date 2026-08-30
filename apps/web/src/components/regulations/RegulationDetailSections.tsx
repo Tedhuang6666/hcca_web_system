@@ -377,13 +377,20 @@ export function RevisionCard({
             {formatRevisionDate(rev)} · {rev.amended_by_name ?? rev.amended_by}
           </p>
           {rev.published_document_id && (
-            <Link
-              href={`/documents/${rev.published_document_id}`}
-              className="mt-1 inline-flex text-xs hover:opacity-80"
-              style={{ color: "var(--primary)" }}
-            >
-              查看公布公文 →
-            </Link>
+            <div className="mt-1 flex flex-col items-start gap-0.5 text-xs">
+              <Link
+                href={`/documents/${rev.published_document_id}`}
+                className="inline-flex hover:opacity-80"
+                style={{ color: "var(--primary)" }}
+              >
+                查看公布公文 →
+              </Link>
+              {rev.published_document_summary?.trim() && (
+                <span className="whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>
+                  摘要：{rev.published_document_summary}
+                </span>
+              )}
+            </div>
           )}
           <div className="mt-2 space-y-1 text-xs">
             <p style={{ color: "var(--text-muted)" }}>修正摘要</p>

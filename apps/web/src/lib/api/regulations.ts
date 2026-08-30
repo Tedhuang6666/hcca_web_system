@@ -18,7 +18,7 @@ export interface RegulationImportItem {
 const regulationPath = (id: string) => `/regulations/${pathSegment(id)}`;
 
 export const regulationHref = (reg: { id: string; title?: string | null }) =>
-  regulationPath(reg.title?.trim() || reg.id);
+  regulationPath(reg.id);
 
 export const regulationsApi = {
   list: (params?: Record<string, string>) => {

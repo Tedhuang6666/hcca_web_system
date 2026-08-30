@@ -1000,7 +1000,7 @@ export default function EditRegulationPage() {
                       <option value="">不連結公布公文</option>
                       {decreeDocuments.map(document => (
                         <option key={document.id} value={document.id}>
-                          {document.serial_number} · {document.title}
+                          {document.serial_number} · {document.summary?.trim() || document.title}
                         </option>
                       ))}
                     </select>
