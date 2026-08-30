@@ -497,12 +497,14 @@
   }
 
   .public-article-feature-media {
-    min-height: 15rem;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
     aspect-ratio: 16 / 9;
   }
 
   .public-article-cover-placeholder {
-    min-height: 15rem;
+    min-height: 0;
   }
 
   .public-article-detail-cover {
