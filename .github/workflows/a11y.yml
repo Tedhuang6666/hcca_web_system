@@ -118,6 +118,7 @@ jobs:
               http://127.0.0.1:3000/legal/accessibility \
             --chromedriver-path "$(npm root -g)/chromedriver/bin/chromedriver" \
             --chrome-options="no-sandbox,disable-setuid-sandbox,disable-dev-shm-usage" \
+            --load-delay 1000 \
             --exit \
             --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
             --save axe-report.json
