@@ -523,18 +523,21 @@
 
   .public-article-toc nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
-    overflow-x: auto;
     padding-bottom: 0.25rem;
-    scrollbar-width: thin;
   }
 
   .public-article-toc a {
-    flex: 0 0 auto;
+    flex: 1 1 calc(50% - 0.35rem);
+    min-width: 0;
+    min-height: 44px;
     border: 1px solid var(--public-border);
     padding: 0.55rem 0.6rem;
     font-size: 0.74rem;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    text-align: center;
+    white-space: normal;
   }
 
   .public-article-toc a.is-subsection {
