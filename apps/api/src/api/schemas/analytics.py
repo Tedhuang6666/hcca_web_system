@@ -1,6 +1,7 @@
 """平台產品統計 API schema。"""
 
-from datetime import date
+import uuid
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -74,6 +75,43 @@ class PageMetricItem(BaseModel):
     views: int
     unique_visitors: int
     click_rate: float
+
+
+class PublicArticleViewCreate(BaseModel):
+    visitor_id: str = Field(min_length=16, max_length=128)
+    device_class: Literal["mobile", "tablet", "desktop"] = "desktop"
+
+
+class DailyArticleViewItem(BaseModel):
+    date: date
+    views: int
+    unique_visitors: int
+
+
+class ArticleMetricItem(BaseModel):
+    page_id: uuid.UUID
+    slug: str
+    title: str
+    views: int
+    unique_visitors: int
+    last_viewed_at: datetime | None
+
+
+class ArticleDeviceMetricItem(BaseModel):
+    device_class: Literal["mobile", "tablet", "desktop"]
+    views: int
+    share: float
+
+
+class ArticleAnalyticsOut(BaseModel):
+    date_from: date
+    date_to: date
+    published_articles: int
+    total_views: int
+    unique_visitors: int
+    daily_views: list[DailyArticleViewItem]
+    top_articles: list[ArticleMetricItem]
+    device_metrics: list[ArticleDeviceMetricItem]
 
 
 class ProductAnalyticsOut(BaseModel):

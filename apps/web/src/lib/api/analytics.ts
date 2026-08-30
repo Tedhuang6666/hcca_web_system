@@ -1,6 +1,7 @@
 import type {
   AnalyticsInsightsOut,
   AnnouncementParticipationItem,
+  ArticleAnalyticsOut,
   DeptRankingItem,
   DocumentEfficiencyOut,
   PendingAlertItem,
@@ -25,6 +26,17 @@ async function ensureCsrfCookie(): Promise<boolean> {
 }
 
 export const analyticsApi = {
+  article: (params?: { date_from?: string; date_to?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    return get<ArticleAnalyticsOut>(`/analytics/articles${q.size ? `?${q}` : ""}`);
+  },
+  trackArticleView: (slug: string, visitorId: string, deviceClass: "mobile" | "tablet" | "desktop") =>
+    post<void>(`/site/pages/${encodeURIComponent(slug)}/view`, {
+      visitor_id: visitorId,
+      device_class: deviceClass,
+    }),
   product: (params?: { date_from?: string; date_to?: string }) => {
     const q = new URLSearchParams();
     if (params?.date_from) q.set("date_from", params.date_from);

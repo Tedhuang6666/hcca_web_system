@@ -13,6 +13,8 @@ from api.models.analytics_page_view import AnalyticsPageView
 from api.models.announcement import Announcement
 from api.models.document import ApprovalStepStatus, Document, DocumentApproval, DocumentStatus
 from api.models.org import Org
+from api.models.public_site_page_view import PublicSitePageView
+from api.models.site import PublicSitePage
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
 
@@ -100,6 +102,14 @@ async def test_survey_participation_without_permission_returns_403(
 ) -> None:
     ac = authed_client_factory(member_user)
     resp = await ac.get("/analytics/surveys/participation")
+    assert resp.status_code == 403
+
+
+async def test_article_analytics_without_permission_returns_403(
+    member_user, authed_client_factory
+) -> None:
+    resp = await authed_client_factory(member_user).get("/analytics/articles")
+
     assert resp.status_code == 403
 
 
@@ -436,3 +446,73 @@ async def test_product_analytics_returns_daily_users_and_page_metrics(
     assert documents["views"] == 2
     assert documents["unique_visitors"] == 2
     assert documents["click_rate"] == 0.6667
+
+
+async def test_article_analytics_returns_views_devices_and_top_articles(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "analytics:view")
+    now = datetime.now(UTC)
+    lunch = PublicSitePage(
+        slug="lunch-guide",
+        title="竹中訂餐指南",
+        body_md="# 內容",
+        page_kind="article",
+        is_published=True,
+    )
+    event = PublicSitePage(
+        slug="event-guide",
+        title="活動參加指南",
+        body_md="# 內容",
+        page_kind="article",
+        is_published=True,
+    )
+    db_session.add_all([lunch, event])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            PublicSitePageView(
+                page_id=lunch.id,
+                visitor_hash="visitor-a",
+                device_class="mobile",
+                created_at=now,
+            ),
+            PublicSitePageView(
+                page_id=lunch.id,
+                visitor_hash="visitor-b",
+                device_class="desktop",
+                created_at=now,
+            ),
+            PublicSitePageView(
+                page_id=event.id,
+                visitor_hash="visitor-a",
+                device_class="mobile",
+                created_at=now,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    resp = await authed_client_factory(member_user).get(
+        "/analytics/articles",
+        params={
+            "date_from": (now - timedelta(days=1)).date().isoformat(),
+            "date_to": now.date().isoformat(),
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["published_articles"] == 2
+    assert body["total_views"] == 3
+    assert body["unique_visitors"] == 2
+    assert len(body["daily_views"]) == 2
+    assert body["daily_views"][-1]["views"] == 3
+    assert body["top_articles"][0]["slug"] == "lunch-guide"
+    assert body["top_articles"][0]["views"] == 2
+    assert body["top_articles"][0]["unique_visitors"] == 2
+    assert body["device_metrics"][0] == {
+        "device_class": "mobile",
+        "views": 2,
+        "share": 0.6667,
+    }

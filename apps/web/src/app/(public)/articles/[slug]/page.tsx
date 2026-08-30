@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import ArticleMarkdown from "@/components/site/ArticleMarkdown";
+import ArticleViewTracker from "@/components/site/ArticleViewTracker";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { articleReadingTime, extractArticleHeadings } from "@/lib/article-utils";
 import { BRANDING } from "@/lib/branding";
@@ -70,6 +71,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
         settings={bundle?.settings}
         urgentAnnouncement={urgentAnnouncement}
       >
+        <ArticleViewTracker slug={slug} />
         <div className="public-article-detail">
           <Link href="/articles" className="public-article-back"><ArrowLeft size={16} aria-hidden /> 返回文章專欄</Link>
 

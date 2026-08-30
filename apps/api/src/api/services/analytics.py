@@ -2,15 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
 from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.models.analytics_page_view import AnalyticsPageView
+from api.models.public_site_page_view import PublicSitePageView
+from api.models.site import PublicSitePage
 from api.models.user import User
-from api.schemas.analytics import DailyRegistrationItem, PageMetricItem, ProductAnalyticsOut
+from api.schemas.analytics import (
+    ArticleAnalyticsOut,
+    ArticleDeviceMetricItem,
+    ArticleMetricItem,
+    DailyArticleViewItem,
+    DailyRegistrationItem,
+    PageMetricItem,
+    ProductAnalyticsOut,
+    PublicArticleViewCreate,
+)
 
 
 def _range_bounds(date_from: date | None, date_to: date | None) -> tuple[date, date]:
@@ -64,6 +78,156 @@ def page_label(path: str) -> str:
 async def record_page_view(db: AsyncSession, user_id, path: str) -> None:
     db.add(AnalyticsPageView(user_id=user_id, path=normalize_page_path(path)))
     await db.flush()
+
+
+def _visitor_hash(visitor_id: str) -> str:
+    """以伺服器金鑰雜湊瀏覽器識別碼，避免資料庫保存原始值。"""
+    return hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        visitor_id.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+async def record_public_article_view(
+    db: AsyncSession, slug: str, data: PublicArticleViewCreate
+) -> bool:
+    page = await db.scalar(
+        select(PublicSitePage).where(
+            PublicSitePage.slug == slug,
+            PublicSitePage.page_kind == "article",
+            PublicSitePage.is_published.is_(True),
+        )
+    )
+    if page is None:
+        return False
+
+    db.add(
+        PublicSitePageView(
+            page_id=page.id,
+            visitor_hash=_visitor_hash(data.visitor_id),
+            device_class=data.device_class,
+        )
+    )
+    await db.flush()
+    return True
+
+
+async def get_article_analytics(
+    db: AsyncSession,
+    date_from: date | None,
+    date_to: date | None,
+) -> ArticleAnalyticsOut:
+    start, end = _range_bounds(date_from, date_to)
+    start_at = _start_datetime(start)
+    end_at = _end_datetime(end)
+    view_range = (
+        PublicSitePageView.created_at >= start_at,
+        PublicSitePageView.created_at < end_at,
+    )
+
+    published_articles = int(
+        await db.scalar(
+            select(func.count(PublicSitePage.id)).where(
+                PublicSitePage.page_kind == "article",
+                PublicSitePage.is_published.is_(True),
+            )
+        )
+        or 0
+    )
+    total_views = int(
+        await db.scalar(select(func.count(PublicSitePageView.id)).where(*view_range)) or 0
+    )
+    unique_visitors = int(
+        await db.scalar(
+            select(func.count(func.distinct(PublicSitePageView.visitor_hash))).where(*view_range)
+        )
+        or 0
+    )
+
+    day_expr = func.date(PublicSitePageView.created_at)
+    daily_rows = (
+        await db.execute(
+            select(
+                day_expr.label("day"),
+                func.count(PublicSitePageView.id).label("views"),
+                func.count(func.distinct(PublicSitePageView.visitor_hash)).label("unique_visitors"),
+            )
+            .where(*view_range)
+            .group_by(day_expr)
+            .order_by(day_expr)
+        )
+    ).all()
+    daily_counts = {str(row.day): (int(row.views), int(row.unique_visitors)) for row in daily_rows}
+    daily_views = [
+        DailyArticleViewItem(
+            date=day,
+            views=daily_counts.get(day.isoformat(), (0, 0))[0],
+            unique_visitors=daily_counts.get(day.isoformat(), (0, 0))[1],
+        )
+        for day in (start + timedelta(days=index) for index in range((end - start).days + 1))
+    ]
+
+    article_rows = (
+        await db.execute(
+            select(
+                PublicSitePage.id.label("page_id"),
+                PublicSitePage.slug,
+                PublicSitePage.title,
+                func.count(PublicSitePageView.id).label("views"),
+                func.count(func.distinct(PublicSitePageView.visitor_hash)).label("unique_visitors"),
+                func.max(PublicSitePageView.created_at).label("last_viewed_at"),
+            )
+            .join(PublicSitePageView, PublicSitePageView.page_id == PublicSitePage.id)
+            .where(*view_range)
+            .group_by(PublicSitePage.id, PublicSitePage.slug, PublicSitePage.title)
+            .order_by(func.count(PublicSitePageView.id).desc(), PublicSitePage.title)
+            .limit(20)
+        )
+    ).all()
+    top_articles = [
+        ArticleMetricItem(
+            page_id=row.page_id,
+            slug=row.slug,
+            title=row.title,
+            views=int(row.views),
+            unique_visitors=int(row.unique_visitors),
+            last_viewed_at=row.last_viewed_at,
+        )
+        for row in article_rows
+    ]
+
+    device_rows = (
+        await db.execute(
+            select(
+                PublicSitePageView.device_class,
+                func.count(PublicSitePageView.id).label("views"),
+            )
+            .where(*view_range)
+            .group_by(PublicSitePageView.device_class)
+            .order_by(func.count(PublicSitePageView.id).desc())
+        )
+    ).all()
+    device_metrics = [
+        ArticleDeviceMetricItem(
+            device_class=row.device_class,
+            views=int(row.views),
+            share=round(int(row.views) / total_views, 4) if total_views else 0,
+        )
+        for row in device_rows
+        if row.device_class in {"mobile", "tablet", "desktop"}
+    ]
+
+    return ArticleAnalyticsOut(
+        date_from=start,
+        date_to=end,
+        published_articles=published_articles,
+        total_views=total_views,
+        unique_visitors=unique_visitors,
+        daily_views=daily_views,
+        top_articles=top_articles,
+        device_metrics=device_metrics,
+    )
 
 
 async def get_product_analytics(

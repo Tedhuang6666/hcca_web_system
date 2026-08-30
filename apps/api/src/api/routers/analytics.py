@@ -24,6 +24,7 @@ from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
 from api.schemas.analytics import (
+    ArticleAnalyticsOut,
     ClientMetricBatchCreate,
     ClientMetricCreate,
     ComponentMetricBatchCreate,
@@ -31,7 +32,7 @@ from api.schemas.analytics import (
     PageViewCreate,
     ProductAnalyticsOut,
 )
-from api.services.analytics import get_product_analytics, record_page_view
+from api.services.analytics import get_article_analytics, get_product_analytics, record_page_view
 from api.services.observability import record_client_metrics
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
@@ -189,6 +190,20 @@ async def product_analytics(
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=422, detail="起始日期不得晚於結束日期")
     return await get_product_analytics(db, date_from, date_to)
+
+
+@router.get("/articles", response_model=ArticleAnalyticsOut, summary="公開文章閱讀統計")
+async def article_analytics(
+    db: DbDep,
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+) -> ArticleAnalyticsOut:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="起始日期不得晚於結束日期")
+    return await get_article_analytics(db, date_from, date_to)
 
 
 # ── 公文效率統計 ───────────────────────────────────────────────────────────────
