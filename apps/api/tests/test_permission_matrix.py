@@ -183,6 +183,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/site/officers", "GET"),
     ("/site/pages", "GET"),
     ("/site/pages/{slug}", "GET"),
+    # 匿名文章閱讀統計；公開頁面需能在未登入時記錄瀏覽。
+    ("/site/pages/{slug}/view", "POST"),
     ("/site/public", "GET"),
     # 公開官網圖片需支援未登入頁面與 Markdown 文章直接載入。
     ("/site/public/images/{storage_key:path}", "GET"),
