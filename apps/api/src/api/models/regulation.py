@@ -314,6 +314,11 @@ class RegulationRevision(Base, TimestampMixin):
         document = self.__dict__.get("published_document")
         return document.id if document is not None else None
 
+    @property
+    def published_document_summary(self) -> str | None:
+        document = self.__dict__.get("published_document")
+        return document.summary if document is not None else None
+
 
 # ── 結構化條文 ────────────────────────────────────────────────────────────────
 

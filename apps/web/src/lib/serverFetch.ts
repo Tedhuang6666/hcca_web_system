@@ -59,8 +59,8 @@ const fetchCachedPublicRegulations = unstable_cache(
     if (!response.ok) throw new Error(`Public API request failed: ${response.status}`);
     return response.json() as Promise<RegulationListItem[]>;
   },
-  ["hcca-public-regulations-v1"],
-  { revalidate: 300, tags: ["public-regulations"] },
+  ["hcca-public-regulations-v2"],
+  { revalidate: 15, tags: ["public-regulations"] },
 );
 
 async function getCachedPublicJson<T>(path: string, live = false): Promise<T | null> {

@@ -22,7 +22,10 @@ type RegulationMeta = {
 };
 
 async function fetchReg(id: string): Promise<RegulationMeta | null> {
-  return fetchPublicJson<RegulationMeta>(`/regulations/${encodeURIComponent(id)}`);
+  return fetchPublicJson<RegulationMeta>(
+    `/regulations/${encodeURIComponent(id)}`,
+    { revalidate: 15 },
+  );
 }
 
 export async function generateMetadata(

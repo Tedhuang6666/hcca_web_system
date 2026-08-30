@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
-from api.models.document import Document, DocumentCategory
+from api.models.document import Document, DocumentCategory, DocumentStatus, DocumentVisibility
 from api.models.meeting import Meeting, MeetingAgendaItem
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.regulation import (
@@ -341,6 +341,54 @@ async def test_update_regulation_revision_accepts_year_unknown_and_document_link
     assert body["published_document_id"] == str(document.id)
     await db_session.refresh(document)
     assert document.regulation_revision_id == revision.id
+
+
+async def test_public_regulation_detail_includes_linked_document_summary(
+    db_session: AsyncSession, client, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user(email="public-revision-document@school.edu")
+    document = Document(
+        serial_number=f"DOC-{uuid.uuid4().hex[:12]}",
+        title="公布法規命令",
+        summary="這是公布公文摘要",
+        category=DocumentCategory.DECREE,
+        status=DocumentStatus.APPROVED,
+        visibility_level=DocumentVisibility.PUBLICLY_OPEN,
+        is_public=True,
+        org_id=org.id,
+        created_by=creator.id,
+    )
+    db_session.add(document)
+    await db_session.flush()
+    reg = await _make_regulation(
+        db_session,
+        org,
+        creator,
+        workflow_status=RegulationWorkflowStatus.PUBLISHED,
+        published_at=datetime.now(UTC),
+        published_document_id=document.id,
+    )
+    revision = RegulationRevision(
+        regulation_id=reg.id,
+        version=1,
+        change_brief="初次公布",
+        content_snapshot="第一條 內容",
+        article_snapshot="[]",
+        amended_at=datetime.now(UTC),
+        amended_by=creator.id,
+        published_document=document,
+    )
+    db_session.add(revision)
+    await db_session.flush()
+
+    response = await client.get(f"/regulations/{reg.id}")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["version"] == 1
+    assert body["revisions"][0]["published_document_id"] == str(document.id)
+    assert body["revisions"][0]["published_document_summary"] == "這是公布公文摘要"
 
 
 async def test_update_regulation_autosave_does_not_increment_version(

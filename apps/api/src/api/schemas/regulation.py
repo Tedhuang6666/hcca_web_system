@@ -145,6 +145,7 @@ class RegulationRevisionOut(BaseModel):
     amended_at_precision: Literal["date", "month", "year", "unknown"] = "date"
     amended_year: int | None = None
     published_document_id: uuid.UUID | None = None
+    published_document_summary: str | None = None
     amended_by: uuid.UUID
     amended_by_name: str | None = None
     created_at: datetime

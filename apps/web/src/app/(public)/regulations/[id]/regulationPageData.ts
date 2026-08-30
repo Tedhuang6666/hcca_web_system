@@ -17,6 +17,7 @@ export async function fetchPublicRegulation(id: string): Promise<RegulationOut |
   const identifier = decodeRouteSegment(id);
   const direct = await fetchPublicJson<RegulationOut>(
     `/regulations/${encodeURIComponent(identifier)}`,
+    { revalidate: 15 },
   );
   if (direct) return direct;
 
@@ -27,7 +28,10 @@ export async function fetchPublicRegulation(id: string): Promise<RegulationOut |
   );
   if (!match) return null;
 
-  return fetchPublicJson<RegulationOut>(`/regulations/${encodeURIComponent(match.id)}`);
+  return fetchPublicJson<RegulationOut>(
+    `/regulations/${encodeURIComponent(match.id)}`,
+    { revalidate: 15 },
+  );
 }
 
 export const fetchRegulationMeta = fetchPublicRegulation;

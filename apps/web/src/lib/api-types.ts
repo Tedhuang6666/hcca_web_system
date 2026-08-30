@@ -34183,6 +34183,8 @@ export interface components {
             proposal_metadata_snapshot?: string | null;
             /** Published Document Id */
             published_document_id?: string | null;
+            /** Published Document Summary */
+            published_document_summary?: string | null;
             /**
              * Regulation Id
              * Format: uuid
