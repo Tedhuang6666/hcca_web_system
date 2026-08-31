@@ -14,8 +14,8 @@ describe("sitemap", () => {
           body = { settings: { updated_at: "2026-08-22T00:00:00+08:00", theme_config: {} }, links: [] };
         } else if (url.pathname.endsWith("/regulations")) {
           body = [
-            { id: "first", title: "重複法規", updated_at: "2026-08-20T00:00:00+08:00" },
-            { id: "second", title: "重複法規", updated_at: "2026-08-21T00:00:00+08:00" },
+            { id: "shared-id", title: "第一筆法規", updated_at: "2026-08-20T00:00:00+08:00" },
+            { id: "shared-id", title: "第二筆法規", updated_at: "2026-08-21T00:00:00+08:00" },
           ];
         }
 
@@ -24,7 +24,7 @@ describe("sitemap", () => {
     );
 
     const entries = await sitemap();
-    const regulationUrl = `https://hcca.tw/regulations/${encodeURIComponent("重複法規")}`;
+    const regulationUrl = "https://hcca.tw/regulations/shared-id";
 
     expect(entries.filter((entry) => entry.url === regulationUrl)).toHaveLength(1);
   });

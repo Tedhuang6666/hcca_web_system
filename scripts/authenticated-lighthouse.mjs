@@ -125,8 +125,15 @@ async function isHtmlPage(url, cookieHeader) {
 
 const appDirectory = fileURLToPath(new URL("../apps/web/src/app/", import.meta.url));
 const pageFilePattern = /^page\.(?:tsx?|jsx?|mjs)$/u;
-// These legacy paths permanently redirect to canonical routes that are already monitored.
-const performanceRedirectAliases = new Set(["/public/documents", "/public/regulations"]);
+// These routes are aliases or operational shells rather than stable public content pages.
+// They are either redirected, explicitly noindexed, or can render without an LCP score.
+const performanceExcludedRoutes = new Set([
+  "/public/documents",
+  "/public/regulations",
+  "/login",
+  "/maintenance",
+  "/module-status",
+]);
 
 async function discoverStaticRoutes(directory = appDirectory, segments = [], publicOnly = false) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -231,11 +238,11 @@ if (!authenticated) {
   }
 }
 const staticTargets = staticRoutes
-  .filter((route) => !performanceRedirectAliases.has(route))
+  .filter((route) => !performanceExcludedRoutes.has(route))
   .map((route) => `${baseUrl}${route}`);
 const reportedTargets = (targetsResponse.urls || [])
   .map((value) => String(value))
-  .filter((target) => !performanceRedirectAliases.has(new URL(target, baseUrl).pathname));
+  .filter((target) => !performanceExcludedRoutes.has(new URL(target, baseUrl).pathname));
 const allTargets = [
   ...new Set([...staticTargets, ...reportedTargets]),
 ].sort();
