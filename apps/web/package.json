@@ -88,6 +88,7 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
+    "browserslist": "^4.28.8",
     "js-yaml": "^4.3.0",
     "postcss": "^8.5.18",
     "sharp": "^0.35.0"
