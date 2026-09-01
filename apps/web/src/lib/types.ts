@@ -609,11 +609,19 @@ export type FinanceExpenseClaimEvidence = {
   evidence_type: ExpenseEvidenceType
   note?: string | null
 }
+export type FinanceExpenseClaimEvidenceOut = FinanceExpenseClaimEvidence & {
+  id: string
+  url: string
+}
 export type FinanceExpenseClaimItemCreate = Omit<ExpenseClaimItemCreate, 'evidence' | 'unit'> & {
   unit?: string
   budget_node_id?: string | null
   budget_exception_note?: string | null
   evidence?: FinanceExpenseClaimEvidence[]
+}
+export type FinanceExpenseClaimItemOut = Omit<FinanceExpenseClaimItemCreate, 'evidence'> & {
+  id: string
+  evidence: FinanceExpenseClaimEvidenceOut[]
 }
 export type FinanceExpenseClaimCreate = Omit<ExpenseClaimCreate, 'source_url' | 'items'> & {
   source_url?: string | null
@@ -658,6 +666,13 @@ export type FinanceBudgetAllocation = {
 }
 export type FinanceBudgetDetail = FinanceBudget & {
   submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]
+}
+export type FinanceBudgetImportResult = {
+  budget: FinanceBudget
+  submission: FinanceBudgetSubmission
+  categories_created: number
+  allocations_created: number
+  skipped_rows: string[]
 }
 export type FinanceSettlementLine = {
   node_id: string; name: string; budgeted_amount: number; settled_amount: number; difference_amount: number

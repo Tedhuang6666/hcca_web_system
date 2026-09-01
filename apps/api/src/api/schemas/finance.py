@@ -234,19 +234,18 @@ class BudgetAllocationCreate(BaseModel):
 
     @model_validator(mode="after")
     def amount_or_quantity_required(self) -> BudgetAllocationCreate:
-        has_line_detail = any(
-            value is not None for value in (self.quantity, self.unit, self.unit_price)
-        )
-        if has_line_detail:
+        has_quantity_detail = self.quantity is not None or self.unit is not None
+        if has_quantity_detail:
             self.unit = (self.unit or "").strip()
-            if self.quantity is None or not self.unit or self.unit_price is None:
-                raise ValueError("填寫數量時，必須同時填寫單位與單價")
-            calculated = int(
-                (self.quantity * self.unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-            )
-            if self.amount is not None and self.amount != calculated:
-                raise ValueError("預算總額必須等於數量乘以單價")
-            self.amount = calculated
+            if self.quantity is None or not self.unit:
+                raise ValueError("填寫數量時，必須同時填寫單位")
+            if self.unit_price is not None:
+                calculated = int(
+                    (self.quantity * self.unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                )
+                if self.amount is not None and self.amount != calculated:
+                    raise ValueError("預算總額必須等於數量乘以單價")
+                self.amount = calculated
         if self.amount is None:
             raise ValueError("請填寫預算總額，或完整填寫數量、單位與單價")
         return self
@@ -281,6 +280,25 @@ class FinanceEvidenceUploadOut(BaseModel):
     filename: str
     content_type: str
     file_size: int
+
+
+class FinanceExpenseClaimEvidenceOut(FinanceEvidenceUploadOut):
+    id: uuid.UUID
+    evidence_type: ExpenseEvidenceType
+    note: str | None
+    url: str
+
+
+class FinanceExpenseClaimItemOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    unit_price: int
+    tax_rate: int
+    quantity: Decimal
+    unit: str
+    budget_node_id: uuid.UUID | None
+    budget_exception_note: str | None
+    evidence: list[FinanceExpenseClaimEvidenceOut]
 
 
 class BudgetOut(BaseModel):
@@ -337,6 +355,14 @@ class BudgetDetailOut(BudgetOut):
     submissions: list[BudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[BudgetAllocationOut]
+
+
+class BudgetImportOut(BaseModel):
+    budget: BudgetOut
+    submission: BudgetSubmissionOut
+    categories_created: int
+    allocations_created: int
+    skipped_rows: list[str]
 
 
 class PublicBudgetListItem(BaseModel):
