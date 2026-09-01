@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, timedelta
+from io import BytesIO
 
+from openpyxl import Workbook
 from sqlalchemy import select
 
 from api.core.clock import local_today
@@ -155,6 +157,51 @@ async def test_expense_claim_with_multiple_items_creates_pending_journal(
     ]
 
 
+async def test_expense_claim_creator_can_review_and_return_own_submission(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:expense_claim", "finance:review"])
+    ledger, period, fund, expense = await _make_ledger(db_session, org)
+    fund_account_id = await db_session.scalar(
+        select(FundAccount.id).where(FundAccount.chart_account_id == fund.id)
+    )
+    ac = authed_client_factory(member_user)
+
+    async def create_claim(description: str) -> str:
+        response = await ac.post(
+            f"/finance/ledgers/{ledger.id}/expense-claims",
+            json={
+                "period_id": str(period.id),
+                "entry_date": "2026-07-18",
+                "fund_account_id": str(fund_account_id),
+                "expense_account_id": str(expense.id),
+                "description": description,
+                "items": [
+                    {
+                        "name": "文具",
+                        "unit_price": 100,
+                        "quantity": 1,
+                        "budget_exception_note": "尚未編列預算",
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    own_review = await create_claim("自己覆核的報帳")
+    reviewed = await ac.post(f"/finance/journals/{own_review}/post")
+    assert reviewed.status_code == 200
+    assert reviewed.json()["claim_status"] == "approved"
+
+    own_return = await create_claim("自己退回的報帳")
+    returned = await ac.post(
+        f"/finance/journals/{own_return}/return", json={"note": "請補上憑證說明"}
+    )
+    assert returned.status_code == 200
+    assert returned.json()["claim_status"] == "returned"
+
+
 async def test_create_expense_claim_without_permission_returns_403(
     db_session, member_user, authed_client_factory
 ) -> None:
@@ -193,6 +240,46 @@ async def test_update_expense_account_name_with_manage_permission(
 
     assert response.status_code == 200
     assert response.json()["name"] == "活動文具支出"
+
+
+async def test_import_budget_xlsx_creates_categories_and_allocations(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["項目", "細項", "數量", "單價", "總額(含稅)", "備註"])
+    sheet.append(["行政雜支", "文具購買", 2, 150, 300, ""])
+    sheet.append([None, "臨時支出", 1, "*", 500, "核准後補憑證"])
+    file_buffer = BytesIO()
+    workbook.save(file_buffer)
+
+    response = await authed_client_factory(member_user).post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data={
+            "period_id": str(period.id),
+            "name": "115 學年度預算",
+            "title": "預算案匯入",
+        },
+        files={
+            "file": (
+                "預算案.xlsx",
+                file_buffer.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["categories_created"] == 1
+    assert response.json()["allocations_created"] == 2
+    assert response.json()["skipped_rows"] == []
+    detail = await authed_client_factory(member_user).get(
+        f"/finance/budgets/{response.json()['budget']['id']}"
+    )
+    assert detail.status_code == 200
+    assert sorted(allocation["amount"] for allocation in detail.json()["allocations"]) == [300, 500]
 
 
 async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
@@ -305,6 +392,39 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
     assert budget.status_code == 200
     assert budget.json()["budget_included"] is True
 
+    updated = await creator_client.patch(
+        f"/finance/journals/{entry_id}/expense-claim",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-18",
+            "fund_account_id": str(fund_account_id),
+            "expense_account_id": str(expense.id),
+            "description": "校商文具採購（修正）",
+            "items": [
+                {
+                    "name": "原子筆",
+                    "unit_price": 100,
+                    "quantity": 1,
+                    "unit": "支",
+                    "budget_node_id": node.json()["id"],
+                    "evidence": [
+                        {
+                            "storage_key": f"finance/evidence/{ledger.id}/{'a' * 32}.pdf",
+                            "filename": "receipt.pdf",
+                            "content_type": "application/pdf",
+                            "file_size": 100,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "posted"
+    assert updated.json()["claim_status"] == "approved"
+    assert updated.json()["budget_included"] is True
+    assert updated.json()["lines"][0]["debit"] == 100
+
     procurement = await reviewer_client.patch(
         f"/finance/journals/{entry_id}/procurement",
         json={"status": ExpenseProcurementStatus.REQUESTED},
@@ -324,7 +444,7 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
     )
     assert settlement.status_code == 200
     assert settlement.json()["budgeted_total"] == 300
-    assert settlement.json()["settled_total"] == 240
+    assert settlement.json()["settled_total"] == 100
     assert settlement.json()["unsettled_claim_count"] == 0
 
     duplicate_payment = await reviewer_client.post(f"/finance/journals/{entry_id}/school-payment")
@@ -410,7 +530,7 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     assert allocation.status_code == 201
     submitted = await creator.post(f"/finance/budget-submissions/{submission.json()['id']}/submit")
     assert submitted.json()["status"] == "submitted"
-    approved = await reviewer_client.post(
+    approved = await creator.post(
         f"/finance/budget-submissions/{submission.json()['id']}/review",
         json={"status": "approved"},
     )

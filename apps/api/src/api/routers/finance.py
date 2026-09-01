@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import mimetypes
 import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +38,7 @@ from api.schemas.finance import (
     BudgetAllocationUpdate,
     BudgetCreate,
     BudgetDetailOut,
+    BudgetImportOut,
     BudgetNodeCreate,
     BudgetNodeOut,
     BudgetOut,
@@ -53,6 +55,7 @@ from api.schemas.finance import (
     ExpenseReimbursementCreate,
     ExpenseReturnCreate,
     FinanceEvidenceUploadOut,
+    FinanceExpenseClaimItemOut,
     FinanceSettlementOut,
     FundAccountCreate,
     FundAccountOut,
@@ -77,6 +80,7 @@ from api.services.storage import get_storage
 router = APIRouter(prefix="/finance", tags=["財務總帳"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+MAX_BUDGET_IMPORT_BYTES = 10 * 1024 * 1024
 
 
 def _journal_out(data: dict) -> JournalOut:
@@ -327,6 +331,58 @@ async def create_budget(
     return BudgetOut.model_validate(budget)
 
 
+@router.post(
+    "/ledgers/{ledger_id}/budgets/import",
+    response_model=BudgetImportOut,
+    status_code=201,
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def import_budget(
+    ledger_id: uuid.UUID,
+    db: DbDep,
+    user: CurrentUser,
+    period_id: uuid.UUID = Form(...),
+    name: str = Form(..., min_length=1, max_length=160),
+    title: str | None = Form(None, max_length=160),
+    proposing_org_id: uuid.UUID | None = Form(None),
+    file: UploadFile = File(...),
+) -> BudgetImportOut:
+    if Path(file.filename or "").suffix.lower() != ".xlsx":
+        raise HTTPException(422, "預算匯入僅支援 xlsx 檔案")
+    file_bytes = await file.read(MAX_BUDGET_IMPORT_BYTES + 1)
+    if len(file_bytes) > MAX_BUDGET_IMPORT_BYTES:
+        raise HTTPException(413, "預算匯入檔不可超過 10 MB")
+    if not file_bytes.startswith(b"PK\x03\x04"):
+        raise HTTPException(422, "檔案不是有效的 xlsx 格式")
+    try:
+        (
+            budget,
+            submission,
+            categories,
+            allocations,
+            skipped,
+        ) = await service.import_budget_from_xlsx(
+            db,
+            ledger_id,
+            period_id,
+            name.strip(),
+            title.strip() if title else None,
+            file_bytes,
+            user.id,
+            proposing_org_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    await db.commit()
+    return BudgetImportOut(
+        budget=BudgetOut.model_validate(budget),
+        submission=BudgetSubmissionOut.model_validate(submission),
+        categories_created=categories,
+        allocations_created=allocations,
+        skipped_rows=skipped,
+    )
+
+
 @router.get(
     "/budgets/{budget_id}",
     response_model=BudgetDetailOut,
@@ -372,7 +428,13 @@ async def update_budget_publication(
     "/budgets/{budget_id}/submissions",
     response_model=BudgetSubmissionOut,
     status_code=201,
-    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_BUDGET))],
+    dependencies=[
+        Depends(
+            require_budget_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
 )
 async def create_budget_submission(
     budget_id: uuid.UUID, body: BudgetSubmissionCreate, db: DbDep, user: CurrentUser
@@ -427,7 +489,13 @@ async def create_budget_allocation(
 @router.post(
     "/budget-submissions/{submission_id}/submit",
     response_model=BudgetSubmissionOut,
-    dependencies=[Depends(require_submission_permission(PermissionCode.FINANCE_BUDGET))],
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
 )
 async def submit_budget_submission(
     submission_id: uuid.UUID, db: DbDep, _: CurrentUser
@@ -448,6 +516,31 @@ async def review_budget_submission(
     submission = await service.review_budget_submission(db, submission_id, body, user.id)
     await db.commit()
     return BudgetSubmissionOut.model_validate(submission)
+
+
+@router.patch(
+    "/budget-submissions/{submission_id}/allocations/{allocation_id}",
+    response_model=BudgetAllocationOut,
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
+)
+async def update_budget_draft_allocation(
+    submission_id: uuid.UUID,
+    allocation_id: uuid.UUID,
+    body: BudgetAllocationCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> BudgetAllocationOut:
+    allocation = await service.update_budget_draft_allocation(
+        db, submission_id, allocation_id, body, user.id
+    )
+    await db.commit()
+    return BudgetAllocationOut.model_validate(allocation)
 
 
 @router.patch(
@@ -616,6 +709,51 @@ async def create_expense_claim(
     ledger_id: uuid.UUID, body: ExpenseClaimCreate, db: DbDep, user: CurrentUser
 ) -> JournalOut:
     entry = await service.create_expense_claim(db, ledger_id, body, user.id)
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.patch(
+    "/journals/{entry_id}/expense-claim",
+    response_model=JournalOut,
+    dependencies=[
+        Depends(
+            require_journal_permission(
+                PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD
+            )
+        )
+    ],
+)
+async def update_expense_claim(
+    entry_id: uuid.UUID, body: ExpenseClaimCreate, db: DbDep, user: CurrentUser
+) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    budgeted_reimbursement_edit = (
+        entry.status == JournalStatus.POSTED
+        and entry.claim_status == "approved"
+        and entry.budget_included is True
+        and entry.payment_status in (None, ExpensePaymentStatus.UNPAID)
+    )
+    await service.update_expense_claim(db, entry, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(entry.id),
+        action=(
+            "finance.expense_reimbursement_update"
+            if budgeted_reimbursement_edit
+            else "finance.expense_update"
+        ),
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=(
+            f"核銷階段修改報帳金額：{entry.description}"
+            if budgeted_reimbursement_edit
+            else f"修改報帳：{entry.description}"
+        ),
+    )
     await db.commit()
     return _journal_out(await service.journal_with_lines(db, entry))
 
@@ -893,17 +1031,19 @@ async def download_evidence(entry_id: uuid.UUID, db: DbDep, _: CurrentUser):
         return FileResponse(
             local_path,
             filename=local_path.name,
-            content_disposition_type="attachment",
+            media_type=mimetypes.guess_type(local_path.name)[0] or "application/octet-stream",
+            content_disposition_type="inline",
             headers={"Cache-Control": "private, no-store"},
         )
     return RedirectResponse(
-        await storage.get_url(entry.evidence_url, disposition="attachment"),
+        await storage.get_url(entry.evidence_url, disposition="inline"),
         headers={"Cache-Control": "private, no-store"},
     )
 
 
 @router.get(
     "/journals/{entry_id}/claim-items",
+    response_model=list[FinanceExpenseClaimItemOut],
     dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_VIEW))],
 )
 async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[dict]:
@@ -940,7 +1080,19 @@ async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> li
             "unit": item.unit,
             "budget_node_id": item.budget_node_id,
             "budget_exception_note": item.budget_exception_note,
-            "evidence_count": len(by_item.get(item.id, [])),
+            "evidence": [
+                {
+                    "id": evidence.id,
+                    "storage_key": evidence.storage_key,
+                    "filename": evidence.filename,
+                    "content_type": evidence.content_type,
+                    "file_size": evidence.file_size,
+                    "evidence_type": evidence.evidence_type,
+                    "note": evidence.note,
+                    "url": f"/finance/expense-evidence/{evidence.id}",
+                }
+                for evidence in by_item.get(item.id, [])
+            ],
         }
         for item in items
     ]
@@ -1014,12 +1166,13 @@ async def download_item_evidence(evidence_id: uuid.UUID, db: DbDep, user: Curren
         return FileResponse(
             local_path,
             filename=evidence.filename,
-            media_type=evidence.content_type,
+            media_type=evidence.content_type or mimetypes.guess_type(evidence.filename)[0],
+            content_disposition_type="inline",
             headers={"Cache-Control": "private, no-store"},
         )
     return RedirectResponse(
         await storage.get_url(
-            evidence.storage_key, disposition="attachment", download_name=evidence.filename
+            evidence.storage_key, disposition="inline", download_name=evidence.filename
         ),
         headers={"Cache-Control": "private, no-store"},
     )

@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { FileUp, Pencil, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
 import type {
   FinanceBudget,
+  FinanceBudgetAllocation,
   FinanceBudgetDetail,
   FinanceSettlement,
   OrgRead,
@@ -19,6 +21,7 @@ type Props = {
   canPropose: boolean;
   canReview: boolean;
   canPublish: boolean;
+  currentUserId: string;
 };
 
 const statusLabel = {
@@ -37,6 +40,7 @@ export default function BudgetWorkspace({
   canPropose,
   canReview,
   canPublish,
+  currentUserId,
 }: Props) {
   const [budgets, setBudgets] = useState<FinanceBudget[]>([]);
   const [detail, setDetail] = useState<FinanceBudgetDetail | null>(null);
@@ -52,6 +56,12 @@ export default function BudgetWorkspace({
   const [allocationUnitPrice, setAllocationUnitPrice] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
   const [settlement, setSettlement] = useState<FinanceSettlement | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [editingAllocationId, setEditingAllocationId] = useState<string | null>(null);
+  const [allocationDraft, setAllocationDraft] = useState({
+    quantity: "", unit: "", unit_price: "", amount: "", note: "",
+  });
 
   const load = useCallback(async (selectedId?: string) => {
     const next = await financeApi.listBudgets(ledgerId);
@@ -121,6 +131,31 @@ export default function BudgetWorkspace({
     }
   };
 
+  const importBudget = async () => {
+    if (!periodId || !budgetName.trim() || !importFile) {
+      return toast.error("請選擇期間、填寫預算名稱並選擇 xlsx 檔案");
+    }
+    try {
+      setIsImporting(true);
+      const result = await financeApi.importBudget(ledgerId, {
+        file: importFile,
+        period_id: periodId,
+        name: budgetName.trim(),
+        proposing_org_id: allocationOrgId || undefined,
+      });
+      setBudgetName("");
+      setImportFile(null);
+      setSelectedSubmissionId(result.submission.id);
+      await load(result.budget.id);
+      const skipped = result.skipped_rows.length > 0 ? `，略過 ${result.skipped_rows.length} 列` : "";
+      toast.success(`已匯入 ${result.allocations_created} 筆預算明細${skipped}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "匯入預算失敗");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const createSubmission = async (kind: "initial" | "supplemental") => {
     if (!detail || !submissionTitle.trim()) return toast.error("請填寫預算案名稱");
     try {
@@ -176,6 +211,49 @@ export default function BudgetWorkspace({
     }
   };
 
+  const startAllocationEdit = (allocation: FinanceBudgetAllocation) => {
+    setEditingAllocationId(allocation.id);
+    setAllocationDraft({
+      quantity: allocation.quantity == null ? "" : String(allocation.quantity),
+      unit: allocation.unit || "",
+      unit_price: allocation.unit_price == null ? "" : String(allocation.unit_price),
+      amount: String(allocation.amount),
+      note: allocation.note || "",
+    });
+  };
+
+  const saveAllocation = async (allocation: FinanceBudgetAllocation) => {
+    if (!activeSubmission) return;
+    const quantity = allocationDraft.quantity.trim() ? Number(allocationDraft.quantity) : undefined;
+    const unitPrice = allocationDraft.unit_price.trim() ? Number(allocationDraft.unit_price) : undefined;
+    const amount = allocationDraft.amount.trim() ? Number(allocationDraft.amount) : undefined;
+    if (
+      (quantity !== undefined && (!Number.isFinite(quantity) || quantity <= 0))
+      || (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice <= 0))
+      || (amount !== undefined && (!Number.isFinite(amount) || amount <= 0))
+      || (quantity !== undefined && !allocationDraft.unit.trim())
+      || (quantity === undefined && amount === undefined)
+    ) {
+      return toast.error("請填寫有效的數量／單位／單價或總額");
+    }
+    try {
+      await financeApi.updateBudgetDraftAllocation(activeSubmission.id, allocation.id, {
+        node_id: allocation.node_id,
+        proposing_org_id: allocation.proposing_org_id,
+        quantity,
+        unit: quantity === undefined ? undefined : allocationDraft.unit.trim(),
+        unit_price: unitPrice,
+        amount,
+        note: allocationDraft.note.trim() || undefined,
+      });
+      setEditingAllocationId(null);
+      await refreshDetail();
+      toast.success("預算明細已更新");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新預算明細失敗");
+    }
+  };
+
   const togglePublication = async () => {
     if (!detail) return;
     try {
@@ -219,6 +297,11 @@ export default function BudgetWorkspace({
   const canOpenPublic = detail?.submissions.some(
     (item) => item.kind === "initial" && item.status === "approved",
   );
+  const canEditAllocations = Boolean(
+    activeSubmission
+    && (activeSubmission.status === "draft" || activeSubmission.status === "returned")
+    && (canPropose || canManage),
+  );
 
   return (
     <section className="space-y-5" aria-labelledby="budget-heading">
@@ -227,23 +310,28 @@ export default function BudgetWorkspace({
           <h2 id="budget-heading" className="font-semibold">共同預算與追加</h2>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>以同一會計期間共同編列；核准後才能成為報帳對應依據。</p>
         </div>
-        {detail && canPublish && (canOpenPublic || detail.is_public) ? (
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {detail && canPublish && (canOpenPublic || detail.is_public) && <>
             <button className="btn btn-secondary" onClick={() => void togglePublication()}>
               {detail.is_public ? "停止議員檢視" : "開放議員檢視"}
             </button>
             {detail.is_public && <a className="btn btn-primary" href={`/public/budgets/${detail.id}`} target="_blank" rel="noreferrer">開啟唯讀頁</a>}
-          </div>
-        ) : canManage && !detail && (
-          <div className="flex flex-wrap gap-2">
+          </>}
+          {canManage && <div className="flex flex-wrap items-center gap-2">
             <select className="input" value={periodId} onChange={(event) => setPeriodId(event.target.value)}>
               <option value="">選擇會計期間</option>
               {periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}
             </select>
             <input className="input" value={budgetName} onChange={(event) => setBudgetName(event.target.value)} placeholder="例如：115 學年度預算" />
-            <button className="btn btn-primary" onClick={() => void createBudget()}>建立共同預算</button>
-          </div>
-        )}
+            <button className="btn btn-secondary" onClick={() => void createBudget()}>建立共同預算</button>
+            <label className="btn btn-secondary inline-flex cursor-pointer items-center gap-2">
+              <FileUp size={16} aria-hidden="true" />
+              <span>{importFile ? importFile.name : "選擇 xlsx"}</span>
+              <input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => setImportFile(event.target.files?.[0] || null)} />
+            </label>
+            <button className="btn btn-primary" disabled={isImporting} onClick={() => void importBudget()}>{isImporting ? "匯入中…" : "匯入預算"}</button>
+          </div>}
+        </div>
       </div>
 
       {budgets.length > 1 && (
@@ -273,15 +361,26 @@ export default function BudgetWorkspace({
           </div>
 
           <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
-            <div className="flex flex-wrap items-baseline justify-between gap-3"><div><h3 className="font-semibold">預算案與內部審核</h3><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>初始預算核准後，可建立追加預算；核准額度的直接修正會保留稽核紀錄。</p></div>{canManage && <div className="flex gap-2"><input className="input" value={submissionTitle} onChange={(event) => setSubmissionTitle(event.target.value)} placeholder="預算案名稱" /><button className="btn btn-secondary" onClick={() => void createSubmission(detail.submissions.length === 0 ? "initial" : "supplemental")}>{detail.submissions.length === 0 ? "建立初始草案" : "建立追加草案"}</button></div>}</div>
+            <div className="flex flex-wrap items-baseline justify-between gap-3"><div><h3 className="font-semibold">預算案與內部審核</h3><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>初始預算核准後，可建立追加預算；核准額度的直接修正會保留稽核紀錄。</p></div>{(canManage || canPropose) && <div className="flex gap-2"><input className="input" value={submissionTitle} onChange={(event) => setSubmissionTitle(event.target.value)} placeholder="預算案名稱" /><button className="btn btn-secondary" onClick={() => void createSubmission(detail.submissions.length === 0 ? "initial" : "supplemental")}>{detail.submissions.length === 0 ? "建立初始草案" : "建立追加草案"}</button></div>}</div>
             <div className="mt-4 flex flex-wrap gap-2">{detail.submissions.map((submission) => <button key={submission.id} className={`btn ${activeSubmission?.id === submission.id ? "btn-primary" : "btn-secondary"}`} onClick={() => setSelectedSubmissionId(submission.id)}>{submission.title}・{statusLabel[submission.status]}</button>)}</div>
             {activeSubmission && (canPropose || canManage) && (activeSubmission.status === "draft" || activeSubmission.status === "returned") && <div className="mt-5 grid gap-3 border-t pt-5 lg:grid-cols-2" style={{ borderColor: "var(--border)" }}>
               <div className="space-y-2"><p className="text-sm font-medium">新增階層條目</p><div className="flex gap-2"><select className="input" value={nodeParentId} onChange={(event) => setNodeParentId(event.target.value)}><option value="">最上層</option>{nodes.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select><input className="input" value={nodeName} onChange={(event) => setNodeName(event.target.value)} placeholder="例如：文書費" /><button className="btn btn-secondary" onClick={() => void createNode()}>新增</button></div></div>
               <div className="space-y-2"><p className="text-sm font-medium">配置最末層額度</p><div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6"><select className="input" value={allocationNodeId} onChange={(event) => setAllocationNodeId(event.target.value)}><option value="">選擇條目</option>{nodes.filter((node) => node.leaf).map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select><select className="input" value={allocationOrgId} onChange={(event) => setAllocationOrgId(event.target.value)}><option value="">提出部門</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</select><input className="input" type="number" min="0.01" step="0.01" value={allocationQuantity} onChange={(event) => setAllocationQuantity(event.target.value)} placeholder="數量" /><input className="input" value={allocationUnit} onChange={(event) => setAllocationUnit(event.target.value)} placeholder="單位，例如：張" /><input className="input" type="number" min="1" value={allocationUnitPrice} onChange={(event) => setAllocationUnitPrice(event.target.value)} placeholder="單價" /><button className="btn btn-secondary" onClick={() => void createAllocation()}>加入明細</button></div></div>
-              {canManage && <button className="btn btn-primary justify-self-start" onClick={() => void submit()}>送內部審核</button>}
+              {(canPropose || canManage) && <button className="btn btn-primary justify-self-start" onClick={() => void submit()}>送內部審核</button>}
             </div>}
             {activeSubmission?.status === "submitted" && canReview && <div className="mt-5 flex flex-wrap gap-2 border-t pt-5" style={{ borderColor: "var(--border)" }}><button className="btn btn-primary" onClick={() => void review("approved")}>核准預算案</button><button className="btn btn-secondary" onClick={() => void review("returned")}>退回補正</button><button className="btn btn-secondary" onClick={() => void review("rejected")}>否決</button></div>}
-            {activeAllocations.length > 0 && <div className="mt-5 overflow-x-auto border-t pt-5" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[680px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">預算細項</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-left">單位</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">總額</th></tr></thead><tbody>{activeAllocations.map((allocation) => <tr key={allocation.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{nodeLabels.get(allocation.node_id) || "已刪除條目"}</td><td className="px-3 py-2 text-right tabular-nums">{allocation.quantity ?? "—"}</td><td className="px-3 py-2">{allocation.unit || "—"}</td><td className="px-3 py-2 text-right tabular-nums">{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "—"}</td><td className="px-3 py-2 text-right tabular-nums">NT${allocation.amount.toLocaleString()}</td></tr>)}</tbody></table></div>}
+            {activeAllocations.length > 0 && <div className="mt-5 overflow-x-auto border-t pt-5" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[760px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">預算細項</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-left">單位</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">總額</th><th className="px-3 py-2 text-right">操作</th></tr></thead><tbody>{activeAllocations.map((allocation) => {
+              const canEdit = canEditAllocations && allocation.proposed_by_id === currentUserId;
+              const editing = editingAllocationId === allocation.id;
+              return <tr key={allocation.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                <td className="px-3 py-2">{nodeLabels.get(allocation.node_id) || "已刪除條目"}</td>
+                <td className="px-2 py-2 text-right">{editing ? <input className="input w-24" type="number" min="0.01" step="0.01" value={allocationDraft.quantity} onChange={(event) => setAllocationDraft({ ...allocationDraft, quantity: event.target.value })} /> : <span className="tabular-nums">{allocation.quantity ?? "—"}</span>}</td>
+                <td className="px-2 py-2">{editing ? <input className="input w-24" value={allocationDraft.unit} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit: event.target.value })} /> : allocation.unit || "—"}</td>
+                <td className="px-2 py-2 text-right">{editing ? <input className="input w-28" type="number" min="1" value={allocationDraft.unit_price} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit_price: event.target.value })} placeholder="可留白" /> : <span className="tabular-nums">{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "—"}</span>}</td>
+                <td className="px-2 py-2 text-right">{editing ? <input className="input w-28" type="number" min="1" value={allocationDraft.amount} onChange={(event) => setAllocationDraft({ ...allocationDraft, amount: event.target.value })} /> : <span className="tabular-nums">NT${allocation.amount.toLocaleString()}</span>}</td>
+                <td className="px-2 py-2 text-right">{editing ? <span className="inline-flex gap-1"><button className="btn btn-primary" title="儲存" aria-label="儲存預算明細" onClick={() => void saveAllocation(allocation)}><Save size={15} aria-hidden="true" /></button><button className="btn btn-secondary" title="取消" aria-label="取消編輯預算明細" onClick={() => setEditingAllocationId(null)}><X size={15} aria-hidden="true" /></button></span> : canEdit && <button className="btn btn-secondary inline-flex items-center gap-1" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯</button>}</td>
+              </tr>;
+            })}</tbody></table></div>}
           </section>
 
           {settlement && <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><div><h3 className="font-semibold">期末決算</h3><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>僅統計已完成核銷的支出；尚有 {settlement.unsettled_claim_count} 件已過帳報帳等待憑證或完成核銷。</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><p className="text-sm">核准預算 <strong className="ml-2 tabular-nums">NT${settlement.budgeted_total.toLocaleString()}</strong></p><p className="text-sm">決算支出 <strong className="ml-2 tabular-nums">NT${settlement.settled_total.toLocaleString()}</strong></p></div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">預算條目</th><th className="px-3 py-2 text-right">核准</th><th className="px-3 py-2 text-right">決算</th><th className="px-3 py-2 text-right">差額</th></tr></thead><tbody>{settlement.lines.map((line) => <tr key={line.node_id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{line.name}</td><td className="px-3 py-2 text-right tabular-nums">NT${line.budgeted_amount.toLocaleString()}</td><td className="px-3 py-2 text-right tabular-nums">NT${line.settled_amount.toLocaleString()}</td><td className="px-3 py-2 text-right tabular-nums">NT${line.difference_amount.toLocaleString()}</td></tr>)}</tbody></table></div></section>}

@@ -35,6 +35,7 @@ from api.models.finance import (
     JournalLine,
     JournalStatus,
 )
+from api.models.org import Org
 from api.schemas.finance import (
     BudgetAllocationCreate,
     BudgetAllocationUpdate,
@@ -165,6 +166,180 @@ async def list_budgets(db: AsyncSession, ledger_id: uuid.UUID) -> list[FinanceBu
     )
 
 
+def _import_text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _import_decimal(value: object) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = Decimal(str(value).replace(",", "").strip())
+    except (ValueError, ArithmeticError):
+        return None
+    return parsed if parsed.is_finite() and parsed > 0 else None
+
+
+def _import_amount(value: object) -> int | None:
+    parsed = _import_decimal(value)
+    if parsed is None:
+        return None
+    return int(parsed.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _import_quantity(value: object) -> tuple[Decimal, str]:
+    text = _import_text(value)
+    if not text:
+        return Decimal("1"), "項"
+    match = re.match(r"^([0-9]+(?:\.[0-9]+)?)\s*(.*)$", text)
+    if not match:
+        return Decimal("1"), text[:32] or "項"
+    quantity = Decimal(match.group(1))
+    return quantity, match.group(2).strip()[:32] or "項"
+
+
+def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[str]]:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    try:
+        workbook = load_workbook(BytesIO(file_bytes), data_only=True, read_only=True)
+    except Exception as exc:
+        raise ValueError("無法讀取 xlsx 預算檔，請確認檔案未損壞") from exc
+
+    try:
+        rows = list(workbook.active.iter_rows(values_only=True))
+    finally:
+        workbook.close()
+
+    header_index = None
+    columns: dict[str, int] = {}
+    for index, row in enumerate(rows[:30]):
+        normalized = {
+            _import_text(value).replace(" ", ""): column for column, value in enumerate(row)
+        }
+        if "項目" in normalized and "細項" in normalized:
+            header_index = index
+            columns = normalized
+            break
+    if header_index is None:
+        raise ValueError("找不到預算表欄位；至少需要「項目」與「細項」欄")
+
+    category_column = columns["項目"]
+    detail_column = columns["細項"]
+    quantity_column = columns.get("數量", 3)
+    unit_price_column = columns.get("單價", 4)
+    amount_column = columns.get("總額(含稅)", columns.get("總額", 5))
+    note_column = columns.get("備註", 7)
+    imported: list[dict] = []
+    skipped: list[str] = []
+    current_category = ""
+    for row_number, row in enumerate(rows[header_index + 1 :], header_index + 2):
+        category = _import_text(row[category_column] if category_column < len(row) else None)
+        detail = _import_text(row[detail_column] if detail_column < len(row) else None)
+        if category:
+            current_category = category
+        if not detail:
+            continue
+        category = category or current_category or "未分類"
+        quantity, unit = _import_quantity(
+            row[quantity_column] if quantity_column < len(row) else None
+        )
+        unit_price = _import_amount(
+            row[unit_price_column] if unit_price_column < len(row) else None
+        )
+        amount = _import_amount(row[amount_column] if amount_column < len(row) else None)
+        if amount is None and unit_price is not None:
+            amount = int((quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        if amount is None:
+            skipped.append(f"第 {row_number} 列「{detail}」沒有可用總額")
+            continue
+        note = _import_text(row[note_column] if note_column < len(row) else None)
+        if unit_price is not None:
+            calculated = int((quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+            if calculated != amount:
+                note = "；".join(filter(None, [note, "單價與總額不一致，保留試算表總額"]))
+                unit_price = None
+        elif _import_text(row[unit_price_column] if unit_price_column < len(row) else None):
+            note = "；".join(filter(None, [note, "原始單價未提供，以試算表總額匯入"]))
+        imported.append(
+            {
+                "category": category[:160],
+                "detail": detail[:160],
+                "quantity": quantity,
+                "unit": unit,
+                "unit_price": unit_price,
+                "amount": amount,
+                "note": note or None,
+                "row_number": row_number,
+            }
+        )
+    if not imported:
+        raise ValueError("預算表沒有可匯入的明細")
+    return imported, skipped
+
+
+async def import_budget_from_xlsx(
+    db: AsyncSession,
+    ledger_id: uuid.UUID,
+    period_id: uuid.UUID,
+    name: str,
+    title: str | None,
+    file_bytes: bytes,
+    user_id: uuid.UUID,
+    proposing_org_id: uuid.UUID | None = None,
+) -> tuple[FinanceBudget, FinanceBudgetSubmission, int, int, list[str]]:
+    rows, skipped = await asyncio.to_thread(_parse_budget_workbook, file_bytes)
+    ledger = await get_ledger(db, ledger_id)
+    org_id = proposing_org_id or ledger.org_id
+    if not await db.get(Org, org_id):
+        raise HTTPException(400, "提出部門不存在")
+    budget = await create_budget(db, ledger_id, BudgetCreate(period_id=period_id, name=name))
+    submission = await create_budget_submission(
+        db,
+        budget,
+        BudgetSubmissionCreate(
+            kind="initial",
+            title=(title or f"{name}（匯入）")[:160],
+            note="由 xlsx 預算表匯入",
+        ),
+        user_id,
+    )
+    categories: dict[str, FinanceBudgetNode] = {}
+    for sort_order, row in enumerate(rows):
+        category = categories.get(row["category"])
+        if category is None:
+            category = await create_budget_node(
+                db,
+                submission.id,
+                BudgetNodeCreate(name=row["category"], sort_order=sort_order),
+            )
+            categories[row["category"]] = category
+        detail = await create_budget_node(
+            db,
+            submission.id,
+            BudgetNodeCreate(parent_id=category.id, name=row["detail"], sort_order=sort_order),
+        )
+        await create_budget_allocation(
+            db,
+            submission.id,
+            BudgetAllocationCreate(
+                node_id=detail.id,
+                amount=row["amount"],
+                quantity=row["quantity"],
+                unit=row["unit"],
+                unit_price=row["unit_price"],
+                proposing_org_id=org_id,
+                note=row["note"],
+            ),
+            user_id,
+        )
+    return budget, submission, len(categories), len(rows), skipped
+
+
 async def create_budget_submission(
     db: AsyncSession, budget: FinanceBudget, body: BudgetSubmissionCreate, user_id: uuid.UUID
 ) -> FinanceBudgetSubmission:
@@ -234,6 +409,39 @@ async def create_budget_allocation(
     return allocation
 
 
+async def update_budget_draft_allocation(
+    db: AsyncSession,
+    submission_id: uuid.UUID,
+    allocation_id: uuid.UUID,
+    body: BudgetAllocationCreate,
+    user_id: uuid.UUID,
+) -> FinanceBudgetAllocation:
+    submission = await _editable_submission(db, submission_id)
+    allocation = await db.get(FinanceBudgetAllocation, allocation_id)
+    if not allocation or allocation.submission_id != submission.id:
+        raise HTTPException(404, "預算配置不存在")
+    if allocation.proposed_by_id != user_id:
+        raise HTTPException(403, "只能修改自己提出的預算配置")
+    node = await db.get(FinanceBudgetNode, body.node_id)
+    if not node or node.budget_id != submission.budget_id:
+        raise HTTPException(400, "預算條目不屬於此預算案")
+    child = await db.scalar(
+        select(FinanceBudgetNode.id).where(FinanceBudgetNode.parent_id == node.id).limit(1)
+    )
+    if child:
+        raise HTTPException(400, "只有最末層預算條目可以配置金額")
+    allocation.node_id = body.node_id
+    assert body.amount is not None
+    allocation.amount = body.amount
+    allocation.quantity = body.quantity
+    allocation.unit = body.unit
+    allocation.unit_price = body.unit_price
+    allocation.proposing_org_id = body.proposing_org_id
+    allocation.note = body.note
+    await db.flush()
+    return allocation
+
+
 async def submit_budget_submission(
     db: AsyncSession, submission_id: uuid.UUID
 ) -> FinanceBudgetSubmission:
@@ -259,8 +467,6 @@ async def review_budget_submission(
         raise HTTPException(404, "預算案不存在")
     if submission.status != BudgetSubmissionStatus.SUBMITTED:
         raise HTTPException(400, "只有待審預算案可以審核")
-    if submission.created_by_id == reviewer_id:
-        raise HTTPException(403, "不得審核自己建立的預算案")
     submission.status = body.status
     submission.review_note = body.note
     submission.reviewed_by_id = reviewer_id
@@ -606,8 +812,6 @@ async def post_journal(
     entry = locked_entry
     if entry.status != JournalStatus.PENDING_REVIEW:
         raise HTTPException(400, "僅待覆核傳票可過帳")
-    if entry.created_by_id == reviewer_id:
-        raise HTTPException(403, "不得覆核自己登錄的傳票")
     await validate_period(db, entry.ledger_id, entry.period_id, entry.entry_date)
     lines = list(
         (await db.execute(select(JournalLine).where(JournalLine.entry_id == entry.id))).scalars()
@@ -630,8 +834,6 @@ async def return_expense_claim(
         raise HTTPException(400, "只有報帳案件可以退回")
     if entry.status != JournalStatus.PENDING_REVIEW:
         raise HTTPException(400, "僅待覆核報帳可以退回")
-    if entry.created_by_id == reviewer_id:
-        raise HTTPException(403, "不得退回自己登錄的報帳")
     entry.status = JournalStatus.RETURNED
     entry.claim_status = ExpenseClaimStatus.RETURNED
     entry.reviewed_by_id = reviewer_id
@@ -649,7 +851,7 @@ async def update_expense_procurement(
     if entry.source_type != "expense_claim":
         raise HTTPException(400, "只有報帳案件可以管理校商請購")
     if entry.claim_status != ExpenseClaimStatus.APPROVED:
-        raise HTTPException(400, "報帳必須先完成第二人覆核")
+        raise HTTPException(400, "報帳必須先完成覆核")
     if entry.budget_included is not True:
         raise HTTPException(400, "報帳必須先列入已核准預算")
     current = ExpenseProcurementStatus(
@@ -688,7 +890,7 @@ async def mark_expense_paid(
     if entry.source_type != "expense_claim":
         raise HTTPException(400, "只有報帳案件可以登錄付款")
     if entry.claim_status != ExpenseClaimStatus.APPROVED or entry.status != JournalStatus.POSTED:
-        raise HTTPException(400, "報帳必須先完成第二人覆核並過帳")
+        raise HTTPException(400, "報帳必須先完成覆核並過帳")
     if entry.budget_included is not True:
         raise HTTPException(400, "報帳必須先列入已核准預算")
     if entry.payment_status not in (None, ExpensePaymentStatus.UNPAID):
@@ -709,7 +911,7 @@ async def reimburse_expense_claim(
     if entry.source_type != "expense_claim" or entry.payment_method != ExpensePaymentMethod.ADVANCE:
         raise HTTPException(400, "只有代墊報帳可以建立償還付款")
     if entry.claim_status != ExpenseClaimStatus.APPROVED or entry.status != JournalStatus.POSTED:
-        raise HTTPException(400, "代墊報帳必須先完成第二人覆核並過帳")
+        raise HTTPException(400, "代墊報帳必須先完成覆核並過帳")
     if entry.budget_included is not True:
         raise HTTPException(400, "代墊報帳必須先列入已核准預算")
     if entry.reimbursement_entry_id is not None:
@@ -771,7 +973,7 @@ async def update_expense_budget(
     if entry.source_type != "expense_claim":
         raise HTTPException(400, "只有報帳案件可以管理預算列管")
     if entry.claim_status != ExpenseClaimStatus.APPROVED:
-        raise HTTPException(400, "報帳必須先完成第二人覆核")
+        raise HTTPException(400, "報帳必須先完成覆核")
     if body.included:
         item_node_ids = set(
             (
@@ -946,6 +1148,199 @@ async def create_expense_claim(
     entry.proposing_org_id = body.proposing_org_id
     entry.advanced_by_id = body.advanced_by_id
     entry.payment_method = body.payment_method
+    for item in body.items:
+        claim_item = ExpenseClaimItem(
+            journal_entry_id=entry.id,
+            name=item.name,
+            unit_price=item.unit_price,
+            tax_rate=item.tax_rate,
+            quantity=item.quantity,
+            unit=item.unit,
+            budget_node_id=item.budget_node_id,
+            budget_exception_note=item.budget_exception_note,
+        )
+        db.add(claim_item)
+        await db.flush()
+        db.add_all(
+            [
+                ExpenseClaimItemEvidence(
+                    item_id=claim_item.id,
+                    storage_key=evidence.storage_key,
+                    filename=evidence.filename,
+                    content_type=evidence.content_type,
+                    file_size=evidence.file_size,
+                    evidence_type=evidence.evidence_type,
+                    note=evidence.note,
+                    uploaded_by_id=user_id,
+                )
+                for evidence in item.evidence
+            ]
+        )
+    await db.flush()
+    return entry
+
+
+async def update_expense_claim(
+    db: AsyncSession,
+    entry: JournalEntry,
+    body: ExpenseClaimCreate,
+    user_id: uuid.UUID,
+) -> JournalEntry:
+    if entry.source_type != "expense_claim":
+        raise HTTPException(400, "只有報帳案件可以修改")
+    if entry.created_by_id != user_id:
+        raise HTTPException(403, "只能修改自己提出的報帳")
+    budgeted_reimbursement_edit = (
+        entry.status == JournalStatus.POSTED
+        and entry.claim_status == ExpenseClaimStatus.APPROVED
+        and entry.budget_included is True
+        and entry.payment_status in (None, ExpensePaymentStatus.UNPAID)
+    )
+    if not budgeted_reimbursement_edit and entry.status not in (
+        JournalStatus.PENDING_REVIEW,
+        JournalStatus.RETURNED,
+    ):
+        raise HTTPException(400, "只有待覆核、退回補正或已列入預算但尚未付款的報帳可以修改")
+    if budgeted_reimbursement_edit and (
+        body.period_id != entry.period_id
+        or body.entry_date != entry.entry_date
+        or body.payment_method != entry.payment_method
+    ):
+        raise HTTPException(400, "核銷階段只能調整報帳品項與金額")
+    approved_budget_node_ids: set[uuid.UUID] = set()
+    if budgeted_reimbursement_edit:
+        item_node_ids = {item.budget_node_id for item in body.items}
+        if None in item_node_ids or not item_node_ids:
+            raise HTTPException(400, "進入核銷階段後，所有報帳品項都必須對應預算條目")
+        approved_budget_node_ids = set(
+            (
+                await db.execute(
+                    select(FinanceBudgetAllocation.node_id)
+                    .join(FinanceBudgetSubmission)
+                    .where(
+                        FinanceBudgetAllocation.node_id.in_(item_node_ids),
+                        FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+                    )
+                )
+            ).scalars()
+        )
+        if item_node_ids != approved_budget_node_ids:
+            raise HTTPException(400, "進入核銷階段後，只能修改對應已核准預算的報帳品項")
+    await validate_period(db, entry.ledger_id, body.period_id, body.entry_date)
+    validate_evidence_key(body.evidence_url, entry.ledger_id)
+
+    fund = await db.get(FundAccount, body.fund_account_id)
+    if not fund or fund.ledger_id != entry.ledger_id or not fund.is_active:
+        raise HTTPException(400, "付款資金保管點不存在或已停用")
+    expense_account = await db.get(ChartAccount, body.expense_account_id)
+    if (
+        not expense_account
+        or expense_account.ledger_id != entry.ledger_id
+        or expense_account.account_type != FinanceAccountType.EXPENSE
+        or not expense_account.is_active
+    ):
+        raise HTTPException(400, "支出科目不存在、非支出科目或已停用")
+    amount = sum(
+        _claim_item_total(item.unit_price, item.tax_rate, item.quantity) for item in body.items
+    )
+    payment_account_id = fund.chart_account_id
+    if body.payment_method == ExpensePaymentMethod.ADVANCE:
+        payable = await db.scalar(
+            select(ChartAccount).where(
+                ChartAccount.ledger_id == entry.ledger_id,
+                ChartAccount.account_type == FinanceAccountType.LIABILITY,
+                ChartAccount.code == "2101",
+            )
+        )
+        if not payable:
+            raise HTTPException(400, "找不到代墊應付款科目")
+        payment_account_id = payable.id
+    for item in body.items:
+        if item.budget_node_id:
+            node = await db.get(FinanceBudgetNode, item.budget_node_id)
+            if not node:
+                raise HTTPException(400, "預算條目不存在")
+            budget = await get_budget(db, node.budget_id)
+            if budget.ledger_id != entry.ledger_id or budget.period_id != body.period_id:
+                raise HTTPException(400, "預算條目不屬於此帳本或會計期間")
+            has_child = await db.scalar(
+                select(FinanceBudgetNode.id)
+                .where(FinanceBudgetNode.parent_id == node.id, FinanceBudgetNode.is_active)
+                .limit(1)
+            )
+            if has_child:
+                raise HTTPException(400, "報帳只能對應最末層預算條目")
+        for evidence in item.evidence:
+            validate_evidence_key(evidence.storage_key, entry.ledger_id)
+
+    lines = list(
+        (await db.execute(select(JournalLine).where(JournalLine.entry_id == entry.id))).scalars()
+    )
+    if len(lines) != 2:
+        raise HTTPException(400, "報帳傳票明細格式不正確，無法修改")
+    debit_line, credit_line = lines
+    if debit_line.debit == 0 and credit_line.debit > 0:
+        debit_line, credit_line = credit_line, debit_line
+    if debit_line.debit == 0 or credit_line.credit == 0:
+        raise HTTPException(400, "報帳傳票借貸明細不正確，無法修改")
+    if budgeted_reimbursement_edit and (
+        expense_account.id != debit_line.account_id
+        or (
+            entry.payment_method == ExpensePaymentMethod.DIRECT
+            and fund.chart_account_id != credit_line.account_id
+        )
+    ):
+        raise HTTPException(400, "核銷階段不可變更付款或支出科目")
+    debit_line.account_id = expense_account.id
+    debit_line.debit = amount
+    debit_line.credit = 0
+    credit_line.account_id = payment_account_id
+    credit_line.debit = 0
+    credit_line.credit = amount
+
+    old_items = list(
+        (
+            await db.execute(
+                select(ExpenseClaimItem).where(ExpenseClaimItem.journal_entry_id == entry.id)
+            )
+        ).scalars()
+    )
+    old_evidence = list(
+        (
+            await db.execute(
+                select(ExpenseClaimItemEvidence).where(
+                    ExpenseClaimItemEvidence.item_id.in_([item.id for item in old_items])
+                )
+            )
+        ).scalars()
+        if old_items
+        else []
+    )
+    for evidence in old_evidence:
+        await db.delete(evidence)
+    for item in old_items:
+        await db.delete(item)
+    await db.flush()
+
+    entry.period_id = body.period_id
+    entry.entry_date = body.entry_date
+    entry.description = f"報帳｜{body.description}（{len(body.items)} 項）"
+    entry.source_url = body.source_url
+    if body.evidence_url is not None:
+        entry.evidence_url = body.evidence_url
+    entry.note = body.note
+    entry.proposing_org_id = body.proposing_org_id
+    entry.advanced_by_id = body.advanced_by_id
+    entry.payment_method = body.payment_method
+    if not budgeted_reimbursement_edit:
+        entry.payment_status = ExpensePaymentStatus.UNPAID
+        entry.procurement_status = ExpenseProcurementStatus.NOT_REQUIRED
+        entry.budget_included = False
+        if entry.status == JournalStatus.RETURNED:
+            entry.status = JournalStatus.PENDING_REVIEW
+            entry.claim_status = ExpenseClaimStatus.PENDING_REVIEW
+            entry.reviewed_by_id = None
+
     for item in body.items:
         claim_item = ExpenseClaimItem(
             journal_entry_id=entry.id,
