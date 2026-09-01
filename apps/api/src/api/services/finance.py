@@ -1395,6 +1395,7 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
                 select(JournalLine, ChartAccount.name)
                 .join(ChartAccount)
                 .where(JournalLine.entry_id == entry.id)
+                .order_by(JournalLine.debit.desc(), JournalLine.created_at, JournalLine.id)
             )
         ).all()
     )

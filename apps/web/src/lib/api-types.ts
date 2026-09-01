@@ -5510,6 +5510,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/budget-submissions/{submission_id}/allocations/{allocation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Budget Draft Allocation */
+        patch: operations["update_budget_draft_allocation_finance_budget_submissions__submission_id__allocations__allocation_id__patch"];
+        trace?: never;
+    };
     "/finance/budget-submissions/{submission_id}/nodes": {
         parameters: {
             query?: never;
@@ -5714,6 +5731,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/journals/{entry_id}/expense-claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Expense Claim */
+        patch: operations["update_expense_claim_finance_journals__entry_id__expense_claim_patch"];
+        trace?: never;
+    };
     "/finance/journals/{entry_id}/post": {
         parameters: {
             query?: never;
@@ -5897,6 +5931,23 @@ export interface paths {
         put?: never;
         /** Create Budget */
         post: operations["create_budget_finance_ledgers__ledger_id__budgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/budgets/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Budget */
+        post: operations["import_budget_finance_ledgers__ledger_id__budgets_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -17293,6 +17344,22 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** Body_import_budget_finance_ledgers__ledger_id__budgets_import_post */
+        Body_import_budget_finance_ledgers__ledger_id__budgets_import_post: {
+            /** File */
+            file: string;
+            /** Name */
+            name: string;
+            /**
+             * Period Id
+             * Format: uuid
+             */
+            period_id: string;
+            /** Proposing Org Id */
+            proposing_org_id?: string | null;
+            /** Title */
+            title?: string | null;
+        };
         /** Body_import_hchs_cadre_directory_admin_imports_hchs_cadre_directory_post */
         Body_import_hchs_cadre_directory_admin_imports_hchs_cadre_directory_post: {
             /**
@@ -17595,6 +17662,17 @@ export interface components {
             period_id: string;
             /** Submissions */
             submissions: components["schemas"]["BudgetSubmissionOut"][];
+        };
+        /** BudgetImportOut */
+        BudgetImportOut: {
+            /** Allocations Created */
+            allocations_created: number;
+            budget: components["schemas"]["BudgetOut"];
+            /** Categories Created */
+            categories_created: number;
+            /** Skipped Rows */
+            skipped_rows: string[];
+            submission: components["schemas"]["BudgetSubmissionOut"];
         };
         /** BudgetNodeCreate */
         BudgetNodeCreate: {
@@ -23152,6 +23230,51 @@ export interface components {
             filename: string;
             /** Storage Key */
             storage_key: string;
+        };
+        /** FinanceExpenseClaimEvidenceOut */
+        FinanceExpenseClaimEvidenceOut: {
+            /** Content Type */
+            content_type: string;
+            evidence_type: components["schemas"]["ExpenseEvidenceType"];
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note: string | null;
+            /** Storage Key */
+            storage_key: string;
+            /** Url */
+            url: string;
+        };
+        /** FinanceExpenseClaimItemOut */
+        FinanceExpenseClaimItemOut: {
+            /** Budget Exception Note */
+            budget_exception_note: string | null;
+            /** Budget Node Id */
+            budget_node_id: string | null;
+            /** Evidence */
+            evidence: components["schemas"]["FinanceExpenseClaimEvidenceOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: string;
+            /** Tax Rate */
+            tax_rate: number;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: number;
         };
         /** FinanceSettlementLineOut */
         FinanceSettlementLineOut: {
@@ -50932,6 +51055,42 @@ export interface operations {
             };
         };
     };
+    update_budget_draft_allocation_finance_budget_submissions__submission_id__allocations__allocation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+                allocation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetAllocationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetAllocationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_budget_node_finance_budget_submissions__submission_id__nodes_post: {
         parameters: {
             query?: never;
@@ -51217,9 +51376,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["FinanceExpenseClaimItemOut"][];
                 };
             };
             /** @description Validation Error */
@@ -51313,6 +51470,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_expense_claim_finance_journals__entry_id__expense_claim_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpenseClaimCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
                 };
             };
             /** @description Validation Error */
@@ -51743,6 +51935,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_budget_finance_ledgers__ledger_id__budgets_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_budget_finance_ledgers__ledger_id__budgets_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetImportOut"];
                 };
             };
             /** @description Validation Error */
