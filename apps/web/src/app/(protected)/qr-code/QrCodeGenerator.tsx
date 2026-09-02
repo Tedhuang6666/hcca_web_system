@@ -21,6 +21,7 @@ import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { BRANDING } from "@/lib/branding";
 
 type ModuleStyle = "dot" | "soft" | "square";
 type ErrorCorrection = "L" | "M" | "Q" | "H";
@@ -47,6 +48,8 @@ type QrMatrix = {
 
 const PERMISSION = "qr_code:manage";
 const DEFAULT_CONTENT = "https://hcca.example.org/entry";
+const TRANSPARENT_BACKGROUND = "transparent";
+const DEFAULT_LOGO_PATH = BRANDING.publicEmblemUrl;
 const DEFAULT_SETTINGS: QrSettings = {
   foreground: "#24163f",
   background: "#fffdf9",
@@ -54,9 +57,9 @@ const DEFAULT_SETTINGS: QrSettings = {
   errorCorrection: "H",
   size: 640,
   margin: 4,
-  showBadge: true,
+  showBadge: false,
   badgeText: "HCCA",
-  logoDataUrl: "",
+  logoDataUrl: DEFAULT_LOGO_PATH,
 };
 
 const MODULE_STYLES: Array<{ key: ModuleStyle; label: string; detail: string }> = [
@@ -89,6 +92,10 @@ function validHex(value: string, fallback: string) {
   return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 }
 
+function validBackground(value: string, fallback: string) {
+  return value === TRANSPARENT_BACKGROUND ? value : validHex(value, fallback);
+}
+
 function isFinderModule(x: number, y: number, size: number) {
   return (
     (x < 7 && y < 7)
@@ -107,14 +114,18 @@ function finderPattern(x: number, y: number, foreground: string, background: str
 
 function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false) {
   const foreground = validHex(settings.foreground, DEFAULT_SETTINGS.foreground);
-  const background = validHex(settings.background, DEFAULT_SETTINGS.background);
+  const background = validBackground(settings.background, DEFAULT_SETTINGS.background);
+  const backgroundPaint = background === TRANSPARENT_BACKGROUND ? "none" : background;
+  const centerBackdrop = background === TRANSPARENT_BACKGROUND ? "#ffffff" : background;
   const moduleCount = matrix.modules.size;
   const margin = Math.max(2, Math.round(settings.margin));
   const total = moduleCount + margin * 2;
   const parts = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${settings.size}" height="${settings.size}" viewBox="0 0 ${total} ${total}"${includeRole ? ' role="img" aria-label="QR Code 預覽"' : ""}>`,
-    `<rect width="${total}" height="${total}" fill="${background}"/>`,
   ];
+  if (background !== TRANSPARENT_BACKGROUND) {
+    parts.push(`<rect width="${total}" height="${total}" fill="${background}"/>`);
+  }
 
   for (let y = 0; y < moduleCount; y += 1) {
     for (let x = 0; x < moduleCount; x += 1) {
@@ -131,9 +142,9 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
     }
   }
 
-  parts.push(finderPattern(margin, margin, foreground, background));
-  parts.push(finderPattern(margin + moduleCount - 7, margin, foreground, background));
-  parts.push(finderPattern(margin, margin + moduleCount - 7, foreground, background));
+  parts.push(finderPattern(margin, margin, foreground, backgroundPaint));
+  parts.push(finderPattern(margin + moduleCount - 7, margin, foreground, backgroundPaint));
+  parts.push(finderPattern(margin, margin + moduleCount - 7, foreground, backgroundPaint));
 
   if (settings.showBadge) {
     const badgeText = escapeXml(settings.badgeText.trim().slice(0, 8) || "HCCA");
@@ -141,9 +152,9 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
     const badgeX = margin + (moduleCount - badgeSize) / 2;
     const badgeY = margin + (moduleCount - badgeSize) / 2;
     const fontSize = Math.max(1.35, Math.min(2.05, badgeSize * 0.28));
-    parts.push(`<rect x="${badgeX - 0.35}" y="${badgeY - 0.35}" width="${badgeSize + 0.7}" height="${badgeSize + 0.7}" rx="1.25" fill="${background}" stroke="${foreground}" stroke-opacity="0.12" stroke-width="0.16"/>`);
+    parts.push(`<rect x="${badgeX - 0.35}" y="${badgeY - 0.35}" width="${badgeSize + 0.7}" height="${badgeSize + 0.7}" rx="1.25" fill="${centerBackdrop}" stroke="${foreground}" stroke-opacity="0.12" stroke-width="0.16"/>`);
     parts.push(`<circle cx="${margin + moduleCount / 2}" cy="${badgeY + badgeSize * 0.31}" r="0.68" fill="${foreground}"/>`);
-    parts.push(`<path d="M ${margin + moduleCount / 2 - 0.28} ${badgeY + badgeSize * 0.31} l 0.28 -0.42 0.28 0.42 -0.28 0.42 z" fill="${background}"/>`);
+    parts.push(`<path d="M ${margin + moduleCount / 2 - 0.28} ${badgeY + badgeSize * 0.31} l 0.28 -0.42 0.28 0.42 -0.28 0.42 z" fill="${centerBackdrop}"/>`);
     parts.push(`<text x="${margin + moduleCount / 2}" y="${badgeY + badgeSize * 0.74}" text-anchor="middle" fill="${foreground}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${fontSize}" font-weight="700" letter-spacing="0.05">${badgeText}</text>`);
   }
 
@@ -151,7 +162,7 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
     const logoSize = Math.min(9, Math.max(6.5, moduleCount * 0.22));
     const logoX = margin + (moduleCount - logoSize) / 2;
     const logoY = margin + (moduleCount - logoSize) / 2;
-    parts.push(`<rect x="${logoX - 0.65}" y="${logoY - 0.65}" width="${logoSize + 1.3}" height="${logoSize + 1.3}" rx="1.4" fill="${background}"/>`);
+    parts.push(`<rect x="${logoX - 0.65}" y="${logoY - 0.65}" width="${logoSize + 1.3}" height="${logoSize + 1.3}" rx="1.4" fill="${centerBackdrop}"/>`);
     parts.push(`<image href="${escapeXml(settings.logoDataUrl)}" x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`);
   }
 
@@ -179,9 +190,39 @@ export default function QrCodeGenerator() {
   const [hydrated, setHydrated] = useState(false);
   const [content, setContent] = useState(DEFAULT_CONTENT);
   const [settings, setSettings] = useState<QrSettings>(DEFAULT_SETTINGS);
+  const [defaultLogoDataUrl, setDefaultLogoDataUrl] = useState("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    let active = true;
+
+    const loadDefaultLogo = async () => {
+      try {
+        const response = await fetch(DEFAULT_LOGO_PATH);
+        if (!response.ok) return;
+        const blob = await response.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+          reader.onerror = () => reject(new Error("預設會徽讀取失敗"));
+          reader.readAsDataURL(blob);
+        });
+        if (!active || !dataUrl) return;
+        setDefaultLogoDataUrl(dataUrl);
+        setSettings((previous) => previous.logoDataUrl === DEFAULT_LOGO_PATH
+          ? { ...previous, logoDataUrl: dataUrl }
+          : previous);
+      } catch {
+        // 保留靜態路徑作為預覽 fallback。
+      }
+    };
+
+    void loadDefaultLogo();
+    return () => {
+      active = false;
+    };
+  }, []);
   useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(""), 2400);
@@ -245,8 +286,11 @@ export default function QrCodeGenerator() {
           reject(new Error("瀏覽器不支援圖片匯出"));
           return;
         }
-        context.fillStyle = validHex(settings.background, DEFAULT_SETTINGS.background);
-        context.fillRect(0, 0, canvas.width, canvas.height);
+        const background = validBackground(settings.background, DEFAULT_SETTINGS.background);
+        if (background !== TRANSPARENT_BACKGROUND) {
+          context.fillStyle = background;
+          context.fillRect(0, 0, canvas.width, canvas.height);
+        }
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
         canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("PNG 匯出失敗")), "image/png");
       };
@@ -272,7 +316,7 @@ export default function QrCodeGenerator() {
 
   const reset = () => {
     setContent(DEFAULT_CONTENT);
-    setSettings(DEFAULT_SETTINGS);
+    setSettings({ ...DEFAULT_SETTINGS, logoDataUrl: defaultLogoDataUrl || DEFAULT_LOGO_PATH });
     setNotice("已恢復預設樣式");
   };
 
@@ -283,6 +327,8 @@ export default function QrCodeGenerator() {
 
   const hasPreview = Boolean(preview && !("error" in preview));
   const previewError = preview && "error" in preview ? preview.error : "";
+  const isDefaultLogo = settings.logoDataUrl === DEFAULT_LOGO_PATH
+    || (defaultLogoDataUrl !== "" && settings.logoDataUrl === defaultLogoDataUrl);
 
   return (
     <main className="qr-tool-page">
@@ -311,7 +357,7 @@ export default function QrCodeGenerator() {
               )}
             </div>
 
-            <div className="qr-preview-stage">
+            <div className={`qr-preview-stage ${settings.background === TRANSPARENT_BACKGROUND ? "is-transparent" : ""}`}>
               {hasPreview && preview && !("error" in preview) ? (
                 <NextImage className="qr-preview-image" src={preview.dataUrl} alt="依照目前設定產生的 QR Code 預覽" width={640} height={640} unoptimized />
               ) : (
@@ -385,6 +431,7 @@ export default function QrCodeGenerator() {
                 onFiles={handleLogoFiles}
                 onRemove={() => updateSetting("logoDataUrl", "")}
               />
+              <p className="qr-logo-note"><Check size={14} aria-hidden="true" />{isDefaultLogo ? "預設已套用班聯會徽，可上傳圖片替換。" : "目前使用自訂會徽，可隨時移除或替換。"}</p>
               {settings.logoDataUrl && <button type="button" className="qr-remove-logo" onClick={() => updateSetting("logoDataUrl", "")}>移除中央會徽</button>}
             </div>
 
@@ -411,7 +458,7 @@ export default function QrCodeGenerator() {
               <div className="qr-field-label"><span><Palette size={15} aria-hidden="true" />色彩</span><small>保持深淺對比</small></div>
               <div className="qr-color-grid">
                 <label className="qr-color-control"><span>前景</span><div><input type="color" value={validHex(settings.foreground, DEFAULT_SETTINGS.foreground)} onChange={(event) => updateSetting("foreground", event.target.value)} /><input className="qr-color-text" value={settings.foreground} onChange={(event) => updateSetting("foreground", event.target.value)} aria-label="前景色 HEX 色碼" /></div></label>
-                <label className="qr-color-control"><span>背景</span><div><input type="color" value={validHex(settings.background, DEFAULT_SETTINGS.background)} onChange={(event) => updateSetting("background", event.target.value)} /><input className="qr-color-text" value={settings.background} onChange={(event) => updateSetting("background", event.target.value)} aria-label="背景色 HEX 色碼" /></div></label>
+                <label className="qr-color-control"><span>背景</span><div><input type="color" value={validHex(settings.background, DEFAULT_SETTINGS.background)} onChange={(event) => updateSetting("background", event.target.value)} /><input className="qr-color-text" value={settings.background === TRANSPARENT_BACKGROUND ? "" : settings.background} placeholder={settings.background === TRANSPARENT_BACKGROUND ? "透明背景" : "#fffdf9"} onChange={(event) => updateSetting("background", event.target.value)} aria-label="背景色 HEX 色碼" /><button type="button" className={`qr-transparent-button ${settings.background === TRANSPARENT_BACKGROUND ? "is-selected" : ""}`} aria-pressed={settings.background === TRANSPARENT_BACKGROUND} onClick={() => updateSetting("background", TRANSPARENT_BACKGROUND)} title="PNG 與 SVG 不輸出背景色">透明</button></div></label>
               </div>
             </div>
 

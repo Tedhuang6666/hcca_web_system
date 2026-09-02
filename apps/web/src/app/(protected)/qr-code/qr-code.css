@@ -143,6 +143,15 @@
   padding: clamp(1.25rem, 5vw, 2.5rem);
 }
 
+.qr-preview-stage.is-transparent {
+  background-color: var(--bg-surface);
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--border) 28%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in srgb, var(--border) 28%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in srgb, var(--border) 28%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in srgb, var(--border) 28%, transparent) 75%);
+  background-position: 0 0, 0.5rem 0.5rem;
+  background-size: 1rem 1rem;
+}
+
 .qr-preview-image {
   display: block;
   width: min(100%, 28rem);
@@ -414,6 +423,7 @@
 .qr-color-control input[type="color"] {
   width: 2rem;
   height: 2rem;
+  flex: 0 0 auto;
   cursor: pointer;
   border: 1px solid var(--border-strong);
   border-radius: 0.38rem;
@@ -423,9 +433,32 @@
 
 .qr-color-text {
   min-width: 0;
+  flex: 1 1 auto;
   padding: 0.48rem 0.55rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.72rem;
+}
+
+.qr-transparent-button {
+  min-width: 2.8rem;
+  min-height: 2rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.38rem;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  padding: 0.3rem 0.38rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.qr-transparent-button:hover,
+.qr-transparent-button.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-dim);
+  color: var(--primary-text);
 }
 
 .qr-setting-split {
@@ -527,6 +560,21 @@
 .qr-warning {
   margin-top: 0.6rem;
   color: var(--warning);
+}
+
+.qr-logo-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.qr-logo-note svg {
+  flex: 0 0 auto;
+  color: var(--success);
 }
 
 .qr-settings-footnote {
@@ -677,6 +725,10 @@
   .qr-textarea,
   .qr-color-text,
   .qr-badge-input {
+    transition: none;
+  }
+
+  .qr-transparent-button {
     transition: none;
   }
 }
