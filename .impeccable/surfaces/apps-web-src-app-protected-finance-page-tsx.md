@@ -15,12 +15,12 @@ Primary job: Make the next required action obvious across reimbursement, approva
 
 Primary actions: Create reimbursement, review queued cases, maintain budget versions, publish an approved initial budget, and mark receivables collected.
 
-Content hierarchy: Current ledger and period, actionable work, six-step case runway, detailed work form, status/version history, then configuration. Public pages contain approved budget data only.
+Content hierarchy: Current ledger and period, actionable work, six-step case runway, detailed work form, status/version history, then configuration. Budget views group line items as item/detail rows with quantity, unit price, tax-inclusive total, item subtotal, and notes. Public pages contain approved budget data only.
 
 Visual direction: Editorial finance workbench with compact module navigation, numbered form sections, sticky monetary/readiness summaries, restrained gold actions, green completion states, and responsive card fallbacks for operational tables.
 
-Responsive behavior: Desktop uses a two-column module shell and data tables. Mobile uses horizontally scrollable module navigation, single-column forms, stacked metrics, and card worklists without document-level horizontal overflow.
+Responsive behavior: Desktop uses a two-column module shell and grouped spreadsheet-style tables. Mobile uses horizontally scrollable module navigation, single-column forms, stacked metrics, and grouped budget cards without document-level horizontal overflow.
 
-Constraints: Preserve existing permissions, API contracts, audit status semantics, router/service boundaries, and public/private data separation. No new backend schema or migration.
+Constraints: Preserve existing permissions, audit status semantics, router/service boundaries, and public/private data separation. Public budget pages never expose evidence or user identifiers; evidence upload and line-item editing remain authenticated back-office actions.
 
 Memorable moment: One continuous runway connects submission to approval, budget control, payment, evidence, and final settlement.

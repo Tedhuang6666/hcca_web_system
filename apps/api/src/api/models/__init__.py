@@ -119,6 +119,7 @@ from api.models.finance import (  # noqa: F401
     FinanceAccountType,
     FinanceBudget,
     FinanceBudgetAllocation,
+    FinanceBudgetAllocationEvidence,
     FinanceBudgetAllocationRevision,
     FinanceBudgetNode,
     FinanceBudgetSubmission,

@@ -631,6 +631,8 @@ export type FinanceExpenseClaimCreate = Omit<ExpenseClaimCreate, 'source_url' | 
   items: FinanceExpenseClaimItemCreate[]
 }
 export type FinanceJournalOut = JournalOut & {
+  reference_no: string
+  created_by_name: string
   claim_status?: ExpenseClaimStatus | null
   procurement_status?: ExpenseProcurementStatus | null
   procurement_updated_by_id?: string | null
@@ -646,6 +648,7 @@ export type FinanceJournalOut = JournalOut & {
   payment_method?: ExpensePaymentMethod
   reimbursement_entry_id?: string | null
   evidence_complete?: boolean
+  effective_amount?: number | null
 }
 export type FinanceBudget = {
   id: string; ledger_id: string; period_id: string; name: string; is_public: boolean
@@ -663,6 +666,11 @@ export type FinanceBudgetAllocation = {
   id: string; submission_id: string; node_id: string; amount: number; note?: string | null
   quantity?: number | null; unit?: string | null; unit_price?: number | null
   proposed_by_id: string; proposing_org_id: string
+  evidence: FinanceBudgetAllocationEvidence[]
+}
+export type FinanceBudgetAllocationEvidence = {
+  id: string; storage_key: string; filename: string; content_type: string; file_size: number
+  note?: string | null; uploaded_at: string; url: string
 }
 export type FinanceBudgetDetail = FinanceBudget & {
   submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]

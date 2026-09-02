@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import exists, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.finance import (
@@ -24,6 +24,7 @@ from api.models.finance import (
     FinanceAccountType,
     FinanceBudget,
     FinanceBudgetAllocation,
+    FinanceBudgetAllocationEvidence,
     FinanceBudgetAllocationRevision,
     FinanceBudgetNode,
     FinanceBudgetSubmission,
@@ -36,8 +37,10 @@ from api.models.finance import (
     JournalStatus,
 )
 from api.models.org import Org
+from api.models.user import User
 from api.schemas.finance import (
     BudgetAllocationCreate,
+    BudgetAllocationEvidenceCreate,
     BudgetAllocationUpdate,
     BudgetCreate,
     BudgetNodeCreate,
@@ -49,6 +52,7 @@ from api.schemas.finance import (
     ExpenseProcurementUpdate,
     ExpenseReimbursementCreate,
     JournalCreate,
+    ManualJournalUpdate,
     TransferCreate,
 )
 
@@ -414,14 +418,11 @@ async def update_budget_draft_allocation(
     submission_id: uuid.UUID,
     allocation_id: uuid.UUID,
     body: BudgetAllocationCreate,
-    user_id: uuid.UUID,
 ) -> FinanceBudgetAllocation:
     submission = await _editable_submission(db, submission_id)
     allocation = await db.get(FinanceBudgetAllocation, allocation_id)
     if not allocation or allocation.submission_id != submission.id:
         raise HTTPException(404, "預算配置不存在")
-    if allocation.proposed_by_id != user_id:
-        raise HTTPException(403, "只能修改自己提出的預算配置")
     node = await db.get(FinanceBudgetNode, body.node_id)
     if not node or node.budget_id != submission.budget_id:
         raise HTTPException(400, "預算條目不屬於此預算案")
@@ -487,18 +488,85 @@ async def update_budget_allocation(
     submission = await db.get(FinanceBudgetSubmission, allocation.submission_id)
     if not submission or submission.status != BudgetSubmissionStatus.APPROVED:
         raise HTTPException(400, "只有已核准預算可以直接修正")
+    budget = await get_budget(db, submission.budget_id)
+    node_id = body.node_id or allocation.node_id
+    node = await db.get(FinanceBudgetNode, node_id)
+    if not node or node.budget_id != budget.id:
+        raise HTTPException(400, "預算條目不屬於此預算案")
+    child = await db.scalar(
+        select(FinanceBudgetNode.id).where(FinanceBudgetNode.parent_id == node.id).limit(1)
+    )
+    if child:
+        raise HTTPException(400, "只有最末層預算條目可以配置金額")
+
+    changed_fields = body.model_dump(exclude_unset=True, exclude={"reason"})
+    quantity_details_changed = bool({"quantity", "unit", "unit_price"} & changed_fields.keys())
+    if quantity_details_changed:
+        quantity = changed_fields.get("quantity", allocation.quantity)
+        unit = (changed_fields.get("unit", allocation.unit) or "").strip()
+        unit_price = changed_fields.get("unit_price", allocation.unit_price)
+        if quantity is None or not unit:
+            raise HTTPException(422, "填寫數量時，必須同時填寫單位")
+        if unit_price is not None:
+            calculated = int(
+                (Decimal(quantity) * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            )
+            if body.amount is not None and body.amount != calculated:
+                raise HTTPException(422, "預算總額必須等於數量乘以單價")
+            changed_fields["amount"] = calculated
+    if not changed_fields:
+        raise HTTPException(422, "請至少修改一個預算欄位")
+
+    previous_details = {
+        "node_id": str(allocation.node_id),
+        "quantity": float(allocation.quantity) if allocation.quantity is not None else None,
+        "unit": allocation.unit,
+        "unit_price": allocation.unit_price,
+        "amount": allocation.amount,
+        "note": allocation.note,
+    }
+    next_details = {**previous_details}
+    for field, value in changed_fields.items():
+        setattr(allocation, field, value)
+        next_details[field] = float(value) if isinstance(value, Decimal) else value
+    next_details["node_id"] = str(next_details["node_id"])
     db.add(
         FinanceBudgetAllocationRevision(
             allocation_id=allocation.id,
-            previous_amount=allocation.amount,
-            next_amount=body.amount,
+            previous_amount=previous_details["amount"],
+            next_amount=next_details["amount"],
             reason=body.reason,
             changed_by_id=user_id,
+            previous_details=previous_details,
+            next_details=next_details,
         )
     )
-    allocation.amount = body.amount
     await db.flush()
     return allocation
+
+
+async def add_budget_allocation_evidence(
+    db: AsyncSession,
+    allocation_id: uuid.UUID,
+    body: BudgetAllocationEvidenceCreate,
+    user_id: uuid.UUID,
+) -> FinanceBudgetAllocationEvidence:
+    allocation = await db.get(FinanceBudgetAllocation, allocation_id)
+    if not allocation:
+        raise HTTPException(404, "預算明細不存在")
+    submission = await db.get(FinanceBudgetSubmission, allocation.submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    budget = await get_budget(db, submission.budget_id)
+    validate_evidence_key(body.storage_key, budget.ledger_id)
+    evidence = FinanceBudgetAllocationEvidence(
+        allocation_id=allocation.id,
+        uploaded_by_id=user_id,
+        **body.model_dump(),
+    )
+    db.add(evidence)
+    await db.flush()
+    return evidence
 
 
 async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
@@ -529,6 +597,23 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
             )
         ).scalars()
     )
+    allocation_ids = [allocation.id for allocation in allocations]
+    evidence_rows = (
+        list(
+            (
+                await db.execute(
+                    select(FinanceBudgetAllocationEvidence)
+                    .where(FinanceBudgetAllocationEvidence.allocation_id.in_(allocation_ids))
+                    .order_by(FinanceBudgetAllocationEvidence.created_at)
+                )
+            ).scalars()
+        )
+        if allocation_ids
+        else []
+    )
+    evidence_by_allocation: dict[uuid.UUID, list[FinanceBudgetAllocationEvidence]] = {}
+    for evidence in evidence_rows:
+        evidence_by_allocation.setdefault(evidence.allocation_id, []).append(evidence)
     approved_ids = {
         item.id for item in submissions if item.status == BudgetSubmissionStatus.APPROVED
     }
@@ -568,7 +653,34 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
         "name": budget.name,
         "is_public": budget.is_public,
         "submissions": submissions,
-        "allocations": allocations,
+        "allocations": [
+            {
+                "id": allocation.id,
+                "submission_id": allocation.submission_id,
+                "node_id": allocation.node_id,
+                "amount": allocation.amount,
+                "quantity": allocation.quantity,
+                "unit": allocation.unit,
+                "unit_price": allocation.unit_price,
+                "note": allocation.note,
+                "proposed_by_id": allocation.proposed_by_id,
+                "proposing_org_id": allocation.proposing_org_id,
+                "evidence": [
+                    {
+                        "id": evidence.id,
+                        "storage_key": evidence.storage_key,
+                        "filename": evidence.filename,
+                        "content_type": evidence.content_type,
+                        "file_size": evidence.file_size,
+                        "note": evidence.note,
+                        "uploaded_at": evidence.created_at,
+                        "url": f"/finance/budget-evidence/{evidence.id}",
+                    }
+                    for evidence in evidence_by_allocation.get(allocation.id, [])
+                ],
+            }
+            for allocation in allocations
+        ],
         "nodes": [
             {
                 "id": node.id,
@@ -786,6 +898,131 @@ async def create_journal(
     db.add(entry)
     await db.flush()
     db.add_all([JournalLine(entry_id=entry.id, **line.model_dump()) for line in body.lines])
+    await db.flush()
+    return entry
+
+
+async def update_manual_journal(
+    db: AsyncSession,
+    entry: JournalEntry,
+    body: ManualJournalUpdate,
+    user_id: uuid.UUID,
+) -> JournalEntry:
+    if entry.source_type != "manual_entry" or entry.source_event not in {"opening", "income"}:
+        raise HTTPException(400, "只有期初餘額或收入傳票可以從此處修改")
+    await validate_period(db, entry.ledger_id, body.period_id, body.entry_date)
+    validate_evidence_key(body.evidence_url, entry.ledger_id)
+    fund = await db.get(FundAccount, body.fund_account_id)
+    if not fund or fund.ledger_id != entry.ledger_id or not fund.is_active:
+        raise HTTPException(400, "資金保管點不存在或已停用")
+    counterpart = await db.get(ChartAccount, body.counterpart_account_id)
+    expected_type = (
+        FinanceAccountType.EQUITY if entry.source_event == "opening" else FinanceAccountType.REVENUE
+    )
+    if (
+        not counterpart
+        or counterpart.ledger_id != entry.ledger_id
+        or counterpart.account_type != expected_type
+        or not counterpart.is_active
+    ):
+        raise HTTPException(400, "對應會計科目不存在、類型不符或已停用")
+
+    if entry.status == JournalStatus.POSTED:
+        if entry.source_event != "opening":
+            raise HTTPException(400, "已過帳收入請另建調整傳票")
+        pending_adjustment = await db.scalar(
+            select(JournalEntry.id).where(
+                JournalEntry.source_type == "manual_entry",
+                JournalEntry.source_event.like("opening_adjustment:%"),
+                JournalEntry.source_id == entry.id,
+                JournalEntry.status.in_(
+                    [JournalStatus.DRAFT, JournalStatus.PENDING_REVIEW, JournalStatus.RETURNED]
+                ),
+            )
+        )
+        if pending_adjustment:
+            raise HTTPException(409, "這筆期初餘額已有待覆核調整，請先完成處理")
+        posted_adjustment_ids = list(
+            (
+                await db.execute(
+                    select(JournalEntry.id).where(
+                        JournalEntry.source_type == "manual_entry",
+                        JournalEntry.source_event.like("opening_adjustment:%"),
+                        JournalEntry.source_id == entry.id,
+                        JournalEntry.status == JournalStatus.POSTED,
+                    )
+                )
+            ).scalars()
+        )
+        current_balances = {
+            account_id: int(balance)
+            for account_id, balance in (
+                await db.execute(
+                    select(
+                        JournalLine.account_id,
+                        func.sum(JournalLine.debit - JournalLine.credit),
+                    )
+                    .where(JournalLine.entry_id.in_([entry.id, *posted_adjustment_ids]))
+                    .group_by(JournalLine.account_id)
+                )
+            ).all()
+        }
+        net_changes = {
+            account_id: -balance for account_id, balance in current_balances.items() if balance
+        }
+        net_changes[fund.chart_account_id] = net_changes.get(fund.chart_account_id, 0) + body.amount
+        net_changes[counterpart.id] = net_changes.get(counterpart.id, 0) - body.amount
+        if all(change == 0 for change in net_changes.values()):
+            raise HTTPException(400, "期初餘額沒有變更")
+        return await create_journal(
+            db,
+            entry.ledger_id,
+            JournalCreate(
+                period_id=body.period_id,
+                entry_date=body.entry_date,
+                description=f"期初餘額調整｜{body.description.strip()}",
+                lines=[
+                    {
+                        "account_id": account_id,
+                        "debit": change if change > 0 else 0,
+                        "credit": -change if change < 0 else 0,
+                    }
+                    for account_id, change in net_changes.items()
+                    if change
+                ],
+                source_type="manual_entry",
+                source_id=entry.id,
+                source_event=f"opening_adjustment:{uuid.uuid4().hex[:12]}",
+                source_url=body.source_url,
+                evidence_url=body.evidence_url,
+                note=body.note,
+            ),
+            user_id,
+            pending=True,
+        )
+    if entry.status not in {
+        JournalStatus.DRAFT,
+        JournalStatus.PENDING_REVIEW,
+        JournalStatus.RETURNED,
+    }:
+        raise HTTPException(400, "這筆傳票目前不可修改")
+
+    entry.period_id = body.period_id
+    entry.entry_date = body.entry_date
+    entry.description = body.description.strip()
+    entry.source_url = body.source_url
+    entry.evidence_url = body.evidence_url
+    entry.note = body.note
+    entry.status = JournalStatus.PENDING_REVIEW
+    entry.reviewed_by_id = None
+    entry.posted_at = None
+    await db.execute(delete(JournalLine).where(JournalLine.entry_id == entry.id))
+    db.add_all(
+        [
+            JournalLine(entry_id=entry.id, account_id=fund.chart_account_id, debit=body.amount),
+            JournalLine(entry_id=entry.id, account_id=counterpart.id, credit=body.amount),
+        ]
+    )
     await db.flush()
     return entry
 
@@ -1392,13 +1629,14 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
     lines = list(
         (
             await db.execute(
-                select(JournalLine, ChartAccount.name)
+                select(JournalLine, ChartAccount.name, ChartAccount.account_type)
                 .join(ChartAccount)
                 .where(JournalLine.entry_id == entry.id)
                 .order_by(JournalLine.debit.desc(), JournalLine.created_at, JournalLine.id)
             )
         ).all()
     )
+    creator_name = await db.scalar(select(User.display_name).where(User.id == entry.created_by_id))
     evidence_count = 0
     if entry.source_type == "expense_claim":
         evidence_count = int(
@@ -1410,14 +1648,39 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
             )
             or 0
         )
+    effective_amount = None
+    if entry.source_type == "manual_entry" and entry.source_event == "opening":
+        original_amount = sum(
+            line.debit - line.credit
+            for line, _, account_type in lines
+            if account_type == FinanceAccountType.ASSET
+        )
+        posted_adjustments = int(
+            await db.scalar(
+                select(func.coalesce(func.sum(JournalLine.debit - JournalLine.credit), 0))
+                .join(JournalEntry, JournalEntry.id == JournalLine.entry_id)
+                .join(ChartAccount, ChartAccount.id == JournalLine.account_id)
+                .where(
+                    JournalEntry.source_type == "manual_entry",
+                    JournalEntry.source_event.like("opening_adjustment:%"),
+                    JournalEntry.source_id == entry.id,
+                    JournalEntry.status == JournalStatus.POSTED,
+                    ChartAccount.account_type == FinanceAccountType.ASSET,
+                )
+            )
+            or 0
+        )
+        effective_amount = original_amount + posted_adjustments
     return {
         "id": entry.id,
+        "reference_no": f"FIN-{entry.entry_date:%y%m%d}-{entry.id.hex[:6].upper()}",
         "ledger_id": entry.ledger_id,
         "period_id": entry.period_id,
         "entry_date": entry.entry_date,
         "description": entry.description,
         "status": entry.status,
         "created_by_id": entry.created_by_id,
+        "created_by_name": creator_name or "已停用使用者",
         "reviewed_by_id": entry.reviewed_by_id,
         "posted_at": entry.posted_at,
         "source_type": entry.source_type,
@@ -1441,6 +1704,7 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
         "payment_method": entry.payment_method,
         "reimbursement_entry_id": entry.reimbursement_entry_id,
         "evidence_complete": bool(entry.evidence_url) or evidence_count > 0,
+        "effective_amount": effective_amount,
         "lines": [
             {
                 "id": line.id,
@@ -1450,7 +1714,7 @@ async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
                 "memo": line.memo,
                 "account_name": account_name,
             }
-            for line, account_name in lines
+            for line, account_name, _ in lines
         ],
     }
 

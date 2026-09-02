@@ -7,10 +7,12 @@ import {
   CircleAlert,
   Eye,
   EyeOff,
+  FileCheck2,
   FileSpreadsheet,
   FileUp,
   ListTree,
   Megaphone,
+  Paperclip,
   Pencil,
   Plus,
   Save,
@@ -18,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
 import { financeApi } from "@/lib/api";
 import type {
   FinanceBudget,
@@ -59,6 +61,7 @@ export default function BudgetWorkspace({
   currentUserId,
 }: Props) {
   const confirm = useConfirm();
+  const prompt = usePrompt();
   const [budgets, setBudgets] = useState<FinanceBudget[]>([]);
   const [detail, setDetail] = useState<FinanceBudgetDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,6 +81,7 @@ export default function BudgetWorkspace({
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [editingAllocationId, setEditingAllocationId] = useState<string | null>(null);
+  const [uploadingEvidenceId, setUploadingEvidenceId] = useState<string | null>(null);
   const [allocationDraft, setAllocationDraft] = useState({
     quantity: "", unit: "", unit_price: "", amount: "", note: "",
   });
@@ -136,7 +140,8 @@ export default function BudgetWorkspace({
   }, [detail]);
 
   const activeSubmission = detail?.submissions.find((item) => item.id === selectedSubmissionId)
-    || detail?.submissions.find((item) => item.status === "draft" || item.status === "returned");
+    || detail?.submissions.find((item) => item.status === "draft" || item.status === "returned")
+    || detail?.submissions.at(-1);
 
   const refreshDetail = async () => {
     await load(detail?.id);
@@ -250,7 +255,9 @@ export default function BudgetWorkspace({
     if (!activeSubmission) return;
     const quantity = allocationDraft.quantity.trim() ? Number(allocationDraft.quantity) : undefined;
     const unitPrice = allocationDraft.unit_price.trim() ? Number(allocationDraft.unit_price) : undefined;
-    const amount = allocationDraft.amount.trim() ? Number(allocationDraft.amount) : undefined;
+    const amount = quantity !== undefined && unitPrice !== undefined
+      ? Math.round(quantity * unitPrice)
+      : allocationDraft.amount.trim() ? Number(allocationDraft.amount) : undefined;
     if (
       (quantity !== undefined && (!Number.isFinite(quantity) || quantity <= 0))
       || (unitPrice !== undefined && (!Number.isFinite(unitPrice) || unitPrice <= 0))
@@ -261,20 +268,57 @@ export default function BudgetWorkspace({
       return toast.error("請填寫有效的數量／單位／單價或總額");
     }
     try {
-      await financeApi.updateBudgetDraftAllocation(activeSubmission.id, allocation.id, {
-        node_id: allocation.node_id,
-        proposing_org_id: allocation.proposing_org_id,
-        quantity,
-        unit: quantity === undefined ? undefined : allocationDraft.unit.trim(),
-        unit_price: unitPrice,
-        amount,
-        note: allocationDraft.note.trim() || undefined,
-      });
+      if (activeSubmission.status === "approved") {
+        const reason = await prompt({
+          title: "修正已核准預算明細",
+          description: "修改會立即更新核准明細，系統會保留修改前後內容與操作人。",
+          inputLabel: "修正原因",
+          required: true,
+          confirmLabel: "確認修正",
+        });
+        if (!reason?.trim()) return;
+        await financeApi.updateBudgetAllocation(allocation.id, {
+          quantity,
+          unit: quantity === undefined ? undefined : allocationDraft.unit.trim(),
+          unit_price: unitPrice,
+          amount,
+          note: allocationDraft.note.trim() || null,
+          reason: reason.trim(),
+        });
+      } else {
+        await financeApi.updateBudgetDraftAllocation(activeSubmission.id, allocation.id, {
+          node_id: allocation.node_id,
+          proposing_org_id: allocation.proposing_org_id,
+          quantity,
+          unit: quantity === undefined ? undefined : allocationDraft.unit.trim(),
+          unit_price: unitPrice,
+          amount,
+          note: allocationDraft.note.trim() || null,
+        });
+      }
       setEditingAllocationId(null);
       await refreshDetail();
       toast.success("預算明細已更新");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "更新預算明細失敗");
+    }
+  };
+
+  const uploadAllocationEvidence = async (
+    allocation: FinanceBudgetAllocation,
+    file: File | undefined,
+  ) => {
+    if (!file) return;
+    try {
+      setUploadingEvidenceId(allocation.id);
+      const stored = await financeApi.uploadEvidence(ledgerId, file);
+      await financeApi.addBudgetAllocationEvidence(allocation.id, stored);
+      await refreshDetail();
+      toast.success(`已補上憑證：${file.name}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "上傳預算憑證失敗");
+    } finally {
+      setUploadingEvidenceId(null);
     }
   };
 
@@ -343,7 +387,35 @@ export default function BudgetWorkspace({
   const activeAllocations = detail?.allocations.filter(
     (item) => item.submission_id === activeSubmission?.id,
   ) || [];
-  const nodeLabels = new Map(nodes.map((node) => [node.id, node.label]));
+  const nodeById = new Map(detail?.nodes.map((node) => [node.id, node]) || []);
+  const allocationGroups = Array.from(activeAllocations.reduce((groups, allocation) => {
+    const path = [];
+    let node = nodeById.get(allocation.node_id);
+    while (node) {
+      path.unshift(node);
+      node = node.parent_id ? nodeById.get(node.parent_id) : undefined;
+    }
+    const groupNode = path[0];
+    const groupId = groupNode?.id || allocation.node_id;
+    const current = groups.get(groupId) || {
+      id: groupId,
+      name: groupNode?.name || "未分類",
+      total: 0,
+      rows: [] as Array<{ allocation: FinanceBudgetAllocation; detail: string }>,
+    };
+    current.total += allocation.amount;
+    current.rows.push({
+      allocation,
+      detail: path.slice(1).map((item) => item.name).join(" ＞ ") || groupNode?.name || "未命名細項",
+    });
+    groups.set(groupId, current);
+    return groups;
+  }, new Map<string, {
+    id: string;
+    name: string;
+    total: number;
+    rows: Array<{ allocation: FinanceBudgetAllocation; detail: string }>;
+  }>()).values());
   const canOpenPublic = detail?.submissions.some(
     (item) => item.kind === "initial" && item.status === "approved",
   );
@@ -493,11 +565,50 @@ export default function BudgetWorkspace({
 
             {activeSubmission?.status === "submitted" && canReview && <div className="finance-budget__review-bar"><span><CircleAlert size={17} aria-hidden="true" /><b>{activeSubmission.title}</b>正在等待你的審核決定</span><div><button className="btn btn-primary" disabled={pendingAction === "review"} onClick={() => void review("approved")}><CheckCircle2 size={16} aria-hidden="true" />{pendingAction === "review" ? "處理中…" : "核准預算案"}</button><button className="btn btn-secondary" disabled={pendingAction === "review"} onClick={() => void review("returned")}>退回補正</button><button className="btn btn-secondary" disabled={pendingAction === "review"} onClick={() => void review("rejected")}>否決</button></div></div>}
 
-            {activeAllocations.length > 0 && <><p className="finance-budget__scroll-hint">左右滑動可查看完整金額；操作欄會固定在右側。</p><div className="finance-budget__table finance-budget__table--allocations" role="region" aria-label="預算配置明細，可左右捲動" tabIndex={0}><table><thead><tr><th>預算細項</th><th>數量</th><th>單位</th><th>單價</th><th>總額</th><th>操作</th></tr></thead><tbody>{activeAllocations.map((allocation) => {
-              const canEdit = canEditAllocations && allocation.proposed_by_id === currentUserId;
-              const editing = editingAllocationId === allocation.id;
-              return <tr key={allocation.id}><td>{nodeLabels.get(allocation.node_id) || "已刪除條目"}</td><td>{editing ? <input className="input" aria-label="編輯數量" type="number" min="0.01" step="0.01" value={allocationDraft.quantity} onChange={(event) => setAllocationDraft({ ...allocationDraft, quantity: event.target.value })} /> : <span>{allocation.quantity ?? "—"}</span>}</td><td>{editing ? <input className="input" aria-label="編輯單位" value={allocationDraft.unit} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit: event.target.value })} /> : allocation.unit || "—"}</td><td>{editing ? <input className="input" aria-label="編輯單價" type="number" min="1" value={allocationDraft.unit_price} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit_price: event.target.value })} placeholder="可留白" /> : <span>{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "—"}</span>}</td><td>{editing ? <input className="input" aria-label="編輯總額" type="number" min="1" value={allocationDraft.amount} onChange={(event) => setAllocationDraft({ ...allocationDraft, amount: event.target.value })} /> : <span>NT${allocation.amount.toLocaleString()}</span>}</td><td>{editing ? <span className="finance-budget__row-actions"><button className="btn btn-primary" title="儲存" aria-label="儲存預算明細" onClick={() => void saveAllocation(allocation)}><Save size={15} aria-hidden="true" /></button><button className="btn btn-secondary" title="取消" aria-label="取消編輯預算明細" onClick={() => setEditingAllocationId(null)}><X size={15} aria-hidden="true" /></button></span> : canEdit && <button className="btn btn-secondary" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯</button>}</td></tr>;
-            })}</tbody></table></div></>}
+            {activeAllocations.length > 0 && <>
+              <p className="finance-budget__scroll-hint">手機版會依項目分組顯示，不需橫向捲動。</p>
+              <div className="finance-budget__table finance-budget__table--allocations" role="region" aria-label="預算配置明細" tabIndex={0}>
+                <table>
+                  <thead><tr><th>項目</th><th>細項</th><th>數量</th><th>單價</th><th>總額（含稅）</th><th>項目總額</th><th>備註與憑證</th><th>操作</th></tr></thead>
+                  <tbody>{allocationGroups.flatMap((group) => group.rows.map(({ allocation, detail: allocationDetail }, rowIndex) => {
+                    const draftEditable = canEditAllocations
+                      && (canManage || allocation.proposed_by_id === currentUserId);
+                    const approvedEditable = activeSubmission?.status === "approved" && canManage;
+                    const canEdit = draftEditable || approvedEditable;
+                    const canAttach = draftEditable || approvedEditable;
+                    const editing = editingAllocationId === allocation.id;
+                    const calculatedAmount = Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0
+                      ? Math.round(Number(allocationDraft.quantity) * Number(allocationDraft.unit_price))
+                      : Number(allocationDraft.amount || 0);
+                    return <tr key={allocation.id}>
+                      {rowIndex === 0 && <th scope="rowgroup" rowSpan={group.rows.length} className="finance-budget__group-cell">{group.name}</th>}
+                      <td><strong>{allocationDetail}</strong></td>
+                      <td>{editing ? <span className="finance-budget__quantity-edit"><input className="input" aria-label="編輯數量" type="number" min="0.01" step="0.01" value={allocationDraft.quantity} onChange={(event) => setAllocationDraft({ ...allocationDraft, quantity: event.target.value })} /><input className="input" aria-label="編輯單位" value={allocationDraft.unit} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit: event.target.value })} /></span> : <span>{allocation.quantity ?? "—"}{allocation.unit || ""}</span>}</td>
+                      <td>{editing ? <input className="input" aria-label="編輯單價" type="number" min="1" value={allocationDraft.unit_price} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit_price: event.target.value })} placeholder="可留白" /> : <span>{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "＊"}</span>}</td>
+                      <td>{editing ? <input className="input" aria-label="編輯總額" type="number" min="1" value={calculatedAmount || ""} disabled={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0} onChange={(event) => setAllocationDraft({ ...allocationDraft, amount: event.target.value })} /> : <strong>NT${allocation.amount.toLocaleString()}</strong>}</td>
+                      {rowIndex === 0 && <td rowSpan={group.rows.length} className="finance-budget__group-total"><strong>NT${group.total.toLocaleString()}</strong></td>}
+                      <td>{editing ? <textarea className="input" aria-label="編輯備註" value={allocationDraft.note} onChange={(event) => setAllocationDraft({ ...allocationDraft, note: event.target.value })} /> : <div className="finance-budget__evidence-cell">{allocation.note && <p>{allocation.note}</p>}{allocation.evidence.length > 0 ? <span>{allocation.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><FileCheck2 size={13} aria-hidden="true" />{evidence.filename}</a>)}</span> : <small>尚未附內部憑證</small>}</div>}</td>
+                      <td><span className="finance-budget__row-actions">{editing ? <><button className="btn btn-primary" title="儲存" aria-label="儲存預算明細" onClick={() => void saveAllocation(allocation)}><Save size={15} aria-hidden="true" /></button><button className="btn btn-secondary" title="取消" aria-label="取消編輯預算明細" onClick={() => setEditingAllocationId(null)}><X size={15} aria-hidden="true" /></button></> : <>{canEdit && <button className="btn btn-secondary" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯</button>}{canAttach && <label className="btn btn-secondary finance-budget__evidence-upload"><Paperclip size={14} aria-hidden="true" />{uploadingEvidenceId === allocation.id ? "上傳中…" : "補憑證"}<input className="sr-only" type="file" disabled={uploadingEvidenceId === allocation.id} accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => { void uploadAllocationEvidence(allocation, event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>}</>}</span></td>
+                    </tr>;
+                  }))}</tbody>
+                </table>
+              </div>
+              <div className="finance-budget__allocation-cards">
+                {allocationGroups.map((group) => <section key={group.id}>
+                  <header><strong>{group.name}</strong><span>項目總額 NT${group.total.toLocaleString()}</span></header>
+                  {group.rows.map(({ allocation, detail: allocationDetail }) => {
+                    const draftEditable = canEditAllocations
+                      && (canManage || allocation.proposed_by_id === currentUserId);
+                    const approvedEditable = activeSubmission?.status === "approved" && canManage;
+                    const editing = editingAllocationId === allocation.id;
+                    return <article key={allocation.id}>
+                      <div><h4>{allocationDetail}</h4><strong>NT${allocation.amount.toLocaleString()}</strong></div>
+                      {editing ? <div className="finance-budget__card-edit"><label>數量<input className="input" type="number" min="0.01" step="0.01" value={allocationDraft.quantity} onChange={(event) => setAllocationDraft({ ...allocationDraft, quantity: event.target.value })} /></label><label>單位<input className="input" value={allocationDraft.unit} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit: event.target.value })} /></label><label>單價<input className="input" type="number" min="1" value={allocationDraft.unit_price} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit_price: event.target.value })} /></label><label>總額<input className="input" type="number" min="1" value={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0 ? Math.round(Number(allocationDraft.quantity) * Number(allocationDraft.unit_price)) : allocationDraft.amount} disabled={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0} onChange={(event) => setAllocationDraft({ ...allocationDraft, amount: event.target.value })} /></label><label className="is-wide">備註<textarea className="input" value={allocationDraft.note} onChange={(event) => setAllocationDraft({ ...allocationDraft, note: event.target.value })} /></label><footer><button className="btn btn-primary" onClick={() => void saveAllocation(allocation)}><Save size={14} aria-hidden="true" />儲存</button><button className="btn btn-secondary" onClick={() => setEditingAllocationId(null)}><X size={14} aria-hidden="true" />取消</button></footer></div> : <><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"}{allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "＊"}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}{allocation.evidence.length > 0 && <div className="finance-budget__card-evidence">{allocation.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><FileCheck2 size={14} aria-hidden="true" />{evidence.filename}</a>)}</div>}{(draftEditable || approvedEditable) && <footer><button className="btn btn-secondary" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯細項</button><label className="btn btn-secondary"><Paperclip size={14} aria-hidden="true" />補憑證<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => { void uploadAllocationEvidence(allocation, event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></footer>}</>}
+                    </article>;
+                  })}
+                </section>)}
+              </div>
+            </>}
           </section>
 
           <section className={`finance-budget__publication ${detail.is_public ? "is-public" : ""}`}>

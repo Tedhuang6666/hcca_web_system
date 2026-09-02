@@ -50,8 +50,10 @@ const paymentStatusLabel: Record<ExpensePaymentStatus, string> = {
   advance_reimbursed: "代墊已償還",
 };
 const claimStatusLabel: Record<string, string> = {
+  draft: "草稿",
   pending_review: "待覆核確認",
   approved: "已確認／已過帳",
+  posted: "已過帳",
   returned: "已退回補正",
   rejected: "已拒絕",
   completed: "已完成",
@@ -153,6 +155,8 @@ export default function FinancePage() {
   const [itemEvidenceFiles, setItemEvidenceFiles] = useState<File[][]>([]);
   const [isEvidenceUploading, setIsEvidenceUploading] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingManualEntryId, setEditingManualEntryId] = useState<string | null>(null);
+  const [existingEvidenceKey, setExistingEvidenceKey] = useState<string | null>(null);
   const [claimItems, setClaimItems] = useState<FinanceExpenseClaimItemCreate[]>([emptyClaimItem()]);
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
@@ -233,6 +237,10 @@ export default function FinancePage() {
   const managedAccounts = accounts.filter((account) => account.account_type === managedAccountType);
   const expenseClaims = useMemo(
     () => journals.filter((item) => item.source_type === "expense_claim"),
+    [journals],
+  );
+  const openingEntries = useMemo(
+    () => journals.filter((item) => item.source_event === "opening"),
     [journals],
   );
   const pendingReviewClaims = useMemo(
@@ -370,7 +378,7 @@ export default function FinancePage() {
 
     try {
       setIsEvidenceUploading(true);
-      let finalEvidenceKey: string | undefined;
+      let finalEvidenceKey = existingEvidenceKey || undefined;
       if (evidenceFile) {
         finalEvidenceKey = (await financeApi.uploadEvidence(ledger.id, evidenceFile)).storage_key;
       }
@@ -420,23 +428,40 @@ export default function FinancePage() {
           ? { account_id: counterpart.id, debit: 0, credit: amount }
           : { account_id: counterpart.id, debit: 0, credit: amount };
         const prefix = entryType === "opening" ? "期初餘額" : "收入";
-        const entry = await financeApi.createJournal(ledger.id, {
-          period_id: periodId,
-          entry_date: entryDate,
-          description: `${prefix}｜${entryDescription.trim()}`,
-          source_type: "manual_entry",
-          source_event: entryType,
-          evidence_url: finalEvidenceKey,
-          source_url: evidenceUrl.trim() || undefined,
-          lines: [fundLine, counterpartLine],
-        });
-        await financeApi.submit(entry.id);
+        if (editingManualEntryId) {
+          await financeApi.updateManualJournal(editingManualEntryId, {
+            period_id: periodId,
+            entry_date: entryDate,
+            fund_account_id: fund.id,
+            counterpart_account_id: counterpart.id,
+            description: `${prefix}｜${entryDescription.trim()}`,
+            amount,
+            evidence_url: finalEvidenceKey,
+            source_url: evidenceUrl.trim() || undefined,
+          });
+        } else {
+          const entry = await financeApi.createJournal(ledger.id, {
+            period_id: periodId,
+            entry_date: entryDate,
+            description: `${prefix}｜${entryDescription.trim()}`,
+            source_type: "manual_entry",
+            source_event: entryType,
+            evidence_url: finalEvidenceKey,
+            source_url: evidenceUrl.trim() || undefined,
+            lines: [fundLine, counterpartLine],
+          });
+          await financeApi.submit(entry.id);
+        }
         setEntryAmount("");
-        toast.success(`${entryTypes[entryType].label}已送覆核`);
+        toast.success(editingManualEntryId
+          ? "期初餘額已更新並送覆核；已過帳案件會另建留痕調整"
+          : `${entryTypes[entryType].label}已送覆核`);
       }
       setEntryDescription("");
       setEvidenceUrl("");
       setEvidenceFile(null);
+      setExistingEvidenceKey(null);
+      setEditingManualEntryId(null);
       await load(ledger.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "建立傳票失敗");
@@ -510,6 +535,8 @@ export default function FinancePage() {
     setClaimDetails({});
     setExpandedEntryId(null);
     setEditingEntryId(null);
+    setEditingManualEntryId(null);
+    setExistingEvidenceKey(null);
     setPeriodId("");
   };
 
@@ -566,6 +593,7 @@ export default function FinancePage() {
       setPaymentMethod(entry.payment_method || "direct");
       setAdvancedById(entry.advanced_by_id || currentUserId);
       setEvidenceUrl(entry.source_url || "");
+      setExistingEvidenceKey(entry.evidence_url || null);
       setEvidenceFile(null);
       setItemEvidenceFiles(items.map(() => []));
       setClaimItems(items.map((item) => ({
@@ -592,9 +620,50 @@ export default function FinancePage() {
     }
   };
 
+  const editOpeningBalance = (entry: FinanceJournalOut) => {
+    const assetLine = entry.lines.find((line) => (
+      line.debit > 0 && funds.some((fund) => fund.chart_account_id === line.account_id)
+    ));
+    const counterpartLine = entry.lines.find((line) => line.credit > 0);
+    const fund = funds.find((item) => item.chart_account_id === assetLine?.account_id);
+    const counterpart = accounts.find((item) => item.id === counterpartLine?.account_id);
+    if (!assetLine || !fund || !counterpart) {
+      toast.error("期初餘額的科目資料不完整，暫時無法修改");
+      return;
+    }
+    const originalPeriod = periods.find((period) => period.id === entry.period_id);
+    setEditingManualEntryId(entry.id);
+    setEditingEntryId(null);
+    setEntryType("opening");
+    setPeriodId(
+      originalPeriod && !originalPeriod.is_closed
+        ? originalPeriod.id
+        : periods.find((period) => !period.is_closed)?.id || "",
+    );
+    setFundId(fund.id);
+    setCounterAccountId(counterpart.id);
+    setEntryDate(entry.status === "posted" ? today : entry.entry_date);
+    setEntryDescription(entry.description.replace(/^期初餘額(?:調整)?｜/, ""));
+    setEntryAmount(String(entry.effective_amount ?? assetLine.debit));
+    setEvidenceUrl(entry.source_url || "");
+    setExistingEvidenceKey(entry.evidence_url || null);
+    setEvidenceFile(null);
+    setActiveTab("entry");
+    toast.info(entry.status === "posted"
+      ? "已載入目前期初餘額；儲存後會建立一筆待覆核調整，保留原始帳務。"
+      : "已載入待覆核期初餘額，可直接修改後重新送審。");
+  };
+
   const cancelClaimEdit = () => {
     setEditingEntryId(null);
+    setExistingEvidenceKey(null);
     setActiveTab("claims");
+  };
+
+  const cancelManualEdit = () => {
+    setEditingManualEntryId(null);
+    setExistingEvidenceKey(null);
+    setActiveTab("review");
   };
 
   const reviewEntry = async (entryId: string) => {
@@ -674,7 +743,11 @@ export default function FinancePage() {
   const availableEntryTypes = (Object.keys(entryTypes) as EntryType[]).filter((type) =>
     type === "expense" ? canClaimExpense : canRecord,
   );
-  const entryTypeOptions = editingEntryId ? ["expense" as EntryType] : availableEntryTypes;
+  const entryTypeOptions = editingEntryId
+    ? ["expense" as EntryType]
+    : editingManualEntryId
+      ? [entryType]
+      : availableEntryTypes;
   const roleQueues = [
     {
       id: "review" as const,
@@ -919,8 +992,8 @@ export default function FinancePage() {
             <section className="finance-entry">
               <header className="finance-entry__header">
                 <div>
-                  <h2>{editingEntryId ? "修改報帳" : entryTypes[entryType].label}</h2>
-                  <p>{editingBudgetedClaim ? "可調整已列入核准預算、尚未付款案件的核銷金額；儲存後保留原核准狀態。" : entryTypes[entryType].help}</p>
+                  <h2>{editingEntryId ? "修改報帳" : editingManualEntryId ? "修改期初餘額" : entryTypes[entryType].label}</h2>
+                  <p>{editingBudgetedClaim ? "可調整已列入核准預算、尚未付款案件的核銷金額；儲存後保留原核准狀態。" : editingManualEntryId ? "待覆核資料會直接更新；已過帳資料會新增調整傳票，原紀錄不會被覆蓋。" : entryTypes[entryType].help}</p>
                 </div>
                 <div className="finance-entry__type-switch" role="group" aria-label="登錄類型">
                   {entryTypeOptions.map((type) => (
@@ -935,6 +1008,7 @@ export default function FinancePage() {
                   ))}
                 </div>
                 {editingEntryId && <button className="btn btn-secondary" onClick={cancelClaimEdit}>取消修改</button>}
+                {editingManualEntryId && <button className="btn btn-secondary" onClick={cancelManualEdit}>取消修改</button>}
               </header>
 
               <div className="finance-entry__layout">
@@ -1016,8 +1090,8 @@ export default function FinancePage() {
                     <li className={expenseItemsReady ? "is-ready" : ""}><Check size={14} aria-hidden="true" />品項與金額完整</li>
                     <li className={expensePaymentReady ? "is-ready" : ""}><Check size={14} aria-hidden="true" />付款方式已確認</li>
                   </ul>}
-                  <button className="btn btn-primary" disabled={isEvidenceUploading || (entryType === "expense" && !expenseReady)} onClick={() => void createEntry()}>{isEvidenceUploading ? "正在處理憑證…" : entryType === "expense" ? (editingEntryId ? "儲存報帳" : "送出報帳") : `${entryTypes[entryType].label}並送覆核`}</button>
-                  <p>{editingEntryId ? (editingBudgetedClaim ? "修正後不需重新覆核。" : "修改後會重新進入覆核。") : "送出前可隨時離開，草稿會保留在這台裝置。"}</p>
+                  <button className="btn btn-primary" disabled={isEvidenceUploading || (entryType === "expense" && !expenseReady)} onClick={() => void createEntry()}>{isEvidenceUploading ? "正在處理憑證…" : entryType === "expense" ? (editingEntryId ? "儲存報帳" : "送出報帳") : editingManualEntryId ? "儲存並送覆核" : `${entryTypes[entryType].label}並送覆核`}</button>
+                  <p>{editingEntryId ? (editingBudgetedClaim ? "修正後不需重新覆核。" : "修改後會重新進入覆核。") : editingManualEntryId ? "系統會保留修改人與調整紀錄。" : "送出前可隨時離開，草稿會保留在這台裝置。"}</p>
                 </aside>
               </div>
             </section>
@@ -1027,6 +1101,7 @@ export default function FinancePage() {
           <section hidden={activeTab !== "funds"} className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
             <h2 className="font-semibold">資金保管點</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>餘額只計入已過帳傳票。請用收支／報帳登錄金額；只有在保管位置改變時才建立移轉。</p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">{funds.map((fund) => <article key={fund.id} className="rounded border p-4" style={{ borderColor: "var(--border)" }}><p className="text-sm" style={{ color: "var(--text-muted)" }}>{storageLabel[fund.storage_type]}</p><h3 className="font-semibold">{fund.name}</h3>{fund.storage_type === "bank" && <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{fund.bank_name || "未填銀行"}{fund.account_last_four ? `／末四碼 ${fund.account_last_four}` : ""}</p>}<p className="mt-2 text-xl font-semibold">NT${fund.balance.toLocaleString()}</p></article>)}</div>
+            {openingEntries.length > 0 && <div className="finance-opening-list"><div><h3>期初餘額紀錄</h3><p>待覆核資料可直接修改；已過帳資料會以調整傳票留存異動。</p></div>{openingEntries.map((entry) => <article key={entry.id}><span><small>{entry.reference_no}</small><strong>{entry.description}</strong></span><b>NT${(entry.effective_amount ?? entry.lines.reduce((sum, line) => sum + line.debit, 0)).toLocaleString()}</b><em>{claimStatusLabel[entry.status] || entry.status}</em>{canRecord && <button className="btn btn-secondary" onClick={() => editOpeningBalance(entry)}>修改期初餘額</button>}</article>)}</div>}
             {activePeriod && canRecord && <div className="mt-5 border-t pt-5" style={{ borderColor: "var(--border)" }}><h3 className="font-medium">資金移轉</h3><div className="mt-3 grid gap-3 md:grid-cols-4"><select className="input" aria-label="轉出保管點" value={fromId} onChange={(event) => setFromId(event.target.value)}><option value="">轉出保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><select className="input" aria-label="轉入保管點" value={toId} onChange={(event) => setToId(event.target.value)}><option value="">轉入保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><input className="input" aria-label="移轉金額（新臺幣）" type="number" min="1" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="移轉金額（NT$）" /><button className="btn btn-secondary" onClick={() => void transfer()}>移轉並送覆核</button></div></div>}
           </section>
 
@@ -1104,7 +1179,7 @@ export default function FinancePage() {
             {canReview ? pendingReviewClaims.length > 0 ? <div className="finance-case-list__items">{pendingReviewClaims.map((item) => {
               const ownClaim = item.source_type === "expense_claim" && item.created_by_id === currentUserId;
               return <article key={item.id} className="finance-case-list__item">
-                <div className="finance-case-list__summary"><div><p className="finance-case-list__meta">{item.entry_date} · {sourceLabel(item.source_type)}</p><h3>{item.description}</h3><p>{claimNextStep(item).detail}</p></div><div className="finance-case-list__actions"><button className="btn btn-secondary" onClick={() => void toggleDetails(item.id)}>{expandedEntryId === item.id ? "收起詳情" : "查看詳情"}</button>{ownClaim && canClaimExpense && canEditExpenseClaim(item, currentUserId) && <button className="btn btn-primary" onClick={() => void editClaim(item)}>修改報帳</button>}{canReview ? <><button className="btn btn-primary" onClick={() => void reviewEntry(item.id)}>確認並過帳</button>{item.source_type === "expense_claim" && <button className="btn btn-secondary" onClick={() => void returnEntry(item.id)}>退回補正</button>}</> : ownClaim && <span className="finance-case-list__owner">需要「覆核案件」權限才能處理</span>}</div></div>
+                <div className="finance-case-list__summary"><div><p className="finance-case-list__meta">{item.entry_date} · {sourceLabel(item.source_type, item.source_event)}</p><h3>{item.description}</h3><p>{claimNextStep(item).detail}</p></div><div className="finance-case-list__actions"><button className="btn btn-secondary" onClick={() => void toggleDetails(item.id)}>{expandedEntryId === item.id ? "收起詳情" : "查看詳情"}</button>{item.source_event === "opening" && canRecord && <button className="btn btn-secondary" onClick={() => editOpeningBalance(item)}>修改期初餘額</button>}{ownClaim && canClaimExpense && canEditExpenseClaim(item, currentUserId) && <button className="btn btn-primary" onClick={() => void editClaim(item)}>修改報帳</button>}{canReview ? <><button className="btn btn-primary" onClick={() => void reviewEntry(item.id)}>確認並過帳</button>{item.source_type === "expense_claim" && <button className="btn btn-secondary" onClick={() => void returnEntry(item.id)}>退回補正</button>}</> : ownClaim && <span className="finance-case-list__owner">需要「覆核案件」權限才能處理</span>}</div></div>
                 {expandedEntryId === item.id && <FinanceCaseDetails entry={item} items={claimDetails[item.id]} loading={loadingEntryDetails === item.id} />}
               </article>;
             })}</div> : <div className="finance-workspace__empty"><Check size={18} aria-hidden="true" />目前沒有待你覆核的傳票。</div> : <div className="finance-workspace__empty">你可查看待覆核案件；完成確認需要「覆核案件」權限。</div>}
@@ -1161,9 +1236,9 @@ function FinanceCaseDetails({
   return (
     <div className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div><span style={{ color: "var(--text-muted)" }}>案件編號</span><p className="break-all font-mono text-xs">{entry.id}</p></div>
+        <div><span style={{ color: "var(--text-muted)" }}>案件編號</span><p>{entry.reference_no}</p></div>
         <div><span style={{ color: "var(--text-muted)" }}>狀態</span><p>{claimStatusLabel[entry.claim_status || entry.status] || entry.status}</p></div>
-        <div><span style={{ color: "var(--text-muted)" }}>提出人</span><p className="break-all font-mono text-xs">{entry.created_by_id}</p></div>
+        <div><span style={{ color: "var(--text-muted)" }}>提出人</span><p>{entry.created_by_name}</p></div>
         <div><span style={{ color: "var(--text-muted)" }}>備註</span><p>{entry.note || "—"}</p></div>
       </div>
       <div className="mt-4 overflow-x-auto">
@@ -1180,8 +1255,13 @@ function FinanceCaseDetails({
   );
 }
 
-function sourceLabel(source: string | null) {
-  return source === "fund_transfer" ? "資金移轉" : source === "expense_claim" ? "報帳" : "手動登錄";
+function sourceLabel(source: string | null, event?: string | null) {
+  if (source === "fund_transfer") return "資金移轉";
+  if (source === "expense_claim") return "報帳";
+  if (event === "opening") return "期初餘額";
+  if (event?.startsWith("opening_adjustment:")) return "期初調整";
+  if (event === "income") return "收入";
+  return "手動登錄";
 }
 
 function isBudgetedClaimEditable(entry: FinanceJournalOut): boolean {
