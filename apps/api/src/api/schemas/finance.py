@@ -120,6 +120,18 @@ class JournalCreate(BaseModel):
         return self
 
 
+class ManualJournalUpdate(BaseModel):
+    period_id: uuid.UUID
+    entry_date: date
+    fund_account_id: uuid.UUID
+    counterpart_account_id: uuid.UUID
+    description: str = Field(min_length=1, max_length=300)
+    amount: int = Field(gt=0, le=2_000_000_000)
+    source_url: str | None = Field(None, max_length=500)
+    evidence_url: str | None = Field(None, max_length=500)
+    note: str | None = Field(None, max_length=500)
+
+
 class TransferCreate(BaseModel):
     period_id: uuid.UUID
     entry_date: date
@@ -252,7 +264,14 @@ class BudgetAllocationCreate(BaseModel):
 
 
 class BudgetAllocationUpdate(BaseModel):
-    amount: int = Field(gt=0, le=2_000_000_000)
+    node_id: uuid.UUID | None = None
+    amount: int | None = Field(default=None, gt=0, le=2_000_000_000)
+    quantity: Decimal | None = Field(
+        default=None, gt=0, le=100_000, max_digits=12, decimal_places=2
+    )
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
+    unit_price: int | None = Field(default=None, gt=0, le=2_000_000_000)
+    note: str | None = Field(default=None, max_length=2000)
     reason: str = Field(min_length=1, max_length=500)
 
 
@@ -286,6 +305,17 @@ class FinanceExpenseClaimEvidenceOut(FinanceEvidenceUploadOut):
     id: uuid.UUID
     evidence_type: ExpenseEvidenceType
     note: str | None
+    url: str
+
+
+class BudgetAllocationEvidenceCreate(FinanceEvidenceUploadOut):
+    note: str | None = Field(None, max_length=500)
+
+
+class BudgetAllocationEvidenceOut(FinanceEvidenceUploadOut):
+    id: uuid.UUID
+    note: str | None
+    uploaded_at: datetime
     url: str
 
 
@@ -349,6 +379,7 @@ class BudgetAllocationOut(BaseModel):
     note: str | None
     proposed_by_id: uuid.UUID
     proposing_org_id: uuid.UUID
+    evidence: list[BudgetAllocationEvidenceOut] = Field(default_factory=list)
 
 
 class BudgetDetailOut(BudgetOut):
@@ -426,12 +457,14 @@ class JournalLineOut(JournalLineIn):
 class JournalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    reference_no: str
     ledger_id: uuid.UUID
     period_id: uuid.UUID
     entry_date: date
     description: str
     status: JournalStatus
     created_by_id: uuid.UUID
+    created_by_name: str
     reviewed_by_id: uuid.UUID | None
     posted_at: datetime | None
     source_type: str | None
@@ -455,6 +488,7 @@ class JournalOut(BaseModel):
     payment_method: ExpensePaymentMethod = ExpensePaymentMethod.DIRECT
     reimbursement_entry_id: uuid.UUID | None = None
     evidence_complete: bool = False
+    effective_amount: int | None = None
     lines: list[JournalLineOut]
 
 

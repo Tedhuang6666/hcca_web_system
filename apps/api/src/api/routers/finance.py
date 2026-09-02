@@ -17,6 +17,7 @@ from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.finance import (
+    BudgetSubmissionStatus,
     ChartAccount,
     ExpenseClaimItem,
     ExpenseClaimItemEvidence,
@@ -24,6 +25,7 @@ from api.models.finance import (
     FinanceAccountType,
     FinanceBudget,
     FinanceBudgetAllocation,
+    FinanceBudgetAllocationEvidence,
     FinanceBudgetSubmission,
     FinanceLedger,
     FiscalPeriod,
@@ -34,6 +36,8 @@ from api.models.finance import (
 from api.models.user import User
 from api.schemas.finance import (
     BudgetAllocationCreate,
+    BudgetAllocationEvidenceCreate,
+    BudgetAllocationEvidenceOut,
     BudgetAllocationOut,
     BudgetAllocationUpdate,
     BudgetCreate,
@@ -64,6 +68,7 @@ from api.schemas.finance import (
     JournalOut,
     LedgerCreate,
     LedgerOut,
+    ManualJournalUpdate,
     PeriodCreate,
     PeriodOut,
     PublicBudgetAllocationOut,
@@ -97,6 +102,20 @@ async def _assert_ledger_permission(
     codes = await get_user_permission_codes_for_org(db, user.id, ledger.org_id)
     if not codes.intersection(map(str, permissions)):
         raise HTTPException(status_code=403, detail="沒有此組織的財務權限")
+
+
+async def _budget_role_flags(
+    db: AsyncSession, user: User, budget: FinanceBudget
+) -> tuple[bool, bool, bool]:
+    if user.is_superuser:
+        return True, True, True
+    ledger = await service.get_ledger(db, budget.ledger_id)
+    codes = await get_user_permission_codes_for_org(db, user.id, ledger.org_id)
+    return (
+        str(PermissionCode.FINANCE_BUDGET) in codes,
+        str(PermissionCode.FINANCE_BUDGET_PROPOSE) in codes,
+        str(PermissionCode.FINANCE_BUDGET_REVIEW) in codes,
+    )
 
 
 class LedgerPermissionChecker:
@@ -214,7 +233,10 @@ def require_allocation_permission(*permissions: PermissionCode) -> AllocationPer
     dependencies=[
         Depends(
             require_ledger_permission(
-                PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD
+                PermissionCode.FINANCE_EXPENSE_CLAIM,
+                PermissionCode.FINANCE_RECORD,
+                PermissionCode.FINANCE_BUDGET_PROPOSE,
+                PermissionCode.FINANCE_BUDGET,
             )
         )
     ],
@@ -388,10 +410,16 @@ async def import_budget(
     response_model=BudgetDetailOut,
     dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_VIEW))],
 )
-async def get_budget_detail(budget_id: uuid.UUID, db: DbDep, _: CurrentUser) -> BudgetDetailOut:
-    return BudgetDetailOut.model_validate(
-        await service.budget_detail(db, await service.get_budget(db, budget_id))
-    )
+async def get_budget_detail(budget_id: uuid.UUID, db: DbDep, user: CurrentUser) -> BudgetDetailOut:
+    budget = await service.get_budget(db, budget_id)
+    detail = await service.budget_detail(db, budget)
+    can_manage, can_propose, can_review = await _budget_role_flags(db, user, budget)
+    for allocation in detail["allocations"]:
+        if not (
+            can_manage or can_review or (can_propose and allocation["proposed_by_id"] == user.id)
+        ):
+            allocation["evidence"] = []
+    return BudgetDetailOut.model_validate(detail)
 
 
 @router.patch(
@@ -536,8 +564,18 @@ async def update_budget_draft_allocation(
     db: DbDep,
     user: CurrentUser,
 ) -> BudgetAllocationOut:
+    existing = await db.get(FinanceBudgetAllocation, allocation_id)
+    if not existing or existing.submission_id != submission_id:
+        raise HTTPException(404, "預算配置不存在")
+    submission = await db.get(FinanceBudgetSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    budget = await service.get_budget(db, submission.budget_id)
+    can_manage, _, _ = await _budget_role_flags(db, user, budget)
+    if not can_manage and existing.proposed_by_id != user.id:
+        raise HTTPException(403, "只能修改自己提出的預算配置")
     allocation = await service.update_budget_draft_allocation(
-        db, submission_id, allocation_id, body, user.id
+        db, submission_id, allocation_id, body
     )
     await db.commit()
     return BudgetAllocationOut.model_validate(allocation)
@@ -552,8 +590,75 @@ async def update_budget_allocation(
     allocation_id: uuid.UUID, body: BudgetAllocationUpdate, db: DbDep, user: CurrentUser
 ) -> BudgetAllocationOut:
     allocation = await service.update_budget_allocation(db, allocation_id, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_allocation",
+        entity_id=str(allocation.id),
+        action="finance.budget_allocation_update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"修正已核准預算明細：{body.reason}",
+    )
     await db.commit()
     return BudgetAllocationOut.model_validate(allocation)
+
+
+@router.post(
+    "/budget-allocations/{allocation_id}/evidence",
+    response_model=BudgetAllocationEvidenceOut,
+    status_code=201,
+    dependencies=[
+        Depends(
+            require_allocation_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
+)
+async def add_budget_allocation_evidence(
+    allocation_id: uuid.UUID,
+    body: BudgetAllocationEvidenceCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> BudgetAllocationEvidenceOut:
+    allocation = await db.get(FinanceBudgetAllocation, allocation_id)
+    if not allocation:
+        raise HTTPException(404, "預算配置不存在")
+    submission = await db.get(FinanceBudgetSubmission, allocation.submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    budget = await service.get_budget(db, submission.budget_id)
+    can_manage, can_propose, _ = await _budget_role_flags(db, user, budget)
+    is_editable = submission.status in {
+        BudgetSubmissionStatus.DRAFT,
+        BudgetSubmissionStatus.RETURNED,
+    }
+    if not (
+        (can_manage and (is_editable or submission.status == BudgetSubmissionStatus.APPROVED))
+        or (can_propose and is_editable and allocation.proposed_by_id == user.id)
+    ):
+        raise HTTPException(403, "只有預算管理幹部或此草案的提出人可以補充憑證")
+    evidence = await service.add_budget_allocation_evidence(db, allocation_id, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_allocation",
+        entity_id=str(allocation_id),
+        action="finance.budget_evidence_add",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"補充預算憑證：{evidence.filename}",
+    )
+    await db.commit()
+    return BudgetAllocationEvidenceOut(
+        id=evidence.id,
+        storage_key=evidence.storage_key,
+        filename=evidence.filename,
+        content_type=evidence.content_type,
+        file_size=evidence.file_size,
+        note=evidence.note,
+        uploaded_at=evidence.created_at,
+        url=f"/finance/budget-evidence/{evidence.id}",
+    )
 
 
 @router.get(
@@ -691,6 +796,39 @@ async def create_journal(
     entry = await service.create_journal(db, ledger_id, body, user.id)
     await db.commit()
     return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.patch(
+    "/journals/{entry_id}/manual-entry",
+    response_model=JournalOut,
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_RECORD))],
+)
+async def update_manual_journal(
+    entry_id: uuid.UUID, body: ManualJournalUpdate, db: DbDep, user: CurrentUser
+) -> JournalOut:
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry:
+        raise HTTPException(404, "傳票不存在")
+    updated = await service.update_manual_journal(db, entry, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_journal",
+        entity_id=str(updated.id),
+        action=(
+            "finance.opening_balance_adjustment"
+            if updated.id != entry.id
+            else "finance.manual_entry_update"
+        ),
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=(
+            f"建立期初餘額調整：{updated.description}"
+            if updated.id != entry.id
+            else f"修改待覆核傳票：{updated.description}"
+        ),
+    )
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, updated))
 
 
 @router.post(
@@ -1129,8 +1267,44 @@ async def get_public_budget_detail(budget_id: uuid.UUID, db: DbDep) -> PublicBud
         allocations=[
             PublicBudgetAllocationOut.model_validate(item)
             for item in detail["allocations"]
-            if item.submission_id in approved_submission_ids
+            if item["submission_id"] in approved_submission_ids
         ],
+    )
+
+
+@router.get("/budget-evidence/{evidence_id}")
+async def download_budget_evidence(evidence_id: uuid.UUID, db: DbDep, user: CurrentUser):
+    evidence = await db.get(FinanceBudgetAllocationEvidence, evidence_id)
+    if not evidence:
+        raise HTTPException(404, "預算憑證不存在")
+    allocation = await db.get(FinanceBudgetAllocation, evidence.allocation_id)
+    if not allocation:
+        raise HTTPException(404, "預算明細不存在")
+    submission = await db.get(FinanceBudgetSubmission, allocation.submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    budget = await service.get_budget(db, submission.budget_id)
+    can_manage, can_propose, can_review = await _budget_role_flags(db, user, budget)
+    if not (can_manage or can_review or (can_propose and allocation.proposed_by_id == user.id)):
+        raise HTTPException(403, "沒有檢視這份內部預算憑證的權限")
+    service.validate_evidence_key(evidence.storage_key, budget.ledger_id)
+    storage = get_storage()
+    local_path = storage.local_path(evidence.storage_key)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(404, "預算憑證檔案不存在")
+        return FileResponse(
+            local_path,
+            filename=evidence.filename,
+            media_type=evidence.content_type,
+            content_disposition_type="inline",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return RedirectResponse(
+        await storage.get_url(
+            evidence.storage_key, disposition="inline", download_name=evidence.filename
+        ),
+        headers={"Cache-Control": "private, no-store"},
     )
 
 

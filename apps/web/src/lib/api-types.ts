@@ -5493,6 +5493,40 @@ export interface paths {
         patch: operations["update_budget_allocation_finance_budget_allocations__allocation_id__patch"];
         trace?: never;
     };
+    "/finance/budget-allocations/{allocation_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Budget Allocation Evidence */
+        post: operations["add_budget_allocation_evidence_finance_budget_allocations__allocation_id__evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/budget-evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Budget Evidence */
+        get: operations["download_budget_evidence_finance_budget_evidence__evidence_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finance/budget-submissions/{submission_id}/allocations": {
         parameters: {
             query?: never;
@@ -5746,6 +5780,23 @@ export interface paths {
         head?: never;
         /** Update Expense Claim */
         patch: operations["update_expense_claim_finance_journals__entry_id__expense_claim_patch"];
+        trace?: never;
+    };
+    "/finance/journals/{entry_id}/manual-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Manual Journal */
+        patch: operations["update_manual_journal_finance_journals__entry_id__manual_entry_patch"];
         trace?: never;
     };
     "/finance/journals/{entry_id}/post": {
@@ -17580,10 +17631,50 @@ export interface components {
             /** Unit Price */
             unit_price?: number | null;
         };
+        /** BudgetAllocationEvidenceCreate */
+        BudgetAllocationEvidenceCreate: {
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /** Note */
+            note?: string | null;
+            /** Storage Key */
+            storage_key: string;
+        };
+        /** BudgetAllocationEvidenceOut */
+        BudgetAllocationEvidenceOut: {
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note: string | null;
+            /** Storage Key */
+            storage_key: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+            /** Url */
+            url: string;
+        };
         /** BudgetAllocationOut */
         BudgetAllocationOut: {
             /** Amount */
             amount: number;
+            /** Evidence */
+            evidence?: components["schemas"]["BudgetAllocationEvidenceOut"][];
             /**
              * Id
              * Format: uuid
@@ -17621,9 +17712,19 @@ export interface components {
         /** BudgetAllocationUpdate */
         BudgetAllocationUpdate: {
             /** Amount */
-            amount: number;
+            amount?: number | null;
+            /** Node Id */
+            node_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Quantity */
+            quantity?: number | string | null;
             /** Reason */
             reason: string;
+            /** Unit */
+            unit?: string | null;
+            /** Unit Price */
+            unit_price?: number | null;
         };
         /** BudgetCreate */
         BudgetCreate: {
@@ -24390,8 +24491,12 @@ export interface components {
              * Format: uuid
              */
             created_by_id: string;
+            /** Created By Name */
+            created_by_name: string;
             /** Description */
             description: string;
+            /** Effective Amount */
+            effective_amount?: number | null;
             /**
              * Entry Date
              * Format: date
@@ -24439,6 +24544,8 @@ export interface components {
             procurement_updated_by_id: string | null;
             /** Proposing Org Id */
             proposing_org_id?: string | null;
+            /** Reference No */
+            reference_no: string;
             /** Reimbursement Entry Id */
             reimbursement_entry_id?: string | null;
             /** Reviewed By Id */
@@ -25001,6 +25108,39 @@ export interface components {
             message: string;
             /** Until */
             until?: number | null;
+        };
+        /** ManualJournalUpdate */
+        ManualJournalUpdate: {
+            /** Amount */
+            amount: number;
+            /**
+             * Counterpart Account Id
+             * Format: uuid
+             */
+            counterpart_account_id: string;
+            /** Description */
+            description: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Evidence Url */
+            evidence_url?: string | null;
+            /**
+             * Fund Account Id
+             * Format: uuid
+             */
+            fund_account_id: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Period Id
+             * Format: uuid
+             */
+            period_id: string;
+            /** Source Url */
+            source_url?: string | null;
         };
         /**
          * ManualTallyRequest
@@ -51020,6 +51160,72 @@ export interface operations {
             };
         };
     };
+    add_budget_allocation_evidence_finance_budget_allocations__allocation_id__evidence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                allocation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetAllocationEvidenceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetAllocationEvidenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_budget_evidence_finance_budget_evidence__evidence_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_budget_allocation_finance_budget_submissions__submission_id__allocations_post: {
         parameters: {
             query?: never;
@@ -51495,6 +51701,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ExpenseClaimCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_manual_journal_finance_journals__entry_id__manual_entry_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualJournalUpdate"];
             };
         };
         responses: {

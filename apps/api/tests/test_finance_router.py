@@ -65,6 +65,22 @@ async def _grant_many(db_session, users, codes: list[str]) -> Org:
     return org
 
 
+async def _grant_on_org(db_session, user, org: Org, codes: list[str]) -> None:
+    position = Position(org_id=org.id, name=f"財務角色-{uuid.uuid4().hex[:6]}")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add_all([Permission(position_id=position.id, code=code) for code in codes])
+    db_session.add(
+        UserPosition(
+            user_id=user.id,
+            position_id=position.id,
+            start_date=local_today() - timedelta(days=1),
+            end_date=None,
+        )
+    )
+    await db_session.flush()
+
+
 async def _make_ledger(db_session, org: Org | None = None):
     if org is None:
         org = Org(name=f"ledger-org-{uuid.uuid4().hex[:6]}")
@@ -240,6 +256,96 @@ async def test_update_expense_account_name_with_manage_permission(
 
     assert response.status_code == 200
     assert response.json()["name"] == "活動文具支出"
+
+
+async def test_opening_balance_can_be_corrected_without_exposing_uuid(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(
+        db_session, [member_user], ["finance:record", "finance:review", "finance:view"]
+    )
+    ledger, period, fund, _ = await _make_ledger(db_session, org)
+    equity = await db_session.scalar(
+        select(ChartAccount).where(
+            ChartAccount.ledger_id == ledger.id,
+            ChartAccount.account_type == "equity",
+        )
+    )
+    fund_account = await db_session.scalar(
+        select(FundAccount).where(FundAccount.chart_account_id == fund.id)
+    )
+    ac = authed_client_factory(member_user)
+    created = await ac.post(
+        f"/finance/ledgers/{ledger.id}/journals",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-01",
+            "description": "期初餘額｜銀行存款",
+            "source_type": "manual_entry",
+            "source_event": "opening",
+            "lines": [
+                {"account_id": str(fund.id), "debit": 500},
+                {"account_id": str(equity.id), "credit": 500},
+            ],
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["reference_no"].startswith("FIN-260701-")
+    assert created.json()["created_by_name"] == member_user.display_name
+
+    entry_id = created.json()["id"]
+    await ac.post(f"/finance/journals/{entry_id}/submit")
+    corrected = await ac.patch(
+        f"/finance/journals/{entry_id}/manual-entry",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-01",
+            "fund_account_id": str(fund_account.id),
+            "counterpart_account_id": str(equity.id),
+            "description": "期初餘額｜銀行存款",
+            "amount": 650,
+        },
+    )
+    assert corrected.status_code == 200
+    assert corrected.json()["id"] == entry_id
+    assert corrected.json()["effective_amount"] == 650
+    assert sum(line["debit"] for line in corrected.json()["lines"]) == 650
+
+    posted = await ac.post(f"/finance/journals/{entry_id}/post")
+    assert posted.status_code == 200
+    adjustment = await ac.patch(
+        f"/finance/journals/{entry_id}/manual-entry",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-02",
+            "fund_account_id": str(fund_account.id),
+            "counterpart_account_id": str(equity.id),
+            "description": "銀行存款",
+            "amount": 700,
+        },
+    )
+    assert adjustment.status_code == 200
+    assert adjustment.json()["id"] != entry_id
+    assert adjustment.json()["source_event"].startswith("opening_adjustment:")
+    assert adjustment.json()["status"] == "pending_review"
+    assert sum(line["debit"] for line in adjustment.json()["lines"]) == 50
+
+    posted_adjustment = await ac.post(f"/finance/journals/{adjustment.json()['id']}/post")
+    assert posted_adjustment.status_code == 200
+    second_adjustment = await ac.patch(
+        f"/finance/journals/{entry_id}/manual-entry",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-03",
+            "fund_account_id": str(fund_account.id),
+            "counterpart_account_id": str(equity.id),
+            "description": "銀行存款",
+            "amount": 675,
+        },
+    )
+    assert second_adjustment.status_code == 200
+    assert second_adjustment.json()["id"] != adjustment.json()["id"]
+    assert sum(line["credit"] for line in second_adjustment.json()["lines"]) == 25
 
 
 async def test_import_budget_xlsx_creates_categories_and_allocations(
@@ -490,14 +596,20 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     db_session, member_user, make_user, authed_client_factory
 ) -> None:
     reviewer = await make_user(email="budget-reviewer@school.edu")
+    proposer = await make_user(email="budget-proposer@school.edu")
+    viewer = await make_user(email="budget-viewer@school.edu")
     org = await _grant_many(
         db_session,
         [member_user, reviewer],
         ["finance:view", "finance:budget", "finance:budget_propose", "finance:budget_review"],
     )
     ledger, period, _, _ = await _make_ledger(db_session, org)
+    await _grant_on_org(db_session, proposer, org, ["finance:view", "finance:budget_propose"])
+    await _grant_on_org(db_session, viewer, org, ["finance:view"])
     creator = authed_client_factory(member_user)
     reviewer_client = authed_client_factory(reviewer)
+    proposer_client = authed_client_factory(proposer)
+    viewer_client = authed_client_factory(viewer)
 
     budget = await creator.post(
         f"/finance/ledgers/{ledger.id}/budgets",
@@ -528,6 +640,41 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
         },
     )
     assert allocation.status_code == 201
+    manager_correction = await reviewer_client.patch(
+        f"/finance/budget-submissions/{submission.json()['id']}/allocations/"
+        f"{allocation.json()['id']}",
+        json={
+            "node_id": leaf.json()["id"],
+            "quantity": 25,
+            "unit": "件",
+            "unit_price": 200,
+            "proposing_org_id": str(org.id),
+            "note": "由預算幹部接手確認",
+        },
+    )
+    assert manager_correction.status_code == 200
+    uploaded = await creator.post(
+        f"/finance/ledgers/{ledger.id}/evidence",
+        files={"file": ("估價單.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
+    )
+    assert uploaded.status_code == 201
+    evidence = await creator.post(
+        f"/finance/budget-allocations/{allocation.json()['id']}/evidence",
+        json={**uploaded.json(), "note": "廠商估價單"},
+    )
+    assert evidence.status_code == 201
+    assert evidence.json()["filename"] == "估價單.pdf"
+    unauthorized_evidence = await proposer_client.post(
+        f"/finance/budget-allocations/{allocation.json()['id']}/evidence",
+        json=uploaded.json(),
+    )
+    assert unauthorized_evidence.status_code == 403
+    viewer_detail = await viewer_client.get(f"/finance/budgets/{budget.json()['id']}")
+    assert viewer_detail.status_code == 200
+    assert viewer_detail.json()["allocations"][0]["evidence"] == []
+    assert (await viewer_client.get(evidence.json()["url"])).status_code == 403
+    downloaded = await creator.get(evidence.json()["url"])
+    assert downloaded.status_code == 200
     submitted = await creator.post(f"/finance/budget-submissions/{submission.json()['id']}/submit")
     assert submitted.json()["status"] == "submitted"
     approved = await creator.post(
@@ -539,6 +686,20 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     assert detail.status_code == 200
     leaf_detail = next(item for item in detail.json()["nodes"] if item["id"] == leaf.json()["id"])
     assert leaf_detail["allocated_amount"] == 5000
+    assert detail.json()["allocations"][0]["evidence"][0]["note"] == "廠商估價單"
+    revised = await creator.patch(
+        f"/finance/budget-allocations/{allocation.json()['id']}",
+        json={
+            "quantity": 30,
+            "unit": "件",
+            "unit_price": 200,
+            "amount": 6000,
+            "note": "依核准數量修正",
+            "reason": "議決增列五件",
+        },
+    )
+    assert revised.status_code == 200
+    assert revised.json()["amount"] == 6000
     published = await reviewer_client.patch(
         f"/finance/budgets/{budget.json()['id']}/publication",
         json={"is_public": True},
@@ -551,4 +712,6 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     public_detail = await creator.get(f"/finance/public/budgets/{budget.json()['id']}")
     assert public_detail.status_code == 200
     assert public_detail.json()["allocations"][0]["unit"] == "件"
+    assert public_detail.json()["allocations"][0]["amount"] == 6000
     assert "proposed_by_id" not in public_detail.json()["allocations"][0]
+    assert "evidence" not in public_detail.json()["allocations"][0]

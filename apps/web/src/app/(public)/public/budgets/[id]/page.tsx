@@ -35,15 +35,38 @@ export default async function PublicBudgetDetailPage({ params }: PageProps) {
   if (!budget) notFound();
 
   const nodes = new Map(budget.nodes.map((node) => [node.id, node]));
-  const labelFor = (nodeId: string) => {
-    const names: string[] = [];
+  const pathFor = (nodeId: string) => {
+    const path: (typeof budget.nodes)[number][] = [];
     let current = nodes.get(nodeId);
     while (current) {
-      names.unshift(current.name);
+      path.unshift(current);
       current = current.parent_id ? nodes.get(current.parent_id) : undefined;
     }
-    return names.join(" ＞ ");
+    return path;
   };
+  const groups = Array.from(budget.allocations.reduce((result, allocation) => {
+    const path = pathFor(allocation.node_id);
+    const groupNode = path[0];
+    const groupId = groupNode?.id || allocation.node_id;
+    const group = result.get(groupId) || {
+      id: groupId,
+      name: groupNode?.name || "未分類",
+      total: 0,
+      rows: [] as Array<{ allocation: typeof allocation; detail: string }>,
+    };
+    group.total += allocation.amount;
+    group.rows.push({
+      allocation,
+      detail: path.slice(1).map((item) => item.name).join(" ＞ ") || group.name,
+    });
+    result.set(groupId, group);
+    return result;
+  }, new Map<string, {
+    id: string;
+    name: string;
+    total: number;
+    rows: Array<{ allocation: (typeof budget.allocations)[number]; detail: string }>;
+  }>()).values());
   const total = budget.allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
 
   return (
@@ -62,20 +85,19 @@ export default async function PublicBudgetDetailPage({ params }: PageProps) {
 
       <section className="public-budget-detail__section" aria-labelledby="public-budget-lines-heading">
         <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">核准編列明細</h2><p>金額依核准預算案的末層條目彙整。</p></div></div><span>{budget.allocations.length} 筆</span></header>
-        <div className="public-budget-detail__table"><table><thead><tr><th>預算項目</th><th>數量</th><th>單位</th><th>單價</th><th>總額</th><th>備註</th></tr></thead>
+        <div className="public-budget-detail__table"><table><thead><tr><th>項目</th><th>細項</th><th>數量</th><th>單價</th><th>總額（含稅）</th><th>項目總額</th><th>備註</th></tr></thead>
           <tbody>
-            {budget.allocations.map((allocation) => (
-              <tr key={allocation.id}>
-                <td><strong>{labelFor(allocation.node_id)}</strong></td>
-                <td>{allocation.quantity ?? "—"}</td>
-                <td>{allocation.unit || "—"}</td>
-                <td>{allocation.unit_price ? formatAmount(allocation.unit_price) : "—"}</td>
-                <td><strong>{formatAmount(allocation.amount)}</strong></td>
-                <td>{allocation.note || "—"}</td>
-              </tr>
-            ))}
+            {groups.flatMap((group) => group.rows.map(({ allocation, detail }, rowIndex) => <tr key={allocation.id}>
+              {rowIndex === 0 && <th scope="rowgroup" rowSpan={group.rows.length}>{group.name}</th>}
+              <td><strong>{detail}</strong></td>
+              <td>{allocation.quantity ?? "—"}{allocation.unit || ""}</td>
+              <td>{allocation.unit_price ? formatAmount(allocation.unit_price) : "＊"}</td>
+              <td><strong>{formatAmount(allocation.amount)}</strong></td>
+              {rowIndex === 0 && <td rowSpan={group.rows.length} className="public-budget-detail__group-total"><strong>{formatAmount(group.total)}</strong></td>}
+              <td>{allocation.note || "—"}</td>
+            </tr>))}
           </tbody></table></div>
-        <div className="public-budget-detail__cards">{budget.allocations.map((allocation) => <article key={allocation.id}><h3>{labelFor(allocation.node_id)}</h3><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"} {allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? formatAmount(allocation.unit_price) : "—"}</dd></div><div><dt>總額</dt><dd>{formatAmount(allocation.amount)}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}</article>)}</div>
+        <div className="public-budget-detail__cards">{groups.map((group) => <section key={group.id}><header><h3>{group.name}</h3><span>項目總額<strong>{formatAmount(group.total)}</strong></span></header>{group.rows.map(({ allocation, detail }) => <article key={allocation.id}><div><h4>{detail}</h4><strong>{formatAmount(allocation.amount)}</strong></div><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"}{allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? formatAmount(allocation.unit_price) : "＊"}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}</article>)}</section>)}</div>
       </section>
 
       <section className="public-budget-detail__approvals" aria-labelledby="public-budget-approvals-heading">

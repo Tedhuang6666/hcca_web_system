@@ -376,6 +376,28 @@ class FinanceBudgetAllocationRevision(Base, TimestampMixin):
     changed_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
+    previous_details: Mapped[dict | None] = mapped_column(JSONDict, nullable=True)
+    next_details: Mapped[dict | None] = mapped_column(JSONDict, nullable=True)
+
+
+class FinanceBudgetAllocationEvidence(Base, TimestampMixin):
+    __tablename__ = "finance_budget_allocation_evidence"
+    __table_args__ = (Index("ix_finance_budget_evidence_allocation", "allocation_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    allocation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_budget_allocations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    uploaded_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
 
 
 class ExpenseClaimItemEvidence(Base, TimestampMixin):
