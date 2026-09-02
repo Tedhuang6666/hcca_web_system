@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, Check, FileText, ShieldCheck } from "lucide-react";
 
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
@@ -46,53 +47,47 @@ export default async function PublicBudgetDetailPage({ params }: PageProps) {
   const total = budget.allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <Link href="/public/budgets" className="text-sm font-medium" style={{ color: "var(--public-accent-text)" }}>← 返回預算列表</Link>
-      <header>
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>{budget.period_name}</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>{budget.name}</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-7" style={{ color: "var(--text-muted)" }}>
-          已核准預算合計 {formatAmount(total)}。本頁僅供議員檢視，不能修改資料或查看憑證。
-        </p>
+    <div className="public-budget-detail">
+      <Link href="/public/budgets" className="public-budget-detail__back"><ArrowLeft size={15} aria-hidden="true" />返回公開預算</Link>
+      <header className="public-budget-detail__header">
+        <div>
+          <span>{budget.period_name}</span>
+          <h1>{budget.name}</h1>
+          <p>這是完成內部審核後的核准版本；後續追加預算與核准紀錄也會保留在同一頁。</p>
+        </div>
+        <div className="public-budget-detail__total"><span>核准預算總額</span><strong>{formatAmount(total)}</strong><small>{budget.allocations.length} 筆編列明細</small></div>
       </header>
 
-      <section className="overflow-x-auto border-y" style={{ borderColor: "var(--public-border)" }}>
-        <table className="w-full min-w-[780px] text-sm">
-          <thead style={{ background: "var(--public-soft)" }}>
-            <tr>
-              <th className="px-4 py-3 text-left">項目</th>
-              <th className="px-4 py-3 text-right">數量</th>
-              <th className="px-4 py-3 text-left">單位</th>
-              <th className="px-4 py-3 text-right">單價</th>
-              <th className="px-4 py-3 text-right">總額</th>
-              <th className="px-4 py-3 text-left">備註</th>
-            </tr>
-          </thead>
+      <aside className="public-budget-detail__privacy"><ShieldCheck size={18} aria-hidden="true" /><p><strong>公開資料不包含個人資訊。</strong>報帳人、內部憑證、帳戶與承辦資料都不會出現在這個頁面。</p></aside>
+
+      <section className="public-budget-detail__section" aria-labelledby="public-budget-lines-heading">
+        <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">核准編列明細</h2><p>金額依核准預算案的末層條目彙整。</p></div></div><span>{budget.allocations.length} 筆</span></header>
+        <div className="public-budget-detail__table"><table><thead><tr><th>預算項目</th><th>數量</th><th>單位</th><th>單價</th><th>總額</th><th>備註</th></tr></thead>
           <tbody>
             {budget.allocations.map((allocation) => (
-              <tr key={allocation.id} className="border-t" style={{ borderColor: "var(--public-border)" }}>
-                <td className="px-4 py-3 font-medium">{labelFor(allocation.node_id)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{allocation.quantity ?? "—"}</td>
-                <td className="px-4 py-3">{allocation.unit || "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{allocation.unit_price ? formatAmount(allocation.unit_price) : "—"}</td>
-                <td className="px-4 py-3 text-right font-medium tabular-nums">{formatAmount(allocation.amount)}</td>
-                <td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>{allocation.note || "—"}</td>
+              <tr key={allocation.id}>
+                <td><strong>{labelFor(allocation.node_id)}</strong></td>
+                <td>{allocation.quantity ?? "—"}</td>
+                <td>{allocation.unit || "—"}</td>
+                <td>{allocation.unit_price ? formatAmount(allocation.unit_price) : "—"}</td>
+                <td><strong>{formatAmount(allocation.amount)}</strong></td>
+                <td>{allocation.note || "—"}</td>
               </tr>
             ))}
-          </tbody>
-        </table>
+          </tbody></table></div>
+        <div className="public-budget-detail__cards">{budget.allocations.map((allocation) => <article key={allocation.id}><h3>{labelFor(allocation.node_id)}</h3><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"} {allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? formatAmount(allocation.unit_price) : "—"}</dd></div><div><dt>總額</dt><dd>{formatAmount(allocation.amount)}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}</article>)}</div>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>核准紀錄</h2>
-        <ul className="border-y" style={{ borderColor: "var(--public-border)" }}>
+      <section className="public-budget-detail__approvals" aria-labelledby="public-budget-approvals-heading">
+        <header><h2 id="public-budget-approvals-heading">核准紀錄</h2><p>初始預算與每一次追加案都會依審核時間保留。</p></header>
+        <ol>
           {budget.submissions.map((submission) => (
-            <li key={submission.id} className="border-b px-1 py-4 last:border-b-0" style={{ borderColor: "var(--public-border)" }}>
-              <p className="font-medium">{submission.title}</p>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{submission.review_note || "已完成內部審核。"}</p>
+            <li key={submission.id}>
+              <span><Check size={14} aria-hidden="true" /></span>
+              <div><h3>{submission.title}</h3><p>{submission.review_note || "已完成內部審核。"}</p>{submission.reviewed_at && <time dateTime={submission.reviewed_at}>{new Intl.DateTimeFormat("zh-TW", { dateStyle: "long" }).format(new Date(submission.reviewed_at))}</time>}</div>
             </li>
           ))}
-        </ul>
+        </ol>
       </section>
     </div>
   );

@@ -3,12 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
+  BookOpenText,
   Check,
   ClipboardCheck,
   FilePlus2,
+  Landmark,
+  LayoutDashboard,
+  ListChecks,
+  PiggyBank,
   ReceiptText,
   Settings2,
   ShieldCheck,
+  WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
@@ -56,7 +62,15 @@ const entryTypes = {
   expense: { label: "支出／報帳", help: "一張報帳可登錄多個購買品項，系統會自動計算總額。" },
 } as const;
 type EntryType = keyof typeof entryTypes;
-type FinanceTab = "workspace" | "ledger" | "entry" | "funds" | "accounts" | "review" | "claims" | "budget";
+type FinanceTab =
+  | "workspace"
+  | "ledger"
+  | "entry"
+  | "funds"
+  | "accounts"
+  | "review"
+  | "claims"
+  | "budget";
 type ManagedAccountType = "expense" | "revenue";
 
 const managedAccountLabels: Record<ManagedAccountType, { title: string; singular: string }> = {
@@ -114,6 +128,7 @@ export default function FinancePage() {
   const [funds, setFunds] = useState<FundAccountOut[]>([]);
   const [periods, setPeriods] = useState<PeriodOut[]>([]);
   const [journals, setJournals] = useState<FinanceJournalOut[]>([]);
+  const [isBooting, setIsBooting] = useState(true);
   const [currentUserId, setCurrentUserId] = useState("");
   const [claimDetails, setClaimDetails] = useState<Record<string, FinanceExpenseClaimItemOut[]>>({});
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
@@ -180,7 +195,8 @@ export default function FinancePage() {
 
   useEffect(() => {
     const id = localStorage.getItem("finance.ledger_id");
-    if (id) void load(id);
+    if (id) void load(id).finally(() => setIsBooting(false));
+    else setIsBooting(false);
   }, [load]);
 
   useEffect(() => {
@@ -337,24 +353,28 @@ export default function FinancePage() {
     if (entryType !== "expense" && !canRecord) {
       return toast.error("你沒有登錄期初餘額或收入的權限");
     }
+    if (entryType === "expense") {
+      if (!claimItems.every((item) => (
+        item.name.trim()
+        && Number(item.unit_price) > 0
+        && Number(item.quantity) > 0
+        && item.unit?.trim()
+      ))) {
+        return toast.error("請完整填寫每個品項、單價、數量與單位");
+      }
+      if (!claimOrgId) return toast.error("請選擇提出部門");
+      if (paymentMethod === "advance" && !advancedById) return toast.error("請選擇代墊人");
+    } else if (!Number(entryAmount)) {
+      return toast.error("請填寫金額");
+    }
 
     try {
+      setIsEvidenceUploading(true);
       let finalEvidenceKey: string | undefined;
       if (evidenceFile) {
-        setIsEvidenceUploading(true);
         finalEvidenceKey = (await financeApi.uploadEvidence(ledger.id, evidenceFile)).storage_key;
       }
       if (entryType === "expense") {
-        if (!claimItems.every((item) => (
-          item.name.trim()
-          && Number(item.unit_price) > 0
-          && Number(item.quantity) > 0
-          && item.unit?.trim()
-        ))) {
-          return toast.error("請完整填寫每個品項、單價、數量與單位");
-        }
-        if (!claimOrgId) return toast.error("請選擇提出部門");
-        if (paymentMethod === "advance" && !advancedById) return toast.error("請選擇代墊人");
         const itemEvidence = await Promise.all(itemEvidenceFiles.map((files) => Promise.all(files.map(async (file) => {
           const stored = await financeApi.uploadEvidence(ledger.id, file);
           return { ...stored, evidence_type: "receipt" as const };
@@ -393,7 +413,6 @@ export default function FinancePage() {
           : "報帳已送覆核");
       } else {
         const amount = Number(entryAmount);
-        if (!amount) return toast.error("請填寫金額");
         const fundLine = entryType === "opening"
           ? { account_id: fund.chart_account_id, debit: amount, credit: 0 }
           : { account_id: fund.chart_account_id, debit: amount, credit: 0 };
@@ -700,69 +719,177 @@ export default function FinancePage() {
   ].filter(Boolean) as string[];
   const editingEntry = editingEntryId ? journals.find((item) => item.id === editingEntryId) : undefined;
   const editingBudgetedClaim = Boolean(editingEntry && isBudgetedClaimEditable(editingEntry));
+  const totalFundBalance = funds.reduce((total, fund) => total + fund.balance, 0);
+  const actionableCount = roleQueues.reduce((total, queue) => total + queue.count, 0);
+  const recentClaims = expenseClaims.slice(0, 3);
+  const expenseBasicsReady = Boolean(
+    periodId && fundId && counterAccountId && entryDescription.trim() && claimOrgId,
+  );
+  const expenseItemsReady = claimItems.every((item) => (
+    item.name.trim()
+    && Number(item.unit_price) > 0
+    && Number(item.quantity) > 0
+    && item.unit?.trim()
+  ));
+  const expensePaymentReady = paymentMethod === "direct" || Boolean(advancedById);
+  const expenseReady = expenseBasicsReady && expenseItemsReady && expensePaymentReady;
+  const primaryNavigation = [
+    { id: "workspace" as const, label: "工作台", icon: LayoutDashboard },
+    { id: "entry" as const, label: "建立報帳", icon: FilePlus2 },
+    { id: "review" as const, label: "待我覆核", icon: ClipboardCheck, count: pendingReviewClaims.length },
+    { id: "claims" as const, label: "案件追蹤", icon: ListChecks },
+    { id: "budget" as const, label: "共同預算", icon: PiggyBank },
+  ];
+  const settingsNavigation = [
+    { id: "ledger" as const, label: "帳本與期間", icon: BookOpenText },
+    { id: "funds" as const, label: "資金保管", icon: WalletCards },
+    { id: "accounts" as const, label: "收支科目", icon: Settings2 },
+  ];
+
+  if (isBooting) {
+    return (
+      <main className="finance-page" aria-busy="true" aria-label="正在載入財務工作區">
+        <div className="finance-loading" role="status">
+          <span className="finance-loading__mark" aria-hidden="true" />
+          <div>
+            <strong>正在開啟財務工作區</strong>
+            <p>同步帳本、會計期間與待辦案件…</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>班聯會財務總帳</p>
-          <h1 className="text-2xl font-semibold">報帳與財務</h1>
-          <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-            從送件到付款都在同一個案件裡追蹤；你能看到的案件與可執行的操作，由權限決定。
-          </p>
+    <main className="finance-page">
+      <header className="finance-header">
+        <div className="finance-header__copy">
+          <h1>財務作業桌</h1>
+          <p>報帳、覆核、付款與核銷共用同一條案件脈絡，現在輪到誰一眼就知道。</p>
         </div>
-        {ledger && <div className="flex flex-wrap gap-2"><button className="btn btn-secondary" onClick={changeLedger}>切換組織帳本</button>{canClaimExpense && <button className="btn btn-primary" onClick={() => { setEntryType("expense"); setActiveTab("entry"); }}><FilePlus2 size={16} aria-hidden="true" />送出報帳</button>}</div>}
+        {ledger && (
+          <div className="finance-header__actions">
+            <button className="btn btn-secondary" onClick={changeLedger}>切換組織帳本</button>
+            {canClaimExpense && (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setEntryType("expense");
+                  setActiveTab("entry");
+                }}
+              >
+                <FilePlus2 size={16} aria-hidden="true" />建立報帳
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       {!ledger ? (
-        <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
-          <h2 className="font-semibold">先選擇要管理的組織</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>每個組織各有一套帳本與資金餘額；已建立的帳本會直接開啟。</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="text-sm">組織<select className="input mt-1" value={orgId} onChange={(event) => setOrgId(event.target.value)}><option value="">請選擇組織</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.prefix ? `${org.prefix}｜` : ""}{org.name}</option>)}</select></label>
-            <label className="text-sm">帳本名稱<input className="input mt-1" value={ledgerName} onChange={(event) => setLedgerName(event.target.value)} /></label>
+        <section className="finance-onboarding">
+          <div className="finance-onboarding__guide">
+            <Landmark size={24} aria-hidden="true" />
+            <div>
+              <h2>先開啟一套組織帳本</h2>
+              <p>帳本會保存會計期間、資金位置、收支科目與每一筆報帳的完整處理紀錄。</p>
+            </div>
           </div>
-          <button className="btn btn-primary mt-4" disabled={!orgId} onClick={() => void initialize()}>開啟帳本</button>
+          <div className="finance-onboarding__form">
+            <label>
+              <span>管理組織</span>
+              <select className="input" value={orgId} onChange={(event) => setOrgId(event.target.value)}>
+                <option value="">選擇組織</option>
+                {orgs.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.prefix ? `${org.prefix}｜` : ""}{org.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>帳本名稱</span>
+              <input
+                className="input"
+                value={ledgerName}
+                onChange={(event) => setLedgerName(event.target.value)}
+              />
+            </label>
+            <button className="btn btn-primary" disabled={!orgId} onClick={() => void initialize()}>
+              開啟財務工作區 <ArrowRight size={16} aria-hidden="true" />
+            </button>
+          </div>
         </section>
       ) : (
-        <>
-          <nav className="finance-workspace-nav" aria-label="財務功能">
+        <div className="finance-module">
+          <nav className="finance-workspace-nav" aria-label="財務作業導覽">
+            <div className="finance-workspace-nav__context">
+              <strong>{ledger.name}</strong>
+              <span>{activePeriod?.name || "尚未選擇會計期間"}</span>
+            </div>
             <div className="finance-workspace-nav__primary">
-              {([
-                ["workspace", "工作台"],
-                ["entry", "送出報帳"],
-                ["review", "待我覆核"],
-                ["claims", "所有案件"],
-              ] as const).map(([tab, label]) => <button key={tab} className={`btn ${activeTab === tab ? "btn-primary" : "btn-secondary"}`} aria-pressed={activeTab === tab} onClick={() => { if (tab === "entry") setEntryType("expense"); setActiveTab(tab); }}>{label}</button>)}
+              {primaryNavigation.map(({ id, label, icon: Icon, count }) => (
+                <button
+                  key={id}
+                  className={`finance-workspace-nav__link ${activeTab === id ? "is-active" : ""}`}
+                  aria-current={activeTab === id ? "page" : undefined}
+                  onClick={() => {
+                    if (id === "entry") setEntryType("expense");
+                    setActiveTab(id);
+                  }}
+                >
+                  <Icon size={17} aria-hidden="true" />
+                  <span>{label}</span>
+                  {count ? <b>{count}</b> : null}
+                </button>
+              ))}
             </div>
             <div className="finance-workspace-nav__secondary">
               <span>帳務設定</span>
-              {([
-                ["ledger", "帳本與期間"],
-                ["funds", "資金保管"],
-                ["accounts", "收支科目"],
-                ["budget", "共同預算"],
-              ] as const).map(([tab, label]) => <button key={tab} className={`finance-workspace-nav__link ${activeTab === tab ? "is-active" : ""}`} aria-current={activeTab === tab ? "page" : undefined} onClick={() => setActiveTab(tab)}>{label}</button>)}
+              {settingsNavigation.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  className={`finance-workspace-nav__link ${activeTab === id ? "is-active" : ""}`}
+                  aria-current={activeTab === id ? "page" : undefined}
+                  onClick={() => setActiveTab(id)}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  <span>{label}</span>
+                </button>
+              ))}
             </div>
           </nav>
 
+          <div className="finance-module__content">
           {activeTab === "workspace" && <section className="finance-workspace">
             <div className="finance-workspace__intro">
               <div>
-                <h2>先處理現在輪到你的事</h2>
-                <p>一筆報帳會經過覆核、請購、付款與預算列管；各步驟可由不同權限的人處理，案件不會因為換手而失去脈絡。</p>
+                <span className="finance-workspace__status-dot" aria-hidden="true" />
+                <div>
+                  <h2>{actionableCount > 0 ? `有 ${actionableCount} 件工作等你處理` : "目前沒有急著處理的案件"}</h2>
+                  <p>{activePeriod ? `${activePeriod.name}使用中。` : "尚未選擇會計期間。"} 每一步都會保留承辦與狀態紀錄。</p>
+                </div>
               </div>
-              <button className="btn btn-primary" disabled={!canClaimExpense} onClick={() => { setEntryType("expense"); setActiveTab("entry"); }}><FilePlus2 size={16} aria-hidden="true" />{canClaimExpense ? "建立報帳" : "目前無報帳權限"}</button>
+              <div className="finance-workspace__balance">
+                <span>帳上資金</span>
+                <strong>NT${totalFundBalance.toLocaleString()}</strong>
+                <button onClick={() => setActiveTab("funds")}>查看 {funds.length} 個保管點</button>
+              </div>
             </div>
             <div className="finance-workspace__flow" aria-label="報帳案件流程">
-              {["送出報帳", "覆核確認", "請購／付款", "預算列管", "完成追蹤"].map((step, index) => <div key={step} className="finance-workspace__flow-step"><span>{index + 1}</span><p>{step}</p></div>)}
+              {["提出報帳", "覆核確認", "預算列管", "請購／付款", "確認憑證", "完成核銷"].map((step, index) => <div key={step} className="finance-workspace__flow-step"><span>{index + 1}</span><p>{step}</p></div>)}
             </div>
             <div className="finance-workspace__body">
               <section aria-labelledby="finance-queue-heading">
-                <div className="finance-workspace__section-heading"><div><h3 id="finance-queue-heading">你的待辦</h3><p>只列出你目前有權限處理的工作。</p></div><span className="finance-workspace__count">{roleQueues.reduce((total, queue) => total + queue.count, 0)} 件</span></div>
+                <div className="finance-workspace__section-heading"><div><h3 id="finance-queue-heading">你的處理佇列</h3><p>依你目前的權限，只顯示能由你接手的工作。</p></div><span className="finance-workspace__count">{actionableCount} 件</span></div>
                 {roleQueues.length > 0 ? <div className="finance-workspace__queues">{roleQueues.map((queue) => { const Icon = queue.icon; return <button key={queue.title} className="finance-workspace__queue" onClick={() => setActiveTab(queue.id)}><Icon size={19} aria-hidden="true" /><span><strong>{queue.title}</strong><small>{queue.description}</small></span><b>{queue.count}</b><ArrowRight size={17} aria-hidden="true" /></button>; })}</div> : <div className="finance-workspace__empty"><Check size={18} aria-hidden="true" />目前沒有可處理的待辦。你仍可從「所有案件」查看已授權的資料。</div>}
               </section>
-              <aside className="finance-workspace__permissions" aria-labelledby="finance-permissions-heading"><div><ShieldCheck size={19} aria-hidden="true" /><h3 id="finance-permissions-heading">你目前可處理</h3></div>{availableCapabilities.length > 0 ? <ul>{availableCapabilities.map((capability) => <li key={capability}><Check size={15} aria-hidden="true" />{capability}</li>)}</ul> : <p>目前只有查看權限。需要處理案件時，請由管理員指派對應財務權限。</p>}<button className="finance-workspace__text-action" onClick={() => setActiveTab("claims")}>查看所有已授權案件 <ArrowRight size={15} aria-hidden="true" /></button></aside>
+              <aside className="finance-workspace__side">
+                <section className="finance-workspace__recent" aria-labelledby="finance-recent-heading">
+                  <div><ReceiptText size={19} aria-hidden="true" /><h3 id="finance-recent-heading">最近案件</h3></div>
+                  {recentClaims.length > 0 ? <ul>{recentClaims.map((claim) => <li key={claim.id}><button onClick={() => { setExpandedEntryId(claim.id); setActiveTab("claims"); }}><span>{claim.description}</span><small>{claimNextStep(claim).title}</small></button></li>)}</ul> : <p>還沒有報帳案件。建立第一筆後，處理進度會顯示在這裡。</p>}
+                </section>
+                <section className="finance-workspace__permissions" aria-labelledby="finance-permissions-heading"><div><ShieldCheck size={19} aria-hidden="true" /><h3 id="finance-permissions-heading">你的處理權限</h3></div>{availableCapabilities.length > 0 ? <ul>{availableCapabilities.map((capability) => <li key={capability}><Check size={15} aria-hidden="true" />{capability}</li>)}</ul> : <p>目前只有查看權限。需要處理案件時，請由管理員指派對應財務權限。</p>}<button className="finance-workspace__text-action" onClick={() => setActiveTab("claims")}>查看所有已授權案件 <ArrowRight size={15} aria-hidden="true" /></button></section>
+              </aside>
             </div>
           </section>}
 
@@ -772,52 +899,135 @@ export default function FinancePage() {
               {activePeriod && <span className="text-sm" style={{ color: "var(--success)" }}>使用中：{activePeriod.name}</span>}
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
-              <select className="input max-w-md" value={periodId} onChange={(event) => setPeriodId(event.target.value)}><option value="">請選擇使用中的會計期間</option>{periods.map((period) => <option key={period.id} value={period.id} disabled={period.is_closed}>{period.name}（{period.starts_on}～{period.ends_on}）{period.is_closed ? "／已關閉" : ""}</option>)}</select>
+              <select className="input max-w-md" aria-label="目前使用的會計期間" value={periodId} onChange={(event) => setPeriodId(event.target.value)}><option value="">請選擇使用中的會計期間</option>{periods.map((period) => <option key={period.id} value={period.id} disabled={period.is_closed}>{period.name}（{period.starts_on}～{period.ends_on}）{period.is_closed ? "／已關閉" : ""}</option>)}</select>
               {canManage && <button className="btn btn-secondary" onClick={() => setIsPeriodSetupOpen((open) => !open)}>{isPeriodSetupOpen ? "收合期間設定" : "新增會計期間"}</button>}
             </div>
-            {(isPeriodSetupOpen || periods.length === 0) && canManage && <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}><div className="grid gap-3 md:grid-cols-3"><input className="input" value={newPeriod.name} onChange={(event) => setNewPeriod({ ...newPeriod, name: event.target.value })} placeholder="期間名稱，例如 115 學年度上學期" /><input className="input" type="date" value={newPeriod.starts_on} onChange={(event) => setNewPeriod({ ...newPeriod, starts_on: event.target.value })} /><input className="input" type="date" value={newPeriod.ends_on} onChange={(event) => setNewPeriod({ ...newPeriod, ends_on: event.target.value })} /></div><button className="btn btn-primary mt-3" onClick={() => void addPeriod()}>儲存會計期間</button></div>}
+            {(isPeriodSetupOpen || periods.length === 0) && canManage && <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}><div className="grid gap-3 md:grid-cols-3"><label><span className="sr-only">期間名稱</span><input className="input" value={newPeriod.name} onChange={(event) => setNewPeriod({ ...newPeriod, name: event.target.value })} placeholder="期間名稱，例如 115 學年度上學期" /></label><label><span className="sr-only">期間開始日</span><input className="input" type="date" value={newPeriod.starts_on} onChange={(event) => setNewPeriod({ ...newPeriod, starts_on: event.target.value })} /></label><label><span className="sr-only">期間結束日</span><input className="input" type="date" value={newPeriod.ends_on} onChange={(event) => setNewPeriod({ ...newPeriod, ends_on: event.target.value })} /></label></div><button className="btn btn-primary mt-3" onClick={() => void addPeriod()}>儲存會計期間</button></div>}
           </section>
 
           <div hidden={activeTab !== "entry"}>
           {!activePeriod ? (
-            <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>請先新增並選擇一個尚未關閉的會計期間，才能登錄傳票。</section>
-          ) : availableEntryTypes.length > 0 ? (
-            <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <div>
-                  <h2 className="font-semibold">{editingEntryId ? "修改報帳" : "登錄收支與報帳"}</h2>
-                  <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{editingBudgetedClaim ? "可調整已列入核准預算、尚未付款案件的核銷金額；儲存後保留原核准狀態。" : entryTypes[entryType].help}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>{editingEntryId ? (editingBudgetedClaim ? "提出人可在付款前修正核銷金額" : "修改後會重新送回覆核流程") : "送出後由具覆核權限的人員過帳"}</p>
-                  {editingEntryId && <button className="btn btn-secondary" onClick={cancelClaimEdit}>取消修改</button>}
-                </div>
+            <section className="finance-blocked-state">
+              <BookOpenText size={22} aria-hidden="true" />
+              <div>
+                <h2>報帳前需要一個使用中的會計期間</h2>
+                <p>先到「帳本與期間」新增或選擇尚未關閉的期間，再回來建立報帳。</p>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="傳票類型">{entryTypeOptions.map((type) => <button key={type} className={`btn ${entryType === type ? "btn-primary" : "btn-secondary"}`} aria-pressed={entryType === type} onClick={() => setEntryType(type)}>{entryTypes[type].label}</button>)}</div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <label className="text-sm">日期<input className="input mt-1" type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} disabled={editingBudgetedClaim} /></label>
-                <label className="text-sm">付款／收款保管點<select className="input mt-1" value={fundId} onChange={(event) => setFundId(event.target.value)} disabled={editingBudgetedClaim}>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select></label>
-                <label className="text-sm">{entryType === "opening" ? "對應科目" : entryType === "income" ? "收入科目" : "支出科目"}<select className="input mt-1" value={counterAccountId} onChange={(event) => setCounterAccountId(event.target.value)} disabled={editingBudgetedClaim}>{counterpartAccounts.map((account) => <option key={account.id} value={account.id}>{account.code}｜{account.name}</option>)}</select></label>
-                {entryType !== "expense" && <label className="text-sm">金額（NT$）<input className="input mt-1" type="number" min="1" value={entryAmount} onChange={(event) => setEntryAmount(event.target.value)} /></label>}
-                <label className={`text-sm ${entryType === "expense" ? "xl:col-span-2" : ""}`}>摘要<input className="input mt-1" value={entryDescription} onChange={(event) => setEntryDescription(event.target.value)} placeholder={entryType === "expense" ? "例如：社團博覽會文具採購" : "請說明這筆款項"} /></label>
-                {entryType === "expense" && <label className="text-sm">提出部門<select className="input mt-1" value={claimOrgId} onChange={(event) => setClaimOrgId(event.target.value)}><option value="">選擇部門</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>}
-                {entryType === "expense" && <div className="text-sm"><span>付款方式</span><div className="mt-1 flex gap-2"><button type="button" disabled={editingBudgetedClaim} className={`btn ${paymentMethod === "direct" ? "btn-primary" : "btn-secondary"}`} onClick={() => setPaymentMethod("direct")}>班聯直接付款</button><button type="button" disabled={editingBudgetedClaim} className={`btn ${paymentMethod === "advance" ? "btn-primary" : "btn-secondary"}`} onClick={() => setPaymentMethod("advance")}>個人代墊</button></div></div>}
-                {entryType === "expense" && paymentMethod === "advance" && <label className="text-sm md:col-span-2">代墊人搜尋<input className="input mt-1" value={advanceQuery} onChange={(event) => setAdvanceQuery(event.target.value)} placeholder="輸入姓名後選擇，預設為本人" />{advanceCandidates.length > 0 && <span className="mt-1 flex flex-wrap gap-2">{advanceCandidates.map((user) => <button type="button" className={`btn ${advancedById === user.id ? "btn-primary" : "btn-secondary"}`} key={user.id} onClick={() => { setAdvancedById(user.id); setAdvanceQuery(user.display_name); }}>{user.display_name}</button>)}</span>}</label>}
-                <div className="text-sm md:col-span-2"><span>上傳憑證（選填）</span><AnimatedFileUpload accept="image/jpeg,image/png,image/webp,application/pdf" label="拖曳憑證到這裡" hint="支援 JPG、PNG、WebP 或 PDF，最大 20 MB；送出報帳時一併上傳" onFiles={(selected) => setEvidenceFile(selected[0] ?? null)} onRemove={() => setEvidenceFile(null)} />{evidenceFile && <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>已選擇：{evidenceFile.name}</span>}</div>
-                <label className="text-sm md:col-span-2">外部憑證連結（選填）<input className="input mt-1" type="url" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="若憑證已存放於雲端，可貼上連結" /></label>
-              </div>
-              {entryType === "expense" && <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">未稅單價</th><th className="px-3 py-2 text-right">稅率（選填）</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-left">單位</th><th className="px-3 py-2 text-right">含稅小計</th><th className="w-20 px-3 py-2" aria-label="移除品項" /></tr></thead><tbody>{claimItems.map((item, index) => <tr key={index} className="border-t" style={{ borderColor: "var(--border)" }}><td className="p-2"><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項未稅單價`} className="input text-right" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項稅率`} className="input text-right" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項數量`} className="input text-right" type="number" min="0.01" step="0.01" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項單位`} className="input" value={item.unit || ""} onChange={(event) => updateClaimItem(index, { unit: event.target.value })} placeholder="例如：張" /></td><td className="px-3 text-right tabular-nums">NT${claimItemTotal(item).toLocaleString()}</td><td className="p-2 text-center"><button className="btn btn-secondary" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody><tfoot><tr className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-3" colSpan={5}>合計</td><td className="px-3 py-3 text-right text-base font-semibold tabular-nums">NT${claimTotal.toLocaleString()}</td><td /></tr></tfoot></table><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button className="btn btn-secondary" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增品項</button>{expenseDraftSavedAt && <span className="text-xs" style={{ color: "var(--text-muted)" }}>草稿已自動暫存</span>}</div></div>}
-              {entryType === "expense" && <div className="mt-4 grid gap-3 md:grid-cols-2">{claimItems.map((item, index) => <label key={`${item.name}-${index}`} className="text-sm">第 {index + 1} 項憑證（收據／發票／其他文件）<input className="input mt-1" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setItemEvidenceFiles((files) => { const next = [...files]; next[index] = Array.from(event.target.files || []); return next; })} />{itemEvidenceFiles[index]?.length ? <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>已選擇 {itemEvidenceFiles[index].length} 份文件</span> : null}</label>)}</div>}
-              {entryType === "expense" && <label className="mt-4 block text-sm">報帳備註（選填）<textarea className="input mt-1 min-h-24" value={claimNote} onChange={(event) => setClaimNote(event.target.value)} placeholder="例如：採購用途、核銷注意事項或其他內部說明" /></label>}
-              <button className="btn btn-primary mt-4" disabled={isEvidenceUploading} onClick={() => void createEntry()}>{isEvidenceUploading ? "上傳憑證中…" : entryType === "expense" ? (editingEntryId ? `儲存報帳（NT$${claimTotal.toLocaleString()}）` : `送出報帳（NT$${claimTotal.toLocaleString()}）`) : `${entryTypes[entryType].label}並送覆核`}</button>
+              {canManage && <button className="btn btn-primary" onClick={() => setActiveTab("ledger")}>前往設定期間</button>}
             </section>
-          ) : <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>你目前只有查看權限。若要報帳，請指派「登錄支出／報帳」；登錄收入、期初與移轉則需要「登錄一般財務傳票」。</section>}
+          ) : availableEntryTypes.length > 0 ? (
+            <section className="finance-entry">
+              <header className="finance-entry__header">
+                <div>
+                  <h2>{editingEntryId ? "修改報帳" : entryTypes[entryType].label}</h2>
+                  <p>{editingBudgetedClaim ? "可調整已列入核准預算、尚未付款案件的核銷金額；儲存後保留原核准狀態。" : entryTypes[entryType].help}</p>
+                </div>
+                <div className="finance-entry__type-switch" role="group" aria-label="登錄類型">
+                  {entryTypeOptions.map((type) => (
+                    <button
+                      key={type}
+                      className={entryType === type ? "is-active" : ""}
+                      aria-pressed={entryType === type}
+                      onClick={() => setEntryType(type)}
+                    >
+                      {entryTypes[type].label}
+                    </button>
+                  ))}
+                </div>
+                {editingEntryId && <button className="btn btn-secondary" onClick={cancelClaimEdit}>取消修改</button>}
+              </header>
+
+              <div className="finance-entry__layout">
+                <div className="finance-entry__form">
+                  <section className="finance-entry__section" aria-labelledby="finance-entry-basics">
+                    <div className="finance-entry__section-heading">
+                      <span>1</span>
+                      <div><h3 id="finance-entry-basics">基本資料</h3><p>先說明這筆款項屬於哪個期間、科目與部門。</p></div>
+                    </div>
+                    <div className="finance-entry__fields">
+                      <label>日期<input className="input" type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} disabled={editingBudgetedClaim} /></label>
+                      <label>付款／收款保管點<select className="input" value={fundId} onChange={(event) => setFundId(event.target.value)} disabled={editingBudgetedClaim}>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select></label>
+                      <label>{entryType === "opening" ? "對應科目" : entryType === "income" ? "收入科目" : "支出科目"}<select className="input" value={counterAccountId} onChange={(event) => setCounterAccountId(event.target.value)} disabled={editingBudgetedClaim}>{counterpartAccounts.map((account) => <option key={account.id} value={account.id}>{account.code}｜{account.name}</option>)}</select></label>
+                      {entryType !== "expense" && <label>金額（NT$）<input className="input" type="number" min="1" value={entryAmount} onChange={(event) => setEntryAmount(event.target.value)} /></label>}
+                      <label className="finance-entry__wide">摘要<input className="input" value={entryDescription} onChange={(event) => setEntryDescription(event.target.value)} placeholder={entryType === "expense" ? "例如：社團博覽會文具採購" : "請說明這筆款項"} /></label>
+                      {entryType === "expense" && <label>提出部門<select className="input" value={claimOrgId} onChange={(event) => setClaimOrgId(event.target.value)}><option value="">選擇部門</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>}
+                    </div>
+                  </section>
+
+                  {entryType === "expense" && <section className="finance-entry__section" aria-labelledby="finance-entry-items">
+                    <div className="finance-entry__section-heading">
+                      <span>2</span>
+                      <div><h3 id="finance-entry-items">購買品項</h3><p>每一列都會獨立保留數量、稅額與憑證，方便後續核銷。</p></div>
+                    </div>
+                    <div className="finance-entry-items__table">
+                      <table>
+                        <thead><tr><th>品項</th><th>未稅單價</th><th>稅率</th><th>數量</th><th>單位</th><th>含稅小計</th><th aria-label="移除品項" /></tr></thead>
+                        <tbody>{claimItems.map((item, index) => <tr key={index}><td><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td><input aria-label={`第 ${index + 1} 項未稅單價`} className="input" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td><input aria-label={`第 ${index + 1} 項稅率`} className="input" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></td><td><input aria-label={`第 ${index + 1} 項數量`} className="input" type="number" min="0.01" step="0.01" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td><input aria-label={`第 ${index + 1} 項單位`} className="input" value={item.unit || ""} onChange={(event) => updateClaimItem(index, { unit: event.target.value })} placeholder="項" /></td><td><strong>NT${claimItemTotal(item).toLocaleString()}</strong></td><td><button className="finance-entry__remove" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody>
+                      </table>
+                    </div>
+                    <div className="finance-entry-items__mobile">
+                      {claimItems.map((item, index) => <article key={index}>
+                        <header><strong>品項 {index + 1}</strong><span>NT${claimItemTotal(item).toLocaleString()}</span></header>
+                        <label>品項名稱<input className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></label>
+                        <div><label>未稅單價<input className="input" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></label><label>數量<input className="input" type="number" min="0.01" step="0.01" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></label></div>
+                        <div><label>單位<input className="input" value={item.unit || ""} onChange={(event) => updateClaimItem(index, { unit: event.target.value })} placeholder="項" /></label><label>稅率（%）<input className="input" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></label></div>
+                        <button className="finance-entry__remove" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除此品項</button>
+                      </article>)}
+                    </div>
+                    <div className="finance-entry__section-footer"><button className="btn btn-secondary" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增一個品項</button>{expenseDraftSavedAt && <span>草稿已自動暫存</span>}</div>
+                  </section>}
+
+                  {entryType === "expense" && <section className="finance-entry__section" aria-labelledby="finance-entry-payment">
+                    <div className="finance-entry__section-heading">
+                      <span>3</span>
+                      <div><h3 id="finance-entry-payment">付款安排</h3><p>選擇由班聯直接支付，或登記需要償還的個人代墊。</p></div>
+                    </div>
+                    <div className="finance-payment-options" role="group" aria-label="付款方式">
+                      <button type="button" disabled={editingBudgetedClaim} className={paymentMethod === "direct" ? "is-active" : ""} aria-pressed={paymentMethod === "direct"} onClick={() => setPaymentMethod("direct")}><Landmark size={19} aria-hidden="true" /><span><strong>班聯直接付款</strong><small>由校方或會費帳戶支付</small></span><Check size={17} aria-hidden="true" /></button>
+                      <button type="button" disabled={editingBudgetedClaim} className={paymentMethod === "advance" ? "is-active" : ""} aria-pressed={paymentMethod === "advance"} onClick={() => setPaymentMethod("advance")}><WalletCards size={19} aria-hidden="true" /><span><strong>個人代墊</strong><small>付款後追蹤代墊償還</small></span><Check size={17} aria-hidden="true" /></button>
+                    </div>
+                    {paymentMethod === "advance" && <label className="finance-entry__advance">代墊人<input className="input" value={advanceQuery} onChange={(event) => setAdvanceQuery(event.target.value)} placeholder="輸入姓名後選擇，預設為本人" />{advanceCandidates.length > 0 && <span>{advanceCandidates.map((user) => <button type="button" className={advancedById === user.id ? "is-active" : ""} key={user.id} onClick={() => { setAdvancedById(user.id); setAdvanceQuery(user.display_name); }}>{user.display_name}</button>)}</span>}</label>}
+                  </section>}
+
+                  <section className="finance-entry__section" aria-labelledby="finance-entry-evidence">
+                    <div className="finance-entry__section-heading">
+                      <span>{entryType === "expense" ? 4 : 2}</span>
+                      <div><h3 id="finance-entry-evidence">憑證與說明</h3><p>現在可先附主要憑證，也可以送出後再依品項補齊。</p></div>
+                    </div>
+                    <div className="finance-entry__evidence-grid">
+                      <div><span>整筆案件共用憑證（選填）</span><AnimatedFileUpload accept="image/jpeg,image/png,image/webp,application/pdf" label="拖曳憑證到這裡" hint="支援 JPG、PNG、WebP 或 PDF，最大 20 MB" onFiles={(selected) => setEvidenceFile(selected[0] ?? null)} onRemove={() => setEvidenceFile(null)} /></div>
+                      <label>外部憑證連結（選填）<input className="input" type="url" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="貼上雲端檔案或相關頁面連結" /></label>
+                    </div>
+                    {entryType === "expense" && <div className="finance-entry__item-evidence"><h4>逐項憑證（選填）</h4><div>{claimItems.map((item, index) => <label key={`${item.name}-${index}`}><span>品項 {index + 1}{item.name ? `｜${item.name}` : ""}</span><input className="input" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setItemEvidenceFiles((files) => { const next = [...files]; next[index] = Array.from(event.target.files || []); return next; })} />{itemEvidenceFiles[index]?.length ? <small>已選擇 {itemEvidenceFiles[index].length} 份文件</small> : null}</label>)}</div></div>}
+                    {entryType === "expense" && <label className="finance-entry__note">報帳備註（選填）<textarea className="input" value={claimNote} onChange={(event) => setClaimNote(event.target.value)} placeholder="採購用途、核銷注意事項或給覆核者的說明" /></label>}
+                  </section>
+                </div>
+
+                <aside className="finance-entry__summary" aria-label="送件摘要">
+                  <span>{entryType === "expense" ? "本次報帳" : "本次登錄"}</span>
+                  <strong>NT${(entryType === "expense" ? claimTotal : Number(entryAmount || 0)).toLocaleString()}</strong>
+                  <dl>
+                    <div><dt>會計期間</dt><dd>{activePeriod.name}</dd></div>
+                    <div><dt>保管點</dt><dd>{funds.find((fund) => fund.id === fundId)?.name || "尚未選擇"}</dd></div>
+                    <div><dt>送出後</dt><dd>{editingBudgetedClaim ? "保留核准狀態" : "進入覆核佇列"}</dd></div>
+                  </dl>
+                  {entryType === "expense" && <ul className="finance-entry__checklist">
+                    <li className={expenseBasicsReady ? "is-ready" : ""}><Check size={14} aria-hidden="true" />基本資料完整</li>
+                    <li className={expenseItemsReady ? "is-ready" : ""}><Check size={14} aria-hidden="true" />品項與金額完整</li>
+                    <li className={expensePaymentReady ? "is-ready" : ""}><Check size={14} aria-hidden="true" />付款方式已確認</li>
+                  </ul>}
+                  <button className="btn btn-primary" disabled={isEvidenceUploading || (entryType === "expense" && !expenseReady)} onClick={() => void createEntry()}>{isEvidenceUploading ? "正在處理憑證…" : entryType === "expense" ? (editingEntryId ? "儲存報帳" : "送出報帳") : `${entryTypes[entryType].label}並送覆核`}</button>
+                  <p>{editingEntryId ? (editingBudgetedClaim ? "修正後不需重新覆核。" : "修改後會重新進入覆核。") : "送出前可隨時離開，草稿會保留在這台裝置。"}</p>
+                </aside>
+              </div>
+            </section>
+          ) : <section className="finance-blocked-state"><ShieldCheck size={22} aria-hidden="true" /><div><h2>目前只有查看權限</h2><p>建立報帳需要「登錄支出／報帳」權限；登錄收入、期初與移轉則需要「登錄一般財務傳票」。</p></div></section>}
           </div>
 
           <section hidden={activeTab !== "funds"} className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
             <h2 className="font-semibold">資金保管點</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>餘額只計入已過帳傳票。請用收支／報帳登錄金額；只有在保管位置改變時才建立移轉。</p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">{funds.map((fund) => <article key={fund.id} className="rounded border p-4" style={{ borderColor: "var(--border)" }}><p className="text-sm" style={{ color: "var(--text-muted)" }}>{storageLabel[fund.storage_type]}</p><h3 className="font-semibold">{fund.name}</h3>{fund.storage_type === "bank" && <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{fund.bank_name || "未填銀行"}{fund.account_last_four ? `／末四碼 ${fund.account_last_four}` : ""}</p>}<p className="mt-2 text-xl font-semibold">NT${fund.balance.toLocaleString()}</p></article>)}</div>
-            {activePeriod && canRecord && <div className="mt-5 border-t pt-5" style={{ borderColor: "var(--border)" }}><h3 className="font-medium">資金移轉</h3><div className="mt-3 grid gap-3 md:grid-cols-4"><select className="input" value={fromId} onChange={(event) => setFromId(event.target.value)}><option value="">轉出保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><select className="input" value={toId} onChange={(event) => setToId(event.target.value)}><option value="">轉入保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><input className="input" type="number" min="1" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="移轉金額（NT$）" /><button className="btn btn-secondary" onClick={() => void transfer()}>移轉並送覆核</button></div></div>}
+            {activePeriod && canRecord && <div className="mt-5 border-t pt-5" style={{ borderColor: "var(--border)" }}><h3 className="font-medium">資金移轉</h3><div className="mt-3 grid gap-3 md:grid-cols-4"><select className="input" aria-label="轉出保管點" value={fromId} onChange={(event) => setFromId(event.target.value)}><option value="">轉出保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><select className="input" aria-label="轉入保管點" value={toId} onChange={(event) => setToId(event.target.value)}><option value="">轉入保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><input className="input" aria-label="移轉金額（新臺幣）" type="number" min="1" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="移轉金額（NT$）" /><button className="btn btn-secondary" onClick={() => void transfer()}>移轉並送覆核</button></div></div>}
           </section>
 
           {activeTab === "accounts" && (canManage ? (
@@ -848,12 +1058,14 @@ export default function FinancePage() {
               <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_auto]">
                 <input
                   className="input"
+                  aria-label={`新增${managedAccountLabels[managedAccountType].singular}科目代碼`}
                   value={newAccount.code}
                   onChange={(event) => setNewAccount({ ...newAccount, code: event.target.value })}
                   placeholder={`科目代碼，例如 ${managedAccountType === "expense" ? "5104" : "4104"}`}
                 />
                 <input
                   className="input"
+                  aria-label={`新增${managedAccountLabels[managedAccountType].singular}科目名稱`}
                   value={newAccount.name}
                   onChange={(event) => setNewAccount({ ...newAccount, name: event.target.value })}
                   placeholder={`新增${managedAccountLabels[managedAccountType].singular}科目名稱`}
@@ -869,7 +1081,7 @@ export default function FinancePage() {
                     {managedAccounts.map((account) => (
                       <tr key={account.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                         <td className="px-3 py-2">{account.code}</td>
-                        <td className="px-3 py-2">{editingAccountId === account.id ? <input className="input" value={editingAccountName} onChange={(event) => setEditingAccountName(event.target.value)} /> : account.name}</td>
+                        <td className="px-3 py-2">{editingAccountId === account.id ? <input className="input" aria-label={`修改科目 ${account.code} 名稱`} value={editingAccountName} onChange={(event) => setEditingAccountName(event.target.value)} /> : account.name}</td>
                         <td className="px-3 py-2">{account.is_active ? "使用中" : "已停用"}</td>
                         <td className="px-3 py-2 text-right">
                           {editingAccountId === account.id ? (
@@ -930,7 +1142,8 @@ export default function FinancePage() {
           </section>}
 
            {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} currentUserId={currentUserId} />}
-        </>
+          </div>
+        </div>
       )}
     </main>
   );
