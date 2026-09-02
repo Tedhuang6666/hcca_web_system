@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowRight, Landmark, ShieldCheck } from "lucide-react";
 
 import { fetchPublicBudgets } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
@@ -14,32 +15,36 @@ export default async function PublicBudgetsPage() {
   const budgets = await fetchPublicBudgets();
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <header className="workspace-header">
-        <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>預算與決算</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-7" style={{ color: "var(--text-muted)" }}>
-          此頁僅顯示已核准且由財務主管開放的資料，不包含報帳人、憑證或其他個人資料。
-        </p>
+    <div className="public-budget-index">
+      <header className="public-budget-index__header">
+        <div>
+          <h1>公開預算</h1>
+          <p>查閱已完成內部審核並由財務主管開放的班聯會預算資料。</p>
+        </div>
+        <span><Landmark size={20} aria-hidden="true" />{budgets.length} 份公開預算</span>
       </header>
 
+      <aside className="public-budget-index__notice">
+        <ShieldCheck size={19} aria-hidden="true" />
+        <p><strong>公開範圍已經過資料隔離。</strong>本頁只呈現核准預算、編列明細與審核紀錄，不包含報帳人、憑證或其他個人資料。</p>
+      </aside>
+
       {budgets.length === 0 ? (
-        <section className="rounded border p-6 text-sm" style={{ borderColor: "var(--public-border)", color: "var(--text-muted)" }}>
-          目前尚無開放檢視的預算案。
+        <section className="public-budget-index__empty">
+          <Landmark size={24} aria-hidden="true" />
+          <div><h2>目前沒有公開預算</h2><p>預算案完成核准並由財務主管開放後，會自動出現在這裡。</p></div>
         </section>
       ) : (
-        <section className="border-y" style={{ borderColor: "var(--public-border)" }} aria-label="公開預算案">
+        <section className="public-budget-index__list" aria-label="公開預算案">
           {budgets.map((budget) => (
             <Link
               key={budget.id}
               href={`/public/budgets/${budget.id}`}
-              className="grid min-h-24 grid-cols-[minmax(0,1fr)_auto] items-center gap-5 border-b px-1 py-5 transition-colors last:border-b-0 hover:bg-[var(--public-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
-              style={{ borderColor: "var(--public-border)", color: "var(--text-primary)", textDecoration: "none" }}
+              className="public-budget-index__row"
             >
-              <div>
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>{budget.period_name}</p>
-                <h2 className="mt-1 text-lg font-semibold">{budget.name}</h2>
-              </div>
-              <span className="text-sm font-medium" style={{ color: "var(--public-accent-text)" }}>檢視明細</span>
+              <span>{budget.period_name}</span>
+              <h2>{budget.name}</h2>
+              <span>查看核准明細 <ArrowRight size={16} aria-hidden="true" /></span>
             </Link>
           ))}
         </section>
