@@ -221,7 +221,7 @@ export function buildMatterInsight(
     score += 26;
     reasons.push("尚未指定負責人");
     badges.push("缺負責人");
-    pushAction(actions, "matter-missing-owner", "指派負責人", "讓一位成員接住總體進度與跨模組協調。", 86, "settings", undefined, "assign-owner");
+    pushAction(actions, "matter-missing-owner", "指派負責人", "指派相關事項負責人", 86, "settings", undefined, "assign-owner");
   }
 
   if ("resources" in matter && matter.resources.length === 0 && active) {

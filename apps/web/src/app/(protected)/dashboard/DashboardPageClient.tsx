@@ -351,12 +351,6 @@ export default function DashboardPageClient({
 
   return (
     <div className="dashboard-page max-w-7xl mx-auto space-y-5">
-
-      {/* 一次性引導：首次進站時提示 */}
-      <OnboardingHint id="hint.dashboard.first-visit">
-        優先事項會集中顯示在首頁，其餘功能可從導覽或搜尋開啟。
-      </OnboardingHint>
-
       {/* 頁首 */}
       <section className="dashboard-hero">
         <div className="dashboard-hero-content">
