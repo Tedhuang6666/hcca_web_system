@@ -21,7 +21,7 @@ from api.core.database import task_session
 from api.models.notification import Notification
 from api.models.user import User
 from api.services.mail import enqueue_email
-from api.services.notification_pref import get_digest_frequency
+from api.services.notification_pref import get_digest_frequency, normalize_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,12 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
                 .order_by(Notification.created_at.desc())
             )
             ntfs = list(ntfs_result.scalars().all())
+            preferences = normalize_preferences(user.notification_preferences)
+            ntfs = [
+                notification
+                for notification in ntfs
+                if preferences.get(notification.type, {}).get("email", False)
+            ]
             if not ntfs:
                 skipped += 1
                 continue

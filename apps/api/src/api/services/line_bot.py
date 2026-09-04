@@ -573,6 +573,7 @@ async def _unread_notifications_text(db: AsyncSession, user: User) -> str:
             select(func.count(Notification.id)).where(
                 Notification.user_id == user.id,
                 Notification.is_read.is_(False),
+                Notification.is_inapp_visible.is_(True),
             )
         )
         or 0
@@ -583,6 +584,7 @@ async def _unread_notifications_text(db: AsyncSession, user: User) -> str:
                 select(Notification)
                 .where(Notification.user_id == user.id)
                 .where(Notification.is_read.is_(False))
+                .where(Notification.is_inapp_visible.is_(True))
                 .order_by(Notification.created_at.desc())
                 .limit(3)
             )

@@ -40,6 +40,7 @@ from api.models.petition import (
     PetitionStatus,
     PetitionType,
 )
+from api.models.petition_notification import PetitionNotificationRule
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.context import PetitionResolutionContextOut
@@ -70,9 +71,17 @@ from api.schemas.petition import (
     PetitionTypeOut,
     PetitionTypeUpdate,
 )
+from api.schemas.petition_notification import (
+    PetitionNotificationRuleCreate,
+    PetitionNotificationRuleOut,
+    PetitionNotificationRuleUpdate,
+    PetitionNotificationSettingsOut,
+    PetitionNotificationSettingsUpdate,
+)
 from api.services import audit as audit_svc
 from api.services import context as context_svc
 from api.services import petition as petition_svc
+from api.services import petition_notification as petition_notification_svc
 from api.services.discord_bot import enqueue_petition_private_channel
 from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
 from api.services.storage import get_storage
@@ -195,6 +204,35 @@ async def _notify(
             )
         except Exception:
             pass
+
+
+async def _notify_responsible(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    type: str,
+    title: str,
+    body: str | None,
+    link: str,
+    exclude_user_ids: tuple[uuid.UUID, ...] = (),
+) -> None:
+    """依陳情通知規則通知負責人；通知失敗不影響案件主流程。"""
+    try:
+        from api.services.notification import notify_users
+
+        recipient_ids = await petition_notification_svc.resolve_recipient_ids(session, case_obj)
+        await notify_users(
+            session,
+            user_ids=recipient_ids,
+            exclude_user_ids=exclude_user_ids,
+            type=type,
+            title=title,
+            body=body,
+            link=link,
+            related_id=case_obj.id,
+        )
+    except Exception:
+        logger.warning("陳情負責人通知失敗 case=%s", case_obj.id, exc_info=True)
 
 
 def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
@@ -394,6 +432,15 @@ async def create_petition(
             await enqueue_petition_private_channel(session, case_obj)
     except Exception:
         logger.warning("陳情可選 Discord 通知失敗，保留案件建立結果", exc_info=True)
+    await _notify_responsible(
+        session,
+        case_obj,
+        type="petition_received",
+        title=f"新陳情案件 {case_obj.case_number}",
+        body=case_obj.title,
+        link=f"/petitions/manage?case={case_obj.id}",
+        exclude_user_ids=(current_user.id,) if current_user else (),
+    )
     # 治理匯流：陳情建立經 audit_svc.record() 統一橋接進治理中樞（governance_events 登錄表），
     # 不再於此手寫 ingest，避免雙重時間軸。
 
@@ -582,6 +629,116 @@ async def delete_type(type_id: uuid.UUID, session: DbDep, user: CurrentUser) -> 
         summary=f"刪除陳情類型「{petition_type.name}」",
     )
     await petition_svc.delete_type(session, petition_type)
+
+
+@router.get(
+    "/admin/notification-settings",
+    response_model=PetitionNotificationSettingsOut,
+    summary="取得陳情負責人通知全域設定",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def get_petition_notification_settings(
+    session: DbDep, _: CurrentUser
+) -> PetitionNotificationSettingsOut:
+    return await petition_notification_svc.get_settings(session)
+
+
+@router.put(
+    "/admin/notification-settings",
+    response_model=PetitionNotificationSettingsOut,
+    summary="更新陳情負責人通知全域設定",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def update_petition_notification_settings(
+    payload: PetitionNotificationSettingsUpdate,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionNotificationSettingsOut:
+    settings = await petition_notification_svc.get_settings(session)
+    return await petition_notification_svc.update_settings(
+        session, settings, payload, updated_by_id=user.id
+    )
+
+
+@router.get(
+    "/admin/notification-rules",
+    response_model=list[PetitionNotificationRuleOut],
+    summary="列出陳情負責人通知規則",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def list_petition_notification_rules(
+    session: DbDep, _: CurrentUser
+) -> list[PetitionNotificationRule]:
+    return await petition_notification_svc.list_rules(session)
+
+
+@router.post(
+    "/admin/notification-rules",
+    response_model=PetitionNotificationRuleOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增陳情負責人通知規則",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def create_petition_notification_rule(
+    payload: PetitionNotificationRuleCreate,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionNotificationRule:
+    try:
+        return await petition_notification_svc.create_rule(session, payload, updated_by_id=user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+
+@router.patch(
+    "/admin/notification-rules/{rule_id}",
+    response_model=PetitionNotificationRuleOut,
+    summary="更新陳情負責人通知規則",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def update_petition_notification_rule(
+    rule_id: uuid.UUID,
+    payload: PetitionNotificationRuleUpdate,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionNotificationRule:
+    rule = await session.get(PetitionNotificationRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此通知規則")
+    return await petition_notification_svc.update_rule(
+        session, rule, payload, updated_by_id=user.id
+    )
+
+
+@router.delete(
+    "/admin/notification-rules/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除陳情負責人通知規則",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def delete_petition_notification_rule(
+    rule_id: uuid.UUID, session: DbDep, _: CurrentUser
+) -> None:
+    rule = await session.get(PetitionNotificationRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此通知規則")
+    await petition_notification_svc.delete_rule(session, rule)
 
 
 # ── 機關工作台與統計 ─────────────────────────────────────────────────────────
@@ -856,14 +1013,14 @@ async def supplement_case(
         data=payload,
         actor_id=user.id if user else None,
     )
-    await _notify(
+    await _notify_responsible(
         session,
-        user_id=case_obj.assigned_to_id,
-        type="petition_supplemented",
+        case_obj,
+        type="petition_updated",
         title=f"陳情案件 {case_obj.case_number} 已補件",
         body=case_obj.title,
         link=f"/petitions/manage?case={case_obj.id}",
-        related_id=case_obj.id,
+        exclude_user_ids=(user.id,) if user else (),
     )
     from api.services.discord_notification_routes import emit_routed_notification
 
@@ -947,11 +1104,22 @@ async def transfer_case(
     await _notify(
         session,
         user_id=case_obj.submitter_id,
-        type="petition_transferred",
+        type="petition_updated",
         title=f"陳情案件 {case_obj.case_number} 已轉派",
         body=payload.reason,
         link=f"/petitions/{case_obj.id}",
         related_id=case_obj.id,
+    )
+    await _notify_responsible(
+        session,
+        case_obj,
+        type="petition_updated",
+        title=f"陳情案件 {case_obj.case_number} 已轉派",
+        body=payload.reason,
+        link=f"/petitions/manage?case={case_obj.id}",
+        exclude_user_ids=tuple(
+            user_id for user_id in (user.id, case_obj.submitter_id) if user_id is not None
+        ),
     )
     return await _decorate_case(
         case_obj, include_internal=True, can_view_submitter=case_obj.is_named
@@ -989,6 +1157,17 @@ async def reply_case(
         related_id=case_obj.id,
         external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
         external_name=case_obj.contact_name,
+    )
+    await _notify_responsible(
+        session,
+        case_obj,
+        type="petition_updated",
+        title=f"陳情案件 {case_obj.case_number} 已回覆",
+        body=case_obj.title,
+        link=f"/petitions/manage?case={case_obj.id}",
+        exclude_user_ids=tuple(
+            user_id for user_id in (user.id, case_obj.submitter_id) if user_id is not None
+        ),
     )
     from api.services.discord_notification_routes import emit_routed_notification
 
@@ -1070,6 +1249,15 @@ async def respond_public(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _notify_responsible(
+        session,
+        case_obj,
+        type="petition_updated",
+        title=f"陳情案件 {case_obj.case_number} 公開意願已回覆",
+        body=case_obj.title,
+        link=f"/petitions/manage?case={case_obj.id}",
+        exclude_user_ids=(user.id,) if user else (),
+    )
     return await _decorate_case(case_obj, include_internal=False, can_view_submitter=False)
 
 
@@ -1092,6 +1280,15 @@ async def confirm_public(
         case_obj = await petition_svc.confirm_public(session, case_obj, actor_id=user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _notify_responsible(
+        session,
+        case_obj,
+        type="petition_updated",
+        title=f"陳情案件 {case_obj.case_number} 已確認公開",
+        body=case_obj.title,
+        link=f"/petitions/manage?case={case_obj.id}",
+        exclude_user_ids=(user.id, case_obj.submitter_id),
+    )
     return await _decorate_case(
         case_obj, include_internal=True, can_view_submitter=case_obj.is_named
     )
@@ -1122,17 +1319,24 @@ async def update_status(
     await _notify(
         session,
         user_id=case_obj.submitter_id,
-        type=(
-            "petition_status_updated"
-            if case_obj.status in {PetitionStatus.NEEDS_INFO, PetitionStatus.CLOSED}
-            else f"petition_{case_obj.status.value}"
-        ),
+        type="petition_status_updated",
         title=f"陳情案件 {case_obj.case_number} 狀態更新",
         body=petition_svc.STATUS_LABELS[case_obj.status],
         link=f"/petitions/{case_obj.id}",
         related_id=case_obj.id,
         external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
         external_name=case_obj.contact_name,
+    )
+    await _notify_responsible(
+        session,
+        case_obj,
+        type="petition_updated",
+        title=f"陳情案件狀態更新 {case_obj.case_number}",
+        body=petition_svc.STATUS_LABELS[case_obj.status],
+        link=f"/petitions/manage?case={case_obj.id}",
+        exclude_user_ids=tuple(
+            user_id for user_id in (user.id, case_obj.submitter_id) if user_id is not None
+        ),
     )
     from api.services.discord_notification_routes import emit_routed_notification
 

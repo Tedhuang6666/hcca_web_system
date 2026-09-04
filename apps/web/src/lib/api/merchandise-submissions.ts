@@ -1,11 +1,11 @@
 import type {
   MerchandiseSubmissionAdminListItem,
   MerchandiseSubmissionItemCreate,
-  MerchandiseSubmissionItemOut,
+  MerchandiseSubmissionItemAdminOut,
   MerchandiseSubmissionOut,
   MerchandiseSubmissionPortalOut,
   MerchandiseSubmissionReview,
-  MerchandiseSubmissionSettingsOut,
+  MerchandiseSubmissionSettingsAdminOut,
   MerchandiseSubmissionSettingsUpdate,
   MerchandiseSubmissionUploadOut,
 } from "../types";
@@ -53,14 +53,14 @@ export const merchandiseSubmissionsApi = {
     files: MerchandiseSubmissionUploadOut[];
   }, submit = true) => patch<MerchandiseSubmissionOut>(`/merchandise-submissions/submissions/${id}?submit=${submit}`, body),
   deleteSubmission: (id: string) => del<void>(`/merchandise-submissions/submissions/${id}`),
-  getSettings: () => get<MerchandiseSubmissionSettingsOut>("/merchandise-submissions/admin/settings"),
+  getSettings: () => get<MerchandiseSubmissionSettingsAdminOut>("/merchandise-submissions/admin/settings"),
   updateSettings: (body: MerchandiseSubmissionSettingsUpdate) =>
-    patch<MerchandiseSubmissionSettingsOut>("/merchandise-submissions/admin/settings", body),
-  listItems: () => get<MerchandiseSubmissionItemOut[]>("/merchandise-submissions/admin/items"),
+    patch<MerchandiseSubmissionSettingsAdminOut>("/merchandise-submissions/admin/settings", body),
+  listItems: () => get<MerchandiseSubmissionItemAdminOut[]>("/merchandise-submissions/admin/items"),
   createItem: (body: MerchandiseSubmissionItemCreate) =>
-    post<MerchandiseSubmissionItemOut>("/merchandise-submissions/admin/items", body),
+    post<MerchandiseSubmissionItemAdminOut>("/merchandise-submissions/admin/items", body),
   updateItem: (id: string, body: Partial<MerchandiseSubmissionItemCreate>) =>
-    patch<MerchandiseSubmissionItemOut>(`/merchandise-submissions/admin/items/${id}`, body),
+    patch<MerchandiseSubmissionItemAdminOut>(`/merchandise-submissions/admin/items/${id}`, body),
   listSubmissions: (status?: string) =>
     get<MerchandiseSubmissionAdminListItem[]>(
       `/merchandise-submissions/admin/submissions${status ? `?status=${status}` : ""}`,

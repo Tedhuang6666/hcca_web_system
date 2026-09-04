@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ApiError, orgsApi, petitionsApi, withFallback } from "@/lib/api";
-import type { PetitionTypeOut } from "@/lib/types";
+import { ApiError, orgsApi, petitionsApi, usersApi, withFallback } from "@/lib/api";
+import UserPicker from "@/components/surveys/UserPicker";
+import type {
+  PetitionNotificationRuleOut,
+  PetitionNotificationSettingsOut,
+  PetitionTypeOut,
+  UserSummary,
+} from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
 import DraftStatus from "@/components/ui/DraftStatus";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
@@ -15,6 +21,32 @@ type PetitionTypeDraft = {
   sortOrder: number;
 };
 
+function NotificationRecipientPicker({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const idsKey = value.join(",");
+  const selectedIds = useMemo(() => (idsKey ? idsKey.split(",") : []), [idsKey]);
+
+  useEffect(() => {
+    void usersApi.listByIds(selectedIds).then(setUsers).catch(() => undefined);
+  }, [idsKey, selectedIds]);
+
+  return (
+    <UserPicker
+      value={users}
+      onChange={(nextUsers) => {
+        setUsers(nextUsers);
+        onChange(nextUsers.map((user) => user.id));
+      }}
+    />
+  );
+}
+
 export default function PetitionTypesAdminPage() {
   const [types, setTypes] = useState<PetitionTypeOut[]>([]);
   const [orgs, setOrgs] = useState<{ id: string; name: string; parent_id?: string | null }[]>([]);
@@ -22,6 +54,10 @@ export default function PetitionTypesAdminPage() {
   const [description, setDescription] = useState("");
   const [orgId, setOrgId] = useState("");
   const [sortOrder, setSortOrder] = useState(0);
+  const [notificationSettings, setNotificationSettings] =
+    useState<PetitionNotificationSettingsOut | null>(null);
+  const [notificationRules, setNotificationRules] = useState<PetitionNotificationRuleOut[]>([]);
+  const [savingNotifications, setSavingNotifications] = useState(false);
 
   const restoreDraft = useCallback((draft: PetitionTypeDraft) => {
     setName(draft.name);
@@ -41,12 +77,16 @@ export default function PetitionTypesAdminPage() {
   const load = useCallback(async () => {
     const failedSections: string[] = [];
     const noteFailure = (label: string) => () => failedSections.push(label);
-    const [typeItems, orgItems] = await Promise.all([
+    const [typeItems, orgItems, nextNotificationSettings, nextNotificationRules] = await Promise.all([
       withFallback(petitionsApi.listAdminTypes(), [], noteFailure("陳情類型")),
       withFallback(orgsApi.list({ active_only: true }), [], noteFailure("組織")),
+      withFallback(petitionsApi.getNotificationSettings(), null, noteFailure("陳情通知設定")),
+      withFallback(petitionsApi.listNotificationRules(), [], noteFailure("陳情通知規則")),
     ]);
     setTypes(typeItems);
     setOrgs(orgItems);
+    setNotificationSettings(nextNotificationSettings);
+    setNotificationRules(nextNotificationRules);
     if (!orgId && orgItems[0]) setOrgId(orgItems[0].id);
     if (failedSections.length) {
       toast.warning(`${failedSections.join("、")}暫時無法載入，其餘資料仍可使用`);
@@ -89,6 +129,71 @@ export default function PetitionTypesAdminPage() {
 
   const orgName = (id: string) => orgs.find((o) => o.id === id)?.name ?? id;
 
+  const saveNotificationSettings = async () => {
+    if (!notificationSettings) return;
+    setSavingNotifications(true);
+    try {
+      const updated = await petitionsApi.updateNotificationSettings({
+        enabled: notificationSettings.enabled,
+        recipient_user_ids: notificationSettings.recipient_user_ids,
+      });
+      setNotificationSettings(updated);
+      toast.success("陳情全域通知設定已儲存");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "通知設定儲存失敗");
+    } finally {
+      setSavingNotifications(false);
+    }
+  };
+
+  const createNotificationRule = async (scope: { petition_type_id?: string; org_id?: string }) => {
+    try {
+      const rule = await petitionsApi.createNotificationRule({
+        petition_type_id: scope.petition_type_id ?? null,
+        org_id: scope.org_id ?? null,
+        enabled: true,
+        recipient_user_ids: [],
+      });
+      setNotificationRules((current) => [...current, rule]);
+      toast.success("已建立通知覆寫規則");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "通知規則建立失敗");
+    }
+  };
+
+  const saveNotificationRule = async (rule: PetitionNotificationRuleOut) => {
+    try {
+      const updated = await petitionsApi.updateNotificationRule(rule.id, {
+        enabled: rule.enabled,
+        recipient_user_ids: rule.recipient_user_ids,
+        is_active: rule.is_active,
+      });
+      setNotificationRules((current) => current.map((item) => item.id === updated.id ? updated : item));
+      toast.success("通知覆寫規則已儲存");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "通知規則儲存失敗");
+    }
+  };
+
+  const deleteNotificationRule = async (rule: PetitionNotificationRuleOut) => {
+    try {
+      await petitionsApi.deleteNotificationRule(rule.id);
+      setNotificationRules((current) => current.filter((item) => item.id !== rule.id));
+      toast.success("已恢復沿用上層通知設定");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "通知規則刪除失敗");
+    }
+  };
+
+  const changeNotificationRule = (
+    ruleId: string,
+    change: Partial<Pick<PetitionNotificationRuleOut, "enabled" | "recipient_user_ids">>,
+  ) => {
+    setNotificationRules((current) =>
+      current.map((rule) => rule.id === ruleId ? { ...rule, ...change } : rule),
+    );
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-5">
       <div>
@@ -116,6 +221,48 @@ export default function PetitionTypesAdminPage() {
         <textarea className="input md:col-span-4 w-full" placeholder="描述（選填）" value={description} onChange={(e) => setDescription(e.target.value)} />
       </form>
 
+      {notificationSettings && (
+        <section className="card p-5 space-y-4">
+          <div>
+            <h2 className="font-semibold">負責人通知設定</h2>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+              新陳情與案件更新會通知負責人；類型覆寫優先於機關覆寫，再沒有覆寫才使用全域設定。
+            </p>
+          </div>
+          <label className="flex min-h-10 items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={notificationSettings.enabled}
+              onChange={(event) =>
+                setNotificationSettings({ ...notificationSettings, enabled: event.target.checked })
+              }
+            />
+            啟用全域陳情負責人通知
+          </label>
+          <div>
+            <p className="mb-1.5 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              指定全域收件人（留空則自動通知具陳情處理權限者）
+            </p>
+            <NotificationRecipientPicker
+              value={notificationSettings.recipient_user_ids}
+              onChange={(ids) =>
+                setNotificationSettings({ ...notificationSettings, recipient_user_ids: ids })
+              }
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={savingNotifications}
+              onClick={() => void saveNotificationSettings()}
+            >
+              {savingNotifications ? "儲存中…" : "儲存全域通知設定"}
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="card p-5 space-y-3">
         {types.map((type) => (
           <div key={type.id} className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
@@ -138,8 +285,78 @@ export default function PetitionTypesAdminPage() {
               <input className="input" type="number" defaultValue={type.sort_order} min={0} onBlur={(e) => Number(e.target.value) !== type.sort_order && update(type.id, { sort_order: Number(e.target.value) })} />
               <span className="text-sm self-center" style={{ color: type.is_active ? "var(--success)" : "var(--text-muted)" }}>{type.is_active ? "啟用中" : "已停用"}</span>
             </div>
+            {(() => {
+              const rule = notificationRules.find((item) => item.petition_type_id === type.id);
+              return rule ? (
+                <div className="rounded-lg border p-3 space-y-3" style={{ borderColor: "var(--border)" }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">此類型通知覆寫</p>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        onChange={(event) => changeNotificationRule(rule.id, { enabled: event.target.checked })}
+                      />
+                      啟用
+                    </label>
+                  </div>
+                  <NotificationRecipientPicker
+                    value={rule.recipient_user_ids}
+                    onChange={(ids) => changeNotificationRule(rule.id, { recipient_user_ids: ids })}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" className="btn btn-ghost text-xs" onClick={() => void deleteNotificationRule(rule)}>恢復全域設定</button>
+                    <button type="button" className="btn btn-primary text-xs" onClick={() => void saveNotificationRule(rule)}>儲存類型設定</button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-ghost text-xs" onClick={() => void createNotificationRule({ petition_type_id: type.id })}>
+                  設定此類型通知覆寫
+                </button>
+              );
+            })()}
           </div>
         ))}
+      </section>
+
+      <section className="card p-5 space-y-3">
+        <div>
+          <h2 className="font-semibold">負責機關通知覆寫</h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            機關規則會套用到該機關承辦的所有陳情；同時有類型規則時，以類型規則為準。
+          </p>
+        </div>
+        {orgs.map((org) => {
+          const rule = notificationRules.find((item) => item.org_id === org.id);
+          return (
+            <div key={org.id} className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">{orgDisplayName(org, orgs)}</p>
+                {!rule && (
+                  <button type="button" className="btn btn-ghost text-xs" onClick={() => void createNotificationRule({ org_id: org.id })}>
+                    新增機關覆寫
+                  </button>
+                )}
+              </div>
+              {rule && (
+                <>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={rule.enabled} onChange={(event) => changeNotificationRule(rule.id, { enabled: event.target.checked })} />
+                    啟用此機關通知
+                  </label>
+                  <NotificationRecipientPicker
+                    value={rule.recipient_user_ids}
+                    onChange={(ids) => changeNotificationRule(rule.id, { recipient_user_ids: ids })}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" className="btn btn-ghost text-xs" onClick={() => void deleteNotificationRule(rule)}>恢復全域設定</button>
+                    <button type="button" className="btn btn-primary text-xs" onClick={() => void saveNotificationRule(rule)}>儲存機關設定</button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
       </section>
     </div>
   );

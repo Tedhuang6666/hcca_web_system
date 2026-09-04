@@ -110,11 +110,15 @@ class NotificationPreferencesOut(BaseModel):
     regulation_review_assigned: ChannelPref
     regulation_publish_ready: ChannelPref
     regulation_published: ChannelPref
+    petition_received: ChannelPref
+    petition_updated: ChannelPref
     petition_assigned: ChannelPref
     petition_replied: ChannelPref
     petition_status_updated: ChannelPref
     meal_class_collecting: ChannelPref
     meal_pickup_ready: ChannelPref
+    merchandise_submission_received: ChannelPref
+    merchandise_submission_status: ChannelPref
     shop_order_paid: ChannelPref
     survey_invitation: ChannelPref
     announcement: ChannelPref
@@ -136,11 +140,15 @@ class NotificationPreferencesIn(BaseModel):
     regulation_review_assigned: ChannelPref | None = None
     regulation_publish_ready: ChannelPref | None = None
     regulation_published: ChannelPref | None = None
+    petition_received: ChannelPref | None = None
+    petition_updated: ChannelPref | None = None
     petition_assigned: ChannelPref | None = None
     petition_replied: ChannelPref | None = None
     petition_status_updated: ChannelPref | None = None
     meal_class_collecting: ChannelPref | None = None
     meal_pickup_ready: ChannelPref | None = None
+    merchandise_submission_received: ChannelPref | None = None
+    merchandise_submission_status: ChannelPref | None = None
     shop_order_paid: ChannelPref | None = None
     survey_invitation: ChannelPref | None = None
     announcement: ChannelPref | None = None
@@ -198,6 +206,7 @@ async def list_notifications(
     stmt = (
         select(Notification)
         .where(Notification.user_id == current_user.id)
+        .where(Notification.is_inapp_visible.is_(True))
         .order_by(Notification.created_at.desc())
     )
     if unread_only:
@@ -225,6 +234,7 @@ async def count_notifications(db: DbDep, current_user: CurrentUser) -> Notificat
     counts = await db.execute(
         select(func.count(Notification.id))
         .where(Notification.user_id == current_user.id)
+        .where(Notification.is_inapp_visible.is_(True))
         .with_only_columns(
             func.count(Notification.id).label("total"),
             func.count(Notification.id).filter(Notification.is_read.is_(False)).label("unread"),
@@ -246,6 +256,7 @@ async def mark_read(
         select(Notification)
         .where(Notification.id == notification_id)
         .where(Notification.user_id == current_user.id)
+        .where(Notification.is_inapp_visible.is_(True))
     )
     n = result.scalar_one_or_none()
     if not n:
@@ -260,6 +271,7 @@ async def mark_all_read(db: DbDep, current_user: CurrentUser) -> dict[str, int]:
     result = await db.execute(
         update(Notification)
         .where(Notification.user_id == current_user.id)
+        .where(Notification.is_inapp_visible.is_(True))
         .where(Notification.is_read == False)  # noqa: E712
         .values(is_read=True)
         .returning(Notification.id)
@@ -284,6 +296,7 @@ async def update_preferences(
     current_user: CurrentUser,
 ) -> NotificationPreferencesOut:
     merged = normalize_preferences(current_user.notification_preferences)
+    digest_frequency = get_digest_frequency(current_user.notification_preferences)
     for ntype, channel in body.model_dump(exclude_none=True).items():
         merged[ntype] = {
             "inapp": bool(channel["inapp"]),
@@ -291,6 +304,8 @@ async def update_preferences(
             "line": bool(channel["line"]),
             "discord": bool(channel["discord"]),
         }
+    if digest_frequency != "off":
+        merged["__digest_frequency"] = digest_frequency
     current_user.notification_preferences = merged
     await db.flush()
     return NotificationPreferencesOut(**merged)

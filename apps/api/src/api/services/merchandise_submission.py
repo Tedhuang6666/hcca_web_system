@@ -38,7 +38,28 @@ from api.services.merchandise_submission_ai import (
     analysis_error,
     analyze_image_ai_evidence,
 )
+from api.services.permission import get_user_permission_codes_batch
 from api.services.storage import get_storage
+
+_HANDLER_PERMISSIONS = {
+    "merchandise_submission:view",
+    "merchandise_submission:manage",
+    "merchandise_submission:review",
+    "shop:manage",
+}
+
+
+async def _active_recipient_ids(session: AsyncSession, values: list[uuid.UUID]) -> list[uuid.UUID]:
+    unique = list(dict.fromkeys(values))
+    if not unique:
+        return []
+    result = await session.scalars(
+        select(User.id).where(User.id.in_(unique), User.is_active.is_(True))
+    )
+    valid = set(result.all())
+    if len(valid) != len(unique):
+        raise ValueError("通知收件人必須是啟用中的使用者")
+    return unique
 
 
 async def get_settings(session: AsyncSession) -> MerchandiseSubmissionSettings:
@@ -123,6 +144,9 @@ async def update_settings(
     fields = data.model_dump(exclude_unset=True)
     if "global_fields" in fields and fields["global_fields"] is not None:
         fields["global_fields"] = [field.model_dump() for field in data.global_fields or []]
+    if "notification_recipient_ids" in fields:
+        recipient_ids = await _active_recipient_ids(session, data.notification_recipient_ids or [])
+        fields["notification_recipient_ids"] = [str(user_id) for user_id in recipient_ids]
     for field, value in fields.items():
         setattr(settings, field, value)
     if settings.opens_at and settings.closes_at and settings.opens_at >= settings.closes_at:
@@ -226,8 +250,12 @@ async def get_item(session: AsyncSession, item_id: uuid.UUID) -> MerchandiseSubm
 async def create_item(
     session: AsyncSession, data: MerchandiseSubmissionItemCreate, *, created_by_id: uuid.UUID
 ) -> MerchandiseSubmissionItem:
+    values = data.model_dump(exclude={"template_images", "custom_fields"})
+    if values.get("notification_recipient_ids") is not None:
+        recipient_ids = await _active_recipient_ids(session, data.notification_recipient_ids or [])
+        values["notification_recipient_ids"] = [str(user_id) for user_id in recipient_ids]
     item = MerchandiseSubmissionItem(
-        **data.model_dump(exclude={"template_images", "custom_fields"}),
+        **values,
         template_images=[image.model_dump() for image in data.template_images],
         custom_fields=[field.model_dump() for field in data.custom_fields],
         created_by_id=created_by_id,
@@ -246,6 +274,9 @@ async def update_item(
         fields["template_images"] = [image.model_dump() for image in data.template_images or []]
     if "custom_fields" in fields and fields["custom_fields"] is not None:
         fields["custom_fields"] = [field.model_dump() for field in data.custom_fields or []]
+    if "notification_recipient_ids" in fields and fields["notification_recipient_ids"] is not None:
+        recipient_ids = await _active_recipient_ids(session, data.notification_recipient_ids or [])
+        fields["notification_recipient_ids"] = [str(user_id) for user_id in recipient_ids]
     for field, value in fields.items():
         setattr(item, field, value)
     _validate_item_times(item)
@@ -260,6 +291,46 @@ def _validate_item_times(item: MerchandiseSubmissionItem) -> None:
         and item.opens_at_override >= item.closes_at_override
     ):
         raise ValueError("品項截止時間必須晚於開放時間")
+
+
+async def resolve_notification_recipient_ids(
+    session: AsyncSession, submission: MerchandiseSubmission
+) -> list[uuid.UUID]:
+    """依品項覆寫或全域設定找出校商投稿負責人。"""
+    settings = await get_settings(session)
+    item = submission.item or await get_item(session, submission.item_id)
+    if item is None:
+        return []
+    enabled = (
+        item.notification_enabled
+        if item.notification_enabled is not None
+        else settings.notification_enabled
+    )
+    if not enabled:
+        return []
+    configured = (
+        item.notification_recipient_ids
+        if item.notification_recipient_ids is not None
+        else settings.notification_recipient_ids
+    )
+    configured_ids = [uuid.UUID(str(user_id)) for user_id in (configured or [])]
+    if configured_ids:
+        result = await session.scalars(
+            select(User.id).where(User.id.in_(configured_ids), User.is_active.is_(True))
+        )
+        valid = set(result.all())
+        return list(dict.fromkeys(user_id for user_id in configured_ids if user_id in valid))
+
+    result = await session.scalars(select(User.id).where(User.is_active.is_(True)))
+    user_ids = list(result.all())
+    permissions = await get_user_permission_codes_batch(session, user_ids)
+    return list(
+        dict.fromkeys(
+            user_id
+            for user_id in user_ids
+            if permissions.get(user_id, frozenset()) & _HANDLER_PERMISSIONS
+        )
+    )
 
 
 async def get_submission(

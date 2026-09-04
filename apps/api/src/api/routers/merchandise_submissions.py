@@ -18,12 +18,12 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
-from api.email.sender import send_branded_email
 from api.models.merchandise_submission import MerchandiseSubmissionStatus
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.merchandise_submission import (
     MerchandiseSubmissionAdminListItem,
+    MerchandiseSubmissionItemAdminOut,
     MerchandiseSubmissionItemCreate,
     MerchandiseSubmissionItemOut,
     MerchandiseSubmissionItemUpdate,
@@ -31,6 +31,7 @@ from api.schemas.merchandise_submission import (
     MerchandiseSubmissionPortalOut,
     MerchandiseSubmissionReview,
     MerchandiseSubmissionSave,
+    MerchandiseSubmissionSettingsAdminOut,
     MerchandiseSubmissionSettingsOut,
     MerchandiseSubmissionSettingsUpdate,
     MerchandiseSubmissionUploadOut,
@@ -127,24 +128,25 @@ async def _submission_discord_details(
     return fields, image_urls
 
 
-def _notify_review_result_by_email(submission) -> None:
-    status_label = _REVIEW_STATUS_LABELS.get(submission.status, str(submission.status))
-    note = submission.review_note or "請前往校商投稿頁查看最新狀態。"
-    send_branded_email(
-        to=[submission.user.email],
-        subject=f"【校商投稿】「{submission.item.name}」審核結果：{status_label}",
-        template="notification",
-        context={
-            "heading": f"您的投稿{status_label}",
-            "body_text": (
-                f"您投稿的「{submission.item.name}」審核狀態已更新為「{status_label}」。\n\n"
-                f"審核備註：{note}"
-            ),
-            "preview_text": f"校商投稿「{submission.item.name}」{status_label}",
-            "cta_url": f"{settings.FRONTEND_BASE_URL.rstrip('/')}/merchandise-submissions",
-            "cta_label": "前往查看投稿",
-        },
-    )
+async def _notify_submission_recipients(
+    session: AsyncSession, submission, *, actor_id: uuid.UUID | None = None
+) -> None:
+    try:
+        from api.services.notification import notify_users
+
+        recipient_ids = await submission_svc.resolve_notification_recipient_ids(session, submission)
+        await notify_users(
+            session,
+            user_ids=recipient_ids,
+            exclude_user_ids=(actor_id,) if actor_id else (),
+            type="merchandise_submission_received",
+            title=f"校商投稿：{submission.item.name}",
+            body=f"新投稿已送出，投稿編號：{submission.id}",
+            link=f"/merchandise-submissions/admin?submission={submission.id}",
+            related_id=submission.id,
+        )
+    except Exception:
+        logger.warning("校商投稿負責人通知失敗 submission=%s", submission.id, exc_info=True)
 
 
 def _serialize_submission(submission, *, include_submitter: bool):
@@ -462,6 +464,7 @@ async def create_submission(
             thread_name=f"投稿討論：{submission.item.name[:70]}",
             image_urls=image_urls,
         )
+        await _notify_submission_recipients(session, submission, actor_id=current_user.id)
     return _serialize_submission(submission, include_submitter=False)
 
 
@@ -497,6 +500,8 @@ async def update_my_submission(
         summary=f"更新校商投稿「{submission.item.name}」",
     )
     await _invalidate_mine_cache(current_user.id)
+    if submit and submission.status == MerchandiseSubmissionStatus.SUBMITTED:
+        await _notify_submission_recipients(session, submission, actor_id=current_user.id)
     return _serialize_submission(submission, include_submitter=False)
 
 
@@ -535,7 +540,7 @@ async def delete_my_submission(
 
 @router.get(
     "/admin/settings",
-    response_model=MerchandiseSubmissionSettingsOut,
+    response_model=MerchandiseSubmissionSettingsAdminOut,
     dependencies=[
         Depends(
             require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
@@ -548,7 +553,7 @@ async def admin_settings(session: DbDep, _: CurrentUser):
 
 @router.patch(
     "/admin/settings",
-    response_model=MerchandiseSubmissionSettingsOut,
+    response_model=MerchandiseSubmissionSettingsAdminOut,
     dependencies=[
         Depends(
             require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
@@ -606,7 +611,7 @@ async def upload_template_image(
 
 @router.get(
     "/admin/items",
-    response_model=list[MerchandiseSubmissionItemOut],
+    response_model=list[MerchandiseSubmissionItemAdminOut],
     dependencies=[
         Depends(
             require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
@@ -619,7 +624,7 @@ async def admin_items(session: DbDep, _: CurrentUser):
 
 @router.post(
     "/admin/items",
-    response_model=MerchandiseSubmissionItemOut,
+    response_model=MerchandiseSubmissionItemAdminOut,
     status_code=status.HTTP_201_CREATED,
     dependencies=[
         Depends(
@@ -642,7 +647,7 @@ async def create_admin_item(
 
 @router.patch(
     "/admin/items/{item_id}",
-    response_model=MerchandiseSubmissionItemOut,
+    response_model=MerchandiseSubmissionItemAdminOut,
     dependencies=[
         Depends(
             require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
@@ -808,23 +813,17 @@ async def review_admin_submission(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     from api.services.notification import create_notification
 
-    if submission.user.email:
-        try:
-            _notify_review_result_by_email(submission)
-        except Exception:
-            logger.warning(
-                "校商投稿審核結果 Email 排程失敗 submission=%s user=%s",
-                submission.id,
-                submission.user_id,
-                exc_info=True,
-            )
-
+    status_label = _REVIEW_STATUS_LABELS.get(submission.status, str(submission.status))
     await create_notification(
         session,
         user_id=submission.user_id,
-        type="system",
-        title=f"校商投稿「{submission.item.name}」已有審核結果",
-        body=submission.review_note or "請前往投稿頁查看最新狀態。",
+        type="merchandise_submission_status",
+        title=f"校商投稿「{submission.item.name}」審核結果：{status_label}",
+        body=(
+            f"目前狀態：{status_label}。\n{submission.review_note}"
+            if submission.review_note
+            else "請前往投稿頁查看最新狀態。"
+        ),
         link="/merchandise-submissions",
         related_id=submission.id,
     )

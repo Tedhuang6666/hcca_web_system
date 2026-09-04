@@ -37,6 +37,8 @@ class MerchandiseSubmissionSettingsUpdate(BaseModel):
     submission_intro: str | None = Field(None, max_length=10000)
     global_fields: list[SubmissionCustomField] | None = Field(None, max_length=20)
     show_announcement_popup: bool | None = None
+    notification_enabled: bool | None = None
+    notification_recipient_ids: list[uuid.UUID] | None = Field(None, max_length=100)
 
     @field_validator("global_fields")
     @classmethod
@@ -66,6 +68,11 @@ class MerchandiseSubmissionSettingsOut(BaseModel):
     updated_at: datetime
 
 
+class MerchandiseSubmissionSettingsAdminOut(MerchandiseSubmissionSettingsOut):
+    notification_enabled: bool
+    notification_recipient_ids: list[uuid.UUID]
+
+
 class MerchandiseSubmissionItemCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=3000)
@@ -78,6 +85,8 @@ class MerchandiseSubmissionItemCreate(BaseModel):
     opens_at_override: datetime | None = None
     closes_at_override: datetime | None = None
     max_file_size_mb_override: int | None = Field(None, ge=1, le=250)
+    notification_enabled: bool | None = None
+    notification_recipient_ids: list[uuid.UUID] | None = Field(None, max_length=100)
 
     @field_validator("custom_fields")
     @classmethod
@@ -113,6 +122,11 @@ class MerchandiseSubmissionItemOut(BaseModel):
     max_file_size_mb_override: int | None
     created_at: datetime
     updated_at: datetime
+
+
+class MerchandiseSubmissionItemAdminOut(MerchandiseSubmissionItemOut):
+    notification_enabled: bool | None
+    notification_recipient_ids: list[uuid.UUID] | None
 
 
 class MerchandiseSubmissionItemPortalOut(MerchandiseSubmissionItemOut):

@@ -45,6 +45,10 @@ class Notification(Base, TimestampMixin):
     is_read: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=expression.false()
     )
+    # 摘要 Email 專用的通知仍保留在資料庫，但不出現在站內收件匣。
+    is_inapp_visible: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=expression.true()
+    )
     # 關聯資源 ID（如 document_id），方便前端快速導航
     related_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 

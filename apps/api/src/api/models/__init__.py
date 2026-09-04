@@ -293,6 +293,10 @@ from api.models.petition import (  # noqa: F401
     PetitionStatus,
     PetitionType,
 )
+from api.models.petition_notification import (  # noqa: F401
+    PetitionNotificationRule,
+    PetitionNotificationSettings,
+)
 
 # 政策版本與同意紀錄
 from api.models.policy import (  # noqa: F401

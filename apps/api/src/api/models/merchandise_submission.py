@@ -53,6 +53,12 @@ class MerchandiseSubmissionSettings(Base, TimestampMixin):
     global_fields: Mapped[list] = mapped_column(
         JSONList, nullable=False, default=list, server_default="[]"
     )
+    notification_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    notification_recipient_ids: Mapped[list] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
     show_announcement_popup: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
@@ -91,6 +97,9 @@ class MerchandiseSubmissionItem(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     max_file_size_mb_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # None = 沿用全域設定；空列表 = 使用系統權限自動尋找負責人。
+    notification_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    notification_recipient_ids: Mapped[list | None] = mapped_column(JSONList, nullable=True)
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
