@@ -11,6 +11,7 @@ db_session 走真實資料庫交易，驗證與 Postgres 互動（with_for_updat
 
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -23,6 +24,7 @@ from api.models.document import (
     ApprovalStepStatus,
     DeliveryMethod,
     Document,
+    DocumentAttachment,
     DocumentCategory,
     DocumentSerialTemplate,
     DocumentStatus,
@@ -753,6 +755,85 @@ async def test_queue_document_recipient_emails_uses_explicit_recipient_email(
     )
     assert event is not None
     assert event.payload["to"] == ["external@example.com"]
+
+
+async def test_queue_document_recipient_emails_attaches_variant_and_files(
+    db_session: AsyncSession, make_user, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.services.document._delivery as document_service
+    from api.services.storage import LocalStorageBackend
+
+    org = await _make_org(db_session)
+    creator = await make_user()
+    primary = await make_user(email="primary@example.com")
+    doc = await _make_draft(
+        db_session,
+        org,
+        creator,
+        recipients=[
+            RecipientCreate(
+                recipient_type="main",
+                name="正本單位",
+                email=primary.email,
+                delivery_method=DeliveryMethod.EMAIL,
+            ),
+            RecipientCreate(
+                recipient_type="copy",
+                name="副本單位",
+                email="copy@example.com",
+                delivery_method=DeliveryMethod.EMAIL,
+            ),
+        ],
+    )
+    source_path = tmp_path / "attachment.pdf"
+    source_path.write_bytes(b"%PDF attachment")
+    doc.attachments.append(
+        DocumentAttachment(
+            filename="附件.pdf",
+            storage_key=source_path.name,
+            content_type="application/pdf",
+            file_size=source_path.stat().st_size,
+            uploaded_by=creator.id,
+        )
+    )
+    await db_session.flush()
+
+    render_calls: list[tuple[str, str]] = []
+
+    async def fake_render_document_print_html(
+        _session, _doc, _viewer=None, *, copy_mark_override, addressed_recipient_name
+    ) -> str:
+        render_calls.append((copy_mark_override, addressed_recipient_name))
+        return "<html>mail document</html>"
+
+    monkeypatch.setattr(document_service, "get_storage", lambda: LocalStorageBackend(str(tmp_path)))
+    monkeypatch.setattr(
+        document_service, "render_document_print_html", fake_render_document_print_html
+    )
+    monkeypatch.setattr(document_service, "render_print_pdf", lambda _html: b"%PDF mail")
+
+    assert await document_service.queue_document_recipient_emails(db_session, doc) == 2
+
+    events = (
+        (
+            await db_session.execute(
+                select(OutboxEvent)
+                .where(OutboxEvent.event_type == "email.send")
+                .order_by(OutboxEvent.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(events) == 2
+    event_by_email = {event.payload["to"][0]: event for event in events}
+    primary_attachments = event_by_email[primary.email].payload["attachments"]
+    copy_attachments = event_by_email["copy@example.com"].payload["attachments"]
+    assert primary_attachments[0]["filename"].endswith("_正本_正本單位.pdf")
+    assert copy_attachments[0]["filename"].endswith("_副本_副本單位.pdf")
+    assert primary_attachments[1]["filename"] == "附件.pdf"
+    assert base64.b64decode(primary_attachments[1]["content"]) == b"%PDF attachment"
+    assert render_calls == [("正本", "正本單位"), ("副本", "副本單位")]
 
 
 # ── recall_document / archive_document / delete_document ───────────────────

@@ -1617,9 +1617,17 @@ function ResourcePreview({ resource }: { resource: MatterResourceOut }) {
           title={`${resource.title} 預覽`}
           className="h-72 w-full"
           loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+          referrerPolicy="strict-origin-when-cross-origin"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
+          allow="autoplay; fullscreen"
+          allowFullScreen
         />
+        <p className="px-3 py-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          若預覽空白，請確認檔案分享權限為「知道連結的任何人可檢視」，或{" "}
+          <a href={resource.url} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--primary)" }}>
+            在 Google Drive 開啟
+          </a>。
+        </p>
       </div>
     );
   }
