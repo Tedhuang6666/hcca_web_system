@@ -5561,6 +5561,23 @@ export interface paths {
         patch: operations["update_budget_draft_allocation_finance_budget_submissions__submission_id__allocations__allocation_id__patch"];
         trace?: never;
     };
+    "/finance/budget-submissions/{submission_id}/council-review-publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Council Review Publication */
+        patch: operations["update_council_review_publication_finance_budget_submissions__submission_id__council_review_publication_patch"];
+        trace?: never;
+    };
     "/finance/budget-submissions/{submission_id}/nodes": {
         parameters: {
             query?: never;
@@ -17397,6 +17414,8 @@ export interface components {
         };
         /** Body_import_budget_finance_ledgers__ledger_id__budgets_import_post */
         Body_import_budget_finance_ledgers__ledger_id__budgets_import_post: {
+            /** Budget Id */
+            budget_id?: string | null;
             /** File */
             file: string;
             /** Name */
@@ -17408,6 +17427,8 @@ export interface components {
             period_id: string;
             /** Proposing Org Id */
             proposing_org_id?: string | null;
+            /** Replace Submission Id */
+            replace_submission_id?: string | null;
             /** Title */
             title?: string | null;
         };
@@ -17726,6 +17747,11 @@ export interface components {
             /** Unit Price */
             unit_price?: number | null;
         };
+        /** BudgetCouncilReviewPublicationUpdate */
+        BudgetCouncilReviewPublicationUpdate: {
+            /** Is Public */
+            is_public: boolean;
+        };
         /** BudgetCreate */
         BudgetCreate: {
             /** Name */
@@ -17885,6 +17911,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Council Review Public */
+            is_council_review_public: boolean;
             kind: components["schemas"]["BudgetSubmissionKind"];
             /** Note */
             note: string | null;
@@ -32025,8 +32053,14 @@ export interface components {
             nodes: components["schemas"]["BudgetNodeOut"][];
             /** Period Name */
             period_name: string;
+            review_submission?: components["schemas"]["PublicBudgetSubmissionOut"] | null;
             /** Submissions */
             submissions: components["schemas"]["PublicBudgetSubmissionOut"][];
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "approved" | "council_review";
         };
         /** PublicBudgetListItem */
         PublicBudgetListItem: {
@@ -32039,6 +32073,15 @@ export interface components {
             name: string;
             /** Period Name */
             period_name: string;
+            /** Review Submission Id */
+            review_submission_id?: string | null;
+            /** Review Title */
+            review_title?: string | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "approved" | "council_review";
         };
         /** PublicBudgetSubmissionOut */
         PublicBudgetSubmissionOut: {
@@ -32052,6 +32095,7 @@ export interface components {
             review_note: string | null;
             /** Reviewed At */
             reviewed_at: string | null;
+            status: components["schemas"]["BudgetSubmissionStatus"];
             /** Title */
             title: string;
         };
@@ -51297,6 +51341,41 @@ export interface operations {
             };
         };
     };
+    update_council_review_publication_finance_budget_submissions__submission_id__council_review_publication_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetCouncilReviewPublicationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetSubmissionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_budget_node_finance_budget_submissions__submission_id__nodes_post: {
         parameters: {
             query?: never;
@@ -52651,7 +52730,9 @@ export interface operations {
     };
     get_public_budget_detail_finance_public_budgets__budget_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                review_submission_id?: string | null;
+            };
             header?: never;
             path: {
                 budget_id: string;
