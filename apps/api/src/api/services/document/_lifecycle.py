@@ -26,7 +26,7 @@ from api.models.document import (
     DocumentVisibility,
     RecipientType,
 )
-from api.models.org import Org
+from api.models.org import Org, Position
 from api.models.school_class import SchoolClass
 from api.schemas.document import (
     DocumentApprovalDelegationCreate,
@@ -85,6 +85,26 @@ async def _validate_recipient_targets(
         )
         if existing_org_ids != org_ids:
             raise ValueError("受文自治組織不存在")
+
+    position_recipients = {
+        position_id: recipient
+        for recipient in recipients
+        for position_id in recipient.email_position_ids
+    }
+    if position_recipients:
+        position_rows = (
+            await session.execute(
+                select(Position.id, Position.org_id).where(Position.id.in_(position_recipients))
+            )
+        ).all()
+        positions_by_id = {
+            position_id: position_org_id for position_id, position_org_id in position_rows
+        }
+        if set(positions_by_id) != set(position_recipients):
+            raise ValueError("電子郵件通知職位不存在")
+        for position_id, recipient in position_recipients.items():
+            if recipient.target_org_id != positions_by_id[position_id]:
+                raise ValueError("電子郵件通知職位必須屬於該機關")
 
 
 async def create_document(
@@ -188,6 +208,7 @@ async def create_document(
                 target_org_id=r.target_org_id,
                 target_class_id=r.target_class_id,
                 delivery_method=r.delivery_method,
+                email_position_ids=[str(position_id) for position_id in r.email_position_ids],
             )
         )
 
@@ -547,6 +568,7 @@ async def upsert_recipients(
             target_org_id=r.target_org_id,
             target_class_id=r.target_class_id,
             delivery_method=r.delivery_method,
+            email_position_ids=[str(position_id) for position_id in r.email_position_ids],
         )
         session.add(rec)
         new_recipients.append(rec)

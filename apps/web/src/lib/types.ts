@@ -776,7 +776,7 @@ export interface ElectionBallotBox {
 /** 速別：普通件 / 速件 / 最速件 */
 /** 公文類別：函 / 令 / 公告 / 報告 / 紀錄 / 咨 / 開會通知單 / 其他 */
 /** 可見度：密件 / 機關可見 / 登入後可見 / 公開（未登入可見） */
-/** 遞送方式（後端僅儲存與顯示） */
+/** 遞送方式（Email 會在公文正式發文後通知受文者） */
 
 
 export interface RecipientCreatePayload {
@@ -787,6 +787,7 @@ export interface RecipientCreatePayload {
   target_org_id?: string | null;
   target_class_id?: string | null;
   delivery_method?: DeliveryMethod;
+  email_position_ids?: string[];
 }
 
 

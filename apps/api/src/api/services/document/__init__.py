@@ -33,6 +33,7 @@ from api.services.document._access import (
     list_documents,
     user_has_full_document_access,
 )
+from api.services.document._delivery import queue_document_recipient_emails
 from api.services.document._lifecycle import (
     PRIMARY_RECIPIENT_TYPES,
     _get_current_approval,
@@ -101,6 +102,8 @@ __all__ = [
     "update_document_template",
     "deactivate_document_template",
     "create_document_from_template",
+    # delivery
+    "queue_document_recipient_emails",
     # access
     "REDACTED_CONFIDENTIAL_TEXT",
     "SENSITIVE_DOCUMENT_CLASSIFICATIONS",

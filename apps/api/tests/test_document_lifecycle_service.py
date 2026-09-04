@@ -15,11 +15,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
 from api.models.document import (
     ApprovalStepStatus,
+    DeliveryMethod,
     Document,
     DocumentCategory,
     DocumentSerialTemplate,
@@ -28,6 +30,7 @@ from api.models.document import (
     YearMode,
 )
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.outbox import OutboxEvent
 from api.models.school_class import SchoolClass
 from api.models.user import User
 from api.schemas.document import (
@@ -46,6 +49,7 @@ from api.services.document import (
     delete_document,
     issue_document_directly,
     list_approval_delegations,
+    queue_document_recipient_emails,
     recall_document,
     reject_step,
     reject_to_previous_step,
@@ -666,6 +670,89 @@ async def test_upsert_meeting_notice_recipients_requires_attendee(
         await upsert_recipients(
             db_session, doc, recipients=[RecipientCreate(recipient_type="main", name="僅受文者")]
         )
+
+
+async def test_queue_document_recipient_emails_resolves_current_position_holders(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session, name="班聯會")
+    creator = await make_user()
+    chair = await make_user(email="chair@school.edu")
+    deputy = await make_user(email="deputy@school.edu")
+    former = await make_user(email="former@school.edu")
+    position = Position(org_id=org.id, name="正副主席")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            UserPosition(
+                user_id=chair.id,
+                position_id=position.id,
+                start_date=local_today() - timedelta(days=30),
+            ),
+            UserPosition(
+                user_id=deputy.id,
+                position_id=position.id,
+                start_date=local_today() - timedelta(days=30),
+            ),
+            UserPosition(
+                user_id=former.id,
+                position_id=position.id,
+                start_date=local_today() - timedelta(days=90),
+                end_date=local_today() - timedelta(days=1),
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    doc = await _make_draft(
+        db_session,
+        org,
+        creator,
+        recipients=[
+            RecipientCreate(
+                recipient_type="main",
+                name="班聯會",
+                target_org_id=org.id,
+                email_position_ids=[position.id],
+                delivery_method=DeliveryMethod.EMAIL,
+            )
+        ],
+    )
+
+    assert await queue_document_recipient_emails(db_session, doc) == 2
+    event = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "email.send")
+    )
+    assert event is not None
+    assert set(event.payload["to"]) == {chair.email, deputy.email}
+
+
+async def test_queue_document_recipient_emails_uses_explicit_recipient_email(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = await _make_draft(
+        db_session,
+        org,
+        creator,
+        recipients=[
+            RecipientCreate(
+                recipient_type="main",
+                name="外部受文單位",
+                email="external@example.com",
+                delivery_method=DeliveryMethod.EMAIL,
+            )
+        ],
+    )
+
+    assert await queue_document_recipient_emails(db_session, doc) == 1
+    event = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "email.send")
+    )
+    assert event is not None
+    assert event.payload["to"] == ["external@example.com"]
 
 
 # ── recall_document / archive_document / delete_document ───────────────────

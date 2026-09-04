@@ -115,6 +115,7 @@ async def batch_approve_documents(
                 summary=f"批量核准公文「{updated.title}」",
             )
             if updated.status == DocumentStatus.APPROVED:
+                await doc_svc.queue_document_recipient_emails(session, updated)
                 await emit_public_document_notice(session, updated)
             bg.add_task(ws_broadcast_bg, updated)
             results.append(batch_result(doc_id, ok=True, doc=updated))
@@ -363,6 +364,7 @@ async def approve_document(
     )
 
     if updated.status == DocumentStatus.APPROVED:
+        await doc_svc.queue_document_recipient_emails(session, updated)
         await create_notification(
             session,
             user_id=updated.created_by,
@@ -835,6 +837,7 @@ async def issue_document_directly(
         link=f"/documents/{loaded.id}",
         related_id=loaded.id,
     )
+    await doc_svc.queue_document_recipient_emails(session, loaded)
     await emit_public_document_notice(session, loaded)
     bg.add_task(ws_broadcast_bg, loaded)
     return loaded
