@@ -17,6 +17,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import DraftStatus from "@/components/ui/DraftStatus";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import { DOCUMENT_TEMPLATE_PRESETS } from "@/lib/documentTemplatePresets";
 
 const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "letter", label: "函" },
@@ -159,6 +160,19 @@ export default function DocumentTemplatesPage() {
     setForm({ ...EMPTY_FORM, org_id: orgFilter });
   };
 
+  const applyPreset = (preset: (typeof DOCUMENT_TEMPLATE_PRESETS)[number]) => {
+    clearDraft();
+    setEditingId(null);
+    setForm({
+      ...EMPTY_FORM,
+      ...preset.values,
+      org_id: form.org_id || orgFilter,
+      name: preset.name,
+      description: preset.description,
+    });
+    toast.info(`已帶入「${preset.name}」，請確認組織與占位符後儲存`);
+  };
+
   const editTemplate = (item: DocumentTemplateOut) => {
     setEditingId(item.id);
     setForm({
@@ -275,6 +289,34 @@ export default function DocumentTemplatesPage() {
 
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-4">
+          <section className="card p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold">快速套用預設範本</h2>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  先帶入正式句式與段落骨架，再依組織、受文者和實際內容修改並儲存。
+                </p>
+              </div>
+              <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>共 {DOCUMENT_TEMPLATE_PRESETS.length} 組</span>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {DOCUMENT_TEMPLATE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="rounded-lg border px-3 py-2 text-left transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-dim)]"
+                  style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+                  onClick={() => applyPreset(preset)}
+                >
+                  <span className="block text-xs font-semibold">{preset.name}</span>
+                  <span className="mt-1 block text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                    {preset.description}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
           <div className="card p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
               <select value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)} style={inputStyle}>
@@ -382,7 +424,14 @@ export default function DocumentTemplatesPage() {
             />
             <select
               value={form.category}
-              onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value as DocumentCategory }))}
+              onChange={(e) => {
+                const category = e.target.value as DocumentCategory;
+                setForm((prev) => ({
+                  ...prev,
+                  category,
+                  action_required: category === "consultation" ? null : prev.action_required,
+                }));
+              }}
               style={inputStyle}
             >
               {CATEGORY_OPTIONS.map((item) => (
@@ -456,7 +505,7 @@ export default function DocumentTemplatesPage() {
               <textarea
                 value={form.subject ?? ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
-                placeholder="主旨"
+                placeholder={form.category === "consultation" ? "咨文第一段：依據、提名事項與咨請內容" : "主旨"}
                 rows={2}
                 style={{ ...inputStyle, resize: "vertical" }}
               />
@@ -475,24 +524,24 @@ export default function DocumentTemplatesPage() {
 	                        ? "公告事項"
 	                        : form.category === "report"
 	                          ? "說明／分析"
-	                          : "說明"
+                          : form.category === "consultation"
+                            ? "咨文第二段：隨咨檢送文件與冊數"
+                            : "說明"
               }
               rows={5}
               style={{ ...inputStyle, resize: "vertical" }}
             />
-            {form.category !== "meeting_notice" && form.category !== "inspection_notice" && form.category !== "decree" && (
+            {form.category !== "meeting_notice" && form.category !== "inspection_notice" && form.category !== "decree" && form.category !== "consultation" && (
               <textarea
                 value={form.action_required ?? ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, action_required: e.target.value }))}
-                placeholder={
-                  form.category === "record"
-                    ? "決議"
-                    : form.category === "report"
-                      ? "建議事項"
-                      : form.category === "consultation"
-                        ? "辦法或事項"
+                  placeholder={
+                    form.category === "record"
+                      ? "決議"
+                      : form.category === "report"
+                        ? "建議事項"
                         : "辦法"
-                }
+                  }
                 rows={3}
                 style={{ ...inputStyle, resize: "vertical" }}
               />

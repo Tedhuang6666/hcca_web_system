@@ -123,6 +123,23 @@ function DocumentBody({ document }: { document: DocumentOut }) {
     );
   }
 
+  if (document.category === "consultation") {
+    const recipient = document.recipients
+      .filter((item) => item.recipient_type === "main" || item.recipient_type === "primary")
+      .map((item) => item.name)
+      .join("、");
+    return (
+      <div className="space-y-5 text-sm leading-8" style={{ color: "var(--text-primary)" }}>
+        <p>{recipient || "（未填受文者）"}</p>
+        {document.subject && <OfficialText value={document.subject} />}
+        {document.doc_description && <OfficialText value={document.doc_description} />}
+        {document.action_required && <OfficialText value={document.action_required} />}
+        <p className="pt-2">此咨</p>
+        <p>{recipient || "（未填受文者）"}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 text-sm" style={{ color: "var(--text-primary)" }}>
       {document.subject && (
@@ -148,9 +165,7 @@ function DocumentBody({ document }: { document: DocumentOut }) {
           <p>
             {document.category === "report"
               ? "建議事項："
-              : document.category === "consultation"
-                ? "辦法或事項："
-                : "辦法："}
+              : "辦法："}
           </p>
           <div className="pl-[2em]"><OfficialText value={document.action_required} /></div>
         </div>
