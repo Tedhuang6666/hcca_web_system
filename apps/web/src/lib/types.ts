@@ -657,6 +657,7 @@ export type FinanceBudgetSubmission = {
   id: string; budget_id: string; kind: BudgetSubmissionKind; status: BudgetSubmissionStatus
   title: string; note?: string | null; created_by_id: string; submitted_at?: string | null
   reviewed_by_id?: string | null; reviewed_at?: string | null; review_note?: string | null
+  is_council_review_public: boolean
 }
 export type FinanceBudgetNode = {
   id: string; budget_id: string; parent_id?: string | null; name: string; sort_order: number
@@ -689,16 +690,22 @@ export type FinanceSettlement = {
   period_id: string; period_name: string; budgeted_total: number; settled_total: number
   unsettled_claim_count: number; lines: FinanceSettlementLine[]
 }
-export type PublicBudgetListItem = { id: string; name: string; period_name: string }
+export type PublicBudgetListItem = {
+  id: string; name: string; period_name: string
+  visibility: "approved" | "council_review"
+  review_submission_id?: string | null; review_title?: string | null
+}
 export type PublicBudgetSubmission = {
-  id: string; kind: BudgetSubmissionKind; title: string; reviewed_at?: string | null; review_note?: string | null
+  id: string; kind: BudgetSubmissionKind; status: BudgetSubmissionStatus; title: string
+  reviewed_at?: string | null; review_note?: string | null
 }
 export type PublicBudgetAllocation = {
   id: string; node_id: string; amount: number; quantity?: number | null; unit?: string | null
   unit_price?: number | null; note?: string | null
 }
 export type PublicBudgetDetail = {
-  id: string; name: string; period_name: string; submissions: PublicBudgetSubmission[]
+  id: string; name: string; period_name: string; visibility: "approved" | "council_review"
+  review_submission?: PublicBudgetSubmission | null; submissions: PublicBudgetSubmission[]
   nodes: FinanceBudgetNode[]; allocations: PublicBudgetAllocation[]
 }
 

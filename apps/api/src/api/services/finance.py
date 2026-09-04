@@ -295,37 +295,72 @@ async def import_budget_from_xlsx(
     file_bytes: bytes,
     user_id: uuid.UUID,
     proposing_org_id: uuid.UUID | None = None,
+    budget_id: uuid.UUID | None = None,
+    replace_submission_id: uuid.UUID | None = None,
 ) -> tuple[FinanceBudget, FinanceBudgetSubmission, int, int, list[str]]:
     rows, skipped = await asyncio.to_thread(_parse_budget_workbook, file_bytes)
     ledger = await get_ledger(db, ledger_id)
     org_id = proposing_org_id or ledger.org_id
     if not await db.get(Org, org_id):
         raise HTTPException(400, "提出部門不存在")
-    budget = await create_budget(db, ledger_id, BudgetCreate(period_id=period_id, name=name))
-    submission = await create_budget_submission(
-        db,
-        budget,
-        BudgetSubmissionCreate(
-            kind="initial",
-            title=(title or f"{name}（匯入）")[:160],
-            note="由 xlsx 預算表匯入",
-        ),
-        user_id,
-    )
+
+    if replace_submission_id and not budget_id:
+        raise HTTPException(400, "重新匯入時必須指定共同預算")
+    if budget_id:
+        budget = await get_budget(db, budget_id)
+        if budget.ledger_id != ledger_id or budget.period_id != period_id:
+            raise HTTPException(400, "指定的共同預算不屬於此帳本或會計期間")
+        if replace_submission_id:
+            submission = await _editable_submission(db, replace_submission_id)
+            if submission.budget_id != budget.id:
+                raise HTTPException(400, "要覆寫的草案不屬於此共同預算")
+            allocation_ids = select(FinanceBudgetAllocation.id).where(
+                FinanceBudgetAllocation.submission_id == submission.id
+            )
+            await db.execute(
+                delete(FinanceBudgetAllocationEvidence).where(
+                    FinanceBudgetAllocationEvidence.allocation_id.in_(allocation_ids)
+                )
+            )
+            await db.execute(
+                delete(FinanceBudgetAllocation).where(
+                    FinanceBudgetAllocation.submission_id == submission.id
+                )
+            )
+        else:
+            submission = await create_budget_submission(
+                db,
+                budget,
+                BudgetSubmissionCreate(
+                    kind="supplemental",
+                    title=(title or f"{budget.name}（追加匯入）")[:160],
+                    note="由 xlsx 預算表匯入",
+                ),
+                user_id,
+            )
+    else:
+        budget = await create_budget(db, ledger_id, BudgetCreate(period_id=period_id, name=name))
+        submission = await create_budget_submission(
+            db,
+            budget,
+            BudgetSubmissionCreate(
+                kind="initial",
+                title=(title or f"{name}（匯入）")[:160],
+                note="由 xlsx 預算表匯入",
+            ),
+            user_id,
+        )
+
     categories: dict[str, FinanceBudgetNode] = {}
     for sort_order, row in enumerate(rows):
         category = categories.get(row["category"])
         if category is None:
-            category = await create_budget_node(
-                db,
-                submission.id,
-                BudgetNodeCreate(name=row["category"], sort_order=sort_order),
+            category = await _get_or_create_import_node(
+                db, budget.id, submission.id, row["category"], None, sort_order
             )
             categories[row["category"]] = category
-        detail = await create_budget_node(
-            db,
-            submission.id,
-            BudgetNodeCreate(parent_id=category.id, name=row["detail"], sort_order=sort_order),
+        detail = await _get_or_create_import_node(
+            db, budget.id, submission.id, row["detail"], category.id, sort_order
         )
         await create_budget_allocation(
             db,
@@ -341,6 +376,7 @@ async def import_budget_from_xlsx(
             ),
             user_id,
         )
+    await _refresh_budget_node_activity(db, budget.id)
     return budget, submission, len(categories), len(rows), skipped
 
 
@@ -388,6 +424,65 @@ async def create_budget_node(
     db.add(node)
     await db.flush()
     return node
+
+
+async def _get_or_create_import_node(
+    db: AsyncSession,
+    budget_id: uuid.UUID,
+    submission_id: uuid.UUID,
+    name: str,
+    parent_id: uuid.UUID | None,
+    sort_order: int,
+) -> FinanceBudgetNode:
+    parent_clause = (
+        FinanceBudgetNode.parent_id.is_(None)
+        if parent_id is None
+        else FinanceBudgetNode.parent_id == parent_id
+    )
+    existing = await db.scalar(
+        select(FinanceBudgetNode).where(
+            FinanceBudgetNode.budget_id == budget_id,
+            parent_clause,
+            FinanceBudgetNode.name == name,
+        )
+    )
+    if existing:
+        existing.is_active = True
+        existing.sort_order = min(existing.sort_order, sort_order)
+        return existing
+    return await create_budget_node(
+        db,
+        submission_id,
+        BudgetNodeCreate(parent_id=parent_id, name=name, sort_order=sort_order),
+    )
+
+
+async def _refresh_budget_node_activity(db: AsyncSession, budget_id: uuid.UUID) -> None:
+    nodes = list(
+        (
+            await db.execute(
+                select(FinanceBudgetNode).where(FinanceBudgetNode.budget_id == budget_id)
+            )
+        ).scalars()
+    )
+    node_by_id = {node.id: node for node in nodes}
+    active_ids = set(
+        (
+            await db.execute(
+                select(FinanceBudgetAllocation.node_id)
+                .join(FinanceBudgetSubmission)
+                .where(FinanceBudgetSubmission.budget_id == budget_id)
+            )
+        ).scalars()
+    )
+    for node_id in list(active_ids):
+        current = node_by_id.get(node_id)
+        while current and current.parent_id:
+            active_ids.add(current.parent_id)
+            current = node_by_id.get(current.parent_id)
+    for node in nodes:
+        node.is_active = node.id in active_ids
+    await db.flush()
 
 
 async def create_budget_allocation(
@@ -472,6 +567,8 @@ async def review_budget_submission(
     submission.review_note = body.note
     submission.reviewed_by_id = reviewer_id
     submission.reviewed_at = datetime.now(UTC)
+    if body.status in {BudgetSubmissionStatus.APPROVED, BudgetSubmissionStatus.REJECTED}:
+        submission.is_council_review_public = False
     await db.flush()
     return submission
 
@@ -715,13 +812,29 @@ async def set_budget_publication(
     return budget
 
 
-async def list_public_budgets(db: AsyncSession) -> list[tuple[FinanceBudget, FiscalPeriod]]:
+async def set_submission_council_review_publication(
+    db: AsyncSession, submission: FinanceBudgetSubmission, is_public: bool
+) -> FinanceBudgetSubmission:
+    if is_public and submission.status not in {
+        BudgetSubmissionStatus.DRAFT,
+        BudgetSubmissionStatus.SUBMITTED,
+        BudgetSubmissionStatus.RETURNED,
+    }:
+        raise HTTPException(400, "只有草案、待審或退回補正的預算案可以開放議員審理")
+    submission.is_council_review_public = is_public
+    await db.flush()
+    return submission
+
+
+async def list_public_budgets(
+    db: AsyncSession,
+) -> list[tuple[FinanceBudget, FiscalPeriod, FinanceBudgetSubmission | None]]:
     approved_initial = exists().where(
         FinanceBudgetSubmission.budget_id == FinanceBudget.id,
         FinanceBudgetSubmission.kind == "initial",
         FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
     )
-    return list(
+    approved = list(
         (
             await db.execute(
                 select(FinanceBudget, FiscalPeriod)
@@ -731,11 +844,67 @@ async def list_public_budgets(db: AsyncSession) -> list[tuple[FinanceBudget, Fis
             )
         ).all()
     )
+    council_review = list(
+        (
+            await db.execute(
+                select(FinanceBudget, FiscalPeriod, FinanceBudgetSubmission)
+                .join(FiscalPeriod, FiscalPeriod.id == FinanceBudget.period_id)
+                .join(
+                    FinanceBudgetSubmission, FinanceBudgetSubmission.budget_id == FinanceBudget.id
+                )
+                .where(
+                    FinanceBudgetSubmission.is_council_review_public,
+                    FinanceBudgetSubmission.status.in_(
+                        [
+                            BudgetSubmissionStatus.DRAFT,
+                            BudgetSubmissionStatus.SUBMITTED,
+                            BudgetSubmissionStatus.RETURNED,
+                        ]
+                    ),
+                )
+                .order_by(
+                    FiscalPeriod.starts_on.desc(),
+                    FinanceBudget.name,
+                    FinanceBudgetSubmission.created_at,
+                )
+            )
+        ).all()
+    )
+    return [
+        *((budget, period, None) for budget, period in approved),
+        *((budget, period, submission) for budget, period, submission in council_review),
+    ]
 
 
-async def public_budget_detail(db: AsyncSession, budget_id: uuid.UUID) -> tuple[dict, FiscalPeriod]:
+async def public_budget_detail(
+    db: AsyncSession, budget_id: uuid.UUID, review_submission_id: uuid.UUID | None = None
+) -> tuple[dict, FiscalPeriod, FinanceBudgetSubmission | None]:
     budget = await db.get(FinanceBudget, budget_id)
-    if not budget or not budget.is_public:
+    if not budget:
+        raise HTTPException(404, "公開預算不存在")
+    period = await db.get(FiscalPeriod, budget.period_id)
+    if not period:
+        raise HTTPException(404, "會計期間不存在")
+    if review_submission_id:
+        submission = await db.scalar(
+            select(FinanceBudgetSubmission).where(
+                FinanceBudgetSubmission.id == review_submission_id,
+                FinanceBudgetSubmission.budget_id == budget.id,
+                FinanceBudgetSubmission.is_council_review_public,
+                FinanceBudgetSubmission.status.in_(
+                    [
+                        BudgetSubmissionStatus.DRAFT,
+                        BudgetSubmissionStatus.SUBMITTED,
+                        BudgetSubmissionStatus.RETURNED,
+                    ]
+                ),
+            )
+        )
+        if not submission:
+            raise HTTPException(404, "公開預算不存在")
+        return await budget_detail(db, budget), period, submission
+
+    if not budget.is_public:
         raise HTTPException(404, "公開預算不存在")
     approved_initial = await db.scalar(
         select(FinanceBudgetSubmission.id).where(
@@ -746,10 +915,7 @@ async def public_budget_detail(db: AsyncSession, budget_id: uuid.UUID) -> tuple[
     )
     if not approved_initial:
         raise HTTPException(404, "公開預算不存在")
-    period = await db.get(FiscalPeriod, budget.period_id)
-    if not period:
-        raise HTTPException(404, "會計期間不存在")
-    return await budget_detail(db, budget), period
+    return await budget_detail(db, budget), period, None
 
 
 async def settlement_report(db: AsyncSession, ledger_id: uuid.UUID, period_id: uuid.UUID) -> dict:

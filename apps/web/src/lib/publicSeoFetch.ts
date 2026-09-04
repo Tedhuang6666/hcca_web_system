@@ -40,9 +40,21 @@ export async function fetchPublicPetition(id: string): Promise<PetitionPublicOut
 }
 
 export async function fetchPublicBudgets(): Promise<PublicBudgetListItem[]> {
-  return (await fetchPublicJson<PublicBudgetListItem[]>("/finance/public/budgets")) ?? [];
+  return (await fetchCachedPublicJson<PublicBudgetListItem[]>(
+    "/finance/public/budgets",
+    { revalidate: 15 },
+  )) ?? [];
 }
 
-export async function fetchPublicBudget(id: string): Promise<PublicBudgetDetail | null> {
-  return fetchPublicJson<PublicBudgetDetail>(`/finance/public/budgets/${encodeURIComponent(id)}`);
+export async function fetchPublicBudget(
+  id: string,
+  reviewSubmissionId?: string,
+): Promise<PublicBudgetDetail | null> {
+  const query = reviewSubmissionId
+    ? `?review_submission_id=${encodeURIComponent(reviewSubmissionId)}`
+    : "";
+  return fetchCachedPublicJson<PublicBudgetDetail>(
+    `/finance/public/budgets/${encodeURIComponent(id)}${query}`,
+    { revalidate: 15 },
+  );
 }

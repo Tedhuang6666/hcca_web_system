@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -294,6 +295,10 @@ class BudgetPublicationUpdate(BaseModel):
     is_public: bool
 
 
+class BudgetCouncilReviewPublicationUpdate(BaseModel):
+    is_public: bool
+
+
 class FinanceEvidenceUploadOut(BaseModel):
     storage_key: str
     filename: str
@@ -353,6 +358,7 @@ class BudgetSubmissionOut(BaseModel):
     reviewed_by_id: uuid.UUID | None
     reviewed_at: datetime | None
     review_note: str | None
+    is_council_review_public: bool
 
 
 class BudgetNodeOut(BaseModel):
@@ -400,11 +406,15 @@ class PublicBudgetListItem(BaseModel):
     id: uuid.UUID
     name: str
     period_name: str
+    visibility: Literal["approved", "council_review"]
+    review_submission_id: uuid.UUID | None = None
+    review_title: str | None = None
 
 
 class PublicBudgetSubmissionOut(BaseModel):
     id: uuid.UUID
     kind: BudgetSubmissionKind
+    status: BudgetSubmissionStatus
     title: str
     reviewed_at: datetime | None
     review_note: str | None
@@ -426,6 +436,8 @@ class PublicBudgetDetailOut(BaseModel):
     id: uuid.UUID
     name: str
     period_name: str
+    visibility: Literal["approved", "council_review"]
+    review_submission: PublicBudgetSubmissionOut | None = None
     submissions: list[PublicBudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[PublicBudgetAllocationOut]
