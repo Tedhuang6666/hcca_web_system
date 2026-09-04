@@ -932,6 +932,7 @@
 }
 
 .public-header-inner {
+  position: relative;
   display: flex;
   width: min(100%, 72rem);
   min-height: 72px;
@@ -950,6 +951,7 @@
 
 .public-brand {
   display: inline-flex;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: min(52vw, 22rem);
   min-height: 48px;
@@ -990,12 +992,11 @@
   gap: 0.15rem;
 }
 
-@media (min-width: 1180px) {
+@media (min-width: 768px) {
   .public-desktop-nav {
     display: flex;
   }
-  /* 提高選擇器特異度：避免被後面定義的基礎 .public-menu-button 規則蓋過，
-     否則桌面寬度下漢堡選單仍會顯示並與「所有公開服務」下拉重疊。 */
+  /* 平板以上使用頁首服務總覽，避免把完整導覽藏在漢堡抽屜裡。 */
   .public-header .public-menu-button,
   .public-mobile-backdrop,
   .public-header .public-mobile-nav {
@@ -1074,14 +1075,104 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes public-menu-in-centered {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (max-width: 899.98px) {
+  .public-task-nav-link {
+    display: none;
+  }
+
+  .public-desktop-nav {
+    justify-content: flex-end;
+  }
+
+}
+
+@media (min-width: 900px) {
+  .public-task-nav-link {
+    display: inline-flex;
+  }
+}
+
 [data-theme="dark"] .public-nav-dropdown-panel {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
 }
 
-/* 各組之間的細分隔，讓三欄不再黏成一片 */
+@media (min-width: 768px) and (max-width: 1179.98px) {
+  .public-nav-dropdown {
+    position: static;
+  }
+
+  .public-nav-dropdown-panel {
+    position: fixed;
+    top: var(--public-menu-top, 4.5rem);
+    left: 50%;
+    right: auto;
+    width: min(52rem, calc(100vw - 1.5rem));
+    max-height: min(42rem, calc(100dvh - 7rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(-50%);
+    animation-name: public-menu-in-centered;
+  }
+
+  .public-nav-dropdown-panel::-webkit-scrollbar {
+    width: 0.65rem;
+  }
+
+  .public-nav-dropdown-panel::-webkit-scrollbar-thumb {
+    border: 0.2rem solid var(--public-surface);
+    border-radius: 999px;
+    background: var(--public-border);
+  }
+
+  .public-nav-dropdown-quick {
+    display: block;
+    grid-column: 1 / -1;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--public-border);
+  }
+
+  .public-nav-dropdown-quick-links {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .public-nav-dropdown-quick-link {
+    min-height: 54px;
+  }
+}
+
+@media (min-width: 1180px) {
+  .public-nav-dropdown-quick {
+    display: none;
+  }
+
+  .public-nav-dropdown-panel {
+    max-height: min(42rem, calc(100dvh - 7rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .public-nav-dropdown-panel::-webkit-scrollbar {
+    width: 0.65rem;
+  }
+
+  .public-nav-dropdown-panel::-webkit-scrollbar-thumb {
+    border: 0.2rem solid var(--public-surface);
+    border-radius: 999px;
+    background: var(--public-border);
+  }
+}
+
+/* 分組靠標題與留白區隔，避免兩欄換行後產生錯位的垂直分隔線。 */
 .public-nav-dropdown-panel > section + section {
-  padding-left: 1.25rem;
-  border-left: 1px solid var(--public-border);
+  padding-left: 0;
+  border-left: 0;
 }
 
 .public-nav-service-search,
@@ -1095,6 +1186,12 @@
   background: var(--public-soft);
   color: var(--public-muted);
   padding-inline: 0.75rem;
+}
+
+.public-nav-service-search:focus-within,
+.public-mobile-service-search:focus-within {
+  border-color: var(--public-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--public-focus) 26%, transparent);
 }
 
 .public-nav-service-search {
@@ -4487,6 +4584,17 @@ button[aria-pressed="true"] {
 
 details[open] > :not(summary) {
   animation: app-page-transition 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 公開站服務面板有自己的定位與進場動畫，避免被全站 details 動畫改寫 transform。 */
+details.public-nav-dropdown[open] > .public-nav-dropdown-panel {
+  animation: public-menu-in 150ms ease both;
+}
+
+@media (min-width: 768px) and (max-width: 1179.98px) {
+  details.public-nav-dropdown[open] > .public-nav-dropdown-panel {
+    animation-name: public-menu-in-centered;
+  }
 }
 
 :where(a, button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
