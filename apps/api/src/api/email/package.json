@@ -10,6 +10,7 @@
     "mjml": "^5.3.0"
   },
   "overrides": {
+    "browserslist": "^4.28.9",
     "postcss": "^8.5.23"
   }
 }
