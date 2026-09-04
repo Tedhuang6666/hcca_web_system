@@ -15,17 +15,19 @@ import {
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
-import { apiErrorMessage, merchandiseSubmissionsApi, orgsApi } from "@/lib/api";
+import { apiErrorMessage, merchandiseSubmissionsApi, orgsApi, usersApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
+import UserPicker from "@/components/surveys/UserPicker";
 import type {
   MerchandiseSubmissionAdminListItem,
   MerchandiseSubmissionItemCreate,
-  MerchandiseSubmissionItemOut,
-  MerchandiseSubmissionSettingsOut,
+  MerchandiseSubmissionItemAdminOut,
+  MerchandiseSubmissionSettingsAdminOut,
   OrgRead,
   SurveyOut,
   SubmissionCustomField,
+  UserSummary,
 } from "@/lib/types";
 
 type ItemDraft = Omit<MerchandiseSubmissionItemCreate, "template_images" | "custom_fields"> & {
@@ -343,6 +345,8 @@ function emptyItem(): ItemDraft {
     opens_at_override: null,
     closes_at_override: null,
     max_file_size_mb_override: null,
+    notification_enabled: null,
+    notification_recipient_ids: null,
   };
 }
 
@@ -386,6 +390,32 @@ function FieldCaption({ children }: { children: React.ReactNode }) {
     >
       {children}
     </span>
+  );
+}
+
+function NotificationRecipientPicker({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const idsKey = value.join(",");
+  const selectedIds = useMemo(() => (idsKey ? idsKey.split(",") : []), [idsKey]);
+
+  useEffect(() => {
+    void usersApi.listByIds(selectedIds).then(setUsers).catch(() => undefined);
+  }, [idsKey, selectedIds]);
+
+  return (
+    <UserPicker
+      value={users}
+      onChange={(nextUsers) => {
+        setUsers(nextUsers);
+        onChange(nextUsers.map((user) => user.id));
+      }}
+    />
   );
 }
 
@@ -788,6 +818,46 @@ function ItemEditor({
           </label>
         </div>
       </div>
+      <div
+        className="mt-6 border-t pt-5"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <h3 className="font-semibold">投稿通知</h3>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          品項送出時通知指定負責人；未指定收件人時會依系統權限自動尋找負責人。
+        </p>
+        <div className="mt-3 space-y-3">
+          <label className="flex min-h-10 items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.notification_enabled !== false}
+              onChange={(event) =>
+                update("notification_enabled", event.target.checked ? true : false)
+              }
+            />
+            啟用此品項通知
+          </label>
+          <NotificationRecipientPicker
+            value={draft.notification_recipient_ids ?? []}
+            onChange={(ids) => update("notification_recipient_ids", ids)}
+          />
+          {(draft.notification_enabled !== null || draft.notification_recipient_ids !== null) && (
+            <button
+              type="button"
+              className="btn btn-ghost min-h-9 text-xs"
+              onClick={() => {
+                onChange({
+                  ...draft,
+                  notification_enabled: null,
+                  notification_recipient_ids: null,
+                });
+              }}
+            >
+              恢復沿用全域通知設定
+            </button>
+          )}
+        </div>
+      </div>
       <div className="mt-6 flex justify-end">
         <button
           type="button"
@@ -1026,8 +1096,8 @@ export default function MerchandiseSubmissionsAdminPage() {
     can("merchandise_submission:view") || canReviewSubmissions;
   const canAccessAdmin = canViewSubmissions;
   const [settings, setSettings] =
-    useState<MerchandiseSubmissionSettingsOut | null>(null);
-  const [items, setItems] = useState<MerchandiseSubmissionItemOut[]>([]);
+    useState<MerchandiseSubmissionSettingsAdminOut | null>(null);
+  const [items, setItems] = useState<MerchandiseSubmissionItemAdminOut[]>([]);
   const [submissions, setSubmissions] = useState<
     VotingSubmission[]
   >([]);
@@ -1104,6 +1174,8 @@ export default function MerchandiseSubmissionsAdminPage() {
         submission_intro: settings.submission_intro || null,
         global_fields: settings.global_fields,
         show_announcement_popup: settings.show_announcement_popup,
+        notification_enabled: settings.notification_enabled,
+        notification_recipient_ids: settings.notification_recipient_ids,
       });
       setSettings(updated);
       toast.success("全站設定已儲存，公告已同步到公告模組");
@@ -1348,6 +1420,31 @@ export default function MerchandiseSubmissionsAdminPage() {
                 儲存後會顯示在所有投稿品項上方。
               </span>
             </label>
+            <div className="rounded-lg border p-4 sm:col-span-3" style={{ borderColor: "var(--border)" }}>
+              <h3 className="font-semibold">投稿通知</h3>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                收到新投稿時通知負責人。品項可在「投稿品項」中個別覆寫這項設定。
+              </p>
+              <label className="mt-3 flex min-h-10 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.notification_enabled}
+                  onChange={(event) =>
+                    setSettings({ ...settings, notification_enabled: event.target.checked })
+                  }
+                />
+                啟用全域投稿通知
+              </label>
+              <div className="mt-3">
+                <FieldCaption>指定通知收件人（留空則依權限自動通知）</FieldCaption>
+                <NotificationRecipientPicker
+                  value={settings.notification_recipient_ids}
+                  onChange={(ids) =>
+                    setSettings({ ...settings, notification_recipient_ids: ids })
+                  }
+                />
+              </div>
+            </div>
           </div>
           <div
             className="mt-6 border-t pt-5"

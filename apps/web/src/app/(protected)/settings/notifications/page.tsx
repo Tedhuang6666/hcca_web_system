@@ -119,6 +119,32 @@ const OPTIONS: NotificationOption[] = [
     group: "schedule",
   },
   {
+    key: "petition_received",
+    label: "新陳情",
+    desc: "負責的陳情案件收到新送件時提醒",
+    group: "campus",
+    permissions: [
+      "petition:view_org",
+      "petition:assign",
+      "petition:handle",
+      "petition:transfer",
+      "petition:admin",
+    ],
+  },
+  {
+    key: "petition_updated",
+    label: "陳情更新",
+    desc: "負責的陳情案件有回覆、補件或狀態變更時提醒",
+    group: "campus",
+    permissions: [
+      "petition:view_org",
+      "petition:assign",
+      "petition:handle",
+      "petition:transfer",
+      "petition:admin",
+    ],
+  },
+  {
     key: "petition_assigned",
     label: "陳情指派",
     desc: "陳情案件被分派給您或所屬機關時提醒",
@@ -147,6 +173,19 @@ const OPTIONS: NotificationOption[] = [
     key: "meal_pickup_ready",
     label: "學餐取餐",
     desc: "取餐時段、未取餐與核銷提醒",
+    group: "campus",
+  },
+  {
+    key: "merchandise_submission_received",
+    label: "新校商投稿",
+    desc: "負責的校商投稿品項收到新投稿時提醒",
+    group: "campus",
+    permissions: ["merchandise_submission:review", "merchandise_submission:manage", "shop:manage"],
+  },
+  {
+    key: "merchandise_submission_status",
+    label: "校商投稿狀態",
+    desc: "您送出的校商投稿審核狀態更新時提醒",
     group: "campus",
   },
   {

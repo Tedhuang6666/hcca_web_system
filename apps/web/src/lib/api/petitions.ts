@@ -1,8 +1,10 @@
 import type {
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut, PetitionStatsOut, PetitionStatus, PetitionTypeOut,
   PetitionPublicListItem, PetitionPublicOut,
+  PetitionNotificationRuleCreate, PetitionNotificationRuleOut, PetitionNotificationRuleUpdate,
+  PetitionNotificationSettingsOut, PetitionNotificationSettingsUpdate,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+import { BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 陳情系統 ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +45,18 @@ export const petitionsApi = {
     sort_order: number;
   }>) => patch<PetitionTypeOut>(`/petitions/admin/types/${id}`, body),
   deleteType: (id: string) => del<void>(`/petitions/admin/types/${id}`),
+  getNotificationSettings: () =>
+    get<PetitionNotificationSettingsOut>("/petitions/admin/notification-settings"),
+  updateNotificationSettings: (body: PetitionNotificationSettingsUpdate) =>
+    put<PetitionNotificationSettingsOut>("/petitions/admin/notification-settings", body),
+  listNotificationRules: () =>
+    get<PetitionNotificationRuleOut[]>("/petitions/admin/notification-rules"),
+  createNotificationRule: (body: PetitionNotificationRuleCreate) =>
+    post<PetitionNotificationRuleOut>("/petitions/admin/notification-rules", body),
+  updateNotificationRule: (id: string, body: PetitionNotificationRuleUpdate) =>
+    patch<PetitionNotificationRuleOut>(`/petitions/admin/notification-rules/${id}`, body),
+  deleteNotificationRule: (id: string) =>
+    del<void>(`/petitions/admin/notification-rules/${id}`),
   create: (body: PetitionCreate) => post<PetitionCreatedOut>("/petitions", body),
   lookup: (caseNumber: string, verificationCode: string) =>
     get<PetitionCaseOut>(

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterable
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +20,7 @@ from api.email.sender import send_branded_email
 from api.models.notification import Notification
 from api.models.user import User
 from api.services.discord_notification_routes import emit_personal_notification
-from api.services.notification_pref import TYPE_LABELS, normalize_preferences
+from api.services.notification_pref import TYPE_LABELS, get_digest_frequency, normalize_preferences
 from api.services.web_push import send_to_user
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,11 @@ async def create_notification(
     channel = normalize_preferences(user.notification_preferences).get(
         type, {"inapp": True, "email": False}
     )
-    if channel["inapp"]:
+    digest_enabled = get_digest_frequency(user.notification_preferences) != "off"
+    # 摘要期間仍建立資料列，讓摘要任務有一致的資料來源；只有開啟站內管道
+    # 的通知才會在收件匣與未讀數顯示。
+    should_queue = channel["inapp"] or (channel["email"] and digest_enabled)
+    if should_queue:
         notification = Notification(
             user_id=user_id,
             type=type,
@@ -85,35 +90,42 @@ async def create_notification(
             body=body,
             link=link,
             related_id=related_id,
+            is_inapp_visible=channel["inapp"],
         )
         db.add(notification)
         await db.flush()
-        try:
-            unread = await db.scalar(
-                select(func.count(Notification.id))
-                .where(Notification.user_id == user_id)
-                .where(Notification.is_read == False)  # noqa: E712
-            )
-            await ws_manager.broadcast_to_room(
-                f"user:{user_id}",
-                {
-                    "type": "notification.created",
-                    "notification": _notification_payload(notification),
-                    "unread": int(unread or 0),
-                },
-            )
-        except Exception:
-            logger.warning("通知 WebSocket 推送失敗 user=%s type=%s", user_id, type, exc_info=True)
-        try:
-            await send_to_user(
-                db,
-                user_id,
-                {"title": title, "body": body or "", "url": link or "/notifications"},
-            )
-        except Exception:
-            logger.warning("通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True)
+        if channel["inapp"]:
+            try:
+                unread = await db.scalar(
+                    select(func.count(Notification.id))
+                    .where(Notification.user_id == user_id)
+                    .where(Notification.is_inapp_visible.is_(True))
+                    .where(Notification.is_read == False)  # noqa: E712
+                )
+                await ws_manager.broadcast_to_room(
+                    f"user:{user_id}",
+                    {
+                        "type": "notification.created",
+                        "notification": _notification_payload(notification),
+                        "unread": int(unread or 0),
+                    },
+                )
+            except Exception:
+                logger.warning(
+                    "通知 WebSocket 推送失敗 user=%s type=%s", user_id, type, exc_info=True
+                )
+            try:
+                await send_to_user(
+                    db,
+                    user_id,
+                    {"title": title, "body": body or "", "url": link or "/notifications"},
+                )
+            except Exception:
+                logger.warning(
+                    "通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True
+                )
 
-    if channel["email"] and user.email:
+    if channel["email"] and user.email and not digest_enabled:
         try:
             _send_notification_email(user, type, title, body, link)
         except Exception:
@@ -156,3 +168,30 @@ async def create_notification(
             )
         except Exception:
             logger.warning("通知 Discord 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
+
+
+async def notify_users(
+    db: AsyncSession,
+    *,
+    user_ids: Iterable[uuid.UUID],
+    type: str,
+    title: str,
+    body: str | None = None,
+    link: str | None = None,
+    related_id: uuid.UUID | None = None,
+    exclude_user_ids: Iterable[uuid.UUID] = (),
+) -> None:
+    """對一組收件人依各自偏好建立通知，並避免同一事件重複通知。"""
+    excluded = set(exclude_user_ids)
+    for user_id in dict.fromkeys(user_ids):
+        if user_id in excluded:
+            continue
+        await create_notification(
+            db,
+            user_id=user_id,
+            type=type,
+            title=title,
+            body=body,
+            link=link,
+            related_id=related_id,
+        )

@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from api.models.notification import Notification
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.petition import PetitionCaseEvent, PetitionType
 from api.models.user import User
@@ -89,6 +90,71 @@ async def test_create_petition_as_guest_with_contact_email_succeeds(db_session, 
     payload = resp.json()
     assert payload["verification_code"]
     assert len(payload["case_number"]) == 7
+
+
+async def test_configured_petition_recipient_gets_new_case_notification(
+    db_session, client, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    admin_user.notification_preferences = {
+        "petition_received": {"inapp": True, "email": False, "line": False, "discord": False}
+    }
+    admin = authed_client_factory(admin_user)
+    settings_response = await admin.put(
+        "/petitions/admin/notification-settings",
+        json={"enabled": True, "recipient_user_ids": [str(admin_user.id)]},
+    )
+    assert settings_response.status_code == 200
+    assert settings_response.json()["recipient_user_ids"] == [str(admin_user.id)]
+
+    response = await client.post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "is_named": False,
+            "contact_email": "guest@example.com",
+            "title": "應通知負責人",
+            "content": "新陳情應通知設定的負責人。",
+        },
+    )
+    assert response.status_code == 201
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == admin_user.id,
+            Notification.type == "petition_received",
+        )
+    )
+    assert notification is not None
+
+
+async def test_petition_handler_permission_receives_new_case_notification(
+    db_session, client
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    handler.notification_preferences = {
+        "petition_received": {"inapp": True, "email": False, "line": False, "discord": False}
+    }
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+
+    response = await client.post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "is_named": False,
+            "contact_email": "guest@example.com",
+            "title": "權限負責人應收到通知",
+            "content": "具陳情處理權限的機關成員應收到新案通知。",
+        },
+    )
+    assert response.status_code == 201
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == handler.id,
+            Notification.type == "petition_received",
+        )
+    )
+    assert notification is not None
 
 
 async def test_create_petition_survives_optional_integration_failure(

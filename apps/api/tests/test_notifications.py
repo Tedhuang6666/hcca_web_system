@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import Mock
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user
@@ -14,6 +16,7 @@ from api.main import app
 from api.models.notification import Notification
 from api.models.user import User
 from api.models.web_push import WebPushSubscription
+from api.services.notification import create_notification
 
 
 def _override_user(user: User) -> None:
@@ -62,6 +65,45 @@ async def test_list_notifications_returns_only_own(
 
     assert resp.status_code == 200
     assert [item["title"] for item in resp.json()] == ["我的通知"]
+
+
+@pytest.mark.asyncio
+async def test_digest_notification_is_not_immediately_emailed_or_shown_in_inbox(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch
+) -> None:
+    user = await _seed_user(
+        db_session,
+        "digest-notification@school.edu",
+        notification_preferences={
+            "__digest_frequency": "daily",
+            "petition_received": {
+                "inapp": False,
+                "email": True,
+                "line": False,
+                "discord": False,
+            },
+        },
+    )
+    send_email = Mock()
+    monkeypatch.setattr("api.services.notification._send_notification_email", send_email)
+
+    await create_notification(
+        db_session,
+        user_id=user.id,
+        type="petition_received",
+        title="摘要測試通知",
+    )
+
+    notification = await db_session.scalar(
+        select(Notification).where(Notification.user_id == user.id)
+    )
+    assert notification is not None
+    assert notification.is_inapp_visible is False
+    send_email.assert_not_called()
+    _override_user(user)
+    response = await client.get("/notifications/inbox")
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 @pytest.mark.asyncio
@@ -187,6 +229,26 @@ async def test_update_preferences_persists_channel_choice(
         "line": False,
         "discord": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_update_preferences_preserves_digest_frequency(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(
+        db_session,
+        "prefs-digest-preserved@school.edu",
+        notification_preferences={"__digest_frequency": "daily"},
+    )
+    _override_user(user)
+
+    resp = await client.put(
+        "/notifications/preferences",
+        json={"petition_received": {"inapp": True, "email": True, "line": False, "discord": False}},
+    )
+
+    assert resp.status_code == 200
+    assert user.notification_preferences["__digest_frequency"] == "daily"
 
 
 @pytest.mark.asyncio
