@@ -5,7 +5,7 @@ import type {
 } from "./types";
 
 export const DEFAULT_SPECIAL_AGREEMENT_CONTENT: PublicSpecialAgreementContent = {
-  intro_md: "如果你想和學生自治組織一起提供更好的校園服務，這裡整理了從提出構想到公開合作資訊的完整路徑。",
+  intro_md: "竹嶺班聯特約洽談說明",
   info_md: `## 適合洽談的合作
 
 可依合作對象與學生需求討論不同形式，例如：

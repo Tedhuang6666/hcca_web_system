@@ -92,8 +92,8 @@ export default function HomeContent({
         <section className="public-home-dynamics" aria-labelledby="public-dynamics-title" data-reveal>
           <div className="public-home-dynamics-heading">
             <div>
-              <h2 id="public-dynamics-title">校園動態</h2>
-              <p>先處理需要你注意的事項，再接著瀏覽最近更新。</p>
+              <h2 id="public-dynamics-title">重要資訊</h2>
+              <p>整合最近的重要更新，記得查看！</p>
             </div>
             <div className="public-home-dynamics-actions" aria-label="校園動態導覽">
               <Link href="/news" className="public-text-link">所有公告</Link>
@@ -173,13 +173,6 @@ export default function HomeContent({
               desc: publicDatabaseDescription || "法規、公文與治理紀錄",
               action: "查詢資料",
               icon: Database,
-            },
-            {
-              href: "/surveys",
-              title: "校園調查",
-              desc: "填寫正在開放的問卷",
-              action: "填寫調查",
-              icon: UsersRound,
             },
             {
               href: "/petitions/new",
