@@ -517,12 +517,6 @@ def _subject_section(value: str | None) -> str:
     )
 
 
-def _consultation_paragraph(value: str | None) -> str:
-    if not value or not value.strip():
-        return ""
-    return f'<div class="consultation-paragraph">{_esc(value)}</div>'
-
-
 async def render_document_print_html(
     session: AsyncSession,
     doc: Document,
@@ -772,17 +766,16 @@ async def render_document_print_html(
                 )
             )
         consultation_body = "".join(
-            _consultation_paragraph(value)
-            for value in (
-                doc.subject,
-                getattr(doc, "basis", None),
-                doc.doc_description or doc.content,
-                doc.action_required,
+            (
+                _subject_section(doc.subject),
+                _document_section("依據：", getattr(doc, "basis", None)),
+                _document_section("說明：", doc.doc_description or doc.content),
+                _document_section("辦法或事項：", doc.action_required),
             )
         )
         body_html = (
             f'<section class="consultation-recipient">受文者：{addressed_to}</section>'
-            f'<section class="meta">{"".join(consultation_meta_rows)}</section>'
+            f'<section class="meta consultation-meta">{"".join(consultation_meta_rows)}</section>'
             f'<section class="consultation-content">{consultation_body}</section>'
             '<div class="consultation-closing">此咨</div>'
             f'<div class="consultation-final-recipient">{addressed_to}</div>'
@@ -832,6 +825,7 @@ async def render_document_print_html(
         )
     title_font_size = min(20.0, max(10.0, 440 / max(len(document_title), 1)))
     document_title = _esc(document_title)
+    page_class = " consultation-page" if is_consultation else ""
 
     return f"""<!DOCTYPE html>
 <html lang="zh-TW">
@@ -910,6 +904,7 @@ async def render_document_print_html(
       margin: 0 0 20mm;
       white-space: nowrap;
     }}
+    .consultation-page .title {{ margin-bottom: 15mm; }}
     .issuer-contact {{
       margin: -15mm 0 5mm;
       font-size: 10pt;
@@ -972,34 +967,40 @@ async def render_document_print_html(
     .subject-label {{ white-space: nowrap; }}
     .subject-body {{ min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }}
     .consultation-recipient {{
-      margin: 5mm 0 7mm;
+      margin: 3mm 0 3mm;
       font-size: 16pt;
       line-height: 1.75;
     }}
+    .consultation-meta {{ margin-bottom: 2mm; }}
     .consultation-content {{
-      margin-top: 3mm;
+      margin-top: 0;
       font-size: 16pt;
-      line-height: 1.9;
+      line-height: 1.75;
     }}
-    .consultation-paragraph {{
-      margin: 0 0 7mm;
-      text-indent: 2em;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      break-inside: avoid;
+    .consultation-content .subject-section,
+    .consultation-content .doc-section {{
+      margin: 0 0 3mm;
+    }}
+    .consultation-content .subject-body,
+    .consultation-content .doc-section-body {{
+      line-height: 1.75;
+    }}
+    .consultation-content .doc-section-body {{
+      margin-top: 0;
+      padding-left: 0;
     }}
     .consultation-closing {{
-      margin-top: 10mm;
+      margin-top: 4mm;
       font-size: 16pt;
       line-height: 1.75;
     }}
     .consultation-final-recipient {{
-      margin-top: 3mm;
+      margin-top: 2mm;
       font-size: 16pt;
       line-height: 1.75;
     }}
     .consultation-date {{
-      margin-top: 7mm;
+      margin-top: 1mm;
       font-size: 14pt;
       line-height: 1.6;
     }}
@@ -1072,7 +1073,7 @@ async def render_document_print_html(
       font-size: 16pt;
       line-height: 1.75;
     }}
-    .copies {{ margin-top: 8mm; font-size: 12pt; line-height: 1.25; }}
+    .copies {{ margin-top: 4mm; font-size: 12pt; line-height: 1.25; }}
     .signature {{
       display: inline-block;
       width: auto;
@@ -1085,6 +1086,7 @@ async def render_document_print_html(
       letter-spacing: .03em;
       white-space: nowrap;
     }}
+    .consultation-page .signature {{ margin-top: 6mm; }}
     .meeting-seal {{
       display: block;
       width: 100%;
@@ -1125,7 +1127,7 @@ async def render_document_print_html(
 <body>
   <div class="no-print"><button onclick="window.print()">列印 / 另存 PDF</button></div>
   <div class="binding"><span>裝</span><span>訂</span><span>線</span></div>
-  <main class="page">
+  <main class="page{page_class}">
     <div class="copy-mark">{copy_mark}</div>
     <div class="file-box">檔　　號：{file_number}<br>保存年限：{retention_period}</div>
     <header class="title">{document_title}</header>
