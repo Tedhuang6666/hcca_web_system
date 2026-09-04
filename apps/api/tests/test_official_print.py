@@ -224,7 +224,11 @@ async def test_consultation_print_uses_two_paragraph_body_and_closing() -> None:
         handler_phone=None,
         subject="茲依據中華民國憲法增修條文第○條第○項規定，提名○○○為第○屆○○院委員並為院長，咨請貴院行使同意權。",
         content=None,
-        doc_description="隨咨檢送○○○先生（女士）最高學歷、主要經歷、著作、重要表現及各項證明文件等檔案各1冊。",
+        doc_description=(
+            "一、依本會組織章程第九條第三款規定，主席具提名並咨請學生議會同意任命行政幹部之職權。\n"
+            "二、為健全本會行政組織及推動各項會務，爰提名下列人員擔任第40屆班級聯合自治會行政幹部。\n"
+            "三、幹部提名名冊如附件。"
+        ),
         action_required=None,
     )
 
@@ -233,14 +237,15 @@ async def test_consultation_print_uses_two_paragraph_body_and_closing() -> None:
 
     assert 'class="consultation-content"' in rendered
     assert '<section class="consultation-recipient">受文者：立法院</section>' in rendered
+    assert '<div class="subject-label">主旨：</div>' in rendered
     assert "茲依據中華民國憲法增修條文" in rendered
-    assert "隨咨檢送○○○先生（女士）最高學歷" in rendered
+    assert '<div class="doc-section-label">說明：</div>' in rendered
+    assert '<span class="hanging-prefix">一、</span>' in rendered
     assert 'class="consultation-closing">此咨</div>' in rendered
     assert 'class="consultation-final-recipient">立法院</div>' in rendered
     assert "<div>正本：立法院</div>" in rendered
     assert "<div>副本：行政院</div>" in rendered
     assert '<span class="signature-title">總統</span>' in rendered
-    assert "主旨：" not in rendered
     assert "辦法或事項：" not in rendered
     assert len(PdfReader(BytesIO(pdf)).pages) == 1
 
