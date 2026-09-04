@@ -403,7 +403,10 @@ async def suggest_approvers(
 async def _lock_document(session: AsyncSession, doc: Document) -> None:
     if session.bind is not None and session.bind.dialect.name == "postgresql":
         await session.execute(select(Document.id).where(Document.id == doc.id).with_for_update())
-    await session.refresh(doc)
+    # 只刷新欄位，保留 get_document() 預先載入的關聯。無條件 refresh 會讓
+    # recipients/approvals 等關聯失效，後續在 async context 外讀取時會觸發
+    # lazy load，導致 MissingGreenlet。
+    await session.refresh(doc, attribute_names=list(Document.__mapper__.column_attrs.keys()))
 
 
 async def approve_step(
