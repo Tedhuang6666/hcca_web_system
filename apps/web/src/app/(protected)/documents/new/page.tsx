@@ -1056,7 +1056,7 @@ export default function NewDocumentPage() {
                   <Label required={isRecord}>{isRecord ? "主席" : "主持人"}</Label>
                   <input value={meetingChairperson} onChange={e => setMeetingChairperson(e.target.value)}
                     onBlur={() => markTouched("recordChairperson")}
-                    placeholder="例：楊總召千霆"
+                    placeholder="例：黃主席丞廷"
                     style={showErr("recordChairperson") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
                   {showErr("recordChairperson") && (
                     <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordChairperson}</p>
@@ -1070,11 +1070,6 @@ export default function NewDocumentPage() {
           {/* 公文主體 */}
           <GuidedFormStep step={1} activeStep={activeStep}>
           <FormSection title={copy.section}>
-            {category === "consultation" && (
-              <p className="rounded-lg px-3 py-2 text-xs leading-relaxed" style={{ color: "var(--text-secondary)", background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                咨文採兩段式正文；列印與公開檢視時會自動合併內容，不顯示「主旨／說明／辦法」標籤，並在文末帶出「此咨」與受文者。
-              </p>
-            )}
             {/* 主要內容欄位 */}
             {copy.subjectLabel && (
               <div>
@@ -1392,9 +1387,6 @@ export default function NewDocumentPage() {
 
           {/* 承辦人 */}
           <FormSection title="承辦人資訊">
-            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-              從個人資料自動帶入，可手動修改
-            </p>
             {[
               { label: "姓名", value: handlerName, setter: setHandlerName, ph: "承辦人姓名" },
               {
