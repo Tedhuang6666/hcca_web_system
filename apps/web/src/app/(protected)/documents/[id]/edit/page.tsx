@@ -59,7 +59,7 @@ const CONTENT_LABELS: Record<DocumentCategory, { title: string; subject?: string
   presentation: { title: "呈文內容", subject: "主旨", desc: "說明", action: "擬辦" },
   report: { title: "報告內容", subject: "主旨", desc: "說明／分析", action: "建議事項" },
   record: { title: "討論與決議", desc: "討論事項", action: "決議" },
-  consultation: { title: "咨文內容", subject: "主旨", desc: "說明", action: "辦法或事項" },
+  consultation: { title: "咨文正文（兩段式）", subject: "第一段：依據、提名與咨請事項", desc: "第二段：隨咨檢送文件" },
   meeting_notice: { title: "議事日程", desc: "議事日程" },
   inspection_notice: { title: "會勘通知", desc: "說明" },
   phone_record: { title: "公務電話紀錄", subject: "主旨", desc: "紀錄" },

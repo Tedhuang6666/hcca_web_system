@@ -215,13 +215,11 @@ const CONTENT_COPY: Record<DocumentCategory, {
     actionPlaceholder: "一、照案通過。\n二、請…續辦。",
   },
   consultation: {
-    section: "咨文內容",
-    subjectLabel: "主旨",
-    subjectPlaceholder: "為…事項，請惠復見解。",
-    descriptionLabel: "說明",
-    descriptionPlaceholder: "一、緣由：\n二、需協調／詢問事項：",
-    actionLabel: "辦法或事項",
-    actionPlaceholder: "一、擬請貴機關…\n二、回復期限…",
+    section: "咨文正文",
+    subjectLabel: "第一段：依據、提名與咨請事項",
+    subjectPlaceholder: "茲依據○○規定，提名○○○為第○屆○○院委員並為院長，咨請貴院行使同意權。",
+    descriptionLabel: "第二段：隨咨檢送文件",
+    descriptionPlaceholder: "隨咨檢送○○○先生（女士）最高學歷、主要經歷、著作、重要表現及各項證明文件等檔案各1冊。",
   },
   meeting_notice: {
     section: "議事日程",
@@ -1072,7 +1070,12 @@ export default function NewDocumentPage() {
           {/* 公文主體 */}
           <GuidedFormStep step={1} activeStep={activeStep}>
           <FormSection title={copy.section}>
-            {/* 主旨（類別需要時顯示） */}
+            {category === "consultation" && (
+              <p className="rounded-lg px-3 py-2 text-xs leading-relaxed" style={{ color: "var(--text-secondary)", background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                咨文採兩段式正文；列印與公開檢視時會自動合併內容，不顯示「主旨／說明／辦法」標籤，並在文末帶出「此咨」與受文者。
+              </p>
+            )}
+            {/* 主要內容欄位 */}
             {copy.subjectLabel && (
               <div>
                 <Label required>{copy.subjectLabel}</Label>

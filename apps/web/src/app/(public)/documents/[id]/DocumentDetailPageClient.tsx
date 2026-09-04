@@ -876,6 +876,15 @@ export default function DocumentDetailPageClient({
                     <p className="text-sm" style={{ color: "var(--text-muted)" }}>（尚無令文內容）</p>
                   )}
                 </div>
+              ) : doc.category === "consultation" ? (
+                <div className="space-y-5 text-sm leading-8" style={{ color: "var(--text-primary)" }}>
+                  <p>{primaryRecipients.length > 0 ? primaryRecipients.map((r) => r.name).join("、") : "（未填受文者）"}</p>
+                  {doc.subject && <OfficialText value={doc.subject} />}
+                  {doc.doc_description && <OfficialText value={doc.doc_description} />}
+                  {doc.action_required && <OfficialText value={doc.action_required} />}
+                  <p className="pt-2">此咨</p>
+                  <p>{primaryRecipients.length > 0 ? primaryRecipients.map((r) => r.name).join("、") : "（未填受文者）"}</p>
+                </div>
               ) : (
                 <>
                   {doc.subject && (
@@ -899,7 +908,7 @@ export default function DocumentDetailPageClient({
                   {doc.action_required && (
                     <div>
                       <p style={{ color: "var(--text-primary)" }}>
-                        {doc.category === "report" ? "建議事項：" : doc.category === "consultation" ? "辦法或事項：" : "辦法："}
+                        {doc.category === "report" ? "建議事項：" : "辦法："}
                       </p>
                       <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
                         <OfficialText value={doc.action_required} />

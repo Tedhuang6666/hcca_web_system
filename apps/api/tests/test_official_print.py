@@ -194,6 +194,50 @@ async def test_decree_print_uses_full_school_heading_and_government_layout() -> 
 
 
 @pytest.mark.asyncio
+async def test_consultation_print_uses_two_paragraph_body_and_closing() -> None:
+    council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
+    doc = SimpleNamespace(
+        category="consultation",
+        issuer_full_name=None,
+        org=council,
+        org_id="council",
+        title="提名院長同意權咨",
+        urgency="normal",
+        classification="normal",
+        declassification_condition="none",
+        recipients=[SimpleNamespace(recipient_type="main", name="立法院")],
+        attachments=[],
+        issued_at=None,
+        completed_at=None,
+        created_at=None,
+        serial_number="嶺咨字第1150000001號",
+        file_number=None,
+        retention_period=None,
+        classification_number=None,
+        approvals=[],
+        handler_name="○○○",
+        handler_unit="總統",
+        handler_email=None,
+        handler_phone=None,
+        subject="茲依據中華民國憲法增修條文第○條第○項規定，提名○○○為第○屆○○院委員並為院長，咨請貴院行使同意權。",
+        content=None,
+        doc_description="隨咨檢送○○○先生（女士）最高學歷、主要經歷、著作、重要表現及各項證明文件等檔案各1冊。",
+        action_required=None,
+    )
+
+    rendered = await render_document_print_html(_OrgSession(council), doc)
+
+    assert 'class="consultation-content"' in rendered
+    assert '<section class="consultation-recipient">立法院</section>' in rendered
+    assert "茲依據中華民國憲法增修條文" in rendered
+    assert "隨咨檢送○○○先生（女士）最高學歷" in rendered
+    assert 'class="consultation-closing">此咨</div>' in rendered
+    assert 'class="consultation-final-recipient">立法院</div>' in rendered
+    assert "主旨：" not in rendered
+    assert "辦法或事項：" not in rendered
+
+
+@pytest.mark.asyncio
 async def test_meeting_notice_seal_stays_on_one_page_with_handwritten_font() -> None:
     council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
     design = SimpleNamespace(id="design", name="設計部", parent_id="council")

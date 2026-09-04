@@ -517,6 +517,12 @@ def _subject_section(value: str | None) -> str:
     )
 
 
+def _consultation_paragraph(value: str | None) -> str:
+    if not value or not value.strip():
+        return ""
+    return f'<div class="consultation-paragraph">{_esc(value)}</div>'
+
+
 async def render_document_print_html(
     session: AsyncSession,
     doc: Document,
@@ -535,6 +541,7 @@ async def render_document_print_html(
     is_notice = cat in {"meeting_notice", "inspection_notice"}
     is_decree = cat == "decree"
     is_record = cat == "record"
+    is_consultation = cat == "consultation"
     issuer_name = await _full_org_name(session, doc)
     decree_authority_title = _decree_issuer_title(doc, issuer_name) if is_decree else ""
     issuer = _esc(issuer_name)
@@ -735,11 +742,50 @@ async def render_document_print_html(
             f"{_document_section('決議：', doc.action_required)}"
             f"{signature}"
         )
+    elif is_consultation:
+        consultation_meta_rows = [
+            _meta_row("發文字號：", serial),
+            _meta_row("速別：", urgency),
+            _meta_row("密等及解密條件或保密期限：", declassification or classification),
+            _meta_row("附件：", attachment_summary),
+        ]
+        if file_number or retention_period:
+            consultation_meta_rows.append(
+                _meta_row("檔號／保存年限：", f"{file_number}／{retention_period}")
+            )
+        if classification_number:
+            consultation_meta_rows.append(_meta_row("分類號：", classification_number))
+        if source_document_date or source_document_number:
+            consultation_meta_rows.append(
+                _meta_row(
+                    "收文日期字號：",
+                    "　".join(
+                        value for value in (source_document_date, source_document_number) if value
+                    ),
+                )
+            )
+        consultation_body = "".join(
+            _consultation_paragraph(value)
+            for value in (
+                doc.subject,
+                getattr(doc, "basis", None),
+                doc.doc_description or doc.content,
+                doc.action_required,
+            )
+        )
+        body_html = (
+            f'<section class="consultation-recipient">{addressed_to}</section>'
+            f'<section class="meta">{"".join(consultation_meta_rows)}</section>'
+            f'<section class="consultation-content">{consultation_body}</section>'
+            '<div class="consultation-closing">此咨</div>'
+            f'<div class="consultation-final-recipient">{addressed_to}</div>'
+            f"{signature}"
+            f'<div class="consultation-date">{issue_date}</div>'
+        )
     else:
         description_label = "公告事項：" if cat == "announcement" else "說明："
         action_label = {
             "report": "建議事項：",
-            "consultation": "辦法或事項：",
             "signature": "擬辦：",
         }.get(cat, "辦法：")
         body_html = (
@@ -914,6 +960,38 @@ async def render_document_print_html(
     }}
     .subject-label {{ white-space: nowrap; }}
     .subject-body {{ min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }}
+    .consultation-recipient {{
+      margin: 5mm 0 7mm;
+      font-size: 16pt;
+      line-height: 1.75;
+    }}
+    .consultation-content {{
+      margin-top: 3mm;
+      font-size: 16pt;
+      line-height: 1.9;
+    }}
+    .consultation-paragraph {{
+      margin: 0 0 7mm;
+      text-indent: 2em;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      break-inside: avoid;
+    }}
+    .consultation-closing {{
+      margin-top: 10mm;
+      font-size: 16pt;
+      line-height: 1.75;
+    }}
+    .consultation-final-recipient {{
+      margin-top: 3mm;
+      font-size: 16pt;
+      line-height: 1.75;
+    }}
+    .consultation-date {{
+      margin-top: 7mm;
+      font-size: 14pt;
+      line-height: 1.6;
+    }}
     .doc-section {{ margin: 5mm 0; break-inside: avoid; }}
     .doc-section-label {{
       font-size: 16pt;
@@ -1040,7 +1118,7 @@ async def render_document_print_html(
     <div class="copy-mark">{copy_mark}</div>
     <div class="file-box">檔　　號：{file_number}<br>保存年限：{retention_period}</div>
     <header class="title">{document_title}</header>
-    {f'<aside class="handler">{handler_block}</aside>' if handler_block and not is_notice else ""}
+    {f'<aside class="handler">{handler_block}</aside>' if handler_block and not is_notice and not is_consultation else ""}
     {f'<div class="issuer-contact">{issuer_contact}</div>' if issuer_contact else ""}
     <section class="body">{body_html}</section>
   </main>
