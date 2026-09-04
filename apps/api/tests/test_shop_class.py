@@ -282,8 +282,10 @@ async def test_bulk_create_classes_builds_class_codes_and_student_ranges(
     assert result.succeeded == 2
     classes = await class_svc.list_classes(db_session, academic_year=115)
     assert [c.class_code for c in classes] == ["101", "102"]
-    assert classes[0].ranges[0].student_id_start == "11510101"
-    assert classes[0].ranges[0].student_id_end == "11510140"
+    first_class = await class_svc.get_class(db_session, classes[0].id)
+    assert first_class is not None
+    assert first_class.ranges[0].student_id_start == "11510101"
+    assert first_class.ranges[0].student_id_end == "11510140"
 
 
 async def test_bulk_create_classes_allows_per_class_student_count_override(
@@ -310,8 +312,12 @@ async def test_bulk_create_classes_allows_per_class_student_count_override(
     assert result.succeeded == 2
     classes = await class_svc.list_classes(db_session, academic_year=116)
     by_code = {c.class_code: c for c in classes}
-    assert by_code["101"].ranges[0].student_id_end == "11610140"
-    assert by_code["102"].ranges[0].student_id_end == "11610235"
+    first_class = await class_svc.get_class(db_session, by_code["101"].id)
+    second_class = await class_svc.get_class(db_session, by_code["102"].id)
+    assert first_class is not None
+    assert second_class is not None
+    assert first_class.ranges[0].student_id_end == "11610140"
+    assert second_class.ranges[0].student_id_end == "11610235"
 
 
 # ── 商品：分類階層與變體 ──────────────────────────────────────────────────────
