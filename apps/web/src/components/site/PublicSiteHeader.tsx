@@ -169,11 +169,13 @@ function PublicSiteHeaderContent({
   const filteredMenuGroups = menuGroups
     .map((group) => ({ ...group, items: group.items.filter(matchesServiceQuery) }))
     .filter((group) => group.items.length > 0);
+  const filteredTaskNav = taskNav.filter(matchesServiceQuery);
   const filteredNavPages = navPages.filter((page) => matchesServiceQuery({
     label: page.nav_label || page.title,
     description: page.title,
   }));
-  const serviceResultCount = filteredMenuGroups.reduce((count, group) => count + group.items.length, 0)
+  const serviceResultCount = filteredTaskNav.length
+    + filteredMenuGroups.reduce((count, group) => count + group.items.length, 0)
     + filteredNavPages.length;
   const systemHref = isLoggedIn ? "/dashboard" : "/login?next=%2Fdashboard";
   const systemLabel = isLoggedIn ? "管理系統" : "登入管理";
@@ -226,7 +228,7 @@ function PublicSiteHeaderContent({
             <Link
               key={item.key}
               href={item.href}
-              className="public-nav-link"
+              className="public-nav-link public-task-nav-link"
               aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
             >
               {item.label}
@@ -238,7 +240,14 @@ function PublicSiteHeaderContent({
               className="public-nav-dropdown"
               ref={menuRef}
               onToggle={(event) => {
-                if ((event.currentTarget as HTMLDetailsElement).open) setOpen(false);
+                const dropdown = event.currentTarget as HTMLDetailsElement;
+                if (dropdown.open) {
+                  const headerBottom = headerRef.current?.getBoundingClientRect().bottom ?? 0;
+                  dropdown.style.setProperty("--public-menu-top", `${headerBottom + 8}px`);
+                  setOpen(false);
+                } else {
+                  dropdown.style.removeProperty("--public-menu-top");
+                }
               }}
             >
               <summary className="public-nav-link cursor-pointer list-none">
@@ -257,6 +266,34 @@ function PublicSiteHeaderContent({
                   />
                   {normalizedQuery && <span aria-live="polite">{serviceResultCount} 項結果</span>}
                 </label>
+                {filteredTaskNav.length > 0 && (
+                  <section className="public-nav-dropdown-quick">
+                    <p className="public-nav-dropdown-label">快速入口</p>
+                    <div className="public-nav-dropdown-quick-links">
+                      {filteredTaskNav.map((item) => (
+                        <Link
+                          key={item.key}
+                          href={item.href}
+                          className="public-nav-dropdown-link public-nav-dropdown-quick-link"
+                          aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
+                        >
+                          <span className="public-nav-dropdown-icon" aria-hidden="true">
+                            <PublicNavIcon iconKey={item.iconKey} size={18} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5">
+                              <span className="text-sm font-semibold">{item.label}</span>
+                              {item.guestUsable && <span className="public-nav-badge">免登入</span>}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
+                              {item.description}
+                            </span>
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 {filteredMenuGroups.map((group) => (
                   <section key={group.id}>
                     <p className="public-nav-dropdown-label">
@@ -369,7 +406,7 @@ function PublicSiteHeaderContent({
           >
             <p className="public-mobile-nav-heading">你想先做什麼？</p>
             <div className="grid gap-2">
-              {taskNav.map((item) => (
+              {filteredTaskNav.map((item) => (
                 <Link
                   key={item.key}
                   href={item.href}
