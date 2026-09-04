@@ -26,7 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
-from api.models.types import JSONDict
+from api.models.types import JSONDict, JSONList
 
 if TYPE_CHECKING:
     from api.models.activity import Activity
@@ -127,7 +127,7 @@ class RecipientType(enum.StrEnum):
 
 
 class DeliveryMethod(enum.StrEnum):
-    """遞送方式（系統僅儲存與顯示，不直接觸發寄送行為）"""
+    """遞送方式。Email 會在公文核准或直接發文後排入寄送佇列。"""
 
     NONE = "none"  # 未指定 / 不適用
     SYSTEM = "system"  # 線上系統下載
@@ -760,6 +760,10 @@ class DocumentRecipient(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)  # 單位或個人名稱
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 發文後寄送聯絡信箱
+    # target_org_id 對應的職位 ID；公文核准時解析該職位當日有效且有信箱的成員。
+    email_position_ids: Mapped[list[str]] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
 
     # 結構化目標：擇一指定（三者皆 None 即為純文字外部單位）
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(

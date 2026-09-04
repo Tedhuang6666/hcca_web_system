@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { classApi, documentsApi, documentTemplatesApi, serialTemplatesApi, orgsApi, usersApi, apiErrorMessage } from "@/lib/api";
 import type {
   DocumentUrgency, DocumentClassification, DocumentCategory,
-  DocumentVisibility, RecipientType, SerialTemplateOut,
+  DeliveryMethod, DocumentVisibility, RecipientType, SerialTemplateOut,
   SchoolClassListItem,
 } from "@/lib/types";
 import type { OrgRead } from "@/lib/api";
@@ -17,6 +17,7 @@ import Toggle from "@/components/ui/Toggle";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { RecipientSearch, type RecipientDraft } from "@/components/documents/RecipientSearch";
+import { OrganizationEmailRecipientSettings } from "@/components/documents/OrganizationEmailRecipientSettings";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import {
@@ -33,6 +34,8 @@ interface Recipient {
   target_user_id?: string;
   target_org_id?: string;
   target_class_id?: string;
+  delivery_method?: DeliveryMethod;
+  email_position_ids?: string[];
 }
 
 interface LinkDraft {
@@ -674,6 +677,8 @@ export default function NewDocumentPage() {
             target_user_id: item.target_user_id ?? undefined,
             target_org_id: item.target_org_id ?? undefined,
             target_class_id: item.target_class_id ?? undefined,
+            delivery_method: item.delivery_method,
+            email_position_ids: item.email_position_ids?.map(String) ?? [],
           })),
         );
         toast.success(`已套用公文範本「${template.name}」`);
@@ -742,7 +747,8 @@ export default function NewDocumentPage() {
           target_user_id: r.target_user_id,
           target_org_id: r.target_org_id,
           target_class_id: r.target_class_id,
-          delivery_method: (r.email ? "email" : "none") as "none" | "system" | "email" | "paper" | "postal",
+          delivery_method: r.delivery_method ?? (r.email ? "email" : "none"),
+          email_position_ids: r.email_position_ids ?? [],
         })),
       });
       for (const lnk of pendingLinks) {
@@ -1180,7 +1186,29 @@ export default function NewDocumentPage() {
                     {r.email && (
                       <span className="truncate max-w-32" style={{ color: "var(--text-muted)" }}>{r.email}</span>
                     )}
-                    <button onClick={() => setRecipients((p) => p.filter((x) => x.id !== r.id))}
+                    {r.email && (
+                      <button
+                        type="button"
+                        onClick={() => setRecipients((current) => current.map((recipient) => (
+                          recipient.id === r.id
+                            ? {
+                                ...recipient,
+                                delivery_method: recipient.delivery_method === "email" ? "none" : "email",
+                              }
+                            : recipient
+                        )))}
+                        className="min-h-11 rounded px-2 text-[10px]"
+                        style={{
+                          color: r.delivery_method === "email" ? "var(--primary)" : "var(--text-muted)",
+                          background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
+                          border: "1px solid var(--border)",
+                        }}
+                        aria-pressed={r.delivery_method === "email"}
+                      >
+                        {r.delivery_method === "email" ? "Email 通知中" : "通知 Email"}
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setRecipients((p) => p.filter((x) => x.id !== r.id))}
                       className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500"
                       style={{ color: "var(--text-muted)" }}
                       aria-label={`移除收件人 ${r.name}`}>
@@ -1210,6 +1238,23 @@ export default function NewDocumentPage() {
               </p>
             )}
           </FormSection>
+          )}
+
+          {!isDecree && (
+            <OrganizationEmailRecipientSettings
+              recipients={recipients}
+              onPositionsChange={(recipientId, positionIds) => {
+                setRecipients((current) => current.map((recipient) => (
+                  recipient.id === recipientId
+                    ? {
+                        ...recipient,
+                        email_position_ids: positionIds,
+                        delivery_method: positionIds.length ? "email" : recipient.email ? "email" : "none",
+                      }
+                    : recipient
+                )));
+              }}
+            />
           )}
 
           {/* 連結附件 */}

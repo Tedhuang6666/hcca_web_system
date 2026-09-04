@@ -33364,10 +33364,16 @@ export interface components {
         /** RecipientCreate */
         RecipientCreate: {
             /**
-             * @description 遞送方式（系統僅儲存與顯示）
+             * @description 遞送方式（Email 會在公文正式發文後通知受文者）
              * @default none
              */
             delivery_method: components["schemas"]["DeliveryMethod"];
+            /**
+             * Email Position Ids
+             * @description 機關電子郵件通知職位（須搭配 target_org_id）
+             * @default []
+             */
+            email_position_ids?: string[];
             /**
              * Email
              * @description 聯絡信箱（發文後自動寄送）
@@ -33406,6 +33412,12 @@ export interface components {
         RecipientOut: {
             /** @default none */
             delivery_method: components["schemas"]["DeliveryMethod"];
+            /**
+             * Email Position Ids
+             * @description 機關電子郵件通知職位
+             * @default []
+             */
+            email_position_ids?: string[];
             /** Email */
             email: string | null;
             /**

@@ -7,7 +7,7 @@ import {
   documentsApi, documentsRecipientsApi, serialTemplatesApi, apiErrorMessage } from "@/lib/api";
 import type {
   DocumentOut, DocumentUrgency, DocumentClassification,
-  DocumentCategory, RecipientType, SerialTemplateOut,
+  DeliveryMethod, DocumentCategory, RecipientType, SerialTemplateOut,
 } from "@/lib/types";
 import GongwenEditor from "@/components/ui/GongwenEditor";
 import SmartTextarea from "@/components/ui/SmartTextarea";
@@ -15,6 +15,7 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import { OrganizationEmailRecipientSettings } from "@/components/documents/OrganizationEmailRecipientSettings";
 
 interface Recipient {
   id: string;
@@ -24,7 +25,16 @@ interface Recipient {
   target_user_id?: string;
   target_org_id?: string;
   target_class_id?: string;
+  delivery_method?: DeliveryMethod;
+  email_position_ids?: string[];
 }
+
+type NewRecipient = {
+  name: string;
+  email: string;
+  recipient_type: RecipientType;
+  delivery_method?: DeliveryMethod;
+};
 
 const CATEGORY_OPTIONS: Array<[DocumentCategory, string]> = [
   ["letter", "函"],
@@ -109,7 +119,7 @@ type DocumentEditDraft = {
   dueDate: string;
   changeNote: string;
   recipients: Recipient[];
-  newRecipient: { name: string; email: string; recipient_type: RecipientType };
+  newRecipient: NewRecipient;
   selectedTemplateId: string;
 };
 
@@ -151,7 +161,9 @@ export default function EditDocumentPage() {
   const [dueDate, setDueDate] = useState("");
   const [changeNote, setChangeNote] = useState("");
   const [recipients, setRecipients] = useState<Recipient[]>([]);
-  const [newRecipient, setNewRecipient] = useState({ name: "", email: "", recipient_type: "main" as RecipientType });
+  const [newRecipient, setNewRecipient] = useState<NewRecipient>({
+    name: "", email: "", recipient_type: "main", delivery_method: "none",
+  });
   const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [doc, setDoc] = useState<DocumentOut | null>(null);
@@ -260,8 +272,10 @@ export default function EditDocumentPage() {
       target_user_id: r.target_user_id ?? undefined,
       target_org_id: r.target_org_id ?? undefined,
       target_class_id: r.target_class_id ?? undefined,
+      delivery_method: r.delivery_method,
+      email_position_ids: r.email_position_ids?.map(String) ?? [],
     })),
-    newRecipient: { name: "", email: "", recipient_type: "main" },
+    newRecipient: { name: "", email: "", recipient_type: "main", delivery_method: "none" },
     selectedTemplateId: doc.serial_template_id ?? "",
   }) : null, [doc]);
   const restoreDraft = useCallback((draft: DocumentEditDraft) => {
@@ -392,6 +406,8 @@ export default function EditDocumentPage() {
           target_user_id: r.target_user_id,
           target_org_id: r.target_org_id,
           target_class_id: r.target_class_id,
+          delivery_method: r.delivery_method ?? (r.email ? "email" : "none"),
+          email_position_ids: r.email_position_ids ?? [],
         })));
       }
     }, [buildUpdatePayload, doc?.status, id, recipients]),
@@ -444,6 +460,8 @@ export default function EditDocumentPage() {
         target_user_id: r.target_user_id ?? undefined,
         target_org_id: r.target_org_id ?? undefined,
         target_class_id: r.target_class_id ?? undefined,
+        delivery_method: r.delivery_method,
+        email_position_ids: r.email_position_ids?.map(String) ?? [],
       })));
     } catch (e) {
       toast.error(apiErrorMessage(e, "載入失敗"));
@@ -470,8 +488,15 @@ export default function EditDocumentPage() {
 
   const addRecipient = () => {
     if (!newRecipient.name.trim()) return;
-    setRecipients(prev => [...prev, { ...newRecipient, id: crypto.randomUUID() }]);
-    setNewRecipient({ name: "", email: "", recipient_type: "main" });
+    setRecipients(prev => [
+      ...prev,
+      {
+        ...newRecipient,
+        delivery_method: newRecipient.email.trim() ? "email" : "none",
+        id: crypto.randomUUID(),
+      },
+    ]);
+    setNewRecipient({ name: "", email: "", recipient_type: "main", delivery_method: "none" });
   };
 
   const save = async () => {
@@ -486,6 +511,8 @@ export default function EditDocumentPage() {
           target_user_id: r.target_user_id,
           target_org_id: r.target_org_id,
           target_class_id: r.target_class_id,
+          delivery_method: r.delivery_method ?? (r.email ? "email" : "none"),
+          email_position_ids: r.email_position_ids ?? [],
         })));
       }
       clearDraft();
@@ -708,8 +735,27 @@ export default function EditDocumentPage() {
                   {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]}
                 </span>
                 <span className=" flex-1">{r.name}</span>
-                {r.email && <span style={{ color: "var(--text-muted)" }}>{r.email}</span>}
-                <button onClick={() => setRecipients(prev => prev.filter(x => x.id !== r.id))}
+                {r.email && <span className="truncate max-w-40" style={{ color: "var(--text-muted)" }}>{r.email}</span>}
+                {r.email && (
+                  <button
+                    type="button"
+                    onClick={() => setRecipients(prev => prev.map(x => (
+                      x.id === r.id
+                        ? { ...x, delivery_method: x.delivery_method === "email" ? "none" : "email" }
+                        : x
+                    )))}
+                    className="min-h-11 rounded px-2 text-[10px]"
+                    style={{
+                      color: r.delivery_method === "email" ? "var(--primary)" : "var(--text-muted)",
+                      background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
+                      border: "1px solid var(--border)",
+                    }}
+                    aria-pressed={r.delivery_method === "email"}
+                  >
+                    {r.delivery_method === "email" ? "Email 通知中" : "通知 Email"}
+                  </button>
+                )}
+                <button type="button" onClick={() => setRecipients(prev => prev.filter(x => x.id !== r.id))}
                   className=" hover:text-red-400"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
               </div>
             ))}
@@ -736,6 +782,20 @@ export default function EditDocumentPage() {
                 ＋ 新增
               </button>
             </div>
+            <OrganizationEmailRecipientSettings
+              recipients={recipients}
+              onPositionsChange={(recipientId, positionIds) => {
+                setRecipients((current) => current.map((recipient) => (
+                  recipient.id === recipientId
+                    ? {
+                        ...recipient,
+                        email_position_ids: positionIds,
+                        delivery_method: positionIds.length ? "email" : recipient.email ? "email" : "none",
+                      }
+                    : recipient
+                )));
+              }}
+            />
           </div>
           )}
 

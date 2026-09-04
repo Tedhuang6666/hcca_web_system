@@ -132,6 +132,7 @@ class RecipientOut(BaseModel):
     target_user_id: uuid.UUID | None = None
     target_org_id: uuid.UUID | None = None
     target_class_id: uuid.UUID | None = None
+    email_position_ids: list[uuid.UUID] = Field(default_factory=list)
     delivery_method: DeliveryMethod = DeliveryMethod.NONE
 
 
@@ -151,8 +152,13 @@ class RecipientCreate(BaseModel):
     target_class_id: uuid.UUID | None = Field(
         None, description="指定特定班級（與其他結構化目標互斥）"
     )
+    email_position_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=20,
+        description="機關電子郵件通知職位（須搭配 target_org_id）",
+    )
     delivery_method: DeliveryMethod = Field(
-        DeliveryMethod.NONE, description="遞送方式（系統僅儲存與顯示）"
+        DeliveryMethod.NONE, description="遞送方式（Email 會在公文正式發文後通知受文者）"
     )
 
     @model_validator(mode="after")
@@ -160,6 +166,10 @@ class RecipientCreate(BaseModel):
         targets = [self.target_user_id, self.target_org_id, self.target_class_id]
         if sum(target is not None for target in targets) > 1:
             raise ValueError("target_user_id、target_org_id、target_class_id 僅能指定一項")
+        if self.email_position_ids and self.target_org_id is None:
+            raise ValueError("email_position_ids 僅能搭配 target_org_id 使用")
+        if self.email_position_ids and self.delivery_method != DeliveryMethod.EMAIL:
+            raise ValueError("email_position_ids 必須搭配 email 遞送方式")
         return self
 
 

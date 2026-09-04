@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { OrgRead, UserSummary } from "@/lib/api";
 import { emailApi, usersApi } from "@/lib/api";
-import type { EmailRecipientListOut, RecipientType, SchoolClassListItem } from "@/lib/types";
+import type {
+  DeliveryMethod,
+  EmailRecipientListOut,
+  RecipientType,
+  SchoolClassListItem,
+} from "@/lib/types";
 import { getRecentRecipients, pushRecentRecipients, type RecentRecipient } from "@/lib/recentRecipients";
 
 // 收件者沒有穩定 id（可自由輸入），用 name + email 以 JSON 編碼成去重鍵。
@@ -55,6 +60,7 @@ export type RecipientDraft = {
   target_user_id?: string;
   target_org_id?: string;
   target_class_id?: string;
+  delivery_method?: DeliveryMethod;
 };
 
 export function RecipientSearch({
@@ -128,7 +134,13 @@ export function RecipientSearch({
     if (!query.trim()) return;
     const name = query.trim();
     const mail = email.trim();
-    onAdd({ recipient_type: type, name, email: mail, ...selectedTarget });
+    onAdd({
+      recipient_type: type,
+      name,
+      email: mail,
+      delivery_method: mail ? "email" : "none",
+      ...selectedTarget,
+    });
     remember(name, mail);
     setQuery("");
     setEmail("");
@@ -159,7 +171,13 @@ export function RecipientSearch({
   }, [classes, query]);
 
   const selectOrg = (o: OrgRead) => {
-    onAdd({ recipient_type: type, name: o.name, email: "", target_org_id: o.id });
+    onAdd({
+      recipient_type: type,
+      name: o.name,
+      email: "",
+      delivery_method: "none",
+      target_org_id: o.id,
+    });
     remember(o.name, "");
     setQuery("");
     setEmail("");
@@ -168,7 +186,13 @@ export function RecipientSearch({
 
   const selectClass = (schoolClass: SchoolClassListItem) => {
     const name = schoolClass.label || `${schoolClass.academic_year} 學年度 ${schoolClass.class_code} 班`;
-    onAdd({ recipient_type: type, name, email: "", target_class_id: schoolClass.id });
+    onAdd({
+      recipient_type: type,
+      name,
+      email: "",
+      delivery_method: "none",
+      target_class_id: schoolClass.id,
+    });
     remember(name, "");
     setQuery("");
     setEmail("");
@@ -178,7 +202,12 @@ export function RecipientSearch({
   // 點擊「最近使用」chip：用目前選擇的收件人類型重新加入。
   const addRecent = (recipient: RecentRecipient) => {
     const { name, email: mail } = decodeRecipientId(recipient.id);
-    onAdd({ recipient_type: type, name, email: mail });
+    onAdd({
+      recipient_type: type,
+      name,
+      email: mail,
+      delivery_method: mail ? "email" : "none",
+    });
     remember(name, mail);
   };
 
@@ -187,6 +216,7 @@ export function RecipientSearch({
       recipient_type: "attendee" as const,
       name: member.name?.trim() || member.email,
       email: member.email,
+      delivery_method: "email" as const,
     }));
     onAddMany(attendees);
   };
