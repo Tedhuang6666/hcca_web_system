@@ -90,8 +90,15 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
         subject = payload.get("subject", "")
         body_text = payload.get("body", "")
         subtype = payload.get("subtype", "html")
+        attachments = payload.get("attachments")
         if to and subject:
-            enqueue_email(to, subject, body_text, subtype)
+            enqueue_email(
+                to,
+                subject,
+                body_text,
+                subtype,
+                attachments=attachments if isinstance(attachments, list) else None,
+            )
     elif etype == "admin.notification":
         # 模組跳閘 / 恢復等系統事件 → fan-out 給所有 superuser 的 inbox
         await _fan_out_admin_notification(db, payload)

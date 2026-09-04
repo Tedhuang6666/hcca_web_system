@@ -69,6 +69,20 @@ function fmtSize(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function googleDrivePreviewUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "drive.google.com") {
+      return null;
+    }
+    const pathMatch = url.pathname.match(/^\/file\/d\/([^/]+)/);
+    const id = pathMatch?.[1] || url.searchParams.get("id");
+    return id ? `https://drive.google.com/file/d/${encodeURIComponent(id)}/preview` : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatActingSignature(step: DocumentWithArchive["approvals"][number] | undefined) {
   if (!step) return null;
   if (!step.is_acting || !step.delegate) {
@@ -1302,24 +1316,20 @@ export default function DocumentDetailPageClient({
 
           {/* PDF / Google Drive 預覽 */}
           {showAttachments && (() => {
-            const previews: Array<{ key: string; label: string; src: string }> = [];
+            const previews: Array<{ key: string; label: string; src: string; sourceUrl: string }> = [];
 
             // Google Drive 連結
             for (const attachment of doc.attachments) {
               if (previews.length >= 2) break;
               if (!attachment.link_url) continue;
-              try {
-                const url = new URL(attachment.link_url);
-                if (url.protocol !== "https:" || url.hostname !== "drive.google.com") continue;
-                const match = url.pathname.match(/^\/file\/d\/([^/]+)(?:\/|$)/);
-                if (!match) continue;
+              const src = googleDrivePreviewUrl(attachment.link_url);
+              if (src) {
                 previews.push({
                   key: `gdrive-${attachment.id}`,
                   label: `Google Drive 預覽：${attachment.filename}`,
-                  src: `https://drive.google.com/file/d/${encodeURIComponent(match[1])}/preview`,
+                  src,
+                  sourceUrl: attachment.link_url,
                 });
-              } catch {
-                // 無效網址不提供預覽。
               }
             }
 
@@ -1334,10 +1344,17 @@ export default function DocumentDetailPageClient({
                   title={p.label}
                   className="w-full rounded"
                   style={{ height: "600px", border: "1px solid var(--border)" }}
-                  sandbox="allow-same-origin allow-scripts allow-popups"
-                  referrerPolicy="no-referrer"
-                  allow="fullscreen"
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
                 />
+                <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                  若預覽空白，請確認檔案分享權限為「知道連結的任何人可檢視」，或{" "}
+                  <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--primary)" }}>
+                    在 Google Drive 開啟
+                  </a>。
+                </p>
               </div>
             ));
           })()}
