@@ -619,10 +619,17 @@ async def render_document_print_html(
             f"{_esc(getattr(doc, 'issuer_address', '') or '')}</div>"
         )
 
+    signature_fallback_title = (
+        decree_authority_title
+        if is_decree
+        else "主席"
+        if is_consultation and not getattr(doc, "handler_unit", None)
+        else None
+    )
     signature = await _final_signature_html(
         session,
         doc,
-        fallback_title=decree_authority_title if is_decree else None,
+        fallback_title=signature_fallback_title,
     )
 
     meta_rows = [
@@ -774,11 +781,15 @@ async def render_document_print_html(
             )
         )
         body_html = (
-            f'<section class="consultation-recipient">{addressed_to}</section>'
+            f'<section class="consultation-recipient">受文者：{addressed_to}</section>'
             f'<section class="meta">{"".join(consultation_meta_rows)}</section>'
             f'<section class="consultation-content">{consultation_body}</section>'
             '<div class="consultation-closing">此咨</div>'
             f'<div class="consultation-final-recipient">{addressed_to}</div>'
+            '<section class="copies consultation-copies">'
+            f"<div>正本：{_join_names(primary_recipients) or addressed_to}</div>"
+            f"<div>副本：{_join_names(copy_recipients)}</div>"
+            "</section>"
             f"{signature}"
             f'<div class="consultation-date">{issue_date}</div>'
         )

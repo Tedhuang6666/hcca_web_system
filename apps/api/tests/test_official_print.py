@@ -205,7 +205,10 @@ async def test_consultation_print_uses_two_paragraph_body_and_closing() -> None:
         urgency="normal",
         classification="normal",
         declassification_condition="none",
-        recipients=[SimpleNamespace(recipient_type="main", name="立法院")],
+        recipients=[
+            SimpleNamespace(recipient_type="main", name="立法院"),
+            SimpleNamespace(recipient_type="copy", name="行政院"),
+        ],
         attachments=[],
         issued_at=None,
         completed_at=None,
@@ -226,15 +229,24 @@ async def test_consultation_print_uses_two_paragraph_body_and_closing() -> None:
     )
 
     rendered = await render_document_print_html(_OrgSession(council), doc)
+    pdf = render_print_pdf(rendered)
 
     assert 'class="consultation-content"' in rendered
-    assert '<section class="consultation-recipient">立法院</section>' in rendered
+    assert '<section class="consultation-recipient">受文者：立法院</section>' in rendered
     assert "茲依據中華民國憲法增修條文" in rendered
     assert "隨咨檢送○○○先生（女士）最高學歷" in rendered
     assert 'class="consultation-closing">此咨</div>' in rendered
     assert 'class="consultation-final-recipient">立法院</div>' in rendered
+    assert "<div>正本：立法院</div>" in rendered
+    assert "<div>副本：行政院</div>" in rendered
+    assert '<span class="signature-title">總統</span>' in rendered
     assert "主旨：" not in rendered
     assert "辦法或事項：" not in rendered
+    assert len(PdfReader(BytesIO(pdf)).pages) == 1
+
+    doc.handler_unit = None
+    fallback_rendered = await render_document_print_html(_OrgSession(council), doc)
+    assert '<span class="signature-title">主席</span>' in fallback_rendered
 
 
 @pytest.mark.asyncio
