@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +40,7 @@ from api.schemas.finance import (
     BudgetAllocationEvidenceOut,
     BudgetAllocationOut,
     BudgetAllocationUpdate,
+    BudgetCouncilReviewPublicationUpdate,
     BudgetCreate,
     BudgetDetailOut,
     BudgetImportOut,
@@ -367,6 +368,8 @@ async def import_budget(
     name: str = Form(..., min_length=1, max_length=160),
     title: str | None = Form(None, max_length=160),
     proposing_org_id: uuid.UUID | None = Form(None),
+    budget_id: uuid.UUID | None = Form(None),
+    replace_submission_id: uuid.UUID | None = Form(None),
     file: UploadFile = File(...),
 ) -> BudgetImportOut:
     if Path(file.filename or "").suffix.lower() != ".xlsx":
@@ -392,6 +395,8 @@ async def import_budget(
             file_bytes,
             user.id,
             proposing_org_id,
+            budget_id,
+            replace_submission_id,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -542,6 +547,42 @@ async def review_budget_submission(
     submission_id: uuid.UUID, body: BudgetReview, db: DbDep, user: CurrentUser
 ) -> BudgetSubmissionOut:
     submission = await service.review_budget_submission(db, submission_id, body, user.id)
+    await db.commit()
+    return BudgetSubmissionOut.model_validate(submission)
+
+
+@router.patch(
+    "/budget-submissions/{submission_id}/council-review-publication",
+    response_model=BudgetSubmissionOut,
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET, PermissionCode.FINANCE_BUDGET_REVIEW
+            )
+        )
+    ],
+)
+async def update_council_review_publication(
+    submission_id: uuid.UUID,
+    body: BudgetCouncilReviewPublicationUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> BudgetSubmissionOut:
+    submission = await db.get(FinanceBudgetSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    submission = await service.set_submission_council_review_publication(
+        db, submission, body.is_public
+    )
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_submission",
+        entity_id=str(submission.id),
+        action="finance.budget_council_review_publication",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"{'開放' if body.is_public else '停止'}議員審理：{submission.title}",
+    )
     await db.commit()
     return BudgetSubmissionOut.model_validate(submission)
 
@@ -1239,24 +1280,52 @@ async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> li
 @router.get("/public/budgets", response_model=list[PublicBudgetListItem])
 async def list_public_budgets(db: DbDep) -> list[PublicBudgetListItem]:
     return [
-        PublicBudgetListItem(id=budget.id, name=budget.name, period_name=period.name)
-        for budget, period in await service.list_public_budgets(db)
+        PublicBudgetListItem(
+            id=budget.id,
+            name=budget.name,
+            period_name=period.name,
+            visibility="council_review" if submission else "approved",
+            review_submission_id=submission.id if submission else None,
+            review_title=submission.title if submission else None,
+        )
+        for budget, period, submission in await service.list_public_budgets(db)
     ]
 
 
 @router.get("/public/budgets/{budget_id}", response_model=PublicBudgetDetailOut)
-async def get_public_budget_detail(budget_id: uuid.UUID, db: DbDep) -> PublicBudgetDetailOut:
-    detail, period = await service.public_budget_detail(db, budget_id)
+async def get_public_budget_detail(
+    budget_id: uuid.UUID,
+    db: DbDep,
+    review_submission_id: uuid.UUID | None = Query(None),
+) -> PublicBudgetDetailOut:
+    detail, period, review_submission = await service.public_budget_detail(
+        db, budget_id, review_submission_id
+    )
     approved_submissions = [item for item in detail["submissions"] if item.status == "approved"]
-    approved_submission_ids = {item.id for item in approved_submissions}
+    visible_submissions = [review_submission] if review_submission else approved_submissions
+    visible_submission_ids = {item.id for item in visible_submissions}
     return PublicBudgetDetailOut(
         id=detail["id"],
         name=detail["name"],
         period_name=period.name,
+        visibility="council_review" if review_submission else "approved",
+        review_submission=(
+            PublicBudgetSubmissionOut(
+                id=review_submission.id,
+                kind=review_submission.kind,
+                status=review_submission.status,
+                title=review_submission.title,
+                reviewed_at=review_submission.reviewed_at,
+                review_note=review_submission.review_note,
+            )
+            if review_submission
+            else None
+        ),
         submissions=[
             PublicBudgetSubmissionOut(
                 id=item.id,
                 kind=item.kind,
+                status=item.status,
                 title=item.title,
                 reviewed_at=item.reviewed_at,
                 review_note=item.review_note,
@@ -1267,7 +1336,7 @@ async def get_public_budget_detail(budget_id: uuid.UUID, db: DbDep) -> PublicBud
         allocations=[
             PublicBudgetAllocationOut.model_validate(item)
             for item in detail["allocations"]
-            if item["submission_id"] in approved_submission_ids
+            if item["submission_id"] in visible_submission_ids
         ],
     )
 

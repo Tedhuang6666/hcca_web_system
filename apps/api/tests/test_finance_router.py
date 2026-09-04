@@ -387,6 +387,95 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     assert detail.status_code == 200
     assert sorted(allocation["amount"] for allocation in detail.json()["allocations"]) == [300, 500]
 
+    replacement = Workbook()
+    replacement_sheet = replacement.active
+    replacement_sheet.append(["項目", "細項", "數量", "單價", "總額(含稅)", "備註"])
+    replacement_sheet.append(["行政雜支", "文具購買", 4, 180, 720, "改用新版估價"])
+    replacement_buffer = BytesIO()
+    replacement.save(replacement_buffer)
+    reimported = await authed_client_factory(member_user).post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data={
+            "period_id": str(period.id),
+            "name": "115 學年度預算",
+            "budget_id": response.json()["budget"]["id"],
+            "replace_submission_id": response.json()["submission"]["id"],
+        },
+        files={
+            "file": (
+                "預算案修正版.xlsx",
+                replacement_buffer.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert reimported.status_code == 201
+    assert reimported.json()["budget"]["id"] == response.json()["budget"]["id"]
+    assert reimported.json()["submission"]["id"] == response.json()["submission"]["id"]
+    detail_after_reimport = await authed_client_factory(member_user).get(
+        f"/finance/budgets/{response.json()['budget']['id']}"
+    )
+    assert [allocation["amount"] for allocation in detail_after_reimport.json()["allocations"]] == [
+        720
+    ]
+    assert "臨時支出" not in {node["name"] for node in detail_after_reimport.json()["nodes"]}
+
+
+async def test_council_review_draft_has_a_public_page_without_internal_data(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    client = authed_client_factory(member_user)
+    budget = await client.post(
+        f"/finance/ledgers/{ledger.id}/budgets",
+        json={"period_id": str(period.id), "name": "議員審理預算"},
+    )
+    submission = await client.post(
+        f"/finance/budgets/{budget.json()['id']}/submissions",
+        json={"kind": "initial", "title": "115 學年度送審草案"},
+    )
+    node = await client.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/nodes",
+        json={"name": "活動支出"},
+    )
+    allocation = await client.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/allocations",
+        json={
+            "node_id": node.json()["id"],
+            "amount": 3600,
+            "proposing_org_id": str(org.id),
+            "note": "供議員審理的活動預算",
+        },
+    )
+    assert allocation.status_code == 201
+
+    published = await client.patch(
+        f"/finance/budget-submissions/{submission.json()['id']}/council-review-publication",
+        json={"is_public": True},
+    )
+    assert published.status_code == 200
+    assert published.json()["is_council_review_public"] is True
+    assert (await client.get(f"/finance/public/budgets/{budget.json()['id']}")).status_code == 404
+
+    public_list = await client.get("/finance/public/budgets")
+    public_item = next(
+        item
+        for item in public_list.json()
+        if item["id"] == budget.json()["id"] and item["visibility"] == "council_review"
+    )
+    assert public_item["review_submission_id"] == submission.json()["id"]
+    public_detail = await client.get(
+        f"/finance/public/budgets/{budget.json()['id']}",
+        params={"review_submission_id": submission.json()["id"]},
+    )
+    assert public_detail.status_code == 200
+    assert public_detail.json()["visibility"] == "council_review"
+    assert public_detail.json()["review_submission"]["status"] == "draft"
+    assert public_detail.json()["allocations"][0]["amount"] == 3600
+    assert "proposed_by_id" not in public_detail.json()["allocations"][0]
+    assert "evidence" not in public_detail.json()["allocations"][0]
+
 
 async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
     db_session, member_user, make_user, authed_client_factory
