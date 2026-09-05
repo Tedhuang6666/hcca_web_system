@@ -709,13 +709,14 @@ async def test_petition_updates_email_logged_in_submitter(
     await _grant_org_permission(db_session, handler, org, "petition:handle")
     case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
 
-    sent: list[dict] = []
+    scheduled: list[dict] = []
 
-    def fake_send_branded_email(to, subject, template, context):
-        sent.append({"to": to, "subject": subject, "template": template, "context": context})
-        return []
+    def fake_schedule(**kwargs):
+        scheduled.append(kwargs)
 
-    monkeypatch.setattr("api.services.notification.send_branded_email", fake_send_branded_email)
+    monkeypatch.setattr(
+        "api.services.notification.send_notification_email_batch.apply_async", fake_schedule
+    )
     ac = authed_client_factory(handler)
 
     if scenario == "needs_info":
@@ -730,16 +731,15 @@ async def test_petition_updates_email_logged_in_submitter(
         )
         assert response.status_code == 200
         if scenario == "public_request":
-            sent.clear()
+            scheduled.clear()
             response = await ac.post(
                 f"/petitions/{case_obj.id}/public-request",
                 json={"title": "公開版陳情", "content": "已完成處理。"},
             )
 
     assert response.status_code == 200
-    assert len(sent) == 1
-    assert sent[0]["to"] == [owner.email]
-    assert sent[0]["template"] == "notification"
+    assert len(scheduled) == 1
+    assert scheduled[0]["args"][0] == str(owner.id)
 
 
 async def test_add_internal_note_succeeds(db_session, authed_client_factory) -> None:

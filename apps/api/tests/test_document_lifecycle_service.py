@@ -680,6 +680,14 @@ async def test_queue_document_recipient_emails_resolves_current_position_holders
     org = await _make_org(db_session, name="班聯會")
     creator = await make_user()
     chair = await make_user(email="chair@school.edu")
+    chair.notification_preferences = {
+        "document_approved": {
+            "inapp": False,
+            "email": False,
+            "line": False,
+            "discord": False,
+        }
+    }
     deputy = await make_user(email="deputy@school.edu")
     former = await make_user(email="former@school.edu")
     position = Position(org_id=org.id, name="正副主席")

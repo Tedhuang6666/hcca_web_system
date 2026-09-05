@@ -50,6 +50,9 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
 _EMAIL_DEFAULT_ON: frozenset[str] = frozenset(
     {
         "document_pending",
+        "document_approved",
+        "document_rejected",
+        "document_recalled",
         "meeting_invited",
         "regulation_publish_ready",
         "petition_received",

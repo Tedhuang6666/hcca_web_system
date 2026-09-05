@@ -34,6 +34,11 @@ def _is_primary_recipient(recipient: DocumentRecipient) -> bool:
     return recipient.recipient_type in {RecipientType.MAIN, RecipientType.PRIMARY}
 
 
+def _has_official_email_delivery(recipient: DocumentRecipient) -> bool:
+    """判斷公文正式遞送；此路徑不讀取使用者的一般通知偏好。"""
+    return recipient.delivery_method == DeliveryMethod.EMAIL or bool(recipient.email_position_ids)
+
+
 def _copy_mark(recipient: DocumentRecipient) -> str:
     return "正本" if _is_primary_recipient(recipient) else "副本"
 
@@ -121,9 +126,7 @@ async def queue_document_recipient_emails(
     讓職務交接後的新任人員可以收到後續公文。
     """
     recipients = [
-        recipient
-        for recipient in doc.recipients
-        if recipient.delivery_method == DeliveryMethod.EMAIL
+        recipient for recipient in doc.recipients if _has_official_email_delivery(recipient)
     ]
     if not recipients:
         return 0

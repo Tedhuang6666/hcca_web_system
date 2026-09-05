@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import asynccontextmanager
 from unittest.mock import Mock
 
 import pytest
@@ -16,6 +17,7 @@ from api.main import app
 from api.models.notification import Notification
 from api.models.user import User
 from api.models.web_push import WebPushSubscription
+from api.services import notification_tasks
 from api.services.notification import create_notification
 
 
@@ -104,6 +106,67 @@ async def test_digest_notification_is_not_immediately_emailed_or_shown_in_inbox(
     response = await client.get("/notifications/inbox")
     assert response.status_code == 200
     assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_same_type_notifications_are_sent_as_one_email_batch(
+    db_session: AsyncSession, monkeypatch
+) -> None:
+    user = await _seed_user(
+        db_session,
+        "batch-notification@school.edu",
+        notification_preferences={
+            "petition_updated": {
+                "inapp": False,
+                "email": True,
+                "line": False,
+                "discord": False,
+            }
+        },
+    )
+    scheduled = Mock()
+    monkeypatch.setattr(
+        "api.services.notification.send_notification_email_batch.apply_async", scheduled
+    )
+
+    @asynccontextmanager
+    async def use_test_session():
+        yield db_session
+
+    sent: list[dict[str, object]] = []
+
+    def fake_send_branded_email(**kwargs: object) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr(notification_tasks, "task_session", use_test_session)
+    monkeypatch.setattr(notification_tasks, "send_branded_email", fake_send_branded_email)
+
+    await create_notification(
+        db_session,
+        user_id=user.id,
+        type="petition_updated",
+        title="陳情狀態已更新",
+        body="案件一",
+    )
+    await create_notification(
+        db_session,
+        user_id=user.id,
+        type="petition_updated",
+        title="陳情狀態已更新",
+        body="案件二",
+    )
+
+    result = await notification_tasks._send_notification_batch(user.id, "petition_updated")
+
+    assert result == {"sent": 1, "notifications": 2}
+    assert len(sent) == 1
+    assert sent[0]["to"] == [user.email]
+    assert "案件一" in sent[0]["context"]["body_text"]
+    assert "案件二" in sent[0]["context"]["body_text"]
+    assert scheduled.call_count == 2
+    assert await notification_tasks._send_notification_batch(user.id, "petition_updated") == {
+        "sent": 0
+    }
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,10 @@ from api.models.notification import Notification
 from api.models.user import User
 from api.services.discord_notification_routes import emit_personal_notification
 from api.services.notification_pref import TYPE_LABELS, get_digest_frequency, normalize_preferences
+from api.services.notification_tasks import (
+    NOTIFICATION_EMAIL_BATCH_DELAY_SECONDS,
+    send_notification_email_batch,
+)
 from api.services.web_push import send_to_user
 
 logger = logging.getLogger(__name__)
@@ -79,9 +83,9 @@ async def create_notification(
         type, {"inapp": True, "email": False}
     )
     digest_enabled = get_digest_frequency(user.notification_preferences) != "off"
-    # 摘要期間仍建立資料列，讓摘要任務有一致的資料來源；只有開啟站內管道
-    # 的通知才會在收件匣與未讀數顯示。
-    should_queue = channel["inapp"] or (channel["email"] and digest_enabled)
+    # 摘要與即時聚合都需要資料列作為寄信來源；只有開啟站內管道的通知才會
+    # 在收件匣與未讀數顯示。
+    should_queue = channel["inapp"] or channel["email"]
     if should_queue:
         notification = Notification(
             user_id=user_id,
@@ -125,9 +129,12 @@ async def create_notification(
                     "通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True
                 )
 
-    if channel["email"] and user.email and not digest_enabled:
+    if channel["email"] and user.email and not digest_enabled and should_queue:
         try:
-            _send_notification_email(user, type, title, body, link)
+            send_notification_email_batch.apply_async(
+                args=[str(user_id), type],
+                countdown=NOTIFICATION_EMAIL_BATCH_DELAY_SECONDS,
+            )
         except Exception:
             logger.warning("通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
 
