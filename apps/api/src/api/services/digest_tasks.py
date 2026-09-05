@@ -89,6 +89,7 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
                 select(Notification)
                 .where(Notification.user_id == user.id)
                 .where(Notification.is_read.is_(False))
+                .where(Notification.email_queued_at.is_(None))
                 .where(Notification.created_at >= cutoff)
                 .order_by(Notification.created_at.desc())
             )
@@ -106,8 +107,13 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
             subject = f"HCCA 通知摘要：{len(ntfs)} 則未讀"
             try:
                 enqueue_email(to=user.email, subject=subject, body=html, subtype="html")
+                queued_at = datetime.now(UTC)
+                for notification in ntfs:
+                    notification.email_queued_at = queued_at
+                await session.commit()
                 sent += 1
             except Exception:
+                await session.rollback()
                 logger.warning("digest enqueue failed for user=%s", user.id, exc_info=True)
     logger.info(
         "digest task done frequency=%s window=%dh sent=%d skipped=%d",

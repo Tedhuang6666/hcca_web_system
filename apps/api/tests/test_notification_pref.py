@@ -10,9 +10,16 @@ def test_normalize_empty_returns_all_defaults() -> None:
     assert set(result) == set(NOTIFICATION_TYPES)
     # 站內預設全開
     assert all(v["inapp"] for v in result.values())
-    # email 僅 document_pending 預設開
-    assert result["document_pending"]["email"] is True
-    assert result["document_approved"]["email"] is False
+    # 公文通知屬重要通知，所有狀態預設寄送
+    assert all(
+        result[type_name]["email"]
+        for type_name in (
+            "document_pending",
+            "document_approved",
+            "document_rejected",
+            "document_recalled",
+        )
+    )
     # LINE 預設關閉，避免綁定後立刻大量推播
     assert all(v["line"] is False for v in result.values())
     # Discord 預設關閉，由使用者綁定並啟用後才推播

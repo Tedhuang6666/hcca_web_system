@@ -53,6 +53,7 @@ celery_app = Celery(
     # 明確列出包含 Task 的模組（Worker 啟動時自動載入）
     include=[
         "api.services.mail",
+        "api.services.notification_tasks",
         "api.services.meal_tasks",
         "api.services.regulation_tasks",
         "api.services.incident_tasks",
@@ -105,6 +106,7 @@ celery_app.conf.update(
     ),
     task_routes={
         "api.services.mail.*": {"queue": "email"},
+        "api.services.notification_tasks.*": {"queue": "email"},
         "api.services.email_tasks.*": {"queue": "email"},
         "api.services.digest_tasks.*": {"queue": "email"},
         "api.services.meal_tasks.*": {"queue": "meal"},

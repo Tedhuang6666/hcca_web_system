@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import expression
@@ -29,6 +30,13 @@ class Notification(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_notifications_user_read", "user_id", "is_read"),
         Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index(
+            "ix_notifications_email_batch",
+            "user_id",
+            "type",
+            "email_queued_at",
+            "created_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -49,6 +57,8 @@ class Notification(Base, TimestampMixin):
     is_inapp_visible: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=expression.true()
     )
+    # 一般通知聚合寄信的去重標記；公文受文者正式遞送不使用此欄位。
+    email_queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 關聯資源 ID（如 document_id），方便前端快速導航
     related_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
