@@ -2200,7 +2200,7 @@ function ComposeInner() {
         </div>
       </div>
 
-      <div className="sticky bottom-3 z-20 flex items-center justify-between rounded-xl border p-3 shadow-lg backdrop-blur" style={{ background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)", borderColor: "var(--border)" }}>
+      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between rounded-xl border p-3 shadow-lg backdrop-blur lg:bottom-3" style={{ background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)", borderColor: "var(--border)" }}>
         <button
           type="button"
           className="btn btn-ghost btn-sm"
