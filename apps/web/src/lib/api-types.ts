@@ -4586,6 +4586,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/resend-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 手動重寄公文受文者 Email
+         * @description 只在使用者明確操作時，依目前版本重寄正式公文 Email。
+         */
+        post: operations["resend_document_email_documents__doc_id__resend_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/submit": {
         parameters: {
             query?: never;
@@ -20915,6 +20935,17 @@ export interface components {
             total_documents: number;
         };
         /**
+         * DocumentEmailResendOut
+         * @description 公文受文者 Email 重寄結果。
+         */
+        DocumentEmailResendOut: {
+            /**
+             * Queued
+             * @description 本次排入寄送佇列的去重後信箱數量
+             */
+            queued: number;
+        };
+        /**
          * DocumentListItem
          * @description 列表頁的輕量版公文資訊（不含全文與版本）
          */
@@ -22246,7 +22277,7 @@ export interface components {
             /** Recipient Count */
             recipient_count: number;
             /** Recipient Preview */
-            recipient_preview: string[];
+            recipient_preview?: string[];
             /** Recipient Spec */
             recipient_spec: {
                 [key: string]: unknown;
@@ -22308,7 +22339,7 @@ export interface components {
             /** Recipient Count */
             recipient_count: number;
             /** Recipient Preview */
-            recipient_preview: string[];
+            recipient_preview?: string[];
             /** Scheduled At */
             scheduled_at: string | null;
             /** Sender Id */
@@ -49274,6 +49305,51 @@ export interface operations {
                 content?: never;
             };
             /** @description 狀態衝突或第一關不可退回上一關 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_document_email_documents__doc_id__resend_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已依目前公文內容排入重寄佇列 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentEmailResendOut"];
+                };
+            };
+            /** @description 無權限重寄此公文 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 公文尚未正式發文 */
             409: {
                 headers: {
                     [name: string]: unknown;
