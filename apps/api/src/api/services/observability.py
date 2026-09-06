@@ -100,6 +100,7 @@ async def record_client_metrics(metrics: list[dict]) -> bool:
                     "value": float(value),
                     "path": _normalize_client_path(metric.get("path")),
                     "status": metric.get("status"),
+                    "protective_response": bool(metric.get("protective_response")),
                     "interaction_id": str(metric.get("interaction_id") or "")[:80] or None,
                     "interaction_name": str(metric.get("interaction_name") or "")[:120] or None,
                     "interaction_kind": metric.get("interaction_kind"),
@@ -219,6 +220,7 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     "pageviews": 0,
                     "api_errors": 0,
                     "api_timeouts": 0,
+                    "protective_responses": 0,
                     "lcp": [],
                     "inp": [],
                     "cls": [],
@@ -254,7 +256,10 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                     samples.append(float(event["value"]))
                 status = int(event.get("status") or 0)
                 if status >= 400:
-                    route["api_errors"] = int(route["api_errors"]) + 1
+                    counter = (
+                        "protective_responses" if event.get("protective_response") else "api_errors"
+                    )
+                    route[counter] = int(route[counter]) + 1
                 elif status == 0:
                     route["api_timeouts"] = int(route["api_timeouts"]) + 1
             elif metric in {"interaction_feedback", "interaction_completion"}:
@@ -335,6 +340,7 @@ async def client_route_analytics(window_hours: int = 24) -> dict:
                 "pageviews": int(values["pageviews"]),
                 "api_errors": int(values["api_errors"]),
                 "api_timeouts": int(values["api_timeouts"]),
+                "protective_responses": int(values["protective_responses"]),
                 "samples": {metric: len(values[metric]) for metric in CLIENT_VITAL_METRICS},
                 "web_vitals": {
                     key: value

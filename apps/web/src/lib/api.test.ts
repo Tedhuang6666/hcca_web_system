@@ -108,6 +108,55 @@ describe("API helpers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not open the circuit for intentional protective responses", async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        Promise.resolve(
+          new Response(JSON.stringify({
+            detail: "此功能模組系統關閉中",
+            module_maintenance: true,
+            module_closed: true,
+          }), {
+            status: 503,
+            headers: {
+              "Content-Type": "application/json",
+              "X-HCCA-Protective-Response": "1",
+            },
+          }),
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await expect(request("/test/protective-response")).rejects.toMatchObject({ status: 503 });
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    vi.unstubAllGlobals();
+  });
+
+  it("fails a stalled request after the client timeout", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockImplementation(
+      (input: string, init: RequestInit) => {
+        if (input === "/api/analytics/client-metrics/batch") return Promise.resolve(new Response(null, { status: 202 }));
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = request("/test/stalled-request");
+    const assertion = expect(pending).rejects.toMatchObject({ status: 0 });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+    expect(fetchMock.mock.calls.filter(([input]) => input === "/api/test/stalled-request")).toHaveLength(1);
+
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
   it("treats a 401 after refresh as an expired session", async () => {
     localStorage.setItem("user_id", "user-401-retry");
     const fetchMock = vi.fn()
