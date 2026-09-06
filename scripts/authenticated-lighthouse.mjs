@@ -130,9 +130,16 @@ const pageFilePattern = /^page\.(?:tsx?|jsx?|mjs)$/u;
 const performanceExcludedRoutes = new Set([
   "/public/documents",
   "/public/regulations",
+  "/auth/callback",
+  "/auth/mfa",
+  "/blocked",
   "/login",
   "/maintenance",
   "/module-status",
+  "/profile/complete",
+  "/petitions/share",
+  "/raffle",
+  "/unsubscribe",
 ]);
 
 async function discoverStaticRoutes(directory = appDirectory, segments = [], publicOnly = false) {

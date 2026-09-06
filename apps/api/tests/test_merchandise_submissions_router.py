@@ -208,7 +208,9 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         file["filename"] == "back-revised.png" for file in replace_file_response.json()["files"]
     )
 
-    with patch("api.email.sender.enqueue_email", return_value="task-id") as enqueue_email:
+    with patch(
+        "api.services.notification.send_notification_email_batch.apply_async"
+    ) as schedule_email:
         review_response = await admin.patch(
             f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
             json={"status": "revision_requested", "review_note": "請補上背面圖稿"},
@@ -277,11 +279,11 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         assert approve_response.status_code == 200
         assert approve_response.json()["status"] == "approved"
 
-    assert enqueue_email.call_count == 3
-    subjects = [call.args[1] for call in enqueue_email.call_args_list]
-    assert "需要補件" in subjects[0]
-    assert "審核完成" in subjects[1]
-    assert "已採用" in subjects[2]
+    assert schedule_email.call_count == 3
+    assert all(
+        call.kwargs["args"] == [str(member_user.id), "merchandise_submission_status"]
+        for call in schedule_email.call_args_list
+    )
 
     mine_response = await student.get("/merchandise-submissions/submissions/me")
     assert mine_response.status_code == 200

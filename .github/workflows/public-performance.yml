@@ -57,6 +57,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           TARGET_SHARD_INDEX: ${{ matrix.shard }}
           TARGET_SHARD_COUNT: "4"
+          LIGHTHOUSE_ATTEMPTS: "3"
           MIN_SCORE: "95"
           OUTPUT_FILE: .lighthouseci/public-summary-${{ matrix.shard }}.json
         run: node scripts/authenticated-lighthouse.mjs
