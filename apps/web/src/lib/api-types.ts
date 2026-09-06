@@ -22245,6 +22245,8 @@ export interface components {
             recent_errors: string[];
             /** Recipient Count */
             recipient_count: number;
+            /** Recipient Preview */
+            recipient_preview: string[];
             /** Recipient Spec */
             recipient_spec: {
                 [key: string]: unknown;
@@ -22305,6 +22307,8 @@ export interface components {
             org_id: string | null;
             /** Recipient Count */
             recipient_count: number;
+            /** Recipient Preview */
+            recipient_preview: string[];
             /** Scheduled At */
             scheduled_at: string | null;
             /** Sender Id */

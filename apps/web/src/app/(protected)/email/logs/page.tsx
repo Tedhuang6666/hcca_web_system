@@ -111,6 +111,7 @@ export default function EmailLogsPage() {
   const [detailHtml, setDetailHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const isSystemNotification = detail?.sender_id === null;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -325,11 +326,16 @@ export default function EmailLogsPage() {
                       {m.subject}
                     </p>
                     <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {m.sender_name ?? "—"} · {m.recipient_count} 人 ·{" "}
+                      {m.sender_name ?? (m.sender_id === null ? "系統自動通知" : "—")} · {m.recipient_count} 人 ·{" "}
                       {m.status === "scheduled"
                         ? `預約 ${fmt(m.scheduled_at)}`
                         : fmt(m.created_at)}
                     </p>
+                    {m.recipient_preview?.length ? (
+                      <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-secondary)" }}>
+                        收件：{m.recipient_preview.join("、")}{m.recipient_count > m.recipient_preview.length ? "…" : ""}
+                      </p>
+                    ) : null}
                   </div>
                   <span className="text-xs font-semibold" style={{ color: meta.color }}>
                     {meta.label}
@@ -391,7 +397,7 @@ export default function EmailLogsPage() {
                         onClick={() => createFromMessage(m.id)}
                         title="擷取這封信的實際收件名單、內容與附件建立新草稿"
                       >
-                        沿用名單建立新信
+                        {m.sender_id === null ? "建立可編輯副本" : "沿用名單建立新信"}
                       </button>
                     )}
                   </div>
@@ -426,7 +432,7 @@ export default function EmailLogsPage() {
                   disabled={busyId === detail.id}
                   onClick={() => createFromMessage(detail.id)}
                 >
-                  沿用名單建立新信
+                  {isSystemNotification ? "建立可編輯副本" : "沿用名單建立新信"}
                 </button>
               )}
               <button className="btn btn-ghost btn-sm" onClick={closeDetail}>
@@ -437,11 +443,27 @@ export default function EmailLogsPage() {
         >
           <div className="space-y-4">
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              {detail.sender_name ?? "—"} · {detail.recipient_count} 人 · {fmt(detail.created_at)} ·{" "}
+              {detail.sender_name ?? (isSystemNotification ? "系統自動通知" : "—")} · {detail.recipient_count} 人 · {fmt(detail.created_at)} ·{" "}
               <span style={{ color: STATUS_META[detail.status as EmailStatus].color }}>
                 {STATUS_META[detail.status as EmailStatus].label}
               </span>
             </p>
+
+            {isSystemNotification && (
+              <div
+                className="rounded-lg border px-3 py-3 text-sm"
+                style={{
+                  borderColor: "var(--warning-border)",
+                  background: "var(--warning-dim)",
+                  color: "var(--text-primary)",
+                }}
+              >
+                <p className="font-semibold">系統自動通知</p>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  收件人由此案件的通知規則與每位使用者的 Email 偏好共同決定；下方名單是這次實際寄送的快照。若要增刪收件人，請建立可編輯副本後再送出。
+                </p>
+              </div>
+            )}
 
             {detail.status === "queued" && (detail.recipient_status_counts.queued ?? 0) > 0 && (
               <p className="rounded-lg px-3 py-2 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>

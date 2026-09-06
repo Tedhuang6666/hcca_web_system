@@ -21,6 +21,9 @@ def enqueue_rendered(
     email_message_id: str | None = None,
     email_recipient_id: str | None = None,
     attachments: list[dict[str, str]] | None = None,
+    recipient_metadata: list[dict[str, str | None]] | None = None,
+    source: str | None = None,
+    message_template: str | None = None,
 ) -> list[str]:
     """對每位收件人各寄一封「已渲染好」的 HTML email，回傳 Celery task_id 清單。"""
     return [
@@ -33,16 +36,38 @@ def enqueue_rendered(
             email_recipient_id,
             attachments,
             already_rendered=True,
+            recipient_metadata=(
+                [recipient_metadata[index]]
+                if recipient_metadata is not None and index < len(recipient_metadata)
+                else None
+            ),
+            source=source,
+            message_template=message_template,
         )
-        for addr in to
+        for index, addr in enumerate(to)
         if addr
     ]
 
 
-def send_branded_email(to: list[str], subject: str, template: str, context: dict) -> list[str]:
+def send_branded_email(
+    to: list[str],
+    subject: str,
+    template: str,
+    context: dict,
+    *,
+    recipient_metadata: list[dict[str, str | None]] | None = None,
+    source: str | None = None,
+) -> list[str]:
     """渲染品牌範本並對每位收件人各寄一封。範本只渲染一次。"""
     html = render_email(template, {**context, "subject": subject})
-    return enqueue_rendered(to, subject, html)
+    return enqueue_rendered(
+        to,
+        subject,
+        html,
+        recipient_metadata=recipient_metadata,
+        source=source,
+        message_template=template,
+    )
 
 
 def render_generic_subject(subject: str, variables: dict | None = None) -> str:

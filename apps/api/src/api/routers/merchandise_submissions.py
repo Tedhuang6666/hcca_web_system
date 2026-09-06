@@ -141,12 +141,33 @@ async def _notify_submission_recipients(
             exclude_user_ids=(actor_id,) if actor_id else (),
             type="merchandise_submission_received",
             title=f"校商投稿：{submission.item.name}",
-            body=f"新投稿已送出，投稿編號：{submission.id}",
+            body=_submission_notification_body(submission),
             link=f"/merchandise-submissions/admin?submission={submission.id}",
             related_id=submission.id,
         )
     except Exception:
         logger.warning("校商投稿負責人通知失敗 submission=%s", submission.id, exc_info=True)
+
+
+def _submission_notification_body(submission, update: str | None = None) -> str:
+    """把投稿表單與投稿者快照一併放進通知，避免收件人只能看到一個 UUID。"""
+    lines = [
+        f"投稿編號：{submission.id}",
+        f"投稿品項：{submission.item.name}",
+        f"投稿者：{submission.account_snapshot.get('display_name') or '—'}",
+        f"投稿者信箱：{submission.account_snapshot.get('email') or '—'}",
+        f"學號：{submission.account_snapshot.get('student_id') or '—'}",
+        f"狀態：{submission.status.value}",
+    ]
+    if submission.submitted_at:
+        lines.append(f"送出時間：{submission.submitted_at.isoformat()}")
+    for key, value in (submission.field_values or {}).items():
+        lines.append(f"{key}：{value or '（未填寫）'}")
+    if submission.files:
+        lines.append("投稿檔案：" + "、".join(file.filename for file in submission.files))
+    if update and update.strip():
+        lines.extend(["", "本次更新：", update.strip()])
+    return "\n".join(lines)
 
 
 def _serialize_submission(submission, *, include_submitter: bool):
@@ -819,10 +840,11 @@ async def review_admin_submission(
         user_id=submission.user_id,
         type="merchandise_submission_status",
         title=f"校商投稿「{submission.item.name}」審核結果：{status_label}",
-        body=(
+        body=_submission_notification_body(
+            submission,
             f"目前狀態：{status_label}。\n{submission.review_note}"
             if submission.review_note
-            else "請前往投稿頁查看最新狀態。"
+            else "請前往投稿頁查看最新狀態。",
         ),
         link="/merchandise-submissions",
         related_id=submission.id,
