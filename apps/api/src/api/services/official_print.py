@@ -157,8 +157,18 @@ def _official_document_title(
     category_label: str,
     org_name: object | None,
 ) -> str:
-    """Render the formal header; the editable case title is not part of the header."""
-    del custom_title, org_name
+    """Render the formal header while preserving an explicit full organization title."""
+    title = _compact_official_name(custom_title)
+    leaf_name = _compact_official_name(org_name)
+    if title and category_label and title.endswith(category_label):
+        title_org = title[: -len(category_label)]
+        for school_name in (_SCHOOL_FULL_NAME, _SCHOOL_SHORT_NAME):
+            if title_org.startswith(school_name):
+                title_org = title_org[len(school_name) :]
+                break
+        canonical_title_org = _canonical_official_org_name(title_org)
+        if title_org and (title_org == leaf_name or canonical_title_org == issuer_name):
+            return title
     return f"{issuer_name}{category_label}"
 
 
