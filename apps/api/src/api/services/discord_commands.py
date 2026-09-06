@@ -514,14 +514,10 @@ async def execute(
         types = await petition_svc.list_types(db, active_only=True)
         if not types:
             raise DiscordCommandError("目前沒有可用的陳情類型。")
-        anonymous = bool(arguments.get("anonymous"))
         case_obj, code, _share_token = await petition_svc.create_case(
             db,
             data=PetitionCreate(
                 type_id=types[0].id,
-                is_named=not anonymous,
-                contact_name=None if anonymous else user.display_name,
-                contact_email=None if anonymous else user.email,
                 title=str(arguments["title"]),
                 content=str(arguments["content"]),
             ),
@@ -537,7 +533,7 @@ async def execute(
             entity_id=str(case_obj.id),
             action="discord.petition.create",
             summary=f"Discord 建立陳情案件 {case_obj.case_number}",
-            meta={"case_number": case_obj.case_number, "is_anonymous": anonymous},
+            meta={"case_number": case_obj.case_number},
         )
         return {"case_number": case_obj.case_number, "verification_code": code}
 

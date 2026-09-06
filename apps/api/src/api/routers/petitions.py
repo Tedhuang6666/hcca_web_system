@@ -135,9 +135,9 @@ async def _assert_case_access(
         or str(PermissionCode.ADMIN_ALL) in codes
         or str(PermissionCode.PETITION_ADMIN) in codes
     ):
-        return True, case_obj.is_named
+        return True, True
     if str(PermissionCode.PETITION_VIEW_ALL) in codes:
-        return True, case_obj.is_named
+        return True, True
     org_ids = set()
     for permission in (
         PermissionCode.PETITION_VIEW_ORG,
@@ -148,12 +148,13 @@ async def _assert_case_access(
     ):
         org_ids.update(await get_user_org_ids_with_permission(session, user.id, str(permission)))
     if case_obj.current_org_id in org_ids:
-        return True, case_obj.is_named
+        return True, True
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此陳情案件")
 
 
 async def _notify(
     session: AsyncSession,
+    case_obj: PetitionCase,
     *,
     user_id: uuid.UUID | None,
     type: str,
@@ -242,7 +243,6 @@ def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
         type_id=case_obj.type_id,
         status=case_obj.status,
         public_status=case_obj.public_status,
-        is_named=case_obj.is_named,
         title=case_obj.title,
         current_org_id=case_obj.current_org_id,
         assigned_to_id=case_obj.assigned_to_id,
@@ -383,12 +383,12 @@ async def get_public_petition(case_id: uuid.UUID, session: DbDep) -> PetitionPub
     "",
     response_model=PetitionCreatedOut,
     status_code=status.HTTP_201_CREATED,
-    summary="建立陳情案件（登入或訪客）",
+    summary="建立陳情案件（需登入且具名）",
 )
 async def create_petition(
     payload: PetitionCreate,
     session: DbDep,
-    current_user: OptionalUser,
+    current_user: CurrentUser,
 ) -> PetitionCreatedOut:
     try:
         case_obj, code, share_token = await petition_svc.create_case(
@@ -401,8 +401,8 @@ async def create_petition(
         entity_type="petition_case",
         entity_id=str(case_obj.id),
         action="petition.create",
-        actor_id=str(current_user.id) if current_user else None,
-        actor_email=current_user.email if current_user else None,
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
         meta={"case_number": case_obj.case_number, "type_id": str(case_obj.type_id)},
         summary=f"建立陳情案件 {case_obj.case_number}",
     )
@@ -446,15 +446,14 @@ async def create_petition(
 
     _ph = get_posthog_client()
     if _ph:
-        _distinct_id = str(current_user.id) if current_user else "anonymous"
+        _distinct_id = str(current_user.id)
         try:
             _ph.capture(
                 distinct_id=_distinct_id,
                 event="petition_submitted",
                 properties={
                     "petition_type_id": str(case_obj.type_id),
-                    "is_named": case_obj.is_named,
-                    "is_authenticated": current_user is not None,
+                    "is_authenticated": True,
                 },
             )
         except Exception:
@@ -474,16 +473,15 @@ async def create_petition(
     )
 
 
-@router.get("/lookup", response_model=PetitionLookupOut, summary="以案號與驗證碼查詢案件")
+@router.get("/lookup", response_model=PetitionLookupOut, summary="登入後以案號與驗證碼查詢本人案件")
 async def lookup_case(
     request: Request,
     session: DbDep,
+    current_user: CurrentUser,
     case_number: str = Query(..., min_length=7, max_length=7, pattern=r"^\d{7}$"),
     verification_code: str = Query(..., min_length=5, max_length=5, pattern=r"^\d{5}$"),
 ) -> PetitionLookupOut:
-    # 此端點未認證、成功即回傳陳情人 PII（姓名/Email/學號）。驗證碼僅 5 位數
-    # （10 萬組）且案號可枚舉，僅靠全域限流不足以擋暴力破解 → 加上 per-IP 與
-    # per-案號 的失敗鎖定（5 次/10 分 → 鎖 15 分），讓 PII 暴力枚舉不可行。
+    # 僅允許登入帳號查詢本人案件；公開頁只提供已發布的公開陳情。
     client_ip = request.client.host if request.client else "unknown"
     ip_key = f"petition_lookup_ip:{client_ip}"
     case_key = f"petition_lookup_case:{case_number}"
@@ -500,6 +498,8 @@ async def lookup_case(
         await record_failure(ip_key)
         await record_failure(case_key)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
+    if case_obj.submitter_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
 
     await record_success(ip_key)
     await record_success(case_key)
@@ -507,7 +507,7 @@ async def lookup_case(
         await _decorate_case(
             case_obj,
             include_internal=False,
-            can_view_submitter=False,
+            can_view_submitter=True,
             can_respond_public=True,
             can_edit_content=True,
         )
@@ -848,17 +848,12 @@ async def update_case_content(
     case_id: uuid.UUID,
     payload: PetitionContentUpdate,
     session: DbDep,
-    user: OptionalUser,
+    user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    is_submitter = user is not None and case_obj.submitter_id == user.id
-    if not is_submitter and (
-        not payload.verification_code
-        or not petition_svc.verify_code(case_obj, payload.verification_code)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="需要本人登入或正確驗證碼"
-        )
+    is_submitter = case_obj.submitter_id == user.id
+    if not is_submitter:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有陳情本人可以編輯")
     try:
         case_obj = await petition_svc.update_content(session, case_obj, data=payload)
     except ValueError as e:
@@ -868,8 +863,8 @@ async def update_case_content(
         entity_type="petition_case",
         entity_id=str(case_obj.id),
         action="petition.content.update",
-        actor_id=str(user.id) if user else None,
-        actor_email=user.email if user else None,
+        actor_id=str(user.id),
+        actor_email=user.email,
         meta={
             "case_number": case_obj.case_number,
             "fields": [
@@ -882,7 +877,7 @@ async def update_case_content(
         case_obj,
         include_internal=False,
         can_view_submitter=is_submitter,
-        can_edit_content=is_submitter or bool(payload.verification_code),
+        can_edit_content=is_submitter,
     )
 
 
@@ -995,23 +990,18 @@ async def supplement_case(
     case_id: uuid.UUID,
     payload: PetitionSupplementCreate,
     session: DbDep,
-    user: OptionalUser,
+    user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    if (user is None or case_obj.submitter_id != user.id) and (
-        not payload.verification_code
-        or not petition_svc.verify_code(case_obj, payload.verification_code)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="需要本人登入或正確驗證碼"
-        )
+    if case_obj.submitter_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有陳情本人可以補件")
     if case_obj.status != PetitionStatus.NEEDS_INFO:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此案件目前不需要補件")
     case_obj = await petition_svc.supplement_case(
         session,
         case_obj,
         data=payload,
-        actor_id=user.id if user else None,
+        actor_id=user.id,
     )
     await _notify_responsible(
         session,
@@ -1075,7 +1065,7 @@ async def assign_case(
         related_id=case_obj.id,
     )
     return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+        case_obj, include_internal=True, can_view_submitter=True
     )
 
 
@@ -1122,7 +1112,7 @@ async def transfer_case(
         ),
     )
     return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+        case_obj, include_internal=True, can_view_submitter=True
     )
 
 
@@ -1182,7 +1172,7 @@ async def reply_case(
         org_id=case_obj.current_org_id,
     )
     return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+        case_obj, include_internal=True, can_view_submitter=True
     )
 
 
@@ -1220,7 +1210,7 @@ async def request_public(
         external_name=case_obj.contact_name,
     )
     return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+        case_obj, include_internal=True, can_view_submitter=True
     )
 
 
@@ -1233,19 +1223,14 @@ async def respond_public(
     case_id: uuid.UUID,
     payload: PetitionPublicResponse,
     session: DbDep,
-    user: OptionalUser,
+    user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    if (user is None or case_obj.submitter_id != user.id) and (
-        not payload.verification_code
-        or not petition_svc.verify_code(case_obj, payload.verification_code)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="需要本人登入或正確驗證碼"
-        )
+    if case_obj.submitter_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有陳情本人可以回覆")
     try:
         case_obj = await petition_svc.respond_public(
-            session, case_obj, data=payload, actor_id=user.id if user else None
+            session, case_obj, data=payload, actor_id=user.id
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
@@ -1256,7 +1241,7 @@ async def respond_public(
         title=f"陳情案件 {case_obj.case_number} 公開意願已回覆",
         body=case_obj.title,
         link=f"/petitions/manage?case={case_obj.id}",
-        exclude_user_ids=(user.id,) if user else (),
+        exclude_user_ids=(user.id,),
     )
     return await _decorate_case(case_obj, include_internal=False, can_view_submitter=False)
 
@@ -1290,7 +1275,7 @@ async def confirm_public(
         exclude_user_ids=(user.id, case_obj.submitter_id),
     )
     return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+        case_obj, include_internal=True, can_view_submitter=True
     )
 
 
@@ -1351,7 +1336,7 @@ async def update_status(
         org_id=case_obj.current_org_id,
     )
     return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+        case_obj, include_internal=True, can_view_submitter=True
     )
 
 
@@ -1375,7 +1360,7 @@ async def add_note(
         session, case_obj, data=payload, actor_id=user.id
     )
     return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+        case_obj, include_internal=True, can_view_submitter=True
     )
 
 
@@ -1386,24 +1371,13 @@ async def add_note(
 async def upload_attachment(
     case_id: uuid.UUID,
     session: DbDep,
-    user: OptionalUser,
+    user: CurrentUser,
     verification_code: str | None = Form(None),
     visibility: PetitionAttachmentVisibility = Form(PetitionAttachmentVisibility.PUBLIC),
     file: UploadFile = File(...),
 ) -> PetitionAttachmentOut:
     case_obj = await _case_or_404(session, case_id)
-    include_internal = False
-    if user is not None:
-        try:
-            include_internal, _ = await _assert_case_access(session, case_obj, user)
-        except HTTPException:
-            include_internal = False
-    if (
-        not include_internal
-        and (user is None or case_obj.submitter_id != user.id)
-        and (not verification_code or not petition_svc.verify_code(case_obj, verification_code))
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限或正確驗證碼")
+    include_internal, _ = await _assert_case_access(session, case_obj, user)
     if not include_internal:
         visibility = PetitionAttachmentVisibility.PUBLIC
 
@@ -1420,7 +1394,7 @@ async def upload_attachment(
         content_type=stored.content_type,
         file_size=stored.file_size,
         visibility=visibility,
-        uploaded_by=user.id if user else None,
+        uploaded_by=user.id,
     )
     out = PetitionAttachmentOut.model_validate(attachment)
     out.url = stored.url
@@ -1436,22 +1410,11 @@ async def download_attachment(
     case_id: uuid.UUID,
     attachment_id: uuid.UUID,
     session: DbDep,
-    user: OptionalUser,
+    user: CurrentUser,
     verification_code: str | None = Query(None),
 ) -> FileResponse | RedirectResponse:
     case_obj = await _case_or_404(session, case_id)
-    include_internal = False
-    if user is not None:
-        try:
-            include_internal, _ = await _assert_case_access(session, case_obj, user)
-        except HTTPException:
-            include_internal = False
-    if (
-        not include_internal
-        and (user is None or case_obj.submitter_id != user.id)
-        and (not verification_code or not petition_svc.verify_code(case_obj, verification_code))
-    ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限或正確驗證碼")
+    include_internal, _ = await _assert_case_access(session, case_obj, user)
     result = await session.execute(
         select(PetitionAttachment).where(
             PetitionAttachment.id == attachment_id,
@@ -1487,19 +1450,22 @@ async def download_attachment(
 @router.post(
     "/share",
     response_model=PetitionLookupOut,
-    summary="以分享 token 查詢案件",
+    summary="登入後以分享 token 查詢本人案件",
 )
 async def lookup_case_by_share_token(
     body: PetitionShareLookup,
     session: DbDep,
+    current_user: CurrentUser,
 ) -> PetitionLookupOut:
     case_obj = await petition_svc.get_case_by_share_token(session, body.share_token)
     if case_obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分享連結無效")
+    if case_obj.submitter_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分享連結無效")
     return PetitionLookupOut.model_validate(
         await _decorate_case(
             case_obj,
             include_internal=False,
-            can_view_submitter=False,
+            can_view_submitter=True,
         )
     )

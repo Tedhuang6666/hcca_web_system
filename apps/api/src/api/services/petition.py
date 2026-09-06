@@ -243,18 +243,13 @@ async def create_case(
     session: AsyncSession,
     *,
     data: PetitionCreate,
-    submitter: User | None,
+    submitter: User,
 ) -> tuple[PetitionCase, str, str]:
+    if submitter is None:
+        raise ValueError("陳情必須先登入帳號")
     petition_type = await get_type(session, data.type_id)
     if petition_type is None or not petition_type.is_active:
         raise ValueError("陳情類型不存在或已停用")
-    if submitter is None and not data.contact_email:
-        raise ValueError("訪客送件需提供聯絡 email")
-    contact_name = data.contact_name
-    contact_email = str(data.contact_email) if data.contact_email else None
-    if submitter is not None:
-        contact_name = submitter.display_name
-        contact_email = submitter.email
 
     code = generate_verification_code()
     share_token = generate_share_token()
@@ -264,10 +259,10 @@ async def create_case(
         verification_code_hash=hash_verification_code(case_number, code),
         share_token_hash=hash_share_token(share_token),
         type_id=data.type_id,
-        is_named=data.is_named,
-        submitter_id=submitter.id if submitter else None,
-        contact_name=contact_name,
-        contact_email=contact_email,
+        is_named=True,
+        submitter_id=submitter.id,
+        contact_name=submitter.display_name,
+        contact_email=submitter.email,
         title=data.title,
         content=data.content,
         current_org_id=petition_type.responsible_org_id,
@@ -372,7 +367,6 @@ async def list_cases(
                 PetitionCase.type_id,
                 PetitionCase.status,
                 PetitionCase.public_status,
-                PetitionCase.is_named,
                 PetitionCase.title,
                 PetitionCase.current_org_id,
                 PetitionCase.assigned_to_id,

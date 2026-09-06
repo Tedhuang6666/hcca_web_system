@@ -59,7 +59,6 @@ const INDEXABLE_EXACT_PATHS = new Set([
   "/documents",
   "/legal",
   "/partner-map",
-  "/petitions",
   "/petitions/public",
   "/regulations",
   "/surveys",
@@ -81,8 +80,6 @@ const INDEXABLE_PREFIXES = [
   "/regulations/",
   "/surveys/",
 ];
-
-const INDEXABLE_PETITION_CASE = /^\/petitions\/[^/]+\/\d+$/;
 
 const NON_INDEXABLE_PATHS = [
   "/auth",
@@ -180,8 +177,7 @@ export function isIndexablePublicPath(pathname: string): boolean {
   if (!isPublicRoute(pathname) || matchesPrefix(pathname, NON_INDEXABLE_PATHS)) return false;
   if (pathname.endsWith("/edit") || pathname.endsWith("/amendment")) return false;
   return INDEXABLE_EXACT_PATHS.has(pathname)
-    || INDEXABLE_PREFIXES.some((prefix) => pathname.startsWith(prefix))
-    || INDEXABLE_PETITION_CASE.test(pathname);
+    || INDEXABLE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 export function isSitemapRoute(pathname: string): boolean {

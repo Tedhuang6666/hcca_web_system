@@ -25,9 +25,9 @@ const SERVICES: Array<{
     moduleId: "elections",
   },
   {
-    href: "/petitions",
-    title: "陳情中心",
-    description: "提出陳情或查詢進度。",
+    href: "/petitions/public",
+    title: "公開陳情",
+    description: "查看已公開案件與處理回覆。",
     icon: MessageSquareText,
     moduleId: "petitions",
   },

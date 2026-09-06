@@ -33,9 +33,6 @@ export default async function PublicPetitionsPage() {
             以下案件已經陳情人同意公開，內容不包含姓名、Email、學號或其他聯絡資料。
           </p>
         </div>
-        <Link href="/petitions/new" className="btn btn-primary shrink-0">
-          我要陳情
-        </Link>
       </header>
 
       {items.length === 0 ? (

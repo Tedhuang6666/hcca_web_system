@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.models.petition import (
     PetitionAttachmentVisibility,
@@ -48,19 +48,8 @@ class PetitionTypeUpdate(BaseModel):
 
 class PetitionCreate(BaseModel):
     type_id: uuid.UUID
-    is_named: bool = True
-    contact_name: str | None = Field(None, max_length=100)
-    contact_email: EmailStr | None = None
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1, max_length=10000)
-
-    @field_validator("contact_name")
-    @classmethod
-    def strip_optional(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        stripped = value.strip()
-        return stripped or None
 
 
 class PetitionCreatedOut(BaseModel):
@@ -125,7 +114,6 @@ class PetitionCaseListItem(BaseModel):
     type_id: uuid.UUID
     status: PetitionStatus
     public_status: PetitionPublicStatus
-    is_named: bool
     title: str
     current_org_id: uuid.UUID
     assigned_to_id: uuid.UUID | None

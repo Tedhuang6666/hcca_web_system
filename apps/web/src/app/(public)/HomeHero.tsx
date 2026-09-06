@@ -79,8 +79,8 @@ export default async function HomeHero({
               {primaryAction.label}
               <ArrowRight size={16} aria-hidden />
             </Link>
-            <Link href="/petitions/new" className="public-cta-secondary">
-              提出校園意見
+            <Link href="/petitions/public" className="public-cta-secondary">
+              查看公開陳情
             </Link>
           </div>
           <aside className="public-hero-status" aria-label="目前最重要的事項">

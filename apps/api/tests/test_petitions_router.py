@@ -56,11 +56,10 @@ async def _make_org_and_type(db, *, name: str = "學生事務處") -> tuple[Org,
 async def _create_case(db, petition_type: PetitionType, *, submitter: User | None = None):
     from api.schemas.petition import PetitionCreate
 
+    if submitter is None:
+        submitter = await _bare_user(db)
     data = PetitionCreate(
         type_id=petition_type.id,
-        is_named=submitter is not None,
-        contact_email=None if submitter else "guest@example.com",
-        contact_name=None if submitter else "訪客",
         title="教室冷氣故障",
         content="B302 教室冷氣無法啟動，請盡快派員維修。",
     )
@@ -73,7 +72,7 @@ async def _create_case(db, petition_type: PetitionType, *, submitter: User | Non
 # ── 前台送件 ──────────────────────────────────────────────────────────────────
 
 
-async def test_create_petition_as_guest_with_contact_email_succeeds(db_session, client) -> None:
+async def test_create_petition_without_login_returns_401(db_session, client) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     resp = await client.post(
         "/petitions",
@@ -86,10 +85,7 @@ async def test_create_petition_as_guest_with_contact_email_succeeds(db_session, 
             "content": "校門口路燈損壞多日未修。",
         },
     )
-    assert resp.status_code == 201
-    payload = resp.json()
-    assert payload["verification_code"]
-    assert len(payload["case_number"]) == 7
+    assert resp.status_code == 401
 
 
 async def test_configured_petition_recipient_gets_new_case_notification(
@@ -107,12 +103,11 @@ async def test_configured_petition_recipient_gets_new_case_notification(
     assert settings_response.status_code == 200
     assert settings_response.json()["recipient_user_ids"] == [str(admin_user.id)]
 
-    response = await client.post(
+    submitter = await _bare_user(db_session)
+    response = await authed_client_factory(submitter).post(
         "/petitions",
         json={
             "type_id": str(petition_type.id),
-            "is_named": False,
-            "contact_email": "guest@example.com",
             "title": "應通知負責人",
             "content": "新陳情應通知設定的負責人。",
         },
@@ -128,7 +123,7 @@ async def test_configured_petition_recipient_gets_new_case_notification(
 
 
 async def test_petition_handler_permission_receives_new_case_notification(
-    db_session, client
+    db_session, authed_client_factory
 ) -> None:
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
@@ -136,13 +131,12 @@ async def test_petition_handler_permission_receives_new_case_notification(
         "petition_received": {"inapp": True, "email": False, "line": False, "discord": False}
     }
     await _grant_org_permission(db_session, handler, org, "petition:handle")
+    submitter = await _bare_user(db_session)
 
-    response = await client.post(
+    response = await authed_client_factory(submitter).post(
         "/petitions",
         json={
             "type_id": str(petition_type.id),
-            "is_named": False,
-            "contact_email": "guest@example.com",
             "title": "權限負責人應收到通知",
             "content": "具陳情處理權限的機關成員應收到新案通知。",
         },
@@ -158,7 +152,7 @@ async def test_petition_handler_permission_receives_new_case_notification(
 
 
 async def test_create_petition_survives_optional_integration_failure(
-    db_session, client, monkeypatch
+    db_session, authed_client_factory, monkeypatch
 ) -> None:
     _, petition_type = await _make_org_and_type(db_session)
 
@@ -174,13 +168,11 @@ async def test_create_petition_survives_optional_integration_failure(
         fail_notification,
     )
 
-    response = await client.post(
+    submitter = await _bare_user(db_session)
+    response = await authed_client_factory(submitter).post(
         "/petitions",
         json={
             "type_id": str(petition_type.id),
-            "is_named": False,
-            "contact_name": "訪客",
-            "contact_email": "guest@example.com",
             "title": "整合故障時仍可送件",
             "content": "核心陳情流程不應被可選通知服務阻斷。",
         },
@@ -190,7 +182,7 @@ async def test_create_petition_survives_optional_integration_failure(
     assert response.json()["status"] == "submitted"
 
 
-async def test_create_petition_as_guest_without_contact_email_returns_422(
+async def test_create_petition_without_login_without_contact_returns_401(
     db_session, client
 ) -> None:
     _, petition_type = await _make_org_and_type(db_session)
@@ -198,20 +190,20 @@ async def test_create_petition_as_guest_without_contact_email_returns_422(
         "/petitions",
         json={
             "type_id": str(petition_type.id),
-            "is_named": False,
             "title": "無聯絡方式",
             "content": "測試內容測試內容",
         },
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 401
 
 
-async def test_create_petition_unknown_type_returns_422(client) -> None:
-    resp = await client.post(
+async def test_create_petition_unknown_type_returns_422(
+    client, member_user, authed_client_factory
+) -> None:
+    resp = await authed_client_factory(member_user).post(
         "/petitions",
         json={
             "type_id": str(uuid.uuid4()),
-            "contact_email": "guest@example.com",
             "title": "測試",
             "content": "測試內容測試內容",
         },
@@ -241,11 +233,14 @@ async def test_list_public_types_hides_inactive(db_session, client) -> None:
 # ── 查詢 ──────────────────────────────────────────────────────────────────────
 
 
-async def test_lookup_case_with_correct_code_succeeds(db_session, client) -> None:
+async def test_lookup_case_with_correct_code_succeeds(
+    db_session, authed_client_factory
+) -> None:
     _, petition_type = await _make_org_and_type(db_session)
-    case_obj, code = await _create_case(db_session, petition_type)
+    owner = await _bare_user(db_session)
+    case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
 
-    resp = await client.get(
+    resp = await authed_client_factory(owner).get(
         "/petitions/lookup",
         params={"case_number": case_obj.case_number, "verification_code": code},
     )
@@ -253,31 +248,37 @@ async def test_lookup_case_with_correct_code_succeeds(db_session, client) -> Non
     assert resp.json()["case_number"] == case_obj.case_number
 
 
-async def test_lookup_case_with_wrong_code_returns_404(db_session, client) -> None:
+async def test_lookup_case_with_wrong_code_returns_404(
+    db_session, authed_client_factory
+) -> None:
     _, petition_type = await _make_org_and_type(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type)
+    owner = await _bare_user(db_session)
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
 
-    resp = await client.get(
+    resp = await authed_client_factory(owner).get(
         "/petitions/lookup",
         params={"case_number": case_obj.case_number, "verification_code": "00000"},
     )
     assert resp.status_code == 404
 
 
-async def test_lookup_case_by_share_token_succeeds(db_session, client) -> None:
+async def test_lookup_case_by_share_token_succeeds(
+    db_session, authed_client_factory
+) -> None:
     _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
     data = PetitionCreate(
         type_id=petition_type.id,
-        contact_email="guest@example.com",
-        contact_name="訪客",
         title="教室冷氣故障",
         content="B302 教室冷氣無法啟動，請盡快派員維修。",
     )
     case_obj, _code, share_token = await petition_svc.create_case(
-        db_session, data=data, submitter=None
+        db_session, data=data, submitter=owner
     )
 
-    resp = await client.post("/petitions/share", json={"share_token": share_token})
+    resp = await authed_client_factory(owner).post(
+        "/petitions/share", json={"share_token": share_token}
+    )
     assert resp.status_code == 200
     assert resp.json()["title"] == "教室冷氣故障"
 
@@ -300,23 +301,24 @@ async def test_submitter_can_edit_content_before_assignment(
     assert resp.json()["can_edit_content"] is True
 
 
-async def test_guest_can_edit_content_with_verification_code(db_session, client) -> None:
+async def test_unauthenticated_cannot_edit_content_with_verification_code(
+    db_session, client
+) -> None:
     _, petition_type = await _make_org_and_type(db_session)
-    case_obj, code = await _create_case(db_session, petition_type)
+    owner = await _bare_user(db_session)
+    case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
 
     forbidden = await client.patch(
         f"/petitions/{case_obj.id}/content",
         json={"content": "不應該成功"},
     )
-    assert forbidden.status_code == 403
+    assert forbidden.status_code == 401
 
     edited = await client.patch(
         f"/petitions/{case_obj.id}/content",
         json={"content": "訪客修改後的內容", "verification_code": code},
     )
-    assert edited.status_code == 200
-    assert edited.json()["content"] == "訪客修改後的內容"
-    assert edited.json()["can_edit_content"] is True
+    assert edited.status_code == 401
 
 
 async def test_submitter_cannot_edit_content_after_assignment(
@@ -757,11 +759,14 @@ async def test_add_internal_note_succeeds(db_session, authed_client_factory) -> 
 # ── 補件 ──────────────────────────────────────────────────────────────────────
 
 
-async def test_supplement_case_requires_auth_or_verification_code(db_session, client) -> None:
+async def test_supplement_case_requires_authenticated_submitter(
+    db_session, client, authed_client_factory
+) -> None:
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, code = await _create_case(db_session, petition_type)
+    owner = await _bare_user(db_session)
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
     await petition_svc.update_status(
         db_session,
         case_obj,
@@ -772,11 +777,11 @@ async def test_supplement_case_requires_auth_or_verification_code(db_session, cl
     forbidden = await client.post(
         f"/petitions/{case_obj.id}/supplement", json={"content": "補充內容"}
     )
-    assert forbidden.status_code == 403
+    assert forbidden.status_code == 401
 
-    ok = await client.post(
+    ok = await authed_client_factory(owner).post(
         f"/petitions/{case_obj.id}/supplement",
-        json={"content": "補充內容", "verification_code": code},
+        json={"content": "補充內容"},
     )
     assert ok.status_code == 200
     assert ok.json()["status"] == "in_progress"

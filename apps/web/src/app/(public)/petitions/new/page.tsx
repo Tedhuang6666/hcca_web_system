@@ -11,9 +11,6 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 type PetitionDraft = {
   typeId: string;
-  isNamed: boolean;
-  contactName: string;
-  contactEmail: string;
   title: string;
   content: string;
 };
@@ -21,26 +18,21 @@ type PetitionDraft = {
 export default function NewPetitionPage() {
   const [types, setTypes] = useState<PetitionTypeOut[]>([]);
   const [typeId, setTypeId] = useState("");
-  const [isNamed, setIsNamed] = useState(true);
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<PetitionCreatedOut | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [accountName, setAccountName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [authReady, setAuthReady] = useState(false);
-  const [draftScope, setDraftScope] = useState("anonymous");
+  const [draftScope, setDraftScope] = useState("user");
 
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
-    setIsLoggedIn(Boolean(userId));
     setAccountName(localStorage.getItem("user_name") ?? "");
     setAccountEmail(localStorage.getItem("user_email") ?? "");
-    setDraftScope(userId ? `user:${userId}` : "anonymous");
+    setDraftScope(userId ? `user:${userId}` : "user");
     setAuthReady(true);
     petitionsApi.listTypes()
       .then((items) => {
@@ -52,9 +44,6 @@ export default function NewPetitionPage() {
 
   const restoreDraft = useCallback((draft: PetitionDraft) => {
     setTypeId(draft.typeId);
-    setIsNamed(draft.isNamed);
-    setContactName(draft.contactName);
-    setContactEmail(draft.contactEmail);
     setTitle(draft.title);
     setContent(draft.content);
     toast.info("已復原未送出的陳情草稿");
@@ -62,7 +51,7 @@ export default function NewPetitionPage() {
 
   const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<PetitionDraft>({
     key: `petitions:new:${draftScope}`,
-    value: { typeId, isNamed, contactName, contactEmail, title, content },
+    value: { typeId, title, content },
     onRestore: restoreDraft,
     enabled: authReady,
     isEmpty: useCallback((draft: PetitionDraft) => (
@@ -71,7 +60,7 @@ export default function NewPetitionPage() {
   });
   const completedSections = [
     Boolean(typeId),
-    isLoggedIn || Boolean(contactEmail.trim()),
+    true,
     Boolean(title.trim()),
     Boolean(content.trim()),
   ];
@@ -82,9 +71,6 @@ export default function NewPetitionPage() {
     try {
       const result = await petitionsApi.create({
         type_id: typeId,
-        is_named: isNamed,
-        contact_name: isLoggedIn ? null : contactName || null,
-        contact_email: isLoggedIn ? null : contactEmail || null,
         title,
         content,
       });
@@ -119,7 +105,7 @@ export default function NewPetitionPage() {
           </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             請妥善保存案號與驗證碼。驗證碼只會在此畫面顯示一次。
-            {isLoggedIn ? " 您也可以直接在我的案件中查看。" : " 未登入案件無法直接查看及管理，回復速度也可能較慢。"}
+            您也可以直接在我的案件中查看。
           </p>
           <div className="petition-receipt-codes grid sm:grid-cols-2 gap-3">
             <div className="petition-receipt-code rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
@@ -156,7 +142,7 @@ export default function NewPetitionPage() {
     <div className="max-w-3xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>我要陳情</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>選擇具名或匿名後送出，系統會依類型自動分派給負責機關。</p>
+        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>登入帳號後以具名方式送出，系統會依類型自動分派給負責機關。</p>
         <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
       <form onSubmit={submit} className="petition-submission-form card p-5 space-y-4">
@@ -168,61 +154,15 @@ export default function NewPetitionPage() {
             </li>
           ))}
         </ol>
-        {!isLoggedIn && (
-          <div className="rounded-lg p-4 text-sm" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)", color: "var(--text-primary)" }}>
-            您目前未登入。未登入送件後無法直接查看及管理案件，必須保存案號與驗證碼才能查詢；因承辦單位較難確認聯絡身分，回復速度較慢。
-          </div>
-        )}
-        {isLoggedIn && (
-          <div className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-            系統會自動使用登入紀錄送件：{accountName || "未命名使用者"} · {accountEmail || "未提供 email"}。姓名與 mail 不需手動填寫。
-          </div>
-        )}
+        <div className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+          系統會以目前登入帳號送件：{accountName || "未命名使用者"} · {accountEmail || "未提供 email"}。
+        </div>
         <label className="block">
           <span className="text-sm font-medium">陳情類型</span>
           <select className="input w-full mt-1" value={typeId} onChange={(e) => setTypeId(e.target.value)} required>
             {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
-        <div className="grid sm:grid-cols-2 gap-3" role="radiogroup" aria-label="陳情身分選擇">
-          <button
-            type="button"
-            onClick={() => setIsNamed(true)}
-            aria-pressed={isNamed}
-            className="petition-identity-choice rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-            data-selected={isNamed || undefined}
-            style={{
-              border: `1px solid ${isNamed ? "var(--primary)" : "var(--border)"}`,
-              background: isNamed ? "var(--primary-dim)" : "transparent",
-            }}>
-            <p className="font-medium" style={{ color: "var(--text-primary)" }}>具名陳情</p>
-            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>承辦單位可看到您的姓名與聯絡方式，方便確認細節與加速回覆。</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsNamed(false)}
-            aria-pressed={!isNamed}
-            className="petition-identity-choice rounded-lg p-4 text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-            data-selected={!isNamed || undefined}
-            style={{
-              border: `1px solid ${!isNamed ? "var(--primary)" : "var(--border)"}`,
-              background: !isNamed ? "var(--primary-dim)" : "transparent",
-            }}>
-            <p className="font-medium" style={{ color: "var(--text-primary)" }}>匿名陳情</p>
-            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>承辦與管理頁不顯示您的身分資料。</p>
-          </button>
-        </div>
-        {!isNamed && (
-          <div className="petition-privacy-note rounded-lg p-4 text-sm" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border)", color: "var(--text-primary)" }}>
-            您的資料僅供紀錄用，不會顯示給任何管理員或承辦單位。
-          </div>
-        )}
-        {!isLoggedIn ? (
-          <div className="grid sm:grid-cols-2 gap-3">
-            <input className="input" placeholder="聯絡姓名" value={contactName} onChange={(e) => setContactName(e.target.value)} />
-            <input className="input" placeholder="聯絡 email" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
-          </div>
-        ) : null}
         <input className="input w-full" placeholder="標題" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
         <textarea className="input w-full min-h-52" placeholder="請描述事實、期待處理方式與相關時間地點" value={content} onChange={(e) => setContent(e.target.value)} required />
         <AnimatedFileUpload
