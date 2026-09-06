@@ -89,6 +89,41 @@ function makePrefix(level: ListLevel, num: number): string {
 }
 
 /**
+ * 依照每一行的層級重新整理編號。
+ *
+ * 公文內容常會從 Word 或其他欄位貼上，不能只相信貼入文字裡的編號；
+ * 例如三個同層項目都可能被貼成「一、」。以目前行的父層路徑作為
+ * counter key，可以在切換父層時重設子層，同時保留同層項目的連續編號。
+ */
+function normalizeNumberedDocument(value: string): string {
+  const counters = new Map<string, number>();
+  const stack: Array<{ level: ListLevel; num: number } | undefined> = [];
+
+  return value.split("\n").map((line) => {
+    const info = parseLine(line);
+    if (info.level === 0) {
+      stack.length = 0;
+      counters.clear();
+      return line;
+    }
+
+    const level = info.level as ListLevel;
+    stack.length = level - 1;
+    const parentKey = stack
+      .filter((item): item is { level: ListLevel; num: number } => Boolean(item))
+      .map((item) => `${item.level}:${item.num}`)
+      .join("/");
+    const counterKey = `${parentKey}|${level}`;
+    const num = (counters.get(counterKey) ?? 0) + 1;
+    counters.set(counterKey, num);
+    stack[level - 1] = { level, num };
+    stack.length = level;
+
+    return `${makePrefix(level, num)}${line.slice(info.bodyStart)}`;
+  }).join("\n");
+}
+
+/**
  * 找出目前行在同一父層下的下一個編號。
  * 遇到空白行或較低層級時停止，避免把另一個段落／父層的編號帶過來。
  */
@@ -388,6 +423,15 @@ export default function GongwenEditor({ value, onChange, placeholder, minRows = 
         }}
         onBlur={() => {
           window.setTimeout(() => setFocused(false), 120);
+
+          const currentValue = ref.current?.value ?? value;
+          const normalizedValue = normalizeNumberedDocument(currentValue);
+          if (normalizedValue !== currentValue) {
+            pushHistory(normalizedValue);
+            skipHistoryPushRef.current = true;
+            onChange(normalizedValue);
+          }
+
           onBlur?.();
         }}
         placeholder={placeholder}

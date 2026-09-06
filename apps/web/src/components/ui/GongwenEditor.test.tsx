@@ -54,6 +54,16 @@ describe("GongwenEditor", () => {
     expect(editor().value).toBe("　　　　1. foo\n　　　　2. \n後續文字");
   });
 
+  it("continues the next top-level number with Enter", () => {
+    render(<EditorHarness initialValue="一、 第一段" />);
+
+    const textArea = editor();
+    textArea.setSelectionRange(textArea.value.length, textArea.value.length);
+    fireEvent.keyDown(textArea, { key: "Enter" });
+
+    expect(editor().value).toBe("一、 第一段\n二、 ");
+  });
+
   it("indents plain text to the first level and replaces the old marker", () => {
     render(<EditorHarness initialValue="純文字" />);
 
@@ -64,6 +74,39 @@ describe("GongwenEditor", () => {
 
     fireEvent.keyDown(editor(), { key: "Tab" });
     expect(editor().value).toBe("　　（一） 純文字");
+  });
+
+  it("keeps indentation and numbering consistent across nested levels", () => {
+    render(<EditorHarness initialValue="一、 第一段" />);
+
+    const textArea = editor();
+    textArea.setSelectionRange(textArea.value.length, textArea.value.length);
+    fireEvent.keyDown(textArea, { key: "Tab" });
+    expect(editor().value).toBe("　　（一） 第一段");
+
+    fireEvent.keyDown(editor(), { key: "Tab" });
+    expect(editor().value).toBe("　　　　1. 第一段");
+  });
+
+  it("renumbers repeated pasted markers when leaving the editor", () => {
+    const initialValue = [
+      "一、 第一段",
+      "一、 第二段",
+      "　　（一） 子項一",
+      "　　（一） 子項二",
+      "一、 第三段",
+    ].join("\n");
+    render(<EditorHarness initialValue={initialValue} />);
+
+    fireEvent.blur(editor());
+
+    expect(editor().value).toBe([
+      "一、 第一段",
+      "二、 第二段",
+      "　　（一） 子項一",
+      "　　（二） 子項二",
+      "三、 第三段",
+    ].join("\n"));
   });
 
   it("does not refocus the editor after a toolbar change", () => {
