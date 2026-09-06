@@ -765,6 +765,43 @@ async def test_queue_document_recipient_emails_uses_explicit_recipient_email(
     assert event.payload["to"] == ["external@example.com"]
 
 
+async def test_queue_document_recipient_emails_only_once_unless_forced(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = await _make_draft(
+        db_session,
+        org,
+        creator,
+        recipients=[
+            RecipientCreate(
+                recipient_type="main",
+                name="外部受文單位",
+                email="external@example.com",
+                delivery_method=DeliveryMethod.EMAIL,
+            )
+        ],
+    )
+
+    assert await queue_document_recipient_emails(db_session, doc) == 1
+    assert doc.recipient_email_sent_at is not None
+    assert await queue_document_recipient_emails(db_session, doc) == 0
+    assert await queue_document_recipient_emails(db_session, doc, force=True) == 1
+
+    events = (
+        (
+            await db_session.execute(
+                select(OutboxEvent).where(OutboxEvent.event_type == "email.send")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(events) == 2
+    assert all(event.payload["document_id"] == str(doc.id) for event in events)
+
+
 async def test_queue_document_recipient_emails_attaches_variant_and_files(
     db_session: AsyncSession, make_user, tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

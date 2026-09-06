@@ -8,6 +8,7 @@ import re
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -119,12 +120,18 @@ def _external_attachment_links(doc: Document) -> str:
 async def queue_document_recipient_emails(
     session: AsyncSession,
     doc: Document,
+    *,
+    force: bool = False,
 ) -> int:
     """將設定為 Email 的公文受文者排入 outbox，回傳去重後的信箱數量。
 
     直接指定的 email 使用公文上的快照；機關職位則在正式發文當下解析現任成員，
-    讓職務交接後的新任人員可以收到後續公文。
+    讓職務交接後的新任人員可以收到後續公文。預設只排入首次通知，
+    `force=True` 僅供使用者明確要求重寄時使用。
     """
+    if doc.recipient_email_sent_at is not None and not force:
+        return 0
+
     recipients = [
         recipient for recipient in doc.recipients if _has_official_email_delivery(recipient)
     ]
@@ -211,6 +218,7 @@ async def queue_document_recipient_emails(
                     "body": body,
                     "subtype": "html",
                     "attachments": attachment_payload,
+                    "document_id": str(doc.id),
                 },
             )
     else:
@@ -222,6 +230,10 @@ async def queue_document_recipient_emails(
                 "subject": f"【公文通知】{doc.title}",
                 "body": body,
                 "subtype": "html",
+                "document_id": str(doc.id),
             },
         )
+    if doc.recipient_email_sent_at is None:
+        doc.recipient_email_sent_at = datetime.now(UTC)
+        await session.flush()
     return len(emails)

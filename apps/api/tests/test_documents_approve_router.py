@@ -13,12 +13,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.clock import local_today
 from api.models.document import (
     ApprovalStepStatus,
+    DeliveryMethod,
     Document,
     DocumentApproval,
     DocumentApprovalDelegation,
+    DocumentRecipient,
     DocumentStatus,
 )
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.outbox import OutboxEvent
 from api.models.user import User
 from api.routers.documents_approve import approve_document, reject_document
 from api.schemas.document import ApproveRequest, RejectMode, RejectRequest
@@ -192,6 +195,58 @@ async def test_approve_document_last_step_by_valid_approver_changes_status(
 
     assert updated.status == DocumentStatus.APPROVED
     assert updated.completed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_resend_document_email_requires_explicit_endpoint(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"重寄組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="resend-creator@example.com", display_name="Creator", is_active=True)
+    db_session.add_all([org, creator])
+    await db_session.flush()
+
+    doc = _make_draft(org, creator, status=DocumentStatus.APPROVED)
+    doc.recipients.append(
+        DocumentRecipient(
+            recipient_type="main",
+            name="受文單位",
+            email="recipient@example.com",
+            delivery_method=DeliveryMethod.EMAIL,
+        )
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, creator)
+    response = await ac.post(f"/documents/{doc.id}/resend-email")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"queued": 1}
+    event = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "email.send")
+    )
+    assert event is not None
+    assert event.payload["document_id"] == str(doc.id)
+
+
+@pytest.mark.asyncio
+async def test_resend_document_email_by_unrelated_user_returns_403(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"重寄拒絕組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="resend-creator2@example.com", display_name="Creator", is_active=True)
+    stranger = User(email="resend-stranger@example.com", display_name="Stranger", is_active=True)
+    db_session.add_all([org, creator, stranger])
+    await db_session.flush()
+    doc = _make_draft(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, stranger)
+    response = await ac.post(f"/documents/{doc.id}/resend-email")
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

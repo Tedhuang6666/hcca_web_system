@@ -66,6 +66,8 @@ export const documentsApi = {
     }),
   issueDirect: (id: string, comment?: string) =>
     post<DocumentOut>(`/documents/${id}/issue-direct`, { comment }),
+  resendEmail: (id: string) =>
+    post<{ queued: number }>(`/documents/${id}/resend-email`),
   suggestApprovers: (id: string) =>
     get<{ id: string; display_name: string; email: string }[]>(`/documents/${id}/suggest-approvers`),
   setDelegate: (id: string, stepOrder: number, delegateId: string | null) =>

@@ -50,6 +50,7 @@ from api.schemas.document import (
     DocumentApprovalDelegationOut,
     DocumentApprovalDelegationUpdate,
     DocumentArchiveSettingsUpdate,
+    DocumentEmailResendOut,
     DocumentOut,
     RecallRequest,
     RejectMode,
@@ -67,6 +68,59 @@ router = APIRouter(prefix="/documents", tags=["公文系統"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+@router.post(
+    "/{doc_id}/resend-email",
+    response_model=DocumentEmailResendOut,
+    summary="手動重寄公文受文者 Email",
+    responses={
+        200: {"description": "已依目前公文內容排入重寄佇列"},
+        403: {"description": "無權限重寄此公文"},
+        409: {"description": "公文尚未正式發文"},
+    },
+)
+async def resend_document_email(
+    doc_id: str,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> DocumentEmailResendOut:
+    """只在使用者明確操作時，依目前版本重寄正式公文 Email。"""
+    doc = await get_doc_or_404(doc_id, session)
+    if doc.status != DocumentStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="只有已核准公文可以重寄 Email",
+        )
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or {"document:admin", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、部門最高權限者、文件編輯者或活動管理者可以重寄 Email",
+            )
+
+    queued = await doc_svc.queue_document_recipient_emails(session, doc, force=True)
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="email.resend",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"recipient_count": queued},
+        summary=f"手動重寄公文「{doc.title}」Email",
+    )
+    return DocumentEmailResendOut(queued=queued)
 
 
 # ── 批量操作端點 ──────────────────────────────────────────────────────────────

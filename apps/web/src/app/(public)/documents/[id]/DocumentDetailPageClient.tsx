@@ -201,6 +201,7 @@ export default function DocumentDetailPageClient({
   const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
   const [visibilityValue, setVisibilityValue] = useState<DocumentVisibility>("org_only");
   const [visibilityBusy, setVisibilityBusy] = useState(false);
+  const [resendEmailBusy, setResendEmailBusy] = useState(false);
   const initialFetchRef = useRef(true);
   const { can, isAdmin } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
@@ -347,6 +348,27 @@ export default function DocumentDetailPageClient({
     } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
+  const handleResendEmail = async () => {
+    if (!(await confirm({
+      title: "重寄公文 Email？",
+      description: "只會依目前公文內容寄送一次，不會因為之後編輯而自動重寄。",
+      confirmLabel: "確認重寄",
+    }))) return;
+    setResendEmailBusy(true);
+    try {
+      const result = await documentsApi.resendEmail(id);
+      if (result.queued > 0) {
+        toast.success(`已排入 ${result.queued} 個收件信箱的重寄佇列`);
+      } else {
+        toast.info("目前沒有可寄送的 Email 受文者");
+      }
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "重寄 Email 失敗"));
+    } finally {
+      setResendEmailBusy(false);
+    }
+  };
+
   // 進入送審模式時自動載入建議審核人
   const enterSubmitMode = async () => {
     setSubmitMode(true);
@@ -442,6 +464,9 @@ export default function DocumentDetailPageClient({
     || can("document:view_all")
     || can("document:edit")
     || can("document:create");
+  const canResendEmail = doc.status === "approved" && (
+    isCreator || isAdmin || can("document:edit") || can("document:admin") || can("document:create")
+  );
   const catLabel = CAT_LABEL[doc.category] ?? doc.category;
   const canApprove = can("document:approve") &&
     doc.status === "pending" &&
@@ -644,6 +669,20 @@ export default function DocumentDetailPageClient({
                 <line x1="10" y1="12" x2="14" y2="12"/>
               </svg>
               封存
+            </button>
+          )}
+          {canResendEmail && (
+            <button
+              type="button"
+              onClick={handleResendEmail}
+              disabled={resendEmailBusy}
+              className="btn btn-ghost text-sm gap-1.5 disabled:opacity-50"
+              title="僅在你明確操作時重寄公文 Email"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M4 4h16v16H4z" /><path d="m4 4 8 7 8-7" /><path d="M16 16a4 4 0 1 1-1.2-2.85" />
+              </svg>
+              {resendEmailBusy ? "寄送中…" : "重寄 Email"}
             </button>
           )}
           {doc.status === "archived" && isCreator && can("document:archive") && (
