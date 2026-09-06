@@ -76,7 +76,8 @@ export async function request<T>(
   try {
     const result = await fetchWithRetry(path, init, trace, method === "GET" ? 2 : 0);
     response = result.response;
-    recordApiMetric({ path, method, operation_kind: operationKind, status: response.status, attempts: result.attempts, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    const protectiveResponse = response.headers.get("X-HCCA-Protective-Response") === "1";
+    recordApiMetric({ path, method, operation_kind: operationKind, status: response.status, protective_response: protectiveResponse, attempts: result.attempts, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
   } catch (error) {
     if (isRequestAborted(error, init.signal)) throw error;
     recordHardFailure(key);
@@ -85,7 +86,8 @@ export async function request<T>(
     throw error;
   }
 
-  if (response.status >= 500) recordHardFailure(key);
+  const protectiveResponse = response.headers.get("X-HCCA-Protective-Response") === "1";
+  if (response.status >= 500 && !protectiveResponse) recordHardFailure(key);
   else recordReachable(key);
 
   if (response.status === 401) {

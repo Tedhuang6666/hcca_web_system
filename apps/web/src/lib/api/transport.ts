@@ -66,6 +66,34 @@ export function requestInitWithTrace(init: HccaRequestInit, trace: Record<string
 
 export class NetworkRequestError extends Error {}
 
+const GET_REQUEST_TIMEOUT_MS = 15_000;
+const MUTATION_REQUEST_TIMEOUT_MS = 30_000;
+
+function requestTimeoutMs(init: HccaRequestInit): number {
+  return (init.method ?? "GET").toUpperCase() === "GET"
+    ? GET_REQUEST_TIMEOUT_MS
+    : MUTATION_REQUEST_TIMEOUT_MS;
+}
+
+function createRequestTimeout(signal: AbortSignal | null | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error(`API request timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+  const onAbort = () => controller.abort(signal?.reason);
+
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
 export function isRequestAborted(error: unknown, signal?: AbortSignal | null): boolean {
   if (signal?.aborted) return true;
   return typeof error === "object"
@@ -97,22 +125,36 @@ export async function fetchWithRetry(
   trace: Record<string, string>,
   maxRetries: number,
 ): Promise<{ response: Response; attempts: number }> {
+  const timeout = createRequestTimeout(init.signal, requestTimeoutMs(init));
   let attempts = 0;
-  while (true) {
-    try {
-      const response = await fetch(`${API_BASE}${path}`, requestInitWithTrace(init, trace));
-      return { response, attempts };
-    } catch (error) {
-      // 元件卸載或路由切換造成的取消不是網路故障；不要重試、開熔斷或回報錯誤。
-      if (isRequestAborted(error, init.signal)) throw error;
-      if (attempts >= maxRetries) {
-        const message = error instanceof Error ? error.message : `無法連線：${path}`;
-        reportClientError({ scope: "api.network", message, stack: error instanceof Error ? error.stack : undefined });
-        throw new NetworkRequestError(`無法連線至後端 API：${API_BASE}`);
+  try {
+    while (true) {
+      try {
+        const response = await fetch(
+          `${API_BASE}${path}`,
+          requestInitWithTrace({ ...init, signal: timeout.signal }, trace),
+        );
+        return { response, attempts };
+      } catch (error) {
+        // 元件卸載或路由切換造成的取消不是網路故障；不要重試、開熔斷或回報錯誤。
+        if (init.signal?.aborted) throw error;
+        if (timeout.signal.aborted) {
+          const message = `後端 API 回應逾時（${Math.round(requestTimeoutMs(init) / 1000)} 秒）：${path}`;
+          reportClientError({ scope: "api.timeout", message });
+          throw new NetworkRequestError(message);
+        }
+        if (isRequestAborted(error, init.signal)) throw error;
+        if (attempts >= maxRetries) {
+          const message = error instanceof Error ? error.message : `無法連線：${path}`;
+          reportClientError({ scope: "api.network", message, stack: error instanceof Error ? error.stack : undefined });
+          throw new NetworkRequestError(`無法連線至後端 API：${API_BASE}`);
+        }
+        await waitForRetry([400, 900][attempts] ?? 1500, timeout.signal);
+        attempts += 1;
       }
-      await waitForRetry([400, 900][attempts] ?? 1500, init.signal);
-      attempts += 1;
     }
+  } finally {
+    timeout.cleanup();
   }
 }
 

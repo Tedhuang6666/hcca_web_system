@@ -22,6 +22,7 @@ class ClientMetricCreate(BaseModel):
     value: float = Field(ge=0, le=86_400_000)
     path: str = Field(min_length=1, max_length=255)
     status: int | None = Field(default=None, ge=0, le=599)
+    protective_response: bool = False
     duration_ms: float | None = Field(default=None, ge=0, le=86_400_000)
     attempts: int | None = Field(default=None, ge=0, le=10)
     circuit_open: bool = False

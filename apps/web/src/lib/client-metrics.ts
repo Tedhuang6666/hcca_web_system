@@ -6,6 +6,7 @@ type ClientMetric = {
   value: number;
   path?: string;
   status?: number;
+  protective_response?: boolean;
   duration_ms?: number;
   attempts?: number;
   circuit_open?: boolean;

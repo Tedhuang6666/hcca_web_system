@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 
 from httpx import AsyncClient
@@ -223,6 +224,7 @@ async def test_client_route_analytics_aggregates_all_field_metric_families(monke
                         "value": 1_000,
                         "path": "/dashboard",
                         "status": 503,
+                        "protective_response": True,
                         "operation_kind": "simple_get",
                         "device_class": "mobile",
                         "auth_state": "authenticated",
@@ -263,8 +265,9 @@ async def test_client_route_analytics_aggregates_all_field_metric_families(monke
     assert route["release"] == "web@test"
     assert route["pageviews"] == 1
     assert route["client_errors"] == 1
-    assert route["api_errors"] == 1
+    assert route["api_errors"] == 0
     assert route["api_timeouts"] == 1
+    assert route["protective_responses"] == 1
     assert route["web_vitals"]["lcp_p50"] == 1200.0
     assert route["web_vitals"]["lcp_p99"] == 4000.0
     assert route["api_latency_percentiles_ms"]["p50_ms"] == 100.0
@@ -307,7 +310,7 @@ async def test_record_client_metrics_pushes_a_batch_with_one_redis_write(monkeyp
     assert await record_client_metrics(
         [
             {"metric": "fcp", "value": 120},
-            {"metric": "lcp", "value": 480},
+            {"metric": "lcp", "value": 480, "protective_response": True},
         ]
     )
 
@@ -315,6 +318,7 @@ async def test_record_client_metrics_pushes_a_batch_with_one_redis_write(monkeyp
     assert commands[0][0] == "lpush"
     assert commands[0][1] == "observability:client-telemetry:v1"
     assert len(commands[0][2:]) == 2
+    assert json.loads(commands[0][3])["protective_response"] is True
     assert commands[1][0] == "ltrim"
     assert commands[2][0] == "expire"
 
