@@ -460,6 +460,10 @@ class Document(Base, TimestampMixin):
     issued_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # 發文日期
+    # 首次正式公文 Email 排入 outbox 的時間；後續修改不自動重寄，手動重寄除外。
+    recipient_email_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     due_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # 限辦日期

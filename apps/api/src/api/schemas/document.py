@@ -527,6 +527,12 @@ class DocumentOut(BaseModel):
     recipients: list[RecipientOut] = []
 
 
+class DocumentEmailResendOut(BaseModel):
+    """公文受文者 Email 重寄結果。"""
+
+    queued: int = Field(..., ge=0, description="本次排入寄送佇列的去重後信箱數量")
+
+
 class DocumentListItem(BaseModel):
     """列表頁的輕量版公文資訊（不含全文與版本）"""
 
