@@ -10852,7 +10852,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 建立陳情案件（登入或訪客） */
+        /** 建立陳情案件（需登入且具名） */
         post: operations["create_petition_petitions_post"];
         delete?: never;
         options?: never;
@@ -10957,7 +10957,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 以案號與驗證碼查詢案件 */
+        /** 登入後以案號與驗證碼查詢本人案件 */
         get: operations["lookup_case_petitions_lookup_get"];
         put?: never;
         post?: never;
@@ -11044,7 +11044,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 以分享 token 查詢案件 */
+        /** 登入後以分享 token 查詢本人案件 */
         post: operations["lookup_case_by_share_token_petitions_share_post"];
         delete?: never;
         options?: never;
@@ -30220,8 +30220,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Is Named */
-            is_named: boolean;
             /**
              * Next Action
              * @default
@@ -30333,8 +30331,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Is Named */
-            is_named: boolean;
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
@@ -30409,17 +30405,8 @@ export interface components {
         };
         /** PetitionCreate */
         PetitionCreate: {
-            /** Contact Email */
-            contact_email?: string | null;
-            /** Contact Name */
-            contact_name?: string | null;
             /** Content */
             content: string;
-            /**
-             * Is Named
-             * @default true
-             */
-            is_named: boolean;
             /** Title */
             title: string;
             /**
@@ -30588,8 +30575,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Is Named */
-            is_named: boolean;
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**

@@ -108,7 +108,7 @@ export default function PetitionsPageClient({
           <div>
             <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>案號查詢</h2>
             <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-              訪客或未登入狀態可使用七碼案號與五碼驗證碼查看進度
+              登入後可使用七碼案號與五碼驗證碼查詢本人案件
             </p>
           </div>
           <form onSubmit={doLookup} className="space-y-3">
@@ -181,7 +181,7 @@ export default function PetitionsPageClient({
             <Link href="/petitions/new" className="btn btn-ghost">新增</Link>
           </div>
           {myCases.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無案件，或目前未登入。</p>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無案件。</p>
           ) : (
             <div className="space-y-2">
               {myCases.slice(0, 8).map((item) => (

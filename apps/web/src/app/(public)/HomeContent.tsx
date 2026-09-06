@@ -175,10 +175,10 @@ export default function HomeContent({
               icon: Database,
             },
             {
-              href: "/petitions/new",
-              title: "提出陳情",
-              desc: "讓你的意見正式傳達",
-              action: "提出陳情",
+              href: "/petitions/public",
+              title: "公開陳情",
+              desc: "閱讀公開案件與處理回覆",
+              action: "查看陳情",
               icon: MessageCircle,
             },
           ].map((item, index) => {

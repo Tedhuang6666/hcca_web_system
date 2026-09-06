@@ -31,7 +31,7 @@ export default function PetitionDetailPage() {
     try {
       setItem(await petitionsApi.get(params.id));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "載入失敗；若您是訪客，請從案號查詢進入");
+      toast.error(err instanceof ApiError ? err.message : "載入失敗，請從案件查詢進入");
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ export default function PetitionDetailPage() {
               <h2 className="font-semibold">補充資料</h2>
               {item.supplement_request && <p className="text-sm" style={{ color: "var(--danger)" }}>{item.supplement_request}</p>}
               <textarea className="input w-full min-h-28" value={supplement} onChange={(e) => setSupplement(e.target.value)} placeholder="請補充承辦機關要求的資料" />
-              <input className="input w-full" placeholder="訪客驗證碼（登入本人可留空）" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))} maxLength={5} />
+              <input className="input w-full" placeholder="案件驗證碼（登入本人可留空）" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))} maxLength={5} />
               <AnimatedFileUpload
                 accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
                 label="拖曳補件附件到這裡"

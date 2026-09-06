@@ -1077,7 +1077,6 @@ async def enqueue_petition_private_channel(
             "category_id": config.petition_private_category_id,
             "staff_role_id": config.petition_staff_role_id,
             "submitter_discord_user_id": submitter_link.discord_user_id if submitter_link else None,
-            "is_named": case_obj.is_named,
         },
     )
     return True

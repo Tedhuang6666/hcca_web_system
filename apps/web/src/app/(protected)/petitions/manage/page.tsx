@@ -369,7 +369,7 @@ export default function PetitionManagePage() {
                 </div>
               ) : (
                 <div className="rounded-lg p-3 text-sm" style={{ background: "var(--primary-dim)", border: "1px solid var(--info-border)", color: "var(--text-muted)" }}>
-                  此案為匿名陳情，提交者資料不顯示給管理員或承辦單位。
+                  此為歷史案件，沒有可供顯示的提交者帳號資料。
                 </div>
               )}
 

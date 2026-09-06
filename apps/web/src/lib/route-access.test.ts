@@ -92,9 +92,17 @@ describe("partner map route access", () => {
 });
 
 describe("public petition and regulation route access", () => {
-  it("allows visitor petition share routes without login", () => {
-    expect(isPublicRoute("/petitions/share")).toBe(true);
-    expect(isPublicRoute("/petitions/CASE-2026/12345")).toBe(true);
+  it("keeps petition submission and private case routes behind login", () => {
+    expect(isPublicRoute("/petitions")).toBe(false);
+    expect(isPublicRoute("/petitions/new")).toBe(false);
+    expect(isPublicRoute("/petitions/share")).toBe(false);
+    expect(isPublicRoute("/petitions/CASE-2026/12345")).toBe(false);
+    expect(requiresAuthentication("/petitions/new")).toBe(true);
+  });
+
+  it("keeps only published petition pages public", () => {
+    expect(isPublicRoute("/petitions/public")).toBe(true);
+    expect(isPublicRoute("/petitions/public/0000001")).toBe(true);
   });
 
   it("keeps archived regulations protected", () => {
