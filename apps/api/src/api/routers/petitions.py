@@ -165,6 +165,7 @@ async def _notify(
     external_email: str | None = None,
     external_name: str | None = None,
 ) -> None:
+    notification_body = _petition_notification_body(case_obj, body)
     if user_id is not None:
         try:
             from api.services.notification import create_notification
@@ -174,7 +175,7 @@ async def _notify(
                 user_id=user_id,
                 type=type,
                 title=title,
-                body=body or "",
+                body=notification_body,
                 link=link,
                 related_id=related_id,
             )
@@ -184,7 +185,7 @@ async def _notify(
                     user_id=user_id,
                     type=type,
                     title=title,
-                    body=body,
+                    body=notification_body,
                     link=link,
                     related_id=related_id,
                 )
@@ -200,7 +201,7 @@ async def _notify(
                     "contact_email": external_email,
                     "contact_name": external_name or "",
                     "title": title,
-                    "body": body or "",
+                    "body": notification_body,
                 },
             )
         except Exception:
@@ -228,12 +229,34 @@ async def _notify_responsible(
             exclude_user_ids=exclude_user_ids,
             type=type,
             title=title,
-            body=body,
+            body=_petition_notification_body(case_obj, body),
             link=link,
             related_id=case_obj.id,
         )
     except Exception:
         logger.warning("陳情負責人通知失敗 case=%s", case_obj.id, exc_info=True)
+
+
+def _petition_notification_body(case_obj: PetitionCase, update: str | None = None) -> str:
+    """把案件核心資料放進通知，讓收件人不必先開頁面才知道發生什麼事。"""
+    lines = [
+        f"案號：{case_obj.case_number}",
+        f"標題：{case_obj.title}",
+        f"分類：{case_obj.type.name if case_obj.type else '未分類'}",
+        f"負責機關：{case_obj.current_org.name if case_obj.current_org else '—'}",
+        f"狀態：{petition_svc.STATUS_LABELS.get(case_obj.status, case_obj.status.value)}",
+        "",
+        "陳情內容：",
+        case_obj.content.strip(),
+    ]
+    if update and update.strip() and update.strip() not in {
+        case_obj.title.strip(),
+        case_obj.content.strip(),
+    }:
+        lines.extend(["", "本次更新：", update.strip()])
+    if case_obj.public_reply:
+        lines.extend(["", "公開回覆：", case_obj.public_reply.strip()])
+    return "\n".join(lines)
 
 
 def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
@@ -1057,6 +1080,7 @@ async def assign_case(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _notify(
         session,
+        case_obj,
         user_id=case_obj.assigned_to_id,
         type="petition_assigned",
         title=f"你被指派陳情案件 {case_obj.case_number}",
@@ -1093,6 +1117,7 @@ async def transfer_case(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _notify(
         session,
+        case_obj,
         user_id=case_obj.submitter_id,
         type="petition_updated",
         title=f"陳情案件 {case_obj.case_number} 已轉派",
@@ -1135,6 +1160,7 @@ async def reply_case(
     case_obj = await petition_svc.reply_case(session, case_obj, data=payload, actor_id=user.id)
     await _notify(
         session,
+        case_obj,
         user_id=case_obj.submitter_id,
         type=(
             "petition_status_updated"
@@ -1200,6 +1226,7 @@ async def request_public(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _notify(
         session,
+        case_obj,
         user_id=case_obj.submitter_id,
         type="petition_status_updated",
         title=f"陳情案件 {case_obj.case_number} 徵詢公開意願",
@@ -1303,6 +1330,7 @@ async def update_status(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _notify(
         session,
+        case_obj,
         user_id=case_obj.submitter_id,
         type="petition_status_updated",
         title=f"陳情案件 {case_obj.case_number} 狀態更新",

@@ -218,6 +218,9 @@ async def _create_automatic_email_message(
     subtype: str,
     *,
     already_rendered: bool,
+    recipient_metadata: list[dict[str, str | None]] | None = None,
+    source: str | None = None,
+    message_template: str | None = None,
 ) -> str:
     """為未經平台建立的共用寄信建立可稽核、可預覽的 EmailMessage。"""
     engine = create_async_engine(str(settings.DATABASE_URL))
@@ -227,20 +230,37 @@ async def _create_automatic_email_message(
             body_format = (
                 "rendered" if already_rendered else ("html" if subtype == "html" else "markdown")
             )
+            metadata = recipient_metadata or []
+            recipient_rows: list[dict[str, object]] = []
+            for index, address in enumerate(recipients):
+                item = metadata[index] if index < len(metadata) else {}
+                name = str(item.get("name") or "").strip() or None
+                raw_user_id = str(item.get("user_id") or "").strip()
+                try:
+                    user_id = uuid.UUID(raw_user_id) if raw_user_id else None
+                except ValueError:
+                    user_id = None
+                recipient_rows.append(
+                    {
+                        "user_id": str(user_id) if user_id else None,
+                        "email": address,
+                        "name": name,
+                        "variables": dict(item.get("variables") or {}),
+                    }
+                )
             message = EmailMessage(
                 subject=subject[:255],
                 body=body,
-                template="generic",
+                template=(message_template or "generic")[:50],
                 context={
                     "body_format": body_format,
                     "heading": subject[:200],
                     "preview_text": _preview_text(body),
                     "source": "system",
+                    "source_kind": source or "system",
                 },
                 recipient_spec={"external_emails": recipients},
-                recipient_variables=[
-                    {"email": address, "name": None, "variables": {}} for address in recipients
-                ],
+                recipient_variables=recipient_rows,
                 resolved_emails=recipients,
                 recipient_count=len(recipients),
                 status=EmailStatus.QUEUED,
@@ -248,11 +268,18 @@ async def _create_automatic_email_message(
             session.add(message)
             await session.flush()
             message_id = str(message.id)
-            for address in recipients:
+            for recipient_data in recipient_rows:
                 session.add(
                     EmailCampaignRecipient(
                         message_id=message.id,
-                        email=address,
+                        user_id=(
+                            uuid.UUID(str(recipient_data["user_id"]))
+                            if recipient_data["user_id"]
+                            else None
+                        ),
+                        email=str(recipient_data["email"]),
+                        name=recipient_data["name"],
+                        variables=recipient_data["variables"],
                         status=EmailRecipientStatus.QUEUED,
                     )
                 )
@@ -275,6 +302,9 @@ def send_email(
     email_recipient_id: str | None = None,
     attachments: list[dict[str, str]] | None = None,
     format_body: bool = False,
+    recipient_metadata: list[dict[str, str | None]] | None = None,
+    source: str | None = None,
+    message_template: str | None = None,
 ) -> dict[str, object]:
     """
     Celery 背景郵件發送任務。
@@ -294,6 +324,9 @@ def send_email(
                     body,
                     subtype,
                     already_rendered=not format_body,
+                    recipient_metadata=recipient_metadata,
+                    source=source,
+                    message_template=message_template,
                 )
             )
         rendered_body = body
@@ -392,6 +425,9 @@ def send_email(
                 "email_recipient_id": email_recipient_id,
                 "attachments": attachments,
                 "format_body": format_body,
+                "recipient_metadata": recipient_metadata,
+                "source": source,
+                "message_template": message_template,
             },
         ) from exc
 
@@ -409,6 +445,9 @@ def enqueue_email(
     attachments: list[dict[str, str]] | None = None,
     *,
     already_rendered: bool = False,
+    recipient_metadata: list[dict[str, str | None]] | None = None,
+    source: str | None = None,
+    message_template: str | None = None,
 ) -> str:
     """
     將郵件發送任務推入 Celery 佇列，立即回傳 task_id。
@@ -432,14 +471,23 @@ def enqueue_email(
             {"body_format": "html" if subtype == "html" else "markdown"},
         )
         queued_subtype = "html"
+    task_kwargs: dict[str, object] = {
+        "email_message_id": email_message_id,
+        "email_recipient_id": email_recipient_id,
+        "attachments": attachments,
+    }
+    if recipient_metadata is not None:
+        task_kwargs["recipient_metadata"] = recipient_metadata
+    if source is not None:
+        task_kwargs["source"] = source
+    if message_template is not None:
+        task_kwargs["message_template"] = message_template
     result = send_email.delay(
         recipients,
         subject,
         queued_body,
         queued_subtype,
-        email_message_id=email_message_id,
-        email_recipient_id=email_recipient_id,
-        attachments=attachments,
+        **task_kwargs,
     )
     logger.info("郵件任務已排入佇列 task_id=%s", result.id)
     return result.id

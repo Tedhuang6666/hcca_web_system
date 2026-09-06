@@ -211,6 +211,7 @@ class EmailMessageOut(BaseModel):
     subject: str
     template: str
     recipient_count: int
+    recipient_preview: list[str] = Field(default_factory=list)
     status: str
     scheduled_at: datetime | None
     created_at: datetime
@@ -760,6 +761,19 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
     return requeued
 
 
+def _recipient_preview(msg: EmailMessage) -> list[str]:
+    values: list[str] = []
+    for row in msg.recipient_variables or []:
+        email = str(row.get("email") or "").strip()
+        if not email:
+            continue
+        name = str(row.get("name") or "").strip()
+        values.append(f"{name}（{email}）" if name else email)
+    if not values:
+        values = [str(email).strip() for email in (msg.resolved_emails or []) if str(email).strip()]
+    return list(dict.fromkeys(values))[:3]
+
+
 def _to_out(msg: EmailMessage, sender_name: str | None) -> EmailMessageOut:
     return EmailMessageOut(
         id=msg.id,
@@ -768,6 +782,7 @@ def _to_out(msg: EmailMessage, sender_name: str | None) -> EmailMessageOut:
         subject=msg.subject,
         template=msg.template,
         recipient_count=msg.recipient_count,
+        recipient_preview=_recipient_preview(msg),
         status=msg.status,
         scheduled_at=msg.scheduled_at,
         created_at=msg.created_at,

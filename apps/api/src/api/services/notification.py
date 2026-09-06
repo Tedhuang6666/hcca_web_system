@@ -48,6 +48,10 @@ def _send_notification_email(
             "cta_label": "前往查看",
             "unsubscribe_url": f"{base}/unsubscribe?token={token}",
         },
+        recipient_metadata=[
+            {"user_id": str(user.id), "email": user.email, "name": user.display_name}
+        ],
+        source="notification",
     )
 
 

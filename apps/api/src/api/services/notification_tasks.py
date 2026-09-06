@@ -42,6 +42,7 @@ class _NotificationEmailItem:
 class _NotificationEmailBatch:
     user_id: uuid.UUID
     email: str
+    name: str | None
     notification_type: str
     notification_ids: tuple[uuid.UUID, ...]
     items: tuple[_NotificationEmailItem, ...]
@@ -93,6 +94,7 @@ async def _claim_notification_batch(
         return _NotificationEmailBatch(
             user_id=user.id,
             email=str(user.email),
+            name=user.display_name,
             notification_type=notification_type,
             notification_ids=tuple(notification.id for notification in notifications),
             items=tuple(
@@ -151,6 +153,14 @@ async def _send_notification_batch(user_id: uuid.UUID, notification_type: str) -
             subject=subject,
             template="notification",
             context=context,
+            recipient_metadata=[
+                {
+                    "user_id": str(batch.user_id),
+                    "email": batch.email,
+                    "name": batch.name,
+                }
+            ],
+            source="notification",
         )
     except Exception:
         try:
