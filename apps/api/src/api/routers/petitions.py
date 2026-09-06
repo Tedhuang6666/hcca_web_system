@@ -249,10 +249,15 @@ def _petition_notification_body(case_obj: PetitionCase, update: str | None = Non
         "陳情內容：",
         case_obj.content.strip(),
     ]
-    if update and update.strip() and update.strip() not in {
-        case_obj.title.strip(),
-        case_obj.content.strip(),
-    }:
+    if (
+        update
+        and update.strip()
+        and update.strip()
+        not in {
+            case_obj.title.strip(),
+            case_obj.content.strip(),
+        }
+    ):
         lines.extend(["", "本次更新：", update.strip()])
     if case_obj.public_reply:
         lines.extend(["", "公開回覆：", case_obj.public_reply.strip()])
@@ -1088,9 +1093,7 @@ async def assign_case(
         link=f"/petitions/manage?case={case_obj.id}",
         related_id=case_obj.id,
     )
-    return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=True
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.patch(
@@ -1136,9 +1139,7 @@ async def transfer_case(
             user_id for user_id in (user.id, case_obj.submitter_id) if user_id is not None
         ),
     )
-    return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=True
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.post(
@@ -1197,9 +1198,7 @@ async def reply_case(
         petition_type_id=case_obj.type_id,
         org_id=case_obj.current_org_id,
     )
-    return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=True
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.post(
@@ -1236,9 +1235,7 @@ async def request_public(
         external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
         external_name=case_obj.contact_name,
     )
-    return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=True
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.post(
@@ -1301,9 +1298,7 @@ async def confirm_public(
         link=f"/petitions/manage?case={case_obj.id}",
         exclude_user_ids=(user.id, case_obj.submitter_id),
     )
-    return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=True
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.patch(
@@ -1363,9 +1358,7 @@ async def update_status(
         petition_type_id=case_obj.type_id,
         org_id=case_obj.current_org_id,
     )
-    return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=True
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.post(
@@ -1387,9 +1380,7 @@ async def add_note(
     case_obj = await petition_svc.add_internal_note(
         session, case_obj, data=payload, actor_id=user.id
     )
-    return await _decorate_case(
-        case_obj, include_internal=True, can_view_submitter=True
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 # ── 附件 ─────────────────────────────────────────────────────────────────────
