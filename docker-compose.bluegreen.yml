@@ -354,14 +354,16 @@ services:
   proxy:
     image: caddy:2-alpine
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/caddy/bluegreen/start-caddy.sh"]
+    command: []
     ports:
       - "80:80"
       - "443:443"
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN}
     volumes:
-      - ./deploy/bluegreen/Caddyfile.blue:/etc/caddy/Caddyfile:ro
       - ./deploy/bluegreen:/etc/caddy/bluegreen:ro
+      - ./.deploy-state:/etc/caddy/state:ro
       - caddydata:/data
       - caddyconfig:/config
 
