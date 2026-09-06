@@ -63,6 +63,18 @@ def test_official_document_title_uses_formal_issuer_and_document_type() -> None:
     )
 
 
+def test_official_document_title_preserves_explicit_full_org_title() -> None:
+    assert (
+        _official_document_title(
+            "國立新竹高級中學班聯會",
+            "國立新竹高級中學學生會咨",
+            "咨",
+            "班級聯合自治會",
+        )
+        == "國立新竹高級中學學生會咨"
+    )
+
+
 def test_official_print_supports_container_source_layout(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(official_print, "__file__", "/app/src/api/services/official_print.py")
 
@@ -201,7 +213,7 @@ async def test_consultation_print_uses_two_paragraph_body_and_closing() -> None:
         issuer_full_name=None,
         org=council,
         org_id="council",
-        title="提名院長同意權咨",
+        title="國立新竹高級中學學生會咨",
         urgency="normal",
         classification="normal",
         declassification_condition="none",
@@ -235,6 +247,8 @@ async def test_consultation_print_uses_two_paragraph_body_and_closing() -> None:
     rendered = await render_document_print_html(_OrgSession(council), doc)
     pdf = render_print_pdf(rendered)
 
+    assert "國立新竹高級中學學生會咨</header>" in rendered
+    assert "國立新竹高級中學班聯會咨</header>" not in rendered
     assert 'class="consultation-content"' in rendered
     assert '<section class="consultation-recipient">受文者：立法院</section>' in rendered
     assert '<div class="subject-label">主旨：</div>' in rendered
