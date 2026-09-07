@@ -77,8 +77,9 @@ async def create_notification(
     body: str | None = None,
     link: str | None = None,
     related_id: uuid.UUID | None = None,
+    email_allowed: bool = True,
 ) -> None:
-    """依使用者偏好建立站內通知並（若開啟）寄送品牌 Email。"""
+    """依使用者偏好建立通知；email_allowed 可讓事件停用 Email 管道。"""
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None:
         return
@@ -89,7 +90,8 @@ async def create_notification(
     digest_enabled = get_digest_frequency(user.notification_preferences) != "off"
     # 摘要與即時聚合都需要資料列作為寄信來源；只有開啟站內管道的通知才會
     # 在收件匣與未讀數顯示。
-    should_queue = channel["inapp"] or channel["email"]
+    email_enabled = channel["email"] and email_allowed
+    should_queue = channel["inapp"] or email_enabled
     if should_queue:
         notification = Notification(
             user_id=user_id,
@@ -133,7 +135,7 @@ async def create_notification(
                     "通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True
                 )
 
-    if channel["email"] and user.email and not digest_enabled and should_queue:
+    if email_enabled and user.email and not digest_enabled and should_queue:
         try:
             send_notification_email_batch.apply_async(
                 args=[str(user_id), type],
