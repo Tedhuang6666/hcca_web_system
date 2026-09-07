@@ -164,6 +164,7 @@ async def _notify(
     related_id: uuid.UUID,
     external_email: str | None = None,
     external_name: str | None = None,
+    email_allowed: bool = True,
 ) -> None:
     notification_body = _petition_notification_body(case_obj, body)
     if user_id is not None:
@@ -178,6 +179,7 @@ async def _notify(
                 body=notification_body,
                 link=link,
                 related_id=related_id,
+                email_allowed=email_allowed,
             )
         except Exception:
             session.add(
@@ -190,7 +192,7 @@ async def _notify(
                     related_id=related_id,
                 )
             )
-    elif external_email:
+    elif external_email and email_allowed:
         try:
             from api.services.outbox import emit as outbox_emit
 
@@ -1122,6 +1124,7 @@ async def transfer_case(
         session,
         case_obj,
         user_id=case_obj.submitter_id,
+        email_allowed=False,
         type="petition_updated",
         title=f"陳情案件 {case_obj.case_number} 已轉派",
         body=payload.reason,
@@ -1163,6 +1166,7 @@ async def reply_case(
         session,
         case_obj,
         user_id=case_obj.submitter_id,
+        email_allowed=payload.resolve or payload.close,
         type=(
             "petition_status_updated"
             if case_obj.status == PetitionStatus.CLOSED
@@ -1227,6 +1231,7 @@ async def request_public(
         session,
         case_obj,
         user_id=case_obj.submitter_id,
+        email_allowed=True,
         type="petition_status_updated",
         title=f"陳情案件 {case_obj.case_number} 徵詢公開意願",
         body="承辦機關已提出公開陳情申請，請登入查看並選擇同意、修改後同意或拒絕。",
@@ -1327,6 +1332,7 @@ async def update_status(
         session,
         case_obj,
         user_id=case_obj.submitter_id,
+        email_allowed=payload.status == PetitionStatus.REJECTED,
         type="petition_status_updated",
         title=f"陳情案件 {case_obj.case_number} 狀態更新",
         body=petition_svc.STATUS_LABELS[case_obj.status],

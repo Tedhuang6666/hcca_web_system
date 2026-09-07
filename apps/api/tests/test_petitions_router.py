@@ -701,9 +701,18 @@ async def test_update_status_needs_info_requires_message(db_session, authed_clie
     assert ok.json()["supplement_request"] == "請補充現場照片"
 
 
-@pytest.mark.parametrize("scenario", ["needs_info", "closed", "public_request"])
+@pytest.mark.parametrize(
+    ("scenario", "should_email"),
+    [
+        ("needs_info", False),
+        ("closed_status", False),
+        ("closed", True),
+        ("rejected", True),
+        ("public_request", True),
+    ],
+)
 async def test_petition_updates_email_logged_in_submitter(
-    db_session, authed_client_factory, scenario, monkeypatch
+    db_session, authed_client_factory, scenario, should_email, monkeypatch
 ) -> None:
     org, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
@@ -726,6 +735,16 @@ async def test_petition_updates_email_logged_in_submitter(
             f"/petitions/{case_obj.id}/status",
             json={"status": "needs_info", "public_message": "請補充現場照片"},
         )
+    elif scenario in {"closed_status", "rejected"}:
+        response = await ac.patch(
+            f"/petitions/{case_obj.id}/status",
+            json={
+                "status": "rejected" if scenario == "rejected" else "closed",
+                "public_message": (
+                    "不屬於本機關業務範圍" if scenario == "rejected" else "案件已結案"
+                ),
+            },
+        )
     else:
         response = await ac.post(
             f"/petitions/{case_obj.id}/reply",
@@ -740,8 +759,36 @@ async def test_petition_updates_email_logged_in_submitter(
             )
 
     assert response.status_code == 200
-    assert len(scheduled) == 1
-    assert scheduled[0]["args"][0] == str(owner.id)
+    assert len(scheduled) == int(should_email)
+    if should_email:
+        assert scheduled[0]["args"][0] == str(owner.id)
+
+
+async def test_petition_transfer_does_not_email_submitter(
+    db_session, authed_client_factory, monkeypatch
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    target_org = Org(name=f"承辦機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(target_org)
+    await db_session.flush()
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:transfer")
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    scheduled: list[dict] = []
+    monkeypatch.setattr(
+        "api.services.notification.send_notification_email_batch.apply_async",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+
+    response = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/transfer",
+        json={"to_org_id": str(target_org.id), "reason": "改由專責機關處理"},
+    )
+
+    assert response.status_code == 200
+    assert scheduled == []
 
 
 async def test_add_internal_note_succeeds(db_session, authed_client_factory) -> None:
