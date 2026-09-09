@@ -828,17 +828,18 @@ async def render_document_print_html(
             f"{_subject_section(doc.subject)}"
             f"{_document_section('依據：', getattr(doc, 'basis', None))}"
             f"{_document_section(description_label, doc.doc_description)}"
-            f"{_document_section(action_label, doc.action_required)}"
         )
         if not (doc.subject or doc.doc_description or doc.action_required) and doc.content:
             body_html += _document_section("說明：", doc.content)
-        body_html += (
+        closing_html = (
+            f"{_document_section(action_label, doc.action_required)}"
             '<section class="copies">'
             f"<div>正本：{_join_names(primary_recipients) or addressed_to}</div>"
             f"<div>副本：{_join_names(copy_recipients)}</div>"
             "</section>"
             f"{'' if cat == 'announcement' and doc.visibility_level in {'public', 'publicly_open'} else signature}"
         )
+        body_html += f'<section class="document-closing">{closing_html}</section>'
 
     custom_title = _compact_official_name(getattr(doc, "title", ""))
     if is_decree:
@@ -1044,7 +1045,7 @@ async def render_document_print_html(
       margin-top: 1mm;
       padding-left: 8mm;
       font-size: 16pt;
-      line-height: 1.75;
+      line-height: 1.65;
     }}
     .decree-meta {{
       margin: 0 0 10mm;
@@ -1104,6 +1105,7 @@ async def render_document_print_html(
       font-size: 16pt;
       line-height: 1.75;
     }}
+    .document-closing {{ break-inside: avoid; }}
     .copies {{ margin-top: 4mm; font-size: 12pt; line-height: 1.25; }}
     .signature {{
       display: inline-block;

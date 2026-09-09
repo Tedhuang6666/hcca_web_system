@@ -365,8 +365,24 @@ async def test_document_print_flows_long_description_on_first_page() -> None:
     """長篇說明應從第一頁的剩餘空間開始排版，而非整段移至下一頁。"""
     council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
     description = "\n".join(
-        f"{index}、起始段落測試內容" + "，用以驗證公文說明區塊可以自然跨頁。" * 8
-        for index in range(1, 9)
+        (
+            "一、依本會學生陳情系統學生第1150006號陳情案辦理。",
+            "二、據學生反映，本校目前提供 HyRead、Hami Book 及國立公共資訊圖書館等電子書資源，"
+            "惟各平台對不同廠牌及作業系統之電子紙閱讀器支援程度不一。其中，HyRead 主要支援"
+            "自有閱讀器及相關服務；Hami Book得於部分採用 Android 系統之開放式電子紙閱讀器"
+            "使用；國立公共資訊圖書館相關電子書服務亦得依其平台及裝置支援情形使用。",
+            "三、另有學生使用 Kobo 等電子紙閱讀器，其圖書館借閱功能主要透過 OverDrive 相關服務"
+            "與合作圖書館館藏整合，惟目前無法透過本校圖書館使用該項借閱服務，致部分電子紙"
+            "閱讀器使用者無法直接利用本校電子書館藏。",
+            "四、電子紙閱讀器具有便於攜帶大量電子書籍、降低一般行動裝置其他應用程式干擾等特性，"
+            "對於鼓勵學生利用電子館藏及培養閱讀習慣具有一定助益。隨電子閱讀設備日益普及，"
+            "電子館藏對不同閱讀裝置之相容性亦值得納入圖書館數位閱讀服務之規劃。",
+            "五、爰建請貴館評估本校導入 OverDrive 電子書借閱服務之可行性，包括申請或合作方式、"
+            "授權及採購費用、館藏資源、帳號驗證方式、既有電子書平台之整合情形，以及實際可"
+            "支援之電子紙閱讀器等事項。",
+            "六、如現階段因經費、授權、系統或其他因素尚無法導入，亦建請貴館提供相關評估結果或"
+            "現有替代使用方式，以利本會向陳情學生說明。",
+        )
     )
     doc = SimpleNamespace(
         category="letter",
@@ -397,5 +413,8 @@ async def test_document_print_flows_long_description_on_first_page() -> None:
     rendered = await render_document_print_html(_OrgSession(council), doc)
     pdf = render_print_pdf(rendered)
 
-    first_page_text = PdfReader(BytesIO(pdf)).pages[0].extract_text()
-    assert "起始段落測試內容" in first_page_text
+    reader = PdfReader(BytesIO(pdf))
+    assert "本會學生陳情" in reader.pages[0].extract_text()
+    assert '<section class="document-closing">' in rendered
+    assert len(reader.pages) == 2
+    assert "主席" in reader.pages[1].extract_text()
