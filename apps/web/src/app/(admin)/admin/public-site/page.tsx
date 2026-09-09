@@ -1082,10 +1082,10 @@ export default function PublicSiteAdminPage() {
   const visibleOfficers = profiles.filter((profile) => profile.is_visible).length;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
+    <div className="public-site-admin-page mx-auto max-w-7xl space-y-5">
       <header className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
         <div className="grid gap-8 px-6 py-7 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-[var(--primary-text)]">
               <Globe2 size={15} aria-hidden />
               PUBLIC SITE CONTROL
@@ -1097,11 +1097,11 @@ export default function PublicSiteAdminPage() {
               管理首頁內容、公開頁面、常用連結與幹部資料。發布前可先開啟官網確認實際呈現。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <button
               type="button"
               onClick={load}
-              className="btn btn-ghost min-h-11 px-4 text-sm"
+              className="btn btn-ghost min-h-11 flex-1 justify-center px-4 text-sm sm:flex-none"
             >
               <RefreshCw size={16} aria-hidden /> 同步資料
             </button>
@@ -1109,7 +1109,7 @@ export default function PublicSiteAdminPage() {
               href="/"
               target="_blank"
               rel="noreferrer"
-              className="btn btn-primary min-h-11 px-4 text-sm font-semibold"
+              className="btn btn-primary min-h-11 flex-1 justify-center px-4 text-sm font-semibold sm:flex-none"
             >
               <Eye size={16} aria-hidden /> 預覽官網
               <ArrowUpRight size={15} aria-hidden />
@@ -1665,8 +1665,8 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "links" && (
-        <section key="links" className="tab-panel-transition grid gap-4 lg:grid-cols-2">
-          <div className="card space-y-4 p-5">
+        <section key="links" className="tab-panel-transition grid min-w-0 gap-4 lg:grid-cols-2">
+          <div className="card min-w-0 space-y-4 p-5">
             <h2 className="font-semibold">新增連結類別</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Slug"><TextInput value={categoryDraft.slug} onChange={(e) => setCategoryDraft({ ...categoryDraft, slug: e.target.value })} /></Field>
@@ -1676,14 +1676,14 @@ export default function PublicSiteAdminPage() {
             <button type="button" onClick={createCategory} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增類別</button>
             <div className="space-y-2">
               {categories.map((category) => (
-                <div key={category.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                  <span className="text-sm">{category.title}</span>
-                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deleteLinkCategory(category.id).then(load).catch((e) => displayError(e, "刪除類別失敗"))}>刪除</button>
+                <div key={category.id} className="flex flex-col gap-2 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:justify-between" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                  <span className="min-w-0 break-words text-sm">{category.title}</span>
+                  <button type="button" className="btn btn-sm btn-ghost self-start sm:self-auto" onClick={() => siteApi.deleteLinkCategory(category.id).then(load).catch((e) => displayError(e, "刪除類別失敗"))}>刪除</button>
                 </div>
               ))}
             </div>
           </div>
-          <div className="card space-y-4 p-5">
+          <div className="card min-w-0 space-y-4 p-5">
             <h2 className="font-semibold">{editingLinkId ? "編輯 Linktree 連結" : "新增 Linktree 連結"}</h2>
             <Field label="標題"><TextInput value={linkDraft.title} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} /></Field>
             <Field label="URL"><TextInput value={linkDraft.url} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} /></Field>
@@ -1707,20 +1707,20 @@ export default function PublicSiteAdminPage() {
             </div>
             <div className="space-y-2">
               {links.map((link) => (
-                <div key={link.id} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                <div key={link.id} className="flex flex-col gap-3 rounded-lg px-3 py-3 sm:flex-row sm:items-center sm:justify-between" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                   <span className="min-w-0 text-sm">
                     <span className="font-medium">{link.title}</span>
                     <span className="ml-2 text-[var(--text-muted)]">{link.category?.title ?? "未分類"}</span>
-                    <span className="mt-1 block truncate text-xs text-[var(--text-muted)]">{link.url}</span>
+                    <span className="mt-1 block break-all text-xs text-[var(--text-muted)]">{link.url}</span>
                   </span>
-                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => startEditLink(link)} aria-label={`編輯${link.title}`}>
+                  <div className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap sm:justify-end">
+                    <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={() => startEditLink(link)} aria-label={`編輯${link.title}`}>
                       <Pencil size={14} aria-hidden /> 編輯
                     </button>
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => deleteLink(link)} aria-label={`刪除${link.title}`}>
+                    <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={() => deleteLink(link)} aria-label={`刪除${link.title}`}>
                       <Trash2 size={14} aria-hidden /> 刪除
                     </button>
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchLink(link, { is_active: !link.is_active }).catch((e) => displayError(e, "更新連結失敗"))}>
+                    <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={() => patchLink(link, { is_active: !link.is_active }).catch((e) => displayError(e, "更新連結失敗"))}>
                       {link.is_active ? "停用" : "啟用"}
                     </button>
                   </div>
