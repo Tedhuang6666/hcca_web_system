@@ -10880,6 +10880,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/petitions/admin/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 管理員代收其他管道的陳情 */
+        post: operations["create_admin_petition_petitions_admin_cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/petitions/admin/notification-rules": {
         parameters: {
             query?: never;
@@ -11359,6 +11376,23 @@ export interface paths {
         head?: never;
         /** 更新案件狀態 */
         patch: operations["update_status_petitions__case_id__status_patch"];
+        trace?: never;
+    };
+    "/petitions/{case_id}/submitter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 登記尚未綁定帳號的陳情人 */
+        patch: operations["update_case_submitter_petitions__case_id__submitter_patch"];
         trace?: never;
     };
     "/petitions/{case_id}/supplement": {
@@ -30182,6 +30216,28 @@ export interface components {
             /** User Id */
             user_id?: string | null;
         };
+        /**
+         * PetitionAdminCreate
+         * @description 管理員代收其他管道陳情時建立案件。
+         */
+        PetitionAdminCreate: {
+            /**
+             * Contact Email
+             * Format: email
+             */
+            contact_email: string;
+            /** Contact Name */
+            contact_name: string;
+            /** Content */
+            content: string;
+            /** Title */
+            title: string;
+            /**
+             * Type Id
+             * Format: uuid
+             */
+            type_id: string;
+        };
         /** PetitionAssignUpdate */
         PetitionAssignUpdate: {
             /**
@@ -30949,6 +31005,19 @@ export interface components {
             id?: string | null;
             /** Student Id */
             student_id?: string | null;
+        };
+        /**
+         * PetitionSubmitterUpdate
+         * @description 管理員補登尚未綁定平台帳號的外部陳情人。
+         */
+        PetitionSubmitterUpdate: {
+            /**
+             * Contact Email
+             * Format: email
+             */
+            contact_email: string;
+            /** Contact Name */
+            contact_name: string;
         };
         /** PetitionSupplementCreate */
         PetitionSupplementCreate: {
@@ -63625,6 +63694,39 @@ export interface operations {
             };
         };
     };
+    create_admin_petition_petitions_admin_cases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionAdminCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_petition_notification_rules_petitions_admin_notification_rules_get: {
         parameters: {
             query?: never;
@@ -64633,6 +64735,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PetitionStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_case_submitter_petitions__case_id__submitter_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionSubmitterUpdate"];
             };
         };
         responses: {
