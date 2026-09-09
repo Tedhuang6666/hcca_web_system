@@ -418,3 +418,42 @@ async def test_document_print_flows_long_description_on_first_page() -> None:
     assert '<section class="document-closing">' in rendered
     assert len(reader.pages) == 2
     assert "主席" in reader.pages[1].extract_text()
+
+
+@pytest.mark.asyncio
+async def test_public_announcement_print_keeps_chief_signature() -> None:
+    council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
+    doc = SimpleNamespace(
+        category="announcement",
+        issuer_full_name=None,
+        org=council,
+        org_id="council",
+        title="國立新竹高級中學學生代表團公告",
+        urgency="priority",
+        classification="normal",
+        declassification_condition="none",
+        recipients=[],
+        attachments=[],
+        issued_at=None,
+        completed_at=None,
+        created_at=None,
+        serial_number="嶺代綜字第 1150000001 號",
+        approvals=[],
+        handler_name="黃丞廷",
+        handler_unit="主席",
+        handler_email=None,
+        subject="公告第二屆學生代表暨備取學生代表名單。",
+        basis="學生代表法第五十條。",
+        content=None,
+        doc_description="一、第二屆學生代表業經選出，自即日起就任。",
+        action_required=None,
+        visibility_level="publicly_open",
+    )
+
+    rendered = await render_document_print_html(_OrgSession(council), doc)
+    reader = PdfReader(BytesIO(render_print_pdf(rendered)))
+
+    assert '<span class="signature-title">主席</span>' in rendered
+    assert '<span class="signature-name">黃丞廷</span>' in rendered
+    assert "主席" in "".join(page.extract_text() for page in reader.pages)
+    assert "黃丞廷" in "".join(page.extract_text() for page in reader.pages)

@@ -837,7 +837,7 @@ async def render_document_print_html(
             f"<div>正本：{_join_names(primary_recipients) or addressed_to}</div>"
             f"<div>副本：{_join_names(copy_recipients)}</div>"
             "</section>"
-            f"{'' if cat == 'announcement' and doc.visibility_level in {'public', 'publicly_open'} else signature}"
+            f"{signature}"
         )
         body_html += f'<section class="document-closing">{closing_html}</section>'
 
