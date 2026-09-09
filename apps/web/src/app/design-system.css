@@ -1592,6 +1592,13 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   min-width: 0;
 }
 
+.public-site-admin-page,
+.public-site-admin-page > *,
+.public-site-admin-page .tab-panel-transition > *,
+.public-site-admin-page .card {
+  min-width: 0;
+}
+
 .public-site,
 .public-hero-inner,
 .public-quick-grid,
