@@ -29,6 +29,7 @@ from api.models.petition import (
 )
 from api.models.user import User
 from api.schemas.petition import (
+    PetitionAdminCreate,
     PetitionAssignUpdate,
     PetitionContentUpdate,
     PetitionCreate,
@@ -40,6 +41,7 @@ from api.schemas.petition import (
     PetitionReplyCreate,
     PetitionStatsOut,
     PetitionStatusUpdate,
+    PetitionSubmitterUpdate,
     PetitionSupplementCreate,
     PetitionTransferUpdate,
     PetitionTypeCreate,
@@ -239,15 +241,19 @@ async def delete_type(session: AsyncSession, petition_type: PetitionType) -> Non
     await session.flush()
 
 
-async def create_case(
+async def _create_case(
     session: AsyncSession,
     *,
-    data: PetitionCreate,
-    submitter: User,
+    type_id: uuid.UUID,
+    title: str,
+    content: str,
+    submitter_id: uuid.UUID | None,
+    contact_name: str,
+    contact_email: str,
+    actor_id: uuid.UUID | None,
+    created_title: str = "案件已建立",
 ) -> tuple[PetitionCase, str, str]:
-    if submitter is None:
-        raise ValueError("陳情必須先登入帳號")
-    petition_type = await get_type(session, data.type_id)
+    petition_type = await get_type(session, type_id)
     if petition_type is None or not petition_type.is_active:
         raise ValueError("陳情類型不存在或已停用")
 
@@ -258,13 +264,13 @@ async def create_case(
         case_number=case_number,
         verification_code_hash=hash_verification_code(case_number, code),
         share_token_hash=hash_share_token(share_token),
-        type_id=data.type_id,
+        type_id=type_id,
         is_named=True,
-        submitter_id=submitter.id,
-        contact_name=submitter.display_name,
-        contact_email=submitter.email,
-        title=data.title,
-        content=data.content,
+        submitter_id=submitter_id,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        title=title,
+        content=content,
         current_org_id=petition_type.responsible_org_id,
         submitted_at=datetime.now(UTC),
     )
@@ -274,11 +280,75 @@ async def create_case(
         session,
         case_obj,
         event_type=PetitionEventType.CREATED,
-        title="案件已建立",
+        title=created_title,
         content=STATUS_MESSAGES[PetitionStatus.SUBMITTED],
-        actor_id=submitter.id if submitter else None,
+        actor_id=actor_id,
     )
     return case_obj, code, share_token
+
+
+async def create_case(
+    session: AsyncSession,
+    *,
+    data: PetitionCreate,
+    submitter: User,
+) -> tuple[PetitionCase, str, str]:
+    if submitter is None:
+        raise ValueError("陳情必須先登入帳號")
+    return await _create_case(
+        session,
+        type_id=data.type_id,
+        title=data.title,
+        content=data.content,
+        submitter_id=submitter.id,
+        contact_name=submitter.display_name,
+        contact_email=submitter.email,
+        actor_id=submitter.id,
+    )
+
+
+async def create_admin_case(
+    session: AsyncSession,
+    *,
+    data: PetitionAdminCreate,
+    actor_id: uuid.UUID,
+) -> tuple[PetitionCase, str, str]:
+    return await _create_case(
+        session,
+        type_id=data.type_id,
+        title=data.title,
+        content=data.content,
+        submitter_id=None,
+        contact_name=data.contact_name,
+        contact_email=str(data.contact_email).strip().lower(),
+        actor_id=actor_id,
+        created_title="案件已建立（管理員代收）",
+    )
+
+
+async def update_submitter(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionSubmitterUpdate,
+    actor_id: uuid.UUID,
+) -> PetitionCase:
+    if case_obj.submitter_id is not None:
+        raise ValueError("此案件已綁定平台帳號，無法改為外部陳情人")
+    case_obj.is_named = True
+    case_obj.contact_name = data.contact_name
+    case_obj.contact_email = str(data.contact_email).strip().lower()
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=PetitionEventType.NOTE,
+        title="已登記陳情人",
+        content=f"姓名：{case_obj.contact_name}\nEmail：{case_obj.contact_email}",
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.INTERNAL,
+    )
+    return case_obj
 
 
 async def update_content(

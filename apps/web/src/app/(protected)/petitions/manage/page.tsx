@@ -70,6 +70,17 @@ export default function PetitionManagePage() {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingEventTitle, setEditingEventTitle] = useState("");
   const [editingEventContent, setEditingEventContent] = useState("");
+  const [editingSubmitter, setEditingSubmitter] = useState(false);
+  const [submitterName, setSubmitterName] = useState("");
+  const [submitterEmail, setSubmitterEmail] = useState("");
+  const [showExternalIntake, setShowExternalIntake] = useState(false);
+  const [intakeTypes, setIntakeTypes] = useState<{ id: string; name: string }[]>([]);
+  const [intakeTypeId, setIntakeTypeId] = useState("");
+  const [intakeName, setIntakeName] = useState("");
+  const [intakeEmail, setIntakeEmail] = useState("");
+  const [intakeTitle, setIntakeTitle] = useState("");
+  const [intakeContent, setIntakeContent] = useState("");
+  const [intakeBusy, setIntakeBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const { can } = usePermissions();
@@ -116,11 +127,64 @@ export default function PetitionManagePage() {
     setEditingEventContent("");
   };
 
+  const openExternalIntake = async () => {
+    if (showExternalIntake) {
+      setShowExternalIntake(false);
+      return;
+    }
+    setShowExternalIntake(true);
+    if (intakeTypes.length > 0) return;
+    try {
+      const types = await petitionsApi.listAdminTypes();
+      setIntakeTypes(types.map((type) => ({ id: type.id, name: type.name })));
+      setIntakeTypeId(types[0]?.id || "");
+    } catch (err) {
+      setShowExternalIntake(false);
+      toast.error(err instanceof ApiError ? err.message : "載入陳情類型失敗");
+    }
+  };
+
+  const submitExternalIntake = async () => {
+    if (
+      intakeBusy
+      || !intakeTypeId
+      || !intakeName.trim()
+      || !intakeEmail.trim()
+      || !intakeTitle.trim()
+      || !intakeContent.trim()
+    ) return;
+    setIntakeBusy(true);
+    try {
+      const created = await petitionsApi.createAdminCase({
+        type_id: intakeTypeId,
+        contact_name: intakeName.trim(),
+        contact_email: intakeEmail.trim(),
+        title: intakeTitle.trim(),
+        content: intakeContent.trim(),
+      });
+      setIntakeName("");
+      setIntakeEmail("");
+      setIntakeTitle("");
+      setIntakeContent("");
+      setShowExternalIntake(false);
+      toast.success(`已建立代收案件 #${created.case_number}`);
+      await load();
+      await open(created.id);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "建立代收案件失敗");
+    } finally {
+      setIntakeBusy(false);
+    }
+  };
+
   const open = async (id: string) => {
     try {
       const detail = await petitionsApi.get(id);
       setSelected(detail);
       resetForm();
+      setEditingSubmitter(false);
+      setSubmitterName(detail.contact_name || detail.submitter?.contact_name || "");
+      setSubmitterEmail(detail.contact_email || detail.submitter?.contact_email || "");
       setPublicTitle(detail.public_title || detail.title);
       setPublicContent(detail.public_content || detail.content);
       const assignable = await petitionsApi.assignableUsers(id).catch(() => []);
@@ -164,6 +228,24 @@ export default function PetitionManagePage() {
       toast.success("公開訊息已更新");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "編輯訊息失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSubmitter = async () => {
+    if (!selected || busy || !submitterName.trim() || !submitterEmail.trim()) return;
+    setBusy(true);
+    try {
+      const updated = await petitionsApi.updateSubmitter(selected.id, {
+        contact_name: submitterName.trim(),
+        contact_email: submitterEmail.trim(),
+      });
+      setSelected(updated);
+      setEditingSubmitter(false);
+      toast.success("陳情人資料已登記，後續通知會寄到此信箱");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "登記陳情人失敗");
     } finally {
       setBusy(false);
     }
@@ -256,10 +338,95 @@ export default function PetitionManagePage() {
             依序完成收件、分派、承辦、補件、跨機關轉派、駁回與結案
           </p>
         </div>
-        {can("petition:type_manage") && (
-          <Link href="/petitions/admin/types" className="btn btn-ghost">陳情類型</Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {can("petition:admin") && (
+            <button className="btn btn-primary" onClick={() => void openExternalIntake()}>
+              {showExternalIntake ? "收起代收表單" : "代收外部陳情"}
+            </button>
+          )}
+          {can("petition:type_manage") && (
+            <Link href="/petitions/admin/types" className="btn btn-ghost">陳情類型</Link>
+          )}
+        </div>
       </div>
+
+      {showExternalIntake && can("petition:admin") && (
+        <section
+          className="card p-5 space-y-4"
+          style={{ borderColor: "var(--primary)", borderLeftWidth: "4px" }}
+          aria-labelledby="external-petition-title">
+          <div>
+            <p className="text-xs font-medium tracking-wide" style={{ color: "var(--primary)" }}>
+              其他管道收件
+            </p>
+            <h2 id="external-petition-title" className="text-lg font-semibold mt-1" style={{ color: "var(--text-primary)" }}>
+              代收外部陳情
+            </h2>
+            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+              建立後會套用同一套收件、分案與處理流程；案件更新通知會寄到登記的聯絡信箱。
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">陳情人姓名</span>
+              <input
+                className="input w-full"
+                value={intakeName}
+                onChange={(e) => setIntakeName(e.target.value)}
+                placeholder="例如：王小明"
+                autoComplete="name"
+              />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">聯絡 Email</span>
+              <input
+                className="input w-full"
+                type="email"
+                value={intakeEmail}
+                onChange={(e) => setIntakeEmail(e.target.value)}
+                placeholder="用於寄送案件進度通知"
+                autoComplete="email"
+              />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">陳情類型</span>
+              <select className="input w-full" value={intakeTypeId} onChange={(e) => setIntakeTypeId(e.target.value)}>
+                {intakeTypes.length === 0 && <option value="">沒有可用類型</option>}
+                {intakeTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">案件標題</span>
+              <input
+                className="input w-full"
+                value={intakeTitle}
+                onChange={(e) => setIntakeTitle(e.target.value)}
+                placeholder="簡短描述這件陳情"
+              />
+            </label>
+          </div>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">陳情內容</span>
+            <textarea
+              className="input w-full min-h-32"
+              value={intakeContent}
+              onChange={(e) => setIntakeContent(e.target.value)}
+              placeholder="記錄對方透過電話、現場或其他管道反映的完整內容"
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="btn btn-primary"
+              disabled={intakeBusy || !intakeTypeId || !intakeName.trim() || !intakeEmail.trim() || !intakeTitle.trim() || !intakeContent.trim()}
+              onClick={() => void submitExternalIntake()}>
+              {intakeBusy ? "建立中…" : "建立並加入工作台"}
+            </button>
+            <button className="btn btn-ghost" disabled={intakeBusy} onClick={() => setShowExternalIntake(false)}>
+              取消
+            </button>
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         {queueCards.map((card) => (
@@ -363,15 +530,47 @@ export default function PetitionManagePage() {
                 <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-muted)" }}>{selected.content}</p>
               </div>
 
-              {selected.submitter ? (
-                <div className="rounded-lg p-3 text-sm" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                  提交者：{selected.submitter.display_name || selected.submitter.contact_name || "未提供"} · {selected.submitter.email || selected.submitter.contact_email || "無聯絡資訊"}
+              <div className="rounded-lg p-3 text-sm space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+                      {selected.submitter_id ? "平台帳號陳情人" : "外部陳情人"}
+                    </p>
+                    <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                      {selected.submitter_id
+                        ? `${selected.submitter?.display_name || "未提供姓名"} · ${selected.submitter?.email || "無平台信箱"}`
+                        : selected.contact_name
+                          ? `${selected.contact_name} · ${selected.contact_email || "尚未登記 Email"}`
+                          : "尚未登記姓名與聯絡信箱"}
+                    </p>
+                  </div>
+                  {can("petition:admin") && !selected.submitter_id && (
+                    <button
+                      className="btn btn-ghost shrink-0"
+                      onClick={() => setEditingSubmitter((value) => !value)}>
+                      {editingSubmitter ? "取消編輯" : "登記陳情人"}
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div className="rounded-lg p-3 text-sm" style={{ background: "var(--primary-dim)", border: "1px solid var(--info-border)", color: "var(--text-muted)" }}>
-                  此為歷史案件，沒有可供顯示的提交者帳號資料。
-                </div>
-              )}
+                {!selected.submitter_id && editingSubmitter && (
+                  <div className="grid sm:grid-cols-2 gap-3 pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium">姓名</span>
+                      <input className="input w-full" value={submitterName} onChange={(e) => setSubmitterName(e.target.value)} autoComplete="name" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium">Email</span>
+                      <input className="input w-full" type="email" value={submitterEmail} onChange={(e) => setSubmitterEmail(e.target.value)} autoComplete="email" />
+                    </label>
+                    <div className="sm:col-span-2 flex items-center gap-2">
+                      <button className="btn btn-primary" disabled={busy || !submitterName.trim() || !submitterEmail.trim()} onClick={() => void saveSubmitter()}>
+                        {busy ? "儲存中…" : "儲存陳情人"}
+                      </button>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>後續案件通知會寄到此信箱。</p>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-wrap gap-2" role="tablist" aria-label="案件處理動作">
                 {[

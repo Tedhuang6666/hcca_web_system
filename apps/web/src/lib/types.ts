@@ -1062,6 +1062,19 @@ export interface MFAChallengeOut {
 
 export type PetitionVisibility = "public" | "internal";
 
+export interface PetitionAdminCreate {
+  type_id: string;
+  contact_name: string;
+  contact_email: string;
+  title: string;
+  content: string;
+}
+
+export interface PetitionSubmitterUpdate {
+  contact_name: string;
+  contact_email: string;
+}
+
 
 // ── 議會提案 ───────────────────────────────────────────────────────────────
 
