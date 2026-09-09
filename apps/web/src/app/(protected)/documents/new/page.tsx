@@ -428,7 +428,6 @@ export default function NewDocumentPage() {
       : copy.subjectLabel && subject.trim().length < 8
         ? `${copy.subjectLabel}至少需 8 個字`
         : "",
-    basis: category === "announcement" && !basis.trim() ? "公告需填寫依據" : "",
     declassification: classification !== "normal" && declassificationCondition === "none"
       ? "密件需填寫解密條件"
       : declassificationCondition === "auto_at_date" && !confidentialityExpiresAt
@@ -804,14 +803,12 @@ export default function NewDocumentPage() {
     if (activeStep === 1) {
       const needsContent = Boolean(
         fieldError.subject
-        || fieldError.basis
         || fieldError.recordDiscussion
         || fieldError.recordDecision
       );
       setTouched((current) => ({
         ...current,
         subject: true,
-        basis: true,
         recordDiscussion: true,
         recordDecision: true,
       }));
@@ -1111,15 +1108,13 @@ export default function NewDocumentPage() {
             )}
             {category === "announcement" && (
               <div>
-                <Label required>依據</Label>
+                <Label>依據</Label>
                 <GongwenEditor
                   value={basis}
                   onChange={setBasis}
-                  onBlur={() => markTouched("basis")}
                   minRows={3}
                   placeholder="依據法規、會議決議或相關文件。"
                 />
-                {showErr("basis") && <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.basis}</p>}
               </div>
             )}
             <div>

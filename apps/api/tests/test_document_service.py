@@ -171,6 +171,26 @@ def test_decree_template_allows_empty_subject() -> None:
     assert template.issuer_full_name == "主席"
 
 
+def test_announcement_create_allows_empty_basis() -> None:
+    payload = _make_create_payload(category=DocumentCategory.ANNOUNCEMENT, basis=None)
+
+    assert payload.category == DocumentCategory.ANNOUNCEMENT
+    assert payload.basis is None
+
+
+def test_announcement_template_allows_empty_basis() -> None:
+    template = DocumentTemplateCreate(
+        org_id=uuid.uuid4(),
+        name="公告範本",
+        category=DocumentCategory.ANNOUNCEMENT,
+        subject="公告本會辦理校園自治事項，請查照。",
+        basis=None,
+    )
+
+    assert template.category == DocumentCategory.ANNOUNCEMENT
+    assert template.basis is None
+
+
 def test_decree_update_defaults_issuer_title() -> None:
     payload = DocumentUpdate(category=DocumentCategory.DECREE)
 

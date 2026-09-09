@@ -20790,7 +20790,7 @@ export interface components {
             activity_id?: string | null;
             /**
              * Basis
-             * @description 依據（公告必填）
+             * @description 依據（選填）
              */
             basis?: string | null;
             /** @default letter */
