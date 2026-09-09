@@ -7,8 +7,7 @@ import uuid
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.clock import local_today
-from api.models.org import Org, Position, UserPosition
+from api.models.org import Org
 from api.models.petition import PetitionCase, PetitionType
 from api.models.petition_notification import PetitionNotificationRule, PetitionNotificationSettings
 from api.models.user import User
@@ -17,15 +16,6 @@ from api.schemas.petition_notification import (
     PetitionNotificationRuleUpdate,
     PetitionNotificationSettingsUpdate,
 )
-from api.services.permission import active_tenure_filter, get_user_permission_codes_batch
-
-_HANDLER_PERMISSIONS = {
-    "petition:view_org",
-    "petition:assign",
-    "petition:handle",
-    "petition:transfer",
-    "petition:admin",
-}
 
 
 def _normalise_ids(values: list[uuid.UUID]) -> list[uuid.UUID]:
@@ -137,31 +127,11 @@ async def delete_rule(session: AsyncSession, rule: PetitionNotificationRule) -> 
     await session.flush()
 
 
-async def _fallback_recipient_ids(
-    session: AsyncSession, *, org_id: uuid.UUID | None
-) -> list[uuid.UUID]:
-    query = select(User.id).where(User.is_active.is_(True))
-    if org_id is not None:
-        query = (
-            query.join(UserPosition, UserPosition.user_id == User.id)
-            .join(Position, Position.id == UserPosition.position_id)
-            .where(
-                Position.org_id == org_id,
-                *active_tenure_filter(local_today()),
-            )
-            .distinct()
-        )
-    user_ids = list((await session.scalars(query)).all())
-    permissions = await get_user_permission_codes_batch(session, user_ids)
-    return [
-        user_id
-        for user_id in user_ids
-        if permissions.get(user_id, frozenset()) & _HANDLER_PERMISSIONS
-    ]
-
-
 async def resolve_recipient_ids(session: AsyncSession, case_obj: PetitionCase) -> list[uuid.UUID]:
-    """依序套用「類型 > 負責機關 > 全域」規則，回傳有效負責人。"""
+    """依序套用「承辦人 > 類型 > 負責機關 > 全域」規則，回傳有效收件人。"""
+    if case_obj.assigned_to_id:
+        return await _active_user_ids(session, [case_obj.assigned_to_id])
+
     settings = await get_settings(session)
     rule_result = await session.scalars(
         select(PetitionNotificationRule).where(
@@ -183,16 +153,10 @@ async def resolve_recipient_ids(session: AsyncSession, case_obj: PetitionCase) -
         recipient_ids = await _active_user_ids(
             session, [uuid.UUID(str(user_id)) for user_id in rule.recipient_user_ids]
         )
-        if not recipient_ids:
-            recipient_ids = await _fallback_recipient_ids(session, org_id=case_obj.current_org_id)
     else:
         if not settings.enabled:
             return []
         recipient_ids = await _active_user_ids(
             session, [uuid.UUID(str(user_id)) for user_id in settings.recipient_user_ids]
         )
-        if not recipient_ids:
-            recipient_ids = await _fallback_recipient_ids(session, org_id=None)
-    if case_obj.assigned_to_id:
-        recipient_ids.append(case_obj.assigned_to_id)
-    return list(dict.fromkeys(recipient_ids))
+    return recipient_ids

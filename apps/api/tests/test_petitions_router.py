@@ -233,7 +233,7 @@ async def test_configured_petition_recipient_gets_new_case_notification(
     assert notification is not None
 
 
-async def test_petition_handler_permission_receives_new_case_notification(
+async def test_petition_handler_permission_alone_does_not_receive_new_case_notification(
     db_session, authed_client_factory
 ) -> None:
     org, petition_type = await _make_org_and_type(db_session)
@@ -248,8 +248,8 @@ async def test_petition_handler_permission_receives_new_case_notification(
         "/petitions",
         json={
             "type_id": str(petition_type.id),
-            "title": "權限負責人應收到通知",
-            "content": "具陳情處理權限的機關成員應收到新案通知。",
+            "title": "權限不應決定通知收件人",
+            "content": "未設定收件人時，不應因具陳情處理權限而收到新案通知。",
         },
     )
     assert response.status_code == 201
@@ -259,7 +259,42 @@ async def test_petition_handler_permission_receives_new_case_notification(
             Notification.type == "petition_received",
         )
     )
-    assert notification is not None
+    assert notification is None
+
+
+async def test_closing_assigned_case_does_not_notify_unrelated_permission_holder(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:assign")
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+
+    council_org = Org(name=f"學生議會-{uuid.uuid4().hex[:6]}")
+    db_session.add(council_org)
+    await db_session.flush()
+    council_member = await _bare_user(db_session)
+    await _grant_org_permission(db_session, council_member, council_org, "petition:handle")
+
+    case_obj, _code = await _create_case(db_session, petition_type)
+    assigned = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(handler.id)}
+    )
+    assert assigned.status_code == 200
+
+    closed = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/status",
+        json={"status": "closed", "public_message": "案件已完成處理。"},
+    )
+    assert closed.status_code == 200
+
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == council_member.id,
+            Notification.type == "petition_updated",
+        )
+    )
+    assert notification is None
 
 
 async def test_create_petition_survives_optional_integration_failure(
