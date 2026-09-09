@@ -70,6 +70,17 @@ async def test_build_org_serial_prefix_skips_orgs_without_prefix(
     assert prefix == "嶺生"
 
 
+async def test_build_org_serial_prefix_can_exclude_ancestor_prefixes(
+    db_session: AsyncSession,
+) -> None:
+    parent = await _make_org(db_session, prefix="嶺代")
+    child = await _make_org(db_session, prefix="生", parent_id=parent.id)
+
+    prefix = await build_org_serial_prefix(db_session, child.id, inherit_parent_prefix=False)
+
+    assert prefix == "生"
+
+
 async def test_build_org_serial_prefix_raises_when_no_org_has_prefix(
     db_session: AsyncSession,
 ) -> None:
@@ -162,6 +173,27 @@ async def test_create_serial_template_success(db_session: AsyncSession, make_use
     assert template.org_prefix == "嶺代"
     assert template.counter == 0
     assert template.is_active is True
+
+
+async def test_create_serial_template_can_exclude_ancestor_prefixes(
+    db_session: AsyncSession, make_user
+) -> None:
+    parent = await _make_org(db_session, prefix="嶺代")
+    child = await _make_org(db_session, prefix="生", parent_id=parent.id)
+    creator = await make_user()
+
+    template = await create_serial_template(
+        db_session,
+        data=SerialTemplateCreate(
+            org_id=child.id,
+            category_char="活",
+            inherit_parent_prefix=False,
+        ),
+        created_by=creator.id,
+    )
+
+    assert template.org_prefix == "生"
+    assert template.inherit_parent_prefix is False
 
 
 async def test_create_serial_template_as_default_clears_sibling_default(
@@ -299,3 +331,23 @@ async def test_update_serial_template_deactivating_clears_default_flags(
 
     assert result.is_default is False
     assert result.is_default_president_publish is False
+
+
+async def test_update_serial_template_can_change_parent_prefix_inheritance(
+    db_session: AsyncSession, make_user
+) -> None:
+    parent = await _make_org(db_session, prefix="嶺代")
+    child = await _make_org(db_session, prefix="生", parent_id=parent.id)
+    creator = await make_user()
+    template = await create_serial_template(
+        db_session,
+        data=SerialTemplateCreate(org_id=child.id, category_char="活"),
+        created_by=creator.id,
+    )
+
+    result = await update_serial_template(
+        db_session, template, updates={"inherit_parent_prefix": False}
+    )
+
+    assert result.org_prefix == "生"
+    assert result.inherit_parent_prefix is False

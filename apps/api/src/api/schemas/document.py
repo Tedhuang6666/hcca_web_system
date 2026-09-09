@@ -35,7 +35,7 @@ from api.models.document import (
 
 class SerialTemplateCreate(BaseModel):
     """建立字號模板（需 serial:create 權限）。
-    org_prefix 由系統沿組織樹逐層組合 Org.prefix，使用者只需填入分類字元（細別）。
+    可選擇是否沿組織樹組合 Org.prefix，使用者只需填入分類字元（細別）。
     """
 
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
@@ -44,6 +44,7 @@ class SerialTemplateCreate(BaseModel):
     )
     year_mode: YearMode = Field(YearMode.ROC, description="年份制度（roc=民國年，ce=西元年）")
     reset_on_new_year: bool = Field(True, description="是否每年重置流水號")
+    inherit_parent_prefix: bool = Field(True, description="是否串接上級組織的字號前綴")
     description: str | None = Field(
         None, max_length=200, description="模板說明（如：學生生活輔導類公文）"
     )
@@ -59,6 +60,7 @@ class SerialTemplateCreate(BaseModel):
                 "category_char": "生",
                 "year_mode": "roc",
                 "reset_on_new_year": True,
+                "inherit_parent_prefix": True,
                 "description": "學生生活輔導類公文",
                 "is_default": True,
                 "is_default_president_publish": False,
@@ -78,6 +80,7 @@ class SerialTemplateOut(BaseModel):
     category_char: str
     year_mode: YearMode
     reset_on_new_year: bool
+    inherit_parent_prefix: bool
     current_year: int
     counter: int
     is_active: bool
@@ -101,11 +104,12 @@ class SerialTemplateOut(BaseModel):
 
 
 class SerialTemplateUpdate(BaseModel):
-    """更新字號模板（僅可修改說明與狀態）"""
+    """更新字號模板設定。"""
 
     description: str | None = Field(None, max_length=200)
     is_active: bool | None = None
     reset_on_new_year: bool | None = None
+    inherit_parent_prefix: bool | None = None
     year_mode: YearMode | None = None
     is_default: bool | None = None
     is_default_president_publish: bool | None = None

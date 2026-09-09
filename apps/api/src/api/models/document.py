@@ -183,6 +183,10 @@ class DocumentSerialTemplate(Base, TimestampMixin):
     )
     # 組織代碼前綴，如「嶺代」「嶺學」「嶺議」
     org_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    # 是否沿組織樹串接上級前綴；非隸屬單位可只使用本組織前綴
+    inherit_parent_prefix: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     # 類別字，如「生」「議」「評」
     category_char: Mapped[str] = mapped_column(String(10), nullable=False)
     # 年份制度：ROC（民國）或 CE（西元）

@@ -16,6 +16,7 @@ interface CreateForm {
   category_char: string;
   year_mode: YearMode;
   reset_on_new_year: boolean;
+  inherit_parent_prefix: boolean;
   description: string;
   is_default: boolean;
   is_default_president_publish: boolean;
@@ -26,6 +27,7 @@ const EMPTY_FORM: CreateForm = {
   category_char: "",
   year_mode: "roc",
   reset_on_new_year: true,
+  inherit_parent_prefix: true,
   description: "",
   is_default: false,
   is_default_president_publish: false,
@@ -122,6 +124,7 @@ export default function SerialTemplatesPage() {
         category_char: form.category_char.trim(),
         year_mode: form.year_mode,
         reset_on_new_year: form.reset_on_new_year,
+        inherit_parent_prefix: form.inherit_parent_prefix,
         description: form.description.trim() || undefined,
         is_default: form.is_default,
         is_default_president_publish: form.is_default_president_publish,
@@ -149,7 +152,7 @@ export default function SerialTemplatesPage() {
     }
   };
 
-  const getHierarchicalPrefix = (orgId: string) => {
+  const getHierarchicalPrefix = (orgId: string, inheritParentPrefix: boolean) => {
     const orgMap = new Map<string, OrgRead>();
     [...allOrgs, ...orgs].forEach((org) => orgMap.set(org.id, org));
     const selected = orgMap.get(orgId);
@@ -162,14 +165,18 @@ export default function SerialTemplatesPage() {
       seen.add(current.id);
       const part = current.prefix?.trim();
       if (part) parts.unshift(part);
-      current = current.parent_id ? (orgMap.get(current.parent_id) ?? null) : null;
+      current = inheritParentPrefix && current.parent_id
+        ? (orgMap.get(current.parent_id) ?? null)
+        : null;
     }
     return parts.join("");
   };
 
   // 預覽字號格式（依組織樹由上到下組合本層前綴）
   const preview = (() => {
-    const pfx = form.org_id ? getHierarchicalPrefix(form.org_id) || "○○" : "○○";
+    const pfx = form.org_id
+      ? getHierarchicalPrefix(form.org_id, form.inherit_parent_prefix) || "○○"
+      : "○○";
     const cat = form.category_char || "?";
     const year = form.year_mode === "roc"
       ? `${new Date().getFullYear() - 1911}`
@@ -250,6 +257,25 @@ export default function SerialTemplatesPage() {
                   {canManageOrg
                     ? "只設定這一層，系統會自動接上上層前綴"
                     : "本層前綴由組織管理員設定，系統會自動接上上層前綴"}
+                </p>
+              </div>
+            )}
+
+            {form.org_id && (
+              <div className="flex flex-col justify-end">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.inherit_parent_prefix}
+                    onChange={e => setForm(p => ({ ...p, inherit_parent_prefix: e.target.checked }))}
+                    className="accent-blue-600 w-4 h-4"
+                  />
+                  <span className="text-sm">沿用上級組織前綴</span>
+                </label>
+                <p className="text-[10px] mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
+                  {form.inherit_parent_prefix
+                    ? "字號會依組織階層串接上級前綴"
+                    : "僅使用本組織前綴，適用於不隸屬上級的單位"}
                 </p>
               </div>
             )}
@@ -416,6 +442,7 @@ function TemplateCard({
   const [editDesc, setEditDesc] = useState(t.description ?? "");
   const [editYearMode, setEditYearMode] = useState<"roc" | "ce">(t.year_mode as "roc" | "ce");
   const [editReset, setEditReset] = useState(t.reset_on_new_year);
+  const [editInheritParentPrefix, setEditInheritParentPrefix] = useState(t.inherit_parent_prefix);
   const [editDefault, setEditDefault] = useState(t.is_default);
   const [editPresidentDefault, setEditPresidentDefault] = useState(t.is_default_president_publish);
   const [saving, setSaving] = useState(false);
@@ -427,6 +454,7 @@ function TemplateCard({
         description: editDesc || null,
         year_mode: editYearMode,
         reset_on_new_year: editReset,
+        inherit_parent_prefix: editInheritParentPrefix,
         is_default: editDefault,
         is_default_president_publish: editPresidentDefault,
       });
@@ -528,6 +556,16 @@ function TemplateCard({
                 <input type="checkbox" checked={editReset}
                   onChange={e => setEditReset(e.target.checked)} />
                 <span className="text-sm">每年重置流水號</span>
+              </label>
+            </div>
+            <div className="flex items-end pb-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editInheritParentPrefix}
+                  onChange={e => setEditInheritParentPrefix(e.target.checked)}
+                />
+                <span className="text-sm">沿用上級組織前綴</span>
               </label>
             </div>
             <label className="flex items-start gap-2 cursor-pointer rounded-lg px-3 py-2"

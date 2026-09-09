@@ -4083,7 +4083,7 @@ export interface paths {
         head?: never;
         /**
          * 更新字號模板（需 serial:create 或 admin:all，限本組織）
-         * @description 更新字號模板的描述、年份制度或重置設定。
+         * @description 更新字號模板的設定，並可調整是否串接上級組織前綴。
          */
         patch: operations["update_serial_template_document_serial_templates__template_id__patch"];
         trace?: never;
@@ -35759,10 +35759,11 @@ export interface components {
         /**
          * SerialTemplateCreate
          * @description 建立字號模板（需 serial:create 權限）。
-         *     org_prefix 由系統沿組織樹逐層組合 Org.prefix，使用者只需填入分類字元（細別）。
+         *     可選擇是否沿組織樹組合 Org.prefix，使用者只需填入分類字元（細別）。
          * @example {
          *       "category_char": "生",
          *       "description": "學生生活輔導類公文",
+         *       "inherit_parent_prefix": true,
          *       "is_default": true,
          *       "is_default_president_publish": false,
          *       "org_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -35781,6 +35782,12 @@ export interface components {
              * @description 模板說明（如：學生生活輔導類公文）
              */
             description?: string | null;
+            /**
+             * Inherit Parent Prefix
+             * @description 是否串接上級組織的字號前綴
+             * @default true
+             */
+            inherit_parent_prefix: boolean;
             /**
              * Is Default
              * @description 是否設為組織預設字號模板
@@ -35839,6 +35846,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Inherit Parent Prefix */
+            inherit_parent_prefix: boolean;
             /** Is Active */
             is_active: boolean;
             /** Is Default */
@@ -35863,11 +35872,13 @@ export interface components {
         };
         /**
          * SerialTemplateUpdate
-         * @description 更新字號模板（僅可修改說明與狀態）
+         * @description 更新字號模板設定。
          */
         SerialTemplateUpdate: {
             /** Description */
             description?: string | null;
+            /** Inherit Parent Prefix */
+            inherit_parent_prefix?: boolean | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Is Default */
