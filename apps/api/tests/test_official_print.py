@@ -358,3 +358,44 @@ async def test_meeting_notice_seal_stays_on_one_page_with_handwritten_font() -> 
     assert "text-align: center;" in rendered
     assert "white-space: nowrap" in rendered
     assert len(PdfReader(BytesIO(pdf)).pages) == 1
+
+
+@pytest.mark.asyncio
+async def test_document_print_flows_long_description_on_first_page() -> None:
+    """長篇說明應從第一頁的剩餘空間開始排版，而非整段移至下一頁。"""
+    council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
+    description = "\n".join(
+        f"{index}、起始段落測試內容" + "，用以驗證公文說明區塊可以自然跨頁。" * 8
+        for index in range(1, 9)
+    )
+    doc = SimpleNamespace(
+        category="letter",
+        issuer_full_name=None,
+        org=council,
+        org_id="council",
+        title="國立新竹高級中學班聯會函",
+        urgency="normal",
+        classification="normal",
+        declassification_condition="none",
+        recipients=[SimpleNamespace(recipient_type="main", name="圖書館")],
+        attachments=[],
+        issued_at=None,
+        completed_at=None,
+        created_at=None,
+        serial_number="嶺班學陳字第1150000003號",
+        approvals=[],
+        handler_name="黃丞廷",
+        handler_unit="主席",
+        handler_email="ted981026@gmail.com",
+        subject="有關學生建議本校圖書館評估導入電子書借閱服務一案，請查照。",
+        content=None,
+        doc_description=description,
+        action_required="敬請圖書館評估相關方案，並函復本會。",
+        visibility_level="private",
+    )
+
+    rendered = await render_document_print_html(_OrgSession(council), doc)
+    pdf = render_print_pdf(rendered)
+
+    first_page_text = PdfReader(BytesIO(pdf)).pages[0].extract_text()
+    assert "起始段落測試內容" in first_page_text
