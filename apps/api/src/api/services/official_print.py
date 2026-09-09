@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.clock import local_today
+from api.core.clock import TAIPEI, local_today
 from api.models.document import Document
 from api.models.org import Org, Position, UserPosition
 from api.models.regulation import Regulation
@@ -302,15 +302,16 @@ async def _position_title(
     *,
     user_id: object,
     org_id: object,
+    on_date: dt.date | None = None,
 ) -> str:
-    today = local_today()
+    title_date = on_date or local_today()
     result = await session.execute(
         select(Position.name)
         .join(UserPosition, UserPosition.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
-            UserPosition.start_date <= today,
-            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= today),
+            UserPosition.start_date <= title_date,
+            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= title_date),
             Position.org_id == org_id,
         )
         .order_by(Position.weight.desc())
@@ -343,16 +344,30 @@ async def _final_signature_html(
         )
 
     last = max(approved, key=lambda approval: approval.step_order)
+    decided_at = getattr(last, "decided_at", None)
+    decision_date = (
+        decided_at.astimezone(TAIPEI).date() if isinstance(decided_at, dt.datetime) else None
+    )
     if getattr(last, "is_acting", False) and last.delegate and last.approver:
         principal = last.approver
         delegate = last.delegate
         principal_title = (
-            await _position_title(session, user_id=principal.id, org_id=doc.org_id)
+            await _position_title(
+                session,
+                user_id=principal.id,
+                org_id=doc.org_id,
+                on_date=decision_date,
+            )
             if getattr(principal, "id", None)
             else ""
         ) or _esc(fallback_title)
         delegate_title = (
-            await _position_title(session, user_id=delegate.id, org_id=doc.org_id)
+            await _position_title(
+                session,
+                user_id=delegate.id,
+                org_id=doc.org_id,
+                on_date=decision_date,
+            )
             if getattr(delegate, "id", None)
             else ""
         ) or _esc(fallback_title)
@@ -367,7 +382,12 @@ async def _final_signature_html(
     signer = _esc(actor.display_name) if actor else ""
     if not signer or not getattr(actor, "id", None):
         return '<section class="signature signature-placeholder">（核准後用印）</section>'
-    title = await _position_title(session, user_id=actor.id, org_id=doc.org_id)
+    title = await _position_title(
+        session,
+        user_id=actor.id,
+        org_id=doc.org_id,
+        on_date=decision_date,
+    )
     title = title or _esc(fallback_title)
     return (
         '<section class="signature">'

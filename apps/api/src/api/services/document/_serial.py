@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import Boolean, bindparam, select, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,7 +46,12 @@ async def generate_serial_from_template(
     )
 
 
-async def build_org_serial_prefix(session: AsyncSession, org_id: uuid.UUID) -> str:
+async def build_org_serial_prefix(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    *,
+    inherit_parent_prefix: bool = True,
+) -> str:
     result = await session.execute(
         text("""
         WITH RECURSIVE org_path AS (
@@ -57,11 +62,19 @@ async def build_org_serial_prefix(session: AsyncSession, org_id: uuid.UUID) -> s
             SELECT o.id, o.parent_id, o.prefix, o.name, org_path.depth + 1
             FROM orgs o
             JOIN org_path ON o.id = org_path.parent_id
+            WHERE :inherit_parent_prefix
         )
         SELECT prefix, name, depth
         FROM org_path
         ORDER BY depth DESC
-        """).bindparams(bindparam("org_id", value=org_id, type_=PGUUID(as_uuid=True))),
+        """).bindparams(
+            bindparam("org_id", value=org_id, type_=PGUUID(as_uuid=True)),
+            bindparam(
+                "inherit_parent_prefix",
+                value=inherit_parent_prefix,
+                type_=Boolean,
+            ),
+        ),
     )
     rows = result.all()
     if not rows:
@@ -84,7 +97,11 @@ async def create_serial_template(
     data: SerialTemplateCreate,
     created_by: uuid.UUID,
 ) -> DocumentSerialTemplate:
-    prefix = await build_org_serial_prefix(session, data.org_id)
+    prefix = await build_org_serial_prefix(
+        session,
+        data.org_id,
+        inherit_parent_prefix=data.inherit_parent_prefix,
+    )
     now = now_local()
     current_year = now.year - 1911 if data.year_mode == YearMode.ROC else now.year
 
@@ -94,6 +111,7 @@ async def create_serial_template(
         category_char=data.category_char,
         year_mode=data.year_mode,
         reset_on_new_year=data.reset_on_new_year,
+        inherit_parent_prefix=data.inherit_parent_prefix,
         current_year=current_year,
         counter=0,
         is_active=True,
@@ -181,6 +199,28 @@ async def update_serial_template(
     *,
     updates: dict,
 ) -> DocumentSerialTemplate:
+    inherit_parent_prefix = updates.pop("inherit_parent_prefix", None)
+    if (
+        inherit_parent_prefix is not None
+        and inherit_parent_prefix != template.inherit_parent_prefix
+    ):
+        prefix = await build_org_serial_prefix(
+            session,
+            template.org_id,
+            inherit_parent_prefix=inherit_parent_prefix,
+        )
+        conflict = await session.scalar(
+            select(DocumentSerialTemplate.id).where(
+                DocumentSerialTemplate.org_id == template.org_id,
+                DocumentSerialTemplate.org_prefix == prefix,
+                DocumentSerialTemplate.category_char == template.category_char,
+                DocumentSerialTemplate.id != template.id,
+            )
+        )
+        if conflict is not None:
+            raise ValueError("變更繼承設定後會與既有字號模板重複")
+        template.inherit_parent_prefix = inherit_parent_prefix
+        template.org_prefix = prefix
     for field, value in updates.items():
         setattr(template, field, value)
     if not template.is_active:

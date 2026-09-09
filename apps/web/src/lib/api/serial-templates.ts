@@ -17,11 +17,13 @@ export const serialTemplatesApi = {
   create: (body: {
     org_id: string; category_char: string;
     year_mode?: "roc" | "ce"; reset_on_new_year?: boolean; description?: string;
+    inherit_parent_prefix?: boolean;
     is_default?: boolean; is_default_president_publish?: boolean;
   }) => post<SerialTemplateOut>("/document-serial-templates", body),
   update: (id: string, body: {
     description?: string | null; is_active?: boolean;
     reset_on_new_year?: boolean; year_mode?: "roc" | "ce";
+    inherit_parent_prefix?: boolean;
     is_default?: boolean; is_default_president_publish?: boolean;
   }) => patch<SerialTemplateOut>(`/document-serial-templates/${id}`, body),
   deactivate: (id: string) => del<void>(`/document-serial-templates/${id}`),

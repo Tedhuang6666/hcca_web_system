@@ -159,6 +159,47 @@ async def test_decree_signature_falls_back_to_chair_title() -> None:
     assert "設計部" not in signature
 
 
+@pytest.mark.asyncio
+async def test_final_signature_uses_approver_position_on_decision_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    decision_at = official_print.dt.datetime(2026, 8, 31, 18, tzinfo=official_print.dt.UTC)
+    approver = SimpleNamespace(id="approver", display_name="王小明")
+    doc = SimpleNamespace(
+        org_id="design",
+        approvals=[
+            SimpleNamespace(
+                status="approved",
+                step_order=1,
+                approver=approver,
+                delegate=None,
+                is_acting=False,
+                decided_at=decision_at,
+            )
+        ],
+    )
+    seen_dates: list[official_print.dt.date | None] = []
+
+    async def fake_position_title(
+        _session: object,
+        *,
+        user_id: object,
+        org_id: object,
+        on_date: official_print.dt.date | None = None,
+    ) -> str:
+        assert user_id == approver.id
+        assert org_id == doc.org_id
+        seen_dates.append(on_date)
+        return "設計長"
+
+    monkeypatch.setattr(official_print, "_position_title", fake_position_title)
+
+    signature = await _final_signature_html(SimpleNamespace(), doc)
+
+    assert "設計長" in signature
+    assert seen_dates == [official_print.dt.date(2026, 9, 1)]
+
+
 def test_decree_title_supports_different_authorities() -> None:
     issuer = "國立新竹高級中學班聯會"
 
