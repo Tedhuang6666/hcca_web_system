@@ -1034,10 +1034,11 @@ async def render_document_print_html(
       font-size: 14pt;
       line-height: 1.6;
     }}
-    .doc-section {{ margin: 5mm 0; break-inside: avoid; }}
+    .doc-section {{ margin: 5mm 0; break-inside: auto; }}
     .doc-section-label {{
       font-size: 16pt;
       line-height: 1.75;
+      break-after: avoid;
     }}
     .doc-section-body {{
       margin-top: 1mm;
