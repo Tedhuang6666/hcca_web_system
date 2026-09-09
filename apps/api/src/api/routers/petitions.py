@@ -28,7 +28,7 @@ from api.core.database import get_db
 from api.core.login_lockout import is_locked, record_failure, record_success
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
-from api.dependencies.auth import get_current_active_user, get_optional_user
+from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.notification import Notification
 from api.models.org import Position, UserPosition
@@ -45,6 +45,7 @@ from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.context import PetitionResolutionContextOut
 from api.schemas.petition import (
+    PetitionAdminCreate,
     PetitionAssignUpdate,
     PetitionAttachmentOut,
     PetitionCaseListItem,
@@ -65,6 +66,7 @@ from api.schemas.petition import (
     PetitionStatsOut,
     PetitionStatusUpdate,
     PetitionSubmitterOut,
+    PetitionSubmitterUpdate,
     PetitionSupplementCreate,
     PetitionTransferUpdate,
     PetitionTypeCreate,
@@ -91,7 +93,6 @@ logger = logging.getLogger(__name__)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
-OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 
 def _has_all_scope(codes: frozenset[str], user: User) -> bool:
@@ -661,6 +662,93 @@ async def delete_type(type_id: uuid.UUID, session: DbDep, user: CurrentUser) -> 
     await petition_svc.delete_type(session, petition_type)
 
 
+@router.post(
+    "/admin/cases",
+    response_model=PetitionCreatedOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="管理員代收其他管道的陳情",
+    dependencies=[Depends(require_any(PermissionCode.PETITION_ADMIN))],
+)
+async def create_admin_petition(
+    payload: PetitionAdminCreate,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionCreatedOut:
+    try:
+        case_obj, code, share_token = await petition_svc.create_admin_case(
+            session, data=payload, actor_id=user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await audit_svc.record(
+        session,
+        entity_type="petition_case",
+        entity_id=str(case_obj.id),
+        action="petition.create.external",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={
+            "case_number": case_obj.case_number,
+            "type_id": str(case_obj.type_id),
+            "contact_name": case_obj.contact_name,
+            "contact_email": case_obj.contact_email,
+        },
+        summary=f"管理員代收陳情案件 {case_obj.case_number}",
+    )
+    petition_type = await petition_svc.get_type(session, case_obj.type_id)
+    from api.services.discord_notification_routes import emit_routed_notification
+
+    try:
+        async with session.begin_nested():
+            await emit_routed_notification(
+                session,
+                event_key="petition.created",
+                module="petition",
+                title=f"新陳情案件 {case_obj.case_number}",
+                body=case_obj.title,
+                link=f"/petitions/{case_obj.id}",
+                petition_type_id=case_obj.type_id,
+                org_id=case_obj.current_org_id,
+                fields=[
+                    {
+                        "name": "分類",
+                        "value": petition_type.name if petition_type else "未分類",
+                        "inline": True,
+                    },
+                    {"name": "來源", "value": "管理員代收", "inline": True},
+                ],
+                thread_name=f"陳情討論：{case_obj.case_number}",
+            )
+            await enqueue_petition_private_channel(session, case_obj)
+    except Exception:
+        logger.warning("代收陳情可選 Discord 通知失敗，保留案件建立結果", exc_info=True)
+
+    await _notify_responsible(
+        session,
+        case_obj,
+        type="petition_received",
+        title=f"新陳情案件 {case_obj.case_number}",
+        body=case_obj.title,
+        link=f"/petitions/manage?case={case_obj.id}",
+        exclude_user_ids=(user.id,),
+    )
+    return PetitionCreatedOut(
+        id=case_obj.id,
+        case_number=case_obj.case_number,
+        verification_code=code,
+        share_token=share_token,
+        status=case_obj.status,
+        title=case_obj.title,
+        status_label=petition_svc.STATUS_LABELS[case_obj.status],
+        status_public_message=petition_svc.STATUS_MESSAGES[case_obj.status],
+        next_action=petition_svc.NEXT_ACTIONS[case_obj.status],
+        created_at=case_obj.created_at,
+    )
+
+
 @router.get(
     "/admin/notification-settings",
     response_model=PetitionNotificationSettingsOut,
@@ -806,6 +894,43 @@ async def list_manage_cases(
         offset=offset,
     )
     return [_decorate_list_item(c) for c in cases]
+
+
+@router.patch(
+    "/{case_id}/submitter",
+    response_model=PetitionCaseOut,
+    summary="登記尚未綁定帳號的陳情人",
+    dependencies=[Depends(require_any(PermissionCode.PETITION_ADMIN))],
+)
+async def update_case_submitter(
+    case_id: uuid.UUID,
+    payload: PetitionSubmitterUpdate,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionCaseOut:
+    case_obj = await _case_or_404(session, case_id)
+    await _assert_case_access(session, case_obj, user)
+    try:
+        case_obj = await petition_svc.update_submitter(
+            session, case_obj, data=payload, actor_id=user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await audit_svc.record(
+        session,
+        entity_type="petition_case",
+        entity_id=str(case_obj.id),
+        action="petition.submitter.update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={
+            "case_number": case_obj.case_number,
+            "contact_name": case_obj.contact_name,
+            "contact_email": case_obj.contact_email,
+        },
+        summary=f"登記陳情人 {case_obj.case_number}",
+    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.get("/stats", response_model=PetitionStatsOut, summary="陳情案件統計")

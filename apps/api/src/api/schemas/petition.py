@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from api.models.petition import (
     PetitionAttachmentVisibility,
@@ -50,6 +50,39 @@ class PetitionCreate(BaseModel):
     type_id: uuid.UUID
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1, max_length=10000)
+
+
+class PetitionAdminCreate(BaseModel):
+    """管理員代收其他管道陳情時建立案件。"""
+
+    type_id: uuid.UUID
+    contact_name: str = Field(..., min_length=1, max_length=100)
+    contact_email: EmailStr
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1, max_length=10000)
+
+    @field_validator("contact_name")
+    @classmethod
+    def strip_contact_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("陳情人姓名不可為空白")
+        return value
+
+
+class PetitionSubmitterUpdate(BaseModel):
+    """管理員補登尚未綁定平台帳號的外部陳情人。"""
+
+    contact_name: str = Field(..., min_length=1, max_length=100)
+    contact_email: EmailStr
+
+    @field_validator("contact_name")
+    @classmethod
+    def strip_contact_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("陳情人姓名不可為空白")
+        return value
 
 
 class PetitionCreatedOut(BaseModel):

@@ -10,7 +10,8 @@ from sqlalchemy import select
 
 from api.models.notification import Notification
 from api.models.org import Org, Permission, Position, UserPosition
-from api.models.petition import PetitionCaseEvent, PetitionType
+from api.models.outbox import OutboxEvent
+from api.models.petition import PetitionCase, PetitionCaseEvent, PetitionType
 from api.models.user import User
 from api.schemas.petition import PetitionCreate, PetitionStatusUpdate
 from api.services import petition as petition_svc
@@ -86,6 +87,116 @@ async def test_create_petition_without_login_returns_401(db_session, client) -> 
         },
     )
     assert resp.status_code == 401
+
+
+async def test_admin_can_create_external_petition_with_contact_email(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    response = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "校外陳情人",
+            "contact_email": "external@example.com",
+            "title": "校外管道反映的問題",
+            "content": "請協助將這件外部反映納入陳情流程。",
+        },
+    )
+
+    assert response.status_code == 201
+    case_obj = await db_session.scalar(
+        select(PetitionCase).where(PetitionCase.id == uuid.UUID(response.json()["id"]))
+    )
+    assert case_obj is not None
+    assert case_obj.submitter_id is None
+    assert case_obj.contact_name == "校外陳情人"
+    assert case_obj.contact_email == "external@example.com"
+    assert response.json()["status"] == "submitted"
+
+
+async def test_non_admin_cannot_create_external_petition(
+    db_session, authed_client_factory, member_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    response = await authed_client_factory(member_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "未授權使用者",
+            "contact_email": "external@example.com",
+            "title": "不應建立",
+            "content": "不應建立代收案件。",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+async def test_admin_can_register_external_submitter_on_unlinked_case(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    create_response = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "先前未登記",
+            "contact_email": "old@example.com",
+            "title": "補登陳情人測試",
+            "content": "案件先建立，之後再補登聯絡人。",
+        },
+    )
+    assert create_response.status_code == 201
+
+    response = await authed_client_factory(admin_user).patch(
+        f"/petitions/{create_response.json()['id']}/submitter",
+        json={
+            "contact_name": "補登後陳情人",
+            "contact_email": "registered@example.com",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["contact_name"] == "補登後陳情人"
+    assert body["contact_email"] == "registered@example.com"
+    assert body["submitter"]["contact_email"] == "registered@example.com"
+
+
+async def test_external_submitter_receives_status_email_event(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    create_response = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "外部收件人",
+            "contact_email": "notify@example.com",
+            "title": "外部信箱通知測試",
+            "content": "狀態更新時應寄送通知。",
+        },
+    )
+    assert create_response.status_code == 201
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+
+    response = await authed_client_factory(handler).patch(
+        f"/petitions/{create_response.json()['id']}/status",
+        json={"status": "rejected", "public_message": "資料不足，暫不受理。"},
+    )
+
+    assert response.status_code == 200
+    event = await db_session.scalar(
+        select(OutboxEvent)
+        .where(OutboxEvent.event_type == "petition.external_notify")
+        .order_by(OutboxEvent.created_at.desc())
+    )
+    assert event is not None
+    assert event.payload["contact_email"] == "notify@example.com"
 
 
 async def test_configured_petition_recipient_gets_new_case_notification(
@@ -233,9 +344,7 @@ async def test_list_public_types_hides_inactive(db_session, client) -> None:
 # ── 查詢 ──────────────────────────────────────────────────────────────────────
 
 
-async def test_lookup_case_with_correct_code_succeeds(
-    db_session, authed_client_factory
-) -> None:
+async def test_lookup_case_with_correct_code_succeeds(db_session, authed_client_factory) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
@@ -248,9 +357,7 @@ async def test_lookup_case_with_correct_code_succeeds(
     assert resp.json()["case_number"] == case_obj.case_number
 
 
-async def test_lookup_case_with_wrong_code_returns_404(
-    db_session, authed_client_factory
-) -> None:
+async def test_lookup_case_with_wrong_code_returns_404(db_session, authed_client_factory) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
@@ -262,9 +369,7 @@ async def test_lookup_case_with_wrong_code_returns_404(
     assert resp.status_code == 404
 
 
-async def test_lookup_case_by_share_token_succeeds(
-    db_session, authed_client_factory
-) -> None:
+async def test_lookup_case_by_share_token_succeeds(db_session, authed_client_factory) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     data = PetitionCreate(

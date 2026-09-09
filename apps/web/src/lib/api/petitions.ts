@@ -1,5 +1,6 @@
 import type {
-  PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut, PetitionStatsOut, PetitionStatus, PetitionTypeOut,
+  PetitionAdminCreate, PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
+  PetitionStatsOut, PetitionStatus, PetitionSubmitterUpdate, PetitionTypeOut,
   PetitionPublicListItem, PetitionPublicOut,
   PetitionNotificationRuleCreate, PetitionNotificationRuleOut, PetitionNotificationRuleUpdate,
   PetitionNotificationSettingsOut, PetitionNotificationSettingsUpdate,
@@ -45,6 +46,8 @@ export const petitionsApi = {
     sort_order: number;
   }>) => patch<PetitionTypeOut>(`/petitions/admin/types/${id}`, body),
   deleteType: (id: string) => del<void>(`/petitions/admin/types/${id}`),
+  createAdminCase: (body: PetitionAdminCreate) =>
+    post<PetitionCreatedOut>("/petitions/admin/cases", body),
   getNotificationSettings: () =>
     get<PetitionNotificationSettingsOut>("/petitions/admin/notification-settings"),
   updateNotificationSettings: (body: PetitionNotificationSettingsUpdate) =>
@@ -88,6 +91,8 @@ export const petitionsApi = {
     patch<PetitionCaseOut>(`/petitions/${id}/content`, body),
   assignableUsers: (id: string) =>
     get<{ id: string; display_name: string; email: string }[]>(`/petitions/${id}/assignable-users`),
+  updateSubmitter: (id: string, body: PetitionSubmitterUpdate) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/submitter`, body),
   supplement: (id: string, body: { content: string; verification_code?: string | null }) =>
     post<PetitionCaseOut>(`/petitions/${id}/supplement`, body),
   assign: (id: string, body: { assigned_to_id: string; internal_note?: string | null }) =>
