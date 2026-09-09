@@ -336,7 +336,7 @@ export default function EditDocumentPage() {
       issuer_address: issuerAddress || undefined,
       subject: category === "decree" ? null : subject || undefined,
       summary: summary || undefined,
-      basis: category === "announcement" ? basis || undefined : undefined,
+      basis: category === "announcement" ? basis || null : undefined,
       doc_description: docDescription || undefined,
       action_required: category === "decree" ? null : actionRequired || undefined,
       meeting_purpose: (category === "meeting_notice" || category === "inspection_notice") ? meetingPurpose || undefined : undefined,
@@ -700,7 +700,7 @@ export default function EditDocumentPage() {
             )}
             {category === "announcement" && (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>依據 *</label>
+                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>依據</label>
                 <GongwenEditor value={basis} onChange={setBasis} minRows={3} placeholder="依據法規、會議決議或相關文件。" />
               </div>
             )}

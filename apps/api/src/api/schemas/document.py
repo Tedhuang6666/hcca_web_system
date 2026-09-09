@@ -253,8 +253,6 @@ class DocumentTemplateBase(BaseModel):
             raise ValueError("紀錄範本需填寫討論事項與決議")
         if self.category == DocumentCategory.DECREE and not (self.issuer_full_name or "").strip():
             self.issuer_full_name = "主席"
-        if self.category == DocumentCategory.ANNOUNCEMENT and not (self.basis or "").strip():
-            raise ValueError("公告範本需填寫依據")
         if (
             self.classification == DocumentClassification.NORMAL
             and self.declassification_condition != DeclassificationCondition.NONE
@@ -611,7 +609,7 @@ class DocumentCreate(BaseModel):
     category: DocumentCategory = Field(DocumentCategory.LETTER, description="公文類別")
     subject: str | None = Field(None, max_length=500, description="主旨")
     summary: str | None = Field(None, max_length=500, description="列表摘要（可選）")
-    basis: str | None = Field(None, description="依據（公告必填）")
+    basis: str | None = Field(None, description="依據（選填）")
     doc_description: str | None = Field(None, description="說明（詳細事由、依據）")
     action_required: str | None = Field(None, description="辦法（具體行動或執行方式）")
     content: str = Field(default="", description="整合性內容（Markdown）")
@@ -697,9 +695,6 @@ class DocumentCreate(BaseModel):
                 raise ValueError("主旨為必填且不可為空白")
             if self.subject and len(self.subject.strip()) < 8:
                 raise ValueError("主旨長度過短，請使用正式句式")
-        if self.category == DocumentCategory.ANNOUNCEMENT and not (self.basis or "").strip():
-            raise ValueError("公告需填寫依據")
-
         if self.classification == DocumentClassification.NORMAL:
             if self.declassification_condition != DeclassificationCondition.NONE:
                 raise ValueError("普通公文不可設定解密條件")
