@@ -15,6 +15,7 @@ from sqlalchemy.orm import load_only, selectinload
 from api.core.clock import local_today, roc_year
 from api.core.config import settings
 from api.core.database import advisory_xact_lock
+from api.core.permission_codes import PermissionCode
 from api.models.org import Org, Position, UserPosition
 from api.models.petition import (
     PetitionAttachment,
@@ -48,7 +49,11 @@ from api.schemas.petition import (
     PetitionTypeUpdate,
 )
 from api.services._base import apply_updates
-from api.services.permission import active_tenure_filter
+from api.services.permission import (
+    active_tenure_filter,
+    get_user_org_ids_with_permission,
+    get_user_permission_codes,
+)
 
 STATUS_LABELS: dict[PetitionStatus, str] = {
     PetitionStatus.SUBMITTED: "已收件",
@@ -77,6 +82,30 @@ PUBLIC_EVENT_EDIT_WINDOW = timedelta(hours=3)
 
 def can_edit_content(case_obj: PetitionCase) -> bool:
     return case_obj.status == PetitionStatus.SUBMITTED
+
+
+async def can_view_case(session: AsyncSession, case_obj: PetitionCase, user: User) -> bool:
+    """檢查使用者是否可將案件內容用於其他受保護的業務流程。"""
+    codes = await get_user_permission_codes(session, user.id)
+    if case_obj.submitter_id == user.id:
+        return True
+    if user.is_superuser or {
+        str(PermissionCode.ADMIN_ALL),
+        str(PermissionCode.PETITION_ADMIN),
+        str(PermissionCode.PETITION_VIEW_ALL),
+    } & set(codes):
+        return True
+
+    org_ids: set[uuid.UUID] = set()
+    for permission in (
+        PermissionCode.PETITION_VIEW_ORG,
+        PermissionCode.PETITION_ASSIGN,
+        PermissionCode.PETITION_HANDLE,
+        PermissionCode.PETITION_TRANSFER,
+        PermissionCode.PETITION_ANALYTICS_ORG,
+    ):
+        org_ids.update(await get_user_org_ids_with_permission(session, user.id, str(permission)))
+    return case_obj.current_org_id in org_ids
 
 
 NEXT_ACTIONS: dict[PetitionStatus, str] = {

@@ -125,6 +125,7 @@ class PetitionEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    related_document_id: uuid.UUID | None = None
     event_type: PetitionEventType
     visibility: PetitionEventVisibility
     actor_id: uuid.UUID | None

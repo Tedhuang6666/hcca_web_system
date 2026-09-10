@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     BigInteger,
@@ -212,6 +212,12 @@ class PetitionCaseEvent(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    related_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     event_type: Mapped[PetitionEventType] = mapped_column(
         Enum(
             PetitionEventType,
@@ -246,6 +252,9 @@ class PetitionCaseEvent(Base, TimestampMixin):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     case: Mapped[PetitionCase] = relationship("PetitionCase", back_populates="events")
+    related_document: Mapped[Any | None] = relationship(
+        "Document", foreign_keys=[related_document_id]
+    )
     actor: Mapped[User | None] = relationship("User", foreign_keys=[actor_id])
     from_org: Mapped[Org | None] = relationship("Org", foreign_keys=[from_org_id])
     to_org: Mapped[Org | None] = relationship("Org", foreign_keys=[to_org_id])

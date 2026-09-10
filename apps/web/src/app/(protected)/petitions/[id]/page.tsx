@@ -161,6 +161,15 @@ export default function PetitionDetailPage() {
             <div key={event.id} className="pl-4 py-1" style={{ borderLeft: "2px solid var(--border)" }}>
               <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{event.title}</p>
               {event.content && <p className="text-sm whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
+              {event.related_document_id && (
+                <Link
+                  href={`/documents/${event.related_document_id}`}
+                  className="mt-2 inline-flex text-xs font-medium hover:underline"
+                  style={{ color: "var(--primary-text)" }}
+                >
+                  查看關聯公文
+                </Link>
+              )}
               <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)}</p>
             </div>
           ))}

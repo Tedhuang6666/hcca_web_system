@@ -56,6 +56,7 @@ from api.schemas.document import (
     DocumentCreate,
     DocumentListItem,
     DocumentOut,
+    DocumentPetitionLinkUpdate,
     DocumentUpdate,
     DocumentVisibilityUpdate,
     RecipientCreate,
@@ -65,6 +66,7 @@ from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import context as context_svc
 from api.services import document as doc_svc
+from api.services import petition as petition_svc
 from api.services.document._access import decode_document_cursor, encode_document_cursor
 from api.services.permission import (
     get_user_permission_codes,
@@ -215,6 +217,14 @@ async def create_document(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="您在此組織或活動下無草擬公文的權限（需 document:draft/document:create 或活動總召）",
             )
+    if payload.petition_case_id is not None:
+        case_obj = await petition_svc.get_case(session, payload.petition_case_id)
+        if case_obj is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="找不到陳情案件"
+            )
+        if not await petition_svc.can_view_case(session, case_obj, current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權關聯此陳情案件")
     try:
         doc = await doc_svc.create_document(session, data=payload, created_by=current_user.id)
     except ValueError as e:
@@ -383,6 +393,14 @@ async def update_document_visibility(
     current_user: CurrentUser,
 ) -> Document:
     doc = await _get_doc_or_404(doc_id, session)
+    if doc.petition_case_id is not None and payload.visibility_level in {
+        DocumentVisibility.PUBLIC,
+        DocumentVisibility.PUBLICLY_OPEN,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="關聯陳情原文的公文不可設為公開",
+        )
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
         is_activity_manager = await activity_svc.can_manage_activity_resource(
@@ -418,6 +436,66 @@ async def update_document_visibility(
         summary=f"調整公文「{updated.title}」可見度為 {updated.visibility_level.value}",
     )
     await _attach_approval_titles(session, updated)
+    return updated
+
+
+@router.put(
+    "/{doc_id}/petition-link",
+    response_model=DocumentOut,
+    summary="連結公文與陳情案件",
+)
+async def update_document_petition_link(
+    doc_id: str,
+    payload: DocumentPetitionLinkUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> Document:
+    doc = await _get_doc_or_404(doc_id, session)
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or "document:admin" in codes
+            or {"document:draft", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權更新公文關聯")
+    if payload.petition_case_id is not None:
+        case_obj = await petition_svc.get_case(session, payload.petition_case_id)
+        if case_obj is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="找不到陳情案件"
+            )
+        if not await petition_svc.can_view_case(session, case_obj, current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權關聯此陳情案件")
+    try:
+        updated = await doc_svc.link_document_to_petition(
+            session,
+            doc,
+            petition_case_id=payload.petition_case_id,
+            linked_by=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(updated.id),
+        action="petition.link",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "petition_case_id": str(payload.petition_case_id) if payload.petition_case_id else None
+        },
+        summary=f"更新公文「{updated.title}」的陳情關聯",
+    )
     return updated
 
 

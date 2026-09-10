@@ -37,6 +37,11 @@ export const documentsApi = {
       method: "PUT",
       body: JSON.stringify({ visibility_level }),
     }),
+  updatePetitionLink: (id: string, petition_case_id: string | null) =>
+    request<DocumentOut>(`/documents/${id}/petition-link`, {
+      method: "PUT",
+      body: JSON.stringify({ petition_case_id }),
+    }),
   delete: (id: string) => del<void>(`/documents/${id}`),
   submit: (id: string, approver_ids: string[]) =>
     post<DocumentOut>(`/documents/${id}/submit`, { approver_ids }),

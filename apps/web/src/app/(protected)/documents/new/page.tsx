@@ -18,6 +18,7 @@ import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/com
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { RecipientSearch, type RecipientDraft } from "@/components/documents/RecipientSearch";
 import { OrganizationEmailRecipientSettings } from "@/components/documents/OrganizationEmailRecipientSettings";
+import { PetitionLinkSelector, type PetitionLinkOption } from "@/components/documents/PetitionLinkSelector";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import {
@@ -80,6 +81,7 @@ type DocumentDraft = {
   pendingLinks: LinkDraft[];
   newLink: LinkDraftInput;
   selectedTemplateId: string;
+  selectedPetition: PetitionLinkOption | null;
 };
 
 type LinkDraftInput = {
@@ -418,6 +420,7 @@ export default function NewDocumentPage() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedPetition, setSelectedPetition] = useState<PetitionLinkOption | null>(null);
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
 
   const fieldError = {
@@ -502,6 +505,7 @@ export default function NewDocumentPage() {
     pendingLinks,
     newLink,
     selectedTemplateId,
+    selectedPetition,
   }), [
     actionRequired,
     activityId,
@@ -529,6 +533,7 @@ export default function NewDocumentPage() {
     recipients,
     selectedOrgId,
     selectedTemplateId,
+    selectedPetition,
     showEmail,
     sourceDocumentDate,
     sourceDocumentNumber,
@@ -575,6 +580,7 @@ export default function NewDocumentPage() {
     setPendingLinks(draft.pendingLinks ?? []);
     setNewLink(draft.newLink ?? { url: "", display_text: "" });
     setSelectedTemplateId(draft.selectedTemplateId ?? "");
+    setSelectedPetition(draft.selectedPetition ?? null);
     toast.info("已復原未儲存的公文草稿");
   }, []);
   const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
@@ -595,6 +601,7 @@ export default function NewDocumentPage() {
       && (draft.pendingLinks ?? []).length === 0
       && !(draft.newLink?.url ?? "").trim()
       && !(draft.newLink?.display_text ?? "").trim()
+      && !draft.selectedPetition
     ), []),
   });
   const restoreFileDraft = useCallback((files: File[]) => {
@@ -739,6 +746,7 @@ export default function NewDocumentPage() {
         visibility_level: visibilityLevel,
         org_id: selectedOrgId,
         activity_id: activityId || null,
+        petition_case_id: selectedPetition?.id ?? null,
         recipients: recipients.map((r) => ({
           recipient_type: r.recipient_type,
           name: r.name,
@@ -1155,6 +1163,9 @@ export default function NewDocumentPage() {
 
           {/* 受文者 / 出席者 */}
           <GuidedFormStep step={2} activeStep={activeStep} className="space-y-4">
+          <FormSection title="關聯陳情">
+            <PetitionLinkSelector selected={selectedPetition} onSelect={setSelectedPetition} />
+          </FormSection>
           {!isDecree && (
           <FormSection title={
             isNotice

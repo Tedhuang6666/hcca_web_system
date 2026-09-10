@@ -20,6 +20,7 @@ import { recordRecent } from "@/lib/recents";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { PetitionLinkSelector, type PetitionLinkOption } from "@/components/documents/PetitionLinkSelector";
 
 const DeferredPanel = () => <div className="card min-h-24 animate-pulse" aria-hidden="true" />;
 const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
@@ -208,6 +209,7 @@ export default function DocumentDetailPageClient({
   const [dispatchEmail, setDispatchEmail] = useState("");
   const [dispatchName, setDispatchName] = useState("");
   const [dispatchBusy, setDispatchBusy] = useState(false);
+  const [petitionLinkBusy, setPetitionLinkBusy] = useState(false);
   const initialFetchRef = useRef(true);
   const { can, isAdmin } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
@@ -326,6 +328,21 @@ export default function DocumentDetailPageClient({
       toast.error(apiErrorMessage(e, "可見度更新失敗"));
     } finally {
       setVisibilityBusy(false);
+    }
+  };
+
+  const handlePetitionLinkChange = async (petition: PetitionLinkOption | null) => {
+    if (!doc) return;
+    setPetitionLinkBusy(true);
+    try {
+      const updated = await documentsApi.updatePetitionLink(doc.id, petition?.id ?? null);
+      setDoc({ ...updated, archive_at: updated.archive_at ?? doc.archive_at });
+      toast.success(petition ? "已關聯陳情案件" : "已解除陳情關聯");
+      router.refresh();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新陳情關聯失敗"));
+    } finally {
+      setPetitionLinkBusy(false);
     }
   };
 
@@ -502,6 +519,11 @@ export default function DocumentDetailPageClient({
     || can("document:admin")
     || can("document:view_all")
     || can("document:edit")
+    || can("document:create");
+  const canManagePetitionLink = isCreator
+    || isAdmin
+    || can("document:edit")
+    || can("document:admin")
     || can("document:create");
   const canResendEmail = doc.status === "approved" && (
     isCreator || isAdmin || can("document:edit") || can("document:admin") || can("document:create")
@@ -1252,6 +1274,21 @@ export default function DocumentDetailPageClient({
               >
                 查看法規
               </Link>
+            </div>
+          )}
+
+          {canManagePetitionLink && (
+            <div className="card p-4">
+              <PetitionLinkSelector
+                selected={doc.petition_case ? {
+                  id: doc.petition_case.id,
+                  case_number: doc.petition_case.case_number,
+                  title: doc.petition_case.title,
+                  status: String(doc.petition_case.status),
+                } : null}
+                onSelect={(petition) => { void handlePetitionLinkChange(petition); }}
+                disabled={petitionLinkBusy}
+              />
             </div>
           )}
 
