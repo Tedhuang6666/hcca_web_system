@@ -473,6 +473,17 @@ class DocumentApprovalDelegationOut(BaseModel):
 # ── 公文詳細輸出 ───────────────────────────────────────────────────────────────
 
 
+class DocumentPetitionOut(BaseModel):
+    """公文上顯示的關聯陳情摘要；不含陳情人個資與原文。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    case_number: str
+    title: str
+    status: str
+
+
 class DocumentOut(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,
@@ -544,6 +555,8 @@ class DocumentOut(BaseModel):
     # 關聯
     org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
+    petition_case_id: uuid.UUID | None = None
+    petition_case: DocumentPetitionOut | None = None
     created_by: uuid.UUID
     serial_template_id: uuid.UUID | None = None
     regulation_id: uuid.UUID | None = None  # 此令所公布的法規（僅令類公文）
@@ -615,6 +628,10 @@ class DocumentCreate(BaseModel):
     issuer_address: str | None = Field(None, max_length=300, description="機關地址")
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
     activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
+    petition_case_id: uuid.UUID | None = Field(
+        None,
+        description="關聯陳情案件 ID；正式列印與寄送時會將陳情原文附於文後",
+    )
     # 字號模板（None 則使用通用格式 DOC-YYYY-NNNNNN）
     serial_template_id: uuid.UUID | None = Field(
         None, description="字號模板 ID（由長官以 doc.issue 權限建立）"
@@ -791,6 +808,13 @@ class DocumentUpdate(BaseModel):
         ):
             raise ValueError("選擇自動解密時必須提供保密期限訖日")
         return self
+
+
+class DocumentPetitionLinkUpdate(BaseModel):
+    petition_case_id: uuid.UUID | None = Field(
+        None,
+        description="關聯陳情案件 ID；傳 null 可解除後續關聯",
+    )
 
 
 class DocumentVisibilityUpdate(BaseModel):

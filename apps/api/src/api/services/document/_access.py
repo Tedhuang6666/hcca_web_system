@@ -84,6 +84,7 @@ def _doc_query_for_list():
 def _doc_query_with_relations():
     return select(Document).options(
         selectinload(Document.org),
+        selectinload(Document.petition_case),
         selectinload(Document.revisions),
         selectinload(Document.approvals).selectinload(DocumentApproval.approver),
         selectinload(Document.approvals).selectinload(DocumentApproval.delegate),
@@ -98,6 +99,7 @@ def _doc_query_with_relations():
 def _doc_query_for_detail():
     """公文詳情專用查詢，只載入 DocumentOut 與存取檢查真正需要的關聯。"""
     return select(Document).options(
+        selectinload(Document.petition_case),
         selectinload(Document.revisions),
         selectinload(Document.approvals).joinedload(DocumentApproval.approver),
         selectinload(Document.approvals).joinedload(DocumentApproval.delegate),

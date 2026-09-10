@@ -515,6 +515,13 @@ class Document(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    # 關聯的陳情案件；列印與寄送正式公文時會將陳情原文附於文後。
+    petition_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("petition_cases.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -557,6 +564,9 @@ class Document(Base, TimestampMixin):
     # ── Relationships ────────────────────────────────────────────────────────
     org: Mapped[Org] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")
+    petition_case: Mapped[Any | None] = relationship(
+        "PetitionCase", foreign_keys=[petition_case_id]
+    )
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
     regulation: Mapped[Any] = relationship("Regulation", foreign_keys=[regulation_id])
     regulation_revision: Mapped[Any] = relationship(

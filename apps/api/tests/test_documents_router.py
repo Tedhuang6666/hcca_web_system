@@ -19,6 +19,7 @@ from api.models.document import (
     DocumentVisibility,
 )
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.petition import PetitionCase, PetitionCaseEvent, PetitionType
 from api.models.user import User
 
 
@@ -527,6 +528,78 @@ async def test_update_visibility_by_unrelated_user_returns_403(
         f"/documents/{doc.id}/visibility",
         json={"visibility_level": DocumentVisibility.PUBLICLY_OPEN.value},
     )
+
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_link_previously_issued_document_to_petition_by_creator_succeeds(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"補登關聯組織-{uuid.uuid4().hex[:6]}")
+    creator = User(
+        email="petition-link-creator@example.com", display_name="Creator", is_active=True
+    )
+    db_session.add_all([org, creator])
+    await db_session.flush()
+
+    petition_type = PetitionType(
+        name=f"陳情類型-{uuid.uuid4().hex[:8]}",
+        responsible_org_id=org.id,
+    )
+    case_obj = PetitionCase(
+        case_number=f"{uuid.uuid4().int % 10**7:07d}",
+        verification_code_hash="verification-code-hash",
+        share_token_hash="share-token-hash",
+        type=petition_type,
+        current_org_id=org.id,
+        submitter_id=creator.id,
+        title="校園設施改善建議",
+        content="請評估改善校園設施。",
+        submitted_at=datetime.now(UTC),
+    )
+    doc = _make_doc(
+        org,
+        creator,
+        status=DocumentStatus.APPROVED,
+        issued_at=datetime.now(UTC) - timedelta(days=1),
+    )
+    db_session.add_all([case_obj, doc])
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, creator)
+    resp = await ac.put(
+        f"/documents/{doc.id}/petition-link",
+        json={"petition_case_id": str(case_obj.id)},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["petition_case_id"] == str(case_obj.id)
+    event = await db_session.scalar(
+        select(PetitionCaseEvent).where(PetitionCaseEvent.related_document_id == doc.id)
+    )
+    assert event is not None
+    assert event.case_id == case_obj.id
+
+
+@pytest.mark.asyncio
+async def test_link_document_to_petition_by_unrelated_user_returns_403(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"關聯拒絕組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="petition-link-owner@example.com", display_name="Creator", is_active=True)
+    stranger = User(
+        email="petition-link-stranger@example.com", display_name="Stranger", is_active=True
+    )
+    db_session.add_all([org, creator, stranger])
+    await db_session.flush()
+
+    doc = _make_doc(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, stranger)
+    resp = await ac.put(f"/documents/{doc.id}/petition-link", json={"petition_case_id": None})
 
     assert resp.status_code == 403
 

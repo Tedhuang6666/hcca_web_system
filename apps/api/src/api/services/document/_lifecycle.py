@@ -28,6 +28,12 @@ from api.models.document import (
     RecipientType,
 )
 from api.models.org import Org, Position
+from api.models.petition import (
+    PetitionCase,
+    PetitionCaseEvent,
+    PetitionEventType,
+    PetitionEventVisibility,
+)
 from api.models.school_class import SchoolClass
 from api.models.user import User
 from api.schemas.document import (
@@ -56,6 +62,89 @@ from api.services.permission import active_tenure_filter
 logger = logging.getLogger(__name__)
 
 PRIMARY_RECIPIENT_TYPES = frozenset({RecipientType.MAIN, RecipientType.PRIMARY})
+
+
+async def _record_petition_document_issued(
+    session: AsyncSession,
+    doc: Document,
+    *,
+    actor_id: uuid.UUID,
+) -> None:
+    """在首次正式發文時寫入可追溯、且不重複的陳情處理歷程。"""
+    if doc.petition_case_id is None:
+        return
+
+    case_obj = await session.get(PetitionCase, doc.petition_case_id)
+    if case_obj is None:
+        return
+    existing = await session.scalar(
+        select(PetitionCaseEvent.id).where(
+            PetitionCaseEvent.case_id == case_obj.id,
+            PetitionCaseEvent.related_document_id == doc.id,
+        )
+    )
+    if existing is not None:
+        return
+
+    recipient_rows = await session.execute(
+        select(DocumentRecipient.name)
+        .where(
+            DocumentRecipient.document_id == doc.id,
+            DocumentRecipient.recipient_type.in_(PRIMARY_RECIPIENT_TYPES),
+        )
+        .order_by(DocumentRecipient.created_at)
+    )
+    recipient_names = list(dict.fromkeys(name for name in recipient_rows.scalars() if name))
+    recipient_text = "、".join(recipient_names) or "相關處室"
+    document_text = (
+        f"「{doc.serial_number}」號公文"
+        if not doc.serial_number.startswith("DRAFT-")
+        else "本會公文"
+    )
+    session.add(
+        PetitionCaseEvent(
+            case_id=case_obj.id,
+            related_document_id=doc.id,
+            event_type=PetitionEventType.NOTE,
+            visibility=PetitionEventVisibility.PUBLIC,
+            actor_id=actor_id,
+            title=f"已函請{recipient_text}處理",
+            content=f"經本會{document_text}函請{recipient_text}處理後妥復。",
+        )
+    )
+    await session.flush()
+
+
+async def link_document_to_petition(
+    session: AsyncSession,
+    doc: Document,
+    *,
+    petition_case_id: uuid.UUID | None,
+    linked_by: uuid.UUID,
+) -> Document:
+    """連結或解除連結；已發文的補登會立即同步寫入陳情歷程。"""
+    if petition_case_id == doc.petition_case_id:
+        return doc
+
+    if petition_case_id is not None:
+        case_obj = await session.get(PetitionCase, petition_case_id)
+        if case_obj is None:
+            raise ValueError("找不到欲關聯的陳情案件")
+        if doc.visibility_level in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}:
+            raise ValueError("關聯陳情原文的公文不可設為公開")
+
+    doc.petition_case_id = petition_case_id
+    await session.flush()
+    if petition_case_id is not None and doc.status in {
+        DocumentStatus.APPROVED,
+        DocumentStatus.ARCHIVED,
+    }:
+        await _record_petition_document_issued(session, doc, actor_id=linked_by)
+
+    loaded = await get_document(session, doc.id)
+    if loaded is None:
+        raise RuntimeError(f"公文關聯更新後無法讀回 id={doc.id}")
+    return loaded
 
 
 async def _validate_recipient_targets(
@@ -124,6 +213,11 @@ async def create_document(
     if is_class_org is not None:
         raise ValueError("班級不是發文機關，請改選自治組織")
     await _validate_recipient_targets(session, data.recipients)
+    if (
+        data.petition_case_id is not None
+        and await session.get(PetitionCase, data.petition_case_id) is None
+    ):
+        raise ValueError("找不到欲關聯的陳情案件")
 
     template: DocumentSerialTemplate | None = None
     manual_serial = data.manual_serial_number.strip() if data.manual_serial_number else None
@@ -151,6 +245,11 @@ async def create_document(
         if data.is_public and "visibility_level" not in data.model_fields_set
         else data.visibility_level
     )
+    if data.petition_case_id is not None and visibility in {
+        DocumentVisibility.PUBLIC,
+        DocumentVisibility.PUBLICLY_OPEN,
+    }:
+        raise ValueError("關聯陳情原文的公文不可設為公開")
     doc = Document(
         serial_number=serial,
         title=data.title,
@@ -159,6 +258,7 @@ async def create_document(
         issuer_address=data.issuer_address,
         org_id=data.org_id,
         activity_id=data.activity_id,
+        petition_case_id=data.petition_case_id,
         created_by=created_by,
         status=DocumentStatus.DRAFT,
         urgency=data.urgency,
@@ -373,6 +473,7 @@ async def issue_document_directly(
     session.add(approval)
 
     await session.flush()
+    await _record_petition_document_issued(session, doc, actor_id=issued_by)
     logger.info("公文直接發文 serial=%s by=%s", doc.serial_number, issued_by)
     await invalidate_dashboard_cache()
     return doc
@@ -448,6 +549,7 @@ async def approve_step(
     else:
         doc.status = DocumentStatus.APPROVED
         doc.completed_at = now
+        await _record_petition_document_issued(session, doc, actor_id=approver_id)
         logger.info("公文核准完成 serial=%s", doc.serial_number)
 
     await session.flush()

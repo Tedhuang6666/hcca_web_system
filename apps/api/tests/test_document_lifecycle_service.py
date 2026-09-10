@@ -33,6 +33,7 @@ from api.models.document import (
 )
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
+from api.models.petition import PetitionCase, PetitionCaseEvent, PetitionEventType, PetitionType
 from api.models.school_class import SchoolClass
 from api.models.user import User
 from api.schemas.document import (
@@ -52,6 +53,7 @@ from api.services.document import (
     delete_document,
     dispatch_document,
     issue_document_directly,
+    link_document_to_petition,
     list_approval_delegations,
     queue_document_recipient_emails,
     recall_document,
@@ -125,6 +127,31 @@ async def _make_draft(
     return await create_document(
         db_session, data=_create_payload(org, **overrides), created_by=creator.id
     )
+
+
+async def _make_petition_case(
+    db_session: AsyncSession,
+    org: Org,
+    submitter: User,
+) -> PetitionCase:
+    petition_type = PetitionType(
+        name=f"測試類型-{uuid.uuid4().hex[:8]}",
+        responsible_org_id=org.id,
+    )
+    case_obj = PetitionCase(
+        case_number=f"{uuid.uuid4().int % 10**7:07d}",
+        verification_code_hash="verification-code-hash",
+        share_token_hash="share-token-hash",
+        type=petition_type,
+        current_org_id=org.id,
+        submitter_id=submitter.id,
+        title="圖書館電子書服務建議",
+        content="請學校評估新增電子書借閱服務。",
+        submitted_at=datetime.now(UTC),
+    )
+    db_session.add(case_obj)
+    await db_session.flush()
+    return case_obj
 
 
 # ── create_document ──────────────────────────────────────────────────────────
@@ -460,6 +487,70 @@ async def test_issue_document_directly_marks_approved_immediately(
     assert issued.status == DocumentStatus.APPROVED
     assert issued.issued_at is not None
     assert issued.completed_at is not None
+
+
+async def test_issue_document_with_petition_records_public_processing_event(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    case_obj = await _make_petition_case(db_session, org, creator)
+    doc = await _make_draft(db_session, org, creator, petition_case_id=case_obj.id)
+
+    await issue_document_directly(db_session, doc, issued_by=creator.id)
+
+    event = await db_session.scalar(
+        select(PetitionCaseEvent).where(PetitionCaseEvent.related_document_id == doc.id)
+    )
+    assert event is not None
+    assert event.case_id == case_obj.id
+    assert event.event_type == PetitionEventType.NOTE
+    assert event.visibility == "public"
+    assert "經本會" in (event.content or "")
+
+
+async def test_link_issued_document_to_petition_records_processing_event(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = await _make_draft(db_session, org, creator)
+    await issue_document_directly(db_session, doc, issued_by=creator.id)
+    case_obj = await _make_petition_case(db_session, org, creator)
+
+    linked = await link_document_to_petition(
+        db_session,
+        doc,
+        petition_case_id=case_obj.id,
+        linked_by=creator.id,
+    )
+
+    event = await db_session.scalar(
+        select(PetitionCaseEvent).where(PetitionCaseEvent.related_document_id == doc.id)
+    )
+    assert linked.petition_case_id == case_obj.id
+    assert event is not None
+    assert event.case_id == case_obj.id
+
+
+async def test_link_public_document_to_petition_raises(db_session: AsyncSession, make_user) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = await _make_draft(
+        db_session,
+        org,
+        creator,
+        visibility_level=DocumentVisibility.PUBLIC,
+    )
+    case_obj = await _make_petition_case(db_session, org, creator)
+
+    with pytest.raises(ValueError, match="不可設為公開"):
+        await link_document_to_petition(
+            db_session,
+            doc,
+            petition_case_id=case_obj.id,
+            linked_by=creator.id,
+        )
 
 
 async def test_issue_document_directly_non_draft_raises(

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.clock import TAIPEI, local_today
 from api.models.document import Document
 from api.models.org import Org, Position, UserPosition
+from api.models.petition import PetitionCase
 from api.models.regulation import Regulation
 from api.models.user import User
 
@@ -265,9 +266,9 @@ def _recipient_names(doc: Document, recipient_type: str) -> list[str]:
     ]
 
 
-def _attachment_summary(doc: Document) -> str:
+def _attachment_summary(doc: Document, *, has_petition_appendix: bool = False) -> str:
     if not doc.attachments:
-        return ""
+        return "陳情案件原文1份" if has_petition_appendix else ""
     names = []
     for attachment in doc.attachments:
         if not getattr(attachment, "filename", None):
@@ -275,7 +276,37 @@ def _attachment_summary(doc: Document) -> str:
         name = _esc(attachment.display_name or attachment.filename)
         quantity = max(1, int(getattr(attachment, "quantity", 1) or 1))
         names.append(f"{name}{quantity}份")
+    if has_petition_appendix:
+        names.append("陳情案件原文1份")
     return "、".join(names) or "如附件"
+
+
+def _petition_appendix_html(case_obj: PetitionCase | None) -> str:
+    if case_obj is None:
+        return ""
+    submitted_at = _roc_date(case_obj.submitted_at, blank="未載明")
+    return f"""
+  <section class="petition-appendix">
+    <header class="petition-appendix-header">
+      <p>附件</p>
+      <h2>陳情案件原文</h2>
+      <div class="petition-appendix-rule"></div>
+    </header>
+    <table class="petition-appendix-meta">
+      <tbody>
+        <tr>
+          <th>案件案號</th><td>{_esc(case_obj.case_number)}</td>
+          <th>提交日期</th><td>{_esc(submitted_at)}</td>
+        </tr>
+        <tr><th>案件主旨</th><td colspan="3">{_esc(case_obj.title)}</td></tr>
+      </tbody>
+    </table>
+    <section class="petition-original">
+      <h3>陳情內容</h3>
+      <div>{_esc(case_obj.content)}</div>
+    </section>
+    <footer>本附件為本案陳情人原始提交內容，隨本公文併送。</footer>
+  </section>"""
 
 
 def _declassification_text(doc: Document) -> str:
@@ -614,7 +645,10 @@ async def render_document_print_html(
     copy_recipients = _recipient_names(doc, "copy")
     recipient_text = addressed_recipient_name or _join_names(main_recipients or primary_recipients)
     addressed_to = recipient_text or "（未填）"
-    attachment_summary = _attachment_summary(doc)
+    petition_case_id = getattr(doc, "petition_case_id", None)
+    petition_case = await session.get(PetitionCase, petition_case_id) if petition_case_id else None
+    attachment_summary = _attachment_summary(doc, has_petition_appendix=petition_case is not None)
+    petition_appendix = _petition_appendix_html(petition_case)
     issue_date = _roc_date(doc.issued_at or doc.completed_at or doc.created_at)
     serial = _esc(doc.serial_number)
     if str(doc.serial_number).startswith("DRAFT-"):
@@ -1155,6 +1189,27 @@ async def render_document_print_html(
       white-space: nowrap;
     }}
     .signature-placeholder {{ color: #777; font-size: 12pt; }}
+    .petition-appendix {{
+      break-before: page;
+      page-break-before: always;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 10mm 0 0;
+      color: #161616;
+      font-family: "OfficialKai","OfficialSerifTC","PMingLiU",serif;
+    }}
+    .petition-appendix-header {{ text-align: center; white-space: nowrap; }}
+    .petition-appendix-header p {{ margin: 0 0 3mm; font-size: 12pt; letter-spacing: .35em; }}
+    .petition-appendix-header h2 {{ margin: 0; font-family: "OfficialTitle","OfficialKai",serif; font-size: 28pt; font-weight: 400; letter-spacing: .2em; }}
+    .petition-appendix-rule {{ width: 100%; height: 1px; margin: 8mm auto 10mm; background: #1d3557; }}
+    .petition-appendix-meta {{ width: 100%; margin: 0; border-collapse: collapse; table-layout: fixed; }}
+    .petition-appendix-meta th,
+    .petition-appendix-meta td {{ min-height: 12mm; border: 1px solid #1d3557; padding: 2mm 3mm; font-size: 13pt; line-height: 1.5; vertical-align: middle; overflow-wrap: anywhere; }}
+    .petition-appendix-meta th {{ width: 24mm; background: #eef3f8; text-align: center; white-space: nowrap; }}
+    .petition-original {{ margin-top: 11mm; }}
+    .petition-original h3 {{ margin: 0; padding-bottom: 3mm; border-bottom: 1px solid #1d3557; font-size: 16pt; font-weight: 400; letter-spacing: .12em; }}
+    .petition-original > div {{ min-height: 105mm; padding: 6mm 3mm; font-size: 15pt; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }}
+    .petition-appendix footer {{ margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #888; color: #555; font-size: 10.5pt; line-height: 1.55; }}
   </style>
 </head>
 <body>
@@ -1168,6 +1223,7 @@ async def render_document_print_html(
     {f'<div class="issuer-contact">{issuer_contact}</div>' if issuer_contact else ""}
     <section class="body">{body_html}</section>
   </main>
+  {petition_appendix}
 </body>
 </html>"""
 

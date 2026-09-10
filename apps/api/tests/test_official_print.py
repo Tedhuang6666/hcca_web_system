@@ -421,6 +421,57 @@ async def test_document_print_flows_long_description_on_first_page() -> None:
 
 
 @pytest.mark.asyncio
+async def test_document_print_appends_linked_petition_original_as_formal_attachment() -> None:
+    council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
+    case_obj = SimpleNamespace(
+        id="petition-case",
+        case_number="1150001",
+        title="圖書館電子書服務建議",
+        content="請學校評估新增電子書借閱服務，並妥予回覆。",
+        submitted_at=official_print.dt.datetime(2026, 9, 1, tzinfo=official_print.dt.UTC),
+    )
+    doc = SimpleNamespace(
+        category="letter",
+        issuer_full_name=None,
+        org=council,
+        org_id="council",
+        title="國立新竹高級中學班聯會函",
+        urgency="normal",
+        classification="normal",
+        declassification_condition="none",
+        recipients=[SimpleNamespace(recipient_type="main", name="圖書館")],
+        attachments=[],
+        petition_case_id=case_obj.id,
+        issued_at=None,
+        completed_at=None,
+        created_at=None,
+        serial_number="嶺班學陳字第1150000003號",
+        approvals=[],
+        handler_name="黃丞廷",
+        handler_unit="主席",
+        handler_email="ted981026@gmail.com",
+        subject="有關學生建議電子書服務一案，請查照。",
+        content=None,
+        doc_description="依學生陳情案件辦理。",
+        action_required="請評估並函復本會。",
+        visibility_level="private",
+    )
+
+    rendered = await render_document_print_html(_OrgSession(council, case_obj), doc)
+    reader = PdfReader(BytesIO(render_print_pdf(rendered)))
+    pdf_text = "".join(page.extract_text() for page in reader.pages)
+
+    assert "陳情案件原文1份" in rendered
+    assert 'class="petition-appendix"' in rendered
+    assert "案件案號" in rendered
+    assert "圖書館電子書服務建議" in rendered
+    assert "請學校評估新增電子書借閱服務" in rendered
+    assert "陳情案件原文" in pdf_text
+    assert "請學校評估新增電子書借閱服務" in pdf_text
+    assert len(reader.pages) == 2
+
+
+@pytest.mark.asyncio
 async def test_public_announcement_print_keeps_chief_signature() -> None:
     council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
     doc = SimpleNamespace(
