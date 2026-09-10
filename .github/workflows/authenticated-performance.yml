@@ -51,6 +51,13 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
+      - name: Route synthetic monitor to origin
+        env:
+          PERFORMANCE_MONITOR_ORIGIN_IP: ${{ secrets.PERFORMANCE_MONITOR_ORIGIN_IP }}
+        run: |
+          test -n "$PERFORMANCE_MONITOR_ORIGIN_IP"
+          printf '%s hcca.tw\n' "$PERFORMANCE_MONITOR_ORIGIN_IP" | sudo tee -a /etc/hosts >/dev/null
+
       - name: Install browser dependencies
         working-directory: apps/web
         run: |
