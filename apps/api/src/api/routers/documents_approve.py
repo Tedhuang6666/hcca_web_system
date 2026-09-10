@@ -50,6 +50,8 @@ from api.schemas.document import (
     DocumentApprovalDelegationOut,
     DocumentApprovalDelegationUpdate,
     DocumentArchiveSettingsUpdate,
+    DocumentDispatchCreate,
+    DocumentDispatchOut,
     DocumentEmailResendOut,
     DocumentOut,
     RecallRequest,
@@ -121,6 +123,74 @@ async def resend_document_email(
         summary=f"手動重寄公文「{doc.title}」Email",
     )
     return DocumentEmailResendOut(queued=queued)
+
+
+@router.post(
+    "/{doc_id}/dispatch",
+    response_model=DocumentDispatchOut,
+    summary="已發文公文指定派送至使用者或 Email",
+    responses={
+        200: {"description": "已新增派送對象並排入寄送佇列"},
+        403: {"description": "無權派送此公文"},
+        409: {"description": "公文尚未正式發文"},
+    },
+)
+async def dispatch_document(
+    doc_id: str,
+    payload: DocumentDispatchCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> DocumentDispatchOut:
+    """派送副本，不會重寄既有受文者；指定平台使用者同時取得此公文查閱權。"""
+    doc = await get_doc_or_404(doc_id, session)
+    if doc.status != DocumentStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="只有已核准公文可以指定派送",
+        )
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or {"document:admin", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、部門最高權限者、文件編輯者或活動管理者可以指定派送",
+            )
+
+    try:
+        recipient = await doc_svc.dispatch_document(session, doc, data=payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    queued = await doc_svc.queue_document_recipient_emails(
+        session,
+        doc,
+        recipient_ids={recipient.id},
+        include_document_pdf=True,
+    )
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="document.dispatch",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "recipient_id": str(recipient.id),
+            "target_user_id": str(recipient.target_user_id) if recipient.target_user_id else None,
+            "queued": queued,
+        },
+        summary=f"指定派送公文「{doc.title}」至「{recipient.name}」",
+    )
+    return DocumentDispatchOut(recipient=recipient, queued=queued)
 
 
 # ── 批量操作端點 ──────────────────────────────────────────────────────────────

@@ -583,6 +583,7 @@ import type {
   PositionCategory,
   PositionSummary,
   RateLimitOverride,
+  RecipientOut,
   RecipientType,
 } from './api-bridge'
 
@@ -603,6 +604,19 @@ export type ExpenseProcurementUpdate = {
   status: ExpenseProcurementStatus
   note?: string | null
 }
+
+/** 已發文公文的單一指定派送對象。 */
+export type DocumentDispatchCreate = {
+  target_user_id?: string | null
+  email?: string | null
+  name?: string | null
+}
+
+export type DocumentDispatchOut = {
+  recipient: RecipientOut
+  queued: number
+}
+
 export type ExpenseBudgetUpdate = {
   included: boolean
   note?: string | null

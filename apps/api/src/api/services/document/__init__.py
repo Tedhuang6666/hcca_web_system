@@ -44,6 +44,7 @@ from api.services.document._lifecycle import (
     create_document,
     deactivate_approval_delegation,
     delete_document,
+    dispatch_document,
     get_recipient_for_admin,
     is_primary_variant,
     issue_document_directly,
@@ -130,6 +131,7 @@ __all__ = [
     "list_documents",
     # lifecycle
     "create_document",
+    "dispatch_document",
     "update_document",
     "update_archive_settings",
     "submit_document",

@@ -177,6 +177,31 @@ class RecipientCreate(BaseModel):
         return self
 
 
+class DocumentDispatchCreate(BaseModel):
+    """已發文公文的單一指定派送對象。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    target_user_id: uuid.UUID | None = Field(None, description="指定平台使用者")
+    email: EmailStr | None = Field(None, description="指定外部 Email")
+    name: str | None = Field(None, min_length=1, max_length=200, description="外部收件者名稱")
+
+    @model_validator(mode="after")
+    def validate_target(self) -> DocumentDispatchCreate:
+        if (self.target_user_id is None) == (self.email is None):
+            raise ValueError("請指定一位平台使用者或一個 Email")
+        return self
+
+
+class DocumentDispatchOut(BaseModel):
+    """指定派送結果。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    recipient: RecipientOut
+    queued: int = Field(..., ge=0, description="排入寄送佇列的信箱數量")
+
+
 class RecipientDownloadVariant(StrEnum):
     """公文製作者或管理員下載時可指定的版本。"""
 
