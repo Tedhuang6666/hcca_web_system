@@ -39,6 +39,7 @@ from api.schemas.document import (
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationUpdate,
     DocumentCreate,
+    DocumentDispatchCreate,
     DocumentUpdate,
     RecipientCreate,
 )
@@ -49,6 +50,7 @@ from api.services.document import (
     create_document,
     deactivate_approval_delegation,
     delete_document,
+    dispatch_document,
     issue_document_directly,
     list_approval_delegations,
     queue_document_recipient_emails,
@@ -763,6 +765,59 @@ async def test_queue_document_recipient_emails_uses_explicit_recipient_email(
     )
     assert event is not None
     assert event.payload["to"] == ["external@example.com"]
+
+
+async def test_dispatch_document_queues_only_new_recipient_with_pdf(
+    db_session: AsyncSession, make_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.services.document._delivery as document_delivery
+
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = await _make_draft(
+        db_session,
+        org,
+        creator,
+        recipients=[
+            RecipientCreate(
+                recipient_type="main",
+                name="原始受文者",
+                email="original@example.com",
+                delivery_method=DeliveryMethod.EMAIL,
+            )
+        ],
+    )
+    doc.status = DocumentStatus.APPROVED
+    await db_session.flush()
+
+    async def fake_render_document_print_html(*_args, **_kwargs) -> str:
+        return "<html>mail document</html>"
+
+    monkeypatch.setattr(
+        document_delivery, "render_document_print_html", fake_render_document_print_html
+    )
+    monkeypatch.setattr(document_delivery, "render_print_pdf", lambda _html: b"%PDF mail")
+
+    recipient = await dispatch_document(
+        db_session,
+        doc,
+        data=DocumentDispatchCreate(email="new@example.com", name="新增派送對象"),
+    )
+    queued = await queue_document_recipient_emails(
+        db_session,
+        doc,
+        recipient_ids={recipient.id},
+        include_document_pdf=True,
+    )
+
+    assert queued == 1
+    assert doc.recipient_email_sent_at is None
+    event = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "email.send")
+    )
+    assert event is not None
+    assert event.payload["to"] == ["new@example.com"]
+    assert event.payload["attachments"][0]["filename"].endswith("_副本_新增派送對象.pdf")
 
 
 async def test_queue_document_recipient_emails_only_once_unless_forced(

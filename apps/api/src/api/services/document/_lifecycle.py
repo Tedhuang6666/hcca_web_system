@@ -15,6 +15,7 @@ from api.models.document import (
     ApprovalStepStatus,
     DeclassificationCondition,
     DelegateSource,
+    DeliveryMethod,
     Document,
     DocumentApproval,
     DocumentApprovalDelegation,
@@ -28,11 +29,13 @@ from api.models.document import (
 )
 from api.models.org import Org, Position
 from api.models.school_class import SchoolClass
+from api.models.user import User
 from api.schemas.document import (
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationUpdate,
     DocumentArchiveSettingsUpdate,
     DocumentCreate,
+    DocumentDispatchCreate,
     DocumentUpdate,
     RecipientCreate,
 )
@@ -578,6 +581,35 @@ async def upsert_recipients(
 
     await session.flush()
     return new_recipients
+
+
+async def dispatch_document(
+    session: AsyncSession,
+    doc: Document,
+    *,
+    data: DocumentDispatchCreate,
+) -> DocumentRecipient:
+    """新增一筆已發文後的副本派送，並保留其受文／查閱權紀錄。"""
+    if doc.status != DocumentStatus.APPROVED:
+        raise ValueError("只有已核准並正式發文的公文可以指定派送")
+
+    target_user: User | None = None
+    if data.target_user_id is not None:
+        target_user = await session.get(User, data.target_user_id)
+        if target_user is None or not target_user.is_active:
+            raise ValueError("指定的使用者不存在或已停用")
+
+    recipient = DocumentRecipient(
+        document_id=doc.id,
+        recipient_type=RecipientType.COPY,
+        name=data.name or (target_user.display_name if target_user else str(data.email)),
+        email=str(target_user.email if target_user else data.email),
+        target_user_id=target_user.id if target_user else None,
+        delivery_method=DeliveryMethod.EMAIL,
+    )
+    session.add(recipient)
+    await session.flush()
+    return recipient
 
 
 async def recall_document(

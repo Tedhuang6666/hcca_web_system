@@ -250,6 +250,75 @@ async def test_resend_document_email_by_unrelated_user_returns_403(
 
 
 @pytest.mark.asyncio
+async def test_dispatch_document_to_user_queues_email_and_grants_recipient_access(
+    db_session: AsyncSession, authed_client_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.services.document._delivery as document_delivery
+
+    org = Org(name=f"指定派送組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="dispatch-creator@example.com", display_name="Creator", is_active=True)
+    recipient_user = User(
+        email="dispatch-recipient@example.com", display_name="Recipient", is_active=True
+    )
+    db_session.add_all([org, creator, recipient_user])
+    await db_session.flush()
+    doc = _make_draft(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    async def fake_render_document_print_html(*_args, **_kwargs) -> str:
+        return "<html>mail document</html>"
+
+    monkeypatch.setattr(
+        document_delivery, "render_document_print_html", fake_render_document_print_html
+    )
+    monkeypatch.setattr(document_delivery, "render_print_pdf", lambda _html: b"%PDF mail")
+
+    ac = _authed(authed_client_factory, creator)
+    response = await ac.post(
+        f"/documents/{doc.id}/dispatch",
+        json={"target_user_id": str(recipient_user.id)},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["queued"] == 1
+    assert body["recipient"]["target_user_id"] == str(recipient_user.id)
+    assert body["recipient"]["email"] == recipient_user.email
+    event = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "email.send")
+    )
+    assert event is not None
+    assert event.payload["to"] == [recipient_user.email]
+
+    recipient_client = _authed(authed_client_factory, recipient_user)
+    detail = await recipient_client.get(f"/documents/{doc.id}")
+    assert detail.status_code == 200, detail.text
+
+
+@pytest.mark.asyncio
+async def test_dispatch_document_by_unrelated_user_returns_403(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"指定派送拒絕組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="dispatch-creator2@example.com", display_name="Creator", is_active=True)
+    stranger = User(email="dispatch-stranger@example.com", display_name="Stranger", is_active=True)
+    db_session.add_all([org, creator, stranger])
+    await db_session.flush()
+    doc = _make_draft(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, stranger)
+    response = await ac.post(
+        f"/documents/{doc.id}/dispatch",
+        json={"email": "outside@example.com"},
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_approve_document_by_non_approver_returns_403(
     db_session: AsyncSession, authed_client_factory
 ) -> None:

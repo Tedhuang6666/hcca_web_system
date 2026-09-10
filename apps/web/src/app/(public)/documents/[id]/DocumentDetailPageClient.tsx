@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { authFetch, documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
 import type { DocumentWithArchive, UserSummary } from "@/lib/api";
-import type { DocumentVisibility, RecipientDownloadVariant } from "@/lib/types";
+import type { DocumentDispatchCreate, DocumentVisibility, RecipientDownloadVariant } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
@@ -202,6 +202,12 @@ export default function DocumentDetailPageClient({
   const [visibilityValue, setVisibilityValue] = useState<DocumentVisibility>("org_only");
   const [visibilityBusy, setVisibilityBusy] = useState(false);
   const [resendEmailBusy, setResendEmailBusy] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [dispatchMode, setDispatchMode] = useState<"user" | "email">("user");
+  const [dispatchUserId, setDispatchUserId] = useState("");
+  const [dispatchEmail, setDispatchEmail] = useState("");
+  const [dispatchName, setDispatchName] = useState("");
+  const [dispatchBusy, setDispatchBusy] = useState(false);
   const initialFetchRef = useRef(true);
   const { can, isAdmin } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
@@ -366,6 +372,39 @@ export default function DocumentDetailPageClient({
       toast.error(apiErrorMessage(e, "重寄 Email 失敗"));
     } finally {
       setResendEmailBusy(false);
+    }
+  };
+
+  const openDispatch = () => {
+    setDispatchOpen(true);
+    void loadAllUsers();
+  };
+
+  const handleDispatch = async () => {
+    const payload: DocumentDispatchCreate = dispatchMode === "user"
+      ? { target_user_id: dispatchUserId }
+      : { email: dispatchEmail.trim(), name: dispatchName.trim() || undefined };
+    if (dispatchMode === "user" && !dispatchUserId) {
+      toast.error("請選擇要派送的使用者");
+      return;
+    }
+    if (dispatchMode === "email" && !dispatchEmail.trim()) {
+      toast.error("請輸入收件 Email");
+      return;
+    }
+    setDispatchBusy(true);
+    try {
+      const result = await documentsApi.dispatch(id, payload);
+      toast.success(`已派送至 ${result.recipient.name}`);
+      setDispatchOpen(false);
+      setDispatchUserId("");
+      setDispatchEmail("");
+      setDispatchName("");
+      fetchDoc();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "指定派送失敗"));
+    } finally {
+      setDispatchBusy(false);
     }
   };
 
@@ -674,6 +713,19 @@ export default function DocumentDetailPageClient({
           {canResendEmail && (
             <button
               type="button"
+              onClick={openDispatch}
+              className="btn btn-primary text-sm gap-1.5"
+              title="新增一位收件者並立即寄送公文副本"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M22 2 11 13" /><path d="m22 2-7 20-4-9-9-4Z" />
+              </svg>
+              指定派送
+            </button>
+          )}
+          {canResendEmail && (
+            <button
+              type="button"
               onClick={handleResendEmail}
               disabled={resendEmailBusy}
               className="btn btn-ghost text-sm gap-1.5 disabled:opacity-50"
@@ -758,6 +810,97 @@ export default function DocumentDetailPageClient({
             style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" }}>
             確認送審（{approverIds.length} 位審核人）
           </button>
+        </div>
+      )}
+
+      {dispatchOpen && (
+        <div className="card p-4 space-y-4" role="dialog" aria-modal="true" aria-labelledby="dispatch-title">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="dispatch-title" className="text-sm font-semibold">指定派送</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                會新增一筆副本派送紀錄，並立即寄出含公文 PDF 的 Email；不會重寄原本的受文者。
+              </p>
+            </div>
+            <button type="button" onClick={() => setDispatchOpen(false)} className="text-xs" style={{ color: "var(--text-muted)" }}>
+              取消
+            </button>
+          </div>
+
+          <div className="flex gap-2" role="group" aria-label="派送對象類型">
+            <button
+              type="button"
+              onClick={() => setDispatchMode("user")}
+              className="rounded px-3 py-1.5 text-xs"
+              style={dispatchMode === "user"
+                ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                : { border: "1px solid var(--border)", color: "var(--text-muted)" }}
+            >
+              平台使用者
+            </button>
+            <button
+              type="button"
+              onClick={() => setDispatchMode("email")}
+              className="rounded px-3 py-1.5 text-xs"
+              style={dispatchMode === "email"
+                ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                : { border: "1px solid var(--border)", color: "var(--text-muted)" }}
+            >
+              外部 Email
+            </button>
+          </div>
+
+          {dispatchMode === "user" ? (
+            <label className="block space-y-1.5">
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>選擇使用者</span>
+              <select
+                value={dispatchUserId}
+                onChange={(event) => setDispatchUserId(event.target.value)}
+                disabled={!allUsersLoaded}
+                className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                <option value="">{allUsersLoaded ? "請選擇使用者" : "正在載入使用者…"}</option>
+                {allUsers.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name}（{user.email}）</option>
+                ))}
+              </select>
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                對方會收到 Email，並取得這份公文的查閱權限。
+              </span>
+            </label>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>收件 Email</span>
+                <input
+                  type="email"
+                  value={dispatchEmail}
+                  onChange={(event) => setDispatchEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none"
+                  style={{ border: "1px solid var(--border)" }}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>收件者名稱（選填）</span>
+                <input
+                  value={dispatchName}
+                  onChange={(event) => setDispatchName(event.target.value)}
+                  placeholder="例如：校長室"
+                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none"
+                  style={{ border: "1px solid var(--border)" }}
+                />
+              </label>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setDispatchOpen(false)} className="btn btn-ghost text-sm">取消</button>
+            <button type="button" onClick={handleDispatch} disabled={dispatchBusy} className="btn btn-primary text-sm disabled:opacity-50">
+              {dispatchBusy ? "派送中…" : "確認派送"}
+            </button>
+          </div>
         </div>
       )}
 

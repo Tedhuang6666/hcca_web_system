@@ -1,6 +1,6 @@
 import type {
   BatchDocumentOperationOut, DocumentApprovalDelegationOut, DocumentCreate, DocumentListItem,
-  DocumentOut, RecipientDownloadVariant,
+  DocumentDispatchCreate, DocumentDispatchOut, DocumentOut, RecipientDownloadVariant,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
@@ -68,6 +68,8 @@ export const documentsApi = {
     post<DocumentOut>(`/documents/${id}/issue-direct`, { comment }),
   resendEmail: (id: string) =>
     post<{ queued: number }>(`/documents/${id}/resend-email`),
+  dispatch: (id: string, body: DocumentDispatchCreate) =>
+    post<DocumentDispatchOut>(`/documents/${id}/dispatch`, body),
   suggestApprovers: (id: string) =>
     get<{ id: string; display_name: string; email: string }[]>(`/documents/${id}/suggest-approvers`),
   setDelegate: (id: string, stepOrder: number, delegateId: string | null) =>

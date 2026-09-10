@@ -122,6 +122,8 @@ async def queue_document_recipient_emails(
     doc: Document,
     *,
     force: bool = False,
+    recipient_ids: set[uuid.UUID] | None = None,
+    include_document_pdf: bool = False,
 ) -> int:
     """將設定為 Email 的公文受文者排入 outbox，回傳去重後的信箱數量。
 
@@ -129,11 +131,22 @@ async def queue_document_recipient_emails(
     讓職務交接後的新任人員可以收到後續公文。預設只排入首次通知，
     `force=True` 僅供使用者明確要求重寄時使用。
     """
-    if doc.recipient_email_sent_at is not None and not force:
+    if recipient_ids is None and doc.recipient_email_sent_at is not None and not force:
         return 0
 
+    if recipient_ids is None:
+        candidate_recipients = doc.recipients
+    else:
+        candidate_recipients = (
+            await session.scalars(
+                select(DocumentRecipient).where(
+                    DocumentRecipient.document_id == doc.id,
+                    DocumentRecipient.id.in_(recipient_ids),
+                )
+            )
+        ).all()
     recipients = [
-        recipient for recipient in doc.recipients if _has_official_email_delivery(recipient)
+        recipient for recipient in candidate_recipients if _has_official_email_delivery(recipient)
     ]
     if not recipients:
         return 0
@@ -199,7 +212,7 @@ async def queue_document_recipient_emails(
         f"<p><strong>{safe_title}</strong><br>字號：{safe_serial}</p>"
         f'<p><a href="{html.escape(document_url, quote=True)}">前往查看公文</a></p>'
     )
-    if doc.attachments:
+    if doc.attachments or include_document_pdf:
         body += "<p>公文下載版與附件已隨信附上。</p>" + _external_attachment_links(doc)
         grouped_recipients: dict[tuple[str, str], list[_EmailRecipient]] = defaultdict(list)
         for delivery in recipients_by_email.values():
@@ -233,7 +246,7 @@ async def queue_document_recipient_emails(
                 "document_id": str(doc.id),
             },
         )
-    if doc.recipient_email_sent_at is None:
+    if recipient_ids is None and doc.recipient_email_sent_at is None:
         doc.recipient_email_sent_at = datetime.now(UTC)
         await session.flush()
     return len(emails)
