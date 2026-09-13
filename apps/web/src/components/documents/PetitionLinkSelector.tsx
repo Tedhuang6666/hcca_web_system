@@ -70,14 +70,22 @@ export function PetitionLinkSelector({
   }, [items, query]);
 
   return (
-    <section aria-labelledby="petition-link-title" className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <section
+      aria-labelledby="petition-link-title"
+      className="border-y py-5"
+      style={{ borderColor: "var(--public-border, var(--border))" }}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 id="petition-link-title" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            關聯陳情
+          <h3
+            id="petition-link-title"
+            className="text-base font-semibold"
+            style={{ color: "var(--text-primary)" }}
+          >
+            關聯陳情案件
           </h3>
-          <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-            關聯後，陳情原文會作為正式附件，隨列印與寄送 PDF 一起附在公文後方。
+          <p className="mt-1 max-w-2xl text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+            案件原文會作為正式附件隨公文列印與寄送；發文後也會寫入案件時間軸。
           </p>
         </div>
         {!selected && (
@@ -85,7 +93,11 @@ export function PetitionLinkSelector({
             type="button"
             onClick={() => setIsOpen((value) => !value)}
             disabled={disabled}
-            className="btn btn-ghost btn-sm min-h-10 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{
+              borderColor: "var(--public-border, var(--border))",
+              color: "var(--public-accent, var(--primary-text))",
+            }}
             aria-expanded={isOpen}
           >
             {isOpen ? "收合案件清單" : "選擇案件"}
@@ -94,25 +106,52 @@ export function PetitionLinkSelector({
       </div>
 
       {selected ? (
-        <div className="rounded-xl px-4 py-3" style={{ background: "var(--primary-dim)" }}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className="mt-5 overflow-hidden rounded-xl border"
+          style={{
+            borderColor: "var(--public-border, var(--border))",
+            background: "var(--public-surface, var(--bg-surface))",
+          }}
+        >
+          <dl
+            className="grid gap-3 border-b px-4 py-3 text-sm sm:grid-cols-2"
+            style={{
+              borderColor: "var(--public-border, var(--border))",
+              background: "var(--public-soft, var(--bg-hover))",
+            }}
+          >
+            <div>
+              <dt className="text-xs" style={{ color: "var(--text-muted)" }}>案件案號</dt>
+              <dd className="mt-1 font-semibold" style={{ color: "var(--text-primary)" }}>
+                {selected.case_number}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs" style={{ color: "var(--text-muted)" }}>目前狀態</dt>
+              <dd className="mt-1 font-semibold" style={{ color: "var(--text-primary)" }}>
+                {STATUS_LABEL[selected.status] ?? selected.status}
+              </dd>
+            </div>
+          </dl>
+          <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-semibold tracking-wide" style={{ color: "var(--primary-text)" }}>
-                案號 {selected.case_number} · {STATUS_LABEL[selected.status] ?? selected.status}
-              </p>
-              <p className="mt-1 break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              <p className="break-words text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {selected.title}
               </p>
             </div>
-            <div className="flex items-center gap-3 text-xs">
-              <Link href={`/petitions/${selected.id}`} className="font-medium hover:underline" style={{ color: "var(--primary-text)" }}>
+            <div className="flex items-center gap-1 text-sm">
+              <Link
+                href={`/petitions/${selected.id}`}
+                className="inline-flex min-h-11 items-center px-3 font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={{ color: "var(--public-accent, var(--primary-text))" }}
+              >
                 查看案件
               </Link>
               <button
                 type="button"
                 onClick={() => onSelect(null)}
                 disabled={disabled}
-                className="font-medium hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-11 items-center px-3 font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 style={{ color: "var(--text-secondary)" }}
               >
                 解除關聯
@@ -121,46 +160,70 @@ export function PetitionLinkSelector({
           </div>
         </div>
       ) : (
-        <p className="text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-          未關聯案件時，公文仍可照常建立與發送。
-        </p>
+        <div className="mt-5 border-t pt-3" style={{ borderColor: "var(--public-border, var(--border))" }}>
+          <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+            尚未關聯案件；公文仍可照常建立與發送。
+          </p>
+        </div>
       )}
 
       {isOpen && !selected && (
-        <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+        <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--public-border, var(--border))" }}>
+          <label className="block text-sm font-semibold" htmlFor="petition-link-search">
+            搜尋可關聯案件
+          </label>
           <input
+            id="petition-link-search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="以案號或案件標題搜尋"
-            className="input w-full"
+            placeholder="輸入案號或案件標題"
+            className="input mt-2 w-full"
             disabled={loading || disabled}
-            aria-label="搜尋可關聯陳情案件"
           />
-          {loading && <p className="py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>載入案件中…</p>}
-          {error && <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p>}
-          {!loading && !error && filtered.length === 0 && (
-            <p className="py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-              沒有符合的可關聯案件。
-            </p>
-          )}
-          {filtered.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                onSelect(item);
-                setIsOpen(false);
-                setQuery("");
-              }}
-              className="w-full rounded-lg px-3 py-3 text-left transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2"
-              style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
-            >
-              <span className="block text-xs font-semibold" style={{ color: "var(--primary-text)" }}>
-                {item.case_number} · {STATUS_LABEL[item.status] ?? item.status}
-              </span>
-              <span className="mt-1 block truncate text-sm">{item.title}</span>
-            </button>
-          ))}
+          <div
+            className="mt-3 overflow-hidden rounded-xl border"
+            style={{
+              borderColor: "var(--public-border, var(--border))",
+              background: "var(--public-surface, var(--bg-surface))",
+            }}
+          >
+            {loading && (
+              <p className="px-4 py-5 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+                載入案件中…
+              </p>
+            )}
+            {error && (
+              <p className="px-4 py-5 text-sm" style={{ color: "var(--danger)" }}>
+                {error}
+              </p>
+            )}
+            {!loading && !error && filtered.length === 0 && (
+              <p className="px-4 py-5 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+                沒有符合的可關聯案件。
+              </p>
+            )}
+            {!loading && !error && filtered.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  onSelect(item);
+                  setIsOpen(false);
+                  setQuery("");
+                }}
+                className="w-full px-4 py-3 text-left transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                style={{
+                  borderTop: index === 0 ? undefined : "1px solid var(--public-border, var(--border))",
+                  color: "var(--text-primary)",
+                }}
+              >
+                <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                  案號 {item.case_number}　·　{STATUS_LABEL[item.status] ?? item.status}
+                </span>
+                <span className="mt-1 block truncate text-sm font-semibold">{item.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </section>
