@@ -19,7 +19,8 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -993,6 +994,30 @@ async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Pet
         can_respond_public=case_obj.submitter_id == user.id,
         can_edit_content=case_obj.submitter_id == user.id,
         editor_user_id=user.id if can_edit_events else None,
+    )
+
+
+@router.get(
+    "/{case_id}/print",
+    response_class=Response,
+    summary="下載陳情案件詳情 PDF",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def print_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Response:
+    """產生供承辦列印給學校處室的案件詳情 PDF。"""
+    from api.services.official_print import render_petition_print_html, render_print_pdf
+
+    case_obj = await _case_or_404(session, case_id)
+    await _assert_case_access(session, case_obj, user)
+    html_content = render_petition_print_html(case_obj)
+    pdf_bytes = await run_in_threadpool(render_print_pdf, html_content)
+    filename = f"陳情案件_{case_obj.case_number}_案件詳情.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 
 
