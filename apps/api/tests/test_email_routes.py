@@ -363,6 +363,72 @@ async def test_recipient_table_overrides_name_and_uses_chinese_placeholder(
 
 
 @pytest.mark.asyncio
+async def test_send_applies_multiple_conditional_rules_to_recipient_variables(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sender = await _seed_user(db_session, "conditional-sender@school.edu", ["email:send"])
+    _override_user(sender)
+    queued_html: list[str] = []
+
+    def fake_enqueue(to: list[str], subject: str, html: str, *args, **kwargs) -> list[str]:
+        queued_html.append(html)
+        return ["task-id"]
+
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", fake_enqueue)
+
+    response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "面試通知",
+            "body": "時間：{{ 面試時間 }}，地點：{{ 面試地點 }}",
+            "action": "send",
+            "recipients": {},
+            "variable_definitions": [
+                {"key": "第一志願", "label": "第一志願", "required": True},
+                {"key": "面試時間", "label": "面試時間", "required": True},
+                {"key": "面試地點", "label": "面試地點", "required": True},
+            ],
+            "conditional_rules": [
+                {
+                    "condition_key": "第一志願",
+                    "operator": "equals",
+                    "condition_value": "攝影部",
+                    "target_key": "面試時間",
+                    "target_value": "115/06/20 14:00",
+                },
+                {
+                    "condition_key": "第一志願",
+                    "operator": "equals",
+                    "condition_value": "攝影部",
+                    "target_key": "面試地點",
+                    "target_value": "行政大樓 302 室",
+                },
+            ],
+            "recipient_variables": [
+                {
+                    "email": "candidate@example.org",
+                    "name": "候選人",
+                    "variables": {"第一志願": "攝影部"},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    recipient = (
+        await db_session.execute(
+            select(EmailCampaignRecipient).where(
+                EmailCampaignRecipient.email == "candidate@example.org"
+            )
+        )
+    ).scalar_one()
+    assert recipient.variables["面試時間"] == "115/06/20 14:00"
+    assert recipient.variables["面試地點"] == "行政大樓 302 室"
+    assert "115/06/20 14:00" in queued_html[0]
+    assert "行政大樓 302 室" in queued_html[0]
+
+
+@pytest.mark.asyncio
 async def test_compose_preview_can_switch_to_specific_recipient(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

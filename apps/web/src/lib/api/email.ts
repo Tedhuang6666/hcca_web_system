@@ -18,6 +18,7 @@ export const emailApi = {
   preflight: (body: {
     recipient_spec: RecipientSelector;
     variable_definitions: EmailComposePayload["variable_definitions"];
+    conditional_rules?: EmailComposePayload["conditional_rules"];
     default_variables?: Record<string, string>;
     recipient_variables?: EmailComposePayload["recipient_variables"];
     attachment_ids?: string[];

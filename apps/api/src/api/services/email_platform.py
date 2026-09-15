@@ -17,7 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.config import settings
-from api.email.renderer import validate_required_variables, validate_variable_definitions
+from api.email.renderer import (
+    apply_conditional_rules,
+    validate_conditional_rules,
+    validate_required_variables,
+    validate_variable_definitions,
+)
 from api.models.email_message import (
     EmailAttachment,
     EmailCampaignRecipient,
@@ -231,6 +236,15 @@ async def run_preflight(
     db: AsyncSession, sender: User, payload: EmailPreflightInput
 ) -> EmailPreflightOut:
     definitions = validate_variable_definitions(payload.variable_definitions)
+    try:
+        conditional_rules = validate_conditional_rules(
+            definitions, [rule.model_dump() for rule in payload.conditional_rules]
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    definition_defaults = {
+        str(item["key"]): str(item.get("default_value") or "") for item in definitions
+    }
     users, resolved_emails = await resolve_recipients(
         db, **spec_to_resolve_kwargs(payload.recipient_spec)
     )
@@ -259,7 +273,12 @@ async def run_preflight(
     for user, email in zip(users, resolved_emails, strict=False):
         imported = by_email.get(_normalize_email(email))
         name = (imported.name if imported else None) or user.display_name
-        variables = {**payload.default_variables, **(imported.variables if imported else {})}
+        variables = {
+            **definition_defaults,
+            **payload.default_variables,
+            **(imported.variables if imported else {}),
+        }
+        variables = apply_conditional_rules(variables, conditional_rules)
         if not name:
             missing_names.append(email)
         try:
@@ -270,9 +289,14 @@ async def run_preflight(
         if not row.name:
             missing_names.append(str(row.email))
         try:
+            variables = {
+                **definition_defaults,
+                **payload.default_variables,
+                **row.variables,
+            }
             validate_required_variables(
                 definitions,
-                {**payload.default_variables, **row.variables},
+                apply_conditional_rules(variables, conditional_rules),
                 recipient_label=str(row.email),
             )
         except ValueError as exc:

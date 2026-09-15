@@ -129,6 +129,44 @@ async def test_preflight_excludes_suppressed_recipient(
 
 
 @pytest.mark.asyncio
+async def test_preflight_applies_conditional_variables_before_required_check(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _superuser(db_session)
+    _override_user(user)
+
+    response = await client.post(
+        "/email/preflight",
+        json={
+            "variable_definitions": [
+                {"key": "第一志願", "required": True},
+                {"key": "面試時間", "required": True},
+            ],
+            "conditional_rules": [
+                {
+                    "condition_key": "第一志願",
+                    "operator": "equals",
+                    "condition_value": "攝影部",
+                    "target_key": "面試時間",
+                    "target_value": "115/06/20 14:00",
+                }
+            ],
+            "recipient_variables": [
+                {
+                    "email": "candidate@example.org",
+                    "name": "候選人",
+                    "variables": {"第一志願": "攝影部"},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["valid"] is True
+    assert response.json()["missing_variables"] == []
+
+
+@pytest.mark.asyncio
 async def test_resend_event_is_idempotent_and_updates_analytics(
     db_session: AsyncSession,
 ) -> None:

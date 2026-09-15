@@ -22,7 +22,9 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any
 from api.email.renderer import (
+    apply_conditional_rules,
     build_personalization_context,
+    validate_conditional_rules,
     validate_required_variables,
     validate_variable_definitions,
 )
@@ -39,6 +41,7 @@ from api.models.email_message import (
     EmailTemplate,
 )
 from api.models.user import User
+from api.schemas.email_platform import EmailConditionalRule
 from api.services import audit as audit_svc
 from api.services.email_dispatch import send_now as dispatch_send_now
 from api.services.permission import get_user_permission_codes
@@ -142,6 +145,7 @@ class EmailComposePayload(BaseModel):
     blocks: list[EmailBlock] = Field(default_factory=list)
     recipients: RecipientSelector = Field(default_factory=RecipientSelector)
     variable_definitions: list[EmailVariableDefinition] = Field(default_factory=list)
+    conditional_rules: list[EmailConditionalRule] = Field(default_factory=list, max_length=100)
     default_variables: dict[str, str] = Field(default_factory=dict)
     recipient_variables: list[EmailRecipientVariableInput] = Field(default_factory=list)
     preview_variables: dict[str, str] = Field(default_factory=dict)
@@ -183,6 +187,7 @@ class EmailMessageUpdate(BaseModel):
     blocks: list[EmailBlock] | None = None
     recipients: RecipientSelector | None = None
     variable_definitions: list[EmailVariableDefinition] | None = None
+    conditional_rules: list[EmailConditionalRule] | None = Field(default=None, max_length=100)
     default_variables: dict[str, str] | None = None
     recipient_variables: list[EmailRecipientVariableInput] | None = None
     scheduled_at: datetime | None = None
@@ -242,6 +247,7 @@ class EmailMessageDetailOut(EmailMessageOut):
     blocks: list[dict]
     recipient_spec: dict
     variable_definitions: list[dict]
+    conditional_rules: list[EmailConditionalRule]
     default_variables: dict
     recipient_variables: list[dict]
     resolved_emails: list[str]
@@ -399,7 +405,9 @@ def _blocks_to_ctx(blocks: list[EmailBlock]) -> list[dict]:
     return out
 
 
-def _build_context(payload: EmailComposePayload) -> dict:
+def _build_context(
+    payload: EmailComposePayload, conditional_rules: list[dict] | None = None
+) -> dict:
     """把寄信內容組成範本 context（標題 / 卡片 / 內文按鈕 / 自由區塊 / 舊版 CTA）。"""
     return {
         "heading": payload.heading,
@@ -418,12 +426,31 @@ def _build_context(payload: EmailComposePayload) -> dict:
         "cta_label": payload.cta_label,
         "buttons": _buttons_to_ctx(payload.buttons),
         "blocks": _blocks_to_ctx(payload.blocks),
+        "conditional_rules": (
+            conditional_rules
+            if conditional_rules is not None
+            else [rule.model_dump() for rule in payload.conditional_rules]
+        ),
     }
 
 
 def _normalize_definitions(definitions: list[EmailVariableDefinition]) -> list[dict]:
     try:
         return validate_variable_definitions([d.model_dump() for d in definitions])
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+
+def _normalize_conditional_rules(
+    definitions: list[dict], rules: list[EmailConditionalRule | dict]
+) -> list[dict]:
+    try:
+        raw_rules = [
+            rule.model_dump() if isinstance(rule, EmailConditionalRule) else rule for rule in rules
+        ]
+        return validate_conditional_rules(definitions, raw_rules)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -600,10 +627,11 @@ async def _check_quota(db: AsyncSession, user: User, count: int) -> None:
 
 def _apply_compose(msg: EmailMessage, payload: EmailComposePayload) -> None:
     definitions = _normalize_definitions(payload.variable_definitions)
+    conditional_rules = _normalize_conditional_rules(definitions, payload.conditional_rules)
     msg.subject = payload.subject
     msg.body = payload.body
     msg.template = "generic"
-    msg.context = _build_context(payload)
+    msg.context = _build_context(payload, conditional_rules)
     msg.recipient_spec = _spec_from_selector(payload.recipients)
     if payload.recipient_list_id:
         msg.recipient_spec["recipient_list_id"] = str(payload.recipient_list_id)
@@ -824,6 +852,7 @@ def _to_detail(
         blocks=list(ctx.get("blocks", [])),
         recipient_spec=msg.recipient_spec or {},
         variable_definitions=list(msg.variable_definitions or []),
+        conditional_rules=list(ctx.get("conditional_rules", [])),
         default_variables=dict(msg.default_variables or {}),
         recipient_variables=list(msg.recipient_variables or []),
         resolved_emails=list(msg.resolved_emails or []) if can_view_emails else [],
@@ -919,11 +948,15 @@ async def upload_email_image(
 @router.post("/preview", response_model=EmailPreviewOut, summary="渲染品牌信件預覽 HTML")
 async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPreviewOut:
     definitions = _normalize_definitions(body.variable_definitions)
+    conditional_rules = _normalize_conditional_rules(definitions, body.conditional_rules)
     preview_row = body.preview_recipient
-    custom = _merged_custom_variables(
-        definitions,
-        body.default_variables,
-        preview_row.variables if preview_row else body.preview_variables,
+    custom = apply_conditional_rules(
+        _merged_custom_variables(
+            definitions,
+            body.default_variables,
+            preview_row.variables if preview_row else body.preview_variables,
+        ),
+        conditional_rules,
     )
     preview_name = str(preview_row.name or "").strip() if preview_row else ""
     preview_email_address = str(preview_row.email or "").strip() if preview_row else ""
@@ -934,7 +967,9 @@ async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPrev
         student_id=user.student_id if not preview_row else None,
         custom_variables=custom,
     )
-    html = render_generic_message(body.subject, body.body, _build_context(body), personal)
+    html = render_generic_message(
+        body.subject, body.body, _build_context(body, conditional_rules), personal
+    )
     return EmailPreviewOut(html=html)
 
 
@@ -945,7 +980,11 @@ async def test_send(body: EmailComposePayload, db: DbDep, user: EmailUser) -> Te
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您的帳號沒有 Email"
         )
     definitions = _normalize_definitions(body.variable_definitions)
-    custom = _merged_custom_variables(definitions, body.default_variables, body.preview_variables)
+    conditional_rules = _normalize_conditional_rules(definitions, body.conditional_rules)
+    custom = apply_conditional_rules(
+        _merged_custom_variables(definitions, body.default_variables, body.preview_variables),
+        conditional_rules,
+    )
     try:
         validate_required_variables(definitions, custom, recipient_label=user.display_name)
     except ValueError as exc:
@@ -963,7 +1002,7 @@ async def test_send(body: EmailComposePayload, db: DbDep, user: EmailUser) -> Te
     resend_attachments, link_blocks = await _render_requested_attachments(
         db, user, body.attachment_ids
     )
-    render_context = _build_context(body)
+    render_context = _build_context(body, conditional_rules)
     render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
     html = render_generic_message(body.subject, body.body, render_context, personal)
     enqueue_rendered(
@@ -987,6 +1026,7 @@ async def test_send_sample(
     if not destinations or not destinations[0]:
         raise HTTPException(status_code=422, detail="沒有可用的測試收件信箱")
     definitions = _normalize_definitions(body.variable_definitions)
+    conditional_rules = _normalize_conditional_rules(definitions, body.conditional_rules)
     indexes = body.recipient_indexes or list(range(min(3, len(body.recipient_variables))))
     selected = [
         body.recipient_variables[index]
@@ -1005,11 +1045,14 @@ async def test_send_sample(
     resend_attachments, link_blocks = await _render_requested_attachments(
         db, user, body.attachment_ids
     )
-    render_context = _build_context(body)
+    render_context = _build_context(body, conditional_rules)
     render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
     queued = 0
     for index, row in enumerate(selected):
-        custom = _merged_custom_variables(definitions, body.default_variables, row.variables)
+        custom = apply_conditional_rules(
+            _merged_custom_variables(definitions, body.default_variables, row.variables),
+            conditional_rules,
+        )
         try:
             validate_required_variables(
                 definitions,
@@ -1147,6 +1190,13 @@ async def update_message(
         msg.recipient_spec = _spec_from_selector(body.recipients)
     if body.variable_definitions is not None:
         msg.variable_definitions = _normalize_definitions(body.variable_definitions)
+    if body.conditional_rules is not None or body.variable_definitions is not None:
+        ctx["conditional_rules"] = _normalize_conditional_rules(
+            list(msg.variable_definitions or []),
+            body.conditional_rules
+            if body.conditional_rules is not None
+            else list(ctx.get("conditional_rules", [])),
+        )
     allowed_keys = {str(item["key"]) for item in msg.variable_definitions or []}
     if body.default_variables is not None:
         msg.default_variables = {

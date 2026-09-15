@@ -22026,6 +22026,26 @@ export interface components {
             alt: string;
         };
         /**
+         * EmailConditionalRule
+         * @description 依收件人自訂變數自動填入另一個變數。
+         */
+        EmailConditionalRule: {
+            /** Condition Key */
+            condition_key: string;
+            /**
+             * Operator
+             * @default equals
+             * @enum {string}
+             */
+            operator: "equals" | "not_equals" | "contains" | "not_contains" | "starts_with" | "ends_with" | "is_empty" | "is_not_empty";
+            /** @default */
+            condition_value: string;
+            /** Target Key */
+            target_key: string;
+            /** @default */
+            target_value: string;
+        };
+        /**
          * EmailButton
          * @description 行動按鈕（一封信可放多顆，可自訂樣式）。
          */
@@ -22194,6 +22214,8 @@ export interface components {
             recipients?: components["schemas"]["RecipientSelector"];
             /** Variable Definitions */
             variable_definitions?: components["schemas"]["EmailVariableDefinition"][];
+            /** Conditional Rules */
+            conditional_rules?: components["schemas"]["EmailConditionalRule"][];
             /** Default Variables */
             default_variables?: {
                 [key: string]: string;
@@ -22309,6 +22331,8 @@ export interface components {
             recipients?: components["schemas"]["RecipientSelector"];
             /** Variable Definitions */
             variable_definitions?: components["schemas"]["EmailVariableDefinition"][];
+            /** Conditional Rules */
+            conditional_rules?: components["schemas"]["EmailConditionalRule"][];
             /** Default Variables */
             default_variables?: {
                 [key: string]: string;
@@ -22438,6 +22462,8 @@ export interface components {
             variable_definitions: {
                 [key: string]: unknown;
             }[];
+            /** Conditional Rules */
+            conditional_rules: components["schemas"]["EmailConditionalRule"][];
             /** Default Variables */
             default_variables: {
                 [key: string]: unknown;
@@ -22545,6 +22571,8 @@ export interface components {
             recipients?: components["schemas"]["RecipientSelector"] | null;
             /** Variable Definitions */
             variable_definitions?: components["schemas"]["EmailVariableDefinition"][] | null;
+            /** Conditional Rules */
+            conditional_rules?: components["schemas"]["EmailConditionalRule"][] | null;
             /** Default Variables */
             default_variables?: {
                 [key: string]: string;
@@ -22576,6 +22604,8 @@ export interface components {
             variable_definitions?: {
                 [key: string]: unknown;
             }[];
+            /** Conditional Rules */
+            conditional_rules?: components["schemas"]["EmailConditionalRule"][];
             /** Default Variables */
             default_variables?: {
                 [key: string]: string;
