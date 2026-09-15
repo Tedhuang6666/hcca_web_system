@@ -7,6 +7,25 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+class EmailConditionalRule(BaseModel):
+    """依收件人自訂變數自動填入另一個變數。"""
+
+    condition_key: str = Field(min_length=1, max_length=64)
+    operator: Literal[
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "is_empty",
+        "is_not_empty",
+    ] = "equals"
+    condition_value: str = Field(default="", max_length=500)
+    target_key: str = Field(min_length=1, max_length=64)
+    target_value: str = Field(default="", max_length=500)
+
+
 class EmailTemplatePayload(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
@@ -132,6 +151,7 @@ class EmailAttachmentOut(BaseModel):
 class EmailPreflightInput(BaseModel):
     recipient_spec: dict = Field(default_factory=dict)
     variable_definitions: list[dict] = Field(default_factory=list)
+    conditional_rules: list[EmailConditionalRule] = Field(default_factory=list, max_length=100)
     default_variables: dict[str, str] = Field(default_factory=dict)
     recipient_variables: list[EmailRecipientListMemberIn] = Field(default_factory=list)
     attachment_ids: list[uuid.UUID] = Field(default_factory=list)

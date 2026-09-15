@@ -43,6 +43,7 @@ function detailToPreviewPayload(d: EmailMessageDetailOut): EmailComposePayload {
     blocks: d.blocks as EmailComposePayload["blocks"],
     recipients: d.recipient_spec as EmailComposePayload["recipients"],
     variable_definitions: d.variable_definitions as EmailComposePayload["variable_definitions"],
+    conditional_rules: d.conditional_rules,
     default_variables: d.default_variables as EmailComposePayload["default_variables"],
     recipient_variables: d.recipient_variables as EmailComposePayload["recipient_variables"],
     preview_variables: d.default_variables as EmailComposePayload["preview_variables"],

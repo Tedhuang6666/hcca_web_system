@@ -3,6 +3,7 @@ import type {
   EmailButton,
   EmailButtonStyle,
   EmailCardRow,
+  EmailConditionalRule,
   EmailVariableDefinition,
   RecipientSelector,
 } from "@/lib/types";
@@ -96,6 +97,21 @@ export const BUTTON_STYLE_OPTIONS: { value: EmailButtonStyle; label: string }[] 
   { value: "outline", label: "外框" },
 ];
 
+export const CONDITIONAL_OPERATOR_OPTIONS: {
+  value: EmailConditionalRule["operator"];
+  label: string;
+  requiresValue: boolean;
+}[] = [
+  { value: "equals", label: "等於", requiresValue: true },
+  { value: "not_equals", label: "不等於", requiresValue: true },
+  { value: "contains", label: "包含", requiresValue: true },
+  { value: "not_contains", label: "不包含", requiresValue: true },
+  { value: "starts_with", label: "開頭是", requiresValue: true },
+  { value: "ends_with", label: "結尾是", requiresValue: true },
+  { value: "is_empty", label: "是空白", requiresValue: false },
+  { value: "is_not_empty", label: "不是空白", requiresValue: false },
+];
+
 export const COMPOSE_STEPS = [
   { number: 1, label: "選擇起點", description: "空白、範本或過去郵件" },
   { number: 2, label: "收件資料", description: "建立名單與個人化欄位" },
@@ -141,6 +157,7 @@ export type ComposeDraft = {
   buttons: EmailButton[];
   blocks: EmailBlock[];
   variableDefinitions: EmailVariableDefinition[];
+  conditionalRules: EmailConditionalRule[];
   previewVariables: Record<string, string>;
   recipientRows: RecipientRow[];
 };

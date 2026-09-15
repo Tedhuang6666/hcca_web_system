@@ -19,7 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.clock import local_today
 from api.core.config import settings
 from api.email.renderer import (
+    apply_conditional_rules,
     build_personalization_context,
+    validate_conditional_rules,
     validate_required_variables,
 )
 from api.email.sender import enqueue_rendered, render_generic_message, render_generic_subject
@@ -84,6 +86,12 @@ async def resolve_personalized_recipients(
 ) -> list[PersonalizedRecipient]:
     users, emails = await resolve_recipients(db, **spec_to_resolve_kwargs(msg.recipient_spec or {}))
     definitions = list(msg.variable_definitions or [])
+    try:
+        conditional_rules = validate_conditional_rules(
+            definitions, list((msg.context or {}).get("conditional_rules", []))
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     defaults = {str(key): str(value) for key, value in (msg.default_variables or {}).items()}
     inputs = list(msg.recipient_variables or [])
     recipient_list_id = (msg.recipient_spec or {}).get("recipient_list_id")
@@ -123,6 +131,7 @@ async def resolve_personalized_recipients(
         custom = _merged_custom_variables(
             definitions, defaults, dict(imported.get("variables") or {})
         )
+        custom = apply_conditional_rules(custom, conditional_rules)
         label = imported_name or user_obj.display_name or email
         try:
             validate_required_variables(definitions, custom, recipient_label=label)
@@ -156,6 +165,7 @@ async def resolve_personalized_recipients(
         custom = _merged_custom_variables(
             definitions, defaults, dict(imported.get("variables") or {})
         )
+        custom = apply_conditional_rules(custom, conditional_rules)
         label = str(imported.get("name") or email)
         try:
             validate_required_variables(definitions, custom, recipient_label=label)

@@ -162,6 +162,7 @@ export type {
   EmailBlock,
   EmailButton,
   EmailCampaignRecipientOut,
+  EmailConditionalRule,
   EmailComposePayload,
   EmailMessageCreate,
   EmailMessageDetailOut,

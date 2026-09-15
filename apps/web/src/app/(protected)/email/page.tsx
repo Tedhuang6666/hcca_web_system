@@ -21,6 +21,7 @@ import type {
   EmailButton,
   EmailButtonStyle,
   EmailCardRow,
+  EmailConditionalRule,
   EmailComposePayload,
   EmailMessageDetailOut,
   EmailMessageOut,
@@ -60,6 +61,7 @@ import {
   AUTOSAVE_KEY,
   BUTTON_STYLE_OPTIONS,
   COMPOSE_STEPS,
+  CONDITIONAL_OPERATOR_OPTIONS,
   CONFIRM_THRESHOLD,
   EMPTY_RECIPIENTS,
   PRESETS,
@@ -99,6 +101,7 @@ function ComposeInner() {
   const [buttons, setButtons] = useState<EmailButton[]>([]);
   const [blocks, setBlocks] = useState<EmailBlock[]>([]);
   const [variableDefinitions, setVariableDefinitions] = useState<EmailVariableDefinition[]>([]);
+  const [conditionalRules, setConditionalRules] = useState<EmailConditionalRule[]>([]);
   const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
   const [recipientRows, setRecipientRows] = useState<RecipientRow[]>([
     { email: "", name: "", variables: {} },
@@ -225,6 +228,7 @@ function ComposeInner() {
           setButtons([]);
         }
         setBlocks(m.blocks as unknown as EmailBlock[] ?? []);
+        setConditionalRules(m.conditional_rules ?? []);
         setRecipients((m.recipient_spec as RecipientSelector) ?? EMPTY_RECIPIENTS);
         setRetainedAttachmentIds(m.attachment_ids ?? []);
         setVariableDefinitions(m.variable_definitions as unknown as EmailVariableDefinition[]);
@@ -258,6 +262,7 @@ function ComposeInner() {
     setButtons(d.buttons ?? []);
     setBlocks(d.blocks ?? []);
     setVariableDefinitions(d.variableDefinitions);
+    setConditionalRules(d.conditionalRules ?? []);
     setPreviewVariables(d.previewVariables);
     setRecipientRows(d.recipientRows ?? []);
     toast.info("已還原上次未送出的內容");
@@ -274,6 +279,7 @@ function ComposeInner() {
       (d.buttons?.length ?? 0) === 0 &&
       (d.blocks?.length ?? 0) === 0 &&
       d.variableDefinitions.length === 0 &&
+      (d.conditionalRules?.length ?? 0) === 0 &&
       (d.recipientRows?.length ?? 0) === 0,
     [],
   );
@@ -298,6 +304,7 @@ function ComposeInner() {
       buttons,
       blocks,
       variableDefinitions,
+      conditionalRules,
       previewVariables,
       recipientRows,
     },
@@ -325,6 +332,7 @@ function ComposeInner() {
       buttons,
       blocks,
       variableDefinitions,
+      conditionalRules,
       previewVariables,
     }),
     [
@@ -345,6 +353,7 @@ function ComposeInner() {
       buttons,
       blocks,
       variableDefinitions,
+      conditionalRules,
       previewVariables,
     ],
   );
@@ -393,6 +402,7 @@ function ComposeInner() {
       ),
       recipients,
       variable_definitions: variableDefinitions.filter((v) => v.key.trim()),
+      conditional_rules: conditionalRules,
       preview_variables: {
         ...previewVariables,
         ...(recipientRows[previewRecipientIndex]?.variables ?? {}),
@@ -432,6 +442,7 @@ function ComposeInner() {
       blocks,
       recipients,
       variableDefinitions,
+      conditionalRules,
       previewVariables,
       recipientRows,
       previewRecipientIndex,
@@ -520,6 +531,13 @@ function ComposeInner() {
         return { ...row, variables };
       }),
     );
+    setConditionalRules((rules) =>
+      rules.map((rule) => ({
+        ...rule,
+        condition_key: rule.condition_key === oldKey ? key : rule.condition_key,
+        target_key: rule.target_key === oldKey ? key : rule.target_key,
+      })),
+    );
   };
   const removeVariable = (i: number) => {
     const key = variableDefinitions[i]?.key;
@@ -537,7 +555,30 @@ function ComposeInner() {
           return { ...row, variables };
         }),
       );
+      setConditionalRules((rules) =>
+        rules.filter((rule) => rule.condition_key !== key && rule.target_key !== key),
+      );
     }
+  };
+
+  const addConditionalRule = () => {
+    const firstKey = variableDefinitions.find((variable) => variable.key.trim())?.key ?? "";
+    setConditionalRules((rules) => [
+      ...rules,
+      {
+        condition_key: firstKey,
+        operator: "equals",
+        condition_value: "",
+        target_key: firstKey,
+        target_value: "",
+      },
+    ]);
+  };
+
+  const updateConditionalRule = (index: number, patch: Partial<EmailConditionalRule>) => {
+    setConditionalRules((rules) =>
+      rules.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, ...patch } : rule)),
+    );
   };
 
   const applyPreset = (key: string) => {
@@ -569,6 +610,7 @@ function ComposeInner() {
     setButtons(template.buttons);
     setBlocks(template.blocks);
     setVariableDefinitions(template.variableDefinitions);
+    setConditionalRules(template.conditionalRules ?? []);
     setPreviewVariables(template.previewVariables);
     setRecipientRows([]);
     toast.success(`已套用範本：${template.name}`);
@@ -634,6 +676,7 @@ function ComposeInner() {
     setButtons(content.buttons ?? []);
     setBlocks(content.blocks ?? []);
     setVariableDefinitions(template.variable_definitions as EmailVariableDefinition[] ?? []);
+    setConditionalRules(content.conditional_rules ?? []);
     setTrackOpens(content.track_opens ?? true);
     setTrackClicks(content.track_clicks ?? true);
     toast.success(`已套用平台範本：${template.name}`);
@@ -660,6 +703,7 @@ function ComposeInner() {
       setButtons(message.buttons as unknown as EmailButton[] ?? []);
       setBlocks(message.blocks as unknown as EmailBlock[] ?? []);
       setVariableDefinitions(message.variable_definitions as EmailVariableDefinition[] ?? []);
+      setConditionalRules(message.conditional_rules ?? []);
       setPreviewVariables(message.default_variables as Record<string, string> ?? {});
       setTrackOpens(message.track_opens);
       setTrackClicks(message.track_clicks);
@@ -998,6 +1042,13 @@ function ComposeInner() {
       toast.error("表格欄位名稱不可重複");
       return false;
     }
+    const availableKeys = new Set(keys);
+    if (conditionalRules.some(
+      (rule) => !availableKeys.has(rule.condition_key) || !availableKeys.has(rule.target_key),
+    )) {
+      toast.error("條件規則使用了不存在的欄位，請重新選擇或移除規則");
+      return false;
+    }
     if (invalidRecipientRows.length > 0) {
       toast.error(`有 ${invalidRecipientRows.length} 列電子郵件格式錯誤`);
       return false;
@@ -1057,6 +1108,7 @@ function ComposeInner() {
       const result = await emailApi.preflight({
         recipient_spec: recipients,
         variable_definitions: payload.variable_definitions,
+        conditional_rules: payload.conditional_rules,
         default_variables: payload.default_variables,
         recipient_variables: payload.recipient_variables,
         attachment_ids: payload.attachment_ids,
@@ -1869,6 +1921,126 @@ function ComposeInner() {
                   + 新增資料列
                 </button>
               </div>
+            </div>
+            <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold">條件式佔位符</h3>
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    依每位收件人的欄位值自動填入另一個欄位；規則會由上到下套用，後面的規則優先。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={definedVariables.length === 0}
+                  onClick={addConditionalRule}
+                >
+                  + 新增條件
+                </button>
+              </div>
+              {definedVariables.length === 0 && (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  請先新增至少兩個自訂欄位，例如「第一志願」和「面試時間」。
+                </p>
+              )}
+              {conditionalRules.length === 0 && definedVariables.length > 0 && (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  尚未設定條件。範例：如果「第一志願」等於「攝影部」，就將「面試時間」設定為「115/06/20 14:00」。
+                </p>
+              )}
+              {conditionalRules.map((rule, index) => {
+                const operator = CONDITIONAL_OPERATOR_OPTIONS.find(
+                  (option) => option.value === rule.operator,
+                );
+                return (
+                  <div
+                    key={index}
+                    className="space-y-2 rounded-lg p-3"
+                    style={{ background: "var(--bg-elevated)" }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                        條件 {index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        aria-label={`移除條件 ${index + 1}`}
+                        onClick={() => setConditionalRules((rules) => rules.filter((_, i) => i !== index))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="grid items-center gap-2 lg:grid-cols-[auto_minmax(9rem,1fr)_minmax(8rem,1fr)_minmax(9rem,1.2fr)]">
+                      <span className="text-xs font-medium">如果</span>
+                      <select
+                        className="input min-w-0"
+                        value={rule.condition_key}
+                        aria-label={`條件 ${index + 1} 的判斷欄位`}
+                        onChange={(event) => updateConditionalRule(index, { condition_key: event.target.value })}
+                      >
+                        <option value="">選擇欄位</option>
+                        {definedVariables.map((variable) => (
+                          <option key={variable.key} value={variable.key}>{variable.label || variable.key}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="input min-w-0"
+                        value={rule.operator}
+                        aria-label={`條件 ${index + 1} 的判斷方式`}
+                        onChange={(event) => {
+                          const nextOperator = event.target.value as EmailConditionalRule["operator"];
+                          updateConditionalRule(index, {
+                            operator: nextOperator,
+                            condition_value: CONDITIONAL_OPERATOR_OPTIONS.find(
+                              (option) => option.value === nextOperator,
+                            )?.requiresValue ? rule.condition_value : "",
+                          });
+                        }}
+                      >
+                        {CONDITIONAL_OPERATOR_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      {operator?.requiresValue ? (
+                        <input
+                          className="input min-w-0"
+                          value={rule.condition_value}
+                          maxLength={500}
+                          placeholder="符合的內容，例如：攝影部"
+                          aria-label={`條件 ${index + 1} 的比對內容`}
+                          onChange={(event) => updateConditionalRule(index, { condition_value: event.target.value })}
+                        />
+                      ) : (
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>不需要填寫比對內容</span>
+                      )}
+                    </div>
+                    <div className="grid items-center gap-2 lg:grid-cols-[auto_minmax(9rem,1fr)_minmax(0,1.2fr)]">
+                      <span className="text-xs font-medium">就將</span>
+                      <select
+                        className="input min-w-0"
+                        value={rule.target_key}
+                        aria-label={`條件 ${index + 1} 的設定欄位`}
+                        onChange={(event) => updateConditionalRule(index, { target_key: event.target.value })}
+                      >
+                        <option value="">選擇要填入的欄位</option>
+                        {definedVariables.map((variable) => (
+                          <option key={variable.key} value={variable.key}>{variable.label || variable.key}</option>
+                        ))}
+                      </select>
+                      <input
+                        className="input min-w-0"
+                        value={rule.target_value}
+                        maxLength={500}
+                        placeholder="自動填入的內容，例如：115/06/20 14:00"
+                        aria-label={`條件 ${index + 1} 的自動填入內容`}
+                        onChange={(event) => updateConditionalRule(index, { target_value: event.target.value })}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
 

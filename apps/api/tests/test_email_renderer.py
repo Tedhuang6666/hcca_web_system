@@ -7,6 +7,7 @@ import uuid
 from api.core.config import settings
 from api.email.renderer import (
     absolutize_url,
+    apply_conditional_rules,
     build_personalization_context,
     make_unsubscribe_token,
     parse_unsubscribe_token,
@@ -14,6 +15,7 @@ from api.email.renderer import (
     render_personalized_text,
     safe_link_url,
     sanitize_html,
+    validate_conditional_rules,
     validate_variable_definitions,
 )
 from api.email.sender import render_generic_message
@@ -163,6 +165,40 @@ def test_chinese_variable_name_can_be_validated_and_rendered() -> None:
     assert render_personalized_text("您已錄取 {{ 錄取部門 }}", {"錄取部門": "活動部"}) == (
         "您已錄取 活動部"
     )
+
+
+def test_conditional_rules_fill_multiple_variables_in_order() -> None:
+    definitions = validate_variable_definitions(
+        [
+            {"key": "第一志願"},
+            {"key": "面試時間"},
+            {"key": "面試地點"},
+        ]
+    )
+    rules = validate_conditional_rules(
+        definitions,
+        [
+            {
+                "condition_key": "第一志願",
+                "operator": "equals",
+                "condition_value": "攝影部",
+                "target_key": "面試時間",
+                "target_value": "115/06/20 14:00",
+            },
+            {
+                "condition_key": "第一志願",
+                "operator": "equals",
+                "condition_value": "攝影部",
+                "target_key": "面試地點",
+                "target_value": "行政大樓 302 室",
+            },
+        ],
+    )
+
+    resolved = apply_conditional_rules({"第一志願": "攝影部"}, rules)
+
+    assert resolved["面試時間"] == "115/06/20 14:00"
+    assert resolved["面試地點"] == "行政大樓 302 室"
 
 
 def test_generic_email_supports_custom_branding() -> None:

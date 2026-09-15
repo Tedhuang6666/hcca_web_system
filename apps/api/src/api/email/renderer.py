@@ -57,6 +57,18 @@ _ALLOWED_ATTRS = {"a": ["href", "title"]}
 _ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 _VARIABLE_KEY_RE = re.compile(r"^[^\W\d]\w{0,63}$", re.UNICODE)
 _RESERVED_VARIABLE_KEYS = {"user", "app", "unsubscribe_url", "frontend_base_url"}
+_CONDITIONAL_OPERATORS = frozenset(
+    {
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "is_empty",
+        "is_not_empty",
+    }
+)
 
 _UNSUBSCRIBE_SALT = "hcca-email-unsubscribe"
 
@@ -181,6 +193,54 @@ def validate_variable_definitions(definitions: list[dict]) -> list[dict]:
             }
         )
     return normalized
+
+
+def validate_conditional_rules(definitions: list[dict], rules: list[dict]) -> list[dict]:
+    """正規化條件規則，並限制只能讀寫本次郵件定義的自訂變數。"""
+    allowed = {str(item.get("key", "")) for item in definitions or []}
+    normalized: list[dict] = []
+    for index, item in enumerate(rules or [], start=1):
+        condition_key = str(item.get("condition_key", "")).strip()
+        target_key = str(item.get("target_key", "")).strip()
+        operator = str(item.get("operator", "equals")).strip()
+        if condition_key not in allowed or target_key not in allowed:
+            raise ValueError(f"第 {index} 條條件規則的欄位不存在：{condition_key} / {target_key}")
+        if operator not in _CONDITIONAL_OPERATORS:
+            raise ValueError(f"第 {index} 條條件規則的判斷方式不支援：{operator}")
+        normalized.append(
+            {
+                "condition_key": condition_key,
+                "operator": operator,
+                "condition_value": str(item.get("condition_value") or "")[:500],
+                "target_key": target_key,
+                "target_value": str(item.get("target_value") or "")[:500],
+            }
+        )
+    return normalized
+
+
+def apply_conditional_rules(variables: dict[str, Any], rules: list[dict]) -> dict[str, str]:
+    """依序套用條件規則；後面的規則若命中，會覆蓋同一目標欄位。"""
+    resolved = {str(key): "" if value is None else str(value) for key, value in variables.items()}
+    for rule in rules or []:
+        actual = resolved.get(str(rule.get("condition_key", "")), "").strip()
+        expected = str(rule.get("condition_value") or "").strip()
+        operator = str(rule.get("operator", "equals"))
+        actual_folded = actual.casefold()
+        expected_folded = expected.casefold()
+        matched = {
+            "equals": actual_folded == expected_folded,
+            "not_equals": actual_folded != expected_folded,
+            "contains": expected_folded in actual_folded,
+            "not_contains": expected_folded not in actual_folded,
+            "starts_with": actual_folded.startswith(expected_folded),
+            "ends_with": actual_folded.endswith(expected_folded),
+            "is_empty": not actual,
+            "is_not_empty": bool(actual),
+        }.get(operator, False)
+        if matched:
+            resolved[str(rule.get("target_key", ""))] = str(rule.get("target_value") or "")
+    return resolved
 
 
 def validate_required_variables(
