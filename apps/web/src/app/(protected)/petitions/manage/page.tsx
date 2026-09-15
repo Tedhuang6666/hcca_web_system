@@ -200,9 +200,12 @@ export default function PetitionManagePage() {
     }
   };
 
-  const refreshSelected = async (updated: PetitionCaseOut) => {
+  const refreshSelected = async (
+    updated: PetitionCaseOut,
+    attachmentVisibility: "public" | "internal" = "internal",
+  ) => {
     if (file) {
-      await petitionsApi.uploadAttachment(updated.id, file, { visibility: "internal" });
+      await petitionsApi.uploadAttachment(updated.id, file, { visibility: attachmentVisibility });
     }
     setSelected(await petitionsApi.get(updated.id));
     await load();
@@ -308,7 +311,7 @@ export default function PetitionManagePage() {
         updated = await petitionsApi.addNote(selected.id, internalNote || publicText);
       }
       cachePurge("petitions/manage");
-      await refreshSelected(updated);
+      await refreshSelected(updated, action === "reply" ? "public" : "internal");
       toast.success("案件已更新");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "操作失敗");
@@ -505,7 +508,17 @@ export default function PetitionManagePage() {
                     {selected.current_org_name} · {selected.assigned_to_name || "尚未分派承辦人"} · 更新 {fmt(selected.updated_at)}
                   </p>
                 </div>
-                <PetitionStatusBadge status={selected.status} />
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <AnimatedDownloadButton
+                    request={() => petitionsApi.printPdf(selected.id)}
+                    filename={`陳情案件_${selected.case_number}_案件詳情.pdf`}
+                    label="列印案件詳情"
+                    completeLabel="已下載"
+                    errorLabel="重試列印"
+                    className="btn btn-ghost"
+                  />
+                  <PetitionStatusBadge status={selected.status} />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -616,8 +629,8 @@ export default function PetitionManagePage() {
                   <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="內部備註（選填）" />
                   <AnimatedFileUpload
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
-                    label="拖曳處理附件到這裡"
-                    hint="選取後會在送出處理動作時上傳"
+                    label="拖曳回覆附件到這裡"
+                    hint="正式回覆時會提供給陳情人下載；其他處理動作則僅內部可見"
                     onFiles={(files) => setFile(files[0] ?? null)}
                     onRemove={() => setFile(null)}
                   />

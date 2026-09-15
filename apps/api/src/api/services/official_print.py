@@ -1622,6 +1622,292 @@ def render_regulation_print_html(reg: Regulation) -> str:
 </html>"""
 
 
+def render_petition_print_html(case_obj: PetitionCase) -> str:
+    """Render a petition case file for internal school-office handling."""
+    status_value = _enum_value(case_obj.status)
+    status_label = {
+        "submitted": "已收件",
+        "assigned": "已分案",
+        "in_progress": "承辦中",
+        "needs_info": "等待補件",
+        "transferred": "已轉派",
+        "resolved": "已回覆",
+        "closed": "已結案",
+        "rejected": "不受理",
+    }.get(status_value, status_value or "未設定")
+
+    def print_datetime(value: object | None) -> str:
+        if not isinstance(value, dt.datetime):
+            return _roc_date(value, blank="未載明")
+        if value.tzinfo is not None:
+            value = value.astimezone(TAIPEI)
+        return _roc_datetime(value)
+
+    def print_file_size(value: object | None) -> str:
+        if value is None:
+            return "大小未提供"
+        size = max(0, int(value))
+        units = ("B", "KB", "MB", "GB")
+        unit_index = 0
+        size_value = float(size)
+        while size_value >= 1024 and unit_index < len(units) - 1:
+            size_value /= 1024
+            unit_index += 1
+        return f"{size_value:.1f} {units[unit_index]}" if unit_index else f"{size} B"
+
+    submitter = getattr(case_obj, "submitter", None)
+    submitter_name = (
+        getattr(case_obj, "contact_name", None)
+        or getattr(submitter, "display_name", None)
+        or "未提供"
+    )
+    submitter_email = (
+        getattr(case_obj, "contact_email", None) or getattr(submitter, "email", None) or "未提供"
+    )
+    assigned_name = (
+        getattr(getattr(case_obj, "assigned_to", None), "display_name", None) or "尚未分案"
+    )
+    org_name = getattr(getattr(case_obj, "current_org", None), "name", None) or "未設定"
+    type_name = getattr(getattr(case_obj, "type", None), "name", None) or "未分類"
+
+    events = []
+    for event in getattr(case_obj, "events", []) or []:
+        visibility = _enum_value(getattr(event, "visibility", ""))
+        visibility_label = "內部紀錄" if visibility == "internal" else "陳情人可見"
+        from_status = _enum_value(getattr(event, "from_status", ""))
+        to_status = _enum_value(getattr(event, "to_status", ""))
+        status_change = ""
+        if from_status or to_status:
+            status_change = (
+                f'<span class="event-status">{_esc(from_status or "—")} → '
+                f"{_esc(to_status or '—')}</span>"
+            )
+        event_content = _br(getattr(event, "content", None)) or "—"
+        events.append(
+            f"""
+      <li class="timeline-item">
+        <div class="timeline-item-head">
+          <strong>{_esc(getattr(event, "title", "案件更新"))}</strong>
+          <span>{_esc(print_datetime(getattr(event, "created_at", None)))}</span>
+        </div>
+        <div class="timeline-meta">{_esc(visibility_label)} {status_change}</div>
+        <div class="timeline-content">{event_content}</div>
+      </li>"""
+        )
+
+    attachments = []
+    for attachment in getattr(case_obj, "attachments", []) or []:
+        visibility = _enum_value(getattr(attachment, "visibility", ""))
+        visibility_label = "提供給陳情人" if visibility == "public" else "內部附件"
+        filename = getattr(attachment, "display_name", None) or getattr(
+            attachment, "filename", "未命名附件"
+        )
+        attachments.append(
+            f"""
+      <li class="attachment-row">
+        <div>
+          <strong>{_esc(filename)}</strong>
+          <span>{_esc(getattr(attachment, "content_type", None) or "檔案")}</span>
+        </div>
+        <div class="attachment-meta">{_esc(visibility_label)} · {_esc(print_file_size(getattr(attachment, "file_size", None)))}</div>
+      </li>"""
+        )
+
+    reply_html = (
+        f'<div class="content-block reply-block">{_br(case_obj.public_reply)}</div>'
+        if case_obj.public_reply
+        else '<p class="empty-copy">尚未建立正式回覆。</p>'
+    )
+    note_html = (
+        f'<div class="content-block note-block">{_br(case_obj.latest_internal_note)}</div>'
+        if case_obj.latest_internal_note
+        else '<p class="empty-copy">尚無最新內部備註。</p>'
+    )
+    event_html = "".join(events) or '<li class="empty-copy">尚無處理紀錄。</li>'
+    attachment_html = "".join(attachments) or '<li class="empty-copy">本案未上傳附件。</li>'
+    generated_at = print_datetime(dt.datetime.now(TAIPEI))
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>陳情案件 {_esc(case_obj.case_number)} 詳情</title>
+  <style>
+    {_font_faces()}
+    @page {{
+      size: A4 portrait;
+      margin: 15mm 15mm 18mm;
+      @bottom-center {{
+        content: "第 " counter(page) " 頁　共 " counter(pages) " 頁";
+        font-family: "OfficialKai", "Noto Sans TC", sans-serif;
+        font-size: 9pt;
+        color: #64748b;
+      }}
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      color: #172033;
+      background: #fff;
+      font-family: "OfficialKai", "Noto Sans TC", sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.65;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }}
+    .no-print {{
+      margin: 0 auto 8mm;
+      max-width: 178mm;
+      text-align: right;
+      font-family: system-ui, sans-serif;
+    }}
+    .no-print button {{
+      padding: 6px 14px;
+      border: 1px solid #94a3b8;
+      border-radius: 5px;
+      background: #f8fafc;
+      color: #172033;
+      cursor: pointer;
+    }}
+    @media print {{ .no-print {{ display: none; }} }}
+    .page {{ width: 178mm; margin: 0 auto; }}
+    .print-header {{ border-bottom: 2px solid #173b57; padding-bottom: 5mm; margin-bottom: 5mm; }}
+    .brand {{ color: #526477; font-size: 9.5pt; letter-spacing: .08em; }}
+    h1 {{ margin: 1mm 0 1mm; color: #173b57; font-size: 21pt; letter-spacing: .04em; line-height: 1.35; }}
+    .case-number {{ color: #526477; font-size: 10pt; }}
+    .status {{
+      display: inline-block;
+      margin-top: 3mm;
+      padding: 1mm 3mm;
+      border: 1px solid #9bb8c5;
+      border-radius: 999px;
+      color: #155e75;
+      font-size: 9.5pt;
+    }}
+    .notice {{
+      margin: 0 0 5mm;
+      padding: 2.5mm 3.5mm;
+      border: 1px solid #cbd5e1;
+      border-color: #9bb8c5;
+      color: #526477;
+      font-size: 9.5pt;
+    }}
+    .section {{ margin: 0 0 6mm; break-inside: avoid; }}
+    .section-title {{
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8mm;
+      margin: 0 0 2.5mm;
+      padding-bottom: 1.5mm;
+      border-bottom: 1px solid #b8c5d1;
+      color: #173b57;
+      font-size: 13pt;
+    }}
+    .section-title span {{ color: #748397; font-size: 8.5pt; font-weight: 400; }}
+    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+    th, td {{
+      padding: 2.3mm 2.5mm;
+      border: 1px solid #cbd5e1;
+      text-align: left;
+      vertical-align: top;
+      white-space: pre-wrap;
+    }}
+    th {{ width: 21%; background: #f1f5f9; color: #526477; font-size: 9.5pt; font-weight: 700; }}
+    td {{ color: #172033; }}
+    .meta-table tr {{ break-inside: avoid; }}
+    .content-block {{
+      padding: 4mm;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      white-space: pre-wrap;
+      min-height: 20mm;
+    }}
+    .reply-block {{ border-color: #9bb8c5; background: #f1f8f8; }}
+    .note-block {{ border-color: #d9c49d; background: #fffaf0; }}
+    .empty-copy {{ margin: 0; color: #748397; }}
+    .timeline {{ margin: 0; padding: 0 0 0 5mm; border-left: 2px solid #b8c5d1; list-style: none; }}
+    .timeline-item {{ position: relative; margin: 0 0 4mm; padding-left: 3mm; break-inside: avoid; }}
+    .timeline-item::before {{
+      content: "";
+      position: absolute;
+      top: 3mm;
+      left: -6.5mm;
+      width: 3mm;
+      height: 3mm;
+      border: 1px solid #2b7288;
+      border-radius: 50%;
+      background: #fff;
+    }}
+    .timeline-item-head {{ display: flex; justify-content: space-between; gap: 5mm; color: #173b57; }}
+    .timeline-item-head span {{ flex: 0 0 auto; color: #748397; font-size: 8.5pt; }}
+    .timeline-meta {{ margin-top: .5mm; color: #748397; font-size: 8.5pt; }}
+    .event-status {{ margin-left: 2mm; color: #526477; }}
+    .timeline-content {{ margin-top: 1mm; white-space: pre-wrap; }}
+    .attachment-list {{ margin: 0; padding: 0; list-style: none; border: 1px solid #cbd5e1; }}
+    .attachment-row {{ display: flex; justify-content: space-between; gap: 5mm; padding: 2.5mm 3mm; break-inside: avoid; }}
+    .attachment-row + .attachment-row {{ border-top: 1px solid #cbd5e1; }}
+    .attachment-row strong {{ display: block; color: #173b57; }}
+    .attachment-row span, .attachment-meta {{ color: #748397; font-size: 8.5pt; }}
+    .attachment-meta {{ flex: 0 0 auto; text-align: right; }}
+    .print-footer {{ margin-top: 8mm; padding-top: 2.5mm; border-top: 1px solid #cbd5e1; color: #748397; font-size: 8.5pt; text-align: right; }}
+  </style>
+</head>
+<body>
+  <div class="no-print"><button onclick="window.print()">列印 / 另存 PDF</button></div>
+  <main class="page">
+    <header class="print-header">
+      <div class="brand">校園自治整合平台</div>
+      <h1>陳情案件詳情</h1>
+      <div class="case-number">案號：{_esc(case_obj.case_number)}</div>
+      <div class="status">案件狀態：{_esc(status_label)}</div>
+    </header>
+
+    <p class="notice">本文件供校內承辦與相關處室辦理參考；標示為「內部紀錄」的內容不對外公開。</p>
+
+    <section class="section">
+      <h2 class="section-title">案件摘要 <span>Case summary</span></h2>
+      <table class="meta-table">
+        <tbody>
+          <tr><th>案件標題</th><td>{_esc(case_obj.title)}</td><th>陳情類型</th><td>{_esc(type_name)}</td></tr>
+          <tr><th>負責機關</th><td>{_esc(org_name)}</td><th>承辦人</th><td>{_esc(assigned_name)}</td></tr>
+          <tr><th>陳情人</th><td>{_esc(submitter_name)}</td><th>聯絡信箱</th><td>{_esc(submitter_email)}</td></tr>
+          <tr><th>送件時間</th><td>{_esc(print_datetime(case_obj.submitted_at))}</td><th>最後更新</th><td>{_esc(print_datetime(case_obj.updated_at))}</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">陳情原文 <span>Original petition</span></h2>
+      <div class="content-block">{_br(case_obj.content)}</div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">正式回覆 <span>Official response</span></h2>
+      {reply_html}
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">附件清單 <span>Attachments</span></h2>
+      <ul class="attachment-list">{attachment_html}</ul>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">最新內部備註 <span>Internal note</span></h2>
+      {note_html}
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">處理時間軸 <span>Case history</span></h2>
+      <ol class="timeline">{event_html}</ol>
+    </section>
+
+    <footer class="print-footer">列印時間：{_esc(generated_at)}　·　校園自治整合平台</footer>
+  </main>
+</body>
+</html>"""
+
+
 def render_regulation_amendment_comparison_html(
     *,
     regulation_title: str,

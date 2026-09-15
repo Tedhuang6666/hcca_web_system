@@ -5,7 +5,7 @@ import type {
   PetitionNotificationRuleCreate, PetitionNotificationRuleOut, PetitionNotificationRuleUpdate,
   PetitionNotificationSettingsOut, PetitionNotificationSettingsUpdate,
 } from "../types";
-import { BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+import { authFetch, BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 陳情系統 ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +87,11 @@ export const petitionsApi = {
   },
   stats: () => get<PetitionStatsOut>("/petitions/stats"),
   get: (id: string) => get<PetitionCaseOut>(`/petitions/${id}`),
+  printPdf: async (id: string): Promise<Blob> => {
+    const res = await authFetch(`${BASE}/petitions/${id}/print`, { credentials: "include" });
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.blob();
+  },
   updateContent: (id: string, body: { title?: string; content?: string; verification_code?: string | null }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/content`, body),
   assignableUsers: (id: string) =>

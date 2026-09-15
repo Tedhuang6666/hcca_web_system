@@ -682,6 +682,51 @@ async def test_reply_case_marks_resolved_when_requested(db_session, authed_clien
     assert resp.json()["public_reply"] == "已派員修復完畢"
 
 
+async def test_public_petition_attachment_can_be_downloaded_by_submitter(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("回覆說明.pdf", b"%PDF-1.4 reply", "application/pdf")},
+        data={"visibility": "public"},
+    )
+    assert uploaded.status_code == 201
+    assert uploaded.json()["visibility"] == "public"
+
+    downloaded = await authed_client_factory(owner).get(
+        f"/petitions/{case_obj.id}/attachments/{uploaded.json()['id']}/download"
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"%PDF-1.4 reply"
+
+
+async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    handler_response = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}/print")
+    assert handler_response.status_code == 200
+    assert handler_response.headers["content-type"] == "application/pdf"
+    assert handler_response.content.startswith(b"%PDF")
+
+    owner_response = await authed_client_factory(owner).get(f"/petitions/{case_obj.id}/print")
+    assert owner_response.status_code == 403
+
+
 async def test_handler_can_edit_own_public_reply_within_one_hour(
     db_session, authed_client_factory
 ) -> None:
