@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardPaste,
   Compass,
+  ChevronDown,
   Eye,
   EyeOff,
   FileText,
@@ -1134,18 +1135,45 @@ export default function PublicSiteAdminPage() {
         ))}
       </section>
 
-      <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="公開網站設定分頁">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-sm sm:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor="public-site-tab" className="text-xs font-semibold text-[var(--text-secondary)]">
+            編輯區塊
+          </label>
+          <span className="text-xs text-[var(--text-muted)]">共 {tabs.length} 個設定</span>
+        </div>
+        <div className="relative mt-2">
+          <Select
+            id="public-site-tab"
+            value={tab}
+            onChange={(event) => setTab(event.target.value as Tab)}
+            className="min-h-12 appearance-none pr-10 font-semibold"
+            aria-label="選擇公開網站設定區塊"
+          >
+            {tabs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </Select>
+          <ChevronDown
+            size={17}
+            aria-hidden={true}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+          />
+        </div>
+        <p className="mt-2 text-xs text-[var(--text-muted)]">選擇要編輯的公開網站內容。</p>
+      </div>
+
+      <nav className="public-site-admin-tabs module-tabs-scroll hidden max-w-full overflow-x-auto sm:block" aria-label="公開網站設定分頁">
         <div className="module-tabs-list">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setTab(item.id)}
-            className={`module-tab-link cursor-pointer${tab === item.id ? " is-active" : ""}`}>
-            {item.icon}
-            <span>{item.label}</span>
-          </button>
-        ))}
+          {tabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTab(item.id)}
+              aria-pressed={tab === item.id}
+              className={`module-tab-link cursor-pointer${tab === item.id ? " is-active" : ""}`}>
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
         </div>
       </nav>
 
@@ -1749,7 +1777,7 @@ export default function PublicSiteAdminPage() {
               <ClipboardPaste size={20} className="text-[var(--primary)]" aria-hidden />
             </div>
             <div className="space-y-3 rounded-lg p-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label="幹部名單組織頁籤">
+              <div className="hidden flex-wrap gap-2 sm:flex" role="tablist" aria-label="幹部名單組織頁籤">
                 {rosterTabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -1763,6 +1791,27 @@ export default function PublicSiteAdminPage() {
                     {tab.label}
                   </button>
                 ))}
+              </div>
+              <div className="sm:hidden">
+                <label htmlFor="public-roster-tab" className="text-xs font-semibold text-[var(--text-secondary)]">
+                  目前編輯組織
+                </label>
+                <div className="relative mt-2">
+                  <Select
+                    id="public-roster-tab"
+                    value={activeRosterTabId}
+                    onChange={(event) => selectRosterTab(event.target.value)}
+                    className="min-h-11 appearance-none pr-10 font-semibold"
+                    aria-label="選擇幹部名單組織"
+                  >
+                    {rosterTabs.map((tab) => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+                  </Select>
+                  <ChevronDown
+                    size={17}
+                    aria-hidden={true}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+                  />
+                </div>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <TextInput
