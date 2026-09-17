@@ -80,7 +80,7 @@ def test_render_generic_applies_body_spacing_settings() -> None:
 
     assert '<p style="margin:0;">第一段</p>' in html
     assert '<p style="margin:6px 0 0;">第二段</p>' in html
-    assert 'class="hcca-body" style="line-height:1.5;"' in html
+    assert 'class="hcca-body" style="color:#334155;line-height:1.5;word-break:break-word;"' in html
 
 
 def test_render_generic_distinguishes_line_breaks_from_paragraphs() -> None:
