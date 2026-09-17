@@ -4,54 +4,55 @@
     <mj-title>{{ subject }}</mj-title>
     <mj-preview>{{ preview_text }}</mj-preview>
   </mj-head>
-  <mj-body background-color="#eef2f7">
+  <mj-body background-color="#edf2f6">
     <mj-include path="./_header.mjml" />
-    <mj-section background-color="#eef2f7" padding="24px 18px 28px">
+    <mj-section background-color="#edf2f6" padding="28px 18px 32px">
       <mj-column>
         <mj-text padding="0">
-          <div style="background-color:{{ background_color }};padding:10px;border-radius:28px;">
-          <div style="background-color:{{ content_background_color }};border:1px solid #e5e7eb;border-radius:24px;padding:32px 30px 30px;box-shadow:0 14px 34px rgba(15,23,42,.08);">
-            <div class="hcca-kicker" style="margin-bottom:10px;color:{{ accent_color }};">Official Message</div>
-            <div style="color:#111827;font-size:26px;font-weight:850;line-height:1.32;margin-bottom:22px;">{{ heading or subject }}</div>
+          <div style="background-color:{{ background_color }};padding:1px 0;">
+          <div style="background-color:{{ content_background_color }};border:1px solid #dbe3eb;border-radius:16px;padding:32px 32px 30px;box-shadow:0 8px 22px rgba(15,23,42,.06);">
+            <div style="height:3px;background-color:{{ accent_color }};border-radius:3px;margin:-32px -32px 28px;"></div>
+            <div style="color:#0f1b2d;font-size:26px;font-weight:800;line-height:1.35;margin-bottom:18px;word-break:break-word;">{{ heading or subject }}</div>
+            <div style="border-top:1px solid #e5eaf0;margin:0 0 22px;"></div>
             {% if banner_image_url %}
-              <div style="padding:0 0 22px;text-align:center;"><img src="{{ banner_image_url }}" alt="{{ banner_image_alt }}" width="540" style="display:block;max-width:100%;height:auto;border-radius:16px;" /></div>
+              <div style="padding:0 0 24px;text-align:center;"><img src="{{ banner_image_url }}" alt="{{ banner_image_alt }}" width="540" style="display:block;max-width:100%;height:auto;border-radius:12px;" /></div>
             {% endif %}
             {% if card_rows %}
-              <div style="margin:0 0 22px;">
+              <div style="margin:0 0 24px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#f8fafc;">
                 {% for row in card_rows %}
                   {% if loop.first %}
-                    <div style="background:#fff4c7;border-radius:20px;padding:22px 22px 24px;margin:0 0 12px;">
-                      <div class="hcca-highlight-label">{{ row.label }}</div>
-                      <div class="hcca-highlight-value">{{ row.value }}</div>
+                    <div style="background:#fff9e8;padding:17px 18px 19px;border-bottom:1px solid #eee4c9;">
+                      <div class="hcca-highlight-label" style="color:#806316;">{{ row.label }}</div>
+                      <div style="color:#111827;font-size:22px;font-weight:800;line-height:1.4;margin-top:5px;word-break:break-word;">{{ row.value }}</div>
                     </div>
                   {% else %}
-                    <div style="background:#f4f7fb;border-radius:16px;padding:15px 18px;margin:0 0 10px;">
+                    <div style="padding:14px 18px;border-bottom:1px solid #e2e8f0;">
                       <div class="hcca-note-label">{{ row.label }}</div>
-                      <div class="hcca-note-value">{{ row.value }}</div>
+                      <div class="hcca-note-value" style="word-break:break-word;">{{ row.value }}</div>
                     </div>
                   {% endif %}
                 {% endfor %}
               </div>
             {% endif %}
-            <div class="hcca-body" style="line-height:{{ body_line_height }};">{{ body_html | safe }}</div>
+            <div class="hcca-body" style="color:#334155;line-height:{{ body_line_height }};word-break:break-word;">{{ body_html | safe }}</div>
             {% for blk in blocks %}
               {% if blk.type == 'image' %}
-                <div style="padding:18px 0 0;text-align:center;"><img src="{{ blk.url }}" alt="{{ blk.alt }}" width="540" style="max-width:100%;height:auto;border-radius:14px;" /></div>
+                <div style="padding:22px 0 0;text-align:center;"><img src="{{ blk.url }}" alt="{{ blk.alt }}" width="540" style="max-width:100%;height:auto;border-radius:12px;" /></div>
               {% elif blk.type == 'divider' %}
-                <div style="border-top:1px solid #e5e7eb;margin:22px 0;"></div>
+                <div style="border-top:1px solid #e5eaf0;margin:24px 0;"></div>
               {% elif blk.type == 'text' %}
                 <div class="hcca-body" style="padding-top:6px;line-height:{{ body_line_height }};">{{ blk.html | safe }}</div>
               {% endif %}
             {% endfor %}
             {% if buttons %}
-              <div style="padding:24px 0 0;text-align:center;">
+              <div style="border-top:1px solid #e5eaf0;margin-top:24px;padding:24px 0 0;text-align:center;">
                 {% for b in buttons %}
-                  <a href="{{ b.url }}" style="box-sizing:border-box;display:inline-block;margin:0 10px 10px 0;max-width:100%;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:{{ accent_color }};border:1px solid {{ accent_color }};{% else %}background-color:{{ accent_color }};color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
+                  <a href="{{ b.url }}" style="box-sizing:border-box;display:inline-block;margin:0 10px 10px 0;max-width:100%;font-size:15px;font-weight:800;text-decoration:none;padding:13px 26px;border-radius:9px;word-break:break-word;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:{{ accent_color }};border:1px solid {{ accent_color }};{% else %}background-color:{{ accent_color }};color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
                 {% endfor %}
               </div>
             {% elif cta_url %}
-              <div style="padding:24px 0 0;text-align:center;">
-                <a href="{{ cta_url }}" style="box-sizing:border-box;display:inline-block;max-width:100%;background-color:{{ accent_color }};color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;">{{ cta_label or '查看詳情' }}</a>
+              <div style="border-top:1px solid #e5eaf0;margin-top:24px;padding:24px 0 0;text-align:center;">
+                <a href="{{ cta_url }}" style="box-sizing:border-box;display:inline-block;max-width:100%;background-color:{{ accent_color }};color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:13px 26px;border-radius:9px;word-break:break-word;">{{ cta_label or '查看詳情' }}</a>
               </div>
             {% endif %}
           </div>
