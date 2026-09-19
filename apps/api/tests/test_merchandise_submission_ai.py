@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import struct
 import zlib
+
+from PIL import Image
 
 from api.services.merchandise_submission_ai import analyze_image_ai_evidence
 
@@ -46,6 +49,18 @@ def _webp_xmp_image(text: str) -> bytes:
     chunk += b"\x00" * (len(data) % 2)
     body = b"WEBP" + chunk
     return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
+def _png_pixel_image(size: tuple[int, int] = (96, 96)) -> bytes:
+    image = Image.new("RGB", size)
+    pixels = image.load()
+    for y in range(size[1]):
+        for x in range(size[0]):
+            block_x, block_y = x % 8, y % 8
+            pixels[x, y] = ((block_x * 29) % 256, (block_y * 31) % 256, (x + y) % 256)
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 def test_png_prompt_metadata_is_reported_as_ai_evidence() -> None:
@@ -144,3 +159,14 @@ def test_plain_image_has_no_ai_evidence() -> None:
 
     assert result["status"] == "no_evidence"
     assert result["evidence"] == []
+
+
+def test_valid_image_is_analyzed_at_pixel_level_without_metadata() -> None:
+    result = analyze_image_ai_evidence(_png_pixel_image(), "image/png")
+
+    assert any(
+        item["source"] == "Pixel-level content analysis" and item["key"] == "decoded"
+        for item in result["metadata"]
+    )
+    assert any(item["category"] == "Pixel-level Forensic Signal" for item in result["evidence"])
+    assert result["status"] == "supporting"

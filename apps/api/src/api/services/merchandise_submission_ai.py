@@ -1,13 +1,17 @@
-"""校商投稿圖片的 metadata / Content Credentials 證據擷取。"""
+"""校商投稿圖片的來源證據與像素層鑑識輔助。"""
 
 from __future__ import annotations
 
 import hashlib
+import io
+import math
 import re
 import zlib
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Literal, TypedDict
+
+from PIL import Image, UnidentifiedImageError
 
 
 class MerchandiseSubmissionAIEvidence(TypedDict):
@@ -32,7 +36,12 @@ class MerchandiseSubmissionAIDetection(TypedDict):
     scanned_at: str
 
 
-AI_DETECTION_VERSION = "20260728.2"
+AI_DETECTION_VERSION = "20260919.1"
+
+_PIXEL_ANALYSIS_SOURCE = "Pixel-level content analysis"
+_PIXEL_SAMPLE_EDGE = 96
+_PIXEL_ANALYSIS_MAX_PIXELS = 12_000_000
+_PIXEL_SIGNAL_MIN_PIXELS = 4_096
 
 
 _AI_TOOLS: tuple[tuple[str, str], ...] = (
@@ -598,10 +607,185 @@ def _add_evidence(
     evidence.append(item)
 
 
+def _entropy(values: Iterable[int]) -> float:
+    counts: dict[int, int] = {}
+    total = 0
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+        total += 1
+    if not total:
+        return 0.0
+    return -sum(count / total * math.log2(count / total) for count in counts.values() if count)
+
+
+def _pixel_forensic_analysis(
+    content: bytes, content_type: str
+) -> tuple[list[MerchandiseSubmissionAIEvidence], list[MerchandiseSubmissionAIMetadata]]:
+    """Extract conservative pixel-level signals without calling them proof of AI generation.
+
+    Metadata can be stripped or rewritten.  This pass therefore decodes the actual image and
+    measures a small, deterministic sample of pixels.  The signals are deliberately emitted as
+    level C evidence: they can request human review, but they must not independently label a file
+    as AI-generated.  A reliable SynthID result still requires Google's detector.
+    """
+    expected_formats = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}
+    expected_format = expected_formats.get(content_type)
+    if expected_format is None:
+        return [], []
+
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image.verify()
+        with Image.open(io.BytesIO(content)) as image:
+            width, height = image.size
+            actual_format = image.format or "unknown"
+            if width <= 0 or height <= 0 or width * height > _PIXEL_ANALYSIS_MAX_PIXELS:
+                return [], [
+                    {
+                        "source": _PIXEL_ANALYSIS_SOURCE,
+                        "key": "decode",
+                        "value": "skipped: image dimensions exceed safe analysis limits",
+                    }
+                ]
+            image.load()
+            sampled = image.convert("RGB")
+            sampled.thumbnail((_PIXEL_SAMPLE_EDGE, _PIXEL_SAMPLE_EDGE), Image.Resampling.BILINEAR)
+            pixels = list(sampled.get_flattened_data())
+    except (
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        IndexError,
+        RuntimeError,
+        ValueError,
+    ):
+        return [], []
+
+    if not pixels:
+        return [], []
+
+    sample_width, sample_height = sampled.size
+    luma = [round(0.299 * red + 0.587 * green + 0.114 * blue) for red, green, blue in pixels]
+    luma_bins = [value // 8 for value in luma]
+    quantized_colors = {(red // 16, green // 16, blue // 16) for red, green, blue in pixels}
+    adjacent_differences: list[int] = []
+    for row in range(sample_height):
+        row_start = row * sample_width
+        for column in range(sample_width):
+            index = row_start + column
+            if column + 1 < sample_width:
+                adjacent_differences.append(abs(luma[index] - luma[index + 1]))
+            if row + 1 < sample_height:
+                adjacent_differences.append(abs(luma[index] - luma[index + sample_width]))
+
+    smooth_ratio = (
+        sum(difference <= 2 for difference in adjacent_differences) / len(adjacent_differences)
+        if adjacent_differences
+        else 0.0
+    )
+    edge_density = (
+        sum(difference >= 24 for difference in adjacent_differences) / len(adjacent_differences)
+        if adjacent_differences
+        else 0.0
+    )
+    color_diversity = len(quantized_colors) / len(pixels)
+    luma_entropy = _entropy(luma_bins)
+
+    block_hashes: list[tuple[tuple[int, int, int], ...]] = []
+    block_size = 8
+    for top in range(0, sample_height - block_size + 1, block_size):
+        for left in range(0, sample_width - block_size + 1, block_size):
+            block_hashes.append(
+                tuple(
+                    (
+                        pixels[(top + offset_y) * sample_width + left + offset_x][0] // 16,
+                        pixels[(top + offset_y) * sample_width + left + offset_x][1] // 16,
+                        pixels[(top + offset_y) * sample_width + left + offset_x][2] // 16,
+                    )
+                    for offset_y in range(block_size)
+                    for offset_x in range(block_size)
+                )
+            )
+    repeated_block_ratio = 1 - len(set(block_hashes)) / len(block_hashes) if block_hashes else 0.0
+
+    metadata: list[MerchandiseSubmissionAIMetadata] = [
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "decoded", "value": "true"},
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "format", "value": actual_format},
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "width", "value": str(width)},
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "height", "value": str(height)},
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "sample_size",
+            "value": f"{sample_width}x{sample_height}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "luma_entropy",
+            "value": f"{luma_entropy:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "edge_density",
+            "value": f"{edge_density:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "smooth_ratio",
+            "value": f"{smooth_ratio:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "color_diversity",
+            "value": f"{color_diversity:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "repeated_block_ratio",
+            "value": f"{repeated_block_ratio:.3f}",
+        },
+    ]
+    if actual_format != expected_format:
+        return [], metadata + [
+            {
+                "source": _PIXEL_ANALYSIS_SOURCE,
+                "key": "container_mismatch",
+                "value": f"宣告 {expected_format}，實際解析為 {actual_format}",
+            }
+        ]
+
+    signals: list[str] = []
+    if (
+        len(pixels) >= _PIXEL_SIGNAL_MIN_PIXELS
+        and repeated_block_ratio >= 0.55
+        and color_diversity >= 0.002
+    ):
+        signals.append(f"重複 8×8 區塊比例 {repeated_block_ratio:.1%}")
+    if (
+        len(pixels) >= _PIXEL_SIGNAL_MIN_PIXELS
+        and smooth_ratio >= 0.995
+        and edge_density <= 0.01
+        and luma_entropy >= 4.0
+    ):
+        signals.append(f"高平滑／低邊緣比例（smooth {smooth_ratio:.1%}，edge {edge_density:.1%}）")
+    if not signals:
+        return [], metadata
+
+    evidence: list[MerchandiseSubmissionAIEvidence] = []
+    _add_evidence(
+        evidence,
+        level="C",
+        category="Pixel-level Forensic Signal",
+        label="像素內容出現需人工複核的統計特徵",
+        value=("；".join(signals) + "。這是內容鑑識輔助線索，不能單獨證明圖片由 AI 生成。"),
+        source=_PIXEL_ANALYSIS_SOURCE,
+    )
+    return evidence, metadata
+
+
 def analyze_image_ai_evidence(
     content: bytes, content_type: str
 ) -> MerchandiseSubmissionAIDetection:
-    """只分析原始檔案內可驗證的 metadata，不對圖片像素做模型推論。"""
+    """Analyse provenance metadata plus conservative pixel-level forensic signals."""
     scanned_at = datetime.now(UTC).isoformat()
     digest = hashlib.sha256(content).hexdigest()
     if not content_type.lower().startswith("image/"):
@@ -613,12 +797,16 @@ def analyze_image_ai_evidence(
             "scanned_at": scanned_at,
         }
 
-    metadata = _metadata_texts(content, content_type.lower())
+    normalized_content_type = content_type.lower()
+    metadata = _metadata_texts(content, normalized_content_type)
     fields = _metadata_fields(metadata)
-    metadata_details = _metadata_details(content, content_type.lower(), metadata, fields)
+    metadata_details = _metadata_details(content, normalized_content_type, metadata, fields)
     metadata_text = "\n".join(text for _, text in metadata)
     lowered = metadata_text.lower()
     evidence: list[MerchandiseSubmissionAIEvidence] = []
+    pixel_evidence, pixel_metadata = _pixel_forensic_analysis(content, normalized_content_type)
+    evidence.extend(pixel_evidence)
+    metadata_details.extend(pixel_metadata)
 
     c2pa_hits = [marker for marker in _C2PA_MARKERS if marker in lowered]
     c2pa_fields = _matching_fields(fields, _C2PA_FIELDS)

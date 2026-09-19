@@ -71,33 +71,33 @@ const AI_STATUS_CONFIG: Record<
   { label: string; description: string; tone: AIDetectionTone }
 > = {
   detected: {
-    label: "偵測到 AI",
-    description: "檔案中有可供判斷的 AI 相關 metadata，請搭配其他審核資訊判讀。",
+    label: "有明確 AI 來源證據",
+    description: "檔案中有生成工具、提示詞或 C2PA 來源證據；仍請搭配投稿內容與人工審核判讀。",
     tone: "warning",
   },
   supporting: {
-    label: "偵測到 AI 製作來源",
-    description: "檔案中有可能與來源或製作流程相關的 metadata，並非直接判定檔案為 AI 生成。",
+    label: "有輔助鑑識線索",
+    description: "像素層統計或一般來源資訊出現需要複核的線索，不能單獨判定檔案為 AI 生成。",
     tone: "info",
   },
   no_evidence: {
-    label: "未偵測到 AI",
-    description: "目前沒有找到可判斷的 AI 相關 metadata；這不代表檔案一定不是 AI 生成。",
+    label: "尚無可靠 AI 證據",
+    description: "已檢查可解析的來源資訊與像素結構，但沒有找到可靠線索；這不代表檔案一定不是 AI 生成。",
     tone: "neutral",
   },
   not_applicable: {
     label: "未偵測",
-    description: "目前檔案格式不支援 AI metadata 分析。",
+    description: "目前檔案格式不支援 AI / 內容鑑識。",
     tone: "neutral",
   },
   error: {
     label: "偵測失敗",
-    description: "分析原始檔時發生問題，請重新上傳檔案或稍後再試。",
+    description: "分析原始檔時發生問題，請重新上傳檔案或稍後再試。系統不會以失敗結果判定投稿。",
     tone: "danger",
   },
   unscanned: {
     label: "尚未偵測",
-    description: "此檔案尚未完成 AI metadata 偵測。",
+    description: "此檔案尚未完成 AI / 內容鑑識。",
     tone: "neutral",
   },
 };
@@ -165,7 +165,7 @@ function AIEvidencePanel({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold" style={{ color: toneStyles.color }}>
-              AI metadata
+              AI / 內容鑑識
             </p>
             <p className="mt-0.5 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
               {status.label}
@@ -188,7 +188,7 @@ function AIEvidencePanel({
       </div>
 
       {isOpen && (
-        <Modal title="AI metadata 詳情" onClose={() => setIsOpen(false)} size="2xl">
+        <Modal title="AI / 內容鑑識詳情" onClose={() => setIsOpen(false)} size="2xl">
           <div className="space-y-5">
             <div
               className="flex items-start gap-3 rounded-lg border p-3"
@@ -274,9 +274,9 @@ function AIEvidencePanel({
                   className="mt-2 rounded-lg border p-3 text-xs"
                   style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}
                 >
-                  <p className="font-medium">未偵測到可供判斷的 AI metadata</p>
+                  <p className="font-medium">未偵測到可供判斷的來源或內容線索</p>
                   <p className="mt-1 leading-5" style={{ color: "var(--text-secondary)" }}>
-                    這只代表目前沒有解析到相關線索，不代表檔案一定不是 AI 生成。
+                    系統已檢查可解析的 metadata 與像素結構；這不代表檔案一定不是 AI 生成。
                   </p>
                 </div>
               )}
@@ -284,7 +284,7 @@ function AIEvidencePanel({
 
             <section aria-labelledby="ai-metadata-title">
               <div className="flex items-center justify-between gap-3">
-                <h3 id="ai-metadata-title" className="text-sm font-semibold">完整 metadata</h3>
+                <h3 id="ai-metadata-title" className="text-sm font-semibold">完整分析資料</h3>
                 <span className="text-xs" style={{ color: "var(--text-muted)" }}>{metadata.length} 筆</span>
               </div>
               {metadata.length > 0 ? (
