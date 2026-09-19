@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import mimetypes
 import uuid
@@ -103,7 +104,7 @@ async def _analyze_storage_file(
         content = await get_storage().read_bytes(storage_key)
     except (FileNotFoundError, OSError, ValueError):
         return analysis_error()
-    return analyze_image_ai_evidence(content, safe_content_type)
+    return await asyncio.to_thread(analyze_image_ai_evidence, content, safe_content_type)
 
 
 def _apply_file_analysis(file: MerchandiseSubmissionFile, result: MerchandiseSubmissionAIDetection):
