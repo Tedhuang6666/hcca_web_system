@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { apiErrorMessage, merchandiseSubmissionsApi, orgsApi, usersApi } from "@/lib/api";
+import { authFetch } from "@/lib/api/core";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import UserPicker from "@/components/surveys/UserPicker";
@@ -58,6 +59,56 @@ function isPreviewableImage(file: { content_type: string; filename: string }) {
     file.content_type.startsWith("image/") ||
     /\.(jpe?g|png|webp)$/i.test(file.filename)
   );
+}
+
+function AuthenticatedPreviewImage({
+  src,
+  alt,
+  className,
+  style,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = uploadUrl(src);
+    if (!url) {
+      setObjectUrl(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let createdUrl: string | null = null;
+    setObjectUrl(null);
+    void authFetch(url, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`無法載入投稿圖片（HTTP ${response.status}）`);
+        return response.blob();
+      })
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        createdUrl = URL.createObjectURL(blob);
+        setObjectUrl(createdUrl);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      controller.abort();
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [src]);
+
+  if (!objectUrl) {
+    return <div className={`${className ?? ""} animate-pulse`} style={{ ...style, background: "var(--bg-elevated)" }} role="img" aria-label={alt} />;
+  }
+
+  // Blob URLs are produced after an authenticated fetch and cannot use Next Image.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={objectUrl} alt={alt} className={className} style={style} />;
 }
 
 type AIDetectionStatus = NonNullable<
@@ -572,9 +623,8 @@ function ItemEditor({
               className="flex gap-3 rounded-lg border p-2"
               style={{ borderColor: "var(--border)" }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={uploadUrl(template.url)}
+              <AuthenticatedPreviewImage
+                src={template.url}
                 alt={`${template.label} 預覽`}
                 className="h-20 w-20 rounded object-contain"
                 style={{ background: "var(--bg-elevated)" }}
@@ -995,9 +1045,8 @@ function ReviewRow({
               className="block"
             >
               {isPreviewableImage(file) ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={uploadUrl(file.url)}
+                <AuthenticatedPreviewImage
+                  src={file.url}
                   alt={`${file.filename} 預覽`}
                   className="aspect-square w-full rounded object-cover"
                 />
@@ -1113,13 +1162,13 @@ export default function MerchandiseSubmissionsAdminPage() {
   >("");
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ showLoading = true }: { showLoading?: boolean } = {}) => {
     if (!permissionsReady) return;
     if (!canAccessAdmin) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       const [nextSettings, nextItems, nextSubmissions, nextOrgs] = await Promise.all([
         canManageSubmissions ? merchandiseSubmissionsApi.getSettings() : Promise.resolve(null),
@@ -1699,7 +1748,7 @@ export default function MerchandiseSubmissionsAdminPage() {
             onChange={setDraft}
             onSaved={() => {
               setDraft(emptyItem());
-              void load();
+              void load({ showLoading: false });
             }}
           />
         </div>
@@ -1845,7 +1894,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                     settings?.global_fields ?? [],
                     items.find((item) => item.id === submission.item_id)?.custom_fields ?? [],
                   )}
-                  onReviewed={() => void load()}
+                  onReviewed={() => void load({ showLoading: false })}
                 />
               ))
             ) : (
