@@ -6,12 +6,14 @@ type PermissionState = {
   permissions: Set<string>;
   isAdmin: boolean;
   isOwner: boolean;
+  isReady: boolean;
 };
 
 const EMPTY_PERMISSION_STATE: PermissionState = {
   permissions: new Set<string>(),
   isAdmin: false,
   isOwner: false,
+  isReady: false,
 };
 
 // Keep one stable snapshot for useSyncExternalStore. It gives React the same
@@ -24,6 +26,7 @@ function equalPermissionState(left: PermissionState, right: PermissionState): bo
   if (
     left.isAdmin !== right.isAdmin
     || left.isOwner !== right.isOwner
+    || left.isReady !== right.isReady
     || left.permissions.size !== right.permissions.size
   ) return false;
   for (const permission of left.permissions) {
@@ -41,28 +44,16 @@ function refreshClientPermissionState(onChange: () => void) {
 
 function subscribeToPermissionState(onChange: () => void) {
   if (typeof window === "undefined") return () => {};
-  let documentReady = document.readyState === "complete";
   const refresh = () => {
-    if (documentReady) refreshClientPermissionState(onChange);
-  };
-  const markReady = () => {
-    documentReady = true;
     refreshClientPermissionState(onChange);
   };
   window.addEventListener(AUTH_CACHE_EVENT, refresh);
-  if (!documentReady) {
-    window.addEventListener("load", markReady, { once: true });
-  } else {
-    // Full reloads can hydrate after the document load event already fired.
-    // Read the cache now instead of waiting for an event that will not recur.
-    refreshClientPermissionState(onChange);
-  }
-  // On the initial streamed document, wait for the browser load boundary so
-  // permission-driven navigation cannot interrupt selective hydration. SPA
-  // navigations run immediately because the document is already complete.
+  // useSyncExternalStore subscribes after hydration commits, so reading the
+  // browser cache immediately is safe and avoids waiting for every page asset
+  // to finish loading before permission-gated UI can settle.
+  refresh();
   return () => {
     window.removeEventListener(AUTH_CACHE_EVENT, refresh);
-    window.removeEventListener("load", markReady);
   };
 }
 
@@ -76,14 +67,23 @@ function getServerPermissionState() {
 
 function readPermissionState(): PermissionState {
   if (typeof window === "undefined") {
-    return { permissions: new Set<string>(), isAdmin: false, isOwner: false };
+    return { permissions: new Set<string>(), isAdmin: false, isOwner: false, isReady: false };
   }
   const raw = sessionStorage.getItem("permissions");
   const superuser = sessionStorage.getItem("is_superuser") === "true";
   const owner = sessionStorage.getItem("is_owner") === "true";
+  const hasCachedAuthState = ["permissions", "is_superuser", "is_owner"]
+    .some((key) => sessionStorage.getItem(key) !== null);
   let perms: string[] = [];
   try { perms = raw ? JSON.parse(raw) : []; } catch { /* ignore */ }
-  return { permissions: new Set<string>(perms), isAdmin: superuser || owner, isOwner: owner };
+  return {
+    permissions: new Set<string>(perms),
+    isAdmin: superuser || owner,
+    isOwner: owner,
+    // localStorage 的 user_id 會跨瀏覽器工作階段保留；若安全權限快取尚未
+    // 寫入，代表 /auth/me 尚未完成，不能把暫時的空權限當成拒絕存取。
+    isReady: !localStorage.getItem("user_id") || hasCachedAuthState,
+  };
 }
 
 /**
@@ -100,7 +100,7 @@ export function usePermissions() {
     getClientPermissionState,
     getServerPermissionState,
   );
-  const { permissions, isAdmin, isOwner } = permissionState;
+  const { permissions, isAdmin, isOwner, isReady } = permissionState;
 
   /** 是否擁有指定權限（超管自動通過） */
   const can = useCallback((code: string) =>
@@ -124,5 +124,5 @@ export function usePermissions() {
     [isAdmin, permissions],
   );
 
-  return { can, canAny, isAdmin, isOwner, permissions };
+  return { can, canAny, isAdmin, isOwner, permissions, isReady };
 }

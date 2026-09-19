@@ -1087,7 +1087,7 @@ function ReviewRow({
 }
 
 export default function MerchandiseSubmissionsAdminPage() {
-  const { can } = usePermissions();
+  const { can, isReady: permissionsReady } = usePermissions();
   const canManageSubmissions =
     can("merchandise_submission:manage") || can("shop:manage");
   const canReviewSubmissions =
@@ -1114,6 +1114,7 @@ export default function MerchandiseSubmissionsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const load = useCallback(async () => {
+    if (!permissionsReady) return;
     if (!canAccessAdmin) {
       setLoading(false);
       return;
@@ -1138,7 +1139,7 @@ export default function MerchandiseSubmissionsAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [canAccessAdmin, canManageSubmissions, canReviewSubmissions]);
+  }, [canAccessAdmin, canManageSubmissions, canReviewSubmissions, permissionsReady]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -1203,6 +1204,15 @@ export default function MerchandiseSubmissionsAdminPage() {
       toast.error(apiErrorMessage(error, "無法建立票選問卷草稿"));
     }
   };
+  if (!permissionsReady || loading || (canManageSubmissions && !settings))
+    return (
+      <main className="p-6">
+        <div
+          className="h-36 animate-pulse rounded-xl"
+          style={{ background: "var(--bg-elevated)" }}
+        />
+      </main>
+    );
   if (!canAccessAdmin)
     return (
       <main className="p-6">
@@ -1212,16 +1222,6 @@ export default function MerchandiseSubmissionsAdminPage() {
         </p>
       </main>
     );
-  if (loading || (canManageSubmissions && !settings))
-    return (
-      <main className="p-6">
-        <div
-          className="h-36 animate-pulse rounded-xl"
-          style={{ background: "var(--bg-elevated)" }}
-        />
-      </main>
-    );
-
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
       <header
