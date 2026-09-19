@@ -207,8 +207,8 @@
                         <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', Helvetica, Arial, sans-serif;font-size:15px;line-height:1.75;text-align:left;color:#334155;">
                           <div style="background-color:{{ background_color }};padding:1px 0;">
                             <div style="background-color:{{ content_background_color }};border:1px solid #dbe3eb;border-radius:16px;padding:32px 32px 30px;box-shadow:0 8px 22px rgba(15,23,42,.06);">
-                              <div style="height:3px;background-color:{{ accent_color }};border-radius:3px;margin:-32px -32px 28px;"></div>
-                              <div style="color:#0f1b2d;font-size:26px;font-weight:800;line-height:1.35;margin-bottom:18px;word-break:break-word;">{{ heading or subject }}</div>
+                              <div style="height:3px;border-top:3px solid {{ accent_color }};border-radius:3px;margin:-32px -32px 28px;"></div>
+                              <div style="color:{{ accent_color }};font-size:26px;font-weight:800;line-height:1.35;margin-bottom:18px;word-break:break-word;">{{ heading or subject }}</div>
                               <div style="border-top:1px solid #e5eaf0;margin:0 0 22px;"></div> {% if banner_image_url %} <div style="padding:0 0 24px;text-align:center;"><img src="{{ banner_image_url }}" alt="{{ banner_image_alt }}" width="540" style="display:block;max-width:100%;height:auto;border-radius:12px;" /></div> {% endif %} {% if card_rows %} <div style="margin:0 0 24px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#f8fafc;"> {% for row in card_rows %} {% if loop.first %} <div style="background:#fff9e8;padding:17px 18px 19px;border-bottom:1px solid #eee4c9;">
                                   <div class="hcca-highlight-label" style="color:#806316;">{{ row.label }}</div>
                                   <div style="color:#111827;font-size:22px;font-weight:800;line-height:1.4;margin-top:5px;word-break:break-word;">{{ row.value }}</div>
