@@ -155,7 +155,7 @@ export default function BudgetWorkspace({
       (item) => item.status === "draft" || item.status === "returned",
     );
     setImportTarget(editable ? "replace" : "supplemental");
-  }, [detail?.id]);
+  }, [detail]);
 
   const refreshDetail = async () => {
     await load(detail?.id);

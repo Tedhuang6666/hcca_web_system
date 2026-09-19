@@ -21,7 +21,6 @@ import type { AnnouncementListItem, MatterListItem } from "@/lib/types";
 import { cacheGet, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
-import OnboardingHint from "@/components/ui/OnboardingHint";
 import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation-profile";
 import { riskColor, sortMattersByInsight } from "@/lib/governanceInsights";
 

@@ -26,6 +26,7 @@ describe("usePermissions", () => {
 
     const { result } = renderPermissions();
 
+    expect(result.current.isReady).toBe(true);
     expect(result.current.can("document:create")).toBe(true);
     expect(result.current.can("document:draft")).toBe(true);
     expect(result.current.can("audit:view_org")).toBe(true);
