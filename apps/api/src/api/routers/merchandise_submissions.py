@@ -712,8 +712,8 @@ async def admin_submissions(
     status_filter: MerchandiseSubmissionStatus | None = Query(None, alias="status"),
 ) -> list[dict]:
     submissions = await submission_svc.list_submissions(session, status=status_filter)
-    # 不要在列表請求中逐一讀取儲存檔並解析 AI metadata；歷史投稿很多時會
-    # 讓管理頁長時間卡在載入。新上傳檔案仍會在上傳流程完成分析。
+    # 首次遇到檔案才分析並寫回資料庫；同一分析版本之後直接使用已儲存結果。
+    await submission_svc.refresh_submission_file_analysis(session, submissions)
     return [_serialize_submission(submission, include_submitter=True) for submission in submissions]
 
 
