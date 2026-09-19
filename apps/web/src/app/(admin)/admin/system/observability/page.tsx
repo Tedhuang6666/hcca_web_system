@@ -253,16 +253,16 @@ export default function ObservabilityPage() {
       </div>
     </header>
     <nav className="flex gap-1 overflow-x-auto border-b" style={{ borderColor: "var(--border)" }} aria-label="觀測分頁">
-      {tabs.map((item) => <button key={item.id} type="button" onClick={() => setTab(item.id)} aria-current={tab === item.id ? "page" : undefined} className="min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium transition-colors" style={{ borderColor: tab === item.id ? "var(--primary)" : "transparent", color: tab === item.id ? "var(--text-primary)" : "var(--text-muted)" }}>{item.label}</button>)}
+      {tabs.map((item) => <button key={item.id} type="button" onClick={() => { setTabData(null); setTabError(null); setTab(item.id); }} aria-current={tab === item.id ? "page" : undefined} className="min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium transition-colors" style={{ borderColor: tab === item.id ? "var(--primary)" : "transparent", color: tab === item.id ? "var(--text-primary)" : "var(--text-muted)" }}>{item.label}</button>)}
     </nav>
     {overviewError && <InlineError message={overviewError} />}
     {tab === "overview" && <OverviewPanel data={overview} loading={loading} onInspect={(url) => { setSelectedUrl(url); setTab("performance"); }} />}
     {tab !== "overview" && tabLoading && <LoadingState />}
     {tab !== "overview" && tabError && <InlineError message={tabError} />}
-    {tab === "errors" && tabData && <ErrorsPanel data={tabData as ErrorsData} />}
-    {tab === "real-users" && tabData && <RealUsersPanel data={tabData as RealUsersData} windowHours={rumWindowHours} onWindowHoursChange={setRumWindowHours} />}
-    {tab === "performance" && tabData && <PerformancePanel data={tabData as PerformanceData} page={selectedPage} />}
-    {tab === "releases" && tabData && <ReleasesPanel data={tabData as Release[]} />}
+    {tab === "errors" && tabData && !Array.isArray(tabData) && <ErrorsPanel data={tabData as ErrorsData} />}
+    {tab === "real-users" && tabData && !Array.isArray(tabData) && <RealUsersPanel data={tabData as RealUsersData} windowHours={rumWindowHours} onWindowHoursChange={setRumWindowHours} />}
+    {tab === "performance" && tabData && !Array.isArray(tabData) && <PerformancePanel data={tabData as PerformanceData} page={selectedPage} />}
+    {tab === "releases" && Array.isArray(tabData) && <ReleasesPanel data={tabData} />}
   </main>;
 }
 
