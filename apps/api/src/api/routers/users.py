@@ -63,6 +63,16 @@ class UserSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _user_summary(user: User, *, include_sensitive: bool) -> UserSummary:
+    """建立下拉選單回應，不修改仍受 session 追蹤的 User instance。"""
+    return UserSummary(
+        id=user.id,
+        display_name=user.display_name,
+        email=user.email if include_sensitive else "",
+        student_id=user.student_id if include_sensitive else None,
+    )
+
+
 class EmailVerificationRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=255)
 
@@ -130,7 +140,7 @@ async def list_users(
     search: str | None = Query(None, description="關鍵字（顯示名稱、信箱或學號）"),
     ids: list[uuid.UUID] | None = Query(None, description="依使用者 ID 批次取得（供回填已選名單）"),
     limit: int = Query(50, ge=1, le=50),
-) -> list[User]:
+) -> list[UserSummary]:
     """回傳使用者列表，可依關鍵字過濾或依 ID 批次取得，用於審核人、受文者選取等場合"""
     codes = await get_user_permission_codes(db, current_user.id)
     allow_sensitive_search = "admin:all" in codes or current_user.is_superuser
@@ -140,11 +150,7 @@ async def list_users(
             select(User).where(User.id.in_(ids[:200]), User.is_active == True)  # noqa: E712
         )
         users = list(result.scalars().all())
-        if not allow_sensitive_search:
-            for u in users:
-                u.email = ""
-                u.student_id = None
-        return users
+        return [_user_summary(user, include_sensitive=allow_sensitive_search) for user in users]
     # 去除 NUL：PostgreSQL/UTF8 不接受 0x00，直接進 ILIKE 參數會丟
     # CharacterNotInRepertoireError → 未處理的 500。任何登入者可藉此低成本刷 5xx
     # 觸發模組斷路器造成 DoS，故在入口先清掉。
@@ -167,12 +173,7 @@ async def list_users(
     q = q.order_by(User.display_name).limit(limit)
     result = await db.execute(q)
     users = list(result.scalars().all())
-    if allow_sensitive_search:
-        return users
-    for u in users:
-        u.email = ""
-        u.student_id = None
-    return users
+    return [_user_summary(user, include_sensitive=allow_sensitive_search) for user in users]
 
 
 @router.get("/me", response_model=UserRead, summary="取得當前使用者資訊")

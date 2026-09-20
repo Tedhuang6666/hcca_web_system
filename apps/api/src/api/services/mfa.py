@@ -1,10 +1,12 @@
 """2FA (TOTP) 服務 - 啟用/停用/驗證多因素認證"""
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import logging
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 
 from argon2 import PasswordHasher
@@ -23,6 +25,9 @@ _ENCRYPTED_PREFIX = "enc:v1:"
 _BACKUP_CODE_COUNT = 8
 _BACKUP_CODE_SALT_BYTES = 16
 _ARGON2 = PasswordHasher()
+# Argon2 與舊版 scrypt 驗證都是同步且昂貴的 CPU 工作。固定兩個 worker 避免大量
+# MFA 請求同時建立 thread，並讓 API event loop 繼續服務其他請求。
+_MFA_HASH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="mfa-hash")
 
 
 def _fernet() -> Fernet:
@@ -65,8 +70,12 @@ def _generate_backup_codes() -> list[str]:
     return [secrets.token_hex(8).upper() for _ in range(_BACKUP_CODE_COUNT)]
 
 
-def _hashes_payload(codes: list[str]) -> dict[str, list[str]]:
-    return {"codes": [_hash_backup_code(code) for code in codes]}
+async def _hashes_payload(codes: list[str]) -> dict[str, list[str]]:
+    loop = asyncio.get_running_loop()
+    hashes = await asyncio.gather(
+        *(loop.run_in_executor(_MFA_HASH_EXECUTOR, _hash_backup_code, code) for code in codes)
+    )
+    return {"codes": list(hashes)}
 
 
 def backup_code_count(user: User) -> int:
@@ -103,36 +112,43 @@ def verify_totp_code(secret: str, code: str) -> bool:
     return totp.verify(code, valid_window=1)
 
 
-def _consume_backup_code(user: User, code: str) -> bool:
+def _matches_backup_code(item: str, normalized: str) -> bool:
+    if item.startswith("argon2:"):
+        try:
+            return _ARGON2.verify(item.removeprefix("argon2:"), normalized)
+        except (InvalidHash, VerificationError, VerifyMismatchError):
+            return False
+    try:
+        algorithm, salt_hex, digest_hex = item.split(":", 2)
+        if algorithm != "scrypt":
+            return False
+        candidate = hashlib.scrypt(
+            normalized.encode("utf-8"),
+            salt=bytes.fromhex(salt_hex),
+            n=2**14,
+            r=8,
+            p=1,
+        )
+        expected = bytes.fromhex(digest_hex)
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(candidate, expected)
+
+
+async def _consume_backup_code(user: User, code: str) -> bool:
     stored = list((user.mfa_backup_code_hashes or {}).get("codes", []))
     if not stored:
         return False
     normalized = _normalize_code(code)
-    for index, item in enumerate(stored):
-        if item.startswith("argon2:"):
-            try:
-                if _ARGON2.verify(item.removeprefix("argon2:"), normalized):
-                    del stored[index]
-                    user.mfa_backup_code_hashes = {"codes": stored}
-                    return True
-            except (InvalidHash, VerificationError, VerifyMismatchError):
-                pass
-            continue
-        try:
-            algorithm, salt_hex, digest_hex = item.split(":", 2)
-            if algorithm != "scrypt":
-                continue
-            candidate = hashlib.scrypt(
-                normalized.encode("utf-8"),
-                salt=bytes.fromhex(salt_hex),
-                n=2**14,
-                r=8,
-                p=1,
-            )
-            expected = bytes.fromhex(digest_hex)
-        except (ValueError, TypeError):
-            continue
-        if hmac.compare_digest(candidate, expected):
+    loop = asyncio.get_running_loop()
+    matches = await asyncio.gather(
+        *(
+            loop.run_in_executor(_MFA_HASH_EXECUTOR, _matches_backup_code, item, normalized)
+            for item in stored
+        )
+    )
+    for index, matched in enumerate(matches):
+        if matched:
             del stored[index]
             user.mfa_backup_code_hashes = {"codes": stored}
             return True
@@ -149,7 +165,7 @@ async def setup_mfa(db: AsyncSession, user: User) -> dict:
     secret = generate_totp_secret()
     backup_codes = _generate_backup_codes()
     user.mfa_pending_secret = encrypt_mfa_secret(secret)
-    user.mfa_pending_backup_code_hashes = _hashes_payload(backup_codes)
+    user.mfa_pending_backup_code_hashes = await _hashes_payload(backup_codes)
 
     logger.info("MFA setup initiated", extra={"user_id": str(user.id)})
 
@@ -196,7 +212,7 @@ async def verify_mfa(db: AsyncSession, user: User, code: str) -> bool:
             if not await redis_client.set(replay_key, "1", ex=90, nx=True):
                 return False
         return True
-    if _consume_backup_code(user, code):
+    if await _consume_backup_code(user, code):
         await db.flush()
         return True
     return False
@@ -210,7 +226,7 @@ async def regenerate_backup_codes(db: AsyncSession, user: User, code: str) -> li
     if not secret or not verify_totp_code(secret, code):
         return None
     backup_codes = _generate_backup_codes()
-    user.mfa_backup_code_hashes = _hashes_payload(backup_codes)
+    user.mfa_backup_code_hashes = await _hashes_payload(backup_codes)
     await db.flush()
     logger.info("MFA backup codes regenerated", extra={"user_id": str(user.id)})
     return backup_codes
