@@ -261,10 +261,6 @@ export default function ElectronicCredentialPage() {
               </div>
             </div>
           </section>
-
-          <p className="credential-note">
-            本證件為平台身分與特約資格的象徵性證明，實際優惠內容與兌換方式仍依各特約店家規範辦理。
-          </p>
         </>
       ) : null}
     </div>
