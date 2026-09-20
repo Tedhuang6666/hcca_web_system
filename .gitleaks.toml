@@ -1,0 +1,11 @@
+title = "HCCA Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated audit source hashes are integrity metadata, not credentials."
+regexTarget = "line"
+regexes = [
+  '''^\s*"apps/api/src/api/dependencies/auth\.py": "[0-9a-f]{64}",?$''',
+]
