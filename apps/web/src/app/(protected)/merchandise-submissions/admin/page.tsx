@@ -940,7 +940,7 @@ function ReviewRow({
 }: {
   submission: VotingSubmission;
   fields: SubmissionCustomField[];
-  onReviewed: () => void;
+  onReviewed: (updated: MerchandiseSubmissionAdminListItem) => void;
   canReview: boolean;
 }) {
   const [status, setStatus] = useState<
@@ -959,12 +959,12 @@ function ReviewRow({
   const review = async () => {
     setSaving(true);
     try {
-      await merchandiseSubmissionsApi.review(submission.id, {
+      const updated = await merchandiseSubmissionsApi.review(submission.id, {
         status,
         review_note: note || null,
       });
       toast.success("審核結果已儲存，學生會收到通知");
-      onReviewed();
+      onReviewed(updated);
     } catch (error) {
       toast.error(apiErrorMessage(error, "無法儲存審核結果"));
     } finally {
@@ -1070,9 +1070,9 @@ function ReviewRow({
                     label="替換檔案"
                     hint=""
                     onUpload={(replacement, reportProgress) => uploadFile(replacement, reportProgress, file.id)}
-                    onUploaded={() => {
+                    onUploaded={(updated) => {
                       toast.success("投稿檔案已替換");
-                      onReviewed();
+                      onReviewed(updated);
                     }}
                   />
                 </div>
@@ -1091,9 +1091,9 @@ function ReviewRow({
               label="拖曳新投稿檔案到這裡"
               hint="可一次增加多個檔案"
               onUpload={(file, reportProgress) => uploadFile(file, reportProgress)}
-              onUploaded={() => {
+              onUploaded={(updated) => {
                 toast.success("投稿檔案已增加");
-                onReviewed();
+                onReviewed(updated);
               }}
             />
           </div>
@@ -1192,6 +1192,11 @@ export default function MerchandiseSubmissionsAdminPage() {
   useEffect(() => {
     void load();
   }, [load]);
+  const updateSubmission = useCallback((updated: MerchandiseSubmissionAdminListItem) => {
+    setSubmissions((current) =>
+      current.map((submission) => (submission.id === updated.id ? updated : submission)),
+    );
+  }, []);
   const current = useMemo(
     () => items.find((item) => item.id === draft.id),
     [draft.id, items],
@@ -1894,7 +1899,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                     settings?.global_fields ?? [],
                     items.find((item) => item.id === submission.item_id)?.custom_fields ?? [],
                   )}
-                  onReviewed={() => void load({ showLoading: false })}
+                  onReviewed={updateSubmission}
                 />
               ))
             ) : (
