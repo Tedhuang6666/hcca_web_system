@@ -31,6 +31,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { recordRecent } from "@/lib/recents";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+import SurveyImageViewer from "@/components/surveys/SurveyImageViewer";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
 
@@ -241,24 +242,22 @@ function QuestionInput({
   ).option_image_sets ?? [];
   const minV = min_value ?? 1;
   const maxV = max_value ?? 5;
-  const optionPreview = (index: number) => {
+  const optionGallery = options.flatMap((option, optionIndex) => (
+    (imageSets[optionIndex] ?? []).map((image) => ({ image, optionLabel: option, optionIndex }))
+  ));
+  const optionPreview = (option: string, index: number, onSelect: (optionIndex: number) => void) => {
     const images = imageSets[index] ?? [];
     if (!images.length) return null;
     return (
-      <span className="mt-2 flex flex-wrap gap-2">
-        {images.map((image) => (
-          <Image
-            key={image}
-            src={uploadUrl(image)}
-            alt="投稿圖稿預覽"
-            width={80}
-            height={80}
-            unoptimized
-            sizes="80px"
-            className="h-20 w-20 rounded-lg object-cover"
-          />
-        ))}
-      </span>
+      <SurveyImageViewer
+        images={images}
+        optionLabel={option}
+        gallery={optionGallery}
+        onSelect={onSelect}
+        selectedOptionIndexes={value.options
+          .map((selected) => options.indexOf(selected))
+          .filter((selectedIndex) => selectedIndex >= 0)}
+      />
     );
   };
 
@@ -353,23 +352,22 @@ function QuestionInput({
     return (
       <div className="space-y-2">
         {options.map((opt, index) => (
-          <label key={opt} className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-            style={{
-              background: value.options[0] === opt ? "var(--primary-dim)" : "var(--bg-elevated)",
-              border: `1px solid ${value.options[0] === opt ? "var(--border-strong)" : "var(--border)"}`,
-            }}>
-            <input
-              type="radio"
-              name={question.id}
-              checked={value.options[0] === opt}
-              onChange={() => onChange({ ...value, options: [opt] })}
-              className="accent-sky-400"
-            />
-              <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>
-                {opt}
-                {optionPreview(index)}
-              </span>
-          </label>
+          <div key={opt} className="rounded-xl p-2.5" style={{
+            background: value.options[0] === opt ? "var(--primary-dim)" : "var(--bg-elevated)",
+            border: `1px solid ${value.options[0] === opt ? "var(--border-strong)" : "var(--border)"}`,
+          }}>
+            <label className="flex min-h-11 cursor-pointer items-center gap-3">
+              <input
+                type="radio"
+                name={question.id}
+                checked={value.options[0] === opt}
+                onChange={() => onChange({ ...value, options: [opt] })}
+                className="accent-sky-400"
+              />
+              <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
+            </label>
+            {optionPreview(opt, index, (optionIndex) => onChange({ ...value, options: [options[optionIndex]] }))}
+          </div>
         ))}
       </div>
     );
@@ -401,26 +399,25 @@ function QuestionInput({
           const isOther = otherSet.has(opt);
           return (
             <div key={opt}>
-              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-                style={{
-                  background: checked ? "var(--primary-dim)" : "var(--bg-elevated)",
-                  border: `1px solid ${checked ? "var(--border-strong)" : "var(--border)"}`,
-                }}>
+              <div className="rounded-xl p-2.5" style={{
+                background: checked ? "var(--primary-dim)" : "var(--bg-elevated)",
+                border: `1px solid ${checked ? "var(--border-strong)" : "var(--border)"}`,
+              }}>
+              <label className="flex min-h-11 cursor-pointer items-center gap-3">
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(opt)}
                   className="accent-sky-400"
                 />
-                <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>
-                  {opt}
-                  {optionPreview(index)}
-                </span>
+                <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
                 {isExcl && (
                   <span className="text-xs px-1.5 py-0.5 rounded"
                     style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}>互斥</span>
                 )}
               </label>
+              {optionPreview(opt, index, (optionIndex) => toggle(options[optionIndex]))}
+              </div>
               {isOther && checked && (
                 <input
                   value={value.other_text ?? ""}
@@ -846,7 +843,7 @@ export default function SurveyDetailClient({
     setAnswers(prev => ({ ...prev, ...draft }));
     toast.info("已復原未送出的問卷填答草稿");
   }, []);
-  const { clearDraft, flushDraft } = useDraftAutosave({
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
     key: `surveys:${id}:response`,
     value: answerDraft,
     onRestore: restoreAnswerDraft,
@@ -1120,6 +1117,13 @@ export default function SurveyDetailClient({
             {answeredQuestionCount === questionCount && questionCount > 0 && (
               <p>所有題目都已整理完成，可以送出了。</p>
             )}
+            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              {lastSavedAt
+                ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
+                  hour: "2-digit", minute: "2-digit", second: "2-digit",
+                })} 自動儲存到此裝置`
+                : "填答內容會自動儲存到此裝置，意外離開後可繼續填寫。"}
+            </p>
           </aside>
           {survey.questions.map((q) => {
             if (hiddenIds.has(q.id)) return null;

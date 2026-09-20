@@ -13,6 +13,7 @@ import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import OptionImageFields from "@/components/surveys/OptionImageFields";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text", label: "簡答（單行）" },
@@ -75,6 +76,7 @@ function QuestionRow({
   const [rule, setRule] = useState<string>(q.validation_rule ?? "");
   const [placeholder, setPlaceholder] = useState(q.placeholder ?? "");
   const [imageUrl, setImageUrl] = useState(q.image_url ?? "");
+  const [optionImageSets, setOptionImageSets] = useState<string[][]>(q.option_image_sets ?? []);
   const [exclusiveOpts, setExclusiveOpts] = useState<string[]>(q.option_config?.exclusive ?? []);
   const [otherOpts, setOtherOpts] = useState<string[]>(q.option_config?.other ?? []);
   const [rules, setRules] = useState<CondRule[]>(
@@ -128,7 +130,10 @@ function QuestionRow({
     }
     setSaving(true);
     const body: SurveyQuestionBody = { question_text: text, is_required: required };
-    if (isChoice) body.options = opts;
+    if (isChoice) {
+      body.options = opts;
+      body.option_image_sets = opts.map((_, index) => optionImageSets[index] ?? []);
+    }
     if (isMultiple) {
       const exclusive = exclusiveOpts.filter(o => opts.includes(o));
       const other = otherOpts.filter(o => opts.includes(o));
@@ -208,6 +213,14 @@ function QuestionRow({
           <textarea value={optionsText} onChange={e => setOptionsText(e.target.value)} rows={3}
             className="input resize-y" placeholder={"選項一\n選項二"} />
         </div>
+      )}
+
+      {isChoice && parsedOptions.length > 0 && (
+        <OptionImageFields
+          options={parsedOptions}
+          value={optionImageSets}
+          onChange={setOptionImageSets}
+        />
       )}
 
       {isMultiple && parsedOptions.length > 0 && (
