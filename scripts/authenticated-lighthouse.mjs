@@ -140,6 +140,9 @@ const performanceExcludedRoutes = new Set([
   "/petitions/share",
   "/raffle",
   "/unsubscribe",
+  // Audit-only missing article sample intentionally renders via streaming
+  // notFound() and therefore has no Lighthouse LCP score.
+  "/articles/audit-no-such-article",
 ]);
 
 async function discoverStaticRoutes(directory = appDirectory, segments = [], publicOnly = false) {
