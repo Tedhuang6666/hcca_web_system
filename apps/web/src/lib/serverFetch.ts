@@ -21,6 +21,11 @@ import { serverApiUrl } from "./config";
 export const PUBLIC_REVALIDATE_SECONDS = 300;
 const PUBLIC_FETCH_TIMEOUT_MS = 5_000;
 
+export type PublicFetchResult<T> = {
+  data: T | null;
+  status: number | null;
+};
+
 async function fetchPublicApi(input: string): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PUBLIC_FETCH_TIMEOUT_MS);
@@ -79,6 +84,19 @@ export function fetchPublicJson<T>(
   return getCachedPublicJson<T>(path, options.revalidate === 15);
 }
 
+// A cached public read intentionally degrades to null so most index pages can
+// keep rendering. Detail routes need to distinguish a confirmed 404 from a
+// transient cache/API failure before they choose a 404 response.
+export async function fetchPublicJsonResult<T>(path: string): Promise<PublicFetchResult<T>> {
+  try {
+    const response = await fetchPublicApi(serverApiUrl(path));
+    if (!response.ok) return { data: null, status: response.status };
+    return { data: await response.json() as T, status: response.status };
+  } catch {
+    return { data: null, status: null };
+  }
+}
+
 export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
   return getCachedPublicJson<PublicSiteBundleOut>("/site/public");
 }
@@ -110,6 +128,16 @@ export async function fetchPublicSurveys(status?: string): Promise<SurveyListIte
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
 
   return (await getCachedPublicJson<SurveyListItem[]>(`/surveys/public${query}`)) ?? [];
+}
+
+export async function fetchPublicSurveysResult(
+  status?: string,
+): Promise<PublicFetchResult<SurveyListItem[]>> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const path = `/surveys/public${query}`;
+  const cached = await getCachedPublicJson<SurveyListItem[]>(path);
+  if (cached !== null) return { data: cached, status: 200 };
+  return fetchPublicJsonResult<SurveyListItem[]>(path);
 }
 
 export async function fetchPublicSurvey(id: string): Promise<SurveyOut | null> {

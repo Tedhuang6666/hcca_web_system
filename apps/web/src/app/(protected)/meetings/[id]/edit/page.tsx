@@ -1025,7 +1025,7 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
          maxFiles={10}
          label="拖曳新議案附件到這裡"
          hint="可加入法規對照表、PDF、試算表或其他會議資料"
-         onFiles={setNewFiles}
+         onFiles={(selected) => setNewFiles((current) => [...current, ...selected].slice(0, 10))}
          onRemove={(removed) => setNewFiles((current) => current.filter((file) => file !== removed))}
        />
        <span className="text-xs text-[var(--muted)]">

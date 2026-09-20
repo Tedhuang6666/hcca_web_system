@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, petitionsApi } from "@/lib/api";
+import { ApiError, petitionsApi, usersApi } from "@/lib/api";
 import type { PetitionCreatedOut, PetitionTypeOut } from "@/lib/types";
 import DraftStatus from "@/components/ui/DraftStatus";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
@@ -25,21 +25,29 @@ export default function NewPetitionPage() {
   const [created, setCreated] = useState<PetitionCreatedOut | null>(null);
   const [accountName, setAccountName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
-  const [authReady, setAuthReady] = useState(false);
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [draftScope, setDraftScope] = useState("user");
 
   useEffect(() => {
-    const userId = localStorage.getItem("user_id");
-    setAccountName(localStorage.getItem("user_name") ?? "");
-    setAccountEmail(localStorage.getItem("user_email") ?? "");
-    setDraftScope(userId ? `user:${userId}` : "user");
-    setAuthReady(true);
+    let cancelled = false;
+    void usersApi.me()
+      .then((user) => {
+        if (cancelled) return;
+        setAccountName(user.display_name);
+        setAccountEmail(user.email);
+        setDraftScope(`user:${user.id}`);
+        setAuthState("authenticated");
+      })
+      .catch(() => {
+        if (!cancelled) setAuthState("unauthenticated");
+      });
     petitionsApi.listTypes()
       .then((items) => {
         setTypes(items);
         if (items[0]) setTypeId(items[0].id);
       })
       .catch(() => toast.error("無法載入陳情類型"));
+    return () => { cancelled = true; };
   }, []);
 
   const restoreDraft = useCallback((draft: PetitionDraft) => {
@@ -53,7 +61,7 @@ export default function NewPetitionPage() {
     key: `petitions:new:${draftScope}`,
     value: { typeId, title, content },
     onRestore: restoreDraft,
-    enabled: authReady,
+    enabled: authState === "authenticated",
     isEmpty: useCallback((draft: PetitionDraft) => (
       !draft.title.trim() && !draft.content.trim()
     ), []),
@@ -67,6 +75,7 @@ export default function NewPetitionPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authState !== "authenticated") return;
     setSubmitting(true);
     try {
       const result = await petitionsApi.create({
@@ -82,6 +91,10 @@ export default function NewPetitionPage() {
       toast.success("陳情案件已送出");
     } catch (err) {
       flushDraft();
+      if (err instanceof ApiError && err.status === 401) {
+        window.location.assign("/login?next=%2Fpetitions%2Fnew");
+        return;
+      }
       toast.error(err instanceof ApiError ? err.message : "送件失敗");
     } finally {
       setSubmitting(false);
@@ -138,6 +151,34 @@ export default function NewPetitionPage() {
     );
   }
 
+  if (authState === "checking") {
+    return (
+      <div className="mx-auto max-w-3xl py-16 text-center" role="status">
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>正在確認登入狀態…</p>
+      </div>
+    );
+  }
+
+  if (authState === "unauthenticated") {
+    return (
+      <div className="mx-auto max-w-2xl space-y-5 py-10">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>我要陳情</h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            陳情以登入帳號具名送出，登入後即可填寫並安全保留未送出的草稿。
+          </p>
+        </div>
+        <section className="card space-y-4 p-6" aria-labelledby="petition-login-heading">
+          <h2 id="petition-login-heading" className="text-base font-semibold">請先登入再開始填寫</h2>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            系統會使用你的帳號作為案件聯絡資料，避免完成長篇內容後才發現無法送件。
+          </p>
+          <Link className="btn btn-primary" href="/login?next=%2Fpetitions%2Fnew">登入後開始陳情</Link>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       <div>
@@ -171,7 +212,7 @@ export default function NewPetitionPage() {
           maxFiles={10}
           label="拖曳陳情附件到這裡"
           hint="可點擊選檔，或貼上圖片；送出陳情時會一併上傳"
-          onFiles={setFiles}
+          onFiles={(selected) => setFiles((current) => [...current, ...selected].slice(0, 10))}
           onRemove={(removed) => setFiles((current) => current.filter((file) => file !== removed))}
         />
         <div className="flex justify-end gap-2">

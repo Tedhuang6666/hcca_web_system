@@ -115,7 +115,7 @@ export default function MerchantApplicationForm() {
             {portal.settings.fields.filter((field) => field.is_active).map((field) => (
               <label key={field.id} htmlFor={field.key} className={field.field_type === "textarea" ? "space-y-2 sm:col-span-2" : "space-y-2"}>
                 <span className="block text-sm font-semibold">
-                  {field.label}{field.required ? <span className="ml-1 text-[var(--public-accent)]" aria-label="必填">*</span> : null}
+                  {field.label}{field.required ? <span className="ml-1 text-[var(--public-accent-text)]" aria-label="必填">*</span> : null}
                 </span>
                 <FieldControl
                   field={field}

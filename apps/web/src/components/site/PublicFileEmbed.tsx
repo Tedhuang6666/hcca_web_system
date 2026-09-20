@@ -28,7 +28,7 @@ export default function PublicFileEmbed({ file }: { file: PublicFileEmbedItem })
     <article className="overflow-hidden rounded-xl border border-[var(--public-border)] bg-[var(--public-surface)]">
       <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
         <div className="flex min-w-0 gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--public-accent-soft)] text-[var(--public-accent)]">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--public-accent-soft)] text-[var(--public-accent-text)]">
             <FileText size={19} aria-hidden />
           </span>
           <div className="min-w-0">
@@ -42,7 +42,7 @@ export default function PublicFileEmbed({ file }: { file: PublicFileEmbedItem })
           href={file.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[var(--public-border)] px-3 text-sm font-semibold text-[var(--public-accent)] transition-colors hover:border-[var(--public-accent)] hover:bg-[var(--public-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-focus)]"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[var(--public-border)] px-3 text-sm font-semibold text-[var(--public-accent-text)] transition-colors hover:border-[var(--public-accent)] hover:bg-[var(--public-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-focus)]"
         >
           開啟檔案
           <ExternalLink size={15} aria-hidden />

@@ -283,7 +283,7 @@
 
 .public-feature-card:hover .public-feature-arrow,
 .public-feature-card:focus-visible .public-feature-arrow {
-  color: var(--public-accent);
+  color: var(--public-accent-text);
   transform: translateX(3px);
 }
 
@@ -520,7 +520,7 @@
 }
 
 .public-site .public-menu-button.is-open {
-  color: var(--public-accent);
+  color: var(--public-accent-text);
   border-color: color-mix(in srgb, var(--public-accent) 58%, var(--public-border));
   transform: rotate(90deg);
 }

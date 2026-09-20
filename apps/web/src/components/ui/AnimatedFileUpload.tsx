@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ChangeEvent, ClipboardEvent } from "react";
 import styles from "./InteractionMotion.module.css";
 
@@ -174,6 +174,7 @@ export function AnimatedFileUpload<TResult = unknown>({
   const previewsRef = useRef<string[]>([]);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const hintId = useId();
 
   useEffect(() => () => {
     previewsRef.current.forEach((preview) => URL.revokeObjectURL(preview));
@@ -204,9 +205,12 @@ export function AnimatedFileUpload<TResult = unknown>({
 
   const addFiles = useCallback((fileList: FileList | File[], dropPoint?: { x: number; y: number }) => {
     if (disabled) return;
+    const remaining = multiple
+      ? Math.max(0, (maxFiles ?? Number.MAX_SAFE_INTEGER) - items.length)
+      : 1;
     const accepted = Array.from(fileList)
       .filter((file) => acceptsFile(file, accept))
-      .slice(0, multiple ? maxFiles : 1);
+      .slice(0, remaining);
     if (!accepted.length) return;
     const nextItems = accepted.map<UploadItem>((file) => {
       const preview = isImage(file) ? URL.createObjectURL(file) : undefined;
@@ -226,14 +230,15 @@ export function AnimatedFileUpload<TResult = unknown>({
     } else {
       void onFiles?.(accepted);
     }
-  }, [accept, disabled, maxFiles, multiple, onFiles, onUpload, runUpload]);
+  }, [accept, disabled, items.length, maxFiles, multiple, onFiles, onUpload, runUpload]);
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) addFiles(event.target.files);
     event.target.value = "";
   };
 
-  const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+  const handlePaste = (event: ClipboardEvent<HTMLLabelElement>) => {
+    if (disabled) return;
     const files = Array.from(event.clipboardData.files).filter((file) => isImage(file));
     if (!files.length) return;
     event.preventDefault();
@@ -248,18 +253,9 @@ export function AnimatedFileUpload<TResult = unknown>({
 
   return (
     <div className={`${styles.uploadRoot} animated-upload ${className}`}>
-      <div
+      <label
         className={`${styles.uploadZone} animated-upload__zone${isDragging ? " is-dragging" : ""}${disabled ? " is-disabled" : ""}`}
-        role="button"
-        tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
-        onClick={() => { if (!disabled) inputRef.current?.click(); }}
-        onKeyDown={(event) => {
-          if ((event.key === "Enter" || event.key === " ") && !disabled) {
-            event.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
         onDragEnter={(event) => { event.preventDefault(); if (!disabled) setIsDragging(true); }}
         onDragOver={(event) => event.preventDefault()}
         onDragLeave={(event) => {
@@ -272,15 +268,24 @@ export function AnimatedFileUpload<TResult = unknown>({
         }}
         onPaste={handlePaste}
       >
-        <input ref={inputRef} className="sr-only" type="file" accept={accept} multiple={multiple} disabled={disabled} onChange={handleInputChange} />
+        <input
+          ref={inputRef}
+          className="sr-only"
+          type="file"
+          accept={accept}
+          multiple={multiple}
+          disabled={disabled}
+          aria-describedby={hint ? hintId : undefined}
+          onChange={handleInputChange}
+        />
         <span className="animated-upload__icon"><UploadCloud size={21} strokeWidth={1.8} /></span>
         <span className="animated-upload__copy">
           <strong>{label}</strong>
-          <span>{hint}</span>
+          <span id={hintId}>{hint}</span>
         </span>
         <span className="animated-upload__choose">選擇檔案</span>
         <ClipboardPaste className="animated-upload__paste" size={16} aria-hidden="true" />
-      </div>
+      </label>
 
       {items.length > 0 && (
         <>

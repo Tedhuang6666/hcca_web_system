@@ -177,13 +177,35 @@ function DocumentBody({ document }: { document: DocumentOut }) {
   );
 }
 
-export default function PublicDocumentView({ document }: { document: DocumentOut | null }) {
+export default function PublicDocumentView({
+  document,
+  loading = false,
+  loadError = null,
+  onRetry,
+}: {
+  document: DocumentOut | null;
+  loading?: boolean;
+  loadError?: "not_found" | "unavailable" | null;
+  onRetry?: () => void;
+}) {
   if (!document) {
+    if (loading) {
+      return (
+        <div className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6" role="status">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>正在載入公開公文…</p>
+        </div>
+      );
+    }
     return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6" role="status">
+      <div className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6" role="alert">
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          公文不存在，或目前不對外公開。
+          {loadError === "not_found"
+            ? "公文不存在，或目前不對外公開。"
+            : "暫時無法載入公開公文，請稍後再試。"}
         </p>
+        {loadError === "unavailable" && onRetry && (
+          <button type="button" className="btn btn-secondary mt-4" onClick={onRetry}>重新載入</button>
+        )}
       </div>
     );
   }

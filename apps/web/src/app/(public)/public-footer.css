@@ -70,7 +70,7 @@
 
 .public-footer-links a:hover,
 .public-footer-links a:focus-visible {
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 .public-footer-label {

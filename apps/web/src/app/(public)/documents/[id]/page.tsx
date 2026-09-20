@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { BRANDING } from "@/lib/branding";
 import { contentCategoryLabel, DOCUMENT_CATEGORY_LABELS } from "@/lib/content-labels";
-import { fetchPublicDocument } from "@/lib/publicSeoFetch";
+import { fetchPublicDocument, fetchPublicDocumentResult } from "@/lib/publicSeoFetch";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { absoluteUrl, excerpt, JsonLd, pageMetadata } from "@/lib/seo";
@@ -36,7 +37,9 @@ export default async function DocumentDetailRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const document = await fetchPublicDocument(id);
+  const result = await fetchPublicDocumentResult(id);
+  if (result.status === 404) notFound();
+  const document = result.data;
   const path = `/documents/${encodeURIComponent(id)}`;
   const canonical = absoluteUrl(path);
   const title = document?.title ?? "公開公文";
@@ -70,7 +73,7 @@ export default async function DocumentDetailRoute({
         { name: "公開公文", url: absoluteUrl("/documents") },
         { name: title, url: canonical },
       ])} />
-      <DocumentDetailEntry initialDoc={document} />
+      <DocumentDetailEntry documentId={id} initialDoc={document} />
     </>
   );
 }

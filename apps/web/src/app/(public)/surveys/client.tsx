@@ -1,6 +1,7 @@
 "use client";
 import { useState, type CSSProperties } from "react";
 import Link from "next/link";
+import { ApiError } from "@/lib/api";
 import { surveysApi } from "@/lib/api/surveys";
 import { useFetch } from "@/hooks/useFetch";
 import type { SurveyListItem, SurveyStatus } from "@/lib/types";
@@ -27,14 +28,20 @@ const SURVEY_SORT = [
 
 export default function SurveysClient({
   initialSurveys = [],
+  initialFailureStatus = null,
 }: {
   initialSurveys?: SurveyListItem[];
+  initialFailureStatus?: number | null;
 }) {
   const [tab, setTab] = usePersistedState<"open" | "all">("hcca:pref:surveys:tab:v1", "open");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = usePersistedState<string>("hcca:pref:surveys:sort:v1", "newest");
   const [activityId, setActivityId] = usePersistedState<string>("hcca:pref:surveys:activity:v1", "");
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const [serviceError, setServiceError] = useState<"closed" | "unavailable" | null>(
+    initialFailureStatus === 503 ? "closed" : initialFailureStatus === null ? null : "unavailable",
+  );
   const { can } = usePermissions();
   const canManage = can("survey:manage") || activities.length > 0;
 
@@ -46,11 +53,20 @@ export default function SurveysClient({
         ...(activityId ? { activity_id: activityId } : {}),
       };
       const isLoggedIn = typeof window !== "undefined" && !!localStorage.getItem("user_id");
-      return isLoggedIn
+      const request = isLoggedIn
         ? surveysApi.list(params)
         : surveysApi.listPublic(tab === "open" ? { status: "open" } : undefined);
+      return request
+        .then((items) => {
+          setServiceError(null);
+          return items;
+        })
+        .catch((error) => {
+          setServiceError(error instanceof ApiError && error.status === 503 ? "closed" : "unavailable");
+          throw error;
+        });
     },
-    [activityId, tab],
+    [activityId, tab, reloadVersion],
     "載入失敗",
     initialSurveys,
     "surveys/list",
@@ -139,7 +155,30 @@ export default function SurveysClient({
       </div>
 
       {/* 問卷列表 */}
-      {loading ? (
+      {serviceError ? (
+        <section className="card space-y-3 p-6 text-center" role="alert" aria-live="assertive">
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            {serviceError === "closed" ? "問卷服務目前關閉或維護中" : "暫時無法載入問卷"}
+          </h2>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            {serviceError === "closed"
+              ? "系統暫時不能提供問卷資料，請稍後再試。"
+              : "連線恢復後即可重新載入，不會把服務異常誤顯示為沒有問卷。"}
+          </p>
+          <div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setServiceError(null);
+                setReloadVersion((version) => version + 1);
+              }}
+            >
+              重新載入
+            </button>
+          </div>
+        </section>
+      ) : loading ? (
         <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : displayed.length === 0 ? (
         <SmartEmptyState
