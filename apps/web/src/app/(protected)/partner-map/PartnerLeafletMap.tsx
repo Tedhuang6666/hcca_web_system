@@ -30,7 +30,7 @@ import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "rea
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { UnifiedMapItem } from "@/lib/partner-map-types";
 import { businessOpenState } from "@/lib/business-hours";
-import { MAP_TILE_ATTRIBUTION, mapTileUrl } from "@/lib/map-tiles";
+import { MAP_MAX_ZOOM, MAP_TILE_ATTRIBUTION, mapTileUrl } from "@/lib/map-tiles";
 import { defaultPartnerIconKey, getPartnerIcon, isPartnerIconKey } from "./partner-map-icons";
 import {
   markerColor,
@@ -216,6 +216,7 @@ export default function PartnerLeafletMap({
       <MapContainer
         center={center}
         zoom={16}
+        maxZoom={MAP_MAX_ZOOM}
         zoomControl={false}
         className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}
         scrollWheelZoom>
@@ -223,6 +224,7 @@ export default function PartnerLeafletMap({
           key={theme}
           attribution={MAP_TILE_ATTRIBUTION}
           url={mapTileUrl(theme)}
+          maxZoom={MAP_MAX_ZOOM}
           detectRetina={false}
           keepBuffer={0}
           updateWhenIdle

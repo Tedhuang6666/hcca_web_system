@@ -7,7 +7,7 @@ import { divIcon, LatLngBounds } from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 import type { RecommendedVendorListItemWithHours } from "@/lib/partner-map-types";
 import { businessOpenState } from "@/lib/business-hours";
-import { MAP_TILE_ATTRIBUTION, mapTileUrl } from "@/lib/map-tiles";
+import { MAP_MAX_ZOOM, MAP_TILE_ATTRIBUTION, mapTileUrl } from "@/lib/map-tiles";
 
 function FitBounds({ items }: { items: RecommendedVendorListItemWithHours[] }) {
   const map = useMap();
@@ -75,6 +75,7 @@ export default function RecommendedVendorMap({
     <MapContainer
       center={center}
       zoom={15}
+      maxZoom={MAP_MAX_ZOOM}
       zoomControl={false}
       scrollWheelZoom
       className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}>
@@ -82,6 +83,7 @@ export default function RecommendedVendorMap({
         key={theme}
         attribution={MAP_TILE_ATTRIBUTION}
         url={mapTileUrl(theme)}
+        maxZoom={MAP_MAX_ZOOM}
       />
       <ZoomControl position="bottomright" />
       <ThemeClassSync theme={theme} />
