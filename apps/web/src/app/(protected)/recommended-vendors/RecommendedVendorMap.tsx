@@ -7,6 +7,7 @@ import { divIcon, LatLngBounds } from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 import type { RecommendedVendorListItemWithHours } from "@/lib/partner-map-types";
 import { businessOpenState } from "@/lib/business-hours";
+import { MAP_TILE_ATTRIBUTION, mapTileUrl } from "@/lib/map-tiles";
 
 function FitBounds({ items }: { items: RecommendedVendorListItemWithHours[] }) {
   const map = useMap();
@@ -79,10 +80,8 @@ export default function RecommendedVendorMap({
       className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}>
       <TileLayer
         key={theme}
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={theme === "dark"
-          ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"}
+        attribution={MAP_TILE_ATTRIBUTION}
+        url={mapTileUrl(theme)}
       />
       <ZoomControl position="bottomright" />
       <ThemeClassSync theme={theme} />

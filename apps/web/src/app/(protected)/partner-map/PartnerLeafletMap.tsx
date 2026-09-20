@@ -30,6 +30,7 @@ import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "rea
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { UnifiedMapItem } from "@/lib/partner-map-types";
 import { businessOpenState } from "@/lib/business-hours";
+import { MAP_TILE_ATTRIBUTION, mapTileUrl } from "@/lib/map-tiles";
 import { defaultPartnerIconKey, getPartnerIcon, isPartnerIconKey } from "./partner-map-icons";
 import {
   markerColor,
@@ -208,10 +209,6 @@ export default function PartnerLeafletMap({
   onBoundsChange: (bounds: PartnerMapBoundsState) => void;
 }) {
   const theme = useMapTheme();
-  const tileUrl =
-    theme === "dark"
-      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-      : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
   const hsinchuStation: LatLngExpression = [24.801645, 120.971703];
 
   return (
@@ -224,8 +221,8 @@ export default function PartnerLeafletMap({
         scrollWheelZoom>
         <TileLayer
           key={theme}
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url={tileUrl.replace("{r}", "")}
+          attribution={MAP_TILE_ATTRIBUTION}
+          url={mapTileUrl(theme)}
           detectRetina={false}
           keepBuffer={0}
           updateWhenIdle
