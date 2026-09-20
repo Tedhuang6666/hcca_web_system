@@ -1,5 +1,7 @@
 export type MapTheme = "light" | "dark";
 
+export const MAP_MAX_ZOOM = 18;
+
 export const MAP_TILE_ATTRIBUTION =
   '&copy; <a href="https://www.esri.com/en-us/arcgis/products/arcgis-online/overview">Esri</a>';
 
