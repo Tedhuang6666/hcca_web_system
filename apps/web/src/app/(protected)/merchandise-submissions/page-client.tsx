@@ -415,7 +415,11 @@ export default function MerchandiseSubmissionsPageClient({
       </main>
     );
   const canUpload = Boolean(
-    selected?.is_accepting && portal?.is_eligible_submitter,
+    selected &&
+      (selected.is_accepting ||
+        submissions.find((submission) => submission.id === editingId)?.status ===
+          "revision_requested") &&
+      portal?.is_eligible_submitter,
   );
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">

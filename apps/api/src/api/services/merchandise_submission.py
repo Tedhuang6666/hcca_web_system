@@ -248,6 +248,21 @@ async def get_item(session: AsyncSession, item_id: uuid.UUID) -> MerchandiseSubm
     return await session.get(MerchandiseSubmissionItem, item_id)
 
 
+async def has_revision_requested_submission(
+    session: AsyncSession, *, item_id: uuid.UUID, user_id: uuid.UUID
+) -> bool:
+    submission_id = await session.scalar(
+        select(MerchandiseSubmission.id)
+        .where(
+            MerchandiseSubmission.item_id == item_id,
+            MerchandiseSubmission.user_id == user_id,
+            MerchandiseSubmission.status == MerchandiseSubmissionStatus.REVISION_REQUESTED,
+        )
+        .limit(1)
+    )
+    return submission_id is not None
+
+
 async def create_item(
     session: AsyncSession, data: MerchandiseSubmissionItemCreate, *, created_by_id: uuid.UUID
 ) -> MerchandiseSubmissionItem:
@@ -501,7 +516,11 @@ async def update_submission(
     settings = await get_settings(session)
     require_eligible_submitter(settings, user)
     accepting, _, _, _ = effective_config(settings, item)
-    if submit and not accepting:
+    if (
+        submit
+        and not accepting
+        and submission.status != MerchandiseSubmissionStatus.REVISION_REQUESTED
+    ):
         raise ValueError("此品項目前未開放投稿")
     validate_submission_values(
         effective_custom_fields(settings, item),

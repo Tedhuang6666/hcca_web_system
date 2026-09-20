@@ -170,6 +170,19 @@ def _submission_notification_body(submission, update: str | None = None) -> str:
     return "\n".join(lines)
 
 
+def _submission_status_notification_body(submission, status_label: str) -> str:
+    lines = [f"您的校商投稿「{submission.item.name}」審核結果：{status_label}"]
+    if submission.review_note:
+        lines.extend(["", f"審核意見：{submission.review_note.strip()}"])
+    if submission.status == MerchandiseSubmissionStatus.REVISION_REQUESTED:
+        lines.extend(["", "請前往投稿頁補件並重新送出。"])
+    elif submission.status == MerchandiseSubmissionStatus.APPROVED:
+        lines.extend(["", "感謝您的投稿。"])
+    else:
+        lines.extend(["", "請前往投稿頁查看詳細結果。"])
+    return "\n".join(lines)
+
+
 def _serialize_submission(submission, *, include_submitter: bool):
     payload = {
         "id": submission.id,
@@ -288,7 +301,10 @@ async def upload_submission_file(
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     accepting, _, _, max_mb = submission_svc.effective_config(settings, item)
-    if not accepting:
+    can_supplement = await submission_svc.has_revision_requested_submission(
+        session, item_id=item_id, user_id=current_user.id
+    )
+    if not accepting and not can_supplement:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此品項目前未開放投稿")
     storage = get_storage()
     allowed_types = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
@@ -841,12 +857,7 @@ async def review_admin_submission(
         user_id=submission.user_id,
         type="merchandise_submission_status",
         title=f"校商投稿「{submission.item.name}」審核結果：{status_label}",
-        body=_submission_notification_body(
-            submission,
-            f"目前狀態：{status_label}。\n{submission.review_note}"
-            if submission.review_note
-            else "請前往投稿頁查看最新狀態。",
-        ),
+        body=_submission_status_notification_body(submission, status_label),
         link="/merchandise-submissions",
         related_id=submission.id,
     )
