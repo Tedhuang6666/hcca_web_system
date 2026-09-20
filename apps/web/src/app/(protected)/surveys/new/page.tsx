@@ -12,6 +12,7 @@ import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import OptionImageFields from "@/components/surveys/OptionImageFields";
 import {
   GovernanceLinkNotice,
   createGovernanceBacklink,
@@ -58,6 +59,7 @@ interface DraftQuestion {
   question_type: QuestionType;
   is_required: boolean;
   options: string[];
+  option_image_sets: string[][];
   min_value: number;
   max_value: number;
   placeholder: string;
@@ -307,12 +309,17 @@ export default function NewSurveyPage() {
     setClosesAt(draft.closesAt ?? "");
     setOrgId(draft.orgId ?? localStorage.getItem("org_id") ?? "");
     setActivityId(draft.activityId ?? "");
-    setQuestions((draft.questions ?? []).map(q => ({ ...q, rules: q.rules ?? [] })));
+    setQuestions((draft.questions ?? []).map(q => ({
+      ...q,
+      option_image_sets: q.option_image_sets ?? [],
+      rules: q.rules ?? [],
+    })));
     setNewQ(draft.newQ ?? {
       question_text: "",
       question_type: "text",
       is_required: true,
       options: [],
+      option_image_sets: [],
       min_value: 1,
       max_value: 5,
       placeholder: "",
@@ -369,6 +376,9 @@ export default function NewSurveyPage() {
         question_type: qType,
         is_required: isDisplayType(qType) ? false : (newQ.is_required ?? true),
         options: newQ.options ?? [],
+        option_image_sets: (newQ.options ?? []).map(
+          (_, index) => newQ.option_image_sets?.[index] ?? [],
+        ),
         min_value: newQ.min_value ?? 1,
         max_value: newQ.max_value ?? 5,
         placeholder: newQ.placeholder ?? "",
@@ -388,6 +398,7 @@ export default function NewSurveyPage() {
       question_type: qType,
       is_required: newQ.is_required ?? true,
       options: [],
+      option_image_sets: [],
       min_value: newQ.min_value ?? 1,
       max_value: newQ.max_value ?? 5,
       placeholder: "",
@@ -448,6 +459,7 @@ export default function NewSurveyPage() {
           question_type: q.question_type,
           is_required: q.is_required,
           options: q.options,
+          option_image_sets: q.option_image_sets,
           min_value: q.question_type === "rating" ? q.min_value : undefined,
           max_value: q.question_type === "rating" ? q.max_value : undefined,
           placeholder: q.placeholder || undefined,
@@ -839,9 +851,17 @@ export default function NewSurveyPage() {
                           ×
                         </button>
                       </span>
-                    ))}
-                  </div>
-                )}
+                ))}
+              </div>
+            )}
+
+            {needsOptions && (newQ.options ?? []).length > 0 && (
+              <OptionImageFields
+                options={newQ.options ?? []}
+                value={newQ.option_image_sets ?? []}
+                onChange={option_image_sets => setNewQ(p => ({ ...p, option_image_sets }))}
+              />
+            )}
                 <div className="flex gap-2">
                   <input
                     value={optionInput}

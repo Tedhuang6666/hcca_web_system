@@ -10,6 +10,7 @@ export type SurveyQuestionBody = {
   question_type?: string;
   is_required?: boolean;
   options?: string[];
+  option_image_sets?: string[][];
   min_value?: number;
   max_value?: number;
   placeholder?: string;
