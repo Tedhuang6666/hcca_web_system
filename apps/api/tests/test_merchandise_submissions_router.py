@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import UUID
 
 from fastapi import HTTPException
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.merchandise_submission import MerchandiseSubmissionFile
+from api.models.notification import Notification
 from api.models.org import Org
 from api.models.user import User
 from api.routers import merchandise_submissions as merchandise_submissions_router
@@ -219,6 +222,31 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         assert review_response.json()["status"] == "revision_requested"
         assert review_response.json()["review_note"] == "請補上背面圖稿"
 
+        status_notification = await db_session.scalar(
+            select(Notification)
+            .where(
+                Notification.user_id == member_user.id,
+                Notification.type == "merchandise_submission_status",
+            )
+            .order_by(Notification.created_at.desc())
+        )
+        assert status_notification is not None
+        assert str(submission["id"]) not in (status_notification.body or "")
+        assert "投稿者" not in (status_notification.body or "")
+        assert "審核意見：請補上背面圖稿" in (status_notification.body or "")
+
+        deadline_response = await admin.patch(
+            "/merchandise-submissions/admin/settings",
+            json={"closes_at": datetime(2020, 1, 1, tzinfo=UTC).isoformat()},
+        )
+        assert deadline_response.status_code == 200
+        supplement_upload_response = await student.post(
+            f"/merchandise-submissions/uploads?item_id={item_id}",
+            files={"file": ("supplement.png", b"\x89PNG\r\n\x1a\nminimal", "image/png")},
+        )
+        assert supplement_upload_response.status_code == 200
+        supplement_upload = supplement_upload_response.json()
+
         resubmit_response = await student.patch(
             f"/merchandise-submissions/submissions/{submission['id']}?submit=true",
             json={
@@ -228,11 +256,16 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
                     "seat_number": "12",
                     "design_name": "校園動能修正版",
                 },
-                "files": [uploaded],
+                "files": [supplement_upload],
             },
         )
         assert resubmit_response.status_code == 200
         assert resubmit_response.json()["status"] == "submitted"
+
+        reopen_response = await admin.patch(
+            "/merchandise-submissions/admin/settings", json={"closes_at": None}
+        )
+        assert reopen_response.status_code == 200
 
         review_completed_response = await admin.patch(
             f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
@@ -255,10 +288,10 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         assert len(survey_response.json()["questions"][0]["option_image_sets"]) == 1
         open_survey_response = await admin.post(f"/surveys/{survey_id}/open")
         assert open_survey_response.status_code == 200
-        voting_preview_response = await student.get(uploaded["url"])
+        voting_preview_response = await student.get(supplement_upload["url"])
         assert voting_preview_response.status_code == 200
         stored_file = await db_session.get(
-            MerchandiseSubmissionFile, UUID(submission["files"][0]["id"])
+            MerchandiseSubmissionFile, UUID(resubmit_response.json()["files"][0]["id"])
         )
         assert stored_file is not None
         stored_file.ai_detection_version = "old-detector"
@@ -268,7 +301,9 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         assert linked["voting_survey_id"] == survey_id
         assert linked["voting_survey_title"] == "校商投稿全校票選"
         linked_file = next(
-            file for file in linked["files"] if file["id"] == submission["files"][0]["id"]
+            file
+            for file in linked["files"]
+            if file["id"] == resubmit_response.json()["files"][0]["id"]
         )
         assert linked_file["ai_detection_version"] == AI_DETECTION_VERSION
 
