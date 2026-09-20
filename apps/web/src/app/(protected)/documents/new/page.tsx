@@ -1313,10 +1313,11 @@ export default function NewDocumentPage() {
               <Label>檔案附件</Label>
               <AnimatedFileUpload
                 multiple
+                maxFiles={10}
                 accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip"
                 label="拖曳附件到這裡"
                 hint="建立草稿後自動上傳；可一次選取多個檔案"
-                onFiles={(files) => setPendingFiles((previous) => [...previous, ...files])}
+                onFiles={(files) => setPendingFiles((previous) => [...previous, ...files].slice(0, 10))}
                 onRemove={(file) => setPendingFiles((previous) => previous.filter((candidate) => candidate !== file))}
               />
               {pendingFiles.length > 0 && (

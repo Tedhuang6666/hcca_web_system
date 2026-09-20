@@ -129,7 +129,7 @@ export default async function SpecialAgreementPage() {
         </div>
         <Link
           href="/about"
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[var(--public-border)] px-4 text-sm font-semibold text-[var(--public-accent)] transition-colors hover:border-[var(--public-accent)] hover:bg-[var(--public-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-focus)]"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-[var(--public-border)] px-4 text-sm font-semibold text-[var(--public-accent-text)] transition-colors hover:border-[var(--public-accent)] hover:bg-[var(--public-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-focus)]"
         >
           關於班聯會
           <ArrowRight size={16} aria-hidden />

@@ -6,7 +6,11 @@ import type {
   PublicBudgetListItem,
   RegulationOut,
 } from "@/lib/types";
-import { fetchPublicJson as fetchCachedPublicJson } from "@/lib/serverFetch";
+import {
+  fetchPublicJson as fetchCachedPublicJson,
+  fetchPublicJsonResult,
+  type PublicFetchResult,
+} from "@/lib/serverFetch";
 
 async function fetchPublicJson<T>(path: string): Promise<T | null> {
   return fetchCachedPublicJson<T>(path);
@@ -23,6 +27,15 @@ export async function fetchPublicDocument(id: string): Promise<DocumentOut | nul
     `/documents/${encodeURIComponent(id)}`,
     { revalidate: 15 },
   );
+}
+
+export async function fetchPublicDocumentResult(
+  id: string,
+): Promise<PublicFetchResult<DocumentOut>> {
+  const path = `/documents/${encodeURIComponent(id)}`;
+  const cached = await fetchCachedPublicJson<DocumentOut>(path, { revalidate: 15 });
+  if (cached) return { data: cached, status: 200 };
+  return fetchPublicJsonResult<DocumentOut>(path);
 }
 
 export async function fetchPublicPetitions(

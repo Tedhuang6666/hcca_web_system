@@ -355,7 +355,7 @@ export default function NewRegulationPage() {
               maxFiles={10}
               label="拖曳 Word / PDF 到這裡"
               hint="可點擊選取多份文件，或貼上圖片"
-              onFiles={setImportFiles}
+              onFiles={(selected) => setImportFiles((current) => [...current, ...selected].slice(0, 10))}
               onRemove={(removed) => setImportFiles((current) => current.filter((file) => file !== removed))}
             />
             {importFiles.length > 0 && (

@@ -1,5 +1,5 @@
 import SurveysClient from "./client";
-import { fetchPublicSurveys } from "@/lib/serverFetch";
+import { fetchPublicSurveysResult } from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -10,6 +10,11 @@ export const metadata = pageMetadata({
 });
 
 export default async function SurveysPage() {
-  const initialSurveys = await fetchPublicSurveys("open");
-  return <SurveysClient initialSurveys={initialSurveys} />;
+  const result = await fetchPublicSurveysResult("open");
+  return (
+    <SurveysClient
+      initialSurveys={result.data ?? []}
+      initialFailureStatus={result.data === null ? result.status : null}
+    />
+  );
 }

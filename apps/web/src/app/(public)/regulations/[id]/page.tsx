@@ -1,6 +1,8 @@
+import { notFound } from "next/navigation";
+
 import RegulationDetailPageClient from "./RegulationDetailPageClient";
 import {
-  fetchPublicRegulation,
+  fetchPublicRegulationResult,
   firstSearchParam,
   type RegulationDetailSearchParams,
 } from "./regulationPageData";
@@ -14,7 +16,9 @@ export default async function Page({
   searchParams: Promise<RegulationDetailSearchParams>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const initialRegulation = await fetchPublicRegulation(id);
+  const result = await fetchPublicRegulationResult(id);
+  if (result.status === 404) notFound();
+  const initialRegulation = result.data;
 
   return (
     <RegulationDetailPageClient

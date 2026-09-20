@@ -1021,7 +1021,7 @@
 .public-nav-link:hover,
 .public-nav-link:focus-visible {
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 .public-nav-link[aria-current="page"],
@@ -1029,7 +1029,7 @@
 .public-nav-dropdown-link[aria-current="page"],
 .public-mobile-service-link[aria-current="page"] {
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 .public-nav-dropdown {
@@ -1042,7 +1042,7 @@
 
 .public-nav-dropdown[open] > summary {
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 .public-nav-dropdown[open] > summary svg {
@@ -1249,7 +1249,7 @@
   border-radius: 999px;
   padding: 0.05rem 0.5rem;
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
   font-size: 0.62rem;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -1262,7 +1262,7 @@
   border-radius: 999px;
   padding: 0.05rem 0.4rem;
   background: color-mix(in srgb, var(--public-accent) 14%, transparent);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
   font-size: 0.6rem;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -1307,7 +1307,7 @@
   place-items: center;
   border-radius: 0.6rem;
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 @media (min-width: 640px) {
@@ -1517,7 +1517,7 @@
 .public-back-link:hover,
 .public-back-link:focus-visible {
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 .public-header-actions {
@@ -1662,7 +1662,7 @@
 .public-mobile-link:hover,
 .public-mobile-link:focus-visible {
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 .public-mobile-service-link {
@@ -1754,7 +1754,7 @@
   align-items: center;
   border-radius: 8px;
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
   padding: 0 0.75rem;
   font-size: 0.78rem;
   font-weight: 850;
@@ -1895,7 +1895,7 @@
   place-items: center;
   border-radius: 8px;
   background: var(--public-accent-soft);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
 }
 
 .public-quick-grid {
@@ -2047,6 +2047,13 @@
 .public-site li,
 .public-site blockquote {
   color: inherit;
+}
+
+/* Brand gold is a surface and decorative token. Inline public-page text that
+   still uses it gets the readable companion token without changing gold fills. */
+.public-site [style*="color:var(--primary)"],
+.public-site [style*="color: var(--primary)"] {
+  color: var(--primary-text) !important;
 }
 
 .public-site .prose {
