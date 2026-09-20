@@ -1,6 +1,7 @@
 """FastAPI 依賴注入 - 身份驗證相關"""
 
 import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Request, status
@@ -16,6 +17,7 @@ from api.core.defense import find_identity_block
 from api.core.security import decode_token, is_blacklisted, is_session_revoked
 from api.models.user import User
 from api.models.user_identity import UserIdentity
+from api.models.user_session import UserSession
 
 if TYPE_CHECKING:
     pass
@@ -41,39 +43,6 @@ def _token_from_request(
     return access_token_from_cookies(request.cookies)
 
 
-def _user_from_snapshot(payload: dict, user_id: uuid.UUID) -> User | None:
-    snapshot = payload.get("user")
-    if not isinstance(snapshot, dict):
-        return None
-    email = snapshot.get("email")
-    display_name = snapshot.get("display_name")
-    if not isinstance(email, str) or not isinstance(display_name, str):
-        return None
-    notification_preferences = snapshot.get("notification_preferences")
-    return User(
-        id=user_id,
-        email=email,
-        display_name=display_name,
-        avatar_url=snapshot.get("avatar_url")
-        if isinstance(snapshot.get("avatar_url"), str)
-        else None,
-        student_id=snapshot.get("student_id")
-        if isinstance(snapshot.get("student_id"), str)
-        else None,
-        show_email=bool(snapshot.get("show_email", True)),
-        is_active=bool(snapshot.get("is_active", True)),
-        is_verified=bool(snapshot.get("is_verified", False)),
-        is_superuser=bool(snapshot.get("is_superuser", False)),
-        notification_preferences=(
-            notification_preferences if isinstance(notification_preferences, dict) else {}
-        ),
-        ui_theme=snapshot.get("ui_theme") if isinstance(snapshot.get("ui_theme"), str) else "auto",
-        ui_locale=snapshot.get("ui_locale")
-        if isinstance(snapshot.get("ui_locale"), str)
-        else "zh-TW",
-    )
-
-
 async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     if await is_blacklisted(token):
         return None
@@ -87,25 +56,39 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     raw_user_id: str | None = payload.get("sub")
     if not raw_user_id:
         return None
-    if await is_session_revoked(payload.get("sid")):
-        return None
     try:
         user_id = uuid.UUID(raw_user_id)
     except (TypeError, ValueError):
         return None
 
-    # JWT v2 在登入／refresh 時放入最小使用者快照。帳號停用、權限異動及全裝置
-    # 登出會撤銷 session，因此一般 access 驗證不必為了載入 User 再打一次 DB。
-    # impersonation 與 migration 期間的無快照舊 token 仍走原本的 DB 驗證流程。
-    if token_type == "access":
-        snapshot_user = _user_from_snapshot(payload, user_id)
-        if snapshot_user is not None:
-            return snapshot_user
-
+    # JWT 是身分提示而不是 User 的可寫快照。每次都取受目前 session 管理的 ORM
+    # instance，確保停用、降權、MFA 與個人資料更新立即以資料庫狀態為準。
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         return None
+
+    raw_session_id = payload.get("sid")
+    if raw_session_id is not None:
+        try:
+            session_id = uuid.UUID(str(raw_session_id))
+        except (TypeError, ValueError):
+            return None
+        # Redis 是即時撤銷快取；資料庫是可在 Redis 故障或資料遺失後復原的真相。
+        if await is_session_revoked(str(session_id)):
+            return None
+        now = datetime.now(UTC)
+        active_session = await db.scalar(
+            select(UserSession.id).where(
+                UserSession.id == session_id,
+                UserSession.user_id == user_id,
+                UserSession.revoked_at.is_(None),
+                UserSession.expires_at > now,
+                UserSession.absolute_expires_at > now,
+            )
+        )
+        if active_session is None:
+            return None
 
     if token_type == "impersonation":
         raw_actor_id = payload.get("imp")
@@ -178,14 +161,13 @@ async def get_current_user(
         raise _CREDENTIALS_EXCEPTION
 
     identity_emails = {user.email}
-    if not isinstance(payload.get("user"), dict):
-        rows = await db.scalars(
-            select(UserIdentity.email).where(
-                UserIdentity.user_id == user.id,
-                UserIdentity.email.is_not(None),
-            )
+    rows = await db.scalars(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email.is_not(None),
         )
-        identity_emails.update(email for email in rows.all() if email)
+    )
+    identity_emails.update(email for email in rows.all() if email)
     block = await find_identity_block(
         user_id=str(user.id),
         emails=identity_emails,

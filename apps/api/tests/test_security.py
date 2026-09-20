@@ -1,7 +1,7 @@
 """JWT 安全機制單元測試"""
 
 import asyncio
-import uuid
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import jwt
@@ -17,6 +17,9 @@ from api.core.security import (
     revoke_user,
 )
 from api.dependencies import auth as auth_dependency
+from api.models.user import User
+from api.models.user_session import UserSession
+from api.services import user_session
 
 
 def test_create_and_decode_access_token() -> None:
@@ -108,33 +111,55 @@ def test_access_token_has_extra_claims() -> None:
     assert payload["sub"] == "user-789"
 
 
-async def test_v2_access_token_snapshot_does_not_query_user(
+async def test_v2_access_token_uses_live_user_and_durable_session(
     monkeypatch: pytest.MonkeyPatch,
+    db_session,
 ) -> None:
-    user_id = uuid.uuid4()
-    token = create_access_token(
-        str(user_id),
-        extra_claims={
-            "user": {
-                "email": "member@school.edu",
-                "display_name": "成員",
-                "is_active": True,
-                "is_verified": True,
-                "is_superuser": False,
-            }
-        },
-        session_id=str(uuid.uuid4()),
+    user = User(email="member@school.edu", display_name="成員", is_verified=True)
+    db_session.add(user)
+    await db_session.flush()
+    tokens = await user_session.issue_session_tokens(
+        db_session,
+        user_id=user.id,
+        extra_claims={"user": {"email": "outdated@school.edu", "display_name": "舊名稱"}},
+        user_agent=None,
+        ip_address=None,
+        auth_method="oauth",
     )
-    db = AsyncMock()
     monkeypatch.setattr(auth_dependency, "is_blacklisted", AsyncMock(return_value=False))
     monkeypatch.setattr(auth_dependency, "is_session_revoked", AsyncMock(return_value=False))
 
-    user = await auth_dependency._user_from_access_token(token, db)
+    resolved = await auth_dependency._user_from_access_token(tokens.access_token, db_session)
 
-    assert user is not None
-    assert user.id == user_id
-    assert user.email == "member@school.edu"
-    db.execute.assert_not_awaited()
+    assert resolved is user
+    assert resolved.email == "member@school.edu"
+
+    tokens.session.revoked_at = datetime.now(UTC)
+    await db_session.flush()
+    assert await auth_dependency._user_from_access_token(tokens.access_token, db_session) is None
+
+
+async def test_list_active_returns_every_unrevoked_session(db_session) -> None:
+    user = User(email="sessions@example.com", display_name="Sessions", is_verified=True)
+    db_session.add(user)
+    await db_session.flush()
+    now = datetime.now(UTC)
+    for index in range(51):
+        db_session.add(
+            UserSession(
+                user_id=user.id,
+                refresh_jti_hash=f"session-{index}",
+                auth_method="oauth",
+                auth_time=now,
+                last_seen_at=now,
+                rotated_at=now,
+                expires_at=now + timedelta(days=1),
+                absolute_expires_at=now + timedelta(days=7),
+            )
+        )
+    await db_session.flush()
+
+    assert len(await user_session.list_active(db_session, user.id)) == 51
 
 
 async def test_register_active_token_does_not_wait_for_stalled_redis(

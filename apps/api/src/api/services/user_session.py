@@ -284,7 +284,6 @@ async def list_active(db: AsyncSession, user_id: uuid.UUID) -> list[UserSession]
                     UserSession.absolute_expires_at > now,
                 )
                 .order_by(UserSession.last_seen_at.desc())
-                .limit(50)
             )
         ).all()
     )
