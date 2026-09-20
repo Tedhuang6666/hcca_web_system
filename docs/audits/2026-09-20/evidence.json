@@ -1,0 +1,2792 @@
+{
+  "audit_period": "2026-09-19/2026-09-20 Asia/Taipei",
+  "production_origin": "https://hcca.tw",
+  "probe_code_baseline": "b1d67a414c4c221114c496c292736edf03bdb22d",
+  "note": "Live workspace also contained unrelated user changes. No production data was modified. Prior-day raw /tmp logs were not retained; those results are historical summaries, not attached raw outputs.",
+  "inventory": {
+    "page_entries": 180,
+    "page_groups": {
+      "(admin)": 40,
+      "(protected)": 84,
+      "(public)": 48,
+      "未分組": 8
+    },
+    "client_entries": 126,
+    "dynamic_entries": 36,
+    "router_files": 75,
+    "route_declarations": 1104,
+    "first_desktop_paths": 41,
+    "mobile_paths": 9,
+    "additional_checks": 7,
+    "distinct_paths": 46
+  },
+  "page_entries": [
+    {
+      "route": "/admin/activities",
+      "file": "apps/web/src/app/(admin)/admin/activities/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/api-keys",
+      "file": "apps/web/src/app/(admin)/admin/api-keys/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/cadre-import",
+      "file": "apps/web/src/app/(admin)/admin/cadre-import/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/calendar/google",
+      "file": "apps/web/src/app/(admin)/admin/calendar/google/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/classes",
+      "file": "apps/web/src/app/(admin)/admin/classes/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/data-lifecycle",
+      "file": "apps/web/src/app/(admin)/admin/data-lifecycle/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/diagnostics",
+      "file": "apps/web/src/app/(admin)/admin/diagnostics/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/discord",
+      "file": "apps/web/src/app/(admin)/admin/discord/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/elections/[id]/count",
+      "file": "apps/web/src/app/(admin)/admin/elections/[id]/count/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/elections/new",
+      "file": "apps/web/src/app/(admin)/admin/elections/new/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/elections",
+      "file": "apps/web/src/app/(admin)/admin/elections/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/feature-flags",
+      "file": "apps/web/src/app/(admin)/admin/feature-flags/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/impersonation",
+      "file": "apps/web/src/app/(admin)/admin/impersonation/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/inventory/items",
+      "file": "apps/web/src/app/(admin)/admin/inventory/items/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/inventory",
+      "file": "apps/web/src/app/(admin)/admin/inventory/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/inventory/procurement",
+      "file": "apps/web/src/app/(admin)/admin/inventory/procurement/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/inventory/transactions",
+      "file": "apps/web/src/app/(admin)/admin/inventory/transactions/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/loans/checkout",
+      "file": "apps/web/src/app/(admin)/admin/loans/checkout/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/loans",
+      "file": "apps/web/src/app/(admin)/admin/loans/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/loans/records",
+      "file": "apps/web/src/app/(admin)/admin/loans/records/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/modules",
+      "file": "apps/web/src/app/(admin)/admin/modules/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/navigation-profiles",
+      "file": "apps/web/src/app/(admin)/admin/navigation-profiles/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin",
+      "file": "apps/web/src/app/(admin)/admin/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/admin"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/people",
+      "file": "apps/web/src/app/(admin)/admin/people/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/permissions",
+      "file": "apps/web/src/app/(admin)/admin/permissions/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/permissions/positions/new",
+      "file": "apps/web/src/app/(admin)/admin/permissions/positions/new/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/policies",
+      "file": "apps/web/src/app/(admin)/admin/policies/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/privacy",
+      "file": "apps/web/src/app/(admin)/admin/privacy/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/public-site",
+      "file": "apps/web/src/app/(admin)/admin/public-site/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/raffle",
+      "file": "apps/web/src/app/(admin)/admin/raffle/page.tsx",
+      "group": "(admin)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/reports",
+      "file": "apps/web/src/app/(admin)/admin/reports/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/settings",
+      "file": "apps/web/src/app/(admin)/admin/settings/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/support",
+      "file": "apps/web/src/app/(admin)/admin/support/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/system/observability",
+      "file": "apps/web/src/app/(admin)/admin/system/observability/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/system",
+      "file": "apps/web/src/app/(admin)/admin/system/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/term-rollover",
+      "file": "apps/web/src/app/(admin)/admin/term-rollover/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/trash",
+      "file": "apps/web/src/app/(admin)/admin/trash/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/user-lifecycle",
+      "file": "apps/web/src/app/(admin)/admin/user-lifecycle/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/users",
+      "file": "apps/web/src/app/(admin)/admin/users/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/admin/webhooks",
+      "file": "apps/web/src/app/(admin)/admin/webhooks/page.tsx",
+      "group": "(admin)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/activities/[id]",
+      "file": "apps/web/src/app/(protected)/activities/[id]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/analytics",
+      "file": "apps/web/src/app/(protected)/analytics/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/announcements/[id]/edit",
+      "file": "apps/web/src/app/(protected)/announcements/[id]/edit/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/announcements/new",
+      "file": "apps/web/src/app/(protected)/announcements/new/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/audit-logs",
+      "file": "apps/web/src/app/(protected)/audit-logs/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/backoffice",
+      "file": "apps/web/src/app/(protected)/backoffice/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/calendar",
+      "file": "apps/web/src/app/(protected)/calendar/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/council-proposals",
+      "file": "apps/web/src/app/(protected)/council-proposals/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/credential",
+      "file": "apps/web/src/app/(protected)/credential/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/dashboard",
+      "file": "apps/web/src/app/(protected)/dashboard/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/dashboard"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/document-templates",
+      "file": "apps/web/src/app/(protected)/document-templates/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/documents/[id]/edit",
+      "file": "apps/web/src/app/(protected)/documents/[id]/edit/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/documents/delegations",
+      "file": "apps/web/src/app/(protected)/documents/delegations/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/documents/new",
+      "file": "apps/web/src/app/(protected)/documents/new/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/documents/new"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/email/analytics",
+      "file": "apps/web/src/app/(protected)/email/analytics/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/email/lists",
+      "file": "apps/web/src/app/(protected)/email/lists/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/email/logs",
+      "file": "apps/web/src/app/(protected)/email/logs/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/email",
+      "file": "apps/web/src/app/(protected)/email/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/email/templates",
+      "file": "apps/web/src/app/(protected)/email/templates/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/exam-papers/admin",
+      "file": "apps/web/src/app/(protected)/exam-papers/admin/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/exam-papers",
+      "file": "apps/web/src/app/(protected)/exam-papers/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/finance",
+      "file": "apps/web/src/app/(protected)/finance/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/finance/receivables",
+      "file": "apps/web/src/app/(protected)/finance/receivables/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/governance/[id]",
+      "file": "apps/web/src/app/(protected)/governance/[id]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/governance",
+      "file": "apps/web/src/app/(protected)/governance/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/judicial-petitions",
+      "file": "apps/web/src/app/(protected)/judicial-petitions/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/matters/[id]",
+      "file": "apps/web/src/app/(protected)/matters/[id]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/matters",
+      "file": "apps/web/src/app/(protected)/matters/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meal/orders",
+      "file": "apps/web/src/app/(protected)/meal/orders/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meal",
+      "file": "apps/web/src/app/(protected)/meal/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/meal"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meal/vendor",
+      "file": "apps/web/src/app/(protected)/meal/vendor/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings/[id]/control",
+      "file": "apps/web/src/app/(protected)/meetings/[id]/control/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings/[id]/edit",
+      "file": "apps/web/src/app/(protected)/meetings/[id]/edit/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings/[id]",
+      "file": "apps/web/src/app/(protected)/meetings/[id]/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings/[id]/vote",
+      "file": "apps/web/src/app/(protected)/meetings/[id]/vote/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings/calendar",
+      "file": "apps/web/src/app/(protected)/meetings/calendar/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings",
+      "file": "apps/web/src/app/(protected)/meetings/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/meetings"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/merchandise-submissions/admin",
+      "file": "apps/web/src/app/(protected)/merchandise-submissions/admin/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/merchandise-submissions",
+      "file": "apps/web/src/app/(protected)/merchandise-submissions/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/notifications",
+      "file": "apps/web/src/app/(protected)/notifications/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/operations",
+      "file": "apps/web/src/app/(protected)/operations/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/orgs/[id]",
+      "file": "apps/web/src/app/(protected)/orgs/[id]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/orgs",
+      "file": "apps/web/src/app/(protected)/orgs/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/partner-map/admin/applications",
+      "file": "apps/web/src/app/(protected)/partner-map/admin/applications/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/partner-map/admin",
+      "file": "apps/web/src/app/(protected)/partner-map/admin/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/partner-map/my-businesses",
+      "file": "apps/web/src/app/(protected)/partner-map/my-businesses/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions/[id]",
+      "file": "apps/web/src/app/(protected)/petitions/[id]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [
+        "/petitions/new",
+        "/petitions/public",
+        "/petitions/share"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions/admin/types",
+      "file": "apps/web/src/app/(protected)/petitions/admin/types/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions/manage",
+      "file": "apps/web/src/app/(protected)/petitions/manage/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/profile",
+      "file": "apps/web/src/app/(protected)/profile/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/publications/new",
+      "file": "apps/web/src/app/(protected)/publications/new/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/publications",
+      "file": "apps/web/src/app/(protected)/publications/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/qr-code",
+      "file": "apps/web/src/app/(protected)/qr-code/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/recommended-vendors/admin/categories",
+      "file": "apps/web/src/app/(protected)/recommended-vendors/admin/categories/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/recommended-vendors/admin",
+      "file": "apps/web/src/app/(protected)/recommended-vendors/admin/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/recommended-vendors",
+      "file": "apps/web/src/app/(protected)/recommended-vendors/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/regulations/[id]/amendment",
+      "file": "apps/web/src/app/(protected)/regulations/[id]/amendment/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/regulations/[id]/edit",
+      "file": "apps/web/src/app/(protected)/regulations/[id]/edit/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/regulations/archived",
+      "file": "apps/web/src/app/(protected)/regulations/archived/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/regulations/new",
+      "file": "apps/web/src/app/(protected)/regulations/new/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/regulations/pending",
+      "file": "apps/web/src/app/(protected)/regulations/pending/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/search",
+      "file": "apps/web/src/app/(protected)/search/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/seating/[zoneId]",
+      "file": "apps/web/src/app/(protected)/seating/[zoneId]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/seating/admin/[productId]",
+      "file": "apps/web/src/app/(protected)/seating/admin/[productId]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/serial-templates",
+      "file": "apps/web/src/app/(protected)/serial-templates/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings/account",
+      "file": "apps/web/src/app/(protected)/settings/account/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings/data-saver",
+      "file": "apps/web/src/app/(protected)/settings/data-saver/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings/integrations",
+      "file": "apps/web/src/app/(protected)/settings/integrations/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings/navigation",
+      "file": "apps/web/src/app/(protected)/settings/navigation/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings/notifications",
+      "file": "apps/web/src/app/(protected)/settings/notifications/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings",
+      "file": "apps/web/src/app/(protected)/settings/page.tsx",
+      "group": "(protected)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings/privacy",
+      "file": "apps/web/src/app/(protected)/settings/privacy/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/settings/security",
+      "file": "apps/web/src/app/(protected)/settings/security/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/settings/security"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/shop/admin",
+      "file": "apps/web/src/app/(protected)/shop/admin/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/shop/cart",
+      "file": "apps/web/src/app/(protected)/shop/cart/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/shop/class-orders",
+      "file": "apps/web/src/app/(protected)/shop/class-orders/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/shop/council-orders",
+      "file": "apps/web/src/app/(protected)/shop/council-orders/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/shop/orders/[id]",
+      "file": "apps/web/src/app/(protected)/shop/orders/[id]/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/shop/orders",
+      "file": "apps/web/src/app/(protected)/shop/orders/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/shop",
+      "file": "apps/web/src/app/(protected)/shop/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/shop"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/surveys/[id]/edit",
+      "file": "apps/web/src/app/(protected)/surveys/[id]/edit/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/surveys/new",
+      "file": "apps/web/src/app/(protected)/surveys/new/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/tasks",
+      "file": "apps/web/src/app/(protected)/tasks/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/work-items",
+      "file": "apps/web/src/app/(protected)/work-items/page.tsx",
+      "group": "(protected)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/about",
+      "file": "apps/web/src/app/(public)/about/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/about"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/announcements/[id]",
+      "file": "apps/web/src/app/(public)/announcements/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/announcements",
+      "file": "apps/web/src/app/(public)/announcements/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/announcements"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/articles/[slug]",
+      "file": "apps/web/src/app/(public)/articles/[slug]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [
+        "/articles/audit-no-such-article",
+        "/articles/hchs-lunch-guide"
+      ],
+      "mobile_samples": [
+        "/articles/hchs-lunch-guide"
+      ]
+    },
+    {
+      "route": "/articles",
+      "file": "apps/web/src/app/(public)/articles/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/articles"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/contact",
+      "file": "apps/web/src/app/(public)/contact/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/contact"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/documents/[id]",
+      "file": "apps/web/src/app/(public)/documents/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [
+        "/documents/audit-no-such-document",
+        "/documents/new",
+        "/documents/嶺代綜字第 1150000001 號"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/documents",
+      "file": "apps/web/src/app/(public)/documents/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/documents"
+      ],
+      "mobile_samples": [
+        "/documents"
+      ]
+    },
+    {
+      "route": "/legal/accessibility",
+      "file": "apps/web/src/app/(public)/legal/accessibility/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/legal/accessibility"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/legal/cookie",
+      "file": "apps/web/src/app/(public)/legal/cookie/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/legal/cookie"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/legal",
+      "file": "apps/web/src/app/(public)/legal/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/legal"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/legal/privacy",
+      "file": "apps/web/src/app/(public)/legal/privacy/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/legal/privacy"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/legal/security-policy",
+      "file": "apps/web/src/app/(public)/legal/security-policy/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/legal/security-policy"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/legal/terms",
+      "file": "apps/web/src/app/(public)/legal/terms/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/legal/terms"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/links",
+      "file": "apps/web/src/app/(public)/links/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/links"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/live/elections/[id]",
+      "file": "apps/web/src/app/(public)/live/elections/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/live/elections/[id]/vertical",
+      "file": "apps/web/src/app/(public)/live/elections/[id]/vertical/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings/join/[token]",
+      "file": "apps/web/src/app/(public)/meetings/join/[token]/page.tsx",
+      "group": "(public)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/meetings/screen/[token]",
+      "file": "apps/web/src/app/(public)/meetings/screen/[token]/page.tsx",
+      "group": "(public)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/news/[id]",
+      "file": "apps/web/src/app/(public)/news/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [
+        "/news/58187290-0900-4de0-b994-dd595ed211e8"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/news",
+      "file": "apps/web/src/app/(public)/news/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/news"
+      ],
+      "mobile_samples": [
+        "/news"
+      ]
+    },
+    {
+      "route": "/officers",
+      "file": "apps/web/src/app/(public)/officers/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/officers"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/",
+      "file": "apps/web/src/app/(public)/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/"
+      ],
+      "mobile_samples": [
+        "/"
+      ]
+    },
+    {
+      "route": "/pages/[slug]",
+      "file": "apps/web/src/app/(public)/pages/[slug]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/partner-map/[businessSlug]",
+      "file": "apps/web/src/app/(public)/partner-map/[businessSlug]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/partner-map",
+      "file": "apps/web/src/app/(public)/partner-map/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/partner-map"
+      ],
+      "mobile_samples": [
+        "/partner-map"
+      ]
+    },
+    {
+      "route": "/petitions/[id]/[verificationCode]",
+      "file": "apps/web/src/app/(public)/petitions/[id]/[verificationCode]/page.tsx",
+      "group": "(public)",
+      "client_entry": true,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions/new",
+      "file": "apps/web/src/app/(public)/petitions/new/page.tsx",
+      "group": "(public)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/petitions/new"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions",
+      "file": "apps/web/src/app/(public)/petitions/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/petitions"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions/public/[id]",
+      "file": "apps/web/src/app/(public)/petitions/public/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions/public",
+      "file": "apps/web/src/app/(public)/petitions/public/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/petitions/public"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/petitions/share",
+      "file": "apps/web/src/app/(public)/petitions/share/page.tsx",
+      "group": "(public)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/petitions/share"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/profile/complete",
+      "file": "apps/web/src/app/(public)/profile/complete/page.tsx",
+      "group": "(public)",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [
+        "/profile/complete"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public/budgets/[id]",
+      "file": "apps/web/src/app/(public)/public/budgets/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public/budgets",
+      "file": "apps/web/src/app/(public)/public/budgets/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/public/budgets"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public/documents/[id]",
+      "file": "apps/web/src/app/(public)/public/documents/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public/documents",
+      "file": "apps/web/src/app/(public)/public/documents/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/public/documents"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public/elections",
+      "file": "apps/web/src/app/(public)/public/elections/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/public/elections"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public",
+      "file": "apps/web/src/app/(public)/public/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/public"
+      ],
+      "mobile_samples": [
+        "/public"
+      ]
+    },
+    {
+      "route": "/public/regulations/[id]",
+      "file": "apps/web/src/app/(public)/public/regulations/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public/regulations",
+      "file": "apps/web/src/app/(public)/public/regulations/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/public/regulations"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/public/special-agreement",
+      "file": "apps/web/src/app/(public)/public/special-agreement/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/public/special-agreement"
+      ],
+      "mobile_samples": [
+        "/public/special-agreement"
+      ]
+    },
+    {
+      "route": "/regulations/[id]/[...refs]",
+      "file": "apps/web/src/app/(public)/regulations/[id]/[...refs]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/regulations/[id]",
+      "file": "apps/web/src/app/(public)/regulations/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [
+        "/regulations/0e8cdf26-42b2-44ac-83c8-5c58be432b0d",
+        "/regulations/audit-no-such-regulation"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/regulations",
+      "file": "apps/web/src/app/(public)/regulations/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/regulations"
+      ],
+      "mobile_samples": [
+        "/regulations"
+      ]
+    },
+    {
+      "route": "/surveys/[id]",
+      "file": "apps/web/src/app/(public)/surveys/[id]/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": true,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/surveys",
+      "file": "apps/web/src/app/(public)/surveys/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/surveys"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/system-info",
+      "file": "apps/web/src/app/(public)/system-info/page.tsx",
+      "group": "(public)",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/system-info"
+      ],
+      "mobile_samples": []
+    },
+    {
+      "route": "/auth/callback",
+      "file": "apps/web/src/app/auth/callback/page.tsx",
+      "group": "未分組",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/auth/mfa",
+      "file": "apps/web/src/app/auth/mfa/page.tsx",
+      "group": "未分組",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/blocked",
+      "file": "apps/web/src/app/blocked/page.tsx",
+      "group": "未分組",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/login",
+      "file": "apps/web/src/app/login/page.tsx",
+      "group": "未分組",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [
+        "/login"
+      ],
+      "mobile_samples": [
+        "/login"
+      ]
+    },
+    {
+      "route": "/maintenance",
+      "file": "apps/web/src/app/maintenance/page.tsx",
+      "group": "未分組",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/module-status",
+      "file": "apps/web/src/app/module-status/page.tsx",
+      "group": "未分組",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/raffle",
+      "file": "apps/web/src/app/raffle/page.tsx",
+      "group": "未分組",
+      "client_entry": false,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    },
+    {
+      "route": "/unsubscribe",
+      "file": "apps/web/src/app/unsubscribe/page.tsx",
+      "group": "未分組",
+      "client_entry": true,
+      "dynamic": false,
+      "desktop_samples": [],
+      "mobile_samples": []
+    }
+  ],
+  "router_counts": [
+    {
+      "file": "apps/api/src/api/routers/activities.py",
+      "methods": {
+        "GET": 11,
+        "POST": 9,
+        "DELETE": 3,
+        "PATCH": 3,
+        "PUT": 1
+      },
+      "count": 27
+    },
+    {
+      "file": "apps/api/src/api/routers/admin.py",
+      "methods": {
+        "POST": 10,
+        "GET": 8,
+        "DELETE": 3,
+        "PATCH": 3,
+        "PUT": 1
+      },
+      "count": 25
+    },
+    {
+      "file": "apps/api/src/api/routers/admin_observability.py",
+      "methods": {
+        "GET": 5,
+        "POST": 3
+      },
+      "count": 8
+    },
+    {
+      "file": "apps/api/src/api/routers/admin_system.py",
+      "methods": {
+        "GET": 25,
+        "DELETE": 3,
+        "POST": 15,
+        "PUT": 5,
+        "PATCH": 3
+      },
+      "count": 51
+    },
+    {
+      "file": "apps/api/src/api/routers/agent_observability.py",
+      "methods": {
+        "GET": 3,
+        "POST": 3
+      },
+      "count": 6
+    },
+    {
+      "file": "apps/api/src/api/routers/analytics.py",
+      "methods": {
+        "POST": 5,
+        "GET": 8
+      },
+      "count": 13
+    },
+    {
+      "file": "apps/api/src/api/routers/announcements.py",
+      "methods": {
+        "GET": 5,
+        "POST": 4,
+        "PATCH": 2,
+        "DELETE": 2
+      },
+      "count": 13
+    },
+    {
+      "file": "apps/api/src/api/routers/api_keys.py",
+      "methods": {
+        "GET": 2,
+        "POST": 2
+      },
+      "count": 4
+    },
+    {
+      "file": "apps/api/src/api/routers/audit.py",
+      "methods": {
+        "GET": 2
+      },
+      "count": 2
+    },
+    {
+      "file": "apps/api/src/api/routers/auth.py",
+      "methods": {
+        "GET": 5,
+        "POST": 3
+      },
+      "count": 8
+    },
+    {
+      "file": "apps/api/src/api/routers/calendar.py",
+      "methods": {
+        "GET": 6,
+        "POST": 5,
+        "PATCH": 4,
+        "DELETE": 5
+      },
+      "count": 20
+    },
+    {
+      "file": "apps/api/src/api/routers/council_proposals.py",
+      "methods": {
+        "POST": 2,
+        "GET": 4,
+        "PATCH": 1
+      },
+      "count": 7
+    },
+    {
+      "file": "apps/api/src/api/routers/dashboard.py",
+      "methods": {
+        "GET": 2
+      },
+      "count": 2
+    },
+    {
+      "file": "apps/api/src/api/routers/data_lifecycle.py",
+      "methods": {
+        "GET": 4,
+        "POST": 2
+      },
+      "count": 6
+    },
+    {
+      "file": "apps/api/src/api/routers/discord.py",
+      "methods": {
+        "GET": 16,
+        "POST": 11,
+        "DELETE": 6,
+        "PATCH": 4
+      },
+      "count": 37
+    },
+    {
+      "file": "apps/api/src/api/routers/discord_internal.py",
+      "methods": {
+        "GET": 2,
+        "POST": 4,
+        "PUT": 1
+      },
+      "count": 7
+    },
+    {
+      "file": "apps/api/src/api/routers/documents.py",
+      "methods": {
+        "GET": 6,
+        "POST": 1,
+        "PUT": 3,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 12
+    },
+    {
+      "file": "apps/api/src/api/routers/documents_approve.py",
+      "methods": {
+        "POST": 14,
+        "PUT": 2,
+        "GET": 1,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 19
+    },
+    {
+      "file": "apps/api/src/api/routers/documents_attachments.py",
+      "methods": {
+        "GET": 3,
+        "POST": 2,
+        "DELETE": 1,
+        "PATCH": 1
+      },
+      "count": 7
+    },
+    {
+      "file": "apps/api/src/api/routers/documents_serial.py",
+      "methods": {
+        "GET": 4,
+        "POST": 3,
+        "PATCH": 2,
+        "DELETE": 2
+      },
+      "count": 11
+    },
+    {
+      "file": "apps/api/src/api/routers/elections.py",
+      "methods": {
+        "GET": 5,
+        "POST": 6,
+        "PATCH": 1
+      },
+      "count": 12
+    },
+    {
+      "file": "apps/api/src/api/routers/electronic_credentials.py",
+      "methods": {
+        "GET": 2,
+        "POST": 2,
+        "PATCH": 1
+      },
+      "count": 5
+    },
+    {
+      "file": "apps/api/src/api/routers/email.py",
+      "methods": {
+        "POST": 8,
+        "PATCH": 1,
+        "DELETE": 1,
+        "GET": 5
+      },
+      "count": 15
+    },
+    {
+      "file": "apps/api/src/api/routers/email_platform.py",
+      "methods": {
+        "GET": 6,
+        "POST": 6,
+        "PATCH": 2,
+        "DELETE": 3
+      },
+      "count": 17
+    },
+    {
+      "file": "apps/api/src/api/routers/exam_papers.py",
+      "methods": {
+        "GET": 3,
+        "POST": 2,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 7
+    },
+    {
+      "file": "apps/api/src/api/routers/feature_flags.py",
+      "methods": {
+        "GET": 3,
+        "POST": 2,
+        "PATCH": 1
+      },
+      "count": 6
+    },
+    {
+      "file": "apps/api/src/api/routers/finance.py",
+      "methods": {
+        "POST": 25,
+        "GET": 14,
+        "PATCH": 9
+      },
+      "count": 48
+    },
+    {
+      "file": "apps/api/src/api/routers/governance.py",
+      "methods": {
+        "GET": 18,
+        "POST": 17,
+        "PUT": 2,
+        "PATCH": 9,
+        "DELETE": 3
+      },
+      "count": 49
+    },
+    {
+      "file": "apps/api/src/api/routers/impersonation.py",
+      "methods": {
+        "POST": 2
+      },
+      "count": 2
+    },
+    {
+      "file": "apps/api/src/api/routers/inventory.py",
+      "methods": {
+        "GET": 8,
+        "POST": 8,
+        "PATCH": 3,
+        "DELETE": 2
+      },
+      "count": 21
+    },
+    {
+      "file": "apps/api/src/api/routers/judicial_petitions.py",
+      "methods": {
+        "POST": 1,
+        "GET": 3,
+        "PATCH": 1
+      },
+      "count": 5
+    },
+    {
+      "file": "apps/api/src/api/routers/line_webhook.py",
+      "methods": {
+        "POST": 2,
+        "GET": 3,
+        "DELETE": 1
+      },
+      "count": 6
+    },
+    {
+      "file": "apps/api/src/api/routers/loans.py",
+      "methods": {
+        "GET": 5,
+        "POST": 4,
+        "PATCH": 3,
+        "DELETE": 1
+      },
+      "count": 13
+    },
+    {
+      "file": "apps/api/src/api/routers/matters.py",
+      "methods": {
+        "GET": 3,
+        "POST": 3,
+        "PATCH": 2,
+        "DELETE": 2
+      },
+      "count": 10
+    },
+    {
+      "file": "apps/api/src/api/routers/meal.py",
+      "methods": {
+        "POST": 19,
+        "GET": 16,
+        "PATCH": 5,
+        "DELETE": 2
+      },
+      "count": 42
+    },
+    {
+      "file": "apps/api/src/api/routers/meetings.py",
+      "methods": {
+        "GET": 11,
+        "POST": 38,
+        "PATCH": 12,
+        "DELETE": 4
+      },
+      "count": 65
+    },
+    {
+      "file": "apps/api/src/api/routers/merchandise_submissions.py",
+      "methods": {
+        "GET": 7,
+        "POST": 6,
+        "PATCH": 4,
+        "DELETE": 1,
+        "PUT": 1
+      },
+      "count": 19
+    },
+    {
+      "file": "apps/api/src/api/routers/metrics_endpoint.py",
+      "methods": {
+        "GET": 1
+      },
+      "count": 1
+    },
+    {
+      "file": "apps/api/src/api/routers/mfa.py",
+      "methods": {
+        "GET": 3,
+        "POST": 9,
+        "DELETE": 2
+      },
+      "count": 14
+    },
+    {
+      "file": "apps/api/src/api/routers/navigation_profiles.py",
+      "methods": {
+        "GET": 3,
+        "POST": 1,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 6
+    },
+    {
+      "file": "apps/api/src/api/routers/notifications.py",
+      "methods": {
+        "GET": 8,
+        "PATCH": 1,
+        "POST": 5,
+        "PUT": 3,
+        "DELETE": 1
+      },
+      "count": 18
+    },
+    {
+      "file": "apps/api/src/api/routers/orgs.py",
+      "methods": {
+        "GET": 6,
+        "POST": 3,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 11
+    },
+    {
+      "file": "apps/api/src/api/routers/partner_business_application.py",
+      "methods": {
+        "GET": 3,
+        "POST": 1,
+        "PATCH": 2
+      },
+      "count": 6
+    },
+    {
+      "file": "apps/api/src/api/routers/partner_map.py",
+      "methods": {
+        "GET": 17,
+        "PATCH": 6,
+        "POST": 11,
+        "DELETE": 6,
+        "PUT": 1
+      },
+      "count": 41
+    },
+    {
+      "file": "apps/api/src/api/routers/people.py",
+      "methods": {
+        "GET": 2,
+        "POST": 4,
+        "PATCH": 2,
+        "DELETE": 1
+      },
+      "count": 9
+    },
+    {
+      "file": "apps/api/src/api/routers/petitions.py",
+      "methods": {
+        "GET": 16,
+        "POST": 13,
+        "PATCH": 8,
+        "DELETE": 2,
+        "PUT": 1
+      },
+      "count": 40
+    },
+    {
+      "file": "apps/api/src/api/routers/policies.py",
+      "methods": {
+        "GET": 8,
+        "POST": 5,
+        "PATCH": 2
+      },
+      "count": 15
+    },
+    {
+      "file": "apps/api/src/api/routers/positions.py",
+      "methods": {
+        "GET": 2,
+        "POST": 2,
+        "PATCH": 1,
+        "DELETE": 2
+      },
+      "count": 7
+    },
+    {
+      "file": "apps/api/src/api/routers/privacy.py",
+      "methods": {
+        "POST": 2,
+        "GET": 2
+      },
+      "count": 4
+    },
+    {
+      "file": "apps/api/src/api/routers/public_api.py",
+      "methods": {
+        "GET": 3
+      },
+      "count": 3
+    },
+    {
+      "file": "apps/api/src/api/routers/publications.py",
+      "methods": {
+        "GET": 3,
+        "POST": 3,
+        "PATCH": 1
+      },
+      "count": 7
+    },
+    {
+      "file": "apps/api/src/api/routers/raffles.py",
+      "methods": {
+        "GET": 3,
+        "POST": 5,
+        "PATCH": 1
+      },
+      "count": 9
+    },
+    {
+      "file": "apps/api/src/api/routers/receivables.py",
+      "methods": {
+        "GET": 3,
+        "POST": 3,
+        "PATCH": 1
+      },
+      "count": 7
+    },
+    {
+      "file": "apps/api/src/api/routers/recommended_vendors.py",
+      "methods": {
+        "GET": 7,
+        "POST": 5,
+        "PATCH": 4,
+        "DELETE": 3
+      },
+      "count": 19
+    },
+    {
+      "file": "apps/api/src/api/routers/regulations.py",
+      "methods": {
+        "GET": 13,
+        "POST": 19,
+        "PATCH": 4,
+        "DELETE": 2,
+        "PUT": 1
+      },
+      "count": 39
+    },
+    {
+      "file": "apps/api/src/api/routers/reports.py",
+      "methods": {
+        "GET": 3
+      },
+      "count": 3
+    },
+    {
+      "file": "apps/api/src/api/routers/saved_filters.py",
+      "methods": {
+        "GET": 1,
+        "POST": 1,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 4
+    },
+    {
+      "file": "apps/api/src/api/routers/school_class.py",
+      "methods": {
+        "GET": 9,
+        "POST": 11,
+        "PATCH": 2,
+        "DELETE": 6
+      },
+      "count": 28
+    },
+    {
+      "file": "apps/api/src/api/routers/search.py",
+      "methods": {
+        "GET": 1,
+        "POST": 1
+      },
+      "count": 2
+    },
+    {
+      "file": "apps/api/src/api/routers/seating.py",
+      "methods": {
+        "GET": 5,
+        "POST": 4,
+        "PATCH": 1,
+        "DELETE": 3,
+        "PUT": 2
+      },
+      "count": 15
+    },
+    {
+      "file": "apps/api/src/api/routers/shop.py",
+      "methods": {
+        "POST": 13,
+        "GET": 15,
+        "PATCH": 8,
+        "DELETE": 7
+      },
+      "count": 43
+    },
+    {
+      "file": "apps/api/src/api/routers/site.py",
+      "methods": {
+        "GET": 13,
+        "POST": 7,
+        "PATCH": 5,
+        "DELETE": 4
+      },
+      "count": 29
+    },
+    {
+      "file": "apps/api/src/api/routers/support.py",
+      "methods": {
+        "GET": 11,
+        "POST": 13,
+        "PATCH": 5
+      },
+      "count": 29
+    },
+    {
+      "file": "apps/api/src/api/routers/survey.py",
+      "methods": {
+        "POST": 6,
+        "GET": 7,
+        "PATCH": 2,
+        "DELETE": 1
+      },
+      "count": 16
+    },
+    {
+      "file": "apps/api/src/api/routers/tasks.py",
+      "methods": {
+        "GET": 2
+      },
+      "count": 2
+    },
+    {
+      "file": "apps/api/src/api/routers/term_rollover.py",
+      "methods": {
+        "POST": 3
+      },
+      "count": 3
+    },
+    {
+      "file": "apps/api/src/api/routers/trash.py",
+      "methods": {
+        "GET": 2
+      },
+      "count": 2
+    },
+    {
+      "file": "apps/api/src/api/routers/user_google_tasks.py",
+      "methods": {
+        "GET": 3,
+        "DELETE": 1,
+        "POST": 1
+      },
+      "count": 5
+    },
+    {
+      "file": "apps/api/src/api/routers/user_lifecycle.py",
+      "methods": {
+        "GET": 1,
+        "POST": 3
+      },
+      "count": 4
+    },
+    {
+      "file": "apps/api/src/api/routers/user_positions.py",
+      "methods": {
+        "GET": 2,
+        "POST": 1,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 5
+    },
+    {
+      "file": "apps/api/src/api/routers/users.py",
+      "methods": {
+        "GET": 6,
+        "PATCH": 1,
+        "POST": 7,
+        "DELETE": 1
+      },
+      "count": 15
+    },
+    {
+      "file": "apps/api/src/api/routers/webhooks.py",
+      "methods": {
+        "GET": 3,
+        "POST": 1,
+        "PATCH": 1,
+        "DELETE": 1
+      },
+      "count": 6
+    },
+    {
+      "file": "apps/api/src/api/routers/work_items.py",
+      "methods": {
+        "GET": 1,
+        "POST": 2,
+        "PATCH": 1
+      },
+      "count": 4
+    },
+    {
+      "file": "apps/api/src/api/routers/workflows.py",
+      "methods": {
+        "GET": 3,
+        "POST": 2
+      },
+      "count": 5
+    },
+    {
+      "file": "apps/api/src/api/routers/ws.py",
+      "methods": {
+        "GET": 1
+      },
+      "count": 1
+    }
+  ],
+  "browser_recheck": {
+    "measuredAt": "2026-09-20T03:13:06.439Z",
+    "pages": [
+      {
+        "path": "/documents/%E5%B6%BA%E4%BB%A3%E7%B6%9C%E5%AD%97%E7%AC%AC%201150000001%20%E8%99%9F",
+        "status": 200,
+        "url": "https://hcca.tw/documents/%E5%B6%BA%E4%BB%A3%E7%B6%9C%E5%AD%97%E7%AC%AC%201150000001%20%E8%99%9F",
+        "title": "國立新竹高級中學學生代表團公告｜新竹高中班聯會 HCCA",
+        "main": "公文不存在，或目前不對外公開。",
+        "violations": []
+      },
+      {
+        "path": "/petitions/new",
+        "status": 200,
+        "url": "https://hcca.tw/petitions/new",
+        "title": "我要陳情｜新竹高中班聯會 HCCA",
+        "main": "我要陳情\n\n登入帳號後以具名方式送出，系統會依類型自動分派給負責機關。\n\n變更會自動儲存於此裝置\n\n選擇類型\n聯絡資料\n填寫內容\n確認送出\n系統會以目前登入帳號送件：未命名使用者 · 未提供 email。\n陳情類型\n班聯會務\n學餐相關\n校務相關\n其餘事務(或無法分類)\n拖曳陳情附件到這裡\n可點擊選檔，或貼上圖片；送出陳情時會一併上傳\n選擇檔案\n取消\n送出陳情",
+        "violations": [
+          {
+            "id": "label",
+            "impact": "critical",
+            "count": 1,
+            "nodes": [
+              {
+                "target": [
+                  "input[type=\"file\"]"
+                ],
+                "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+              }
+            ]
+          },
+          {
+            "id": "nested-interactive",
+            "impact": "serious",
+            "count": 1,
+            "nodes": [
+              {
+                "target": [
+                  ".InteractionMotion_uploadZone__ZNajb"
+                ],
+                "summary": "Fix any of the following:\n  Element has focusable descendants"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": "/surveys",
+        "status": 200,
+        "url": "https://hcca.tw/surveys",
+        "title": "公開問卷｜新竹高中班聯會 HCCA",
+        "main": "問卷\n\n查看可填問卷與截止時間。\n\n最新建立\n最早建立\n回應數多→少\n截止最近\n開放中\n全部\n\n目前沒有問卷\n\n目前沒有開放填答的問卷",
+        "violations": []
+      },
+      {
+        "path": "/partner-map",
+        "status": 200,
+        "url": "https://hcca.tw/partner-map",
+        "title": "合作商家地圖｜新竹高中班聯會 HCCA",
+        "main": "店家地圖\n\n以新竹高中周邊為中心，搜尋特約店家與推薦商家\n\n全部\n目前視野\n手搖飲\n服裝\n炸物\n麵食\n\n學生常去排行\n\n投稿新店\n1\n統帥西服\n27 次\n2\n老賴茶棧新竹城隍店\n0 次\n3\n帥帥西服\n0 次\n4\n阿力香雞排 新竹東門店\n0 次\n5\n焗的飽平價義式焗烤竹北店\n0 次\n\n合作夥伴聯絡資訊\n\n沃爾創意行銷\n\n查看詳情 →\n\n提供班服、社服等團體服裝優惠\n\n有 2 筆優惠\n\n統帥西服\n\n服裝\n\n4 · 熱度 221.9\n\n300新竹市東區育賢里中華路二段353號\n\n優惠\n\n滿額贈禮、五星評價贈禮\n\n老賴茶棧新竹城隍店\n\n飲料\n\n- · 熱度 96.7\n\n300新竹市北區中央里中山路105號\n\n★ 折扣\n\n外送買十送一、全品項九折\n\n帥帥西服\n\n服裝\n\n4 · 熱度 62.9\n\n300新竹市東區育賢里東門街34巷5號\n\n優惠\n\n滿額贈禮、滿4000可參與抽獎\n\n阿力香雞排 新竹東門店\n\n炸物\n\n- · 熱度 44.3\n\n300新竹市東區育賢里東門街76號2\n\n優惠\n\n滿額贈送麥克雞塊\n\n焗的飽平價義式焗烤竹北店\n\n麵食\n\n- · 熱度 5.4\n\n302新竹縣竹北市北崙里博愛街22",
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "count": 3,
+            "nodes": [
+              {
+                "target": [
+                  ".mt-1.text-\\[11px\\]:nth-child(3)"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.26 (foreground color: #c9a84c, background color: #fffef9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+              },
+              {
+                "target": [
+                  ".transition-colors.hover\\:border-\\[var\\(--primary\\)\\].w-full:nth-child(1) > .items-start.gap-3.justify-between > .flex-1.min-w-0 > .font-medium.gap-1.mt-0\\.5"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.51 (foreground color: #10b981, background color: #fffef9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+              },
+              {
+                "target": [
+                  ".transition-colors.hover\\:border-\\[var\\(--primary\\)\\].w-full:nth-child(2) > .items-start.gap-3.justify-between > .flex-1.min-w-0 > .font-medium.gap-1.mt-0\\.5"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.49 (foreground color: #ec4899, background color: #fffef9, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "count": 5,
+            "nodes": [
+              {
+                "target": [
+                  ".w-full.gap-2.text-left:nth-child(1)"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (309px by 18.7px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 21.4px instead of at least 24px."
+              },
+              {
+                "target": [
+                  ".w-full.gap-2.text-left:nth-child(2)"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (309px by 18.7px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 21.4px instead of at least 24px."
+              },
+              {
+                "target": [
+                  ".w-full.gap-2.text-left:nth-child(3)"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (309px by 18.7px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 21.4px instead of at least 24px."
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "api": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "version": "04.12.08.67.1352"
+      },
+      {
+        "path": "/api/documents/%E5%B6%BA%E4%BB%A3%E7%B6%9C%E5%AD%97%E7%AC%AC%201150000001%20%E8%99%9F",
+        "status": 200,
+        "id": "88d2b308-465b-47c8-a9d4-2557f279ae49",
+        "title": "國立新竹高級中學學生代表團公告"
+      },
+      {
+        "path": "/api/surveys/public?status=open",
+        "status": 503,
+        "detail": "此功能模組系統關閉中",
+        "mode": "closed"
+      }
+    ]
+  },
+  "isolated_backend_probes": [
+    {
+      "probe": "read_search_mutates_orm",
+      "rows": 1,
+      "dirty_objects": 1
+    },
+    {
+      "probe": "read_search_commit",
+      "stored_email": "",
+      "stored_student_id": null
+    },
+    {
+      "probe": "snapshot_profile_write",
+      "snapshot_transient": true,
+      "response_display_name": "Updated Name",
+      "stored_display_name": "Audit Target"
+    },
+    {
+      "probe": "snapshot_mfa_status",
+      "stored_mfa_enabled": true,
+      "response_mfa_enabled": false
+    },
+    {
+      "probe": "snapshot_mfa_setup",
+      "snapshot_has_pending_secret": true,
+      "stored_has_pending_secret": false,
+      "duration_ms": 374.7,
+      "timer_10ms_actual_ms": 374.8
+    },
+    {
+      "probe": "revoke_all_51_sessions",
+      "created": 51,
+      "returned_revoked": 50,
+      "remaining_active": 1
+    },
+    {
+      "probe": "redis_unavailable",
+      "db_user_active": false,
+      "db_session_revoked": true,
+      "token_accepted": true,
+      "admin_permission_accepted": true
+    },
+    {
+      "probe": "redis_key_missing",
+      "db_user_active": false,
+      "db_session_revoked": true,
+      "token_accepted": true,
+      "admin_permission_accepted": true
+    }
+  ],
+  "real_component_probes": [
+    {
+      "probe": "incremental_file_selection",
+      "visibleFiles": [
+        "first.pdf",
+        "second.pdf"
+      ],
+      "parentPendingFiles": [
+        "second.pdf"
+      ]
+    },
+    {
+      "probe": "max_files_across_selections",
+      "maxFiles": 10,
+      "visibleCount": 12,
+      "parentPendingCount": 10
+    }
+  ],
+  "backend_reproduction_scope": {
+    "database": "real SQLAlchemy AsyncSession with isolated SQLite in memory",
+    "redis": "controlled connection error / missing-key test doubles",
+    "authorization_bypass": "direct real dependencies with legitimately signed test token, not production HTTP exploit",
+    "production_submissions": false
+  },
+  "graph_impact": [
+    {
+      "target": {
+        "id": "Function:apps/api/src/api/dependencies/auth.py:_user_from_snapshot",
+        "name": "_user_from_snapshot",
+        "type": "Function",
+        "filePath": "apps/api/src/api/dependencies/auth.py"
+      },
+      "direction": "upstream",
+      "impactedCount": 438,
+      "risk": "CRITICAL",
+      "epistemic": "exact",
+      "summary": {
+        "direct": 1,
+        "processes_affected": 182,
+        "modules_affected": 20
+      }
+    },
+    {
+      "target": {
+        "id": "Function:apps/api/src/api/routers/users.py:list_users",
+        "name": "list_users",
+        "type": "Function",
+        "filePath": "apps/api/src/api/routers/users.py"
+      },
+      "direction": "upstream",
+      "impactedCount": 0,
+      "risk": "UNKNOWN",
+      "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe.",
+      "epistemic": "exact",
+      "summary": {
+        "direct": 0,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  ],
+  "source_sha256": {
+    "apps/api/src/api/routers/users.py": "b3053215e9ddebd6bdfc2e8d27a97ff6b94c1ab30c3deccf95e11a4907d715a9",
+    "apps/api/src/api/dependencies/auth.py": "015ef3f00ec121cd63fd3b7306b57dd16195d9fb80f4b8dc3c446413f32f1d04",
+    "apps/api/src/api/core/security.py": "1459d9e242ff48f512ee781b6fdb19ad67a001ba49437aac42b2c34ca693f5a1",
+    "apps/api/src/api/services/user_session.py": "726da3643523a2cc8e189a59e391a86240996994c480b330cf459d080f497c14",
+    "apps/api/src/api/services/mfa.py": "b693a62c816fde50a6786dadc98060d59448038a01fa78116390a45bda7c8ff1",
+    "apps/web/src/components/ui/AnimatedFileUpload.tsx": "e9589e1933bee26207b0a9b0618aea8574926dea817f866b09a69ff9fb7e92a3"
+  },
+  "verification": {
+    "historical_2026_09_19": {
+      "frontend_lint": "pass",
+      "typescript": "pass",
+      "vitest": {
+        "passed": 97,
+        "failed": 0
+      },
+      "next_production_build": "pass",
+      "npm_production_vulnerabilities": 0,
+      "pip_audit": "no known vulnerabilities; local api package skipped",
+      "ruff": "pass",
+      "ruff_format_files": 561,
+      "pytest": {
+        "passed": 1856,
+        "failed": 15,
+        "stopped_at_maxfail": 15,
+        "app_db_isolation_connection_failures": 13,
+        "subsequently_fixed_assertions": 2
+      }
+    },
+    "recheck_2026_09_20": {
+      "selected_previous_failures": 2,
+      "passed": 2,
+      "failed": 0,
+      "raw_output": "..                                                                       [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.12/site-packages/authlib/integrations/httpx_client/assertion_client.py:5\n  /home/ted98/projects/main/.venv/lib/python3.12/site-packages/authlib/integrations/httpx_client/assertion_client.py:5: AuthlibDeprecationWarning: The httpx module is deprecated; please use httpx2 instead.\n    from ._compat import httpx2\n\napps/api/tests/test_merchandise_submissions_router.py::test_merchandise_submission_flow_uses_school_account_and_notifies_submitter\n  /home/ted98/projects/main/.venv/lib/python3.12/site-packages/fastapi/routing.py:352: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.\n    return await dependant.call(**values)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n2 passed, 2 warnings in 3.97s\n"
+    }
+  },
+  "retained_screenshots": {
+    "home-mobile-dark.png": "e15094a1d142de406981f0da22475b3800de22be7166bb451a0816e214aff859",
+    "petition-anonymous.png": "77b8a9f376fb31e108a656a48fa28fce406308976438aaa6bd912861572419a5",
+    "public-document.png": "70acd02388d92344f133dff0f8340ac5ea511973d04ef4f4424c3c994ae70292"
+  },
+  "browser_error_recheck": {
+    "measuredAt": "2026-09-20T03:22:55.651Z",
+    "pages": [
+      {
+        "path": "/documents/audit-no-such-document",
+        "status": 200,
+        "headers": {
+          "content-security-policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'nonce-[redacted]' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com; script-src-elem 'self' 'nonce-[redacted]' https://accounts.google.com https://us-assets.i.posthog.com; style-src 'self' 'nonce-[redacted]' https://fonts.googleapis.com https://accounts.google.com; style-src-elem 'self' 'nonce-[redacted]' https://fonts.googleapis.com https://accounts.google.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works; connect-src 'self'  https://accounts.google.com https://us.i.posthog.com https://us-assets.i.posthog.com https://cdn.jsdelivr.net https://fonts.googleapis.com; frame-src 'self' https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self' https://hcca.tw https://www.hcca.tw",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY"
+        },
+        "robots": [],
+        "text": "公文不存在，或目前不對外公開。"
+      },
+      {
+        "path": "/regulations/audit-no-such-regulation",
+        "status": 200,
+        "headers": {
+          "content-security-policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'nonce-[redacted]' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com; script-src-elem 'self' 'nonce-[redacted]' https://accounts.google.com https://us-assets.i.posthog.com; style-src 'self' 'nonce-[redacted]' https://fonts.googleapis.com https://accounts.google.com; style-src-elem 'self' 'nonce-[redacted]' https://fonts.googleapis.com https://accounts.google.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works; connect-src 'self'  https://accounts.google.com https://us.i.posthog.com https://us-assets.i.posthog.com https://cdn.jsdelivr.net https://fonts.googleapis.com; frame-src 'self' https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self' https://hcca.tw https://www.hcca.tw",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY"
+        },
+        "robots": [],
+        "text": "法規不存在或無法存取"
+      },
+      {
+        "path": "/articles/audit-no-such-article",
+        "status": 200,
+        "headers": {
+          "content-security-policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'nonce-[redacted]' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com; script-src-elem 'self' 'nonce-[redacted]' https://accounts.google.com https://us-assets.i.posthog.com; style-src 'self' 'nonce-[redacted]' https://fonts.googleapis.com https://accounts.google.com; style-src-elem 'self' 'nonce-[redacted]' https://fonts.googleapis.com https://accounts.google.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works; connect-src 'self'  https://accounts.google.com https://us.i.posthog.com https://us-assets.i.posthog.com https://cdn.jsdelivr.net https://fonts.googleapis.com; frame-src 'self' https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self' https://hcca.tw https://www.hcca.tw",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY"
+        },
+        "robots": [
+          "noindex",
+          "noindex"
+        ],
+        "text": "找不到這個頁面\n\n連結可能已更新，或該公開內容已不再提供。\n\n返回首頁"
+      }
+    ]
+  },
+  "precommit_graph_review": {
+    "indexed_head": "2d91a117d24c083bfa9fa9fcd2e5fe75ebfd933e",
+    "all_scope_command": "node .gitnexus/run.cjs detect-changes --scope all --repo . --limit 1000",
+    "all_scope_output": "Changes: 12 files, 8 symbols\nAffected processes: 0\nRisk level: low\n\nChanged symbols:\n  Function dashboard_stats → apps/api/src/api/routers/admin.py\n  Function _case_detail_response → apps/api/src/api/routers/petitions.py\n  Function get_case_by_number_compat → apps/api/src/api/routers/petitions.py\n  Function get_case → apps/api/src/api/routers/petitions.py\n  Variable MAX_PERFORMANCE_TIME_MARK_MS → apps/api/src/api/schemas/analytics.py\n  Class ClientMetricCreate → apps/api/src/api/schemas/analytics.py\n  Function test_admin_dashboard_stats_returns_counts → apps/api/tests/test_admin_routes.py\n  Function test_client_metric_batch_accepts_multiple_metrics → apps/api/tests/test_analytics_router.py\n",
+    "staged_scope_output": "Diff touched 6 file(s) but no indexed symbols overlap those hunks — not a clean tree.\n",
+    "limitation": "CLI output is plain text, not structured completeness metadata. Indexer warned that process enumeration drops some entry points and truncates traces. Zero affected processes is not proof of absence. The eight changed code symbols belong to pre-existing user changes, excluded from this audit commit."
+  }
+}
