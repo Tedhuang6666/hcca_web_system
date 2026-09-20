@@ -158,7 +158,7 @@ function buildCsp(nonce: string): string {
     `style-src-elem 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
     "style-src-attr 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
+    "img-src 'self' data: blob: https://server.arcgisonline.com https://*.tile.openstreetmap.org https://*.googleusercontent.com https://hcca.buckets.hct.works",
     `connect-src 'self' ${webSocketSources().join(" ")} https://accounts.google.com ${postHogSources().join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com`,
     "frame-src 'self' https://accounts.google.com",
     "worker-src 'self' blob:",
