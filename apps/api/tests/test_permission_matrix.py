@@ -149,6 +149,9 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/surveys/public", "GET"),
     ("/surveys/public/{survey_id}", "GET"),
     ("/surveys/{survey_id}/submit", "POST"),
+    # 匿名填答者以 anon_token 讀取與更新自己的回應；登入者同樣受本人限制。
+    ("/surveys/{survey_id}/my-responses", "GET"),
+    ("/surveys/{survey_id}/responses/{response_id}", "PATCH"),
     # 選舉（公開資訊與即時牆）
     ("/elections/public", "GET"),
     ("/elections/public/{election_ref}/live", "GET"),
