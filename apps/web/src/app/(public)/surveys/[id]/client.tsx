@@ -683,8 +683,55 @@ function ShareModal({ surveyId, title, onClose }: { surveyId: string; title: str
   );
 }
 
+function OptionImageStrip({
+  images,
+  label,
+  compact = false,
+}: {
+  images: string[];
+  label: string;
+  compact?: boolean;
+}) {
+  const validImages = images.filter(Boolean);
+  if (validImages.length === 0) return null;
+  const visibleImages = validImages.slice(0, compact ? 1 : 3);
+  const sizeClass = compact ? "h-10 w-10" : "h-16 w-16";
+
+  return (
+    <div className="flex shrink-0 items-center gap-1" aria-label={`${label}選項圖片`}>
+      {visibleImages.map((image, index) => (
+        <div
+          key={`${image}-${index}`}
+          className={`relative ${sizeClass} overflow-hidden rounded-lg`}
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        >
+          <Image
+            src={uploadUrl(image)}
+            alt={`「${label}」圖片 ${index + 1}`}
+            fill
+            unoptimized
+            sizes={compact ? "40px" : "64px"}
+            className="object-contain p-1"
+          />
+        </div>
+      ))}
+      {validImages.length > visibleImages.length && (
+        <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+          +{validImages.length - visibleImages.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /* ── 統計視圖（管理員） ───────────────────────────────────────────────────── */
-function StatsView({ surveyId }: { surveyId: string }) {
+function StatsView({
+  surveyId,
+  questions,
+}: {
+  surveyId: string;
+  questions: SurveyQuestionOut[];
+}) {
   const [stats, setStats] = useState<SurveyStats | null>(null);
   const [responses, setResponses] = useState<SurveyResponseAdminItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -742,6 +789,13 @@ function StatsView({ surveyId }: { surveyId: string }) {
   if (loading) return <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>統計載入中…</div>;
   if (!stats) return null;
 
+  const questionsById = new Map(questions.map(question => [question.id, question]));
+  const optionImagesFor = (questionId: string, option: string) => {
+    const question = questionsById.get(questionId);
+    const optionIndex = question?.options?.indexOf(option) ?? -1;
+    return optionIndex >= 0 ? question?.option_image_sets?.[optionIndex] ?? [] : [];
+  };
+
   const renderPie = (qs: NonNullable<SurveyStats["questions"]>[number]) => {
     const entries = Object.entries(qs.option_counts ?? {}).sort(([, a], [, b]) => b - a);
     if (entries.length === 0) return null;
@@ -774,7 +828,8 @@ function StatsView({ surveyId }: { surveyId: string }) {
           {entries.map(([opt, count], index) => (
             <div key={opt} className="flex items-center gap-2 text-xs">
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} />
-              <span style={{ color: "var(--text-secondary)" }}>{opt}</span>
+              <OptionImageStrip images={optionImagesFor(qs.question_id, opt)} label={opt} compact />
+              <span className="min-w-0" style={{ color: "var(--text-secondary)" }}>{opt}</span>
               <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
                 {count}（{Math.round((count / total) * 100)}%）
               </span>
@@ -867,18 +922,21 @@ function StatsView({ surveyId }: { surveyId: string }) {
                 .map(([opt, count]) => {
                   const pct = qs.total_responses > 0 ? Math.round((count / qs.total_responses) * 100) : 0;
                   return (
-                    <div key={opt} className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span style={{ color: "var(--text-secondary)" }}>{opt}</span>
-                        <span className="font-medium tabular-nums" style={{ color: "var(--text-muted)" }}>
-                          {count} <span style={{ opacity: 0.6 }}>({pct}%)</span>
-                        </span>
-                      </div>
-                      <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
-                        <div
-                          className="h-full rounded-full transition-[width] duration-500 ease-out"
-                          style={{ width: `${pct}%`, background: "var(--primary)" }}
-                        />
+                    <div key={opt} className="flex items-start gap-3">
+                      <OptionImageStrip images={optionImagesFor(qs.question_id, opt)} label={opt} />
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="min-w-0 break-words" style={{ color: "var(--text-secondary)" }}>{opt}</span>
+                          <span className="shrink-0 font-medium tabular-nums" style={{ color: "var(--text-muted)" }}>
+                            {count} <span style={{ opacity: 0.6 }}>({pct}%)</span>
+                          </span>
+                        </div>
+                        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
+                          <div
+                            className="h-full rounded-full transition-[width] duration-500 ease-out"
+                            style={{ width: `${pct}%`, background: "var(--primary)" }}
+                          />
+                        </div>
                       </div>
                     </div>
                   );
@@ -1387,7 +1445,7 @@ export default function SurveyDetailClient({
 
       {/* 統計 / 填答 */}
       {isAdmin && viewStats ? (
-        <StatsView surveyId={id} />
+        <StatsView surveyId={id} questions={survey.questions} />
       ) : submitted ? (
         <section className="survey-response-receipt card p-8 text-center space-y-3" aria-live="polite">
           <div className="survey-response-receipt-seal" aria-hidden="true">
