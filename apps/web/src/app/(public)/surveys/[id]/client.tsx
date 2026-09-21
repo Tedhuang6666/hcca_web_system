@@ -1375,7 +1375,7 @@ export default function SurveyDetailClient({
             <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>校務帳號限定</p>
             <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-secondary)" }}>
               此問卷限使用 {allowedDomains.map(domain => `@${domain.replace(/^@/, "")}`).join("、")}
-              的校務帳號填答；已連結的校務帳號同樣符合資格。若目前帳號不符，請切換帳號後再填寫。
+              的校務帳號填答。若目前帳號不符，請切換帳號後再填寫。
             </p>
           </div>
           <SwitchAccountButton
@@ -1441,13 +1441,13 @@ export default function SurveyDetailClient({
                         {editingResponseId ? "正在修改既有回答" : "正在填寫新的一份回答"}
                       </p>
                       <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                        這份問卷允許多次提交；你可以新增回答，也可以隨時回來修改自己的既有回答。
+                        這份問卷允許多次提交，你可以新增回答，也可以修改自己的既有回答。
                         {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
                       </p>
                     </div>
                     {editingResponseId && (
                       <button type="button" onClick={addResponse} className="btn btn-ghost shrink-0 text-xs">
-                        新增一份回答
+                        新增回覆
                       </button>
                     )}
                   </div>
@@ -1475,13 +1475,13 @@ export default function SurveyDetailClient({
                     你已提交過這份問卷
                   </p>
                   <p className="mt-0.5 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-                    此問卷每人只能提交一次。已載入你原本的回答，修改後請按「儲存變更」。
+                    此問卷每人僅能提交一次。目前正在修改您前次的答案。
                     {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
                   </p>
                 </div>
               ) : !survey.is_anonymous ? (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  此問卷每人只能提交一次；提交後仍可回來修改原本的回答。
+                  此問卷每人只能提交一次。
                 </p>
               ) : null}
             </section>
@@ -1495,14 +1495,14 @@ export default function SurveyDetailClient({
               <span style={{ transform: `scaleX(${responseProgress})` }} />
             </div>
             {answeredQuestionCount === questionCount && questionCount > 0 && (
-              <p>所有題目都已整理完成，可以送出了。</p>
+              <p>所有題目都已填答完成，可以送出了!</p>
             )}
             <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
               {lastSavedAt
                 ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
                   hour: "2-digit", minute: "2-digit", second: "2-digit",
                 })} 自動儲存到此裝置`
-                : "填答內容會自動儲存到此裝置，意外離開後可繼續填寫。"}
+                : "填答內容會自動儲存到裝置，不用擔心!"}
             </p>
           </aside>
           {survey.questions.map((q) => {
@@ -1612,7 +1612,7 @@ export default function SurveyDetailClient({
           </div>
           {survey.is_anonymous && (
             <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              此為匿名問卷，您的身份不會與填答內容關聯
+              此為匿名問卷，您的身份不會公開
             </p>
           )}
         </form>
