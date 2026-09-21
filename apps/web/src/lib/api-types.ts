@@ -36923,6 +36923,15 @@ export interface components {
             allowed_org_ids?: string[];
             /** Allowed User Ids */
             allowed_user_ids?: string[];
+            /** Announcement */
+            announcement?: string | null;
+            /** Announcement Title */
+            announcement_title?: string | null;
+            /**
+             * Show Announcement Popup
+             * @default false
+             */
+            show_announcement_popup: boolean;
             /** Closes At */
             closes_at?: string | null;
             /** Description */
@@ -37008,6 +37017,17 @@ export interface components {
             allowed_org_ids?: string[];
             /** Allowed User Ids */
             allowed_user_ids?: string[];
+            /** Announcement */
+            announcement?: string | null;
+            /** Announcement Id */
+            announcement_id?: string | null;
+            /** Announcement Title */
+            announcement_title?: string | null;
+            /**
+             * Show Announcement Popup
+             * @default false
+             */
+            show_announcement_popup: boolean;
             /** Closes At */
             closes_at: string | null;
             /**
@@ -37325,6 +37345,12 @@ export interface components {
             description?: string | null;
             /** Is Public */
             is_public?: boolean | null;
+            /** Announcement */
+            announcement?: string | null;
+            /** Announcement Title */
+            announcement_title?: string | null;
+            /** Show Announcement Popup */
+            show_announcement_popup?: boolean | null;
             /** Opens At */
             opens_at?: string | null;
             /** Title */

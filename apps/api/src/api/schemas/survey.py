@@ -303,6 +303,10 @@ class SurveyOut(BaseModel):
     allowed_org_ids: list[str] = Field(default_factory=list)
     allowed_user_ids: list[str] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
+    announcement: str | None = None
+    announcement_title: str | None = None
+    show_announcement_popup: bool = False
+    announcement_id: uuid.UUID | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -325,6 +329,10 @@ class SurveyOut(BaseModel):
             "updated_at",
             "questions",
             "is_public",
+            "announcement",
+            "announcement_title",
+            "show_announcement_popup",
+            "announcement_id",
         )
         result: dict[str, Any] = {f: getattr(data, f, None) for f in plain}
         result["response_count"] = getattr(data, "response_count", 0) or 0
@@ -368,6 +376,9 @@ class SurveyCreate(SurveyAudience):
     closes_at: datetime | None = None
     org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
+    announcement: str | None = Field(None, max_length=3000)
+    announcement_title: str | None = Field(None, max_length=200)
+    show_announcement_popup: bool = False
 
 
 class SurveyUpdate(BaseModel):
@@ -380,6 +391,9 @@ class SurveyUpdate(BaseModel):
     allowed_user_ids: list[uuid.UUID] | None = None
     allowed_domains: list[str] | None = None
     activity_id: uuid.UUID | None = None
+    announcement: str | None = Field(None, max_length=3000)
+    announcement_title: str | None = Field(None, max_length=200)
+    show_announcement_popup: bool | None = None
 
 
 # ── 答案 ─────────────────────────────────────────────────────────────────────

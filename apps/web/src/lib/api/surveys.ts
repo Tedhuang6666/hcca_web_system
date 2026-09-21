@@ -54,9 +54,9 @@ export const surveysApi = {
   },
   get: (id: string) => get<SurveyOut>(`/surveys/${pathSegment(id)}`),
   getPublic: (id: string) => get<SurveyOut>(`/surveys/public/${pathSegment(id)}`),
-  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
+  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
     post<SurveyOut>("/surveys", body),
-  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
+  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
     patch<SurveyOut>(`/surveys/${pathSegment(id)}`, body),
   open: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/open`),
   close: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/close`),

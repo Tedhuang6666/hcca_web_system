@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from api.email.renderer import absolutize_url, safe_link_url
+from api.models.announcement import Announcement, AnnouncementAudience
 from api.models.org import Position, UserPosition
 from api.models.survey import (
     QuestionType,
@@ -188,23 +189,78 @@ async def create_survey(
         allowed_org_ids_json=_dump_str_list(data.allowed_org_ids),
         allowed_user_ids_json=_dump_str_list(data.allowed_user_ids),
         allowed_domains_json=_dump_str_list(data.allowed_domains),
+        announcement=data.announcement,
+        announcement_title=data.announcement_title,
+        show_announcement_popup=data.show_announcement_popup,
     )
     session.add(survey)
     await session.flush()
+    await sync_announcement(session, survey, author_id=created_by)
     return survey
 
 
-async def update_survey(session: AsyncSession, survey: Survey, *, data: SurveyUpdate) -> Survey:
+async def update_survey(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    data: SurveyUpdate,
+    updated_by_id: uuid.UUID | None = None,
+) -> Survey:
     if survey.status not in _EDITABLE_STATUSES:
         raise ValueError("已截止或封存的問卷無法修改")
-    fields = data.model_dump(exclude_none=True)
+    fields = data.model_dump(exclude_unset=True)
     for key in ("allowed_org_ids", "allowed_user_ids", "allowed_domains"):
         if key in fields:
             setattr(survey, f"{key}_json", _dump_str_list(fields.pop(key)))
     for field, value in fields.items():
         setattr(survey, field, value)
+    await sync_announcement(session, survey, author_id=updated_by_id or survey.created_by)
     await session.flush()
     return survey
+
+
+def _announcement_content(message: str) -> dict:
+    return {"format": "markdown", "markdown": message}
+
+
+async def sync_announcement(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    author_id: uuid.UUID,
+) -> None:
+    """同步問卷公告；草稿不公開，開放後依設定顯示一般／重要公告。"""
+    message = (survey.announcement or "").strip()
+    announcement = (
+        await session.get(Announcement, survey.announcement_id) if survey.announcement_id else None
+    )
+    if not message:
+        if announcement:
+            announcement.is_published = False
+            announcement.is_urgent = False
+            announcement.urgent_until = None
+            announcement.show_on_every_visit = False
+        return
+
+    if announcement is None:
+        announcement = Announcement(id=uuid.uuid4(), author_id=author_id)
+        session.add(announcement)
+        survey.announcement_id = announcement.id
+
+    was_published = announcement.is_published
+    announcement.title = (survey.announcement_title or survey.title).strip() or survey.title
+    announcement.content = _announcement_content(message)
+    announcement.is_published = survey.status in {SurveyStatus.OPEN, SurveyStatus.CLOSED}
+    announcement.is_urgent = announcement.is_published and survey.show_announcement_popup
+    announcement.urgent_until = survey.closes_at if announcement.is_urgent else None
+    announcement.link_url = f"/surveys/{survey.id}"
+    announcement.link_label = "前往填答"
+    announcement.show_on_every_visit = announcement.is_urgent
+    announcement.org_id = None
+    announcement.activity_id = survey.activity_id
+    announcement.audience_type = AnnouncementAudience.ALL.value
+    if announcement.is_published and (not was_published or announcement.published_at is None):
+        announcement.published_at = datetime.now(UTC)
 
 
 def _email_domain(email: str | None) -> str:
@@ -308,6 +364,7 @@ async def open_survey(session: AsyncSession, survey: Survey) -> Survey:
     if survey.closes_at and survey.closes_at <= datetime.now(UTC):
         survey.closes_at = None
     survey.status = SurveyStatus.OPEN
+    await sync_announcement(session, survey, author_id=survey.created_by)
     await session.flush()
     return survey
 

@@ -109,6 +109,15 @@ class Survey(Base, TimestampMixin):
     allowed_org_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     allowed_user_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     allowed_domains_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 可選的公告內容；服務層會同步到 announcements，並導向問卷填答頁。
+    announcement: Mapped[str | None] = mapped_column(Text, nullable=True)
+    announcement_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    show_announcement_popup: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    announcement_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("announcements.id", ondelete="SET NULL"), nullable=True
+    )
 
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
