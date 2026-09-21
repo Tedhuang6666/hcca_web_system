@@ -86,6 +86,20 @@ async def test_admin_can_update_position_weight(
 
 
 @pytest.mark.asyncio
+async def test_admin_dashboard_stats_returns_counts(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, _, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.get("/admin/dashboard-stats")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"active_user_count": 2, "position_count": 1}
+
+
+@pytest.mark.asyncio
 async def test_admin_route_does_not_require_mfa(
     client: AsyncClient,
     db_session: AsyncSession,

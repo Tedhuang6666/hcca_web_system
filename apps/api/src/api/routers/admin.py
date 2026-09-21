@@ -471,10 +471,12 @@ async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserD
     summary="取得管理總覽統計",
 )
 async def dashboard_stats(db: DbDep, _: AdminUser) -> AdminDashboardStats:
-    active_users, positions = await db.execute(
-        select(
-            select(func.count(User.id)).where(User.is_active == True).scalar_subquery(),  # noqa: E712
-            select(func.count(Position.id)).scalar_subquery(),
+    active_users, positions = (
+        await db.execute(
+            select(
+                select(func.count(User.id)).where(User.is_active == True).scalar_subquery(),  # noqa: E712
+                select(func.count(Position.id)).scalar_subquery(),
+            )
         )
     ).one()
     return AdminDashboardStats(
