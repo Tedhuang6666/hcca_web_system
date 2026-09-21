@@ -855,13 +855,6 @@ export default function NewSurveyPage() {
               </div>
             )}
 
-            {needsOptions && (newQ.options ?? []).length > 0 && (
-              <OptionImageFields
-                options={newQ.options ?? []}
-                value={newQ.option_image_sets ?? []}
-                onChange={option_image_sets => setNewQ(p => ({ ...p, option_image_sets }))}
-              />
-            )}
                 <div className="flex gap-2">
                   <input
                     value={optionInput}
@@ -872,6 +865,17 @@ export default function NewSurveyPage() {
                   />
                   <button onClick={addOption} className="btn btn-ghost flex-shrink-0">新增選項</button>
                 </div>
+                {(newQ.options ?? []).length > 0 ? (
+                  <OptionImageFields
+                    options={newQ.options ?? []}
+                    value={newQ.option_image_sets ?? []}
+                    onChange={option_image_sets => setNewQ(p => ({ ...p, option_image_sets }))}
+                  />
+                ) : (
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    新增第一個選項後，即可在這裡為每個選項上傳圖片。
+                  </p>
+                )}
               </div>
             )}
 
