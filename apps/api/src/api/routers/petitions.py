@@ -113,6 +113,29 @@ async def _case_or_404(session: AsyncSession, case_id: uuid.UUID) -> PetitionCas
     return or_404(case_obj, "找不到此陳情案件")
 
 
+async def _case_detail_response(
+    session: AsyncSession, case_obj: PetitionCase, user: User
+) -> PetitionCaseOut:
+    include_internal, can_view_submitter = await _assert_case_access(session, case_obj, user)
+    permission_codes = await get_user_permission_codes(session, user.id)
+    can_edit_events = user.is_superuser or bool(
+        permission_codes
+        & {
+            str(PermissionCode.ADMIN_ALL),
+            str(PermissionCode.PETITION_ADMIN),
+            str(PermissionCode.PETITION_HANDLE),
+        }
+    )
+    return await _decorate_case(
+        case_obj,
+        include_internal=include_internal,
+        can_view_submitter=can_view_submitter,
+        can_respond_public=case_obj.submitter_id == user.id,
+        can_edit_content=case_obj.submitter_id == user.id,
+        editor_user_id=user.id if can_edit_events else None,
+    )
+
+
 async def _manageable_org_ids(
     session: AsyncSession, user: User, *permissions: str
 ) -> list[uuid.UUID] | None:
@@ -974,27 +997,25 @@ async def petition_resolution_context(
     return await context_svc.petition_resolution_context(session, case_obj.id)
 
 
+@router.get(
+    "/{case_number:int}",
+    response_model=PetitionCaseOut,
+    include_in_schema=False,
+    summary="以案號相容取得陳情案件詳情",
+)
+async def get_case_by_number_compat(
+    case_number: int, session: DbDep, user: CurrentUser
+) -> PetitionCaseOut:
+    case_obj = or_404(
+        await petition_svc.get_case_by_number(session, str(case_number)),
+        "找不到此陳情案件",
+    )
+    return await _case_detail_response(session, case_obj, user)
+
+
 @router.get("/{case_id}", response_model=PetitionCaseOut, summary="取得陳情案件詳情")
 async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> PetitionCaseOut:
-    case_obj = await _case_or_404(session, case_id)
-    include_internal, can_view_submitter = await _assert_case_access(session, case_obj, user)
-    permission_codes = await get_user_permission_codes(session, user.id)
-    can_edit_events = user.is_superuser or bool(
-        permission_codes
-        & {
-            str(PermissionCode.ADMIN_ALL),
-            str(PermissionCode.PETITION_ADMIN),
-            str(PermissionCode.PETITION_HANDLE),
-        }
-    )
-    return await _decorate_case(
-        case_obj,
-        include_internal=include_internal,
-        can_view_submitter=can_view_submitter,
-        can_respond_public=case_obj.submitter_id == user.id,
-        can_edit_content=case_obj.submitter_id == user.id,
-        editor_user_id=user.id if can_edit_events else None,
-    )
+    return await _case_detail_response(session, await _case_or_404(session, case_id), user)
 
 
 @router.get(

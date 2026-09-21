@@ -592,6 +592,19 @@ async def test_get_case_visible_to_submitter(db_session, authed_client_factory) 
     assert resp.json()["latest_internal_note"] is None  # 陳情人不可見內部備註
 
 
+async def test_get_case_by_case_number_compatibility_route(
+    db_session, authed_client_factory
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    resp = await authed_client_factory(owner).get(f"/petitions/{case_obj.case_number}")
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == str(case_obj.id)
+
+
 async def test_list_assignable_users_returns_org_members(db_session, authed_client_factory) -> None:
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
