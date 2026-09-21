@@ -76,6 +76,9 @@ interface DraftQuestion {
 type SurveyDraft = {
   title: string;
   description: string;
+  announcement: string;
+  announcementTitle: string;
+  showAnnouncementPopup: boolean;
   isAnonymous: boolean;
   allowMultiple: boolean;
   closesAt: string;
@@ -195,6 +198,9 @@ export default function NewSurveyPage() {
   // 問卷基本資料
   const [title, setTitle] = useState(governanceContext?.matterTitle ?? "");
   const [description, setDescription] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [showAnnouncementPopup, setShowAnnouncementPopup] = useState(false);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [closesAt, setClosesAt] = useState("");
@@ -236,6 +242,9 @@ export default function NewSurveyPage() {
   const draftValue = useMemo<SurveyDraft>(() => ({
     title,
     description,
+    announcement,
+    announcementTitle,
+    showAnnouncementPopup,
     isAnonymous,
     allowMultiple,
     closesAt,
@@ -245,6 +254,8 @@ export default function NewSurveyPage() {
     newQ,
   }), [
     activityId,
+    announcement,
+    announcementTitle,
     allowMultiple,
     closesAt,
     description,
@@ -252,11 +263,15 @@ export default function NewSurveyPage() {
     newQ,
     orgId,
     questions,
+    showAnnouncementPopup,
     title,
   ]);
   const restoreDraft = useCallback((draft: SurveyDraft) => {
     setTitle(draft.title ?? "");
     setDescription(draft.description ?? "");
+    setAnnouncement(draft.announcement ?? "");
+    setAnnouncementTitle(draft.announcementTitle ?? "");
+    setShowAnnouncementPopup(Boolean(draft.showAnnouncementPopup));
     setIsAnonymous(Boolean(draft.isAnonymous));
     setAllowMultiple(Boolean(draft.allowMultiple));
     setClosesAt(draft.closesAt ?? "");
@@ -292,6 +307,9 @@ export default function NewSurveyPage() {
     isEmpty: useCallback((draft: SurveyDraft) => (
       !(draft.title ?? "").trim()
       && !(draft.description ?? "").trim()
+      && !(draft.announcement ?? "").trim()
+      && !(draft.announcementTitle ?? "").trim()
+      && !draft.showAnnouncementPopup
       && !draft.closesAt
       && (draft.questions ?? []).length === 0
       && !(draft.newQ.question_text ?? "").trim()
@@ -415,6 +433,9 @@ export default function NewSurveyPage() {
       const survey = await surveysApi.create({
         title: title.trim(),
         description: description.trim() || undefined,
+        announcement: announcement.trim() || null,
+        announcement_title: announcementTitle.trim() || null,
+        show_announcement_popup: showAnnouncementPopup,
         is_anonymous: isAnonymous,
         allow_multiple: allowMultiple,
         closes_at: closesAt || undefined,
@@ -575,6 +596,44 @@ export default function NewSurveyPage() {
               </select>
             </div>
             <ActivitySelect value={activityId} onChange={setActivityId} />
+            <div className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
+              <div>
+                <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  公告設定（選填）
+                </p>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  儲存後會同步到公告模組，按鈕會直接帶使用者前往這份問卷。
+                </p>
+              </div>
+              <div>
+                <Label>公告標題</Label>
+                <input
+                  value={announcementTitle}
+                  onChange={e => setAnnouncementTitle(e.target.value)}
+                  placeholder={title.trim() || "例如：校園意見調查開始填答"}
+                  className="input"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: "var(--text-secondary)" }}>
+                <input
+                  type="checkbox"
+                  checked={showAnnouncementPopup}
+                  onChange={e => setShowAnnouncementPopup(e.target.checked)}
+                  className="accent-sky-400"
+                />
+                設為重要公告，進入系統時提示使用者
+              </label>
+              <div>
+                <Label>公告訊息（Markdown）</Label>
+                <textarea
+                  value={announcement}
+                  onChange={e => setAnnouncement(e.target.value)}
+                  rows={4}
+                  placeholder="例如：本次問卷開放填答，歡迎大家撥空完成。"
+                  className="input resize-y"
+                />
+              </div>
+            </div>
           </div>
           </GuidedFormStep>
 

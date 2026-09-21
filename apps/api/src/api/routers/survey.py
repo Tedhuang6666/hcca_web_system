@@ -222,6 +222,9 @@ async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser
             "allow_multiple": survey.allow_multiple,
             "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
             "closes_at": survey.closes_at.isoformat() if survey.closes_at else None,
+            "announcement": survey.announcement,
+            "announcement_title": survey.announcement_title,
+            "show_announcement_popup": survey.show_announcement_popup,
         },
         summary=f"建立問卷「{survey.title}」",
     )
@@ -245,9 +248,14 @@ async def update_survey(
         "allow_multiple": survey.allow_multiple,
         "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
         "closes_at": survey.closes_at.isoformat() if survey.closes_at else None,
+        "announcement": survey.announcement,
+        "announcement_title": survey.announcement_title,
+        "show_announcement_popup": survey.show_announcement_popup,
     }
     try:
-        survey = await survey_svc.update_survey(session, survey, data=payload)
+        survey = await survey_svc.update_survey(
+            session, survey, data=payload, updated_by_id=user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await audit_svc.record(
@@ -266,6 +274,9 @@ async def update_survey(
                 "allow_multiple": survey.allow_multiple,
                 "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
                 "closes_at": survey.closes_at.isoformat() if survey.closes_at else None,
+                "announcement": survey.announcement,
+                "announcement_title": survey.announcement_title,
+                "show_announcement_popup": survey.show_announcement_popup,
             },
         },
         summary=f"更新問卷「{survey.title}」",

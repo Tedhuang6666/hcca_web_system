@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.announcement import Announcement
 from api.models.org import Org
 from api.models.user import User
 from api.models.user_identity import UserIdentity
@@ -56,6 +57,78 @@ async def test_create_survey_and_get_detail(
     assert detail.status_code == 200
     assert detail.json()["title"] == "滿意度調查"
     assert detail.json()["status"] == "draft"
+
+
+async def test_survey_announcement_links_to_survey_and_publishes_on_open(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    ac = authed_client_factory(admin_user)
+    response = await ac.post(
+        "/surveys",
+        json={
+            "title": "校園意見調查",
+            "org_id": str(org.id),
+            "announcement": "歡迎大家完成本次問卷。",
+            "announcement_title": "校園意見調查開始填答",
+            "show_announcement_popup": True,
+        },
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["announcement"] == "歡迎大家完成本次問卷。"
+    assert payload["announcement_id"]
+
+    announcement = await db_session.get(Announcement, uuid.UUID(payload["announcement_id"]))
+    assert announcement is not None
+    assert announcement.is_published is False
+    assert announcement.is_urgent is False
+
+    survey_id = payload["id"]
+    question_response = await ac.post(
+        f"/surveys/{survey_id}/questions",
+        json={"question_text": "你的意見？", "question_type": "text"},
+    )
+    assert question_response.status_code == 201
+    assert (await ac.post(f"/surveys/{survey_id}/open")).status_code == 200
+
+    await db_session.refresh(announcement)
+    assert announcement.is_published is True
+    assert announcement.is_urgent is True
+    assert announcement.link_url == f"/surveys/{survey_id}"
+    assert announcement.link_label == "前往填答"
+
+
+async def test_clearing_survey_announcement_unpublishes_linked_announcement(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    ac = authed_client_factory(admin_user)
+    create_response = await ac.post(
+        "/surveys",
+        json={
+            "title": "公告清除測試",
+            "org_id": str(org.id),
+            "announcement": "暫時公告",
+        },
+    )
+    announcement_id = uuid.UUID(create_response.json()["announcement_id"])
+
+    response = await ac.patch(
+        f"/surveys/{create_response.json()['id']}",
+        json={"announcement": None, "show_announcement_popup": False},
+    )
+    assert response.status_code == 200
+    assert response.json()["announcement"] is None
+
+    announcement = await db_session.get(Announcement, announcement_id)
+    assert announcement is not None
+    assert announcement.is_published is False
+    assert announcement.is_urgent is False
 
 
 async def test_get_survey_404_when_missing(

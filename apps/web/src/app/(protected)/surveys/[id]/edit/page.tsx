@@ -594,6 +594,9 @@ export default function EditSurveyPage() {
   const [draggedQuestionId, setDraggedQuestionId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [showAnnouncementPopup, setShowAnnouncementPopup] = useState(false);
   const [closesAt, setClosesAt] = useState("");
   const [activityId, setActivityId] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -621,6 +624,9 @@ export default function EditSurveyPage() {
         setSurvey(s);
         setTitle(s.title);
         setDescription(s.description ?? "");
+        setAnnouncement(s.announcement ?? "");
+        setAnnouncementTitle(s.announcement_title ?? "");
+        setShowAnnouncementPopup(Boolean(s.show_announcement_popup));
         setClosesAt(s.closes_at ? s.closes_at.slice(0, 16) : "");
         setActivityId(s.activity_id ?? "");
         setIsPublic(s.is_public);
@@ -648,6 +654,9 @@ export default function EditSurveyPage() {
       await surveysApi.update(survey.id, {
         title: title.trim(),
         description: description.trim(),
+        announcement: announcement.trim(),
+        announcement_title: announcementTitle.trim() || null,
+        show_announcement_popup: showAnnouncementPopup,
         closes_at: closesAt || undefined,
         activity_id: activityId || null,
         is_public: isPublic,
@@ -825,6 +834,44 @@ export default function EditSurveyPage() {
             className="input" style={{ colorScheme: "dark" }} />
         </div>
         <ActivitySelect value={activityId} onChange={setActivityId} onActivitiesLoaded={setActivities} />
+        <div className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
+          <div>
+            <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              公告設定（選填）
+            </p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              儲存後會同步到公告模組，按鈕會直接帶使用者前往這份問卷。
+            </p>
+          </div>
+          <div>
+            <Label>公告標題</Label>
+            <input
+              value={announcementTitle}
+              onChange={e => setAnnouncementTitle(e.target.value)}
+              placeholder={title.trim() || "例如：校園意見調查開始填答"}
+              className="input"
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: "var(--text-secondary)" }}>
+            <input
+              type="checkbox"
+              checked={showAnnouncementPopup}
+              onChange={e => setShowAnnouncementPopup(e.target.checked)}
+              className="accent-sky-400"
+            />
+            設為重要公告，進入系統時提示使用者
+          </label>
+          <div>
+            <Label>公告訊息（Markdown）</Label>
+            <textarea
+              value={announcement}
+              onChange={e => setAnnouncement(e.target.value)}
+              rows={4}
+              placeholder="例如：本次問卷開放填答，歡迎大家撥空完成。"
+              className="input resize-y"
+            />
+          </div>
+        </div>
 
         {/* 開放對象 */}
         <div className="rounded-xl p-3 space-y-2.5" style={{ background: "var(--bg-elevated)" }}>
