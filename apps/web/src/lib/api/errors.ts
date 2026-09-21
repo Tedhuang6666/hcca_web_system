@@ -62,12 +62,10 @@ async function errorDetailFromResponse(res: Response): Promise<ResponseErrorDeta
   }
   const message = formatErrorDetail(detail, res.statusText || "請求失敗");
   const requestId = res.headers.get("X-Request-ID");
-  const codes = [
-    errorId ? `錯誤代碼 ${errorId}` : null,
-    requestId ? `請求代碼 ${requestId}` : null,
-  ].filter(Boolean);
   return {
-    message: codes.length > 0 ? `${message}（${codes.join("，")}）` : message,
+    // Diagnostic identifiers remain on ApiError for logging/support lookup, but
+    // should not be exposed in normal user-facing error messages.
+    message,
     requestId,
     errorId,
     traceId,
