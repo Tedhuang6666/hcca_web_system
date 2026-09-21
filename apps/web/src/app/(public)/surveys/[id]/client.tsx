@@ -1546,7 +1546,7 @@ export default function SurveyDetailClient({
                         最多選 {q.max_value} 項
                       </span>
                     )}
-                    {!isDisplay && isAnswered && <span className="survey-question-recorded">已記錄</span>}
+                    {!isDisplay && isAnswered && <span className="survey-question-recorded">已回覆</span>}
                   </p>
                 </div>
               </div>
