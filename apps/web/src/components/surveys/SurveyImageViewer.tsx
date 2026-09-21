@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
@@ -99,10 +99,6 @@ export default function SurveyImageViewer({
               sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 224px"
               className="select-none object-contain p-1.5"
             />
-            <span className="absolute inset-x-2 bottom-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100" style={{ background: "rgba(15, 23, 42, 0.88)", color: "white" }}>
-              <Expand size={15} aria-hidden="true" />
-              查看完整圖片
-            </span>
           </button>
         ))}
       </div>
