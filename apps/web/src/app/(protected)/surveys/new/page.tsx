@@ -2,17 +2,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { surveysApi, orgsApi, apiErrorMessage } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type { QuestionType, ValidationRule, UserSummary } from "@/lib/types";
-import { uploadUrl } from "@/lib/config";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
-import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
+import SurveyImageField from "@/components/surveys/SurveyImageField";
 import {
   GovernanceLinkNotice,
   createGovernanceBacklink,
@@ -83,7 +83,6 @@ type SurveyDraft = {
   activityId: string;
   questions: DraftQuestion[];
   newQ: Partial<DraftQuestion>;
-  optionInput: string;
 };
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -91,51 +90,6 @@ function Label({ children }: { children: React.ReactNode }) {
     <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>
       {children}
     </label>
-  );
-}
-
-/** 本地圖片上傳欄位：可上傳、預覽、移除。 */
-function ImageField({
-  value, onChange, label, hint,
-}: {
-  value: string;
-  onChange: (url: string) => void;
-  label: string;
-  hint?: string;
-}) {
-  const upload = (file: File, reportProgress: (progress: number) => void) => {
-    if (!file.type.startsWith("image/")) throw new Error("請選擇圖片檔案");
-    return surveysApi.uploadImage(file, reportProgress);
-  };
-
-  return (
-    <div>
-      <Label>{label}</Label>
-      {value ? (
-        <div className="relative inline-block">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={uploadUrl(value)} alt="圖片預覽" width={320} height={180} className="max-h-40 rounded-lg"
-            style={{ border: "1px solid var(--border)" }} />
-          <button type="button" onClick={() => onChange("")}
-            className="absolute -top-2 -right-2 h-11 w-11 rounded-full flex items-center justify-center text-sm"
-            style={{ background: "var(--danger)", color: "white" }} aria-label="移除圖片">
-            ×
-          </button>
-        </div>
-      ) : (
-        <AnimatedFileUpload
-          accept="image/*"
-          label="拖曳圖片到這裡"
-          hint="圖片會在上傳時逐步恢復色彩"
-          onUpload={upload}
-          onUploaded={(result) => {
-            onChange(result.url);
-            toast.success("圖片已上傳");
-          }}
-        />
-      )}
-      {hint && <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{hint}</p>}
-    </div>
   );
 }
 
@@ -257,10 +211,11 @@ export default function NewSurveyPage() {
   // 題目列表
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [newQ, setNewQ] = useState<Partial<DraftQuestion>>({
-    question_text: "", question_type: "text", is_required: true, options: [], min_value: 1, max_value: 5,
+    question_text: "", question_type: "text", is_required: true, options: [], option_image_sets: [], min_value: 1, max_value: 5,
     placeholder: "", image_url: "", min_length: "", max_length: "", validation_rule: "", min_label: "", max_label: "",
   });
-  const [optionInput, setOptionInput] = useState("");
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [draggedQuestionId, setDraggedQuestionId] = useState<string | null>(null);
 
   useEffect(() => {
     const storedOrgId = localStorage.getItem("org_id") ?? "";
@@ -288,7 +243,6 @@ export default function NewSurveyPage() {
     activityId,
     questions,
     newQ,
-    optionInput,
   }), [
     activityId,
     allowMultiple,
@@ -296,7 +250,6 @@ export default function NewSurveyPage() {
     description,
     isAnonymous,
     newQ,
-    optionInput,
     orgId,
     questions,
     title,
@@ -330,7 +283,6 @@ export default function NewSurveyPage() {
       min_label: "",
       max_label: "",
     });
-    setOptionInput(draft.optionInput ?? "");
     toast.info("已復原未送出的問卷草稿");
   }, []);
   const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
@@ -343,20 +295,10 @@ export default function NewSurveyPage() {
       && !draft.closesAt
       && (draft.questions ?? []).length === 0
       && !(draft.newQ.question_text ?? "").trim()
-      && !(draft.optionInput ?? "").trim()
+      && !(draft.newQ.options ?? []).some((option) => option.trim())
+      && !(draft.newQ.option_image_sets ?? []).some((images) => images.length > 0)
     ), []),
   });
-
-  const addOption = () => {
-    const opt = optionInput.trim();
-    if (!opt) return;
-    setNewQ(prev => ({ ...prev, options: [...(prev.options ?? []), opt] }));
-    setOptionInput("");
-  };
-
-  const removeOption = (i: number) => {
-    setNewQ(prev => ({ ...prev, options: (prev.options ?? []).filter((_, j) => j !== i) }));
-  };
 
   const addQuestion = () => {
     const qType = newQ.question_type ?? "text";
@@ -364,21 +306,21 @@ export default function NewSurveyPage() {
     if (isImg && !newQ.image_url) { toast.error("圖片題型請先上傳圖片"); return; }
     if (!isImg && !newQ.question_text?.trim()) { toast.error("請輸入題目或區塊文字"); return; }
     const needsOptions = qType === "single" || qType === "multiple";
-    if (needsOptions && (!newQ.options || newQ.options.length < 2)) {
+    const optionEntries = (newQ.options ?? []).map((option, index) => ({
+      option: option.trim(),
+      images: newQ.option_image_sets?.[index] ?? [],
+    })).filter(({ option }) => Boolean(option));
+    if (needsOptions && optionEntries.length < 2) {
       toast.error("選擇題至少需要 2 個選項"); return;
     }
     const isText = qType === "text" || qType === "textarea";
-    setQuestions(prev => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
+    setQuestions(prev => {
+      const draftQuestion: Omit<DraftQuestion, "id" | "order_index"> = {
         question_text: newQ.question_text?.trim() ?? "",
         question_type: qType,
         is_required: isDisplayType(qType) ? false : (newQ.is_required ?? true),
-        options: newQ.options ?? [],
-        option_image_sets: (newQ.options ?? []).map(
-          (_, index) => newQ.option_image_sets?.[index] ?? [],
-        ),
+        options: optionEntries.map(({ option }) => option),
+        option_image_sets: optionEntries.map(({ images }) => images),
         min_value: newQ.min_value ?? 1,
         max_value: newQ.max_value ?? 5,
         placeholder: newQ.placeholder ?? "",
@@ -389,9 +331,14 @@ export default function NewSurveyPage() {
         min_label: qType === "rating" ? (newQ.min_label ?? "") : "",
         max_label: qType === "rating" ? (newQ.max_label ?? "") : "",
         rules: [],
-        order_index: prev.length,
-      },
-    ]);
+      };
+      if (editingQuestionId) {
+        return prev.map((question) => question.id === editingQuestionId
+          ? { ...draftQuestion, id: question.id, order_index: question.order_index }
+          : question);
+      }
+      return [...prev, { ...draftQuestion, id: crypto.randomUUID(), order_index: prev.length }];
+    });
     // 保留上一題的題型與必填設定，方便連續新增同類型題目
     setNewQ({
       question_text: "",
@@ -409,11 +356,22 @@ export default function NewSurveyPage() {
       min_label: "",
       max_label: "",
     });
-    setOptionInput("");
+    setEditingQuestionId(null);
   };
 
   const removeQuestion = (id: string) => {
+    if (id === editingQuestionId) setEditingQuestionId(null);
     setQuestions(prev => prev.filter(q => q.id !== id));
+  };
+
+  const editQuestion = (question: DraftQuestion) => {
+    setNewQ({
+      ...question,
+      options: [...question.options],
+      option_image_sets: question.option_image_sets.map((images) => [...images]),
+      rules: question.rules.map((rule) => ({ ...rule })),
+    });
+    setEditingQuestionId(question.id);
   };
 
   const moveQuestion = (index: number, dir: -1 | 1) => {
@@ -426,8 +384,22 @@ export default function NewSurveyPage() {
     });
   };
 
+  const reorderQuestion = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setQuestions((previous) => {
+      const sourceIndex = previous.findIndex((question) => question.id === sourceId);
+      const targetIndex = previous.findIndex((question) => question.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return previous;
+      const next = [...previous];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next.map((question, index) => ({ ...question, order_index: index }));
+    });
+  };
+
   const setQuestionRules = (id: string, rules: CondRule[]) => {
     setQuestions(prev => prev.map(q => (q.id === id ? { ...q, rules } : q)));
+    if (id === editingQuestionId) setNewQ((question) => ({ ...question, rules }));
   };
 
   const save = async (publish = false) => {
@@ -665,8 +637,22 @@ export default function NewSurveyPage() {
                 {questions.map((q, idx) => (
                   <li key={q.id}
                     className="px-5 py-3.5 space-y-2"
-                    style={idx < questions.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                    draggable
+                    onDragStart={() => setDraggedQuestionId(q.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggedQuestionId) reorderQuestion(draggedQuestionId, q.id);
+                      setDraggedQuestionId(null);
+                    }}
+                    onDragEnd={() => setDraggedQuestionId(null)}
+                    style={{
+                      ...(idx < questions.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}),
+                      ...(editingQuestionId === q.id ? { background: "var(--primary-dim)" } : {}),
+                    }}>
                     <div className="flex items-start gap-3">
+                      <span className="cursor-grab mt-0.5 flex-shrink-0" style={{ color: "var(--text-muted)" }} title="拖曳調整順序">
+                        <GripVertical size={16} aria-hidden="true" />
+                      </span>
                       <span className="text-xs font-bold mt-0.5 w-5 flex-shrink-0" style={{ color: "var(--primary)" }}>
                         Q{idx + 1}
                       </span>
@@ -683,6 +669,10 @@ export default function NewSurveyPage() {
                         </p>
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
+                        <button type="button" onClick={() => editQuestion(q)}
+                          className="btn btn-ghost min-h-11 px-2 text-xs" aria-label={`編輯第 ${idx + 1} 題`}>
+                          編輯
+                        </button>
                         <button type="button" onClick={() => moveQuestion(idx, -1)} disabled={idx === 0}
                           className="topbar-icon-btn" aria-label="上移題目" style={{ opacity: idx === 0 ? 0.3 : 1 }}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -734,18 +724,20 @@ export default function NewSurveyPage() {
 
           {/* 新增題目 */}
           <div className="card p-5 space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>新增題目</h3>
-            <div>
-              <Label>{textLabel}</Label>
-              <textarea
-                value={newQ.question_text}
-                onChange={e => setNewQ(p => ({ ...p, question_text: e.target.value }))}
-                rows={2}
-                placeholder={isImage ? "圖片下方的說明文字…" : isDisplay ? "請輸入要顯示給填答者的內容…" : "請輸入題目…"}
-                className="input resize-y"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              {editingQuestionId ? "編輯題目" : "新增題目"}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+              <div>
+                <Label>{textLabel}</Label>
+                <textarea
+                  value={newQ.question_text}
+                  onChange={e => setNewQ(p => ({ ...p, question_text: e.target.value }))}
+                  rows={2}
+                  placeholder={isImage ? "圖片下方的說明文字…" : isDisplay ? "請輸入要顯示給填答者的內容…" : "請輸入題目…"}
+                  className="input resize-y"
+                />
+              </div>
               <div>
                 <Label>題型</Label>
                 <select value={newQ.question_type}
@@ -756,22 +748,22 @@ export default function NewSurveyPage() {
                       question_type,
                       is_required: isDisplayType(question_type) ? false : p.is_required,
                       options: [],
+                      option_image_sets: [],
                     }));
                   }}
                   className="input">
                   {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
-              <div className="flex items-center gap-2 mt-5">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={!isDisplay && (newQ.is_required ?? true)}
-                    disabled={isDisplay}
-                    onChange={e => setNewQ(p => ({ ...p, is_required: e.target.checked }))}
-                    className="accent-sky-400" />
-                  <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
-                </label>
-              </div>
             </div>
+            {!isDisplay && (
+              <label className="flex min-h-11 items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={newQ.is_required ?? true}
+                  onChange={e => setNewQ(p => ({ ...p, is_required: e.target.checked }))}
+                  className="accent-sky-400" />
+                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
+              </label>
+            )}
 
             {isVideo && (
               <div>
@@ -786,7 +778,7 @@ export default function NewSurveyPage() {
             )}
 
             {isImage && (
-              <ImageField
+              <SurveyImageField
                 label="圖片 *"
                 value={newQ.image_url ?? ""}
                 onChange={url => setNewQ(p => ({ ...p, image_url: url }))}
@@ -795,7 +787,7 @@ export default function NewSurveyPage() {
             )}
 
             {!isDisplay && (
-              <ImageField
+              <SurveyImageField
                 label="附加圖片（選填）"
                 value={newQ.image_url ?? ""}
                 onChange={url => setNewQ(p => ({ ...p, image_url: url }))}
@@ -839,44 +831,13 @@ export default function NewSurveyPage() {
 
             {/* 選項 */}
             {needsOptions && (
-              <div className="space-y-2">
-                <Label>選項（至少 2 個）</Label>
-                {(newQ.options ?? []).length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {(newQ.options ?? []).map((opt, i) => (
-                      <span key={i} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full"
-                        style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
-                        {opt}
-                        <button onClick={() => removeOption(i)} className="ml-0.5 hover:text-red-400" aria-label={`移除 ${opt}`}>
-                          ×
-                        </button>
-                      </span>
-                ))}
-              </div>
-            )}
-
-                <div className="flex gap-2">
-                  <input
-                    value={optionInput}
-                    onChange={e => setOptionInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addOption(); } }}
-                    placeholder="輸入選項後按 Enter 或點擊新增"
-                    className="input flex-1 text-sm"
-                  />
-                  <button onClick={addOption} className="btn btn-ghost flex-shrink-0">新增選項</button>
-                </div>
-                {(newQ.options ?? []).length > 0 ? (
-                  <OptionImageFields
-                    options={newQ.options ?? []}
-                    value={newQ.option_image_sets ?? []}
-                    onChange={option_image_sets => setNewQ(p => ({ ...p, option_image_sets }))}
-                  />
-                ) : (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    新增第一個選項後，即可在這裡為每個選項上傳圖片。
-                  </p>
-                )}
-              </div>
+              <OptionImageFields
+                options={newQ.options ?? []}
+                value={newQ.option_image_sets ?? []}
+                onChange={option_image_sets => setNewQ(p => ({ ...p, option_image_sets }))}
+                onOptionsChange={options => setNewQ(p => ({ ...p, options }))}
+                selectionStyle={newQ.question_type === "multiple" ? "multiple" : "single"}
+              />
             )}
 
             {/* 自訂驗證規則（簡答 / 長答題型） */}
@@ -912,12 +873,12 @@ export default function NewSurveyPage() {
               </div>
             )}
 
-            <button onClick={addQuestion} className="btn btn-ghost w-full">
+            <button onClick={addQuestion} className="btn btn-primary w-full">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              加入此題目
+              {editingQuestionId ? "儲存題目變更" : "加入此題目"}
             </button>
           </div>
           </GuidedFormStep>
