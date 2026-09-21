@@ -3,6 +3,8 @@ import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+import { authApi } from "@/lib/api";
+import { cacheCurrentUser } from "@/lib/auth-cache";
 import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function AuthCallbackPage() {
@@ -23,10 +25,21 @@ export default function AuthCallbackPage() {
       return;
     }
 
-    // Google callback 已在 API response 設定 HttpOnly cookies。這裡不再重複
-    // 呼叫 /auth/me → /auth/refresh → /auth/me；直接進入目標頁，由受保護
-    // layout 的單次 server session check 完成身分驗證。
-    window.location.replace(next);
+    // Google callback 已在 API response 設定 HttpOnly cookies，但公開頁面不會
+    // 經過受保護 layout，因此仍需同步本機登入快取，讓問卷等公開頁面知道目前
+    // 是登入狀態。這裡只查詢一次 /auth/me，不主動刷新 token。
+    void authApi.me()
+      .then((user) => {
+        cacheCurrentUser(user);
+        window.location.replace(next);
+      })
+      .catch(() => {
+        const query = new URLSearchParams({
+          error: "登入狀態同步失敗，請重新登入",
+          next,
+        });
+        window.location.replace(`/login?${query.toString()}`);
+      });
   }, [searchParams]);
 
   return (

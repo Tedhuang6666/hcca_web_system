@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError, apiErrorMessage, withFallback } from "./api-helpers";
 import { governanceApi } from "./api/governance";
 import { request } from "./api/core";
+import { apiErrorFromResponse } from "./api/errors";
 import {
   clearImpersonationSession,
   saveImpersonationSession,
@@ -37,6 +38,24 @@ describe("API helpers", () => {
   it("uses backend messages only for ApiError instances", () => {
     expect(apiErrorMessage(new ApiError(422, "欄位格式錯誤"), "通用錯誤")).toBe("欄位格式錯誤");
     expect(apiErrorMessage(new Error("internal detail"), "通用錯誤")).toBe("通用錯誤");
+  });
+
+  it("does not expose diagnostic codes in user-facing API errors", async () => {
+    const response = new Response(JSON.stringify({
+      detail: "此問卷僅限校務帳號填答",
+      error_id: "error-1",
+    }), {
+      status: 403,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-ID": "request-1",
+      },
+    });
+
+    const error = await apiErrorFromResponse(response);
+    expect(error.message).toBe("此問卷僅限校務帳號填答");
+    expect(error.errorId).toBe("error-1");
+    expect(error.requestId).toBe("request-1");
   });
 
   it("does not double-encode an already encoded governance matter slug", async () => {
