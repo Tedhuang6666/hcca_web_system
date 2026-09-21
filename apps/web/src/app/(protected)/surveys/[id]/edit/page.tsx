@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -74,6 +74,9 @@ function QuestionRow({
   const [options, setOptions] = useState<string[]>(q.options ?? []);
   const [minValue, setMinValue] = useState(q.min_value ?? 1);
   const [maxValue, setMaxValue] = useState(q.max_value ?? 5);
+  const [maxSelections, setMaxSelections] = useState(
+    q.question_type === "multiple" ? (q.max_value ?? 0) : 0,
+  );
   const [minLabel, setMinLabel] = useState(q.min_label ?? "");
   const [maxLabel, setMaxLabel] = useState(q.max_label ?? "");
   const [minLength, setMinLength] = useState(q.min_length?.toString() ?? "");
@@ -90,6 +93,11 @@ function QuestionRow({
     })),
   );
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "pending" | "saving" | "error">("saved");
+  const [saveError, setSaveError] = useState("");
+  const hasInitializedDraft = useRef(false);
+  const lastSavedFingerprint = useRef("");
+  const failedFingerprint = useRef("");
 
   const updateRule = (i: number, patch: Partial<CondRule>) =>
     setRules(rs => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -117,21 +125,73 @@ function QuestionRow({
     images: optionImageSets[index] ?? [],
   })).filter(({ option }) => Boolean(option));
   const parsedOptions = optionEntries.map(({ option }) => option);
+  const draftFingerprint = useMemo(() => JSON.stringify({
+    text,
+    questionType,
+    required,
+    options,
+    minValue,
+    maxValue,
+    maxSelections,
+    minLabel,
+    maxLabel,
+    minLength,
+    maxLength,
+    rule,
+    placeholder,
+    imageUrl,
+    optionImageSets,
+    exclusiveOpts,
+    otherOpts,
+    rules,
+  }), [
+    text,
+    questionType,
+    required,
+    options,
+    minValue,
+    maxValue,
+    maxSelections,
+    minLabel,
+    maxLabel,
+    minLength,
+    maxLength,
+    rule,
+    placeholder,
+    imageUrl,
+    optionImageSets,
+    exclusiveOpts,
+    otherOpts,
+    rules,
+  ]);
   const toggleExclusive = (opt: string) =>
     setExclusiveOpts(prev => prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]);
   const toggleOther = (opt: string) =>
     setOtherOpts(prev => prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]);
 
-  const save = async () => {
+  const save = async (manual = false) => {
+    if (saving || busy) return;
     const opts = isChoice ? parsedOptions : [];
-    if (isChoice && opts.length < 2) { toast.error("選擇題至少需 2 個選項"); return; }
+    let validationError = "";
+    if (isChoice && opts.length < 2) validationError = "選擇題至少需 2 個選項";
     if (isRanking && maxValue > opts.length) {
-      toast.error("排序最多項數不可大於選項總數"); return;
+      validationError = "排序最多項數不可大於選項總數";
     }
     if (isRanking && minValue > maxValue) {
-      toast.error("最少項數不可大於最多項數"); return;
+      validationError = "最少項數不可大於最多項數";
+    }
+    if (isMultiple && maxSelections > opts.length) {
+      validationError = "多選最多項數不可大於選項總數";
+    }
+    if (validationError) {
+      setSaveStatus("error");
+      setSaveError(validationError);
+      if (manual) toast.error(validationError);
+      return;
     }
     setSaving(true);
+    setSaveStatus("saving");
+    setSaveError("");
     const body: SurveyQuestionBody = {
       question_text: text,
       question_type: questionType,
@@ -148,6 +208,7 @@ function QuestionRow({
       const exclusive = exclusiveOpts.filter(o => opts.includes(o));
       const other = otherOpts.filter(o => opts.includes(o));
       body.option_config = (exclusive.length || other.length) ? { exclusive, other } : null;
+      body.max_value = maxSelections || null;
     }
     if (isRanking) {
       body.min_value = Math.max(1, minValue);
@@ -170,10 +231,36 @@ function QuestionRow({
     body.condition = validRules.length ? { rules: validRules } : null;
     try {
       await onSave(q.id, body);
+      lastSavedFingerprint.current = draftFingerprint;
+      failedFingerprint.current = "";
+      setSaveStatus("saved");
+    } catch (error) {
+      failedFingerprint.current = draftFingerprint;
+      setSaveStatus("error");
+      setSaveError(apiErrorMessage(error, "無法自動儲存，請稍後重試。"));
     } finally {
       setSaving(false);
     }
   };
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  useEffect(() => {
+    if (!hasInitializedDraft.current) {
+      hasInitializedDraft.current = true;
+      lastSavedFingerprint.current = draftFingerprint;
+      return;
+    }
+    if (
+      busy
+      || saving
+      || draftFingerprint === lastSavedFingerprint.current
+      || draftFingerprint === failedFingerprint.current
+    ) return;
+    setSaveStatus("pending");
+    const timeout = window.setTimeout(() => { void saveRef.current(false); }, 700);
+    return () => window.clearTimeout(timeout);
+  }, [busy, draftFingerprint, saving]);
 
   return (
     <div
@@ -225,6 +312,20 @@ function QuestionRow({
       </div>
 
       {isActive && <>
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs"
+        style={{ background: "var(--bg-elevated)" }}
+        role="status"
+        aria-live="polite"
+      >
+        <span style={{ color: saveStatus === "error" ? "var(--danger)" : "var(--text-secondary)" }}>
+          {saveStatus === "saving" && "正在自動儲存…"}
+          {saveStatus === "pending" && "已修改，稍後會自動儲存"}
+          {saveStatus === "saved" && "修改會自動儲存"}
+          {saveStatus === "error" && `尚未儲存：${saveError}`}
+        </span>
+        <span style={{ color: "var(--text-muted)" }}>停止輸入約 1 秒後即會儲存</span>
+      </div>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
         <div>
           <Label>{isImage ? "圖片說明（選填）" : DISPLAY_TYPES.has(questionType) ? "區塊文字" : "題目文字"}</Label>
@@ -255,6 +356,26 @@ function QuestionRow({
           onOptionsChange={setOptions}
           selectionStyle={isMultiple ? "multiple" : isRanking ? "ranking" : "single"}
         />
+      )}
+
+      {isMultiple && (
+        <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+          <div>
+            <Label>最多可選項數（選填）</Label>
+            <input
+              type="number"
+              min={1}
+              max={Math.max(1, parsedOptions.length)}
+              value={maxSelections || ""}
+              onChange={event => setMaxSelections(parseInt(event.target.value) || 0)}
+              placeholder="不限制"
+              className="input"
+            />
+          </div>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            留空代表不限制；設定後填答者會看到「最多可選 N 項」提示。
+          </p>
+        </div>
       )}
 
       {isMultiple && parsedOptions.length > 0 && (
@@ -367,7 +488,7 @@ function QuestionRow({
           label={isImage ? "圖片" : "附加圖片（選填）"}
           value={imageUrl}
           onChange={setImageUrl}
-          hint="上傳後按「儲存此題」才會套用到填答表單。"
+          hint="上傳後會自動儲存並套用到填答表單。"
         />
       )}
 
@@ -451,9 +572,9 @@ function QuestionRow({
         </button>
       </div>
 
-      <button type="button" onClick={save} disabled={saving || busy}
-        className="btn btn-primary w-full text-sm" aria-busy={saving}>
-        {saving ? "儲存中…" : "儲存此題"}
+      <button type="button" onClick={() => { void save(true); }} disabled={saving || busy}
+        className="btn btn-ghost w-full text-sm" aria-busy={saving}>
+        {saving ? "儲存中…" : "立即儲存"}
       </button>
       </>}
     </div>
@@ -543,16 +664,17 @@ export default function EditSurveyPage() {
     } finally { setBusy(false); }
   };
 
-  const saveQuestion = async (questionId: string, body: SurveyQuestionBody) => {
-    try {
-      await surveysApi.updateQuestion(questionId, body);
-      toast.success("題目已更新");
-      load();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "更新失敗"));
-      throw e;
-    }
-  };
+  const saveQuestion = useCallback(async (questionId: string, body: SurveyQuestionBody) => {
+    const updated = await surveysApi.updateQuestion(questionId, body);
+    setSurvey(current => current
+      ? {
+        ...current,
+        questions: current.questions.map(question => (
+          question.id === updated.id ? updated : question
+        )),
+      }
+      : current);
+  }, []);
 
   const deleteQuestion = async (questionId: string) => {
     if (!confirm("確定刪除此題？該題已有的回答也會一併移除。")) return;

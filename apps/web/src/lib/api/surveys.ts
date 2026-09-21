@@ -12,7 +12,7 @@ export type SurveyQuestionBody = {
   options?: string[];
   option_image_sets?: string[][];
   min_value?: number;
-  max_value?: number;
+  max_value?: number | null;
   placeholder?: string;
   image_url?: string;
   min_length?: number;

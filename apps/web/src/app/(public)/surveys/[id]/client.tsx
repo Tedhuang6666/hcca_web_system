@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -24,7 +24,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { surveysApi, ApiError, apiErrorMessage } from "@/lib/api";
+import { surveysApi, ApiError, apiErrorMessage, authFetch } from "@/lib/api";
 import type {
   ConditionRule,
   SurveyOut,
@@ -33,7 +33,8 @@ import type {
   SurveyResponseOut,
   SurveyStats,
 } from "@/lib/types";
-import { uploadUrl } from "@/lib/config";
+import { apiUrl, uploadUrl } from "@/lib/config";
+import { clearAuthCache } from "@/lib/auth-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { recordRecent } from "@/lib/recents";
@@ -58,6 +59,31 @@ function validationHint(q: SurveyQuestionOut): string {
 type AnswerValue = { text: string; options: string[]; other_text?: string };
 type AnswerMap = Record<string, AnswerValue>;
 type AnonymousResponseTokens = Record<string, string>;
+
+function SwitchAccountButton({ surveyId, className }: { surveyId: string; className: string }) {
+  const [switching, setSwitching] = useState(false);
+
+  const switchAccount = async () => {
+    setSwitching(true);
+    try {
+      await authFetch(apiUrl("/auth/logout"), {
+        method: "POST",
+        credentials: "include",
+        skipImpersonation: true,
+      });
+    } catch {
+      // 即使 session 已經失效，也必須清掉本機快取，避免登入頁立即導回原帳號。
+    }
+    clearAuthCache();
+    window.location.replace(`/login?next=${encodeURIComponent(`/surveys/${encodeURIComponent(surveyId)}`)}`);
+  };
+
+  return (
+    <button type="button" onClick={switchAccount} disabled={switching} className={className}>
+      {switching ? "正在切換…" : "切換帳號"}
+    </button>
+  );
+}
 
 function anonymousResponseTokenKey(surveyId: string): string {
   return `hcca:survey:${surveyId}:anonymous-response-tokens`;
@@ -115,9 +141,28 @@ function responseTimeLabel(response: SurveyResponseOut): string {
 function hasAnswerContent(answer: AnswerValue | undefined): boolean {
   return Boolean(
     answer?.text.trim()
-    || answer?.options.length
-    || answer?.other_text?.trim(),
+    || answer?.options.length,
   );
+}
+
+function questionValidationError(question: SurveyQuestionOut, answer: AnswerValue | undefined): string | null {
+  if (question.is_required && !hasAnswerContent(answer)) return "此題為必填，請完成填答。";
+  if (question.question_type === "multiple" && question.max_value != null) {
+    if ((answer?.options.length ?? 0) > question.max_value) {
+      return `最多可選 ${question.max_value} 個選項。`;
+    }
+  }
+  if (question.question_type !== "ranking") return null;
+
+  const chosen = answer?.options ?? [];
+  const min = question.min_value ?? (question.is_required ? 1 : 0);
+  const max = question.max_value ?? (question.options ?? []).length;
+  if (question.is_required && chosen.length < Math.max(min, 1)) {
+    return `至少需排序 ${Math.max(min, 1)} 項。`;
+  }
+  if (chosen.length > 0 && chosen.length < min) return `至少需排序 ${min} 項。`;
+  if (chosen.length > max) return `最多只能排序 ${max} 項。`;
+  return null;
 }
 
 /** 評估單一條件規則。 */
@@ -436,6 +481,7 @@ function QuestionInput({
   if (type === "multiple") {
     const exclusive = new Set(question.option_config?.exclusive ?? []);
     const otherSet = new Set(question.option_config?.other ?? []);
+    const maxSelections = question.max_value ?? null;
     const otherChosen = value.options.some(o => otherSet.has(o));
     const toggle = (opt: string) => {
       const checked = value.options.includes(opt);
@@ -446,6 +492,8 @@ function QuestionInput({
         // 勾選互斥選項 → 清空其他
         next = [opt];
       } else {
+        const selectedNormalOptions = value.options.filter(selected => !exclusive.has(selected));
+        if (maxSelections != null && selectedNormalOptions.length >= maxSelections) return;
         // 勾選一般選項 → 清掉所有互斥選項
         next = [...value.options.filter(o => !exclusive.has(o)), opt];
       }
@@ -454,10 +502,16 @@ function QuestionInput({
     };
     return (
       <div className="space-y-2">
+        {maxSelections != null && (
+          <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+            最多可選 {maxSelections} 項（目前已選 {value.options.length} 項）
+          </p>
+        )}
         {options.map((opt, index) => {
           const checked = value.options.includes(opt);
           const isExcl = exclusive.has(opt);
           const isOther = otherSet.has(opt);
+          const limitReached = maxSelections != null && value.options.length >= maxSelections;
           return (
             <div key={opt}>
               <div className="rounded-xl p-2.5" style={{
@@ -469,6 +523,7 @@ function QuestionInput({
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(opt)}
+                  disabled={!checked && !isExcl && limitReached}
                   className="accent-sky-400"
                 />
                 <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
@@ -888,6 +943,8 @@ export default function SurveyDetailClient({
   const [opening, setOpening] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [emailCopy, setEmailCopy] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const questionElements = useRef<Record<string, HTMLDivElement | null>>({});
   const answerDraft = useMemo(() => answers, [answers]);
   const responseDraftKey = `surveys:${id}:response:${editingResponseId ?? "new"}`;
   const hiddenIds = useMemo(
@@ -994,41 +1051,31 @@ export default function SurveyDetailClient({
     if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${encodeURIComponent(survey.title)}` });
   }, [survey]);
 
+  const showValidationErrors = (errors: Record<string, string>) => {
+    setValidationErrors(errors);
+    const [firstQuestionId] = Object.keys(errors);
+    if (!firstQuestionId) return;
+    toast.error(`尚有 ${Object.keys(errors).length} 題需要完成，已帶你前往第一題。`);
+    window.requestAnimationFrame(() => {
+      const question = questionElements.current[firstQuestionId];
+      question?.scrollIntoView({ behavior: "smooth", block: "center" });
+      question?.querySelector<HTMLElement>("input, textarea, button")?.focus({ preventScroll: true });
+    });
+  };
+
   const submit = async () => {
     if (!survey) return;
-    // 驗證必填（略過顯示條件未成立的題目）
+    const errors: Record<string, string> = {};
     for (const q of survey.questions) {
-      if (DISPLAY_TYPES.has(q.question_type)) continue;
-      if (hiddenIds.has(q.id)) continue;
-      if (!q.is_required) continue;
-      const ans = answers[q.id];
-      const hasText = ans?.text.trim();
-      const hasOptions = ans?.options.length > 0;
-      if (!hasText && !hasOptions) {
-        toast.error(`請填答「${q.question_text.slice(0, 30)}」`);
-        return;
-      }
+      if (DISPLAY_TYPES.has(q.question_type) || hiddenIds.has(q.id)) continue;
+      const error = questionValidationError(q, answers[q.id]);
+      if (error) errors[q.id] = error;
     }
-
-    // 排序題額外驗證項數
-    for (const q of survey.questions) {
-      if (q.question_type !== "ranking" || hiddenIds.has(q.id)) continue;
-      const chosen = answers[q.id]?.options ?? [];
-      const minN = q.min_value ?? (q.is_required ? 1 : 0);
-      const maxN = q.max_value ?? (q.options ?? []).length;
-      if (q.is_required && chosen.length < Math.max(minN, 1)) {
-        toast.error(`「${q.question_text.slice(0, 20)}」至少需排序 ${Math.max(minN, 1)} 項`);
-        return;
-      }
-      if (chosen.length > 0 && chosen.length < minN) {
-        toast.error(`「${q.question_text.slice(0, 20)}」至少需排序 ${minN} 項`);
-        return;
-      }
-      if (chosen.length > maxN) {
-        toast.error(`「${q.question_text.slice(0, 20)}」最多只能排序 ${maxN} 項`);
-        return;
-      }
+    if (Object.keys(errors).length > 0) {
+      showValidationErrors(errors);
+      return;
     }
+    setValidationErrors({});
 
     setSubmitting(true);
     try {
@@ -1082,6 +1129,7 @@ export default function SurveyDetailClient({
     setEditingResponseId(response.id);
     setEditingAnonToken(anonToken);
     setAnswers(answersFromResponse(survey, response));
+    setValidationErrors({});
     setEmailCopy(false);
     setSubmitted(false);
   };
@@ -1091,6 +1139,7 @@ export default function SurveyDetailClient({
     setEditingResponseId(null);
     setEditingAnonToken(null);
     setAnswers(emptyAnswers(survey.questions));
+    setValidationErrors({});
     setEmailCopy(false);
     setSubmitted(false);
   };
@@ -1135,12 +1184,7 @@ export default function SurveyDetailClient({
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           {canSwitchAccount && (
-            <Link
-              href={`/login?next=${encodeURIComponent(`/surveys/${id}`)}`}
-              className="btn btn-primary"
-            >
-              切換帳號
-            </Link>
+            <SwitchAccountButton surveyId={id} className="btn btn-primary" />
           )}
           <Link href="/surveys" className="btn btn-ghost">返回問卷列表</Link>
         </div>
@@ -1175,11 +1219,6 @@ export default function SurveyDetailClient({
             <h1 className="text-xl font-semibold truncate" style={{ color: "var(--text-primary)" }}>
               {survey.title}
             </h1>
-            {survey.description && (
-              <p className="text-sm mt-0.5 line-clamp-2" style={{ color: "var(--text-muted)" }}>
-                {survey.description}
-              </p>
-            )}
           </div>
         </div>
         {/* 操作列 */}
@@ -1230,6 +1269,21 @@ export default function SurveyDetailClient({
         </div>
       </div>
 
+      {survey.description && (
+        <section
+          className="rounded-xl px-5 py-4"
+          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+          aria-labelledby="survey-description-heading"
+        >
+          <h2 id="survey-description-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            問卷說明
+          </h2>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+            {survey.description}
+          </p>
+        </section>
+      )}
+
       {/* 資訊列 */}
       <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
         <span className="badge"
@@ -1265,12 +1319,10 @@ export default function SurveyDetailClient({
               的校務帳號填答；已連結的校務帳號同樣符合資格。若目前帳號不符，請切換帳號後再填寫。
             </p>
           </div>
-          <Link
-            href={`/login?next=${encodeURIComponent(`/surveys/${id}`)}`}
+          <SwitchAccountButton
+            surveyId={id}
             className="btn btn-ghost shrink-0 self-start text-xs sm:self-auto"
-          >
-            切換帳號
-          </Link>
+          />
         </aside>
       )}
 
@@ -1312,6 +1364,10 @@ export default function SurveyDetailClient({
         </div>
       ) : (
         <form onSubmit={e => { e.preventDefault(); submit(); }} className="survey-response-form space-y-4">
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            標示 <span className="font-semibold" style={{ color: "var(--danger)" }}>「必填」</span>
+            的題目須完成後才能送出。
+          </p>
           {(!survey.is_anonymous || myResponses.length > 0) && (
             <section
               className="space-y-3 rounded-xl px-4 py-3"
@@ -1394,11 +1450,18 @@ export default function SurveyDetailClient({
             if (hiddenIds.has(q.id)) return null;
             const isDisplay = DISPLAY_TYPES.has(q.question_type);
             const isAnswered = hasAnswerContent(answers[q.id]);
+            const validationError = validationErrors[q.id];
             return (
             <div
               key={q.id}
+              ref={element => { questionElements.current[q.id] = element; }}
               className={isDisplay ? "py-2 space-y-3" : "survey-question-card card p-5 space-y-3"}
               data-answered={!isDisplay && isAnswered ? "true" : undefined}
+              aria-invalid={validationError ? true : undefined}
+              aria-describedby={validationError ? `question-error-${q.id}` : undefined}
+              style={validationError ? {
+                borderColor: "var(--danger)",
+              } : undefined}
             >
               <div className="flex items-start gap-2">
                 {!isDisplay && (
@@ -1408,7 +1471,22 @@ export default function SurveyDetailClient({
                 <div className="flex-1">
                   <p className={isDisplay ? "sr-only" : "text-sm font-medium"} style={{ color: "var(--text-primary)" }}>
                     {q.question_text}
-                    {q.is_required && <span className="ml-1" style={{ color: "var(--danger)" }}>*</span>}
+                    {q.is_required && (
+                      <span
+                        className="ml-2 inline-flex rounded px-1.5 py-0.5 align-middle text-xs font-semibold"
+                        style={{ background: "var(--danger-dim)", color: "var(--danger)" }}
+                      >
+                        必填
+                      </span>
+                    )}
+                    {q.question_type === "multiple" && q.max_value != null && (
+                      <span
+                        className="ml-2 inline-flex rounded px-1.5 py-0.5 align-middle text-xs font-semibold"
+                        style={{ background: "var(--info-dim)", color: "var(--info)" }}
+                      >
+                        最多選 {q.max_value} 項
+                      </span>
+                    )}
                     {!isDisplay && isAnswered && <span className="survey-question-recorded">已記錄</span>}
                   </p>
                 </div>
@@ -1425,8 +1503,28 @@ export default function SurveyDetailClient({
               <QuestionInput
                 question={q}
                 value={answers[q.id] ?? { text: "", options: [] }}
-                onChange={val => setAnswers(prev => ({ ...prev, [q.id]: val }))}
+                onChange={val => {
+                  setAnswers(prev => ({ ...prev, [q.id]: val }));
+                  setValidationErrors(previous => {
+                    if (!previous[q.id]) return previous;
+                    const nextError = questionValidationError(q, val);
+                    if (nextError) return { ...previous, [q.id]: nextError };
+                    const next = { ...previous };
+                    delete next[q.id];
+                    return next;
+                  });
+                }}
               />
+              {validationError && (
+                <p
+                  id={`question-error-${q.id}`}
+                  role="alert"
+                  className="text-sm font-medium"
+                  style={{ color: "var(--danger)" }}
+                >
+                  {validationError}
+                </p>
+              )}
             </div>
             );
           })}

@@ -182,7 +182,7 @@ class SurveyQuestionCreate(BaseModel):
     option_image_sets: list[list[str]] = Field(
         default_factory=list, description="各選項的預覽圖片 URL，與 options 依序對應"
     )
-    # 評分題：起始/最大分數；排序題：最少/最多必選項數
+    # 評分題：起始/最大分數；排序題：最少/最多必選項數；多選題：最多可選項數
     min_value: int | None = Field(None, ge=1, le=100, description="評分起始值或排序最少項數")
     max_value: int | None = Field(None, ge=1, le=100, description="評分最大值或排序最多項數")
     placeholder: str | None = Field(None, max_length=300)
@@ -242,11 +242,18 @@ class SurveyQuestionCreate(BaseModel):
             ceiling = self.max_value if self.max_value is not None else len(self.options)
             if ceiling > len(self.options):
                 raise ValueError("排序最多項數不可大於選項總數")
+        if (
+            self.question_type == QuestionType.MULTIPLE
+            and self.max_value is not None
+            and self.max_value > len(self.options)
+        ):
+            raise ValueError("多選最多項數不可大於選項總數")
         return self
 
 
 class SurveyQuestionUpdate(BaseModel):
     question_text: str | None = Field(None, max_length=1000)
+    question_type: QuestionType | None = None
     is_required: bool | None = None
     options: list[str] | None = None
     option_image_sets: list[list[str]] | None = None
