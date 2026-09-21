@@ -354,7 +354,13 @@ async def test_client_metric_batch_accepts_multiple_metrics(
                     "path": "/login",
                     "interaction_kind": "change",
                 },
-                {"metric": "resource_timing", "value": 180, "path": "/login"},
+                {
+                    "metric": "resource_timing",
+                    "value": 180,
+                    "path": "/login",
+                    "start_time_ms": 120_689_760.8,
+                    "response_end_ms": 120_689_949.5,
+                },
             ]
         },
     )

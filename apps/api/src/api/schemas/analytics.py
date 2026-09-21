@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+MAX_PERFORMANCE_TIME_MARK_MS = 365 * 86_400_000
+
 
 class PageViewCreate(BaseModel):
     path: str = Field(min_length=1, max_length=2048)
@@ -29,8 +31,10 @@ class ClientMetricCreate(BaseModel):
     component_name: str | None = Field(default=None, min_length=1, max_length=150)
     resource_name: str | None = Field(default=None, min_length=1, max_length=500)
     initiator_type: str | None = Field(default=None, min_length=1, max_length=50)
-    start_time_ms: float | None = Field(default=None, ge=0, le=86_400_000)
-    response_end_ms: float | None = Field(default=None, ge=0, le=86_400_000)
+    # Performance API marks are monotonic offsets from the page time origin;
+    # unlike durations, they can exceed 24 hours when a tab stays open.
+    start_time_ms: float | None = Field(default=None, ge=0, le=MAX_PERFORMANCE_TIME_MARK_MS)
+    response_end_ms: float | None = Field(default=None, ge=0, le=MAX_PERFORMANCE_TIME_MARK_MS)
     interaction_id: str | None = Field(default=None, min_length=1, max_length=80)
     interaction_name: str | None = Field(default=None, min_length=1, max_length=120)
     interaction_kind: Literal["click", "submit", "change"] | None = None
