@@ -774,7 +774,7 @@ export default function EditSurveyPage() {
       <div className="max-w-2xl mx-auto py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>
         已截止或封存的問卷無法編輯。
         <div className="mt-3">
-          <Link href={`/surveys/${encodeURIComponent(survey.title)}`} className="btn btn-ghost">返回問卷</Link>
+          <Link href={`/surveys/${encodeURIComponent(survey.id)}`} className="btn btn-ghost">返回問卷</Link>
         </div>
       </div>
     );
@@ -786,7 +786,7 @@ export default function EditSurveyPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
-        <Link href={`/surveys/${encodeURIComponent(survey.title)}`} className="topbar-icon-btn" aria-label="返回問卷">
+        <Link href={`/surveys/${encodeURIComponent(survey.id)}`} className="topbar-icon-btn" aria-label="返回問卷">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
@@ -804,7 +804,7 @@ export default function EditSurveyPage() {
         entityType="survey"
         entityId={survey.id}
         title={survey.title}
-        href={`/surveys/${encodeURIComponent(survey.title)}`}
+        href={`/surveys/${encodeURIComponent(survey.id)}`}
       />
 
       {/* 基本資料 */}

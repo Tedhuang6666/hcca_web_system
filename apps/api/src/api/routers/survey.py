@@ -652,6 +652,59 @@ async def list_survey_responses(
     return await survey_svc.list_responses(session, survey, limit=limit, offset=offset)
 
 
+@router.delete(
+    "/{survey_id}/responses/{response_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除問卷單筆回應（survey:manage）",
+)
+async def delete_survey_response(
+    survey_id: str,
+    response_id: uuid.UUID,
+    session: DbDep,
+    user: CurrentUser,
+) -> None:
+    survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
+    deleted = await survey_svc.delete_response(session, survey, response_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷回應")
+    await audit_svc.record(
+        session,
+        entity_type="survey_response",
+        entity_id=str(response_id),
+        action="survey.response_delete",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={"survey_id": str(survey.id), "survey_title": survey.title},
+        summary=f"刪除問卷「{survey.title}」單筆回應",
+    )
+
+
+@router.delete(
+    "/{survey_id}/responses",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="清除問卷全部回應（survey:manage）",
+)
+async def delete_all_survey_responses(
+    survey_id: str,
+    session: DbDep,
+    user: CurrentUser,
+) -> None:
+    survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
+    deleted_count = await survey_svc.delete_all_responses(session, survey)
+    await audit_svc.record(
+        session,
+        entity_type="survey",
+        entity_id=str(survey.id),
+        action="survey.responses_clear",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={"survey_title": survey.title, "deleted_count": deleted_count},
+        summary=f"清除問卷「{survey.title}」全部回應（{deleted_count} 份）",
+    )
+
+
 @router.get(
     "/{survey_id}/export",
     response_class=Response,

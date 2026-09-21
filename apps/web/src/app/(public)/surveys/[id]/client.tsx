@@ -615,11 +615,11 @@ function QuestionInput({
 }
 
 /* ── 分享問卷（複製連結 + QR code） ───────────────────────────────────────── */
-function ShareModal({ title, onClose }: { title: string; onClose: () => void }) {
+function ShareModal({ surveyId, title, onClose }: { surveyId: string; title: string; onClose: () => void }) {
   const [qr, setQr] = useState("");
   const shareUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/surveys/${encodeURIComponent(title)}`
+      ? `${window.location.origin}/surveys/${encodeURIComponent(surveyId)}`
       : "";
 
   useEffect(() => {
@@ -690,13 +690,54 @@ function StatsView({ surveyId }: { surveyId: string }) {
   const [loading, setLoading] = useState(true);
   const [chartTypes, setChartTypes] = useState<Record<string, string>>({});
   const [view, setView] = useState<"charts" | "responses">("charts");
+  const [deletingResponseId, setDeletingResponseId] = useState<string | null>(null);
+  const [clearingResponses, setClearingResponses] = useState(false);
 
-  useEffect(() => {
-    Promise.all([surveysApi.stats(surveyId), surveysApi.responses(surveyId)])
-      .then(([s, r]) => { setStats(s); setResponses(r); })
-      .catch(() => toast.error("載入統計失敗"))
-      .finally(() => setLoading(false));
+  const loadStats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [nextStats, nextResponses] = await Promise.all([
+        surveysApi.stats(surveyId),
+        surveysApi.responses(surveyId),
+      ]);
+      setStats(nextStats);
+      setResponses(nextResponses);
+    } catch {
+      toast.error("載入統計失敗");
+    } finally {
+      setLoading(false);
+    }
   }, [surveyId]);
+
+  useEffect(() => { void loadStats(); }, [loadStats]);
+
+  const deleteResponse = async (responseId: string) => {
+    if (!confirm("確定刪除這筆回應？刪除後無法復原。")) return;
+    setDeletingResponseId(responseId);
+    try {
+      await surveysApi.deleteResponse(surveyId, responseId);
+      toast.success("回應已刪除");
+      await loadStats();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "刪除回應失敗"));
+    } finally {
+      setDeletingResponseId(null);
+    }
+  };
+
+  const clearResponses = async () => {
+    if (!confirm("確定清除這份問卷的全部回應？所有答案都會永久刪除，且無法復原。")) return;
+    setClearingResponses(true);
+    try {
+      await surveysApi.clearResponses(surveyId);
+      toast.success("全部回應已清除");
+      await loadStats();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "清除回應失敗"));
+    } finally {
+      setClearingResponses(false);
+    }
+  };
 
   if (loading) return <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>統計載入中…</div>;
   if (!stats) return null;
@@ -753,6 +794,16 @@ function StatsView({ surveyId }: { surveyId: string }) {
         <p className="text-sm" style={{ color: "var(--info)" }}>
           共 <strong>{stats.total_responses}</strong> 份回應
         </p>
+        {stats.total_responses > 0 && (
+          <button
+            type="button"
+            onClick={() => { void clearResponses(); }}
+            disabled={clearingResponses || deletingResponseId !== null}
+            className="btn btn-ghost text-xs"
+            style={{ color: "var(--danger)" }}>
+            {clearingResponses ? "清除中…" : "清除全部回應"}
+          </button>
+        )}
         <div className="flex gap-1 ml-auto p-1 rounded-lg" style={{ background: "var(--bg-surface)" }}>
           {(["charts", "responses"] as const).map(v => (
             <button
@@ -889,6 +940,14 @@ function StatsView({ surveyId }: { surveyId: string }) {
                   <span className="ml-auto" style={{ color: "var(--text-muted)" }}>
                     {new Date(r.submitted_at).toLocaleString("zh-TW")}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => { void deleteResponse(r.id); }}
+                    disabled={clearingResponses || deletingResponseId !== null}
+                    className="btn btn-ghost px-2 py-1 text-xs"
+                    style={{ color: "var(--danger)" }}>
+                    {deletingResponseId === r.id ? "刪除中…" : "刪除"}
+                  </button>
                 </div>
                 <div className="space-y-1.5" style={{ borderTop: "1px solid var(--border)" }}>
                   {r.answers.length === 0 ? (
@@ -1048,7 +1107,7 @@ export default function SurveyDetailClient({
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${encodeURIComponent(survey.title)}` });
+    if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${encodeURIComponent(survey.id)}` });
   }, [survey]);
 
   const showValidationErrors = (errors: Record<string, string>) => {
@@ -1155,7 +1214,7 @@ export default function SurveyDetailClient({
         load();
       } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
       finally { setClosing(false); }
-    } else if (survey.status === "draft") {
+    } else if (survey.status === "draft" || survey.status === "closed") {
       setOpening(true);
       try {
         await surveysApi.open(id);
@@ -1244,18 +1303,18 @@ export default function SurveyDetailClient({
           </button>
           {isAdmin && (survey.status === "draft" || survey.status === "open") && (
             <Link
-              href={`/surveys/${encodeURIComponent(survey.title)}/edit`}
+              href={`/surveys/${encodeURIComponent(survey.id)}/edit`}
               className="btn btn-ghost text-xs">
               編輯題目
             </Link>
           )}
-          {isAdmin && (survey.status === "draft" || survey.status === "open") && (
+          {isAdmin && (survey.status === "draft" || survey.status === "open" || survey.status === "closed") && (
             <button
               onClick={toggleStatus}
               disabled={opening || closing}
               className="btn btn-ghost text-xs"
-              style={survey.status === "open" ? { color: "var(--danger)" } : {}}>
-              {opening ? "開放中…" : closing ? "關閉中…" : survey.status === "draft" ? "開放填答" : "關閉問卷"}
+              style={survey.status === "open" ? { color: "var(--danger)" } : survey.status === "closed" ? { color: "var(--success)" } : {}}>
+              {opening ? "開放中…" : closing ? "關閉中…" : survey.status === "closed" ? "重新開放" : survey.status === "draft" ? "開放填答" : "關閉問卷"}
             </button>
           )}
           {isAdmin && (
@@ -1559,7 +1618,9 @@ export default function SurveyDetailClient({
         </form>
       )}
 
-      {shareOpen && <ShareModal title={survey.title} onClose={() => setShareOpen(false)} />}
+      {shareOpen && (
+        <ShareModal surveyId={survey.id} title={survey.title} onClose={() => setShareOpen(false)} />
+      )}
     </div>
   );
 }

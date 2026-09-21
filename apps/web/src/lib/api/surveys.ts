@@ -79,6 +79,9 @@ export const surveysApi = {
   stats: (id: string) => get<SurveyStats>(`/surveys/${pathSegment(id)}/stats`),
   responses: (id: string) =>
     get<SurveyResponseAdminItem[]>(`/surveys/${pathSegment(id)}/responses`),
+  deleteResponse: (id: string, responseId: string) =>
+    del<void>(`/surveys/${pathSegment(id)}/responses/${pathSegment(responseId)}`),
+  clearResponses: (id: string) => del<void>(`/surveys/${pathSegment(id)}/responses`),
   uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<{ url: string; filename: string }> => {
     const fd = new FormData();
     fd.append("file", file);

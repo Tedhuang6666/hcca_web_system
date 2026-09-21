@@ -60,6 +60,20 @@ describe("route manifest", () => {
     expect(getRoutePolicy("/about").shell).toBe("bare");
   });
 
+  it("keeps shared survey detail links public and indexable", () => {
+    const sharedSurveyPath = "/surveys/550e8400-e29b-41d4-a716-446655440000";
+
+    expect(getRoutePolicy(sharedSurveyPath)).toMatchObject({
+      public: true,
+      requiresAuth: false,
+      indexable: true,
+      sitemap: true,
+      shell: "app",
+    });
+    expect(isPublicRoute(sharedSurveyPath)).toBe(true);
+    expect(requiresAuthentication(sharedSurveyPath)).toBe(false);
+  });
+
   it("keeps the现场抽獎入口 public and bare for shared tablets", () => {
     expect(getRoutePolicy("/raffle")).toMatchObject({
       public: true,
