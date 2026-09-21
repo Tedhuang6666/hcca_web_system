@@ -14851,7 +14851,8 @@ export interface paths {
         get: operations["list_survey_responses_surveys__survey_id__responses_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** 清除問卷全部回應（survey:manage） */
+        delete: operations["delete_all_survey_responses_surveys__survey_id__responses_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -14867,7 +14868,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** 刪除問卷單筆回應（survey:manage） */
+        delete: operations["delete_survey_response_surveys__survey_id__responses__response_id__delete"];
         options?: never;
         head?: never;
         /** 更新自己的問卷回應 */
@@ -37223,6 +37225,7 @@ export interface components {
             placeholder?: string | null;
             /** Question Text */
             question_text?: string | null;
+            question_type?: components["schemas"]["QuestionType"] | null;
             validation_rule?: components["schemas"]["ValidationRule"] | null;
         };
         /**
@@ -73097,6 +73100,65 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SurveyResponseAdminItem"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_all_survey_responses_surveys__survey_id__responses_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                survey_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_survey_response_surveys__survey_id__responses__response_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                survey_id: string;
+                response_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
