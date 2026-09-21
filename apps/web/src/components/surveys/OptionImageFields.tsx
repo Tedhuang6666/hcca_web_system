@@ -31,11 +31,17 @@ export default function OptionImageFields({ options, value, onChange }: OptionIm
   };
 
   return (
-    <section className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
+    <section
+      aria-label="為各選項上傳圖片"
+      className="rounded-xl p-3 space-y-3"
+      style={{ background: "var(--bg-elevated)" }}
+    >
       <div>
-        <h4 className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>選項圖片</h4>
+        <h4 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          為各選項上傳圖片
+        </h4>
         <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          可為每個選項加入多張圖稿；填答者可點按查看完整圖片。調整選項順序後，請一併確認圖片對應。
+          這裡的圖片會附在各選項上，不是題目圖片。直接點選下方對應選項的「選擇檔案」。
         </p>
       </div>
 
@@ -44,9 +50,14 @@ export default function OptionImageFields({ options, value, onChange }: OptionIm
           const images = imageSets[index];
           return (
             <div key={`${index}-${option}`} className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-surface)" }}>
-              <p className="text-sm font-medium break-words" style={{ color: "var(--text-primary)" }}>
-                {option}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-medium break-words" style={{ color: "var(--text-primary)" }}>
+                  選項 {index + 1}：{option}
+                </p>
+                <span className="shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
+                  {images.length} 張圖片
+                </span>
+              </div>
               {images.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {images.map((image) => (
@@ -75,8 +86,8 @@ export default function OptionImageFields({ options, value, onChange }: OptionIm
               <AnimatedFileUpload
                 accept="image/*"
                 multiple
-                label={`為「${option}」加入圖片`}
-                hint="支援拖曳、點擊選取或貼上；上傳後請儲存題目。"
+                label={`上傳「${option}」的圖片`}
+                hint="點「選擇檔案」、拖曳或貼上；上傳後請儲存題目。"
                 onUpload={upload}
                 onUploaded={(result) => {
                   updateImages(index, [...images, result.url]);
