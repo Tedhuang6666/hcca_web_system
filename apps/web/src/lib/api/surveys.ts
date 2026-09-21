@@ -25,6 +25,17 @@ export type SurveyQuestionBody = {
   order_index?: number;
 };
 
+export type SurveySubmitBody = {
+  answers: {
+    question_id: string;
+    answer_text?: string;
+    answer_options?: string[];
+    other_text?: string;
+  }[];
+  anon_token?: string;
+  email_copy?: boolean;
+};
+
 export const surveysApi = {
   list: (params?: { status?: string; org_id?: string; activity_id?: string }) => {
     const q = new URLSearchParams();
@@ -54,8 +65,17 @@ export const surveysApi = {
   updateQuestion: (questionId: string, body: SurveyQuestionBody) =>
     patch<SurveyQuestionOut>(`/surveys/questions/${questionId}`, body),
   deleteQuestion: (questionId: string) => del<void>(`/surveys/questions/${questionId}`),
-  submit: (id: string, body: { answers: { question_id: string; answer_text?: string; answer_options?: string[]; other_text?: string }[]; anon_token?: string; email_copy?: boolean }) =>
+  submit: (id: string, body: SurveySubmitBody) =>
     post<SurveyResponseOut>(`/surveys/${pathSegment(id)}/submit`, body),
+  myResponses: (id: string, anonToken?: string) => {
+    const query = anonToken ? `?anon_token=${encodeURIComponent(anonToken)}` : "";
+    return get<SurveyResponseOut[]>(`/surveys/${pathSegment(id)}/my-responses${query}`);
+  },
+  updateResponse: (id: string, responseId: string, body: SurveySubmitBody) =>
+    patch<SurveyResponseOut>(
+      `/surveys/${pathSegment(id)}/responses/${pathSegment(responseId)}`,
+      body,
+    ),
   stats: (id: string) => get<SurveyStats>(`/surveys/${pathSegment(id)}/stats`),
   responses: (id: string) =>
     get<SurveyResponseAdminItem[]>(`/surveys/${pathSegment(id)}/responses`),

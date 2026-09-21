@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.org import Org
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 
 
 async def _make_org(db: AsyncSession) -> Org:
@@ -163,7 +165,13 @@ async def test_close_survey_requires_open_status(
 
 
 async def _make_open_survey_with_question(
-    ac: AsyncClient, org_id: uuid.UUID, *, is_public: bool = False, allow_multiple: bool = False
+    ac: AsyncClient,
+    org_id: uuid.UUID,
+    *,
+    is_public: bool = False,
+    is_anonymous: bool = False,
+    allow_multiple: bool = False,
+    allowed_domains: list[str] | None = None,
 ) -> tuple[str, str]:
     create_resp = await ac.post(
         "/surveys",
@@ -171,7 +179,9 @@ async def _make_open_survey_with_question(
             "title": "填答測試",
             "org_id": str(org_id),
             "is_public": is_public,
+            "is_anonymous": is_anonymous,
             "allow_multiple": allow_multiple,
+            "allowed_domains": allowed_domains or [],
         },
     )
     survey_id = create_resp.json()["id"]
@@ -239,6 +249,130 @@ async def test_submit_response_duplicate_conflicts(
     assert first.status_code == 201
     second = await ac.post(f"/surveys/{survey_id}/submit", json=payload)
     assert second.status_code == 422
+
+
+async def test_single_response_can_be_loaded_and_updated(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    survey_id, question_id = await _make_open_survey_with_question(admin_ac, org.id)
+    member_ac = authed_client_factory(member_user)
+
+    created = await member_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_text": "原本的回答"}]},
+    )
+    assert created.status_code == 201
+    response_id = created.json()["id"]
+
+    mine = await member_ac.get(f"/surveys/{survey_id}/my-responses")
+    assert mine.status_code == 200
+    assert mine.json()[0]["answers"][0]["answer_text"] == "原本的回答"
+
+    updated = await member_ac.patch(
+        f"/surveys/{survey_id}/responses/{response_id}",
+        json={"answers": [{"question_id": question_id, "answer_text": "更新後的回答"}]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["answers"][0]["answer_text"] == "更新後的回答"
+
+    mine_after_update = await member_ac.get(f"/surveys/{survey_id}/my-responses")
+    assert len(mine_after_update.json()) == 1
+    assert mine_after_update.json()[0]["answers"][0]["answer_text"] == "更新後的回答"
+
+
+async def test_multiple_response_survey_allows_add_and_own_update_only(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    survey_id, question_id = await _make_open_survey_with_question(
+        admin_ac, org.id, allow_multiple=True
+    )
+    member_ac = authed_client_factory(member_user)
+    first = await member_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_text": "第一份"}]},
+    )
+    second = await member_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_text": "第二份"}]},
+    )
+    assert first.status_code == second.status_code == 201
+
+    updated = await member_ac.patch(
+        f"/surveys/{survey_id}/responses/{first.json()['id']}",
+        json={"answers": [{"question_id": question_id, "answer_text": "第一份已修改"}]},
+    )
+    assert updated.status_code == 200
+
+    mine = await member_ac.get(f"/surveys/{survey_id}/my-responses")
+    assert mine.status_code == 200
+    assert len(mine.json()) == 2
+    assert {item["answers"][0]["answer_text"] for item in mine.json()} == {
+        "第一份已修改",
+        "第二份",
+    }
+
+    other = User(email=f"other-{uuid.uuid4().hex[:8]}@test.edu", display_name="其他填答者")
+    db_session.add(other)
+    await db_session.flush()
+    other_ac = authed_client_factory(other)
+    forbidden = await other_ac.patch(
+        f"/surveys/{survey_id}/responses/{first.json()['id']}",
+        json={"answers": [{"question_id": question_id, "answer_text": "不應被修改"}]},
+    )
+    assert forbidden.status_code == 404
+
+
+async def test_anonymous_response_can_be_updated_with_its_original_token(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    survey_id, question_id = await _make_open_survey_with_question(
+        admin_ac,
+        org.id,
+        is_public=True,
+        is_anonymous=True,
+    )
+    anon_token = str(uuid.uuid4())
+    created = await client.post(
+        f"/surveys/{survey_id}/submit",
+        json={
+            "anon_token": anon_token,
+            "answers": [{"question_id": question_id, "answer_text": "匿名原答"}],
+        },
+    )
+    assert created.status_code == 201
+    response_id = created.json()["id"]
+
+    mine = await client.get(
+        f"/surveys/{survey_id}/my-responses",
+        params={"anon_token": anon_token},
+    )
+    assert mine.status_code == 200
+    assert mine.json()[0]["id"] == response_id
+
+    updated = await client.patch(
+        f"/surveys/{survey_id}/responses/{response_id}",
+        json={
+            "anon_token": anon_token,
+            "answers": [{"question_id": question_id, "answer_text": "匿名修改後"}],
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["answers"][0]["answer_text"] == "匿名修改後"
 
 
 async def test_submit_response_without_login_requires_public(
@@ -310,6 +444,49 @@ async def test_get_public_survey_shows_open_public(
     response = await client.get(f"/surveys/public/{survey_id}")
     assert response.status_code == 200
     assert response.json()["id"] == survey_id
+
+
+async def test_domain_restricted_survey_hides_non_target_and_accepts_linked_school_email(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    survey_id, _ = await _make_open_survey_with_question(
+        admin_ac,
+        org.id,
+        allowed_domains=["hchs.hc.edu.tw"],
+    )
+    member_ac = authed_client_factory(member_user)
+
+    public_detail = await client.get(f"/surveys/public/{survey_id}")
+    assert public_detail.status_code == 403
+    assert "切換" in public_detail.json()["detail"]
+
+    denied_detail = await member_ac.get(f"/surveys/{survey_id}")
+    assert denied_detail.status_code == 403
+    assert "@hchs.hc.edu.tw" in denied_detail.json()["detail"]
+    hidden_from_list = await member_ac.get("/surveys", params={"status": "open"})
+    assert survey_id not in {item["id"] for item in hidden_from_list.json()}
+
+    db_session.add(
+        UserIdentity(
+            user_id=member_user.id,
+            provider="google",
+            external_id=f"school-{uuid.uuid4().hex}",
+            email=f"student-{uuid.uuid4().hex[:8]}@hchs.hc.edu.tw",
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+
+    allowed_detail = await member_ac.get(f"/surveys/{survey_id}")
+    assert allowed_detail.status_code == 200
+    visible_in_list = await member_ac.get("/surveys", params={"status": "open"})
+    assert survey_id in {item["id"] for item in visible_in_list.json()}
 
 
 async def test_list_public_surveys_excludes_drafts(

@@ -14789,6 +14789,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/surveys/{survey_id}/my-responses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出自己的問卷回應 */
+        get: operations["list_my_responses_surveys__survey_id__my_responses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/surveys/{survey_id}/open": {
         parameters: {
             query?: never;
@@ -14838,6 +14855,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/surveys/{survey_id}/responses/{response_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新自己的問卷回應 */
+        patch: operations["update_response_surveys__survey_id__responses__response_id__patch"];
         trace?: never;
     };
     "/surveys/{survey_id}/stats": {
@@ -72942,6 +72976,39 @@ export interface operations {
             };
         };
     };
+    list_my_responses_surveys__survey_id__my_responses_get: {
+        parameters: {
+            query?: {
+                anon_token?: string | null;
+            };
+            header?: never;
+            path: {
+                survey_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SurveyResponseOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     open_survey_surveys__survey_id__open_post: {
         parameters: {
             query?: never;
@@ -73029,6 +73096,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SurveyResponseAdminItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_response_surveys__survey_id__responses__response_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                survey_id: string;
+                response_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SurveySubmit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SurveyResponseOut"];
                 };
             };
             /** @description Validation Error */

@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -23,6 +23,8 @@ from api.models.survey import (
     SurveyStatus,
     ValidationRule,
 )
+from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.schemas.survey import (
     DISPLAY_QUESTION_TYPES,
     QuestionStats,
@@ -131,6 +133,10 @@ async def list_surveys(
                 Survey.activity_id,
                 Survey.created_by,
                 Survey.created_at,
+                Survey.is_public,
+                Survey.allowed_org_ids_json,
+                Survey.allowed_user_ids_json,
+                Survey.allowed_domains_json,
             )
         )
         .order_by(Survey.created_at.desc())
@@ -204,22 +210,47 @@ def _email_domain(email: str | None) -> str:
     return email.rsplit("@", 1)[-1].lower() if email and "@" in email else ""
 
 
-async def check_survey_access(session: AsyncSession, survey: Survey, user: object | None) -> None:
+async def _linked_emails(session: AsyncSession, user: User) -> set[str]:
+    """取得帳號主信箱與所有已連結身分的信箱。"""
+    emails = {user.email.strip().lower()}
+    rows = await session.scalars(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email.is_not(None),
+        )
+    )
+    emails.update(email.strip().lower() for email in rows.all() if email)
+    emails.discard("")
+    return emails
+
+
+def _domain_access_message(domains: set[str]) -> str:
+    rendered = "、".join(f"@{domain}" for domain in sorted(domains))
+    return (
+        f"此問卷僅限使用 {rendered} 的校務帳號填答。"
+        "請切換到符合資格的帳號，或先在帳號設定完成校務帳號連結後再重新載入。"
+    )
+
+
+async def check_survey_access(session: AsyncSession, survey: Survey, user: User | None) -> None:
     """驗證填答者是否在問卷開放對象內；不符時拋出 PermissionError。"""
     if survey.is_public:
         return
-    if user is None:
-        raise PermissionError("此問卷需登入後才能填答")
     org_ids = set(_load_str_list(survey.allowed_org_ids_json))
     user_ids = set(_load_str_list(survey.allowed_user_ids_json))
     domains = {d.lower().lstrip("@") for d in _load_str_list(survey.allowed_domains_json)}
+    if user is None:
+        if domains:
+            raise PermissionError(_domain_access_message(domains))
+        raise PermissionError("此問卷需登入後才能填答")
     if not org_ids and not user_ids and not domains:
         return  # 未設限制名單 → 任何登入者皆可填
-    if user_ids and str(getattr(user, "id", "")) in user_ids:
+    if user_ids and str(user.id) in user_ids:
         return
-    email = (getattr(user, "email", "") or "").lower()
-    if domains and _email_domain(email) in domains:
-        return
+    if domains:
+        emails = await _linked_emails(session, user)
+        if any(_email_domain(email) in domains for email in emails):
+            return
     if org_ids:
         result = await session.execute(
             select(Position.org_id)
@@ -228,7 +259,42 @@ async def check_survey_access(session: AsyncSession, survey: Survey, user: objec
         )
         if {str(o) for o in result.scalars().all()} & org_ids:
             return
+    if domains:
+        raise PermissionError(_domain_access_message(domains))
     raise PermissionError("您不在此問卷的開放填答對象範圍內")
+
+
+async def list_respondable_surveys(
+    session: AsyncSession,
+    user: User,
+    *,
+    org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
+    status: SurveyStatus | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Survey]:
+    """列出目前使用者符合資格的開放／已截止問卷。"""
+    if status not in (None, SurveyStatus.OPEN, SurveyStatus.CLOSED):
+        return []
+    candidates = await list_surveys(
+        session,
+        org_id=org_id,
+        activity_id=activity_id,
+        status=status,
+        limit=100,
+        offset=0,
+    )
+    visible: list[Survey] = []
+    for survey in candidates:
+        if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
+            continue
+        try:
+            await check_survey_access(session, survey, user)
+        except PermissionError:
+            continue
+        visible.append(survey)
+    return visible[offset : offset + limit]
 
 
 async def open_survey(session: AsyncSession, survey: Survey) -> Survey:
@@ -458,6 +524,7 @@ async def _check_can_respond(
     survey: Survey,
     respondent_id: uuid.UUID | None,
     anon_token: str | None,
+    response_id: uuid.UUID | None = None,
 ) -> None:
     """驗證是否可以填答（檢查重複、時間範圍）"""
     now = datetime.now(UTC)
@@ -469,8 +536,11 @@ async def _check_can_respond(
     if survey.closes_at and now > survey.closes_at:
         raise ValueError("問卷已截止")
 
-    if survey.allow_multiple:
+    if response_id is not None or survey.allow_multiple:
         return  # 允許重複填答，不做唯一性檢查
+
+    # 單次填答以問卷資料列做序列化鎖，避免兩個同時送出的請求都通過重複檢查。
+    await session.execute(select(Survey.id).where(Survey.id == survey.id).with_for_update())
 
     # 非匿名：檢查 user 是否已填答
     if not survey.is_anonymous and respondent_id:
@@ -495,17 +565,9 @@ async def _check_can_respond(
             raise ValueError("此 token 已填答過此問卷")
 
 
-async def submit_response(
-    session: AsyncSession,
-    survey: Survey,
-    *,
-    respondent_id: uuid.UUID | None,
-    data: SurveySubmit,
-    respondent_email: str | None = None,
-) -> SurveyResponse:
-    await _check_can_respond(session, survey, respondent_id, data.anon_token)
-
-    # 載入問題
+async def _validate_submission(
+    session: AsyncSession, survey: Survey, data: SurveySubmit
+) -> dict[uuid.UUID, SurveyQuestion]:
     q_result = await session.execute(
         select(SurveyQuestion).where(SurveyQuestion.survey_id == survey.id)
     )
@@ -557,29 +619,20 @@ async def submit_response(
                 raise ValueError(f"題目「{q.question_text[:30]}」至少需排序 {min_n} 個項目")
             if len(unique) > max_n:
                 raise ValueError(f"題目「{q.question_text[:30]}」最多只能排序 {max_n} 個項目")
+    return questions
 
-    # 建立回應（匿名問卷不記錄 email，保障匿名性）
-    response = SurveyResponse(
-        survey_id=survey.id,
-        respondent_id=None if survey.is_anonymous else respondent_id,
-        anon_token=data.anon_token if survey.is_anonymous else None,
-        respondent_email=None if survey.is_anonymous else respondent_email,
-        submitted_at=datetime.now(UTC),
-    )
-    session.add(response)
-    await session.flush()
 
-    # 儲存各題答案
+async def _store_answers(
+    session: AsyncSession,
+    response: SurveyResponse,
+    questions: dict[uuid.UUID, SurveyQuestion],
+    data: SurveySubmit,
+) -> None:
     for ans in data.answers:
         q = questions.get(ans.question_id)
-        if q is None:
+        if q is None or q.question_type in DISPLAY_QUESTION_TYPES:
             continue
-        if q.question_type in DISPLAY_QUESTION_TYPES:
-            continue
-        answer = SurveyAnswer(
-            response_id=response.id,
-            question_id=ans.question_id,
-        )
+        answer = SurveyAnswer(response_id=response.id, question_id=ans.question_id)
         if q.question_type == QuestionType.MULTIPLE:
             answer.answer_json = json.dumps(ans.answer_options, ensure_ascii=False)
             cfg = _load_option_config(q.option_config_json)
@@ -593,6 +646,102 @@ async def submit_response(
             answer.answer_text = ans.answer_text
         session.add(answer)
 
+
+async def submit_response(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    respondent_id: uuid.UUID | None,
+    data: SurveySubmit,
+    respondent_email: str | None = None,
+) -> SurveyResponse:
+    await _check_can_respond(session, survey, respondent_id, data.anon_token)
+    questions = await _validate_submission(session, survey, data)
+
+    # 建立回應（匿名問卷不記錄 email，保障匿名性）
+    response = SurveyResponse(
+        survey_id=survey.id,
+        respondent_id=None if survey.is_anonymous else respondent_id,
+        anon_token=data.anon_token if survey.is_anonymous else None,
+        respondent_email=None if survey.is_anonymous else respondent_email,
+        submitted_at=datetime.now(UTC),
+    )
+    session.add(response)
+    await session.flush()
+    await _store_answers(session, response, questions, data)
+    await session.flush()
+    return response
+
+
+async def list_my_responses(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    respondent_id: uuid.UUID | None,
+    anon_token: str | None = None,
+) -> list[SurveyResponse]:
+    """列出目前填答者可存取的回應，匿名問卷需持有原本的 token。"""
+    if survey.is_anonymous:
+        if not anon_token:
+            return []
+        conditions = (
+            SurveyResponse.survey_id == survey.id,
+            SurveyResponse.anon_token == anon_token,
+        )
+    else:
+        if respondent_id is None:
+            return []
+        conditions = (
+            SurveyResponse.survey_id == survey.id,
+            SurveyResponse.respondent_id == respondent_id,
+        )
+    result = await session.execute(
+        select(SurveyResponse)
+        .options(selectinload(SurveyResponse.answers))
+        .where(*conditions)
+        .order_by(SurveyResponse.submitted_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_my_response(
+    session: AsyncSession,
+    survey: Survey,
+    response_id: uuid.UUID,
+    *,
+    respondent_id: uuid.UUID | None,
+    anon_token: str | None = None,
+) -> SurveyResponse | None:
+    responses = await list_my_responses(
+        session,
+        survey,
+        respondent_id=respondent_id,
+        anon_token=anon_token,
+    )
+    return next((response for response in responses if response.id == response_id), None)
+
+
+async def update_response(
+    session: AsyncSession,
+    survey: Survey,
+    response: SurveyResponse,
+    *,
+    respondent_id: uuid.UUID | None,
+    data: SurveySubmit,
+) -> SurveyResponse:
+    """以同一份回應覆寫答案；所有權由 get_my_response 先驗證。"""
+    await _check_can_respond(
+        session,
+        survey,
+        respondent_id,
+        data.anon_token,
+        response_id=response.id,
+    )
+    questions = await _validate_submission(session, survey, data)
+    await session.execute(delete(SurveyAnswer).where(SurveyAnswer.response_id == response.id))
+    session.expire(response, ["answers"])
+    response.updated_at = datetime.now(UTC)
+    await _store_answers(session, response, questions, data)
     await session.flush()
     return response
 

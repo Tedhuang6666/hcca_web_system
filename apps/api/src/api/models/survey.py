@@ -16,7 +16,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -212,12 +211,11 @@ class SurveyResponse(Base, TimestampMixin):
     一次完整填答記錄。
     匿名問卷：respondent_id=NULL，anon_token 為不可逆 UUID（每次填答生成）。
     非匿名問卷：respondent_id=填答人 user_id，anon_token=NULL。
-    UNIQUE (survey_id, respondent_id)：非匿名問卷每人限填一次。
-    匿名問卷：每個 anon_token 一條記錄（允許重複填答由 allow_multiple 控制）。
+    是否可新增多份回應由 Survey.allow_multiple 決定；單次填答的限制在服務層
+    以鎖定問卷後檢查，才能讓多次填答問卷保留同一位填答者的每一份回應。
     """
 
     __tablename__ = "survey_responses"
-    __table_args__ = (UniqueConstraint("survey_id", "respondent_id", name="uq_survey_respondent"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     survey_id: Mapped[uuid.UUID] = mapped_column(
