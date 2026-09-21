@@ -23,6 +23,7 @@ from api.schemas.survey import (
     SurveyOut,
     SurveyQuestionCreate,
     SurveyQuestionOut,
+    SurveySubmit,
 )
 from api.services import survey as survey_svc
 
@@ -150,6 +151,111 @@ def test_image_question_without_image_is_rejected() -> None:
 def test_answerable_question_without_text_is_rejected() -> None:
     with pytest.raises(ValidationError):
         SurveyQuestionCreate(question_type=QuestionType.TEXT, question_text="   ")
+
+
+def test_multiple_choice_limit_cannot_exceed_option_count() -> None:
+    with pytest.raises(ValidationError, match="多選最多項數不可大於選項總數"):
+        SurveyQuestionCreate(
+            question_text="可選活動",
+            question_type=QuestionType.MULTIPLE,
+            options=["A", "B"],
+            max_value=3,
+        )
+
+
+async def test_submit_response_rejects_empty_required_answer(db_session: AsyncSession) -> None:
+    survey = await _make_draft_survey(db_session)
+    question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(question_text="必填意見", question_type=QuestionType.TEXT),
+    )
+    survey.status = SurveyStatus.OPEN
+
+    with pytest.raises(ValueError, match="為必填"):
+        await survey_svc.submit_response(
+            db_session,
+            survey,
+            respondent_id=await _make_respondent_id(db_session),
+            data=SurveySubmit(answers=[{"question_id": question.id, "answer_text": "   "}]),
+        )
+
+
+async def test_submit_response_rejects_answers_above_multiple_choice_limit(
+    db_session: AsyncSession,
+) -> None:
+    survey = await _make_draft_survey(db_session)
+    question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(
+            question_text="最多選兩項",
+            question_type=QuestionType.MULTIPLE,
+            options=["A", "B", "C"],
+            max_value=2,
+        ),
+    )
+    survey.status = SurveyStatus.OPEN
+
+    with pytest.raises(ValueError, match="最多可選 2 個選項"):
+        await survey_svc.submit_response(
+            db_session,
+            survey,
+            respondent_id=await _make_respondent_id(db_session),
+            data=SurveySubmit(
+                answers=[{"question_id": question.id, "answer_options": ["A", "B", "C"]}],
+            ),
+        )
+
+
+# ── 回答副本信件 ──────────────────────────────────────────────────────────────
+
+
+async def test_response_copy_email_includes_questions_options_and_images(
+    db_session: AsyncSession,
+) -> None:
+    survey = await _make_draft_survey(db_session)
+    question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(
+            question_text="最想參加哪一類活動？",
+            question_type=QuestionType.SINGLE,
+            is_required=True,
+            options=["社團博覽會", "校慶晚會"],
+            image_url="/uploads/surveys/question.png",
+            option_image_sets=[
+                ["/uploads/surveys/clubs.png"],
+                ["/uploads/surveys/celebration.png"],
+            ],
+        ),
+    )
+    response = SurveyResponse(
+        survey_id=survey.id,
+        respondent_id=await _make_respondent_id(db_session),
+        submitted_at=datetime.now(UTC),
+    )
+    db_session.add(response)
+    await db_session.flush()
+    answer = SurveyAnswer(
+        response_id=response.id,
+        question_id=question.id,
+        answer_text="社團博覽會",
+    )
+    db_session.add(answer)
+    await db_session.flush()
+
+    subject, context = survey_svc.render_response_copy_email(survey, [question], [answer])
+    body_html = context["body_html"]
+
+    assert subject == f"問卷「{survey.title}」回答副本"
+    assert "最想參加哪一類活動？" in body_html
+    assert "社團博覽會（你的選擇）" in body_html
+    assert "校慶晚會" in body_html
+    assert "question.png" in body_html
+    assert "clubs.png" in body_html
+    assert "celebration.png" in body_html
+    assert body_html.count("<img") == 3
 
 
 # ── 試算表匯出 ────────────────────────────────────────────────────────────────

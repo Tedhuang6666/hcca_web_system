@@ -13,6 +13,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
+from api.email.renderer import absolutize_url, safe_link_url
 from api.models.org import Position, UserPosition
 from api.models.survey import (
     QuestionType,
@@ -393,6 +394,15 @@ async def update_question(
         raise ValueError("已截止或封存的問卷無法修改題目")
     # exclude_unset：只更新呼叫端明確提供的欄位（含明確設為 null 以清除設定）
     fields = data.model_dump(exclude_unset=True)
+    next_question_type = fields.get("question_type", question.question_type)
+    next_options = fields.get("options", _load_str_list(question.options_json))
+    next_max_value = fields.get("max_value", question.max_value)
+    if (
+        next_question_type == QuestionType.MULTIPLE
+        and next_max_value is not None
+        and next_max_value > len(next_options)
+    ):
+        raise ValueError("多選最多項數不可大於選項總數")
     if "options" in fields:
         opts = fields.pop("options")
         question.options_json = json.dumps(opts, ensure_ascii=False) if opts else None
@@ -580,7 +590,9 @@ async def _validate_submission(
             continue
         if not _evaluate_condition(q.condition_json, answers_by_q):
             continue
-        if q.is_required and q.id not in answers_by_q:
+        answer = answers_by_q.get(q.id)
+        has_answer = bool(answer and ((answer.answer_text or "").strip() or answer.answer_options))
+        if q.is_required and not has_answer:
             raise ValueError(f"題目「{q.question_text[:30]}」為必填")
 
     # 驗證文字題型的自訂規則（字數、格式）
@@ -605,6 +617,8 @@ async def _validate_submission(
                 )
             if cfg["other"] and ans.other_text and not any(o in cfg["other"] for o in chosen):
                 ans.other_text = None
+            if q.max_value is not None and len(chosen) > q.max_value:
+                raise ValueError(f"題目「{q.question_text[:30]}」最多可選 {q.max_value} 個選項")
         elif q.question_type == QuestionType.RANKING:
             options_list = _load_str_list(q.options_json)
             chosen = [o for o in (ans.answer_options or []) if o in options_list]
@@ -1001,16 +1015,89 @@ def render_response_copy_email(
     題目/回答以排版區塊呈現，套用平台品牌 email 版型（api.email）。
     """
     answers_by_q = {a.question_id: a for a in answers}
-    blocks: list[str] = ["<p>感謝您的填答，以下是您本次提交的回答副本。</p>"]
+    blocks: list[str] = ["<p>感謝您的填答，以下是您本次提交的完整問卷與回答副本。</p>"]
+    question_number = 0
+
+    def image_markup(url: str | None, alt: str) -> str:
+        src = absolutize_url(url)
+        if not src:
+            return ""
+        return (
+            '<img src="'
+            f'{html.escape(src, quote=True)}" alt="{html.escape(alt, quote=True)}" width="520" '
+            'style="display:block;max-width:100%;height:auto;margin:10px 0;border-radius:10px;" />'
+        )
+
     for q in questions:
-        if q.question_type in DISPLAY_QUESTION_TYPES:
+        if q.question_type == QuestionType.PAGE_BREAK:
+            blocks.append('<hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;" />')
             continue
+        if q.question_type in DISPLAY_QUESTION_TYPES:
+            blocks.append(
+                '<div style="margin:22px 0 8px;">'
+                f'<p style="margin:0;color:#1a1a2e;font-weight:600;">{html.escape(q.question_text)}</p>'
+                f"{image_markup(q.image_url or q.placeholder, q.question_text)}"
+            )
+            if q.question_type == QuestionType.VIDEO:
+                video_url = safe_link_url(q.placeholder)
+                if video_url:
+                    blocks.append(
+                        f'<p style="margin:8px 0 0;"><a href="{html.escape(video_url, quote=True)}">'
+                        "開啟影片</a></p>"
+                    )
+            blocks.append("</div>")
+            continue
+
+        question_number += 1
+        answer = answers_by_q.get(q.id)
         value = _answer_display(answers_by_q.get(q.id)) or "—"
+        options = _load_str_list(q.options_json)
+        try:
+            raw_image_sets = json.loads(q.option_image_sets_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            raw_image_sets = []
+        image_sets = (
+            [
+                [str(image) for image in images if isinstance(image, str)]
+                for images in raw_image_sets
+                if isinstance(images, list)
+            ]
+            if isinstance(raw_image_sets, list)
+            else []
+        )
+        selected_options: set[str] = set()
+        if answer and answer.answer_json:
+            selected_options.update(_load_str_list(answer.answer_json))
+        if answer and answer.answer_text:
+            selected_options.add(answer.answer_text)
+
         blocks.append(
-            '<p style="margin:18px 0 2px;color:#64748b;font-size:13px;">'
-            f"{html.escape(q.question_text)}</p>"
+            '<div style="margin:22px 0 0;padding:16px;border:1px solid #e2e8f0;border-radius:10px;">'
+            '<p style="margin:0 0 4px;color:#64748b;font-size:13px;">'
+            f"第 {question_number} 題{'（必填）' if q.is_required else ''}</p>"
             '<p style="margin:0;color:#1a1a2e;font-weight:600;">'
-            f"{html.escape(value)}</p>"
+            f"{html.escape(q.question_text)}</p>"
+            f"{image_markup(q.image_url, q.question_text)}"
+        )
+        if options:
+            blocks.append(
+                '<div style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e2e8f0;">'
+            )
+            blocks.append('<p style="margin:0 0 6px;color:#64748b;font-size:13px;">選項</p>')
+            for index, option in enumerate(options):
+                selected_label = "（你的選擇）" if option in selected_options else ""
+                blocks.append(
+                    '<div style="margin:8px 0;color:#334155;">'
+                    f"{html.escape(option)}{selected_label}"
+                )
+                for image_url in image_sets[index] if index < len(image_sets) else []:
+                    blocks.append(image_markup(image_url, f"{q.question_text}：{option}"))
+                blocks.append("</div>")
+            blocks.append("</div>")
+        blocks.append(
+            '<p style="margin:14px 0 2px;color:#64748b;font-size:13px;">你的回答</p>'
+            '<p style="margin:0;color:#1a1a2e;font-weight:600;white-space:pre-wrap;">'
+            f"{html.escape(value)}</p></div>"
         )
     context = {
         "heading": f"問卷「{survey.title}」回答副本",

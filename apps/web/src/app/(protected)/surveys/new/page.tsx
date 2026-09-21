@@ -313,6 +313,9 @@ export default function NewSurveyPage() {
     if (needsOptions && optionEntries.length < 2) {
       toast.error("選擇題至少需要 2 個選項"); return;
     }
+    if (qType === "multiple" && (newQ.max_value ?? 0) > optionEntries.length) {
+      toast.error("多選最多項數不可大於選項總數"); return;
+    }
     const isText = qType === "text" || qType === "textarea";
     setQuestions(prev => {
       const draftQuestion: Omit<DraftQuestion, "id" | "order_index"> = {
@@ -322,7 +325,7 @@ export default function NewSurveyPage() {
         options: optionEntries.map(({ option }) => option),
         option_image_sets: optionEntries.map(({ images }) => images),
         min_value: newQ.min_value ?? 1,
-        max_value: newQ.max_value ?? 5,
+        max_value: qType === "multiple" ? (newQ.max_value ?? 0) : (newQ.max_value ?? 5),
         placeholder: newQ.placeholder ?? "",
         image_url: newQ.image_url ?? "",
         min_length: isText ? (newQ.min_length ?? "") : "",
@@ -347,7 +350,7 @@ export default function NewSurveyPage() {
       options: [],
       option_image_sets: [],
       min_value: newQ.min_value ?? 1,
-      max_value: newQ.max_value ?? 5,
+      max_value: qType === "multiple" ? (newQ.max_value ?? 0) : (newQ.max_value ?? 5),
       placeholder: "",
       image_url: "",
       min_length: "",
@@ -433,7 +436,11 @@ export default function NewSurveyPage() {
           options: q.options,
           option_image_sets: q.option_image_sets,
           min_value: q.question_type === "rating" ? q.min_value : undefined,
-          max_value: q.question_type === "rating" ? q.max_value : undefined,
+          max_value: q.question_type === "rating"
+            ? q.max_value
+            : q.question_type === "multiple" && q.max_value > 0
+              ? q.max_value
+              : undefined,
           placeholder: q.placeholder || undefined,
           image_url: q.image_url || undefined,
           min_length: isText && q.min_length ? parseInt(q.min_length) : undefined,
@@ -664,6 +671,8 @@ export default function NewSurveyPage() {
                           {QUESTION_TYPES.find(t => t.value === q.question_type)?.label}
                           {q.is_required && " · 必填"}
                           {q.options.length > 0 && ` · ${q.options.length} 個選項`}
+                          {q.question_type === "multiple" && q.max_value > 0
+                            && ` · 最多選 ${q.max_value} 項`}
                           {q.image_url && " · 含圖片"}
                           {q.rules.length > 0 && ` · ${q.rules.length} 條顯示條件`}
                         </p>
@@ -749,6 +758,7 @@ export default function NewSurveyPage() {
                       is_required: isDisplayType(question_type) ? false : p.is_required,
                       options: [],
                       option_image_sets: [],
+                      max_value: question_type === "multiple" ? 0 : p.max_value,
                     }));
                   }}
                   className="input">
@@ -838,6 +848,29 @@ export default function NewSurveyPage() {
                 onOptionsChange={options => setNewQ(p => ({ ...p, options }))}
                 selectionStyle={newQ.question_type === "multiple" ? "multiple" : "single"}
               />
+            )}
+
+            {newQ.question_type === "multiple" && (
+              <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+                <div>
+                  <Label>最多可選項數（選填）</Label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, (newQ.options ?? []).filter(option => option.trim()).length)}
+                    value={newQ.max_value || ""}
+                    onChange={event => setNewQ(question => ({
+                      ...question,
+                      max_value: parseInt(event.target.value) || 0,
+                    }))}
+                    placeholder="不限制"
+                    className="input"
+                  />
+                </div>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  留空代表不限制；設定後填答者會看到「最多可選 N 項」提示。
+                </p>
+              </div>
             )}
 
             {/* 自訂驗證規則（簡答 / 長答題型） */}
