@@ -472,7 +472,7 @@ export default function NewSurveyPage() {
       });
       clearDraft();
       toast.success(publish ? "問卷已建立並開放填答" : "問卷草稿已建立");
-      router.push(`/surveys/${encodeURIComponent(survey.title)}`);
+      router.push(`/surveys/${encodeURIComponent(survey.id)}`);
     } catch (e) {
       flushDraft();
       toast.error(apiErrorMessage(e, "建立失敗"));

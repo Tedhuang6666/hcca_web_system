@@ -299,10 +299,14 @@ async def list_respondable_surveys(
 
 
 async def open_survey(session: AsyncSession, survey: Survey) -> Survey:
-    if survey.status != SurveyStatus.DRAFT:
-        raise ValueError("只有草稿可以開放填答")
+    if survey.status not in {SurveyStatus.DRAFT, SurveyStatus.CLOSED}:
+        raise ValueError("只有草稿或已截止的問卷可以開放填答")
     if not any(q.question_type not in DISPLAY_QUESTION_TYPES for q in survey.questions):
         raise ValueError("問卷至少需要一個可填答題目才能開放")
+    # 手動關閉後重新開放時，若原截止時間已過，必須移除過期限制，否則
+    # 狀態雖然變成 open，填答仍會被 _check_can_respond 判定為已截止。
+    if survey.closes_at and survey.closes_at <= datetime.now(UTC):
+        survey.closes_at = None
     survey.status = SurveyStatus.OPEN
     await session.flush()
     return survey
@@ -1003,6 +1007,42 @@ async def list_responses(
         .offset(offset)
     )
     return list(result.scalars().all())
+
+
+async def delete_response(session: AsyncSession, survey: Survey, response_id: uuid.UUID) -> bool:
+    """刪除指定問卷的一筆回應；回應不屬於該問卷時回傳 False。"""
+    result = await session.execute(
+        select(SurveyResponse).where(
+            SurveyResponse.id == response_id,
+            SurveyResponse.survey_id == survey.id,
+        )
+    )
+    response = result.scalar_one_or_none()
+    if response is None:
+        return False
+    await session.delete(response)
+    await session.flush()
+    return True
+
+
+async def delete_all_responses(session: AsyncSession, survey: Survey) -> int:
+    """刪除問卷全部回應與答案，回傳刪除的回應數。"""
+    response_ids = list(
+        (
+            await session.scalars(
+                select(SurveyResponse.id).where(SurveyResponse.survey_id == survey.id)
+            )
+        ).all()
+    )
+    if not response_ids:
+        return 0
+
+    await session.execute(delete(SurveyAnswer).where(SurveyAnswer.response_id.in_(response_ids)))
+    result = await session.execute(
+        delete(SurveyResponse).where(SurveyResponse.id.in_(response_ids))
+    )
+    await session.flush()
+    return result.rowcount or 0
 
 
 def render_response_copy_email(

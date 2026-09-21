@@ -161,6 +161,26 @@ async def test_close_survey_requires_open_status(
     assert response.status_code == 409
 
 
+async def test_closed_survey_can_be_reopened(
+    authed_client_factory: Callable[[User], AsyncClient], admin_user: User, db_session: AsyncSession
+) -> None:
+    org = await _make_org(db_session)
+    ac = authed_client_factory(admin_user)
+    create_resp = await ac.post("/surveys", json={"title": "重新開放測試", "org_id": str(org.id)})
+    survey_id = create_resp.json()["id"]
+    await ac.post(
+        f"/surveys/{survey_id}/questions",
+        json={"question_text": "是否同意？", "question_type": "text"},
+    )
+    assert (await ac.post(f"/surveys/{survey_id}/open")).status_code == 200
+    assert (await ac.post(f"/surveys/{survey_id}/close")).status_code == 200
+
+    response = await ac.post(f"/surveys/{survey_id}/open")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "open"
+
+
 # ── 填答 ─────────────────────────────────────────────────────────────────────
 
 
@@ -549,6 +569,43 @@ async def test_get_survey_stats_and_responses(
     responses_resp = await admin_ac.get(f"/surveys/{survey_id}/responses")
     assert responses_resp.status_code == 200
     assert len(responses_resp.json()) == 1
+
+
+async def test_manager_can_delete_one_response_and_clear_all_responses(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    survey_id, question_id = await _make_open_survey_with_question(
+        admin_ac, org.id, allow_multiple=True
+    )
+    member_ac = authed_client_factory(member_user)
+    first = await member_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_text": "第一份"}]},
+    )
+    second = await member_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_text": "第二份"}]},
+    )
+    assert first.status_code == second.status_code == 201
+    first_id = first.json()["id"]
+
+    forbidden = await member_ac.delete(f"/surveys/{survey_id}/responses/{first_id}")
+    assert forbidden.status_code == 403
+
+    deleted = await admin_ac.delete(f"/surveys/{survey_id}/responses/{first_id}")
+    assert deleted.status_code == 204
+    remaining = await admin_ac.get(f"/surveys/{survey_id}/responses")
+    assert [item["id"] for item in remaining.json()] == [second.json()["id"]]
+
+    cleared = await admin_ac.delete(f"/surveys/{survey_id}/responses")
+    assert cleared.status_code == 204
+    assert (await admin_ac.get(f"/surveys/{survey_id}/responses")).json() == []
+    assert (await admin_ac.get(f"/surveys/{survey_id}/stats")).json()["total_responses"] == 0
 
 
 async def test_export_survey_requires_manage(
