@@ -25,7 +25,14 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { surveysApi, ApiError, apiErrorMessage } from "@/lib/api";
-import type { SurveyOut, SurveyQuestionOut, SurveyStats, SurveyResponseAdminItem, ConditionRule } from "@/lib/types";
+import type {
+  ConditionRule,
+  SurveyOut,
+  SurveyQuestionOut,
+  SurveyResponseAdminItem,
+  SurveyResponseOut,
+  SurveyStats,
+} from "@/lib/types";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
@@ -50,6 +57,60 @@ function validationHint(q: SurveyQuestionOut): string {
 
 type AnswerValue = { text: string; options: string[]; other_text?: string };
 type AnswerMap = Record<string, AnswerValue>;
+type AnonymousResponseTokens = Record<string, string>;
+
+function anonymousResponseTokenKey(surveyId: string): string {
+  return `hcca:survey:${surveyId}:anonymous-response-tokens`;
+}
+
+function readAnonymousResponseTokens(surveyId: string): AnonymousResponseTokens {
+  if (typeof window === "undefined") return {};
+  try {
+    const value = JSON.parse(window.localStorage.getItem(anonymousResponseTokenKey(surveyId)) ?? "{}") as unknown;
+    if (!value || typeof value !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function storeAnonymousResponseTokens(surveyId: string, tokens: AnonymousResponseTokens): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(anonymousResponseTokenKey(surveyId), JSON.stringify(tokens));
+}
+
+function emptyAnswers(questions: SurveyQuestionOut[]): AnswerMap {
+  return Object.fromEntries(
+    questions
+      .filter(question => !DISPLAY_TYPES.has(question.question_type))
+      .map(question => [question.id, { text: "", options: [] }]),
+  );
+}
+
+function answersFromResponse(survey: SurveyOut, response: SurveyResponseOut): AnswerMap {
+  const answers = emptyAnswers(survey.questions);
+  const questionsById = new Map(survey.questions.map(question => [question.id, question]));
+  for (const answer of response.answers) {
+    if (!answers[answer.question_id]) continue;
+    const question = questionsById.get(answer.question_id);
+    answers[answer.question_id] = {
+      text: question?.question_type === "single" ? "" : (answer.answer_text ?? ""),
+      options: question?.question_type === "single"
+        ? (answer.answer_text ? [answer.answer_text] : [])
+        : (answer.answer_options ?? []),
+      other_text: answer.other_text ?? undefined,
+    };
+  }
+  return answers;
+}
+
+function responseTimeLabel(response: SurveyResponseOut): string {
+  return new Date(response.submitted_at).toLocaleString("zh-TW", {
+    month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
 
 function hasAnswerContent(answer: AnswerValue | undefined): boolean {
   return Boolean(
@@ -813,8 +874,13 @@ export default function SurveyDetailClient({
   const id = params.id as string;
 
   const [survey, setSurvey] = useState<SurveyOut | null>(initialSurvey ?? null);
-  const [loading, setLoading] = useState(initialSurvey === undefined);
+  const [loading, setLoading] = useState(initialSurvey == null);
   const [answers, setAnswers] = useState<AnswerMap>({});
+  const [myResponses, setMyResponses] = useState<SurveyResponseOut[]>([]);
+  const [editingResponseId, setEditingResponseId] = useState<string | null>(null);
+  const [editingAnonToken, setEditingAnonToken] = useState<string | null>(null);
+  const [anonymousResponseTokens, setAnonymousResponseTokens] = useState<AnonymousResponseTokens>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [viewStats, setViewStats] = useState(false);
@@ -823,6 +889,7 @@ export default function SurveyDetailClient({
   const [shareOpen, setShareOpen] = useState(false);
   const [emailCopy, setEmailCopy] = useState(false);
   const answerDraft = useMemo(() => answers, [answers]);
+  const responseDraftKey = `surveys:${id}:response:${editingResponseId ?? "new"}`;
   const hiddenIds = useMemo(
     () => (survey ? computeHidden(survey.questions, answers) : new Set<string>()),
     [survey, answers],
@@ -844,7 +911,7 @@ export default function SurveyDetailClient({
     toast.info("已復原未送出的問卷填答草稿");
   }, []);
   const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
-    key: `surveys:${id}:response`,
+    key: responseDraftKey,
     value: answerDraft,
     onRestore: restoreAnswerDraft,
     enabled: Boolean(survey && survey.status === "open" && !submitted && !viewStats),
@@ -857,23 +924,69 @@ export default function SurveyDetailClient({
     ), []),
   });
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     // 未登入者改用公開端點（僅開放未登入填答的問卷可取得）
     const loggedIn = typeof window !== "undefined" && Boolean(localStorage.getItem("user_id"));
     const fetcher = loggedIn ? surveysApi.get(id) : surveysApi.getPublic(id);
-    fetcher
-      .then(s => {
-        setSurvey(s);
-        // 初始化答案狀態
-        const init: AnswerMap = {};
-        s.questions.forEach(q => {
-          if (!DISPLAY_TYPES.has(q.question_type)) init[q.id] = { text: "", options: [] };
-        });
-        setAnswers(init);
-      })
-      .catch(() => toast.error("載入問卷失敗"))
-      .finally(() => setLoading(false));
+    try {
+      const loadedSurvey = await fetcher;
+      setSurvey(loadedSurvey);
+      const initialAnswers = emptyAnswers(loadedSurvey.questions);
+
+      if (loadedSurvey.is_anonymous) {
+        const tokens = readAnonymousResponseTokens(id);
+        const responses = (await Promise.all(
+          Object.entries(tokens).map(async ([responseId, token]) => {
+            try {
+              const [response] = await surveysApi.myResponses(id, token);
+              return response?.id === responseId ? response : null;
+            } catch {
+              return null;
+            }
+          }),
+        )).filter((response): response is SurveyResponseOut => response !== null);
+        setAnonymousResponseTokens(tokens);
+        setMyResponses(responses);
+        if (!loadedSurvey.allow_multiple && responses[0]) {
+          setEditingResponseId(responses[0].id);
+          setEditingAnonToken(tokens[responses[0].id] ?? null);
+          setAnswers(answersFromResponse(loadedSurvey, responses[0]));
+        } else {
+          setEditingResponseId(null);
+          setEditingAnonToken(null);
+          setAnswers(initialAnswers);
+        }
+      } else if (loggedIn) {
+        const responses = await surveysApi.myResponses(id);
+        setMyResponses(responses);
+        setAnonymousResponseTokens({});
+        if (!loadedSurvey.allow_multiple && responses[0]) {
+          setEditingResponseId(responses[0].id);
+          setEditingAnonToken(null);
+          setAnswers(answersFromResponse(loadedSurvey, responses[0]));
+        } else {
+          setEditingResponseId(null);
+          setEditingAnonToken(null);
+          setAnswers(initialAnswers);
+        }
+      } else {
+        setMyResponses([]);
+        setEditingResponseId(null);
+        setEditingAnonToken(null);
+        setAnonymousResponseTokens({});
+        setAnswers(initialAnswers);
+      }
+    } catch (error) {
+      setSurvey(null);
+      setMyResponses([]);
+      setEditingAnonToken(null);
+      setAnonymousResponseTokens({});
+      setLoadError(apiErrorMessage(error, "無法載入問卷"));
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -919,8 +1032,8 @@ export default function SurveyDetailClient({
 
     setSubmitting(true);
     try {
-      const anon_token = survey.is_anonymous ? crypto.randomUUID() : undefined;
-      await surveysApi.submit(id, {
+      const anon_token = survey.is_anonymous ? (editingAnonToken ?? crypto.randomUUID()) : undefined;
+      const payload = {
         answers: survey.questions
           .filter(q => !DISPLAY_TYPES.has(q.question_type) && !hiddenIds.has(q.id))
           .map(q => ({
@@ -931,9 +1044,23 @@ export default function SurveyDetailClient({
           })),
         anon_token,
         email_copy: emailCopy,
+      };
+      const response = editingResponseId
+        ? await surveysApi.updateResponse(id, editingResponseId, payload)
+        : await surveysApi.submit(id, payload);
+      setMyResponses(previous => {
+        const withoutUpdated = previous.filter(item => item.id !== response.id);
+        return [response, ...withoutUpdated];
       });
+      if (survey.is_anonymous && anon_token) {
+        setAnonymousResponseTokens(previous => {
+          const next = { ...previous, [response.id]: anon_token };
+          storeAnonymousResponseTokens(id, next);
+          return next;
+        });
+      }
       clearDraft();
-      toast.success("填答成功，感謝您的參與！");
+      toast.success(editingResponseId ? "答案已更新" : "填答成功，感謝您的參與！");
       setSubmitted(true);
     } catch (e) {
       flushDraft();
@@ -943,6 +1070,29 @@ export default function SurveyDetailClient({
         toast.error(apiErrorMessage(e, "提交失敗"));
       }
     } finally { setSubmitting(false); }
+  };
+
+  const editResponse = (response: SurveyResponseOut) => {
+    if (!survey) return;
+    const anonToken = survey.is_anonymous ? anonymousResponseTokens[response.id] : null;
+    if (survey.is_anonymous && !anonToken) {
+      toast.error("找不到這份匿名回答的驗證資料，無法修改。");
+      return;
+    }
+    setEditingResponseId(response.id);
+    setEditingAnonToken(anonToken);
+    setAnswers(answersFromResponse(survey, response));
+    setEmailCopy(false);
+    setSubmitted(false);
+  };
+
+  const addResponse = () => {
+    if (!survey || !survey.allow_multiple) return;
+    setEditingResponseId(null);
+    setEditingAnonToken(null);
+    setAnswers(emptyAnswers(survey.questions));
+    setEmailCopy(false);
+    setSubmitted(false);
   };
 
   const toggleStatus = async () => {
@@ -975,10 +1125,32 @@ export default function SurveyDetailClient({
       </div>
     );
   }
-  if (!survey) return <div className="py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>問卷不存在</div>;
+  if (!survey) {
+    const canSwitchAccount = loadError?.includes("校務帳號") || loadError?.includes("登入");
+    return (
+      <section className="card mx-auto max-w-xl space-y-4 p-7 text-center" role="alert" aria-live="assertive">
+        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>目前無法填寫這份問卷</h1>
+        <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+          {loadError ?? "找不到這份問卷，或你目前沒有填答資格。"}
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          {canSwitchAccount && (
+            <Link
+              href={`/login?next=${encodeURIComponent(`/surveys/${id}`)}`}
+              className="btn btn-primary"
+            >
+              切換帳號
+            </Link>
+          )}
+          <Link href="/surveys" className="btn btn-ghost">返回問卷列表</Link>
+        </div>
+      </section>
+    );
+  }
 
   const isAdmin = can("survey:manage");
   const isOpen = survey.status === "open";
+  const allowedDomains = survey.allowed_domains ?? [];
   const responseQuestions = survey.questions.filter(
     (question) => !DISPLAY_TYPES.has(question.question_type) && !hiddenIds.has(question.id),
   );
@@ -1080,6 +1252,28 @@ export default function SurveyDetailClient({
         )}
       </div>
 
+      {!survey.is_public && allowedDomains.length > 0 && (
+        <aside
+          className="flex flex-col gap-3 rounded-xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: "var(--info-dim)", border: "1px solid rgba(37,99,235,0.24)" }}
+          aria-label="校務帳號填答資格"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>校務帳號限定</p>
+            <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-secondary)" }}>
+              此問卷限使用 {allowedDomains.map(domain => `@${domain.replace(/^@/, "")}`).join("、")}
+              的校務帳號填答；已連結的校務帳號同樣符合資格。若目前帳號不符，請切換帳號後再填寫。
+            </p>
+          </div>
+          <Link
+            href={`/login?next=${encodeURIComponent(`/surveys/${id}`)}`}
+            className="btn btn-ghost shrink-0 self-start text-xs sm:self-auto"
+          >
+            切換帳號
+          </Link>
+        </aside>
+      )}
+
       {/* 統計 / 填答 */}
       {isAdmin && viewStats ? (
         <StatsView surveyId={id} />
@@ -1098,7 +1292,19 @@ export default function SurveyDetailClient({
           {survey.is_anonymous && (
             <p className="survey-response-receipt-note text-xs">此份填答不會與你的身分連結。</p>
           )}
-          <Link href="/surveys" className="btn btn-ghost inline-flex">返回問卷列表</Link>
+          <div className="flex flex-wrap justify-center gap-2 pt-1">
+            {myResponses[0] && (
+              <button type="button" onClick={() => editResponse(myResponses[0])} className="btn btn-ghost">
+                修改這份回答
+              </button>
+            )}
+            {survey.allow_multiple && (
+              <button type="button" onClick={addResponse} className="btn btn-primary">
+                新增一份回答
+              </button>
+            )}
+            <Link href="/surveys" className="btn btn-ghost">返回問卷列表</Link>
+          </div>
         </section>
       ) : !isOpen ? (
         <div className="card p-8 text-center">
@@ -1106,6 +1312,65 @@ export default function SurveyDetailClient({
         </div>
       ) : (
         <form onSubmit={e => { e.preventDefault(); submit(); }} className="survey-response-form space-y-4">
+          {(!survey.is_anonymous || myResponses.length > 0) && (
+            <section
+              className="space-y-3 rounded-xl px-4 py-3"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+              aria-live="polite"
+            >
+              {survey.allow_multiple ? (
+                <>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                        {editingResponseId ? "正在修改既有回答" : "正在填寫新的一份回答"}
+                      </p>
+                      <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                        這份問卷允許多次提交；你可以新增回答，也可以隨時回來修改自己的既有回答。
+                        {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
+                      </p>
+                    </div>
+                    {editingResponseId && (
+                      <button type="button" onClick={addResponse} className="btn btn-ghost shrink-0 text-xs">
+                        新增一份回答
+                      </button>
+                    )}
+                  </div>
+                  {myResponses.length > 0 && (
+                    <div className="flex flex-wrap gap-2" aria-label="既有回答">
+                      {myResponses.map((response, index) => (
+                        <button
+                          key={response.id}
+                          type="button"
+                          onClick={() => editResponse(response)}
+                          className="btn btn-ghost text-xs"
+                          style={editingResponseId === response.id ? {
+                            color: "var(--primary)", borderColor: "var(--primary)",
+                          } : {}}
+                        >
+                          修改第 {myResponses.length - index} 份（{responseTimeLabel(response)}）
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : editingResponseId ? (
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                    你已提交過這份問卷
+                  </p>
+                  <p className="mt-0.5 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
+                    此問卷每人只能提交一次。已載入你原本的回答，修改後請按「儲存變更」。
+                    {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
+                  </p>
+                </div>
+              ) : !survey.is_anonymous ? (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  此問卷每人只能提交一次；提交後仍可回來修改原本的回答。
+                </p>
+              ) : null}
+            </section>
+          )}
           <aside className="survey-response-meter" aria-label="填答進度" aria-live="polite">
             <div className="flex items-center justify-between gap-4">
               <span>填答進度</span>
@@ -1185,7 +1450,7 @@ export default function SurveyDetailClient({
               className="btn flex-1"
               style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
               aria-busy={submitting}>
-              {submitting ? "提交中…" : "提交填答"}
+              {submitting ? (editingResponseId ? "儲存中…" : "提交中…") : (editingResponseId ? "儲存變更" : "提交填答")}
             </button>
           </div>
           {survey.is_anonymous && (
