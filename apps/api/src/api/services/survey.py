@@ -8,6 +8,7 @@ import json
 import re
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -254,7 +255,7 @@ async def sync_announcement(
     announcement.is_published = survey.status in {SurveyStatus.OPEN, SurveyStatus.CLOSED}
     announcement.is_urgent = announcement.is_published and survey.show_announcement_popup
     announcement.urgent_until = survey.closes_at if announcement.is_urgent else None
-    announcement.link_url = f"/surveys/{survey.id}"
+    announcement.link_url = f"/surveys/{quote(survey.title, safe='')}"
     announcement.link_label = "前往填答"
     announcement.show_on_every_visit = announcement.is_urgent
     announcement.org_id = None

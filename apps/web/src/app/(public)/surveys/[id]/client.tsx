@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -619,11 +620,11 @@ function QuestionInput({
 }
 
 /* ── 分享問卷（複製連結 + QR code） ───────────────────────────────────────── */
-function ShareModal({ surveyId, title, onClose }: { surveyId: string; title: string; onClose: () => void }) {
+function ShareModal({ title, onClose }: { title: string; onClose: () => void }) {
   const [qr, setQr] = useState("");
   const shareUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/surveys/${encodeURIComponent(surveyId)}`
+      ? `${window.location.origin}/surveys/${title}`
       : "";
 
   useEffect(() => {
@@ -642,15 +643,19 @@ function ShareModal({ surveyId, title, onClose }: { surveyId: string; title: str
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "var(--bg-overlay)" }}
-      onClick={onClose}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label="分享問卷">
-      <div className="card p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+      <div
+        className="absolute inset-0"
+        style={{ background: "var(--bg-overlay)" }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div className="card relative z-10 w-full max-w-sm space-y-4 p-6">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>分享問卷</h3>
           <button onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
@@ -683,7 +688,8 @@ function ShareModal({ surveyId, title, onClose }: { surveyId: string; title: str
           label="下載 QR code 圖片"
           onError={() => toast.error("QR code 下載失敗")} />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1272,7 +1278,7 @@ export default function SurveyDetailClient({
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${encodeURIComponent(survey.id)}` });
+    if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${encodeURIComponent(survey.title)}` });
   }, [survey]);
 
   const showValidationErrors = (errors: Record<string, string>) => {
@@ -1451,7 +1457,7 @@ export default function SurveyDetailClient({
             entityType="survey"
             entityId={survey.id}
             title={survey.title}
-            href={`/surveys/${survey.id}`}
+            href={`/surveys/${encodeURIComponent(survey.title)}`}
             compact
           />
           <button
@@ -1468,7 +1474,7 @@ export default function SurveyDetailClient({
           </button>
           {isAdmin && (survey.status === "draft" || survey.status === "open") && (
             <Link
-              href={`/surveys/${encodeURIComponent(survey.id)}/edit`}
+              href={`/surveys/${encodeURIComponent(survey.title)}/edit`}
               className="btn btn-ghost text-xs">
               編輯題目
             </Link>
@@ -1784,7 +1790,7 @@ export default function SurveyDetailClient({
       )}
 
       {shareOpen && (
-        <ShareModal surveyId={survey.id} title={survey.title} onClose={() => setShareOpen(false)} />
+        <ShareModal title={survey.title} onClose={() => setShareOpen(false)} />
       )}
     </div>
   );
