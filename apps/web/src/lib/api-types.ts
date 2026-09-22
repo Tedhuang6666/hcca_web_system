@@ -37253,6 +37253,21 @@ export interface components {
             validation_rule?: components["schemas"]["ValidationRule"] | null;
         };
         /**
+         * SurveyRespondentSummary
+         * @description 統計中顯示的非匿名填答者摘要。
+         */
+        SurveyRespondentSummary: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
          * SurveyResponseAdminItem
          * @description 後台檢視用的單筆填答記錄（含填答者姓名、email 與各題答案）。
          */
@@ -37267,26 +37282,17 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Respondent Email */
+            respondent_email?: string | null;
             /** Respondent Id */
             respondent_id?: string | null;
             /** Respondent Name */
             respondent_name?: string | null;
-            /** Respondent Email */
-            respondent_email?: string | null;
             /**
              * Submitted At
              * Format: date-time
              */
             submitted_at: string;
-        };
-        /** SurveyRespondentSummary */
-        SurveyRespondentSummary: {
-            /** Display Name */
-            display_name: string;
-            /** Email */
-            email: string;
-            /** User Id */
-            user_id: string;
         };
         /** SurveyResponseOut */
         SurveyResponseOut: {
