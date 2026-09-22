@@ -36927,11 +36927,6 @@ export interface components {
             announcement?: string | null;
             /** Announcement Title */
             announcement_title?: string | null;
-            /**
-             * Show Announcement Popup
-             * @default false
-             */
-            show_announcement_popup: boolean;
             /** Closes At */
             closes_at?: string | null;
             /** Description */
@@ -36953,6 +36948,11 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+            /**
+             * Show Announcement Popup
+             * @default false
+             */
+            show_announcement_popup: boolean;
             /** Title */
             title: string;
         };
@@ -37023,11 +37023,6 @@ export interface components {
             announcement_id?: string | null;
             /** Announcement Title */
             announcement_title?: string | null;
-            /**
-             * Show Announcement Popup
-             * @default false
-             */
-            show_announcement_popup: boolean;
             /** Closes At */
             closes_at: string | null;
             /**
@@ -37071,6 +37066,11 @@ export interface components {
              * @default 0
              */
             response_count: number;
+            /**
+             * Show Announcement Popup
+             * @default false
+             */
+            show_announcement_popup: boolean;
             status: components["schemas"]["SurveyStatus"];
             /** Title */
             title: string;
@@ -37339,20 +37339,20 @@ export interface components {
             allowed_org_ids?: string[] | null;
             /** Allowed User Ids */
             allowed_user_ids?: string[] | null;
+            /** Announcement */
+            announcement?: string | null;
+            /** Announcement Title */
+            announcement_title?: string | null;
             /** Closes At */
             closes_at?: string | null;
             /** Description */
             description?: string | null;
             /** Is Public */
             is_public?: boolean | null;
-            /** Announcement */
-            announcement?: string | null;
-            /** Announcement Title */
-            announcement_title?: string | null;
-            /** Show Announcement Popup */
-            show_announcement_popup?: boolean | null;
             /** Opens At */
             opens_at?: string | null;
+            /** Show Announcement Popup */
+            show_announcement_popup?: boolean | null;
             /** Title */
             title?: string | null;
         };
