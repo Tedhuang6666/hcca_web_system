@@ -10,6 +10,7 @@ import { uploadUrl } from "@/lib/config";
 type SurveyImageViewerProps = {
   images: string[];
   optionLabel: string;
+  compact?: boolean;
   gallery?: SurveyImageGalleryItem[];
   onSelect?: (optionIndex: number) => void;
   selectedOptionIndexes?: number[];
@@ -25,6 +26,7 @@ export type SurveyImageGalleryItem = {
 export default function SurveyImageViewer({
   images,
   optionLabel,
+  compact = false,
   gallery,
   onSelect,
   selectedOptionIndexes = [],
@@ -75,7 +77,7 @@ export default function SurveyImageViewer({
 
   return (
     <>
-      <div className={images.length === 1 ? "mt-3 max-w-md" : "mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3"}>
+      <div className={compact ? "flex items-center gap-1" : images.length === 1 ? "mt-3 max-w-md" : "mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3"}>
         {images.map((image, index) => (
           <button
             key={image}
@@ -84,7 +86,9 @@ export default function SurveyImageViewer({
               const galleryIndex = allImages.findIndex((item) => item.image === image && item.optionLabel === optionLabel);
               setActiveIndex(galleryIndex >= 0 ? galleryIndex : index);
             }}
-            className="group relative min-h-28 w-full overflow-hidden rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2"
+            className={`group relative overflow-hidden text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 ${
+              compact ? "h-12 w-12 shrink-0 rounded-lg" : "min-h-28 w-full rounded-xl"
+            }`}
             style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
             aria-label={`查看「${optionLabel}」的完整圖片 ${index + 1}`}
           >
@@ -96,7 +100,7 @@ export default function SurveyImageViewer({
               draggable={false}
               onContextMenu={preventImageSave}
               onDragStart={preventImageSave}
-              sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 224px"
+              sizes={compact ? "48px" : "(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 224px"}
               className="select-none object-contain p-1.5"
             />
           </button>

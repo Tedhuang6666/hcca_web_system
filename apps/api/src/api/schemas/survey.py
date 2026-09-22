@@ -453,17 +453,42 @@ class SurveyResponseOut(BaseModel):
 
 
 class SurveyResponseAdminItem(BaseModel):
-    """後台檢視用的單筆填答記錄（含填答者 email 與各題答案）。"""
+    """後台檢視用的單筆填答記錄（含填答者姓名、email 與各題答案）。"""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     submitted_at: datetime
+    respondent_id: uuid.UUID | None = None
+    respondent_name: str | None = None
     respondent_email: str | None = None
     answers: list[SurveyAnswerOut] = []
 
+    @model_validator(mode="before")
+    @classmethod
+    def _from_orm(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return data
+        respondent = getattr(data, "respondent", None)
+        return {
+            "id": getattr(data, "id", None),
+            "submitted_at": getattr(data, "submitted_at", None),
+            "respondent_id": getattr(data, "respondent_id", None),
+            "respondent_name": getattr(respondent, "display_name", None),
+            "respondent_email": getattr(data, "respondent_email", None),
+            "answers": getattr(data, "answers", []),
+        }
+
 
 # ── 統計（管理員用） ──────────────────────────────────────────────────────────
+
+
+class SurveyRespondentSummary(BaseModel):
+    """統計中顯示的非匿名填答者摘要。"""
+
+    user_id: uuid.UUID
+    display_name: str
+    email: str
 
 
 class QuestionStats(BaseModel):
@@ -473,6 +498,8 @@ class QuestionStats(BaseModel):
     total_responses: int
     # SINGLE / MULTIPLE：各選項票數
     option_counts: dict[str, int] = Field(default_factory=dict)
+    # SINGLE / MULTIPLE / RANKING：各選項的非匿名填答者
+    option_respondents: dict[str, list[SurveyRespondentSummary]] = Field(default_factory=dict)
     # TEXT / TEXTAREA：所有文字回答
     text_answers: list[str] = Field(default_factory=list)
     # RATING：平均分

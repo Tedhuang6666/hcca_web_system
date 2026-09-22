@@ -33,6 +33,7 @@ from api.schemas.survey import (
     SurveyCreate,
     SurveyQuestionCreate,
     SurveyQuestionUpdate,
+    SurveyRespondentSummary,
     SurveyStats,
     SurveySubmit,
     SurveyUpdate,
@@ -848,6 +849,7 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
         # 此題所有答案
         a_result = await session.execute(
             select(SurveyAnswer)
+            .options(selectinload(SurveyAnswer.response).selectinload(SurveyResponse.respondent))
             .join(SurveyResponse, SurveyAnswer.response_id == SurveyResponse.id)
             .where(SurveyResponse.survey_id == survey.id)
             .where(SurveyAnswer.question_id == q.id)
@@ -863,17 +865,35 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
 
         if q.question_type in (QuestionType.SINGLE, QuestionType.MULTIPLE):
             counts: dict[str, int] = {}
+            respondents: dict[str, list[SurveyRespondentSummary]] = {}
             for a in answers:
                 if a.answer_json:
                     try:
                         opts = json.loads(a.answer_json)
                         for opt in opts:
                             counts[opt] = counts.get(opt, 0) + 1
+                            if a.response.respondent is not None:
+                                respondents.setdefault(opt, []).append(
+                                    SurveyRespondentSummary(
+                                        user_id=a.response.respondent.id,
+                                        display_name=a.response.respondent.display_name,
+                                        email=a.response.respondent.email,
+                                    )
+                                )
                     except json.JSONDecodeError:
                         pass
                 elif a.answer_text:
                     counts[a.answer_text] = counts.get(a.answer_text, 0) + 1
+                    if a.response.respondent is not None:
+                        respondents.setdefault(a.answer_text, []).append(
+                            SurveyRespondentSummary(
+                                user_id=a.response.respondent.id,
+                                display_name=a.response.respondent.display_name,
+                                email=a.response.respondent.email,
+                            )
+                        )
             qs.option_counts = counts
+            qs.option_respondents = respondents
             qs.suggested_chart = "pie" if len(counts) <= 5 else "bar"
             qs.available_charts = ["bar", "pie"]
             # 多選題若有「其他」自由輸入，彙整為文字回答清單供管理員瀏覽
@@ -885,6 +905,7 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
             # 計算各選項平均排名：第 1 名 = 1 分，越小越優先
             rank_sums: dict[str, float] = {}
             rank_counts: dict[str, int] = {}
+            respondents: dict[str, list[SurveyRespondentSummary]] = {}
             for a in answers:
                 if not a.answer_json:
                     continue
@@ -895,9 +916,18 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
                 for idx, opt in enumerate(ordered):
                     rank_sums[opt] = rank_sums.get(opt, 0.0) + idx + 1
                     rank_counts[opt] = rank_counts.get(opt, 0) + 1
+                    if a.response.respondent is not None:
+                        respondents.setdefault(opt, []).append(
+                            SurveyRespondentSummary(
+                                user_id=a.response.respondent.id,
+                                display_name=a.response.respondent.display_name,
+                                email=a.response.respondent.email,
+                            )
+                        )
             # 以平均排名（越低越好）反向轉成「分數」用於長條圖
             # 沿用 option_counts 結構：值為被選次數，方便管理員看「最常被排入名單」
             qs.option_counts = dict(rank_counts)
+            qs.option_respondents = respondents
             qs.text_answers = [
                 f"{opt}：平均第 {rank_sums[opt] / rank_counts[opt]:.2f} 名（{rank_counts[opt]} 票）"
                 for opt in sorted(rank_sums, key=lambda o: rank_sums[o] / rank_counts[o])
@@ -907,10 +937,19 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
 
         elif q.question_type == QuestionType.RATING:
             values = []
+            respondents: dict[str, list[SurveyRespondentSummary]] = {}
             for a in answers:
                 try:
                     v = float(a.answer_text or "")
                     values.append(v)
+                    if a.response.respondent is not None:
+                        respondents.setdefault(str(int(v)), []).append(
+                            SurveyRespondentSummary(
+                                user_id=a.response.respondent.id,
+                                display_name=a.response.respondent.display_name,
+                                email=a.response.respondent.email,
+                            )
+                        )
                 except (ValueError, TypeError):
                     pass
             qs.average_rating = sum(values) / len(values) if values else None
@@ -918,6 +957,7 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
                 str(n): sum(1 for value in values if int(value) == n)
                 for n in range(q.min_value or 1, (q.max_value or 5) + 1)
             }
+            qs.option_respondents = respondents
             qs.suggested_chart = "bar"
             qs.available_charts = ["bar", "pie"]
 
@@ -1057,7 +1097,10 @@ async def list_responses(
     """後台檢視用：列出問卷所有填答記錄（含答案，依提交時間新到舊）。"""
     result = await session.execute(
         select(SurveyResponse)
-        .options(selectinload(SurveyResponse.answers))
+        .options(
+            selectinload(SurveyResponse.answers),
+            selectinload(SurveyResponse.respondent),
+        )
         .where(SurveyResponse.survey_id == survey.id)
         .order_by(SurveyResponse.submitted_at.desc())
         .limit(limit)
