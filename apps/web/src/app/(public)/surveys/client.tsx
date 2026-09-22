@@ -200,7 +200,7 @@ export default function SurveysClient({
             return (
               <Link
                 key={survey.id}
-                href={`/surveys/${encodeURIComponent(survey.id)}`}
+                href={`/surveys/${encodeURIComponent(survey.title)}`}
                 className="survey-list-card card card-hover flex items-center gap-4 px-5 py-4"
                 style={{
                   textDecoration: "none",

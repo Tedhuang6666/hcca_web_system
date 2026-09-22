@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +98,9 @@ async def test_survey_announcement_links_to_survey_and_publishes_on_open(
     await db_session.refresh(announcement)
     assert announcement.is_published is True
     assert announcement.is_urgent is True
-    assert announcement.link_url == f"/surveys/{survey_id}"
+    assert (
+        announcement.link_url == "/surveys/%E6%A0%A1%E5%9C%92%E6%84%8F%E8%A6%8B%E8%AA%BF%E6%9F%A5"
+    )
     assert announcement.link_label == "前往填答"
 
 
@@ -532,9 +535,19 @@ async def test_get_public_survey_shows_open_public(
 ) -> None:
     org = await _make_org(db_session)
     admin_ac = authed_client_factory(admin_user)
-    survey_id, _ = await _make_open_survey_with_question(admin_ac, org.id, is_public=True)
+    title = "第 42 屆學生自治投票"
+    created = await admin_ac.post(
+        "/surveys", json={"title": title, "org_id": str(org.id), "is_public": True}
+    )
+    survey_id = created.json()["id"]
+    question = await admin_ac.post(
+        f"/surveys/{survey_id}/questions",
+        json={"question_text": "是否同意？", "question_type": "text"},
+    )
+    assert question.status_code == 201
+    assert (await admin_ac.post(f"/surveys/{survey_id}/open")).status_code == 200
 
-    response = await client.get(f"/surveys/public/{survey_id}")
+    response = await client.get(f"/surveys/public/{quote(title, safe='')}")
     assert response.status_code == 200
     assert response.json()["id"] == survey_id
 
