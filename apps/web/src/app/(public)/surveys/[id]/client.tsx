@@ -24,7 +24,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { surveysApi, ApiError, apiErrorMessage, authFetch } from "@/lib/api";
+import { surveysApi, ApiError, apiErrorMessage, authFetch, pathSegment } from "@/lib/api";
 import type {
   ConditionRule,
   SurveyOut,
@@ -75,7 +75,8 @@ function SwitchAccountButton({ surveyId, className }: { surveyId: string; classN
       // 即使 session 已經失效，也必須清掉本機快取，避免登入頁立即導回原帳號。
     }
     clearAuthCache();
-    window.location.replace(`/login?next=${encodeURIComponent(`/surveys/${encodeURIComponent(surveyId)}`)}`);
+    const surveyPath = `/surveys/${pathSegment(surveyId)}`;
+    window.location.replace(`/login?next=${encodeURIComponent(surveyPath)}`);
   };
 
   return (
