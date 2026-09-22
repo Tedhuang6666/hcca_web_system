@@ -644,6 +644,52 @@ async def test_get_survey_stats_and_responses(
     assert len(responses_resp.json()) == 1
 
 
+async def test_survey_stats_and_responses_include_respondent_details(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    created = await admin_ac.post(
+        "/surveys",
+        json={"title": "選項統計問卷", "org_id": str(org.id)},
+    )
+    survey_id = created.json()["id"]
+    question = await admin_ac.post(
+        f"/surveys/{survey_id}/questions",
+        json={
+            "question_text": "偏好？",
+            "question_type": "single",
+            "options": ["A", "B"],
+        },
+    )
+    question_id = question.json()["id"]
+    await admin_ac.post(f"/surveys/{survey_id}/open")
+
+    member_ac = authed_client_factory(member_user)
+    submitted = await member_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_options": ["A"]}]},
+    )
+    assert submitted.status_code == 201
+
+    stats = (await admin_ac.get(f"/surveys/{survey_id}/stats")).json()
+    assert stats["questions"][0]["option_respondents"]["A"] == [
+        {
+            "user_id": str(member_user.id),
+            "display_name": member_user.display_name,
+            "email": member_user.email,
+        }
+    ]
+
+    responses = (await admin_ac.get(f"/surveys/{survey_id}/responses")).json()
+    assert responses[0]["respondent_id"] == str(member_user.id)
+    assert responses[0]["respondent_name"] == member_user.display_name
+    assert responses[0]["respondent_email"] == member_user.email
+
+
 async def test_manager_can_delete_one_response_and_clear_all_responses(
     authed_client_factory: Callable[[User], AsyncClient],
     admin_user: User,

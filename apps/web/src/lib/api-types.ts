@@ -33407,6 +33407,10 @@ export interface components {
             option_counts?: {
                 [key: string]: number;
             };
+            /** Option Respondents */
+            option_respondents?: {
+                [key: string]: components["schemas"]["SurveyRespondentSummary"][];
+            };
             /**
              * Question Id
              * Format: uuid
@@ -37250,7 +37254,7 @@ export interface components {
         };
         /**
          * SurveyResponseAdminItem
-         * @description 後台檢視用的單筆填答記錄（含填答者 email 與各題答案）。
+         * @description 後台檢視用的單筆填答記錄（含填答者姓名、email 與各題答案）。
          */
         SurveyResponseAdminItem: {
             /**
@@ -37263,6 +37267,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Respondent Id */
+            respondent_id?: string | null;
+            /** Respondent Name */
+            respondent_name?: string | null;
             /** Respondent Email */
             respondent_email?: string | null;
             /**
@@ -37270,6 +37278,15 @@ export interface components {
              * Format: date-time
              */
             submitted_at: string;
+        };
+        /** SurveyRespondentSummary */
+        SurveyRespondentSummary: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /** User Id */
+            user_id: string;
         };
         /** SurveyResponseOut */
         SurveyResponseOut: {

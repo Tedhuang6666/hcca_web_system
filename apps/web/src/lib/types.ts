@@ -533,6 +533,7 @@ export type {
   SurveyQuestionOut,
   SurveyResponseAdminItem,
   SurveyResponseOut,
+  SurveyRespondentSummary,
   SurveyStats,
   SurveyStatus,
   TemplateImage,

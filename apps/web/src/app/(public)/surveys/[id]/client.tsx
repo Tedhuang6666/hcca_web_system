@@ -31,6 +31,7 @@ import type {
   SurveyQuestionOut,
   SurveyResponseAdminItem,
   SurveyResponseOut,
+  SurveyRespondentSummary,
   SurveyStats,
 } from "@/lib/types";
 import { apiUrl, uploadUrl } from "@/lib/config";
@@ -40,6 +41,8 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { recordRecent } from "@/lib/recents";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import SurveyImageViewer from "@/components/surveys/SurveyImageViewer";
+import Combobox from "@/components/ui/Combobox";
+import type { ComboboxOption } from "@/components/ui/Combobox";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
 
@@ -695,33 +698,57 @@ function OptionImageStrip({
 }) {
   const validImages = images.filter(Boolean);
   if (validImages.length === 0) return null;
-  const visibleImages = validImages.slice(0, compact ? 1 : 3);
-  const sizeClass = compact ? "h-10 w-10" : "h-16 w-16";
+
+  return <SurveyImageViewer images={validImages} optionLabel={label} compact={compact} />;
+}
+
+function OptionRespondents({
+  respondents,
+}: {
+  respondents: SurveyRespondentSummary[];
+}) {
+  const [open, setOpen] = useState(false);
+  if (!respondents?.length) return null;
 
   return (
-    <div className="flex shrink-0 items-center gap-1" aria-label={`${label}選項圖片`}>
-      {visibleImages.map((image, index) => (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        className="text-xs font-medium transition-colors hover:underline"
+        style={{ color: "var(--primary)" }}
+        aria-expanded={open}
+      >
+        {open ? "收起填答者" : `查看 ${respondents.length} 位填答者`}
+      </button>
+      {open && (
         <div
-          key={`${image}-${index}`}
-          className={`relative ${sizeClass} overflow-hidden rounded-lg`}
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+          className="mt-2 grid gap-1.5 sm:grid-cols-2"
+          aria-label="選項填答者"
         >
-          <Image
-            src={uploadUrl(image)}
-            alt={`「${label}」圖片 ${index + 1}`}
-            fill
-            unoptimized
-            sizes={compact ? "40px" : "64px"}
-            className="object-contain p-1"
-          />
+          {respondents.map(respondent => (
+            <div
+              key={respondent.user_id}
+              className="rounded-lg px-2.5 py-2"
+              style={{ background: "var(--bg-elevated)" }}
+            >
+              <p className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+                {respondent.display_name}
+              </p>
+              <p className="mt-0.5 truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
+                {respondent.email}
+              </p>
+            </div>
+          ))}
         </div>
-      ))}
-      {validImages.length > visibleImages.length && (
-        <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-          +{validImages.length - visibleImages.length}
-        </span>
       )}
     </div>
+  );
+}
+
+function surveyResponseUserKey(response: SurveyResponseAdminItem): string {
+  return response.respondent_id ?? (
+    response.respondent_email ? `email:${response.respondent_email}` : "anonymous"
   );
 }
 
@@ -738,6 +765,7 @@ function StatsView({
   const [loading, setLoading] = useState(true);
   const [chartTypes, setChartTypes] = useState<Record<string, string>>({});
   const [view, setView] = useState<"charts" | "responses">("charts");
+  const [selectedRespondentKey, setSelectedRespondentKey] = useState("");
   const [deletingResponseId, setDeletingResponseId] = useState<string | null>(null);
   const [clearingResponses, setClearingResponses] = useState(false);
 
@@ -758,6 +786,28 @@ function StatsView({
   }, [surveyId]);
 
   useEffect(() => { void loadStats(); }, [loadStats]);
+
+  const respondentOptions = useMemo<ComboboxOption[]>(() => {
+    const options = new Map<string, ComboboxOption>();
+    for (const response of responses) {
+      if (!response.respondent_id && !response.respondent_email) continue;
+      const key = surveyResponseUserKey(response);
+      if (options.has(key)) continue;
+      options.set(key, {
+        value: key,
+        label: response.respondent_name || response.respondent_email || "未辨識使用者",
+        description: response.respondent_email ?? undefined,
+      });
+    }
+    return [...options.values()].sort((a, b) => a.label.localeCompare(b.label, "zh-TW"));
+  }, [responses]);
+
+  const filteredResponses = useMemo(
+    () => selectedRespondentKey
+      ? responses.filter(response => surveyResponseUserKey(response) === selectedRespondentKey)
+      : responses,
+    [responses, selectedRespondentKey],
+  );
 
   const deleteResponse = async (responseId: string) => {
     if (!confirm("確定刪除這筆回應？刪除後無法復原。")) return;
@@ -827,13 +877,16 @@ function StatsView({
         </svg>
         <div className="space-y-1.5">
           {entries.map(([opt, count], index) => (
-            <div key={opt} className="flex items-center gap-2 text-xs">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} />
-              <OptionImageStrip images={optionImagesFor(qs.question_id, opt)} label={opt} compact />
-              <span className="min-w-0" style={{ color: "var(--text-secondary)" }}>{opt}</span>
-              <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
-                {count}（{Math.round((count / total) * 100)}%）
-              </span>
+            <div key={opt}>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} />
+                <OptionImageStrip images={optionImagesFor(qs.question_id, opt)} label={opt} compact />
+                <span className="min-w-0" style={{ color: "var(--text-secondary)" }}>{opt}</span>
+                <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
+                  {count}（{Math.round((count / total) * 100)}%）
+                </span>
+              </div>
+              <OptionRespondents respondents={qs.option_respondents?.[opt] ?? []} />
             </div>
           ))}
         </div>
@@ -845,43 +898,53 @@ function StatsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 px-5 py-3 rounded-xl"
-        style={{ background: "var(--info-dim)", border: "1px solid rgba(37,99,235,0.2)" }}>
-        <p className="text-sm" style={{ color: "var(--info)" }}>
-          共 <strong>{stats.total_responses}</strong> 份回應
-        </p>
-        {stats.total_responses > 0 && (
-          <button
-            type="button"
-            onClick={() => { void clearResponses(); }}
-            disabled={clearingResponses || deletingResponseId !== null}
-            className="btn btn-ghost text-xs"
-            style={{ color: "var(--danger)" }}>
-            {clearingResponses ? "清除中…" : "清除全部回應"}
-          </button>
-        )}
-        <div className="flex gap-1 ml-auto p-1 rounded-lg" style={{ background: "var(--bg-surface)" }}>
+      <section
+        className="rounded-2xl p-4 sm:p-5"
+        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+        aria-label="問卷後台統計工具"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>回應分析</h2>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+              共 <strong style={{ color: "var(--text-primary)" }}>{stats.total_responses}</strong> 份回應，查看分布、填答者與原始答案。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <AnimatedDownloadButton
+              className="btn btn-ghost text-xs"
+              request={() => surveysApi.exportSpreadsheet(surveyId)}
+              filename={`${stats.title ?? "問卷回應"}.xlsx`}
+              label="匯出試算表"
+              onComplete={() => toast.success("試算表已開始下載")}
+              onError={(error) => toast.error(apiErrorMessage(error, "匯出失敗"))} />
+            {stats.total_responses > 0 && (
+              <button
+                type="button"
+                onClick={() => { void clearResponses(); }}
+                disabled={clearingResponses || deletingResponseId !== null}
+                className="btn btn-ghost text-xs"
+                style={{ color: "var(--danger)" }}>
+                {clearingResponses ? "清除中…" : "清除全部回應"}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mt-4 flex gap-1 rounded-xl p-1" style={{ background: "var(--bg-surface)" }}>
           {(["charts", "responses"] as const).map(v => (
             <button
               key={v}
               type="button"
               onClick={() => setView(v)}
-              className="px-2.5 py-1 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+              className="min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
               style={view === v
                 ? { background: "var(--primary)", color: "var(--primary-fg)" }
                 : { color: "var(--text-muted)" }}>
-              {v === "charts" ? "圖表統計" : "個別回應"}
+              {v === "charts" ? "圖表統計" : `個別回應（${responses.length}）`}
             </button>
           ))}
         </div>
-        <AnimatedDownloadButton
-          className="btn btn-ghost text-xs flex-shrink-0"
-          request={() => surveysApi.exportSpreadsheet(surveyId)}
-          filename={`${stats.title ?? "問卷回應"}.xlsx`}
-          label="匯出試算表"
-          onComplete={() => toast.success("試算表已開始下載")}
-          onError={(error) => toast.error(apiErrorMessage(error, "匯出失敗"))} />
-      </div>
+      </section>
 
       {view === "charts" && stats.total_responses === 0 && (
         <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
@@ -938,6 +1001,7 @@ function StatsView({
                             style={{ width: `${pct}%`, background: "var(--primary)" }}
                           />
                         </div>
+                        <OptionRespondents respondents={qs.option_respondents?.[opt] ?? []} />
                       </div>
                     </div>
                   );
@@ -986,49 +1050,91 @@ function StatsView({
             尚無填答回應
           </div>
         ) : (
-          <div className="space-y-3">
-            {responses.map((r, idx) => (
-              <div key={r.id} className="card p-4 space-y-2">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                  <span className="font-semibold" style={{ color: "var(--primary)" }}>
-                    #{responses.length - idx}
-                  </span>
-                  <span style={{ color: "var(--text-secondary)" }}>
-                    {r.respondent_email ?? "匿名填答"}
-                  </span>
-                  <span className="ml-auto" style={{ color: "var(--text-muted)" }}>
-                    {new Date(r.submitted_at).toLocaleString("zh-TW")}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => { void deleteResponse(r.id); }}
-                    disabled={clearingResponses || deletingResponseId !== null}
-                    className="btn btn-ghost px-2 py-1 text-xs"
-                    style={{ color: "var(--danger)" }}>
-                    {deletingResponseId === r.id ? "刪除中…" : "刪除"}
-                  </button>
+          <div className="space-y-4">
+            <section
+              className="rounded-2xl p-4"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+              aria-label="個別回應篩選"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <label className="mb-1.5 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                    依填答者篩選
+                  </label>
+                  <Combobox
+                    value={selectedRespondentKey}
+                    onChange={setSelectedRespondentKey}
+                    options={respondentOptions}
+                    clearable
+                    placeholder="搜尋姓名或電子郵件…"
+                    ariaLabel="選擇特定填答者"
+                  />
                 </div>
-                <div className="space-y-1.5" style={{ borderTop: "1px solid var(--border)" }}>
-                  {r.answers.length === 0 ? (
-                    <p className="text-xs pt-2" style={{ color: "var(--text-muted)" }}>（無作答內容）</p>
-                  ) : (
-                    r.answers.map(a => {
-                      const label = questionLabels.get(a.question_id) ?? "題目";
-                      const val = (a.answer_options ?? []).length
-                        ? (a.answer_options ?? []).join("、")
-                        : (a.answer_text || "—");
-                      return (
-                        <div key={a.id} className="text-xs pt-1.5">
-                          <span style={{ color: "var(--text-muted)" }}>{label}</span>
-                          <p className="mt-0.5 whitespace-pre-wrap break-words"
-                            style={{ color: "var(--text-primary)" }}>{val}</p>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                <p className="shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
+                  顯示 {filteredResponses.length} / {responses.length} 份回應
+                </p>
               </div>
-            ))}
+            </section>
+
+            {filteredResponses.length === 0 ? (
+              <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+                找不到符合的回應，請清除填答者篩選。
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredResponses.map(r => (
+                  <div key={r.id} className="card p-4 space-y-3">
+                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                      <span className="pt-0.5 text-xs font-semibold" style={{ color: "var(--primary)" }}>
+                        #{responses.length - responses.indexOf(r)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                          {r.respondent_name ?? (r.respondent_email ? "未命名使用者" : "匿名填答")}
+                        </p>
+                        {r.respondent_email && (
+                          <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                            {r.respondent_email}
+                          </p>
+                        )}
+                      </div>
+                      <span className="ml-auto text-xs" style={{ color: "var(--text-muted)" }}>
+                        {new Date(r.submitted_at).toLocaleString("zh-TW")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { void deleteResponse(r.id); }}
+                        disabled={clearingResponses || deletingResponseId !== null}
+                        className="btn btn-ghost px-2 py-1 text-xs"
+                        style={{ color: "var(--danger)" }}>
+                        {deletingResponseId === r.id ? "刪除中…" : "刪除"}
+                      </button>
+                    </div>
+                    <div className="space-y-2" style={{ borderTop: "1px solid var(--border)" }}>
+                      {r.answers.length === 0 ? (
+                        <p className="pt-2 text-xs" style={{ color: "var(--text-muted)" }}>（無作答內容）</p>
+                      ) : (
+                        r.answers.map(a => {
+                          const label = questionLabels.get(a.question_id) ?? "題目";
+                          const val = (a.answer_options ?? []).length
+                            ? (a.answer_options ?? []).join("、")
+                            : (a.answer_text || "—");
+                          return (
+                            <div key={a.id} className="pt-2 text-xs">
+                              <span style={{ color: "var(--text-muted)" }}>{label}</span>
+                              <p className="mt-0.5 whitespace-pre-wrap break-words"
+                                style={{ color: "var(--text-primary)" }}>
+                                {val}{a.other_text ? `（其他：${a.other_text}）` : ""}
+                              </p>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )
       )}

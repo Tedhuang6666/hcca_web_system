@@ -981,6 +981,7 @@ export type SurveyParticipationItem = components['schemas']['SurveyParticipation
 export type SurveyQuestionCreate = components['schemas']['SurveyQuestionCreate']
 export type SurveyQuestionOut = components['schemas']['SurveyQuestionOut']
 export type SurveyQuestionUpdate = components['schemas']['SurveyQuestionUpdate']
+export type SurveyRespondentSummary = components['schemas']['SurveyRespondentSummary']
 export type SurveyResponseAdminItem = components['schemas']['SurveyResponseAdminItem']
 export type SurveyResponseOut = components['schemas']['SurveyResponseOut']
 export type SurveyStats = components['schemas']['SurveyStats']
