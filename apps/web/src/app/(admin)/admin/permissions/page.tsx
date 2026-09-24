@@ -9,7 +9,8 @@ import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/Perm
 import { today } from "@/lib/dateUtils";
 import Modal from "@/components/ui/Modal";
 import MobileBackToList from "@/components/ui/MobileBackToList";
-import { adminApi, ApiError, apiErrorMessage, classApi, orgsApi, withFallback } from "@/lib/api";
+import { adminApi, ApiError, apiErrorMessage, authApi, classApi, orgsApi, withFallback } from "@/lib/api";
+import { cacheCurrentUser } from "@/lib/auth-cache";
 import type { OrgRead } from "@/lib/api";
 import type {
   AccountMergeConflict,
@@ -60,6 +61,12 @@ function uniquePositionsById(positions: PositionSummary[]) {
     .sort((a, b) => `${a.category} ${a.org_name} ${a.name}`.localeCompare(`${b.category} ${b.org_name} ${b.name}`, "zh-Hant"));
 }
 
+function samePermissionCodes(left: string[], right: string[]) {
+  if (left.length !== right.length || new Set(left).size !== new Set(right).size) return false;
+  const rightSet = new Set(right);
+  return left.every((code) => rightSet.has(code));
+}
+
 function parseBatchUsers(input: string) {
   return input
     .split(/\r?\n/)
@@ -94,13 +101,14 @@ function Icon({ name }: { name: "org" | "users" | "shield" | "plus" | "search" |
 }
 
 function SmallButton({
-  children, onClick, tone = "neutral", disabled = false, title,
+  children, onClick, tone = "neutral", disabled = false, title, type = "button",
 }: {
   children: React.ReactNode;
   onClick: () => void;
   tone?: "neutral" | "primary" | "danger" | "warning";
   disabled?: boolean;
   title?: string;
+  type?: "button" | "submit";
 }) {
   const styles = {
     neutral: { color: "var(--text-secondary)", border: "1px solid var(--border)" },
@@ -110,10 +118,11 @@ function SmallButton({
   }[tone];
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
+      className="inline-flex min-h-10 items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
       style={styles}
     >
       {children}
@@ -680,6 +689,7 @@ function OrgPanel({
   const [parentId, setParentId] = useState(org.parent_id ?? "");
   const [leaderUserId, setLeaderUserId] = useState(org.leader_user_id ?? "");
   const [defaultCodes, setDefaultCodes] = useState<string[]>(org.default_permission_codes ?? []);
+  const [saving, setSaving] = useState<"details" | "permissions" | null>(null);
   const orgPositions = positions.filter((p) => p.org_id === org.id);
   const orgMembers = users.filter((u) => orgPositions.some((p) => u.positions.some((up) => up.id === p.id)));
   const fallbackLeader = orgMembers
@@ -714,7 +724,8 @@ function OrgPanel({
     setDefaultCodes(org.default_permission_codes ?? []);
   }, [org]);
 
-  const save = async () => {
+  const saveDetails = async () => {
+    setSaving("details");
     try {
       await adminApi.updateOrg(org.id, {
         name: name.trim(),
@@ -723,14 +734,42 @@ function OrgPanel({
         bill_stage: billStage || null,
         parent_id: parentId || null,
         leader_user_id: leaderUserId || null,
-        default_permission_codes: defaultCodes,
       });
       toast.success("組織已更新");
       await onRefresh();
     } catch (e) {
       displayError(e, "更新組織失敗");
+    } finally {
+      setSaving(null);
     }
   };
+  const saveDefaults = async () => {
+    if (samePermissionCodes(defaultCodes, org.default_permission_codes ?? [])) {
+      toast.info("預設權限沒有變更");
+      return;
+    }
+    setSaving("permissions");
+    try {
+      await adminApi.updateOrg(org.id, { default_permission_codes: defaultCodes });
+      try {
+        cacheCurrentUser(await authApi.refresh());
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) throw e;
+        toast.warning("預設權限已儲存，但登入狀態同步稍後再試");
+      }
+      toast.success("組織預設權限已儲存，成員權限會立即重新整理");
+      await onRefresh();
+    } catch (e) {
+      displayError(e, "預設權限儲存失敗，請確認連線後再試");
+    } finally {
+      setSaving(null);
+    }
+  };
+  const defaultPermissionDirty = !samePermissionCodes(defaultCodes, org.default_permission_codes ?? []);
+  const selectedHighRiskCount = defaultCodes.filter(highRisk).length;
+  const selectedGroupCount = new Set(
+    defaultCodes.map((code) => permCodes.find((item) => item.code === code)?.group).filter(Boolean),
+  ).size;
   const confirmDeactivate = () => {
     onConfirm({
       title: "停用組織",
@@ -845,7 +884,9 @@ function OrgPanel({
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織資料</h3>
-          <SmallButton onClick={save} tone="primary"><Icon name="edit" />儲存</SmallButton>
+          <SmallButton onClick={saveDetails} tone="primary" disabled={saving !== null}>
+            <Icon name="edit" />{saving === "details" ? "儲存中…" : "儲存組織資料"}
+          </SmallButton>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
@@ -871,10 +912,26 @@ function OrgPanel({
           <div>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織預設權限</h3>
             <p className="text-xs mt-1 max-w-2xl" style={{ color: "var(--text-muted)" }}>
-              組織成員的有效權限會包含這組預設權限；職位仍可增加個別權限。
+              套用到這個組織所有現任成員；職位仍可在此基礎上增加個別權限。變更只會影響權限，不會中斷你目前的登入。
             </p>
           </div>
-          <SmallButton onClick={save} tone="primary">儲存預設</SmallButton>
+          <SmallButton onClick={saveDefaults} tone="primary" disabled={!defaultPermissionDirty || saving !== null}>
+            {saving === "permissions" ? "儲存中…" : "儲存預設權限"}
+          </SmallButton>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <span>{defaultCodes.length} 項權限</span>
+          <span aria-hidden="true" style={{ color: "var(--text-disabled)" }}>·</span>
+          <span>{selectedGroupCount} 個模組</span>
+          {selectedHighRiskCount > 0 && <span style={{ color: "#f59e0b" }}>{selectedHighRiskCount} 項高風險</span>}
+          <span
+            className="rounded-full px-2 py-0.5"
+            style={defaultPermissionDirty
+              ? { color: "#f59e0b", background: "rgba(245,158,11,0.12)" }
+              : { color: "var(--text-muted)", background: "var(--bg-elevated)" }}
+          >
+            {defaultPermissionDirty ? "有未儲存變更" : "已與目前設定同步"}
+          </span>
         </div>
         <PermCheckboxes selected={defaultCodes} onChange={setDefaultCodes} permCodes={permCodes} />
       </section>

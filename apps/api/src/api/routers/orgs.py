@@ -3,11 +3,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.auth_cookies import access_token_from_cookies
 from api.core.cache import (
     cache_get,
     cache_invalidate,
@@ -16,6 +18,7 @@ from api.core.cache import (
 )
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode, validate_permission_codes
+from api.core.security import decode_token
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.org import Position, UserPosition
@@ -34,6 +37,18 @@ router = APIRouter(prefix="/orgs", tags=["組織架構"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+def _get_org_update_session_id(request: Request) -> uuid.UUID | None:
+    """取得目前瀏覽器工作階段，讓權限更新不會把操作者自己登出。"""
+    token = access_token_from_cookies(request.cookies)
+    if not token:
+        return None
+    try:
+        raw_session_id = decode_token(token).get("sid")
+        return uuid.UUID(str(raw_session_id)) if raw_session_id else None
+    except (ExpiredSignatureError, InvalidTokenError, TypeError, ValueError):
+        return None
 
 
 @router.get("", response_model=list[OrgRead], summary="列出所有組織節點（扁平）")
@@ -207,6 +222,7 @@ async def update_org(
     data: OrgUpdate,
     db: DbDep,
     current_user: CurrentUser,
+    request: Request,
 ) -> object:
     org = await org_svc.get_org(db, org_id)
     if not org:
@@ -260,6 +276,7 @@ async def update_org(
     await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
     if data.default_permission_codes is not None:
+        current_session_id = _get_org_update_session_id(request)
         holder_ids = (
             await db.scalars(
                 select(UserPosition.user_id)
@@ -270,7 +287,7 @@ async def update_org(
         ).all()
         for user_id in holder_ids:
             await cache_invalidate_user_permissions(str(user_id))
-            await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
+            await user_session_svc.revoke_others(db, user_id, current_session_id)
     return org
 
 

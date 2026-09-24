@@ -162,6 +162,34 @@ async def test_list_active_returns_every_unrevoked_session(db_session) -> None:
     assert len(await user_session.list_active(db_session, user.id)) == 51
 
 
+async def test_revoke_others_preserves_current_session(db_session) -> None:
+    user = User(email="keep-session@example.com", display_name="保留目前工作階段", is_verified=True)
+    db_session.add(user)
+    await db_session.flush()
+    current = await user_session.issue_session_tokens(
+        db_session,
+        user_id=user.id,
+        extra_claims=None,
+        user_agent=None,
+        ip_address=None,
+        auth_method="oauth",
+    )
+    other = await user_session.issue_session_tokens(
+        db_session,
+        user_id=user.id,
+        extra_claims=None,
+        user_agent=None,
+        ip_address=None,
+        auth_method="oauth",
+    )
+
+    revoked_count = await user_session.revoke_others(db_session, user.id, current.session.id)
+
+    assert revoked_count == 1
+    assert current.session.revoked_at is None
+    assert other.session.revoked_at is not None
+
+
 async def test_register_active_token_does_not_wait_for_stalled_redis(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
