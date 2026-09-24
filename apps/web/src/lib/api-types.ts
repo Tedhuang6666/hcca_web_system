@@ -30726,6 +30726,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Confidential
+             * @default false
+             */
+            is_confidential: boolean;
             /** Next Action */
             next_action: string;
             /** Share Token */
@@ -30737,11 +30742,6 @@ export interface components {
             status_public_message: string;
             /** Title */
             title: string;
-            /**
-             * Is Confidential
-             * @default false
-             */
-            is_confidential: boolean;
             /** Verification Code */
             verification_code: string;
         };
@@ -30879,6 +30879,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Confidential */
+            is_confidential: boolean;
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
