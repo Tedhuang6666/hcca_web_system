@@ -282,7 +282,6 @@ async def _create_case(
     contact_name: str,
     contact_email: str,
     actor_id: uuid.UUID | None,
-    is_confidential: bool = False,
     created_title: str = "案件已建立",
 ) -> tuple[PetitionCase, str, str]:
     petition_type = await get_type(session, type_id)
@@ -298,7 +297,6 @@ async def _create_case(
         share_token_hash=hash_share_token(share_token),
         type_id=type_id,
         is_named=True,
-        is_confidential=is_confidential,
         submitter_id=submitter_id,
         contact_name=contact_name,
         contact_email=contact_email,
@@ -333,7 +331,6 @@ async def create_case(
         type_id=data.type_id,
         title=data.title,
         content=data.content,
-        is_confidential=data.is_confidential,
         submitter_id=submitter.id,
         contact_name=submitter.display_name,
         contact_email=submitter.email,
@@ -382,6 +379,16 @@ async def update_submitter(
         actor_id=actor_id,
         visibility=PetitionEventVisibility.INTERNAL,
     )
+    return case_obj
+
+
+async def set_confidential(session: AsyncSession, case_obj: PetitionCase) -> PetitionCase:
+    if case_obj.submitter_id is None:
+        raise ValueError("案件尚未綁定平台帳號，無法指定密件擁有者")
+    if case_obj.is_confidential:
+        raise ValueError("此案件已標註為密件")
+    case_obj.is_confidential = True
+    await session.flush()
     return case_obj
 
 

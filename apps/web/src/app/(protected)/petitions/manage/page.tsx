@@ -83,6 +83,7 @@ export default function PetitionManagePage() {
   const [intakeBusy, setIntakeBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingConfidential, setConfirmingConfidential] = useState(false);
   const { can } = usePermissions();
 
   const effectiveStatus = status || queueStatus(queue);
@@ -181,6 +182,7 @@ export default function PetitionManagePage() {
     try {
       const detail = await petitionsApi.get(id);
       setSelected(detail);
+      setConfirmingConfidential(false);
       resetForm();
       setEditingSubmitter(false);
       setSubmitterName(detail.contact_name || detail.submitter?.contact_name || "");
@@ -249,6 +251,22 @@ export default function PetitionManagePage() {
       toast.success("陳情人資料已登記，後續通知會寄到此信箱");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "登記陳情人失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setConfidential = async () => {
+    if (!selected || busy || selected.is_confidential || !selected.submitter_id) return;
+    setBusy(true);
+    try {
+      await petitionsApi.setConfidential(selected.id);
+      setSelected(null);
+      setConfirmingConfidential(false);
+      await load();
+      toast.success("案件已標註為密件，並從管理工作台移除");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "標註密件失敗");
     } finally {
       setBusy(false);
     }
@@ -517,6 +535,25 @@ export default function PetitionManagePage() {
                     errorLabel="重試列印"
                     className="btn btn-ghost"
                   />
+                  {can("petition:admin") && !selected.is_confidential && selected.submitter_id && (
+                    confirmingConfidential ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2" role="group" aria-label="確認標註密件">
+                        <span className="text-xs" style={{ color: "var(--warning)" }}>
+                          設定後僅陳情人本人可查看，且無法再公開。
+                        </span>
+                        <button className="btn btn-primary" disabled={busy} onClick={() => void setConfidential()}>
+                          {busy ? "設定中…" : "確認設為密件"}
+                        </button>
+                        <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmingConfidential(false)}>
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmingConfidential(true)}>
+                        設為密件
+                      </button>
+                    )
+                  )}
                   <PetitionStatusBadge status={selected.status} />
                 </div>
               </div>

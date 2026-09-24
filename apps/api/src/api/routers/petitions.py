@@ -51,6 +51,7 @@ from api.schemas.petition import (
     PetitionAttachmentOut,
     PetitionCaseListItem,
     PetitionCaseOut,
+    PetitionConfidentialityOut,
     PetitionContentUpdate,
     PetitionCreate,
     PetitionCreatedOut,
@@ -567,7 +568,11 @@ async def lookup_case(
             )
 
     case_obj = await petition_svc.get_case_by_number(session, case_number)
-    if case_obj is None or not petition_svc.verify_code(case_obj, verification_code):
+    if (
+        case_obj is None
+        or case_obj.is_confidential
+        or not petition_svc.verify_code(case_obj, verification_code)
+    ):
         await record_failure(ip_key)
         await record_failure(case_key)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
@@ -974,6 +979,36 @@ async def update_case_submitter(
         summary=f"登記陳情人 {case_obj.case_number}",
     )
     return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
+
+
+@router.post(
+    "/{case_id}/confidential",
+    response_model=PetitionConfidentialityOut,
+    summary="將陳情案件標註為密件",
+    dependencies=[Depends(require_any(PermissionCode.PETITION_ADMIN))],
+)
+async def set_case_confidential(
+    case_id: uuid.UUID,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionConfidentialityOut:
+    case_obj = await _case_or_404(session, case_id)
+    await _assert_case_access(session, case_obj, user)
+    try:
+        case_obj = await petition_svc.set_confidential(session, case_obj)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await audit_svc.record(
+        session,
+        entity_type="petition_case",
+        entity_id=str(case_obj.id),
+        action="petition.confidentiality.set",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={"case_number": case_obj.case_number},
+        summary=f"陳情案件 {case_obj.case_number} 標註為密件",
+    )
+    return PetitionConfidentialityOut(id=case_obj.id, is_confidential=True)
 
 
 @router.get("/stats", response_model=PetitionStatsOut, summary="陳情案件統計")
