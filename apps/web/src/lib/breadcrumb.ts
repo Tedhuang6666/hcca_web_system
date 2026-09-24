@@ -18,7 +18,6 @@ const SEGMENT_LABELS: Record<string, string> = {
   regulations: "法規查詢",
   announcements: "校內公告",
   shop: "商品訂購",
-  meal: "學餐訂購",
   "partner-map": "特約地圖",
   surveys: "問卷專區",
   petitions: "陳情中心",
@@ -33,7 +32,6 @@ const SEGMENT_LABELS: Record<string, string> = {
   email: "電子郵件",
   settings: "設定",
   about: "關於本系統",
-  governance: "工作中心",
 };
 
 const PATH_OVERRIDES: Record<string, string> = {
@@ -48,8 +46,6 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/shop/admin":                  "商品後台",
   "/shop/orders":                 "我的訂單",
   "/shop/class-orders":           "班級訂單",
-  "/meal/vendor":                 "商家管理",
-  "/meal/orders":                 "我的餐單",
   "/partner-map/admin":           "特約管理",
   "/surveys/new":                 "新增問卷",
   "/petitions/new":               "我要陳情",

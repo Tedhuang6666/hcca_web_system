@@ -48,10 +48,8 @@ from api.schemas.dashboard import (
     DashboardWidgetItem,
     LayoutHint,
 )
-from api.schemas.governance import MatterListItem
 from api.schemas.task import TaskInboxResponse
 from api.services import announcement as announcement_service
-from api.services import matter as matter_service
 from api.services.permission import get_user_permission_codes
 from api.services.task_inbox import build_task_inbox_cached
 from api.services.task_priority import prioritize_dashboard_widgets
@@ -72,13 +70,12 @@ def _dashboard_composite_cache_key(
     user_id: str,
     *,
     include_tasks: bool,
-    include_matters: bool,
     include_announcements: bool,
     compact_dashboard: bool,
 ) -> str:
     return (
         f"dashboard:composite:{user_id}:"
-        f"{int(include_tasks)}:{int(include_matters)}:{int(include_announcements)}"
+        f"{int(include_tasks)}:{int(include_announcements)}"
         f":{int(compact_dashboard)}"
     )
 
@@ -107,7 +104,6 @@ def _is_officer(perms: frozenset[str]) -> bool:
             "document:create",
             "regulation:create",
             "class:shop_collect",
-            "class:meal_collect",
         )
     ) or any(code.startswith("petition:") for code in perms)
 
@@ -750,7 +746,7 @@ async def _build_dashboard_uncached(
     widgets = [w for w in results if w is not None]
 
     if hint == "student":
-        preferred_keys = ("announcements_recent", "open_surveys", "today_meal")
+        preferred_keys = ("announcements_recent", "open_surveys")
     elif hint == "leader":
         preferred_keys = ("regulation_publish", "doc_pending_my_approval", "regulation_review")
     else:
@@ -808,29 +804,6 @@ async def _with_component_session(
     return await builder(db)
 
 
-async def _dashboard_matters(db: AsyncSession, user: User) -> list[MatterListItem]:
-    cache_key = f"dashboard:matters:{user.id}"
-    cached = await cache_get(cache_key)
-    if isinstance(cached, list):
-        try:
-            return [MatterListItem.model_validate(item) for item in cached]
-        except Exception:
-            logger.debug("dashboard matters cache payload invalid user=%s", user.id, exc_info=True)
-
-    items = await matter_service.list_matters(
-        db,
-        user=user,
-        status="active",
-        limit=6,
-    )
-    await cache_set(
-        cache_key,
-        [item.model_dump(mode="json") for item in items],
-        ttl=30,
-    )
-    return items
-
-
 async def _dashboard_announcements(db: AsyncSession, user: User) -> list[AnnouncementListItem]:
     cache_key = f"dashboard:announcements:{user.id}"
     cached = await cache_get(cache_key)
@@ -871,7 +844,6 @@ async def build_dashboard_composite(
     user: User,
     *,
     include_tasks: bool = True,
-    include_matters: bool = True,
     include_announcements: bool = True,
     compact_dashboard: bool = False,
 ) -> DashboardCompositeResponse:
@@ -879,7 +851,6 @@ async def build_dashboard_composite(
     cache_key = _dashboard_composite_cache_key(
         str(user.id),
         include_tasks=include_tasks,
-        include_matters=include_matters,
         include_announcements=include_announcements,
         compact_dashboard=compact_dashboard,
     )
@@ -909,12 +880,6 @@ async def build_dashboard_composite(
         )
         return result  # type: ignore[return-value]
 
-    async def matters_component() -> list[MatterListItem]:
-        result = await _with_component_session(
-            db, lambda source_db: _dashboard_matters(source_db, user)
-        )
-        return result  # type: ignore[return-value]
-
     async def announcements_component() -> list[AnnouncementListItem]:
         result = await _with_component_session(
             db, lambda source_db: _dashboard_announcements(source_db, user)
@@ -924,8 +889,6 @@ async def build_dashboard_composite(
     components: list[Awaitable[object]] = [dashboard_component()]
     if include_tasks:
         components.append(tasks_component())
-    if include_matters:
-        components.append(matters_component())
     if include_announcements:
         components.append(announcements_component())
 
@@ -939,14 +902,11 @@ async def build_dashboard_composite(
     index += 1
     tasks = values[index] if include_tasks else None
     index += int(include_tasks)
-    matters = values[index] if include_matters else None
-    index += int(include_matters)
     announcements = values[index] if include_announcements else None
 
     response = DashboardCompositeResponse(
         dashboard=dashboard,  # type: ignore[arg-type]
         tasks=tasks,  # type: ignore[arg-type]
-        matters=matters,  # type: ignore[arg-type]
         announcements=announcements,  # type: ignore[arg-type]
     )
     await cache_set(cache_key, response.model_dump(mode="json"), ttl=20)

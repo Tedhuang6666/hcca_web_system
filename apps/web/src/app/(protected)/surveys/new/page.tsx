@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
@@ -9,15 +9,9 @@ import type { OrgRead } from "@/lib/api";
 import type { QuestionType, ValidationRule, UserSummary } from "@/lib/types";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import UserPicker from "@/components/surveys/UserPicker";
-import ActivitySelect from "@/components/activities/ActivitySelect";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
-import {
-  GovernanceLinkNotice,
-  createGovernanceBacklink,
-  governanceContextFromParams,
-} from "@/lib/governanceLinking";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "section_text", label: "文字描述區塊" },
@@ -83,7 +77,6 @@ type SurveyDraft = {
   allowMultiple: boolean;
   closesAt: string;
   orgId: string;
-  activityId: string;
   questions: DraftQuestion[];
   newQ: Partial<DraftQuestion>;
 };
@@ -187,16 +180,11 @@ function ConditionEditor({
 
 export default function NewSurveyPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const governanceContext = useMemo(
-    () => governanceContextFromParams(searchParams),
-    [searchParams],
-  );
   const [saving, setSaving] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
 
   // 問卷基本資料
-  const [title, setTitle] = useState(governanceContext?.matterTitle ?? "");
+  const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [announcementTitle, setAnnouncementTitle] = useState("");
@@ -204,8 +192,7 @@ export default function NewSurveyPage() {
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [closesAt, setClosesAt] = useState("");
-  const [orgId, setOrgId] = useState(governanceContext?.orgId ?? "");
-  const [activityId, setActivityId] = useState("");
+  const [orgId, setOrgId] = useState("");
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
 
   // 填答對象
@@ -249,11 +236,9 @@ export default function NewSurveyPage() {
     allowMultiple,
     closesAt,
     orgId,
-    activityId,
     questions,
     newQ,
   }), [
-    activityId,
     announcement,
     announcementTitle,
     allowMultiple,
@@ -276,7 +261,6 @@ export default function NewSurveyPage() {
     setAllowMultiple(Boolean(draft.allowMultiple));
     setClosesAt(draft.closesAt ?? "");
     setOrgId(draft.orgId ?? localStorage.getItem("org_id") ?? "");
-    setActivityId(draft.activityId ?? "");
     setQuestions((draft.questions ?? []).map(q => ({
       ...q,
       option_image_sets: q.option_image_sets ?? [],
@@ -440,7 +424,6 @@ export default function NewSurveyPage() {
         allow_multiple: allowMultiple,
         closes_at: closesAt || undefined,
         org_id: orgId,
-        activity_id: activityId || null,
         is_public: isPublic,
         allowed_org_ids: isPublic ? [] : allowedOrgIds,
         allowed_user_ids: isPublic ? [] : allowedUsers.map(u => u.id),
@@ -484,13 +467,6 @@ export default function NewSurveyPage() {
         }
       }
       if (publish) await surveysApi.open(survey.id);
-      await createGovernanceBacklink({
-        context: governanceContext,
-        targetType: "survey",
-        targetId: survey.id,
-        title: survey.title,
-        href: `/surveys/${survey.id}`,
-      });
       clearDraft();
       toast.success(publish ? "問卷已建立並開放填答" : "問卷草稿已建立");
       router.push(`/surveys/${encodeURIComponent(survey.id)}`);
@@ -535,8 +511,6 @@ export default function NewSurveyPage() {
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>建立草稿後可開放填答</p>
         </div>
       </div>
-
-      <GovernanceLinkNotice context={governanceContext} />
 
       <GuidedForm
         steps={SURVEY_STEPS}
@@ -595,7 +569,6 @@ export default function NewSurveyPage() {
                 {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </div>
-            <ActivitySelect value={activityId} onChange={setActivityId} />
             <div className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
               <div>
                 <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>

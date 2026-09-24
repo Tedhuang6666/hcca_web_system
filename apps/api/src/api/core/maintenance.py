@@ -31,7 +31,6 @@ FEATURE_FLAGS_DEFAULT: dict[str, str] = {
     "feature:file_upload": "檔案上傳",
     "feature:document_export_pdf": "公文 PDF 匯出",
     "feature:document_export_excel": "公文 Excel 匯出",
-    "feature:meal_order_create": "建立學餐訂單",
     "feature:survey_submit": "送出問卷答覆",
     "feature:meeting_vote": "議事投票",
 }

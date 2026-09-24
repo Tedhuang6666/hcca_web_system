@@ -30,7 +30,6 @@ const WIDGET_ICONS: Record<string, React.ComponentType<IconProps>> = {
   announcements_recent: (p) => <Megaphone {...p} />,
   petition_assigned: (p) => <MessageSquare {...p} />,
   open_surveys: (p) => <CheckSquare {...p} />,
-  today_meal: (p) => <FileText {...p} />,
   class_order_collecting: (p) => <ListChecks {...p} />,
 };
 

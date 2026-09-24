@@ -5,12 +5,6 @@
 # 公告系統
 # 稽核日誌（不可變）
 from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
-from api.models.activity_discord import (  # noqa: F401
-    ActivityMember,
-    ActivityRole,
-    DiscordActivitySyncStatus,
-    DiscordActivityWorkspace,
-)
 from api.models.activity_link import ActivityLink, ActivityLinkKind  # noqa: F401
 from api.models.analytics_page_view import AnalyticsPageView  # noqa: F401
 from api.models.announcement import (  # noqa: F401
@@ -159,16 +153,6 @@ from api.models.governance import (  # noqa: F401
     PlanningDocumentStatus,
     Program,
     TimelineEvent,
-)
-from api.models.inventory import (  # noqa: F401
-    InventoryCategory,
-    InventoryItem,
-    InventoryItemType,
-    InventoryProcurement,
-    InventoryProcurementItem,
-    InventoryProcurementStatus,
-    InventoryTransaction,
-    InventoryTxnType,
 )
 from api.models.judicial_petition import (  # noqa: F401
     JudicialPetition,
@@ -391,20 +375,6 @@ from api.models.site import (  # noqa: F401
     PublicOfficerProfile,
     PublicSitePage,
     PublicSiteSettings,
-)
-from api.models.support import (  # noqa: F401
-    SupportApproval,
-    SupportApprovalStatus,
-    SupportAssistanceSession,
-    SupportAssistanceStatus,
-    SupportAuditLog,
-    SupportGuideEntry,
-    SupportImpersonationMode,
-    SupportImpersonationSession,
-    SupportTicket,
-    SupportTicketEvent,
-    SupportTicketPriority,
-    SupportTicketStatus,
 )
 from api.models.survey import (  # noqa: F401
     QuestionType,

@@ -9,7 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core import maintenance as maint
-from api.core import module_health, module_recovery
+from api.core import module_health
 from api.core.config import settings
 from api.core.load_shed import _can_bypass_protection, _is_path_exempt
 from api.core.modules import MODULE_IDS, match_module
@@ -75,12 +75,10 @@ def test_match_module_respects_segment_boundary() -> None:
     assert match_module("/shop") == "shop"
     assert match_module("/shop/cart") == "shop"
     assert match_module("/merchandise-submissions/admin") == "merchandiseSubmissions"
-    assert match_module("/matters") == "matters"
     assert match_module("/finance/receivables") == "finance"
     assert match_module("/receivables") == "finance"
     assert match_module("/publications") == "publications"
     assert match_module("/email") == "email"
-    assert match_module("/inventory/items") == "operations"
     assert "elections" in MODULE_IDS
     assert match_module("/elections/public") == "elections"
     # 邊界：非 segment 邊界不命中
@@ -203,17 +201,6 @@ async def test_closed_module_browser_navigation_redirects_to_status_page(
     assert resp.headers["location"].endswith("/module-status?module=shop")
 
 
-async def test_closed_module_is_not_cleared_by_forced_recovery() -> None:
-    await maint.set_module_maintenance("meal", on=True, mode="closed", source="manual")
-
-    recovered = await module_recovery.attempt_recovery("meal", force=True)
-
-    assert recovered is False
-    state = await maint.get_module_maintenance("meal")
-    assert state is not None
-    assert state["mode"] == "closed"
-
-
 async def test_closed_module_is_not_overwritten_by_auto_maintenance() -> None:
     await maint.set_module_maintenance("surveys", on=True, mode="closed", source="manual")
 
@@ -281,13 +268,13 @@ async def test_restart_module_clears_maintenance_and_resets_window(
     admin, _ = await _seed_users(db_session)
     _override_user(admin)
 
-    await maint.set_module_maintenance("meal", on=True, source="manual", reason="x")
+    await maint.set_module_maintenance("shop", on=True, source="manual", reason="x")
     maint.clear_cache()
 
-    resp = await client.post("/admin/system/modules/meal/restart")
+    resp = await client.post("/admin/system/modules/shop/restart")
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
 
     maint.clear_cache()
-    assert await maint.get_module_maintenance("meal") is None
-    assert await maint.get_module_reset("meal") > 0
+    assert await maint.get_module_maintenance("shop") is None
+    assert await maint.get_module_reset("shop") > 0

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileText, Landmark, Scale, MessageSquare, CheckSquare, ShoppingCart,
-  Utensils, Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
+  Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
   CalendarDays, Gauge,
 } from "lucide-react";
 import {
@@ -33,7 +33,6 @@ const MODULE_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
   petition: (p) => <MessageSquare {...p} />,
   survey: (p) => <CheckSquare {...p} />,
   shop: (p) => <ShoppingCart {...p} />,
-  meal: (p) => <Utensils {...p} />,
   announcement: (p) => <Megaphone {...p} />,
   calendar: (p) => <CalendarDays {...p} />,
   work_item: (p) => <CheckSquare {...p} />,
@@ -46,7 +45,6 @@ const MODULE_LABEL: Record<TaskModule, string> = {
   petition: "陳情",
   survey: "問卷",
   shop: "商品",
-  meal: "學餐",
   announcement: "公告",
   calendar: "行事曆",
   work_item: "工作",

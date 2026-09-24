@@ -4,13 +4,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { GripVertical, Loader2 } from "lucide-react";
-import { activitiesApi, surveysApi, orgsApi, usersApi, apiErrorMessage } from "@/lib/api";
+import { surveysApi, orgsApi, usersApi, apiErrorMessage } from "@/lib/api";
 import type { SurveyQuestionBody, OrgRead } from "@/lib/api";
-import type { Activity, SurveyOut, SurveyQuestionOut, QuestionType, UserSummary } from "@/lib/types";
+import type { SurveyOut, SurveyQuestionOut, QuestionType, UserSummary } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import UserPicker from "@/components/surveys/UserPicker";
-import ActivitySelect from "@/components/activities/ActivitySelect";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
 
@@ -598,8 +596,6 @@ export default function EditSurveyPage() {
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [showAnnouncementPopup, setShowAnnouncementPopup] = useState(false);
   const [closesAt, setClosesAt] = useState("");
-  const [activityId, setActivityId] = useState("");
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [newType, setNewType] = useState<QuestionType>("text");
   const [newText, setNewText] = useState("");
   const [newRequired, setNewRequired] = useState(true);
@@ -615,7 +611,6 @@ export default function EditSurveyPage() {
 
   useEffect(() => {
     orgsApi.list({ active_only: true }).then(setOrgs).catch(() => setOrgs([]));
-    activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
   }, []);
 
   const load = useCallback(() => {
@@ -628,7 +623,6 @@ export default function EditSurveyPage() {
         setAnnouncementTitle(s.announcement_title ?? "");
         setShowAnnouncementPopup(Boolean(s.show_announcement_popup));
         setClosesAt(s.closes_at ? s.closes_at.slice(0, 16) : "");
-        setActivityId(s.activity_id ?? "");
         setIsPublic(s.is_public);
         setAllowedDomains((s.allowed_domains ?? []).join("\n"));
         setAllowedOrgIds(s.allowed_org_ids ?? []);
@@ -658,7 +652,6 @@ export default function EditSurveyPage() {
         announcement_title: announcementTitle.trim() || null,
         show_announcement_popup: showAnnouncementPopup,
         closes_at: closesAt || undefined,
-        activity_id: activityId || null,
         is_public: isPublic,
         allowed_org_ids: isPublic ? [] : allowedOrgIds,
         allowed_user_ids: isPublic ? [] : allowedUsers.map(u => u.id),
@@ -772,10 +765,7 @@ export default function EditSurveyPage() {
   if (!survey) {
     return <div className="py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>問卷不存在</div>;
   }
-  const managesActivity = Boolean(
-    survey.activity_id && activities.some((activity) => activity.id === survey.activity_id),
-  );
-  if (!can("survey:manage") && !managesActivity) {
+  if (!can("survey:manage")) {
     return <div className="py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>您沒有編輯問卷的權限</div>;
   }
   if (survey.status === "closed" || survey.status === "archived") {
@@ -809,13 +799,6 @@ export default function EditSurveyPage() {
         </div>
       </div>
 
-      <GovernanceLinkPanel
-        entityType="survey"
-        entityId={survey.id}
-        title={survey.title}
-        href={`/surveys/${encodeURIComponent(survey.id)}`}
-      />
-
       {/* 基本資料 */}
       <div className="card p-5 space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>基本資料</h3>
@@ -833,7 +816,6 @@ export default function EditSurveyPage() {
           <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
             className="input" style={{ colorScheme: "dark" }} />
         </div>
-        <ActivitySelect value={activityId} onChange={setActivityId} onActivitiesLoaded={setActivities} />
         <div className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
           <div>
             <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>

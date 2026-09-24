@@ -39,9 +39,10 @@ GENERATED_HEADER_RE = re.compile(
     re.MULTILINE,
 )
 
-existing_bridge_reexports: set[str] = set()
-for reexport in BRIDGE_REEXPORT_RE.finditer(source):
-    existing_bridge_reexports.update(BRIDGE_NAME_RE.findall(reexport.group("names")))
+bridge_source = (TYPES_TS.parent / "api-bridge.ts").read_text(encoding="utf-8")
+existing_bridge_reexports = set(
+    re.findall(r"^export type ([A-Za-z][A-Za-z0-9_]*)", bridge_source, re.MULTILINE)
+)
 
 EXPORT_START_RE = re.compile(
     r"^export\s+(?:(?:default|declare)\s+)?(?:type|interface|enum|const|abstract class|class)\s+([A-Za-z][A-Za-z0-9_]*)"
@@ -57,6 +58,11 @@ def find_definition_end(lines: list[str], start: int) -> int:
 
     while i < len(lines):
         line = lines[i]
+
+        # Type aliases without a trailing semicolon are common in this file.
+        # Treat the next top-level export as the end of the current alias.
+        if i > start and brace_depth == 0 and EXPORT_START_RE.match(line):
+            return i
 
         j = 0
         while j < len(line):
@@ -117,6 +123,10 @@ while i < n:
         i += 1
 
 print(f"解析到 {len(exports)} 個頂層匯出定義", file=sys.stderr)
+
+# Keep handwritten definitions authoritative when the bridge generator now
+# covers a name that was previously maintained in this compatibility layer.
+existing_bridge_reexports.difference_update(e["name"] for e in exports)
 
 covered_exports = [e for e in exports if e["name"] in COVERED]
 missing_exports = [e for e in exports if e["name"] in MISSING]

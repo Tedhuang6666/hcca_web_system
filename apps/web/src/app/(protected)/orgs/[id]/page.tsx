@@ -8,7 +8,6 @@ import { authFetch, orgsApi, adminApi, withFallback, apiErrorMessage } from "@/l
 import { apiUrl } from "@/lib/config";
 import type { OrgRead } from "@/lib/api";
 import type { OrgWithPositions, AdminUserDetail } from "@/lib/types";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 interface PositionBasic {
   id: string;
@@ -128,13 +127,6 @@ export default function OrgDetailPage() {
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          <GovernanceLinkPanel
-            entityType="org"
-            entityId={org.id}
-            title={org.name}
-            href={`/orgs/${org.id}`}
-            compact
-          />
           {isAdmin && (
             <Link href="/admin/permissions"
               className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0 transition-colors"

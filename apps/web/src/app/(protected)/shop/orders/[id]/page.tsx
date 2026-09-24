@@ -6,7 +6,6 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import { seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import type { SeatBookingOut, OrderOut, ProductOut, ZoneListItem } from "@/lib/types";
 import { useWS } from "@/hooks/useWS";
 
@@ -87,13 +86,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
         <div className="ml-auto">
-          <GovernanceLinkPanel
-            entityType="order"
-            entityId={order.id}
-            title={`訂單 ${order.serial_number}`}
-            href={`/shop/orders/${order.id}`}
-            compact
-          />
         </div>
       </div>
 

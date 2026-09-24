@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -335,8 +334,7 @@ function ProductCard({
 // ── 購買頁 ────────────────────────────────────────────────────────────────────
 
 export default function ShopPage() {
-  const activityId = useSearchParams().get("activity_id") || undefined;
-  const catalogCacheKey = `shop/catalog/${activityId ?? "all"}`;
+  const catalogCacheKey = "shop/catalog/all";
 
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
@@ -350,7 +348,7 @@ export default function ShopPage() {
   const loadCatalog = useCallback(() => {
     if (!cacheHas(catalogCacheKey)) setLoading(true);
     shopApi
-      .catalog(activityId)
+      .catalog()
       .then(async (data) => {
         setCatalog(data);
         cacheSet(catalogCacheKey, data);
@@ -371,7 +369,7 @@ export default function ShopPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
-  }, [setSelectedCategoryId, activityId, catalogCacheKey]);
+  }, [setSelectedCategoryId, catalogCacheKey]);
 
   const loadCart = useCallback(() => {
     shopApi

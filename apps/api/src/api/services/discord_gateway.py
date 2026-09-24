@@ -164,16 +164,6 @@ async def acknowledge_event(
         record_outbox_delivery(event.event_type, "processed")
         if event.event_type == "discord.petition_channel_create":
             await _save_petition_channel(db, event.payload, result)
-        elif event.event_type == "discord.activity_workspace_sync":
-            from api.services.activity_discord import apply_workspace_result
-
-            await apply_workspace_result(
-                db,
-                str(event.payload.get("workspace_id") or ""),
-                success=True,
-                error=None,
-                result=result,
-            )
         elif event.event_type == "discord.governance_workspace_sync":
             from api.services.governance_discord import apply_workspace_result
 
@@ -194,17 +184,7 @@ async def acknowledge_event(
             record_outbox_delivery(event.event_type, "dead")
         else:
             record_outbox_delivery(event.event_type, "retry")
-        if event.event_type == "discord.activity_workspace_sync":
-            from api.services.activity_discord import apply_workspace_result
-
-            await apply_workspace_result(
-                db,
-                str(event.payload.get("workspace_id") or ""),
-                success=False,
-                error=error,
-                result=result,
-            )
-        elif event.event_type == "discord.governance_workspace_sync":
+        if event.event_type == "discord.governance_workspace_sync":
             from api.services.governance_discord import apply_workspace_result
 
             await apply_workspace_result(

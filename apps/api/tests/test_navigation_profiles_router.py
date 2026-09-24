@@ -2,8 +2,8 @@
 
 測試資料庫是用 Base.metadata.create_all 直接建 schema（見 conftest.py
 _build_schema_once），不會跑 alembic migration，所以 migration
-20260701090000_add_navigation_profiles.py 灌的三個系統預設視角
-（mealVendor / teacher / default）在測試裡並不存在，各測試需自行造資料。
+20260701090000_add_navigation_profiles.py 灌的系統預設視角在測試裡並不存在，
+各測試需自行造資料。
 """
 
 from __future__ import annotations

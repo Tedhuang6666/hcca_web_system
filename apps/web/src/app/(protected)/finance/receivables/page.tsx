@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -30,8 +29,6 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
 
 const SOURCE_LABEL: Record<string, string> = {
   shop_order: "校商訂單",
-  meal_order: "學餐訂單",
-  activity_fee: "活動費用",
   class_fee: "班級費用",
   manual: "手動建立",
 };
@@ -42,10 +39,8 @@ function formatDate(value?: string | null): string {
 }
 
 export default function ReceivablesPage() {
-  const search = useSearchParams();
-  const activityId = search.get("activity_id") || undefined;
-  const cacheKey = `finance/receivables/${activityId ?? "all"}`;
-  const summaryKey = `finance/receivables-summary/${activityId ?? "all"}`;
+  const cacheKey = "finance/receivables/all";
+  const summaryKey = "finance/receivables-summary/all";
   const [rows, setRows] = useState<ReceivableOut[]>(() => cacheGet<ReceivableOut[]>(cacheKey) ?? []);
   const [summary, setSummary] = useState<ReceivableSummaryOut | null>(
     () => cacheGet<ReceivableSummaryOut>(summaryKey) ?? null,
@@ -59,8 +54,8 @@ export default function ReceivablesPage() {
     try {
       setIsLoading(true);
       const [items, sum] = await Promise.all([
-        receivablesApi.list({ activity_id: activityId, status: status || undefined, limit: 300 }),
-        receivablesApi.summary({ activity_id: activityId }),
+        receivablesApi.list({ status: status || undefined, limit: 300 }),
+        receivablesApi.summary(),
       ]);
       setRows(items);
       setSummary(sum);
@@ -73,7 +68,7 @@ export default function ReceivablesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activityId, status, cacheKey, summaryKey]);
+  }, [status, cacheKey, summaryKey]);
 
   useEffect(() => {
     if (!cacheHas(cacheKey) || status) void reload();
@@ -121,7 +116,7 @@ export default function ReceivablesPage() {
         </div>
         <AnimatedDownloadButton
           className="btn btn-secondary"
-          href={receivablesApi.exportUrl({ activity_id: activityId })}
+          href={receivablesApi.exportUrl()}
           filename="receivables.csv"
           label="匯出收款明細"
         />

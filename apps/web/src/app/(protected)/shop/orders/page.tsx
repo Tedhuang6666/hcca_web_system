@@ -2,13 +2,12 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, shopApi, apiErrorMessage } from "@/lib/api";
-import type { Activity, OrderListItem, OrderSummaryOut } from "@/lib/types";
+import { shopApi, apiErrorMessage } from "@/lib/api";
+import type { OrderListItem, OrderSummaryOut } from "@/lib/types";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
-import ActivitySelect from "@/components/activities/ActivitySelect";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { useWS } from "@/hooks/useWS";
 
@@ -18,11 +17,9 @@ export default function OrdersPage() {
 
   const [tab, setTab] = useState<"mine" | "all">("mine");
   const [orders, setOrders] = useState<OrderListItem[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [activityId, setActivityId] = useState("");
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
-  const canManageOrders = isAdmin || activities.length > 0;
+  const canManageOrders = isAdmin;
   const [userRoom, setUserRoom] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,13 +32,11 @@ export default function OrdersPage() {
     try {
       const params: Record<string, string> = {};
       if (tab === "all") params.my_only = "false";
-      if (activityId) params.activity_id = activityId;
       const data = await shopApi.listOrders(params);
       setOrders(data);
       if (canManageOrders) {
         const nextSummary = await shopApi.orderSummary({
           group_by: "class",
-          activity_id: activityId,
         }).catch(() => null);
         setSummary(nextSummary);
       } else {
@@ -52,13 +47,9 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [activityId, canManageOrders, tab]);
+  }, [canManageOrders, tab]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
-  }, []);
-
   useWS(userRoom, useCallback((message) => {
     if (message.type === "order.updated") void load();
   }, [load]));
@@ -102,7 +93,7 @@ export default function OrdersPage() {
             <AnimatedDownloadButton
               className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:flex-none"
               style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.3)" }}
-              request={() => shopApi.downloadReport("xlsx", activityId ? { activity_id: activityId } : undefined)}
+              request={() => shopApi.downloadReport("xlsx")}
               filename="orders.xlsx"
               label="匯出 Excel"
               onComplete={() => toast.success("已匯出 XLSX")}
@@ -110,7 +101,7 @@ export default function OrdersPage() {
             <AnimatedDownloadButton
               className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:flex-none"
               style={{ background: "rgba(34,211,238,0.05)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}
-              request={() => shopApi.downloadReport("csv", activityId ? { activity_id: activityId } : undefined)}
+              request={() => shopApi.downloadReport("csv")}
               filename="orders.csv"
               label="匯出 CSV"
               onComplete={() => toast.success("已匯出 CSV")}
@@ -137,12 +128,7 @@ export default function OrdersPage() {
                 key={key}
                 role="tab"
                 aria-selected={active}
-                disabled={key === "all" && !isAdmin && !activityId}
                 onClick={() => {
-                  if (key === "all" && !isAdmin && !activityId) {
-                    toast.error("請先選擇你可管理的活動");
-                    return;
-                  }
                   setTab(key);
                 }}
                 className="px-4 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] disabled:opacity-45"
@@ -157,20 +143,6 @@ export default function OrdersPage() {
           })}
         </div>
       )}
-
-      <div className="card p-4">
-        <ActivitySelect
-          value={activityId}
-          onChange={(next) => {
-            setActivityId(next);
-            if (!isAdmin && !next) setTab("mine");
-          }}
-          label="活動篩選"
-          noneLabel="全部訂單"
-          scope="all"
-          onActivitiesLoaded={setActivities}
-        />
-      </div>
 
       {/* 統計卡片 */}
       {orders.length > 0 && (

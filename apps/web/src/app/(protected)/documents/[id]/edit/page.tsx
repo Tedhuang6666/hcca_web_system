@@ -13,7 +13,6 @@ import GongwenEditor from "@/components/ui/GongwenEditor";
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { OrganizationEmailRecipientSettings } from "@/components/documents/OrganizationEmailRecipientSettings";
 
@@ -581,13 +580,6 @@ export default function EditDocumentPage() {
           </p>
         </div>
       </div>
-
-      <GovernanceLinkPanel
-        entityType="document"
-        entityId={doc.id}
-        title={doc.title}
-        href={`/documents/${encodeURIComponent(doc.serial_number)}`}
-      />
 
       <fieldset className="min-w-0 border-0 p-0">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">

@@ -43,15 +43,11 @@ export const dashboardApi = {
   get: () => get<DashboardResponse>("/dashboard"),
   composite: (options?: {
     includeTasks?: boolean;
-    includeMatters?: boolean;
     includeAnnouncements?: boolean;
     compactDashboard?: boolean;
   }) => {
     const query = new URLSearchParams();
     if (options?.includeTasks === false) query.set("include_tasks", "false");
-    if (options?.includeMatters !== undefined) {
-      query.set("include_matters", String(options.includeMatters));
-    }
     if (options?.includeAnnouncements === false) query.set("include_announcements", "false");
     if (options?.compactDashboard) query.set("compact_dashboard", "true");
     const queryString = query.toString();

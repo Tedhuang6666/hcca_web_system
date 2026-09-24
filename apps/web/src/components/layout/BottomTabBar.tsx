@@ -106,7 +106,7 @@ function buildLiquidDockPath(width: number, height: number, beadX: number, veloc
  * 依使用者身分顯示三套不同 tab：
  *  - guest：法規/公告/特約/陳情/登入（皆公開可讀）
  *  - student：依個人導覽偏好取前四個項目
- *  - teacher / mealVendor：依專屬視角取常用模組
+ *  - teacher：依專屬視角取常用模組
  *  - cadre：首頁/待辦/公文/法規/更多（有公文、法規或審計權限者）
  */
 export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {

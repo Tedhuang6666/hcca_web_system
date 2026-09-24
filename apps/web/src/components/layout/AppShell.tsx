@@ -18,10 +18,6 @@ import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncement
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 const UrgentAnnouncementPopup = dynamic(() => import("@/components/announcements/UrgentAnnouncementPopup"), { ssr: false });
 const PasskeySetupPrompt = dynamic(() => import("@/components/auth/PasskeySetupPrompt"), { ssr: false });
-const ImpersonationBanner = dynamic(
-  () => import("@/components/admin/ImpersonationBanner").then((module) => module.ImpersonationBanner),
-  { ssr: false },
-);
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isBareRoute, isPublicRoute, requiresAuthentication } from "@/lib/route-access";
 import { ApiError } from "@/lib/api-helpers";
@@ -289,7 +285,6 @@ function AppShellContent({
 
         {/* 主內容區 */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          <ImpersonationBanner />
           <ImportantAnnouncementBanner announcement={initialImportantAnnouncement} />
           <Topbar onMenuClick={toggleSidebar} />
           <main

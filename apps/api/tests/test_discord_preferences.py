@@ -85,7 +85,6 @@ def test_default_dm_categories_complete():
         "document_pending",
         "meeting_invited",
         "calendar_reminder",
-        "meal_closing",
         "survey_closing",
         "shop_ready",
         "tenure",

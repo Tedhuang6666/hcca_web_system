@@ -1,21 +1,20 @@
 /** Generated from api-bridge.ts. */
 export type {
-  Activity,
-  ActivityClosingReportOut,
-  ActivityConvener,
-  ActivityCreate,
-  ActivityLinkCreate,
-  ActivityLinkKind,
-  ActivityLinkOut,
-  ActivityLinkSuggestion,
-  ActivityMember,
-  ActivityRole,
-  ActivitySpawnCreate,
-  ActivitySpawnOut,
-  ActivityStatus,
-  ActivityWorkspaceOut,
+  AccessBlockStatus,
+  AcclamationRequest,
+  AddSinglePosition,
+  AdminAssignRequest,
+  AdminDashboardStats,
+  AgendaAttachmentLinkCreate,
+  AgendaAttachmentOut,
+  AgendaItemCreate,
+  AgendaItemOut,
   AgendaItemType,
+  AgendaItemUpdate,
+  AmendmentComparisonExportRequest,
+  AmendmentComparisonExportRowIn,
   AmendmentComparisonRow,
+  AmendmentComparisonRowOut,
   AnalyticsInsightsOut,
   AnnouncementAudience,
   AnnouncementAudienceRef,
@@ -26,34 +25,90 @@ export type {
   AnnouncementParticipationItem,
   AnnouncementStatsOut,
   AnnouncementUpdate,
+  AnonymizeBody,
+  AnonymizeOut,
+  AnswerSubmit,
+  ApiKeyCreate,
+  ApiKeyCreatedResponse,
+  ApiKeyOut,
+  ApiKeyRevoke,
+  AppSettingFieldOut,
+  AppSettingsListResponse,
   ApprovalStepOut,
   ApprovalStepStatus,
+  ApproveRequest,
   ApproverOut,
+  ArchiveFileOut,
   ArticleAnalyticsOut,
   ArticleDeviceMetricItem,
   ArticleMetricItem,
+  ArticleMoveRequest,
+  ArticleReorderItem,
+  ArticleReorderRequest,
   ArticleType,
+  ArtifactLinkCreate,
+  ArtifactLinkOut,
+  ArtifactLinkType,
+  ArtifactLinkUpdate,
+  AttachmentLinkCreate,
   AttachmentOut,
+  AttachmentRenameRequest,
+  AttendanceCreate,
+  AttendanceOut,
   AttendanceRole,
+  AttendanceSourceCreate,
+  AttendanceSourceOut,
+  AttendanceSourcePreviewOut,
+  AttendanceSourceResolveRequest,
   AttendanceSourceType,
   AttendanceStatus,
+  AttendanceUpdate,
   AuditLogOut,
-  AutomationRuleCreate,
-  AutomationRuleOut,
-  AutomationRuleStatus,
-  AutomationRuleUpdate,
+  AuthenticatedAuditIn,
+  AuthenticatedRunIn,
+  AuthenticatedRunsIn,
+  AutoRenumberRequest,
+  BallotBoxCreate,
+  BallotBoxOut,
   BallotBoxStatus,
+  BallotBoxStatusUpdate,
   BallotBoxTally,
   BallotChoice,
+  BallotCreate,
+  BallotOut,
+  BatchApproveRequest,
+  BatchArchiveRequest,
+  BatchDelegateRequest,
   BatchDocumentOperationOut,
   BatchDocumentResult,
+  BatchRejectRequest,
+  BudgetAllocationCreate,
+  BudgetAllocationEvidenceCreate,
+  BudgetAllocationEvidenceOut,
+  BudgetAllocationOut,
+  BudgetAllocationUpdate,
+  BudgetCouncilReviewPublicationUpdate,
+  BudgetCreate,
+  BudgetDetailOut,
+  BudgetImportOut,
+  BudgetNodeCreate,
+  BudgetNodeOut,
+  BudgetOut,
+  BudgetPublicationUpdate,
+  BudgetReview,
+  BudgetSubmissionCreate,
+  BudgetSubmissionOut,
+  BusinessHours,
+  BusinessHoursInterval,
   CalendarChecklistCreate,
   CalendarChecklistOut,
+  CalendarChecklistUpdate,
   CalendarEventCreate,
   CalendarEventListItem,
   CalendarEventOut,
   CalendarEventStatus,
   CalendarEventType,
+  CalendarEventUpdate,
   CalendarLinkCreate,
   CalendarLinkOut,
   CalendarLinkType,
@@ -61,22 +116,38 @@ export type {
   CalendarParticipantOut,
   CalendarParticipantResponse,
   CalendarParticipantRole,
+  CalendarParticipantUpdate,
   CalendarUserBrief,
   CalendarVisibility,
+  CandidateCreate,
+  CandidateMemberCreate,
+  CandidateMemberOut,
+  CandidateOut,
   CandidateTally,
+  CardRow,
+  CartItemCreate,
   CartItemOut,
+  CartItemUpdate,
   CartOut,
   CatalogCategoryOut,
   CatalogProductOut,
   CatalogSeriesOut,
+  CeleryQueueView,
+  CeleryView,
   ChannelPref,
   ChartAccountCreate,
   ChartAccountOut,
   ChartAccountUpdate,
+  CheckoutRequest,
+  ClassCadreCreate,
   ClassCadreOut,
+  ClassManualMemberCreate,
   ClassManualMemberOut,
   ClassMemberOut,
+  ClassMembershipCreate,
   ClassMembershipOut,
+  ClassOrderUpsert,
+  ClassRoleAssign,
   ClassRoleBindingOut,
   ClassRoleHolderOut,
   ClassRoleOut,
@@ -85,41 +156,70 @@ export type {
   ClassRosterEntryCreate,
   ClassRosterEntryOut,
   ClassRosterEntryUpdate,
+  ClassStudentRangeCreate,
   ClassStudentRangeOut,
   ClassStudentRangeOverride,
   ClassStudentRangeTemplate,
   ClassUserBrief,
+  ClientErrorReport,
   CloseStatusItem,
   CloseStatusOut,
   ConditionRule,
   ContextLink,
+  CopyPositionPermissionsRequest,
   CouncilProposalCaseType,
   CouncilProposalCreate,
   CouncilProposalKind,
   CouncilProposalListItem,
   CouncilProposalOut,
+  CouncilProposalSchedule,
   CouncilProposalStatus,
+  CouncilProposalStatusUpdate,
   DailyArticleViewItem,
   DailyRegistrationItem,
+  DashboardResponse,
+  DashboardWidget,
+  DashboardWidgetItem,
+  DbPoolView,
+  DeadLetterItem,
+  DeadLetterReplayBody,
+  DeadLetterResponse,
   DecisionCreate,
   DecisionOut,
-  DecisionStatus,
   DecisionUpdate,
   DeclassificationCondition,
   DefenseRule,
+  DefenseRuleCreate,
+  DefenseRuleOut,
+  DefenseRuleUpdate,
   DefenseSummary,
   DelegateSource,
   DeliveryMethod,
+  DeliveryStatus,
   DeptRankingItem,
-  DiscordActivitySyncStatus,
-  DiscordActivityWorkspace,
+  DiagnosticsCheck,
+  DiagnosticsView,
+  DigestPreferenceIn,
+  DigestPreferenceOut,
   DiscordBindingOut,
+  DiscordBotEventAck,
+  DiscordBotEventOut,
   DiscordBotHealthOut,
+  DiscordBotInventoryIn,
+  DiscordBotStatusOut,
   DiscordChannelOptionOut,
+  DiscordCommandRequest,
+  DiscordCommandResponse,
   DiscordGuildConfigIn,
   DiscordGuildConfigOut,
   DiscordGuildOptionOut,
+  DiscordMemberJoinedIn,
+  DiscordMemberJoinedOut,
+  DiscordMemberRepairBatchIn,
+  DiscordMemberRepairBatchOut,
   DiscordMemberSyncStateOut,
+  DiscordMemberUpdatedIn,
+  DiscordMemberUpdatedOut,
   DiscordNicknamePrefixRuleIn,
   DiscordNicknamePrefixRuleOut,
   DiscordNotificationRouteIn,
@@ -133,49 +233,76 @@ export type {
   DiscordRolePolicyIn,
   DiscordRolePolicyOut,
   DiscordSyncAllOut,
+  DiscordTestMessageIn,
   DocumentApprovalContextOut,
+  DocumentApprovalDelegationCreate,
   DocumentApprovalDelegationOut,
+  DocumentApprovalDelegationUpdate,
+  DocumentArchiveSettingsUpdate,
   DocumentCategory,
   DocumentClassification,
   DocumentCreate,
   DocumentEfficiencyOut,
+  DocumentEmailResendOut,
   DocumentListItem,
   DocumentOut,
+  DocumentPetitionLinkUpdate,
+  DocumentPetitionOut,
   DocumentStatus,
   DocumentTemplateCreate,
+  DocumentTemplateDraftCreate,
   DocumentTemplateOut,
   DocumentTemplateUpdate,
+  DocumentUpdate,
   DocumentUrgency,
   DocumentVisibility,
+  DocumentVisibilityUpdate,
+  DryRunBody,
+  DryRunOut,
+  ElectionCreate,
+  ElectionImageOut,
   ElectionListItem,
   ElectionLiveSummary,
   ElectionOut,
   ElectionStatus,
+  ElectionStatusUpdate,
+  ElectionUpdate,
   ElectronicCredentialAuthorizationBulkCreate,
   ElectronicCredentialAuthorizationBulkOut,
   ElectronicCredentialAuthorizationCreate,
   ElectronicCredentialAuthorizationOut,
   ElectronicCredentialAuthorizationUpdate,
   ElectronicCredentialOut,
+  EligibleMeetingBrief,
   EmailAnalyticsOut,
   EmailAttachmentOut,
   EmailBlock,
   EmailButton,
   EmailCampaignRecipientOut,
-  EmailConditionalRule,
   EmailComposePayload,
+  EmailConditionalRule,
   EmailMessageCreate,
   EmailMessageDetailOut,
   EmailMessageOut,
+  EmailMessageUpdate,
+  EmailPreflightInput,
   EmailPreflightOut,
+  EmailPreviewOut,
+  EmailRecipientListMemberIn,
   EmailRecipientListMemberOut,
   EmailRecipientListOut,
+  EmailRecipientListPayload,
+  EmailRecipientListUpdate,
   EmailRecipientVariableInput,
+  EmailRequest,
+  EmailSampleTestPayload,
   EmailTemplateOut,
+  EmailTemplatePayload,
+  EmailTemplateUpdate,
+  EmailTemplateVersionOut,
   EmailVariableDefinition,
-  EntityRelationCreate,
-  EntityRelationGraphOut,
-  EntityRelationOut,
+  EmailVerificationConfirm,
+  EmailVerificationRequest,
   ExamGradeTrack,
   ExamPaperDownloadOut,
   ExamPaperListItem,
@@ -184,45 +311,68 @@ export type {
   ExamTraceInspectMatch,
   ExamTraceInspectOut,
   ExpenseClaimCreate,
+  ExpenseClaimEvidenceIn,
   ExpenseClaimItemCreate,
+  ExpenseReimbursementCreate,
+  ExpenseReturnCreate,
+  ExportFileOut,
+  ExportOut,
+  FeatureFlagCreate,
+  FeatureFlagEvaluation,
+  FeatureFlagItem,
+  FeatureFlagOut,
+  FeatureFlagUpdate,
   FinanceAccountType,
   FinanceEvidenceUploadOut,
+  FinanceSettlementLineOut,
+  FinanceSettlementOut,
+  FreezeRequest,
+  FundAccountCreate,
   FundAccountOut,
   FundStorageType,
+  GitHubVersionView,
   GoogleCalendarItem,
   GoogleCalendarStatusOut,
-  GovernanceCaseCreate,
-  GovernanceCaseOut,
-  GovernanceCaseUpdate,
-  GovernanceDashboardOut,
-  GovernanceDiscordEventRouteIn,
-  GovernanceDiscordEventRouteOut,
-  GovernanceDiscordWorkspaceIn,
-  GovernanceDiscordWorkspaceOut,
-  GovernanceModuleCapabilityOut,
-  GovernanceResourceSearchOut,
-  GovernanceStatsOut,
-  GovernanceWorkflowTemplateCreate,
-  GovernanceWorkflowTemplateOut,
+  GoogleConfigUpdate,
+  GoogleOneTapRequest,
+  GoogleSheetsExportIn,
+  GoogleTasksStatusOut,
+  HTTPValidationError,
   HoldOut,
-  ImpersonationStartResponse,
-  InventoryDashboard,
-  InventoryItemType,
-  InventoryProcurementStatus,
-  InventoryTxnType,
-  ItemStatOut,
+  HoldRequest,
+  ImageUploadOut,
+  IncidentDetailOut,
+  IncidentEventBody,
+  IncidentEventOut,
+  IncidentOut,
+  IncidentSeverity,
+  IncidentStatus,
+  IncidentUpdateBody,
+  InsightItem,
+  IpBlockBody,
+  IpBlockedItem,
+  IssuedDirectRequest,
   JournalCreate,
   JournalLineIn,
+  JournalLineOut,
   JournalOut,
   JournalStatus,
   JudicialPetitionCreate,
   JudicialPetitionListItem,
   JudicialPetitionOut,
   JudicialPetitionStatus,
+  JudicialPetitionStatusUpdate,
   JudicialPetitionType,
+  LedgerCreate,
   LedgerOut,
+  LifecycleActionBody,
+  LifecycleResultOut,
   LineBindingOut,
   LineLinkCodeOut,
+  LinkUserEmailsRequest,
+  LinkedEmailsOut,
+  LoadShedBody,
+  LoadSignalsView,
   LoanAvailableItem,
   LoanCheckoutCreate,
   LoanDashboard,
@@ -232,39 +382,20 @@ export type {
   LoanRecordOut,
   LoanRecordStatus,
   LoanRecordUpdate,
+  LoanUnitCreate,
   LoanUnitOut,
   LoanUnitStatus,
   LoanUnitUpdate,
+  MFABackupCodesOut,
+  MFAConfirmIn,
+  MFALoginVerifyIn,
   MFASetupOut,
   MFAStatusOut,
-  MatterCreate,
-  MatterLinkRef,
-  MatterListItem,
-  MatterOut,
-  MatterPriority,
-  MatterResourceCreate,
-  MatterResourceOut,
-  MatterResourceType,
-  MatterResourceUpdate,
-  MatterRoleAssignmentCreate,
-  MatterRoleAssignmentOut,
-  MatterRoleAssignmentUpdate,
-  MatterSpawnResult,
-  MatterStatus,
-  MatterType,
-  MatterUpdate,
-  MatterVisibility,
-  MealAvailabilityOut,
-  MealClassPickupCodeOut,
-  MealOrderItemOut,
-  MealOrderListItem,
-  MealOrderOut,
-  MealOrderStatus,
-  MealPickupLookupOut,
-  MealPickupSlotOut,
-  MealProductOut,
-  MealVendorApplicationOut,
-  MealVendorOut,
+  MFAVerifyIn,
+  MaintenanceBody,
+  MaintenanceView,
+  ManualJournalUpdate,
+  ManualTallyRequest,
   MeetingAgendaAttachmentOut,
   MeetingAgendaItemOut,
   MeetingArtifactLinkOut,
@@ -276,8 +407,10 @@ export type {
   MeetingBillStage,
   MeetingBriefingCardOut,
   MeetingClassBrief,
-  MeetingDecisionOut,
+  MeetingConfirmCreate,
+  MeetingCreate,
   MeetingDecisionStatus,
+  MeetingDocumentDraftOut,
   MeetingEventOut,
   MeetingJoinOut,
   MeetingListItem,
@@ -289,9 +422,11 @@ export type {
   MeetingOut,
   MeetingRecusalOut,
   MeetingRegulationBrief,
+  MeetingRequestCreate,
   MeetingRequestOut,
   MeetingRequestStatus,
   MeetingRequestType,
+  MeetingRequestUpdate,
   MeetingScreenOut,
   MeetingScreenReadingMode,
   MeetingScreenStateOut,
@@ -300,6 +435,7 @@ export type {
   MeetingStatus,
   MeetingTimerStateOut,
   MeetingTimerStatus,
+  MeetingUpdate,
   MeetingUserBrief,
   MeetingVoteOption,
   MeetingVoteOut,
@@ -308,57 +444,95 @@ export type {
   MeetingVoteRosterOut,
   MeetingVoteTallyOut,
   MeetingWorkspaceOut,
-  MenuItemOut,
-  MenuItemSummary,
-  MenuScheduleListItem,
-  MenuScheduleOut,
   MerchandiseSubmissionAIEvidenceOut,
   MerchandiseSubmissionAIMetadataOut,
+  MerchandiseSubmissionAdminFileOut,
   MerchandiseSubmissionAdminListItem,
   MerchandiseSubmissionFileOut,
   MerchandiseSubmissionItemAdminOut,
   MerchandiseSubmissionItemCreate,
   MerchandiseSubmissionItemPortalOut,
+  MerchandiseSubmissionItemUpdate,
   MerchandiseSubmissionOut,
   MerchandiseSubmissionPortalOut,
   MerchandiseSubmissionReview,
+  MerchandiseSubmissionSave,
   MerchandiseSubmissionSettingsAdminOut,
   MerchandiseSubmissionSettingsOut,
   MerchandiseSubmissionSettingsUpdate,
   MerchandiseSubmissionStatus,
   MerchandiseSubmissionUploadOut,
+  MerchandiseSubmissionVotingSurveyCreate,
+  MergeConflict,
+  MergeConflictRecord,
+  MergePreview,
+  MergeUserAccountsRequest,
+  ModuleMaintenanceBody,
+  ModuleRecoverResult,
+  ModuleStatusOut,
+  ModuleStatusPublic,
+  ModuleTripHistory,
+  ModuleTripHistoryItem,
+  MotionCreate,
+  MotionOut,
+  MotionUpdate,
+  MutedModulesIn,
+  MutedModulesOut,
   NavigationProfileCreate,
   NavigationProfileOut,
   NavigationProfileResolveOut,
   NavigationProfileSection,
   NavigationProfileUpdate,
+  NewAssignmentIn,
+  NotificationCountOut,
+  NotificationOut,
   NotificationPreferences,
+  NotificationPreferencesIn,
+  NotificationPreferencesOut,
   OptionConfig,
+  OrderCancelRequest,
+  OrderItemCreate,
   OrderItemOut,
   OrderListItem,
   OrderOut,
+  OrderPaymentUpdate,
   OrderQuantityRow,
   OrderStatus,
   OrderSummaryOut,
   OrderSummaryRow,
+  OrgCreate,
   OrgRead,
+  OrgTree,
+  OrgUpdate,
   PageMetricItem,
+  PageViewCreate,
   PartnerApplicationFieldConfig,
   PartnerApplicationFieldOut,
   PartnerApplicationPortalOut,
   PartnerApplicationSettingsOut,
+  PartnerApplicationSettingsUpdate,
+  PartnerBusinessAccountOut,
+  PartnerBusinessAccountsUpdate,
+  PartnerBusinessApplicationCreate,
   PartnerBusinessApplicationOut,
+  PartnerBusinessApplicationReview,
   PartnerBusinessApplicationStatus,
   PartnerBusinessCreate,
   PartnerBusinessImageOut,
   PartnerBusinessListItem,
+  PartnerBusinessListingType,
   PartnerBusinessOut,
+  PartnerBusinessSelfUpdate,
   PartnerBusinessStatus,
   PartnerBusinessUpdate,
+  PartnerDiscoveryItem,
+  PartnerGoogleMapsParseIn,
+  PartnerGoogleMapsParseOut,
   PartnerLocationCreate,
   PartnerLocationOut,
   PartnerLocationUpdate,
   PartnerMapItem,
+  PartnerOfferBenefitType,
   PartnerOfferCreate,
   PartnerOfferOut,
   PartnerOfferUpdate,
@@ -367,17 +541,25 @@ export type {
   PartnerRatingOut,
   PartnerSubmissionCreate,
   PartnerSubmissionOut,
+  PartnerSubmissionReview,
   PartnerSubmissionStatus,
   PartnerTagCreate,
   PartnerTagOut,
   PartnerTagUpdate,
+  PasskeyAuthenticationOptionsIn,
   PasskeyAuthenticationOptionsOut,
+  PasskeyAuthenticationVerifyIn,
+  PasskeyDeleteIn,
   PasskeyOut,
   PasskeyRegistrationOptionsOut,
+  PasskeyRegistrationVerifyIn,
   PendingAlertItem,
   PendingConsentItem,
   PeriodCreate,
   PeriodOut,
+  PermissionCatalogItem,
+  PermissionCreate,
+  PermissionRead,
   PersonAffiliationCreate,
   PersonAffiliationKind,
   PersonAffiliationOut,
@@ -388,63 +570,90 @@ export type {
   PersonDetailOut,
   PersonListItem,
   PersonOut,
+  PersonRosterImport,
   PersonRosterImportResult,
   PersonRosterImportRow,
   PersonStatus,
   PersonUpdate,
+  PetitionAssignUpdate,
   PetitionAttachmentOut,
+  PetitionAttachmentVisibility,
   PetitionCaseListItem,
   PetitionCaseOut,
+  PetitionConfidentialityOut,
   PetitionContentUpdate,
   PetitionCreate,
   PetitionCreatedOut,
   PetitionEventOut,
   PetitionEventType,
   PetitionEventUpdate,
+  PetitionEventVisibility,
+  PetitionInternalNoteCreate,
+  PetitionLookupOut,
+  PetitionNotificationRuleCreate,
+  PetitionNotificationRuleOut,
+  PetitionNotificationRuleUpdate,
+  PetitionNotificationSettingsOut,
+  PetitionNotificationSettingsUpdate,
   PetitionOrgStatsItem,
   PetitionPublicListItem,
   PetitionPublicOut,
   PetitionPublicRequest,
   PetitionPublicResponse,
   PetitionPublicStatus,
+  PetitionReplyCreate,
   PetitionResolutionContextOut,
+  PetitionShareLookup,
   PetitionStatsOut,
   PetitionStatus,
+  PetitionStatusUpdate,
   PetitionSubmitterOut,
+  PetitionSupplementCreate,
+  PetitionTransferUpdate,
+  PetitionTypeCreate,
   PetitionTypeOut,
-  PetitionNotificationRuleCreate,
-  PetitionNotificationRuleOut,
-  PetitionNotificationRuleUpdate,
-  PetitionNotificationSettingsOut,
-  PetitionNotificationSettingsUpdate,
-  PickupListItemOut,
-  PlanningDocumentAttachmentOut,
-  PlanningDocumentCreate,
-  PlanningDocumentOut,
-  PlanningDocumentRevisionAttachmentOut,
-  PlanningDocumentRevisionCreate,
-  PlanningDocumentRevisionOut,
-  PlanningDocumentStatus,
-  PlanningDocumentUpdate,
+  PetitionTypeUpdate,
+  PolicyConsentCreate,
   PolicyConsentOut,
+  PolicyDocumentCreate,
   PolicyDocumentListItem,
   PolicyDocumentOut,
+  PolicyDocumentUpdate,
   PolicyKind,
   PositionCategory,
+  PositionRead,
   PositionSummary,
+  PreviewBody,
+  PreviewOut,
+  PrimaryEmailUpdate,
+  PrivacyRequestCancel,
+  PrivacyRequestCreate,
   PrivacyRequestOut,
   PrivacyRequestStatus,
   PrivacyRequestType,
+  PrivacyRequestUpdate,
   ProductAnalyticsOut,
+  ProductCategoryCreate,
   ProductCategoryOut,
+  ProductCategoryUpdate,
+  ProductCreate,
   ProductOut,
+  ProductSeriesCreate,
   ProductSeriesOut,
+  ProductSeriesUpdate,
   ProductStatus,
+  ProductUpdate,
+  ProductVariantGroupCreate,
   ProductVariantGroupOut,
+  ProductVariantGroupUpdate,
+  ProductVariantOptionCreate,
   ProductVariantOptionOut,
-  ProgramCreate,
-  ProgramOut,
-  ProgramUpdate,
+  ProductVariantOptionUpdate,
+  PublicAnnouncementItem,
+  PublicArticleViewCreate,
+  PublicBudgetAllocationOut,
+  PublicBudgetDetailOut,
+  PublicBudgetSubmissionOut,
   PublicLinkCategoryCreate,
   PublicLinkCategoryOut,
   PublicLinkCategoryUpdate,
@@ -456,137 +665,278 @@ export type {
   PublicOfficerProfileCreate,
   PublicOfficerProfileOut,
   PublicOfficerProfileUpdate,
+  PublicRegulationItem,
   PublicSiteBundleOut,
   PublicSitePageCreate,
   PublicSitePageOut,
   PublicSitePageUpdate,
   PublicSiteSettingsOut,
   PublicSiteSettingsUpdate,
+  PublicationCampaignCreate,
   PublicationCampaignOut,
+  PublicationCampaignUpdate,
   PublicationPreviewOut,
   PublicationStatsOut,
   PublicationStatus,
   QuestionCondition,
   QuestionStats,
   QuestionType,
+  QueueDepth,
+  RaffleActivate,
+  RaffleDrawRequest,
+  RaffleJoinRequest,
+  RaffleNextRequest,
+  RaffleStatusUpdate,
+  RateLimitConfigBody,
   RateLimitOverride,
+  RecallRequest,
+  ReceivableCreate,
   ReceivableOut,
+  ReceivablePaymentIn,
+  ReceivableRefundIn,
   ReceivableSource,
   ReceivableStatus,
   ReceivableSummaryOut,
+  ReceivableUpdate,
+  RecentErrorItem,
+  RecentErrorsResponse,
+  RecipientCreate,
   RecipientDownloadVariant,
   RecipientOut,
   RecipientPreviewOut,
   RecipientSelector,
   RecipientType,
+  RecommendedVendorCategoryCreate,
   RecommendedVendorCategoryOut,
+  RecommendedVendorCategoryUpdate,
   RecommendedVendorCreate,
   RecommendedVendorListItem,
+  RecommendedVendorMenuCreate,
   RecommendedVendorMenuKind,
   RecommendedVendorMenuOut,
+  RecommendedVendorMenuUpdate,
   RecommendedVendorOut,
   RecommendedVendorProductCreate,
   RecommendedVendorProductOut,
   RecommendedVendorProductUpdate,
   RecommendedVendorStatus,
   RecommendedVendorUpdate,
+  RecorderBallotCreate,
+  RecoveryActionBody,
+  RecusalCreate,
+  RecusalOut,
+  RedisView,
+  ReferenceWarningOut,
   RegulationAmendmentType,
+  RegulationArticleCreate,
   RegulationArticleOut,
+  RegulationArticleUpdate,
+  RegulationBrief,
   RegulationCategory,
+  RegulationCreate,
+  RegulationImportItemOut,
   RegulationListItem,
+  RegulationMetadataUpdate,
   RegulationOut,
+  RegulationPublishRequest,
   RegulationRevisionOut,
+  RegulationRevisionUpdate,
   RegulationSearchResult,
+  RegulationTimeMachineOut,
   RegulationTreeNodeOut,
+  RegulationUpdate,
   RegulationUsageContextOut,
   RegulationWorkflowLogOut,
   RegulationWorkflowStatus,
   RejectMode,
+  RejectRequest,
+  RepealRegulationRequest,
+  ReportResult,
+  ReportSummary,
+  RevealBody,
+  RevealResponse,
   RevisionOut,
+  RevokeUserBody,
+  RollbackBody,
+  RollbackOut,
+  RuleSummary,
+  RuntimeVersionView,
+  SampleTestSendOut,
+  SaveSettingsBody,
+  SaveSettingsResponse,
+  SavedFilterCreate,
   SavedFilterOut,
+  SavedFilterUpdate,
+  SchoolClassBrief,
+  SchoolClassBulkAction,
   SchoolClassBulkActionOut,
   SchoolClassBulkActionResult,
   SchoolClassBulkCreate,
   SchoolClassBulkCreateOut,
   SchoolClassBulkCreateResult,
   SchoolClassBulkGradeCreate,
+  SchoolClassCreate,
   SchoolClassListItem,
   SchoolClassOut,
+  SchoolClassUpdate,
+  ScreenReadingMode,
+  ScreenStateOut,
+  ScreenStateUpdate,
+  SearchIndexOut,
   SearchResultOut,
   SeatAssignmentStatus,
   SeatBookingOut,
   SeatInput,
   SeatMapOut,
   SeatOut,
+  SeatSelectRequest,
   SeatState,
   SeatStatus,
+  SeatsReplace,
+  SecurityEventOut,
   SelectedOption,
+  SelfAnonymizeRequestOut,
+  SelfExportRequestOut,
+  SerialTemplateCreate,
   SerialTemplateOut,
+  SerialTemplateUpdate,
+  SetFlagBody,
   ShopClassProductSummaryRow,
   ShopClassSummaryOut,
+  ShopOrderCloseCreate,
   ShopOrderCloseOut,
+  SpeechQueueCreate,
+  SpeechQueueExtend,
+  SpeechQueueItemOut,
+  SpeechQueueReorder,
+  SpeechQueueStatus,
+  SpeechQueueUpdate,
+  StatusOut,
+  StructureContentRequest,
   SubmissionCustomField,
+  SubmitRequest,
   SurveyAnswerOut,
+  SurveyCreate,
+  SurveyImageOut,
   SurveyListItem,
   SurveyOut,
   SurveyParticipationItem,
+  SurveyQuestionCreate,
   SurveyQuestionOut,
+  SurveyQuestionUpdate,
+  SurveyRespondentSummary,
   SurveyResponseAdminItem,
   SurveyResponseOut,
-  SurveyRespondentSummary,
   SurveyStats,
   SurveyStatus,
+  SurveySubmit,
+  SurveyUpdate,
+  SystemMetricsSnapshot,
+  TaskCountResponse,
+  TaskEnqueuedResponse,
+  TaskInboxResponse,
+  TaskItem,
   TemplateImage,
-  TimelineEventCreate,
-  TimelineEventOut,
+  TerminationOut,
+  TestSendOut,
+  TimerStateOut,
+  TimerStatus,
   TransferCreate,
+  TrashEntryOut,
+  UnsubscribeRequest,
+  UpdateUserPositionRequest,
+  UpdateUserRequest,
   UploadedImageOut,
+  UserBatchPreRegister,
+  UserBatchPreRegisterItem,
   UserBatchPreRegisterResult,
+  UserBlockBody,
+  UserBlockPreview,
+  UserBlockResult,
+  UserBrief,
+  UserDetail,
+  UserPositionCreate,
   UserPositionRead,
+  UserPositionUpdate,
+  UserPreRegister,
   UserRead,
+  UserSelfUpdate,
+  UserSessionOut,
   UserSummary,
+  ValidationError,
   ValidationRule,
-  VendorManagerOut,
+  VersionStatusView,
+  VoteCreate,
+  VoteEventCreate,
   VoteEventKind,
   VoteEventOut,
+  VoteOption,
+  VoteOut,
+  VoteRecordMethod,
+  VoteRosterClassOut,
+  VoteRosterOut,
   VoteStatus,
+  VoteTallyOut,
   VoteThresholdType,
+  VoteUpdate,
   VoteVisibility,
   WaveInput,
   WaveOut,
+  WavesReplace,
   WebPushConfigOut,
+  WebPushKeys,
+  WebPushSubscriptionIn,
   WebPushSubscriptionOut,
+  WebhookDeliveryOut,
+  WebhookSubscriptionCreate,
+  WebhookSubscriptionCreatedResponse,
+  WebhookSubscriptionOut,
+  WebhookSubscriptionUpdate,
   WorkItemCreate,
   WorkItemOut,
   WorkItemStatus,
   WorkItemUpdate,
+  WorkflowActionRequest,
   WorkflowEventOut,
   WorkflowInstanceOut,
   WorkflowLinkCreate,
   WorkflowLinkOut,
   WorkflowTimelineOut,
   WorkflowTransitionCreate,
+  WsRoomCount,
+  WsView,
   YearMode,
+  ZombieCredentialEntry,
+  ZoneCreate,
   ZoneListItem,
-  ZoneOut
+  ZoneOut,
+  ZoneUpdate,
+  api__routers__admin__PositionCreate,
+  api__routers__admin__PositionUpdate,
+  api__routers__data_lifecycle__ExecuteBody,
+  api__routers__data_lifecycle__ExecuteOut,
+  api__routers__term_rollover__AssignmentOut,
+  api__routers__term_rollover__ExecuteBody,
+  api__routers__term_rollover__ExecuteOut,
+  api__schemas__org__PositionCreate,
+  api__schemas__org__PositionUpdate,
+  api__schemas__seating__AssignmentOut
 } from './api-bridge'
 
 import type {
   AnnouncementListItem,
   BallotBoxStatus,
+  DashboardResponse,
   DeliveryMethod,
   ExpenseClaimCreate,
   ExpenseClaimItemCreate,
-  InventoryItemType,
-  InventoryProcurementStatus,
-  InventoryTxnType,
   JournalOut,
-  MatterListItem,
   PositionCategory,
   PositionSummary,
   RateLimitOverride,
   RecipientOut,
   RecipientType,
+  TaskInboxResponse,
 } from './api-bridge'
 
 // 財務報帳工作流的手寫擴充；後端新增欄位時，財務 API 先以此維持型別安全。
@@ -922,23 +1272,7 @@ export type MeetingVoteRosterStatus =
 export interface DashboardCompositeResponse {
   dashboard: import("./api/dashboard").DashboardResponse;
   tasks: import("./api/tasks").TaskInboxResponse | null;
-  matters: MatterListItem[] | null;
   announcements: AnnouncementListItem[] | null;
-}
-
-export interface ActivityWorkspaceItem {
-  id: string;
-  title: string;
-  href: string;
-  status?: string | null;
-  timestamp?: string | null;
-  due_at?: string | null;
-  starts_at?: string | null;
-  ends_at?: string | null;
-  location?: string | null;
-  note?: string | null;
-  meta?: Record<string, unknown>;
-  [key: string]: unknown;
 }
 
 
@@ -1131,39 +1465,6 @@ export interface RateLimitConfig {
 }
 
 
-// ── 事情治理中樞 ─────────────────────────────────────────────────────────────
-
-export type GovernanceCaseStatus =
-  | "draft"
-  | "todo"
-  | "in_progress"
-  | "review"
-  | "approved"
-  | "done"
-  | "archived"
-  | "canceled";
-
-
-export type MatterSpawnKind =
-  | "task"
-  | "announcement"
-  | "survey"
-  | "meeting"
-  | "document"
-  | "regulation";
-
-/** 從事情主動建立並連動的artifact回傳。 */
-
-/** 反向查詢：某模組資源被哪些事情納入。 */
-
-/** 自動化規則編輯器選項（後端 /governance/automation-meta）。 */
-export interface AutomationMeta {
-  trigger_types: Record<string, string>;
-  action_types: Record<string, string>;
-  entity_types: Record<string, string>;
-}
-
-
 // ── 公告統計 ─────────────────────────────────────────────────────────────────
 
 
@@ -1256,295 +1557,11 @@ export interface UploadedPublicFileOut {
 }
 
 
-// ── 物品借用系統 ───────────────────────────────────────────────────────────────
-
-
-// ── 物資管理系統 ──────────────────────────────────────────────────────────────
-
-
-export interface InventoryCategoryOut {
-  id: string;
-  org_id: string;
-  name: string;
-  color: string | null;
-  sort_order: number;
-  is_active: boolean;
-}
-
-export interface InventoryCategoryCreate {
-  name: string;
-  color?: string;
-  sort_order?: number;
-  org_id?: string;
-}
-
-export interface InventoryCategoryUpdate {
-  name?: string;
-  color?: string;
-  sort_order?: number;
-  is_active?: boolean;
-}
-
-export interface InventoryItemOut {
-  id: string;
-  org_id: string;
-  category_id: string | null;
-  category_name: string | null;
-  name: string;
-  description: string | null;
-  unit: string;
-  item_type: InventoryItemType;
-  quantity: number;
-  low_stock_threshold: number;
-  is_low_stock: boolean;
-  location: string | null;
-  image_url: string | null;
-  is_active: boolean;
-  loan_item_id: string | null;
-  created_at: string;
-}
-
-export interface InventoryItemCreate {
-  name: string;
-  description?: string;
-  unit?: string;
-  item_type?: InventoryItemType;
-  quantity?: number;
-  low_stock_threshold?: number;
-  location?: string;
-  image_url?: string;
-  category_id?: string;
-  loan_item_id?: string;
-  org_id?: string;
-}
-
-export interface InventoryItemUpdate {
-  name?: string;
-  description?: string;
-  unit?: string;
-  item_type?: InventoryItemType;
-  low_stock_threshold?: number;
-  location?: string;
-  image_url?: string;
-  category_id?: string;
-  loan_item_id?: string;
-  is_active?: boolean;
-}
-
-export interface InventoryItemAdjust {
-  txn_type: InventoryTxnType;
-  quantity: number;
-  notes?: string;
-}
-
-export interface InventoryTransactionOut {
-  id: string;
-  item_id: string;
-  item_name: string;
-  txn_type: InventoryTxnType;
-  quantity: number;
-  quantity_before: number;
-  quantity_after: number;
-  notes: string | null;
-  created_by_name: string | null;
-  created_at: string;
-}
-
-export interface InventoryProcurementItemOut {
-  id: string;
-  item_id: string | null;
-  item_name: string;
-  item_unit: string;
-  quantity_requested: number;
-  quantity_received: number;
-  estimated_unit_price: number | null;
-  notes: string | null;
-}
-
-export interface InventoryProcurementOut {
-  id: string;
-  org_id: string;
-  title: string;
-  status: InventoryProcurementStatus;
-  estimated_amount: number | null;
-  requester_id: string;
-  requester_name: string;
-  reviewer_id: string | null;
-  reviewer_name: string | null;
-  reviewed_at: string | null;
-  requester_notes: string | null;
-  reviewer_notes: string | null;
-  created_at: string;
-  line_items: InventoryProcurementItemOut[];
-}
-
-export interface InventoryProcurementItemIn {
-  item_id?: string;
-  item_name: string;
-  item_unit?: string;
-  quantity_requested: number;
-  estimated_unit_price?: number;
-  notes?: string;
-}
-
-export interface InventoryProcurementCreate {
-  title: string;
-  requester_notes?: string;
-  estimated_amount?: number;
-  line_items?: InventoryProcurementItemIn[];
-  org_id?: string;
-}
-
-export interface InventoryProcurementUpdate {
-  title?: string;
-  requester_notes?: string;
-  estimated_amount?: number;
-  line_items?: InventoryProcurementItemIn[];
-}
-
-
 export interface DiscordNotificationEventOut {
   key: string;
   module: string;
   label: string;
 }
-
-// ── 客服作業平台 ─────────────────────────────────────────────────────────────
-export interface SupportUserSummary {
-  id: string;
-  display_name: string;
-  masked_name: string;
-  email: string;
-  masked_email: string;
-  student_id: string | null;
-  masked_student_id: string | null;
-  is_active: boolean;
-  is_verified: boolean;
-  mfa_enabled: boolean;
-  is_superuser: boolean;
-  created_at: string;
-}
-
-export interface SupportDiagnostic {
-  code: string;
-  severity: "info" | "warning" | "error";
-  message: string;
-  repair_action: string | null;
-}
-
-export interface SupportUserDetail {
-  user: SupportUserSummary;
-  linked_emails: string[];
-  masked_linked_emails: string[];
-  account: Record<string, unknown>;
-  roles: Array<{
-    id: string;
-    name: string;
-    org_id: string;
-    org_name: string;
-    start_date: string;
-    end_date: string | null;
-    permission_codes: string[];
-  }>;
-  effective_permissions: string[];
-  settings: Record<string, unknown>;
-  tickets: Array<{
-    id: string;
-    ticket_number: string;
-    title: string;
-    status: string;
-    priority: string;
-    updated_at: string;
-  }>;
-  diagnostics: SupportDiagnostic[];
-}
-
-export interface SupportTicket {
-  id: string;
-  ticket_number: string;
-  title: string;
-  description: string;
-  user_id: string | null;
-  reported_by_user_id: string | null;
-  assigned_to_id: string | null;
-  channel: string;
-  priority: "low" | "normal" | "high" | "urgent" | string;
-  status: "new" | "assigned" | "investigating" | "waiting_user" | "waiting_internal" | "resolved" | "closed" | "reopened" | string;
-  error_code: string | null;
-  request_id: string | null;
-  related_data: Record<string, unknown>;
-  resolution: string | null;
-  created_at: string;
-  updated_at: string;
-  closed_at: string | null;
-  events: Array<{
-    id: string;
-    actor_user_id: string | null;
-    event_type: string;
-    body: string;
-    metadata: Record<string, unknown>;
-    created_at: string;
-  }>;
-}
-
-export interface SupportDashboard {
-  open_tickets: number;
-  urgent_tickets: number;
-  pending_approvals: number;
-  active_assistance_sessions: number;
-  active_impersonation_sessions: number;
-  recent_actions: Array<Record<string, unknown>>;
-}
-
-export interface SupportApproval {
-  id: string;
-  approval_number: string;
-  requested_by: string;
-  approved_by: string | null;
-  ticket_id: string | null;
-  target_user_id: string | null;
-  action: string;
-  payload: Record<string, unknown>;
-  reason: string;
-  risk_level: string;
-  status: string;
-  requested_at: string;
-  reviewed_at: string | null;
-  executed_at: string | null;
-  review_note: string | null;
-  result: Record<string, unknown> | null;
-}
-
-export interface SupportAuditEntry {
-  id: string;
-  actor_user_id: string;
-  target_user_id: string | null;
-  ticket_id: string | null;
-  action: string;
-  resource_type: string;
-  resource_id: string | null;
-  risk_level: string;
-  reason: string;
-  before_data: Record<string, unknown> | null;
-  after_data: Record<string, unknown> | null;
-  request_id: string | null;
-  ip_address: string | null;
-  user_agent: string | null;
-  created_at: string;
-}
-
-export interface SupportGuide {
-  id: string;
-  slug: string;
-  title: string;
-  summary: string;
-  body: string;
-  category: string;
-  required_permissions: string[];
-  route: string | null;
-  is_active: boolean;
-}
-
 
 // ── Google Calendar 同步 ──────────────────────────────────────────────────────
 

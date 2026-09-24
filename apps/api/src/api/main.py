@@ -50,9 +50,7 @@ from api.core.sentry import init_sentry
 from api.core.structured_logging import configure_logging
 from api.core.trusted_proxy import TrustedProxyMiddleware
 from api.core.waf import WAFMiddleware
-from api.dependencies.impersonation_guard import ImpersonationContextMiddleware
 from api.routers import (
-    activities,
     admin,
     admin_observability,
     admin_system,
@@ -78,14 +76,9 @@ from api.routers import (
     exam_papers,
     feature_flags,
     finance,
-    governance,
-    impersonation,
-    inventory,
     judicial_petitions,
     line_webhook,
     loans,
-    matters,
-    meal,
     meetings,
     merchandise_submissions,
     metrics_endpoint,
@@ -113,7 +106,6 @@ from api.routers import (
     seating,
     shop,
     site,
-    support,
     survey,
     tasks,
     term_rollover,
@@ -315,9 +307,6 @@ def create_app() -> FastAPI:
         window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     )
     app.add_middleware(IdempotencyMiddleware)
-    # impersonation context：讓目標使用者的 RBAC 生效，並讓所有 audit writer
-    # 能記錄「哪位管理員代行」，寫入權限仍由目標使用者的 router RBAC 決定。
-    app.add_middleware(ImpersonationContextMiddleware)
     app.add_middleware(CSRFMiddleware, enabled=True, secure=settings.COOKIE_SECURE)
     app.add_middleware(
         CORSMiddleware,
@@ -385,7 +374,6 @@ def create_app() -> FastAPI:
     attach_module_health(announcements.router, module_id="announcements")
     attach_module_health(shop.router, module_id="shop")
     attach_module_health(merchandise_submissions.router, module_id="merchandiseSubmissions")
-    attach_module_health(meal.router, module_id="meal")
     attach_module_health(survey.router, module_id="surveys")
     attach_module_health(petitions.router, module_id="petitions")
     attach_module_health(exam_papers.router, module_id="examPapers")
@@ -393,9 +381,6 @@ def create_app() -> FastAPI:
     attach_module_health(recommended_vendors.router, module_id="recommendedVendors")
     attach_module_health(line_webhook.router, module_id="line")
     attach_module_health(discord.router, module_id="discord")
-    attach_module_health(governance.router, module_id="governance")
-    attach_module_health(matters.router, module_id="matters")
-    attach_module_health(activities.router, module_id="activities")
     attach_module_health(elections.router, module_id="elections")
     attach_module_health(seating.router, module_id="seating")
     attach_module_health(finance.router, module_id="finance")
@@ -418,7 +403,6 @@ def create_app() -> FastAPI:
         "announcements",
         "shop",
         "merchandiseSubmissions",
-        "meal",
         "surveys",
         "petitions",
         "examPapers",
@@ -426,9 +410,6 @@ def create_app() -> FastAPI:
         "recommendedVendors",
         "line",
         "discord",
-        "governance",
-        "matters",
-        "activities",
         "elections",
         "seating",
         "finance",
@@ -456,7 +437,6 @@ def create_app() -> FastAPI:
     app.include_router(term_rollover.router)
     app.include_router(user_lifecycle.router)
     app.include_router(reports.router)
-    app.include_router(activities.router)
     app.include_router(receivables.router)
     app.include_router(finance.router)
     app.include_router(publications.router)
@@ -484,7 +464,6 @@ def create_app() -> FastAPI:
     app.include_router(merchandise_submissions.router)
     app.include_router(seating.router)
     app.include_router(school_class.router)
-    app.include_router(meal.router)
     app.include_router(meetings.router)
     app.include_router(meetings.public_router)
     app.include_router(calendar.router)
@@ -499,13 +478,10 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
     app.include_router(loans.router)
-    app.include_router(inventory.router)
     app.include_router(recommended_vendors.router)
     app.include_router(raffles.router)
     app.include_router(work_items.router)
     app.include_router(user_google_tasks.router)
-    app.include_router(governance.router)
-    app.include_router(matters.router)
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
     app.include_router(policies.router)
@@ -514,8 +490,6 @@ def create_app() -> FastAPI:
     app.include_router(workflows.router)
     app.include_router(public_api.router)
     app.include_router(metrics_endpoint.router)
-    app.include_router(impersonation.router)
-    app.include_router(support.router)
     app.include_router(feature_flags.router)
 
     # 使用者上傳檔案的靜態存取：僅限「本就公開」的媒體前綴（公告圖、問卷圖、官網素材）。

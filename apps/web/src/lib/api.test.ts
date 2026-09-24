@@ -1,13 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiErrorMessage, withFallback } from "./api-helpers";
-import { governanceApi } from "./api/governance";
 import { request } from "./api/core";
 import { apiErrorFromResponse } from "./api/errors";
-import {
-  clearImpersonationSession,
-  saveImpersonationSession,
-} from "./auth-cache";
 
 describe("API helpers", () => {
   it("returns successful values without invoking the error hook", async () => {
@@ -56,54 +51,6 @@ describe("API helpers", () => {
     expect(error.message).toBe("此問卷僅限校務帳號填答");
     expect(error.errorId).toBe("error-1");
     expect(error.requestId).toBe("request-1");
-  });
-
-  it("does not double-encode an already encoded governance matter slug", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: "matter-1" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await governanceApi.getMatterBySlug("%E6%B8%AC%E8%A9%A6");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/governance/matters/by-slug/%E6%B8%AC%E8%A9%A6",
-      expect.objectContaining({ credentials: "include" }),
-    );
-    vi.unstubAllGlobals();
-  });
-
-  it("adds the impersonation token to API requests", async () => {
-    saveImpersonationSession({
-      token: "impersonation-token",
-      target_user_id: "target-1",
-      target_email: "target@example.com",
-      target_display_name: "目標使用者",
-      actor_email: "admin@example.com",
-      actor_display_name: "管理員",
-      expires_at: Date.now() + 60_000,
-    });
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await request("/auth/me");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/auth/me",
-      expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: "Bearer impersonation-token" }),
-      }),
-    );
-    clearImpersonationSession();
-    vi.unstubAllGlobals();
   });
 
   it("does not report an already-counted circuit-open state as another client error", async () => {

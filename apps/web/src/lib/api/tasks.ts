@@ -2,7 +2,7 @@ import { get } from "./core";
 
 export type TaskModule =
   | "document" | "meeting" | "regulation" | "petition"
-  | "meal" | "shop" | "survey" | "announcement" | "calendar" | "work_item";
+  | "shop" | "survey" | "announcement" | "calendar" | "work_item";
 
 export type TaskAction =
   | "approve" | "attend" | "review" | "publish"

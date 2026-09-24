@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -24,11 +24,9 @@ const CHANNELS = [
 
 export default function NewPublicationPage() {
   const router = useRouter();
-  const search = useSearchParams();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [channels, setChannels] = useState<string[]>(["announcement"]);
-  const activityId = search.get("activity_id");
 
   const restoreDraft = useCallback((draft: PublicationDraft) => {
     setTitle(draft.title);
@@ -38,7 +36,7 @@ export default function NewPublicationPage() {
   }, []);
 
   const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<PublicationDraft>({
-    key: `publications:new:${activityId || "none"}`,
+    key: "publications:new",
     value: { title, body, channels },
     onRestore: restoreDraft,
     isEmpty: useCallback((draft: PublicationDraft) => (
@@ -63,7 +61,6 @@ export default function NewPublicationPage() {
       const created = await publicationsApi.create({
         title: title.trim(),
         body: body.trim(),
-        activity_id: activityId,
         channels,
         audience_type: "all",
       });

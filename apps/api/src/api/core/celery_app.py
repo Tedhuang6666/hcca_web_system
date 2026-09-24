@@ -54,7 +54,6 @@ celery_app = Celery(
     include=[
         "api.services.mail",
         "api.services.notification_tasks",
-        "api.services.meal_tasks",
         "api.services.regulation_tasks",
         "api.services.incident_tasks",
     ],
@@ -98,7 +97,6 @@ celery_app.conf.update(
     task_queues=(
         Queue("default"),
         Queue("email"),
-        Queue("meal"),
         Queue("backup"),
         Queue("documents"),
         Queue("recovery"),
@@ -109,7 +107,6 @@ celery_app.conf.update(
         "api.services.notification_tasks.*": {"queue": "email"},
         "api.services.email_tasks.*": {"queue": "email"},
         "api.services.digest_tasks.*": {"queue": "email"},
-        "api.services.meal_tasks.*": {"queue": "meal"},
         "api.services.backup_tasks.*": {"queue": "backup"},
         "api.services.recovery_tasks.*": {"queue": "recovery"},
         "api.services.google_calendar_tasks.*": {"queue": "gcal"},
@@ -162,18 +159,6 @@ celery_app.conf.beat_schedule = {
     "process-outbox-events-every-30s": {
         "task": "api.services.outbox_tasks.process_outbox",
         "schedule": 30.0,
-    },
-    # 每 5 分鐘自動結單（學餐系統）
-    "auto-close-meal-schedules-every-5min": {
-        "task": "api.services.meal_tasks.auto_close_meal_schedules",
-        "schedule": 300.0,
-    },
-    # 每 30 分鐘檢查未取餐：結單 1 小時後提醒，4 小時後標記 no_show。
-    "check-meal-no-shows-every-30min": {
-        "task": "api.services.meal_tasks.check_meal_no_shows",
-        "schedule": 1800.0,
-        # 此任務可能遍歷大量訂單，需使用較長的 soft limit。
-        "options": {"soft_time_limit": 300, "time_limit": 360},
     },
     # 每日巡檢法規與公布令一致性（24 小時）
     "audit-regulation-consistency-daily": {

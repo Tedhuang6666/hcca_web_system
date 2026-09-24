@@ -15,7 +15,7 @@ from api.core.prometheus_metrics import set_queue_depth
 # Worker image 的 /app 對非 root 使用者不可寫；/tmp 是容器內的共用可寫路徑。
 _HEARTBEAT_PATH = Path("/tmp/celery-heartbeat")
 
-_QUEUES = ("default", "email", "meal", "documents", "backup", "recovery", "celery")
+_QUEUES = ("default", "email", "documents", "backup", "recovery", "celery")
 
 
 @celery_app.task(

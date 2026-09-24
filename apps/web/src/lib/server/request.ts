@@ -45,11 +45,6 @@ export async function serverRequest<T>(
 
   if (policy.scope === "private") {
     const cookieStore = await cookies();
-    // Impersonation tokens live only in sessionStorage and must never cause the
-    // server to render the actor's cookie-backed data during a client switch.
-    if (cookieStore.get("hcca_impersonating")?.value === "1") {
-      throw new ServerRequestError(409, path);
-    }
     const cookieHeader = cookieStore.toString();
     if (cookieHeader) headers.set("cookie", cookieHeader);
   }

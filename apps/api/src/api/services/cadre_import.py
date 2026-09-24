@@ -92,15 +92,13 @@ _ROLE_PERMISSION_CODES: dict[tuple[str, str], tuple[str, ...]] = {
     ),
     ("活動部", "活動長"): (
         "org:view_members",
-        "activity:manage",
-        "activity:appoint",
         "meeting:create",
         "meeting:manage",
         "announcement:create",
         "announcement:publish",
         "email:send",
     ),
-    ("活動部", "活動"): ("org:view_members", "activity:manage", "announcement:create"),
+    ("活動部", "活動"): ("org:view_members", "announcement:create"),
     ("公關部", "公關長"): (
         "org:view_members",
         "announcement:create",

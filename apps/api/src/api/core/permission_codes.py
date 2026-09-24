@@ -19,9 +19,6 @@ class PermissionCode(StrEnum):
     AUDIT_VIEW_ALL = "audit:view_all"
     AUDIT_VIEW = "audit:view"
 
-    ACTIVITY_MANAGE = "activity:manage"
-    ACTIVITY_APPOINT = "activity:appoint"
-
     ORG_MANAGE = "org:manage"
     ORG_MANAGE_POSITIONS = "org:manage_positions"
     ORG_MANAGE_MEMBERS = "org:manage_members"
@@ -67,12 +64,6 @@ class PermissionCode(StrEnum):
     REGULATION_COUNCIL_APPROVE = "regulation:council_approve"
     REGULATION_PRESIDENT_PUBLISH = "regulation:president_publish"
 
-    MEAL_MANAGE = "meal:manage"
-    MEAL_MANAGE_SCHEDULE = "meal:manage_schedule"
-    MEAL_CONFIRM_ORDER = "meal:confirm_order"
-    MEAL_COMPLETE_ORDER = "meal:complete_order"
-    MEAL_EXPORT = "meal:export"
-
     SURVEY_CREATE = "survey:create"
     SURVEY_MANAGE = "survey:manage"
     SURVEY_VIEW_ALL = "survey:view_all"
@@ -117,10 +108,6 @@ class PermissionCode(StrEnum):
     CLASS_MANAGE_ROLES = "class:manage_roles"
     CLASS_SHOP_COLLECT = "class:shop_collect"
     CLASS_SHOP_CLOSE = "class:shop_close"
-    CLASS_MEAL_COLLECT = "class:meal_collect"
-    CLASS_MEAL_CLOSE = "class:meal_close"
-    CLASS_MEAL_PICKUP = "class:meal_pickup"
-
     ANNOUNCEMENT_CREATE = "announcement:create"
     ANNOUNCEMENT_PUBLISH = "announcement:publish"
     ANNOUNCEMENT_EDIT = "announcement:edit"
@@ -132,7 +119,6 @@ class PermissionCode(StrEnum):
     ANNOUNCEMENT_PUBLIC_LAYOUT = "announcement:public_layout"
 
     ANALYTICS_VIEW = "analytics:view"
-    GOVERNANCE_MANAGE = "governance:manage"
     ELECTION_MANAGE = "election:manage"
 
     EMAIL_SEND = "email:send"
@@ -176,33 +162,10 @@ class PermissionCode(StrEnum):
     LOAN_CHECKOUT = "loan:checkout"
     LOAN_VIEW_ALL = "loan:view_all"
 
-    INVENTORY_MANAGE = "inventory:manage"
-    INVENTORY_STOCK = "inventory:stock"
-    INVENTORY_VIEW = "inventory:view"
-
     POLICY_ADMIN = "policy:admin"
     API_KEY_ADMIN = "api_key:admin"
     WEBHOOK_ADMIN = "webhook:admin"
-    ADMIN_IMPERSONATE = "admin:impersonate"
     FEATURE_FLAG_ADMIN = "feature_flag:admin"
-
-    SUPPORT_USERS_READ = "support.users.read"
-    SUPPORT_USERS_VIEW_SENSITIVE = "support.users.view_sensitive"
-    SUPPORT_USERS_EDIT_PROFILE = "support.users.edit_profile"
-    SUPPORT_USERS_EDIT_EMAIL = "support.users.edit_email"
-    SUPPORT_USERS_UNLOCK = "support.users.unlock"
-    SUPPORT_USERS_REVOKE_SESSIONS = "support.users.revoke_sessions"
-    SUPPORT_USERS_RESET_MFA = "support.users.reset_mfa"
-    SUPPORT_USERS_IMPERSONATE = "support.users.impersonate"
-    SUPPORT_USERS_IMPERSONATE_INTERACTIVE = "support.users.impersonate_interactive"
-    SUPPORT_TICKETS_READ = "support.tickets.read"
-    SUPPORT_TICKETS_CREATE = "support.tickets.create"
-    SUPPORT_TICKETS_MANAGE = "support.tickets.manage"
-    SUPPORT_APPROVALS_REVIEW = "support.approvals.review"
-    SUPPORT_AUDIT_READ = "support.audit.read"
-    SUPPORT_AUDIT_EXPORT = "support.audit.export"
-    SUPPORT_GUIDES_MANAGE = "support.guides.manage"
-    SUPPORT_ASSISTANCE_MANAGE = "support.assistance.manage"
 
 
 ALL_PERMISSION_CODES: list[dict[str, str]] = [
@@ -277,18 +240,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.AUDIT_VIEW_ALL,
         "label": "查看所有稽核日誌",
         "desc": "查看全站所有操作軌跡與稽核事件",
-    },
-    {
-        "group": "活動系統",
-        "code": PermissionCode.ACTIVITY_MANAGE,
-        "label": "管理活動",
-        "desc": "建立、編輯、封存活動基本資料",
-    },
-    {
-        "group": "活動系統",
-        "code": PermissionCode.ACTIVITY_APPOINT,
-        "label": "任命活動總召",
-        "desc": "指派、調整與卸任活動總召任期",
     },
     {
         "group": "組織管理",
@@ -531,36 +482,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "主席正式公布法規",
     },
     {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_MANAGE,
-        "label": "學餐完整管理",
-        "desc": "管理商家/菜單（含以下所有學餐權限）",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_MANAGE_SCHEDULE,
-        "label": "管理排程",
-        "desc": "僅建立/修改/結單排程（不含商家/菜單）",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_CONFIRM_ORDER,
-        "label": "確認訂單",
-        "desc": "將 pending 訂單改為 confirmed",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_COMPLETE_ORDER,
-        "label": "完成訂單",
-        "desc": "將 confirmed 訂單改為 completed（核銷）",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_EXPORT,
-        "label": "匯出報表",
-        "desc": "下載訂單/領餐名單 Excel",
-    },
-    {
         "group": "問卷系統",
         "code": PermissionCode.SURVEY_CREATE,
         "label": "建立問卷",
@@ -766,18 +687,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     },
     {
         "group": "班級管理",
-        "code": PermissionCode.CLASS_MEAL_PICKUP,
-        "label": "本班學餐領取",
-        "desc": "取得本班同商家同時段的班級領取碼並處理領餐",
-    },
-    {
-        "group": "班級管理",
-        "code": PermissionCode.CLASS_MEAL_COLLECT,
-        "label": "本班學餐收款",
-        "desc": "標示本班學餐訂單收款狀態",
-    },
-    {
-        "group": "班級管理",
         "code": PermissionCode.CLASS_SHOP_COLLECT,
         "label": "本班商品收款",
         "desc": "標示本班商品訂單收款狀態",
@@ -799,12 +708,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.CLASS_SHOP_CLOSE,
         "label": "本班商品結單",
         "desc": "處理本班商品結單彙整",
-    },
-    {
-        "group": "班級管理",
-        "code": PermissionCode.CLASS_MEAL_CLOSE,
-        "label": "本班學餐結單",
-        "desc": "處理本班學餐結單彙整",
     },
     {
         "group": "公告系統",
@@ -865,12 +768,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.ANALYTICS_VIEW,
         "label": "查看數據分析",
         "desc": "查看公文效率統計、部門排名與待辦警告",
-    },
-    {
-        "group": "治理中樞",
-        "code": PermissionCode.GOVERNANCE_MANAGE,
-        "label": "管理事情治理",
-        "desc": "建立與維護 Matter / Program / Case、任務與跨模組關聯",
     },
     {
         "group": "即時開票",
@@ -1060,24 +957,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "跨組織查看所有借用紀錄（唯讀）",
     },
     {
-        "group": "物資管理",
-        "code": PermissionCode.INVENTORY_MANAGE,
-        "label": "管理物資",
-        "desc": "建立/修改品項與類別、審核採購申請、查看所有庫存",
-    },
-    {
-        "group": "物資管理",
-        "code": PermissionCode.INVENTORY_STOCK,
-        "label": "執行進出庫",
-        "desc": "進行庫存調整（入庫/出庫/盤點）、提交採購申請",
-    },
-    {
-        "group": "物資管理",
-        "code": PermissionCode.INVENTORY_VIEW,
-        "label": "查看庫存",
-        "desc": "唯讀查看物資品項、庫存數量與異動紀錄",
-    },
-    {
         "group": "企業級治理",
         "code": PermissionCode.POLICY_ADMIN,
         "label": "政策版本管理",
@@ -1094,115 +973,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.WEBHOOK_ADMIN,
         "label": "Webhook 管理",
         "desc": "建立 / 編輯 / 刪除事件投遞訂閱與檢視投遞紀錄",
-    },
-    {
-        "group": "企業級治理",
-        "code": PermissionCode.ADMIN_IMPERSONATE,
-        "label": "代理登入（客服）",
-        "desc": "以目標使用者身分檢視並操作介面（有時效，修改完整標註代行管理員）",
-    },
-    # ── 客服作業平台 ──────────────────────────────────────────────────
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_READ,
-        "label": "查看客服使用者資料",
-        "desc": "以遮罩方式搜尋、查看使用者帳號、角色、設定、工單與診斷結果",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_VIEW_SENSITIVE,
-        "label": "查看客服敏感資料",
-        "desc": "綁定工單並填寫理由後查看未遮罩 Email、學號等資料",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_EDIT_PROFILE,
-        "label": "修改客服基本資料",
-        "desc": "透過白名單欄位修改顯示名稱、學號或聯絡顯示設定",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_EDIT_EMAIL,
-        "label": "修改客服 Email",
-        "desc": "透過受控流程修改登入 Email 並重新要求驗證",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_UNLOCK,
-        "label": "解除客服帳號鎖定",
-        "desc": "解除指定使用者的登入、MFA 與 Email 鎖定狀態",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_REVOKE_SESSIONS,
-        "label": "撤銷客服登入工作階段",
-        "desc": "撤銷指定使用者所有現存登入工作階段",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_RESET_MFA,
-        "label": "重設客服 MFA",
-        "desc": "清除 MFA 設定，讓使用者重新註冊（中風險）",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_IMPERSONATE,
-        "label": "啟動客服模擬使用者",
-        "desc": "啟動有時效、綁定工單的唯讀或可操作模擬工作階段",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_USERS_IMPERSONATE_INTERACTIVE,
-        "label": "啟動可操作模擬",
-        "desc": "在更高權限與短期限下代替使用者操作，財務、投票與權限管理區域仍禁止代理",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_TICKETS_READ,
-        "label": "查看客服工單",
-        "desc": "查看、搜尋與追蹤客服工單",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_TICKETS_CREATE,
-        "label": "建立客服工單",
-        "desc": "建立客服工單並綁定使用者、錯誤編號或 Request ID",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_TICKETS_MANAGE,
-        "label": "管理客服工單",
-        "desc": "指派、更新狀態、補充處理紀錄與結案",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_APPROVALS_REVIEW,
-        "label": "審核客服高風險操作",
-        "desc": "查看差異並核准或拒絕角色與資料還原操作",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_AUDIT_READ,
-        "label": "查看客服稽核",
-        "desc": "依客服、使用者、工單、風險與動作查詢客服 append-only 稽核",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_AUDIT_EXPORT,
-        "label": "匯出客服稽核",
-        "desc": "匯出遮罩後的客服操作稽核 CSV",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_GUIDES_MANAGE,
-        "label": "管理客服知識庫",
-        "desc": "建立與維護操作引導、常見錯誤與安全提示",
-    },
-    {
-        "group": "客服作業平台",
-        "code": PermissionCode.SUPPORT_ASSISTANCE_MANAGE,
-        "label": "管理客服協助模式",
-        "desc": "建立、查看、結束使用者協助碼與畫面狀態同步",
     },
     {
         "group": "企業級治理",

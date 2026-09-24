@@ -9,12 +9,6 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
-from api.models.activity import ActivityConvener
-from api.models.activity_discord import (
-    ActivityMember,
-    ActivityRole,
-    DiscordActivityWorkspace,
-)
 from api.models.discord_account import (
     DiscordAccountLink,
     DiscordMemberSyncState,
@@ -174,74 +168,7 @@ async def managed_role_ids(db: AsyncSession, guild_id: str) -> set[str]:
             )
         )
     ).scalars()
-    activity_rows = (
-        await db.execute(
-            select(ActivityRole.discord_role_id)
-            .join(
-                DiscordActivityWorkspace,
-                DiscordActivityWorkspace.activity_id == ActivityRole.activity_id,
-            )
-            .where(
-                DiscordActivityWorkspace.guild_id == guild_id,
-                DiscordActivityWorkspace.is_active.is_(True),
-                ActivityRole.is_active.is_(True),
-                ActivityRole.discord_role_id.is_not(None),
-            )
-        )
-    ).scalars()
-    convener_rows = (
-        await db.execute(
-            select(DiscordActivityWorkspace.convener_role_id).where(
-                DiscordActivityWorkspace.guild_id == guild_id,
-                DiscordActivityWorkspace.is_active.is_(True),
-                DiscordActivityWorkspace.convener_role_id.is_not(None),
-            )
-        )
-    ).scalars()
-    return set(policy_rows) | set(legacy_rows) | set(activity_rows) | set(convener_rows)
-
-
-async def activity_role_ids_for_user(
-    db: AsyncSession, *, user_id: uuid.UUID, guild_id: str
-) -> set[str]:
-    today = local_today()
-    member_rows = (
-        await db.execute(
-            select(ActivityRole.discord_role_id)
-            .join(ActivityMember, ActivityMember.role_id == ActivityRole.id)
-            .join(
-                DiscordActivityWorkspace,
-                DiscordActivityWorkspace.activity_id == ActivityRole.activity_id,
-            )
-            .where(
-                ActivityMember.user_id == user_id,
-                ActivityMember.start_date <= today,
-                or_(ActivityMember.end_date.is_(None), ActivityMember.end_date >= today),
-                DiscordActivityWorkspace.guild_id == guild_id,
-                DiscordActivityWorkspace.is_active.is_(True),
-                ActivityRole.is_active.is_(True),
-                ActivityRole.discord_role_id.is_not(None),
-            )
-        )
-    ).scalars()
-    convener_rows = (
-        await db.execute(
-            select(DiscordActivityWorkspace.convener_role_id)
-            .join(
-                ActivityConvener,
-                ActivityConvener.activity_id == DiscordActivityWorkspace.activity_id,
-            )
-            .where(
-                ActivityConvener.user_id == user_id,
-                ActivityConvener.start_date <= today,
-                or_(ActivityConvener.end_date.is_(None), ActivityConvener.end_date >= today),
-                DiscordActivityWorkspace.guild_id == guild_id,
-                DiscordActivityWorkspace.is_active.is_(True),
-                DiscordActivityWorkspace.convener_role_id.is_not(None),
-            )
-        )
-    ).scalars()
-    return set(member_rows) | set(convener_rows)
+    return set(policy_rows) | set(legacy_rows)
 
 
 async def get_or_create_member_state(
@@ -303,13 +230,6 @@ async def observe_member(
         desired.update(
             (await desired_policy_role_ids_for_user(db, link.user_id)).get(guild_id, set())
         )
-        desired.update(
-            await activity_role_ids_for_user(
-                db,
-                user_id=link.user_id,
-                guild_id=guild_id,
-            )
-        )
     managed = await managed_role_ids(db, guild_id)
     state.actual_role_ids = sorted(role_ids)
     state.desired_role_ids = sorted(desired)
@@ -338,7 +258,6 @@ async def list_member_states(
 
 __all__ = [
     "compose_nickname",
-    "activity_role_ids_for_user",
     "desired_policy_role_ids_for_user",
     "get_or_create_member_state",
     "list_member_states",

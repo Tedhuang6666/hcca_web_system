@@ -12,14 +12,6 @@ import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdow
 import { usePermissions } from "@/hooks/usePermissions";
 import { API_BASE } from "@/lib/config";
 
-const GovernanceLinkPanel = dynamic(
-  () => import("@/components/governance/GovernanceLinkPanel"),
-  {
-    loading: () => <div className="min-h-11" aria-hidden="true" />,
-    ssr: false,
-  },
-);
-
 const AUDIENCE_LABEL: Record<string, string> = {
   all: "全體",
   school: "全體竹中生",
@@ -74,15 +66,6 @@ export default function AnnouncementDetailPageClient({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <Link href="/announcements" className="btn btn-ghost self-start">返回公告檢視</Link>
         <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:items-end">
-          <div className="w-full sm:w-auto">
-            <GovernanceLinkPanel
-              entityType="announcement"
-              entityId={item.id}
-              title={item.title}
-              href={`/announcements/${item.id}`}
-              compact
-            />
-          </div>
           {canManage && (
             <Link href={`/announcements/${item.id}/edit`} className="btn btn-secondary self-end sm:self-auto">
               編輯公告

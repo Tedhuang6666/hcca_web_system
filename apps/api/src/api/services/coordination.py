@@ -11,7 +11,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models.activity import Activity
 from api.models.announcement import Announcement
 from api.models.calendar import (
     CalendarEvent,
@@ -24,7 +23,6 @@ from api.models.calendar import (
 from api.models.discord_account import DiscordOrgChannelMapping
 from api.models.document import Document, DocumentStatus
 from api.models.email_message import EmailMessage, EmailStatus
-from api.models.meal import MealPickupSlot, MealProductAvailability, MealVendor, MenuSchedule
 from api.models.meeting import Meeting
 from api.models.partner_map import PartnerBusiness, PartnerOffer
 from api.models.shop import Product
@@ -59,11 +57,9 @@ async def sync_calendar_projections(
     total += await _project_surveys(session, start, end)
     total += await _project_announcements(session, start, end)
     total += await _project_shop_products(session, start, end)
-    total += await _project_meals(session, start, end)
     total += await _project_partner_offers(session, start, end)
     total += await _project_email_messages(session, start, end)
     total += await _project_work_items(session, start, end)
-    total += await _project_activities(session, start, end)
     return total
 
 
@@ -384,82 +380,6 @@ async def _project_shop_products(
     return count
 
 
-async def _project_meals(
-    session: AsyncSession, start: datetime | None, end: datetime | None
-) -> int:
-    count = 0
-    schedules = (
-        await session.execute(
-            select(MenuSchedule)
-            .options(selectinload(MenuSchedule.vendor))
-            .where(
-                or_(
-                    _in_range(MenuSchedule.order_open_time, start, end),
-                    _in_range(MenuSchedule.order_deadline, start, end),
-                )
-            )
-            .limit(500)
-        )
-    ).scalars()
-    for schedule in schedules:
-        for key, at, label in [
-            ("order_open_time", schedule.order_open_time, "學餐開放訂購"),
-            ("order_deadline", schedule.order_deadline, "學餐結單"),
-        ]:
-            if not at:
-                continue
-            await _upsert_projection(
-                session,
-                source_module="meal",
-                source_id=schedule.id,
-                source_key=key,
-                org_id=schedule.vendor.org_id,
-                title=f"{label}：{schedule.vendor.name}",
-                starts_at=at,
-                created_by=schedule.created_by,
-                href="/meal/vendor",
-                event_type=CalendarEventType.DEADLINE
-                if key == "order_deadline"
-                else CalendarEventType.OTHER,
-            )
-            count += 1
-
-    slots = (
-        await session.execute(
-            select(MealPickupSlot)
-            .join(
-                MealProductAvailability,
-                MealProductAvailability.id == MealPickupSlot.availability_id,
-            )
-            .join(MealVendor, MealVendor.id == MealProductAvailability.vendor_id)
-            .options(
-                selectinload(MealPickupSlot.availability).selectinload(
-                    MealProductAvailability.vendor
-                )
-            )
-            .where(*_overlaps(MealPickupSlot.pickup_start, start, end))
-            .limit(500)
-        )
-    ).scalars()
-    for slot in slots:
-        availability = slot.availability
-        await _upsert_projection(
-            session,
-            source_module="meal",
-            source_id=slot.id,
-            source_key="pickup_start",
-            org_id=availability.vendor.org_id,
-            title=f"學餐取餐：{availability.vendor.name} {slot.label}",
-            starts_at=slot.pickup_start,
-            ends_at=slot.pickup_end,
-            created_by=availability.vendor.created_by,
-            href="/meal/orders",
-            event_type=CalendarEventType.OTHER,
-        )
-        count += 1
-    return count
-
-
 async def _project_partner_offers(
     session: AsyncSession, start: datetime | None, end: datetime | None
 ) -> int:
@@ -566,38 +486,6 @@ async def _project_work_items(
             event_type=CalendarEventType.DEADLINE,
             visibility=CalendarVisibility.PARTICIPANTS,
             participant_user_ids=[item.assigned_to_id] if item.assigned_to_id else [],
-        )
-        count += 1
-    return count
-
-
-async def _project_activities(
-    session: AsyncSession, start: datetime | None, end: datetime | None
-) -> int:
-    rows = (
-        await session.execute(
-            select(Activity)
-            .options(selectinload(Activity.conveners))
-            .where(*_overlaps(Activity.starts_at, start, end))
-            .limit(500)
-        )
-    ).scalars()
-    count = 0
-    for activity in rows:
-        if not activity.starts_at or not activity.conveners:
-            continue
-        await _upsert_projection(
-            session,
-            source_module="activity",
-            source_id=activity.id,
-            source_key="starts_at",
-            org_id=activity.org_id,
-            title=f"活動：{activity.name}",
-            starts_at=activity.starts_at,
-            ends_at=activity.ends_at,
-            created_by=activity.conveners[0].user_id,
-            href=f"/admin/activities?activity={activity.id}",
-            event_type=CalendarEventType.ACTIVITY,
         )
         count += 1
     return count

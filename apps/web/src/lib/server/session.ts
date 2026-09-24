@@ -27,9 +27,6 @@ export type ServerImportantAnnouncement = Pick<
  */
 export const getServerSession = cache(async (): Promise<ServerSessionUser | null> => {
   const cookieStore = await cookies();
-  // 模擬登入 token 僅存在 sessionStorage，server 無法安全轉送；因此 flag 存在時
-  // 不預載原管理員資料，交由既有 client impersonation flow 取得目標使用者資料。
-  if (cookieStore.get("hcca_impersonating")?.value === "1") return null;
   const cookieHeader = cookieStore.toString();
   if (!cookieHeader) return null;
 

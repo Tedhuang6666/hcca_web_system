@@ -23,11 +23,6 @@ const ENTITY_LABELS: Record<string, string> = {
   shop: "商品",
   product: "商品",
   order: "訂單",
-  meal: "學餐",
-  meal_vendor: "學餐商家",
-  meal_schedule: "學餐排程",
-  meal_item: "學餐品項",
-  meal_order: "學餐訂單",
   survey: "問卷",
   survey_question: "問卷題目",
   survey_response: "問卷填答",
@@ -44,7 +39,6 @@ const AUDIT_SYSTEMS = [
   { key: "regulation", label: "法規", entities: ["regulation", "regulation_article"] },
   { key: "announcement", label: "公告", entities: ["announcement", "announcement_media"] },
   { key: "shop", label: "商品訂購", entities: ["product", "order", "shop"] },
-  { key: "meal", label: "學餐", entities: ["meal_vendor", "meal_schedule", "meal_item", "meal_order"] },
   { key: "survey", label: "問卷", entities: ["survey", "survey_question", "survey_response"] },
 ] as const;
 

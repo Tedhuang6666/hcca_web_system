@@ -12,7 +12,6 @@ TaskModule = Literal[
     "meeting",
     "regulation",
     "petition",
-    "meal",
     "shop",
     "survey",
     "announcement",

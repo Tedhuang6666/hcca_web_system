@@ -27,7 +27,6 @@ MODULE_IMPACT_WEIGHT = {
     "announcement": 14,
     "calendar": 12,
     "work_item": 12,
-    "meal": 16,
     "shop": 16,
     "survey": 10,
 }
@@ -108,7 +107,7 @@ def score_task(item: TaskItem, *, now: datetime | None = None) -> TaskItem:
     score += action_score
 
     module_score = MODULE_IMPACT_WEIGHT.get(item.module, 8)
-    if item.module in {"regulation", "announcement", "meal", "shop"}:
+    if item.module in {"regulation", "announcement", "shop"}:
         reasons.append("影響多人可見或服務時程")
     score += module_score
 

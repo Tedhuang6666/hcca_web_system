@@ -27,7 +27,7 @@ _ALLOWED_TARGETS: dict[str, frozenset[str]] = {
     ),
     "reload_caddy": frozenset({"caddy"}),
     "maintenance_mode": frozenset({"global"}),
-    "retry_task": frozenset({"default", "email", "meal", "documents", "backup"}),
+    "retry_task": frozenset({"default", "email", "documents", "backup"}),
 }
 _TASK_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,200}$")
 

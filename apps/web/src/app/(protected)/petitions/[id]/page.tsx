@@ -9,7 +9,6 @@ import type { PetitionCaseOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
 import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
@@ -76,13 +75,6 @@ export default function PetitionDetailPage() {
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{item.current_org_name} · {item.type_name}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <GovernanceLinkPanel
-            entityType="petition"
-            entityId={item.id}
-            title={`${item.case_number} ${item.title}`}
-            href={`/petitions/${item.id}`}
-            compact
-          />
           <PetitionStatusBadge status={item.status} />
         </div>
       </div>
