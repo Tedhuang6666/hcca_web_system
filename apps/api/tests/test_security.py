@@ -1,6 +1,7 @@
 """JWT 安全機制單元測試"""
 
 import asyncio
+import socket
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
@@ -216,3 +217,38 @@ async def test_revoke_user_fails_closed_when_redis_is_unavailable(
 
     with pytest.raises(RedisUnavailableError, match="revoking user tokens"):
         await revoke_user("user-123")
+
+
+@pytest.mark.parametrize(
+    "failure", [socket.gaierror("name resolution failed"), ConnectionRefusedError()]
+)
+async def test_blacklist_check_handles_redis_network_failures(
+    monkeypatch: pytest.MonkeyPatch, failure: OSError
+) -> None:
+    class UnavailableRedis:
+        async def exists(self, *_args: object) -> bool:
+            raise failure
+
+    monkeypatch.setattr(security, "redis_client", UnavailableRedis())
+    token = create_access_token("user-network-failure")
+
+    assert await security.is_blacklisted(token) is False
+    with pytest.raises(RedisUnavailableError, match="checking token blacklist"):
+        await security.is_blacklisted(token, fail_closed=True, raise_on_unavailable=True)
+
+
+@pytest.mark.parametrize(
+    "failure", [socket.gaierror("name resolution failed"), ConnectionRefusedError()]
+)
+async def test_session_check_handles_redis_network_failures(
+    monkeypatch: pytest.MonkeyPatch, failure: OSError
+) -> None:
+    class UnavailableRedis:
+        async def exists(self, *_args: object) -> bool:
+            raise failure
+
+    monkeypatch.setattr(security, "redis_client", UnavailableRedis())
+
+    assert await security.is_session_revoked("session-network-failure") is False
+    with pytest.raises(RedisUnavailableError, match="checking session revocation"):
+        await security.is_session_revoked("session-network-failure", fail_closed=True)

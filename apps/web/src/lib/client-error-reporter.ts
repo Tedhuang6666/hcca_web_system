@@ -5,6 +5,18 @@ const MAX_MESSAGE_LENGTH = 1000;
 const MAX_STACK_LENGTH = 6000;
 const MAX_SCOPE_LENGTH = 100;
 const MAX_PATH_LENGTH = 500;
+const STATIC_CACHE_NAME = "hcca-static-v5";
+const CHUNK_RELOAD_KEY = "hcca:chunk-reload-at";
+const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
+
+const IGNORED_RESOURCE_HOSTS = new Set([
+  "static.cloudflareinsights.com",
+  "server.arcgisonline.com",
+]);
+const IGNORED_RESOURCE_PATHS = new Set([
+  "/brand/hcca-emblem-64.avif",
+  "/brand/hcca-emblem-64.webp",
+]);
 
 export interface ClientErrorInput {
   message: string;
@@ -104,6 +116,56 @@ function resourceUrl(target: Element): string | null {
   return target.getAttribute("src") || target.getAttribute("href");
 }
 
+function isIgnoredResource(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.href);
+    return IGNORED_RESOURCE_HOSTS.has(parsed.hostname)
+      || IGNORED_RESOURCE_PATHS.has(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isNextChunk(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.origin === window.location.origin
+      && parsed.pathname.startsWith("/_next/static/chunks/");
+  } catch {
+    return false;
+  }
+}
+
+function recoverFromChunkFailure(url: string | null): void {
+  if (!isNextChunk(url)) return;
+
+  try {
+    const previousReloadAt = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? 0);
+    if (previousReloadAt && Date.now() - previousReloadAt <= CHUNK_RELOAD_COOLDOWN_MS) return;
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+
+    const reload = () => window.location.reload();
+    if (!("caches" in window)) {
+      reload();
+      return;
+    }
+    navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_STATIC_CACHE" });
+    void window.caches
+      .delete(STATIC_CACHE_NAME)
+      .catch(() => undefined)
+      .finally(() => window.setTimeout(reload, 50));
+  } catch {
+    // Storage or Cache Storage may be blocked by private browsing modes.
+    window.location.reload();
+  }
+}
+
+function isIgnoredWindowError(message: string): boolean {
+  return /Error invoking postMessage:\s*Java object is gone/i.test(message);
+}
+
 /** 安裝 window error / unhandledrejection 入口，涵蓋未經 React boundary 的錯誤。 */
 export function installGlobalClientErrorReporter(): () => void {
   if (typeof window === "undefined") return () => undefined;
@@ -113,6 +175,8 @@ export function installGlobalClientErrorReporter(): () => void {
     const details = errorDetails(event.error ?? event.message);
     const resource = target instanceof Element;
     const failedResource = resource ? resourceUrl(target) : null;
+    if (isIgnoredWindowError(details.message) || isIgnoredResource(failedResource)) return;
+    if (resource && target instanceof HTMLScriptElement) recoverFromChunkFailure(failedResource);
     reportClientError({
       ...details,
       message: resource

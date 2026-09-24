@@ -114,8 +114,7 @@ function shouldSkipApiMetric(metric: Omit<ClientMetric, "metric" | "value">): bo
 }
 
 function postBatch(endpoint: string, metrics: unknown[], preferBeacon: boolean): boolean {
-  if (metrics.length === 0 || !canSendMetric()) return false;
-  if (Date.now() < metricBackoffUntil) return false;
+  if (metrics.length === 0 || Date.now() < metricBackoffUntil || !canSendMetric()) return false;
   const body = JSON.stringify({ items: metrics });
   const url = apiUrl(endpoint);
 
@@ -135,9 +134,10 @@ function postBatch(endpoint: string, metrics: unknown[], preferBeacon: boolean):
     headers: { "content-type": "application/json" },
     body,
   }).then((response) => {
-    if (response.status >= 500 || response.status === 429) {
+    if (response.status >= 400) {
       // Telemetry is optional. Stop adding traffic while the API is already
-      // unhealthy, otherwise failed metrics amplify the original incident.
+      // unhealthy or the client/server schema is out of sync, otherwise failed
+      // metrics amplify the original incident.
       metricBackoffUntil = Date.now() + METRIC_BACKOFF_MS;
     }
   }).catch(() => {

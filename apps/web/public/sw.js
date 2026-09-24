@@ -207,6 +207,13 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEAR_STATIC_CACHE") {
+    event.waitUntil(
+      caches.delete(STATIC_CACHE).finally(() => {
+        event.ports?.[0]?.postMessage({ type: "STATIC_CACHE_CLEARED" });
+      }),
+    );
+  }
   if (event.data?.type === "SET_CACHE_USER" && event.source?.id && event.data.userId) {
     clientUserKeys.set(event.source.id, String(event.data.userId));
   }
