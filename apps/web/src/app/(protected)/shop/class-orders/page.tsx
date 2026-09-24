@@ -62,6 +62,7 @@ export default function ClassOrdersPage() {
   const [memberFilter, setMemberFilter] = useState("");
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [formOpen, setFormOpen] = useState(false);
 
   // 代建 / 修改共用表單
   const [editOrder, setEditOrder] = useState<OrderOut | null>(null);
@@ -152,6 +153,7 @@ export default function ClassOrdersPage() {
   }, [orderProductId]);
 
   const openCreate = () => {
+    setFormOpen(true);
     setEditOrder(null);
     setStudentId("");
     setOrderProductId("");
@@ -161,6 +163,7 @@ export default function ClassOrdersPage() {
   };
 
   const openEdit = async (order: OrderListItem) => {
+    setFormOpen(true);
     try {
       const full = await shopApi.getOrder(order.id);
       setEditOrder(full);
@@ -240,6 +243,7 @@ export default function ClassOrdersPage() {
       }
       setEditOrder(null);
       setStudentId(""); setOrderProductId(""); setQuantity(1); setNotes("");
+      setFormOpen(false);
       await load();
     } catch (e) {
       toast.error(apiErrorMessage(e, editOrder ? "修改失敗" : "代訂失敗"));
@@ -283,8 +287,6 @@ export default function ClassOrdersPage() {
     }
   };
 
-  const isFormOpen = studentId !== "" || editOrder !== null;
-
   return (
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -293,6 +295,9 @@ export default function ClassOrdersPage() {
           <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班級商品工作台</h1>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={openCreate} className="btn" style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+            <Plus size={15} /> 替同學代訂
+          </button>
           <button type="button" onClick={load} className="btn btn-ghost" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
           </button>
@@ -337,9 +342,9 @@ export default function ClassOrdersPage() {
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "有效訂單", value: `${summary.order_count} 筆` },
-          { label: "商品件數", value: `${summary.item_count} 件` },
+          { label: "已收款", value: money(summary.paid_amount) },
           { label: "應收金額", value: money(summary.total_amount) },
-          { label: "未收金額", value: money(summary.unpaid_amount) },
+          { label: "待收款", value: `${summary.unpaid_order_count} 筆 · ${money(summary.unpaid_amount)}` },
         ].map((item) => (
           <div key={item.label} className="rounded-lg p-4"
             style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
@@ -347,6 +352,15 @@ export default function ClassOrdersPage() {
             <p className="mt-1 text-xl font-bold" style={{ color: "var(--primary)" }}>{item.value}</p>
           </div>
         ))}
+      </section>
+
+      <section className="rounded-lg px-4 py-3" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+        <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>訂購與收款流程</h2>
+        <ol className="mt-3 grid gap-3 text-sm md:grid-cols-3" style={{ color: "var(--text-secondary)" }}>
+          <li><span className="font-semibold" style={{ color: "var(--primary)" }}>同學自行下單</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>從商品訂購送單，訂單會自動歸到本班。</span></li>
+          <li><span className="font-semibold" style={{ color: "var(--primary)" }}>需要時由幹部代訂</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>協助不熟悉系統的同學完成同一套訂單。</span></li>
+          <li><span className="font-semibold" style={{ color: "var(--primary)" }}>收到款項即確認</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>勾選已收款，學生的「我的訂單」會同步顯示結果。</span></li>
+        </ol>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
@@ -366,8 +380,8 @@ export default function ClassOrdersPage() {
               </select>
               <select className="input" value={paidFilter} onChange={(e) => setPaidFilter(e.target.value as PaidFilter)}>
                 <option value="all">全部繳費</option>
-                <option value="unpaid">未繳費</option>
-                <option value="paid">已繳費</option>
+                <option value="unpaid">待收款</option>
+                <option value="paid">已收款</option>
               </select>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -398,10 +412,10 @@ export default function ClassOrdersPage() {
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={!selectedIds.length || batchBusy} onClick={() => batchSetPaid(true)}
                   className="rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
-                  style={{ border: "1px solid var(--border)", color: "#16a34a" }}>批量已繳</button>
+                  style={{ border: "1px solid var(--border)", color: "#16a34a" }}>確認已收款</button>
                 <button type="button" disabled={!selectedIds.length || batchBusy} onClick={() => batchSetPaid(false)}
                   className="rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
-                  style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>批量未繳</button>
+                  style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>撤銷收款</button>
               </div>
             </div>
 
@@ -410,9 +424,57 @@ export default function ClassOrdersPage() {
             ) : !visibleOrders.length ? (
               <div className="py-16 text-center" style={{ color: "var(--text-muted)" }}>
                 <p className="text-sm">目前沒有符合條件的班級訂單</p>
+                <button type="button" onClick={openCreate} className="btn btn-ghost mt-3 text-xs">替同學建立第一筆訂單</button>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="space-y-2 p-3 md:hidden">
+                {visibleOrders.map((order) => (
+                  <article key={order.id} className="rounded-md p-3" style={{ border: "1px solid var(--border)" }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link href={`/shop/orders/${order.id}`} className="block truncate text-xs font-mono font-medium hover:underline" style={{ color: "var(--primary)" }}>
+                          {order.serial_number}
+                        </Link>
+                        <p className="mt-1 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{order.user_name ?? "未具名訂購人"}</p>
+                        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                          {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"} · {order.class_label ?? "未歸班"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+                        style={order.is_paid
+                          ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
+                          : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                        {order.is_paid ? "已收款" : "待收款"}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <OrderStatusBadge status={order.status} />
+                      <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
+                        className="min-h-11 rounded-md px-3 text-xs font-medium disabled:opacity-50"
+                        style={{ border: "1px solid var(--border)", color: order.is_paid ? "var(--text-secondary)" : "#16a34a" }}>
+                        {order.is_paid ? "撤銷收款" : "確認收款"}
+                      </button>
+                      <button type="button" onClick={() => setSelectedIds((current) => current.includes(order.id) ? current.filter((id) => id !== order.id) : [...current, order.id])}
+                        className="min-h-11 rounded-md px-3 text-xs" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                        {selectedSet.has(order.id) ? "取消選取" : "選取"}
+                      </button>
+                      {order.status !== "cancelled" && order.status !== "refunded" && (
+                        <>
+                          <button type="button" onClick={() => openEdit(order)} className="min-h-11 rounded-md px-3 text-xs"
+                            style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>修改</button>
+                          <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} className="min-h-11 rounded-md px-3 text-xs"
+                            style={{ border: "1px solid var(--border)", color: "#ef4444" }}>取消</button>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[820px] text-sm" role="table">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
@@ -448,7 +510,7 @@ export default function ClassOrdersPage() {
                             style={order.is_paid
                               ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
                               : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                            {order.is_paid ? "已繳費" : "未繳費"}
+                            {order.is_paid ? "已收款" : "待收款"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -456,7 +518,7 @@ export default function ClassOrdersPage() {
                             <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
                               className="rounded-md px-2 py-1 text-xs disabled:opacity-50"
                               style={{ border: "1px solid var(--border)" }}>
-                              {order.is_paid ? "未繳" : "已繳"}
+                              {order.is_paid ? "撤銷" : "確認收款"}
                             </button>
                             {order.status !== "cancelled" && order.status !== "refunded" && (
                               <>
@@ -477,6 +539,7 @@ export default function ClassOrdersPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         </section>
@@ -507,18 +570,17 @@ export default function ClassOrdersPage() {
           </section>
 
           {/* 代建 / 修改表單 */}
-          <section className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          {formOpen && (
+          <section id="class-order-form" className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {editOrder ? <Edit2 size={15} /> : <Plus size={15} />}
                 {editOrder ? `修改訂單 ${editOrder.serial_number}` : "班級代訂"}
               </h2>
-              {editOrder && (
-                <button type="button" onClick={() => { setEditOrder(null); setStudentId(""); setOrderProductId(""); }}
-                  className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  <X size={15} />
-                </button>
-              )}
+              <button type="button" onClick={() => { setFormOpen(false); setEditOrder(null); setStudentId(""); setOrderProductId(""); }}
+                className="text-xs" style={{ color: "var(--text-muted)" }} aria-label="關閉代訂表單">
+                <X size={15} />
+              </button>
             </div>
             <div className="grid gap-3">
               <label className="grid gap-1 text-sm">
@@ -565,14 +627,9 @@ export default function ClassOrdersPage() {
                 style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
                 {creating ? "處理中..." : editOrder ? "儲存修改" : "建立代訂訂單"}
               </button>
-              {!editOrder && !isFormOpen && (
-                <button type="button" onClick={openCreate}
-                  className="btn btn-ghost w-full text-xs" style={{ color: "var(--text-muted)" }}>
-                  清空表單
-                </button>
-              )}
             </div>
           </section>
+          )}
         </aside>
       </div>
 

@@ -194,8 +194,11 @@ async def test_list_class_roles_includes_default_bindings(
     ac = authed_client_factory(admin_user)
     response = await ac.get(f"/classes/{sc.id}/roles")
     assert response.status_code == 200
-    role_keys = {row["role_key"] for row in response.json()}
+    roles = response.json()
+    role_keys = {row["role_key"] for row in roles}
     assert "class_leader" in role_keys
+    representative = next(row for row in roles if row["role_key"] == "class_representative")
+    assert "class:shop_collect" in representative["permission_codes"]
 
 
 async def test_assign_class_role_returns_position(
