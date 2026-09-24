@@ -1054,6 +1054,8 @@ async def enqueue_petition_private_channel(
 ) -> bool:
     from api.services.outbox import emit
 
+    if case_obj.is_confidential:
+        return False
     if case_obj.discord_channel_id and not force:
         return False
     config = await get_primary_guild_config(db)

@@ -152,6 +152,10 @@ async def _assert_case_access(
     session: AsyncSession, case_obj: PetitionCase, user: User
 ) -> tuple[bool, bool]:
     """回傳 (include_internal, can_view_submitter)。"""
+    if case_obj.is_confidential:
+        if case_obj.submitter_id == user.id:
+            return False, True
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此密件陳情")
     codes = await get_user_permission_codes(session, user.id)
     if case_obj.submitter_id == user.id:
         return False, True
@@ -246,6 +250,8 @@ async def _notify_responsible(
     exclude_user_ids: tuple[uuid.UUID, ...] = (),
 ) -> None:
     """依陳情通知規則通知負責人；通知失敗不影響案件主流程。"""
+    if case_obj.is_confidential:
+        return
     try:
         from api.services.notification import notify_users
 
@@ -262,6 +268,16 @@ async def _notify_responsible(
         )
     except Exception:
         logger.warning("陳情負責人通知失敗 case=%s", case_obj.id, exc_info=True)
+
+
+async def _emit_routed_notification(
+    session: AsyncSession, case_obj: PetitionCase, **kwargs: object
+) -> None:
+    if case_obj.is_confidential:
+        return
+    from api.services.discord_notification_routes import emit_routed_notification
+
+    await emit_routed_notification(session, **kwargs)
 
 
 def _petition_notification_body(case_obj: PetitionCase, update: str | None = None) -> str:
@@ -299,6 +315,7 @@ def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
         status=case_obj.status,
         public_status=case_obj.public_status,
         title=case_obj.title,
+        is_confidential=case_obj.is_confidential,
         current_org_id=case_obj.current_org_id,
         assigned_to_id=case_obj.assigned_to_id,
         submitted_at=case_obj.submitted_at,
@@ -462,12 +479,12 @@ async def create_petition(
         summary=f"建立陳情案件 {case_obj.case_number}",
     )
     petition_type = await petition_svc.get_type(session, case_obj.type_id)
-    from api.services.discord_notification_routes import emit_routed_notification
 
     try:
         async with session.begin_nested():
-            await emit_routed_notification(
+            await _emit_routed_notification(
                 session,
+                case_obj,
                 event_key="petition.created",
                 module="petition",
                 title=f"新陳情案件 {case_obj.case_number}",
@@ -521,6 +538,7 @@ async def create_petition(
         share_token=share_token,
         status=case_obj.status,
         title=case_obj.title,
+        is_confidential=case_obj.is_confidential,
         status_label=petition_svc.STATUS_LABELS[case_obj.status],
         status_public_message=petition_svc.STATUS_MESSAGES[case_obj.status],
         next_action=petition_svc.NEXT_ACTIONS[case_obj.status],
@@ -723,12 +741,12 @@ async def create_admin_petition(
         summary=f"管理員代收陳情案件 {case_obj.case_number}",
     )
     petition_type = await petition_svc.get_type(session, case_obj.type_id)
-    from api.services.discord_notification_routes import emit_routed_notification
 
     try:
         async with session.begin_nested():
-            await emit_routed_notification(
+            await _emit_routed_notification(
                 session,
+                case_obj,
                 event_key="petition.created",
                 module="petition",
                 title=f"新陳情案件 {case_obj.case_number}",
@@ -766,6 +784,7 @@ async def create_admin_petition(
         share_token=share_token,
         status=case_obj.status,
         title=case_obj.title,
+        is_confidential=case_obj.is_confidential,
         status_label=petition_svc.STATUS_LABELS[case_obj.status],
         status_public_message=petition_svc.STATUS_MESSAGES[case_obj.status],
         next_action=petition_svc.NEXT_ACTIONS[case_obj.status],
@@ -1213,11 +1232,10 @@ async def supplement_case(
         link=f"/petitions/manage?case={case_obj.id}",
         exclude_user_ids=(user.id,) if user else (),
     )
-    from api.services.discord_notification_routes import emit_routed_notification
-
     petition_type = await petition_svc.get_type(session, case_obj.type_id)
-    await emit_routed_notification(
+    await _emit_routed_notification(
         session,
+        case_obj,
         event_key="petition.assigned",
         module="petition",
         title=f"陳情案件已指派 {case_obj.case_number}",
@@ -1361,10 +1379,9 @@ async def reply_case(
             user_id for user_id in (user.id, case_obj.submitter_id) if user_id is not None
         ),
     )
-    from api.services.discord_notification_routes import emit_routed_notification
-
-    await emit_routed_notification(
+    await _emit_routed_notification(
         session,
+        case_obj,
         event_key="petition.replied",
         module="petition",
         title=f"陳情案件已回覆 {case_obj.case_number}",
@@ -1523,10 +1540,9 @@ async def update_status(
             user_id for user_id in (user.id, case_obj.submitter_id) if user_id is not None
         ),
     )
-    from api.services.discord_notification_routes import emit_routed_notification
-
-    await emit_routed_notification(
+    await _emit_routed_notification(
         session,
+        case_obj,
         event_key="petition.status_changed",
         module="petition",
         title=f"陳情案件狀態更新 {case_obj.case_number}",

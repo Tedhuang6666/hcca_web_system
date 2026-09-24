@@ -11,7 +11,13 @@ from sqlalchemy import select
 from api.models.notification import Notification
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
-from api.models.petition import PetitionCase, PetitionCaseEvent, PetitionType
+from api.models.petition import (
+    PetitionCase,
+    PetitionCaseEvent,
+    PetitionPublicStatus,
+    PetitionStatus,
+    PetitionType,
+)
 from api.models.user import User
 from api.schemas.petition import PetitionCreate, PetitionStatusUpdate
 from api.services import petition as petition_svc
@@ -54,7 +60,13 @@ async def _make_org_and_type(db, *, name: str = "學生事務處") -> tuple[Org,
     return org, petition_type
 
 
-async def _create_case(db, petition_type: PetitionType, *, submitter: User | None = None):
+async def _create_case(
+    db,
+    petition_type: PetitionType,
+    *,
+    submitter: User | None = None,
+    is_confidential: bool = False,
+):
     from api.schemas.petition import PetitionCreate
 
     if submitter is None:
@@ -63,6 +75,7 @@ async def _create_case(db, petition_type: PetitionType, *, submitter: User | Non
         type_id=petition_type.id,
         title="教室冷氣故障",
         content="B302 教室冷氣無法啟動，請盡快派員維修。",
+        is_confidential=is_confidential,
     )
     case_obj, code, _share_token = await petition_svc.create_case(
         db, data=data, submitter=submitter
@@ -552,6 +565,39 @@ async def test_list_manage_cases_scoped_to_org_permission(
     payload = resp.json()
     assert len(payload) == 1
     assert payload[0]["current_org_id"] == str(org_a.id)
+
+
+async def test_confidential_petition_is_visible_only_to_submitter(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:view_org")
+    case_obj, _code = await _create_case(
+        db_session, petition_type, submitter=owner, is_confidential=True
+    )
+    case_obj.status = PetitionStatus.CLOSED
+    case_obj.public_status = PetitionPublicStatus.PUBLISHED
+    await db_session.flush()
+
+    owner_detail = await authed_client_factory(owner).get(f"/petitions/{case_obj.id}")
+    assert owner_detail.status_code == 200
+    assert owner_detail.json()["is_confidential"] is True
+
+    handler_detail = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}")
+    assert handler_detail.status_code == 403
+    assert (await authed_client_factory(handler).get("/petitions/manage")).json() == []
+
+    own_cases = await authed_client_factory(owner).get("/petitions/my")
+    assert own_cases.status_code == 200
+    assert [item["id"] for item in own_cases.json()] == [str(case_obj.id)]
+
+    public_cases = await authed_client_factory(owner).get("/petitions/public")
+    assert public_cases.status_code == 200
+    assert all(item["id"] != str(case_obj.id) for item in public_cases.json())
+    public_detail = await authed_client_factory(owner).get(f"/petitions/public/{case_obj.id}")
+    assert public_detail.status_code == 404
 
 
 async def test_get_stats_scoped_by_org(db_session, authed_client_factory) -> None:

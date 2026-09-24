@@ -558,6 +558,8 @@ async def execute(
         case_obj = await petition_svc.get_case(db, uuid.UUID(str(arguments["case_id"])))
         if case_obj is None:
             raise DiscordCommandError("找不到此陳情案件。")
+        if not await petition_svc.can_view_case(db, case_obj, user):
+            raise DiscordCommandError("無權查看此陳情案件。")
         if operation == "petition_note":
             await petition_svc.add_internal_note(
                 db,

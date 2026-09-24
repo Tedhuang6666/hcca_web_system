@@ -86,6 +86,8 @@ def can_edit_content(case_obj: PetitionCase) -> bool:
 
 async def can_view_case(session: AsyncSession, case_obj: PetitionCase, user: User) -> bool:
     """檢查使用者是否可將案件內容用於其他受保護的業務流程。"""
+    if case_obj.is_confidential:
+        return case_obj.submitter_id == user.id
     codes = await get_user_permission_codes(session, user.id)
     if case_obj.submitter_id == user.id:
         return True
@@ -280,6 +282,7 @@ async def _create_case(
     contact_name: str,
     contact_email: str,
     actor_id: uuid.UUID | None,
+    is_confidential: bool = False,
     created_title: str = "案件已建立",
 ) -> tuple[PetitionCase, str, str]:
     petition_type = await get_type(session, type_id)
@@ -295,6 +298,7 @@ async def _create_case(
         share_token_hash=hash_share_token(share_token),
         type_id=type_id,
         is_named=True,
+        is_confidential=is_confidential,
         submitter_id=submitter_id,
         contact_name=contact_name,
         contact_email=contact_email,
@@ -329,6 +333,7 @@ async def create_case(
         type_id=data.type_id,
         title=data.title,
         content=data.content,
+        is_confidential=data.is_confidential,
         submitter_id=submitter.id,
         contact_name=submitter.display_name,
         contact_email=submitter.email,
@@ -466,6 +471,7 @@ async def list_cases(
                 PetitionCase.type_id,
                 PetitionCase.status,
                 PetitionCase.public_status,
+                PetitionCase.is_confidential,
                 PetitionCase.title,
                 PetitionCase.current_org_id,
                 PetitionCase.assigned_to_id,
@@ -498,6 +504,8 @@ async def list_cases(
         stmt = stmt.where(
             PetitionCase.title.ilike(pattern) | PetitionCase.case_number.ilike(pattern)
         )
+    if submitter_id is None:
+        stmt = stmt.where(PetitionCase.is_confidential.is_(False))
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -510,6 +518,7 @@ async def list_public_cases(
         .where(
             PetitionCase.status == PetitionStatus.CLOSED,
             PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+            PetitionCase.is_confidential.is_(False),
         )
         .options(selectinload(PetitionCase.type), selectinload(PetitionCase.current_org))
         .order_by(PetitionCase.public_published_at.desc())
@@ -526,6 +535,7 @@ async def get_public_case(session: AsyncSession, case_id: uuid.UUID) -> Petition
             PetitionCase.id == case_id,
             PetitionCase.status == PetitionStatus.CLOSED,
             PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+            PetitionCase.is_confidential.is_(False),
         )
         .options(selectinload(PetitionCase.type), selectinload(PetitionCase.current_org))
     )
@@ -665,6 +675,8 @@ async def request_public(
     data: PetitionPublicRequest,
     actor_id: uuid.UUID,
 ) -> PetitionCase:
+    if case_obj.is_confidential:
+        raise ValueError("密件不可申請公開")
     if case_obj.status != PetitionStatus.CLOSED:
         raise ValueError("案件結案後才能提出公開申請")
     if case_obj.public_status in {
@@ -699,6 +711,8 @@ async def respond_public(
     data: PetitionPublicResponse,
     actor_id: uuid.UUID | None,
 ) -> PetitionCase:
+    if case_obj.is_confidential:
+        raise ValueError("密件不可公開")
     if case_obj.public_status != PetitionPublicStatus.PENDING_USER:
         raise ValueError("此案件目前沒有待確認的公開申請")
     now = datetime.now(UTC)
@@ -740,6 +754,8 @@ async def confirm_public(
     *,
     actor_id: uuid.UUID,
 ) -> PetitionCase:
+    if case_obj.is_confidential:
+        raise ValueError("密件不可公開")
     if case_obj.public_status != PetitionPublicStatus.PENDING_HANDLER:
         raise ValueError("此案件目前沒有待承辦確認的公開修改")
     case_obj.public_status = PetitionPublicStatus.PUBLISHED
@@ -935,6 +951,7 @@ async def stats(
 
     now = datetime.now(UTC)
     base_filter = []
+    base_filter.append(PetitionCase.is_confidential.is_(False))
     if org_ids is not None:
         base_filter.append(PetitionCase.current_org_id.in_(org_ids))
 
@@ -1017,6 +1034,7 @@ async def org_stats(
         if not org_ids:
             return []
         stmt = stmt.where(PetitionCase.current_org_id.in_(org_ids))
+    stmt = stmt.where(PetitionCase.is_confidential.is_(False))
     result = await session.execute(stmt)
     rows = result.all()
     return [
