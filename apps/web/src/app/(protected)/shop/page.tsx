@@ -4,10 +4,16 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Package, ShoppingBag } from "lucide-react";
+import { CircleAlert, CircleCheck, Package, ShoppingBag } from "lucide-react";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
-import type { CatalogCategoryOut, CatalogProductOut, CloseStatusItem, ProductOut } from "@/lib/types";
+import type {
+  CatalogCategoryOut,
+  CatalogProductOut,
+  CloseStatusItem,
+  ProductOut,
+  SchoolClassListItem,
+} from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -45,10 +51,12 @@ function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?
 
 function ProductModal({
   productId,
+  classClosed,
   onClose,
   onAdded,
 }: {
   productId: string;
+  classClosed: boolean;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -113,12 +121,17 @@ function ProductModal({
   const allPicked = product.variant_groups.every((g) => picked[g.id]);
   const available =
     product.status === "active" && (product.is_unlimited || product.stock_quantity > 0);
+  const canAddToCart = available && !classClosed;
   const displayImage = product.variant_groups.reduce((current, group) => {
     const option = group.options.find((o) => o.id === picked[group.id]);
     return option?.image_url || current;
   }, product.image_url);
 
   const submit = async () => {
+    if (classClosed) {
+      toast.error("本班已結單，請聯繫班級幹部確認訂購安排");
+      return;
+    }
     if (!allPicked) {
       toast.error("請選擇所有規格");
       return;
@@ -232,12 +245,14 @@ function ProductModal({
         <div className="flex gap-3 pt-1">
           <button
             onClick={submit}
-            disabled={loading || !available}
+            disabled={loading || !canAddToCart}
             className="btn flex-1"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
             aria-busy={loading}>
             {!available
               ? "無法購買"
+              : classClosed
+                ? "本班已結單"
               : loading
                 ? "處理中…"
                 : `加入購物車 NT$${(unitPrice * qty).toLocaleString()}`}
@@ -252,14 +267,23 @@ function ProductModal({
 
 // ── 商品卡片 ──────────────────────────────────────────────────────────────────
 
-function ProductCard({ product, onClick }: { product: CatalogProductOut; onClick: () => void }) {
+function ProductCard({
+  product,
+  classClosed,
+  onClick,
+}: {
+  product: CatalogProductOut;
+  classClosed: boolean;
+  onClick: () => void;
+}) {
   const soldOut = product.status === "sold_out";
   return (
     <button
       onClick={onClick}
+      disabled={soldOut || classClosed}
       className="group relative overflow-hidden rounded-xl border text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5"
       style={{
-        opacity: soldOut ? 0.6 : 1,
+        opacity: soldOut || classClosed ? 0.6 : 1,
         background: "var(--bg-surface)",
         borderColor: "var(--border)",
       }}
@@ -283,7 +307,7 @@ function ProductCard({ product, onClick }: { product: CatalogProductOut; onClick
             background: soldOut ? "var(--bg-elevated)" : "var(--primary-dim)",
             color: soldOut ? "var(--text-secondary)" : "var(--primary-text)",
           }}>
-          {soldOut ? "已售完" : product.is_unlimited ? "供應中" : `剩 ${product.stock_quantity}`}
+          {classClosed ? "本班已結單" : soldOut ? "已售完" : product.is_unlimited ? "供應中" : `剩 ${product.stock_quantity}`}
         </span>
       </div>
       <div className="space-y-2 px-3.5 py-3.5">
@@ -319,6 +343,7 @@ export default function ShopPage() {
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
+  const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
 
@@ -333,11 +358,16 @@ export default function ShopPage() {
         try {
           const schoolClass = await classApi.myClass();
           if (schoolClass && data.length) {
+            setMyClass(schoolClass);
             const catIds = data.map((c) => c.id);
             const status = await shopApi.getCloseStatus(catIds, schoolClass.id);
             setCloseStatus(status.statuses);
+          } else {
+            setMyClass(null);
           }
-        } catch { /* best effort */ }
+        } catch {
+          setMyClass(null);
+        }
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
@@ -382,6 +412,27 @@ export default function ShopPage() {
           </Link>
         </div>
       </div>
+
+      {myClass && (
+        <section
+          className="flex items-start gap-3 rounded-lg px-4 py-3"
+          role="status"
+          style={Object.values(closeStatus).some((status) => status.is_closed)
+            ? { border: "1px solid var(--danger-border)", background: "var(--danger-dim)" }
+            : { border: "1px solid var(--success-border)", background: "var(--success-dim)" }}>
+          {Object.values(closeStatus).some((status) => status.is_closed)
+            ? <CircleAlert className="mt-0.5 shrink-0" size={18} style={{ color: "var(--danger)" }} aria-hidden />
+            : <CircleCheck className="mt-0.5 shrink-0" size={18} style={{ color: "var(--success)" }} aria-hidden />}
+          <div>
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              以 {myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`} 的身分訂購
+            </p>
+            <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
+              送單後請向班級幹部繳費；幹部確認收款後，會在「我的訂單」更新為已繳費。
+            </p>
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <ListPageSkeleton rows={4} showHeader={false} showFilters={false} />
@@ -493,7 +544,12 @@ export default function ShopPage() {
                   ) : (
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                       {series.products.map((product) => (
-                        <ProductCard key={product.id} product={product} onClick={() => setOpenProduct(product.id)} />
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                          onClick={() => setOpenProduct(product.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -507,6 +563,7 @@ export default function ShopPage() {
       {openProduct && (
         <ProductModal
           productId={openProduct}
+          classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           onClose={() => setOpenProduct(null)}
           onAdded={() => {
             setOpenProduct(null);

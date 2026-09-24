@@ -73,6 +73,7 @@ CLASS_ROLE_DEFINITIONS: dict[str, tuple[str, list[str], int]] = {
         "班代",
         [
             "class:view_members",
+            "class:shop_collect",
             "meeting:vote",
             "meeting:view_all",
             "regulation:create",
@@ -235,7 +236,18 @@ async def ensure_class_default_roles(
     bindings: list[ClassRoleBinding] = []
     for role_key, (title, codes, weight) in CLASS_ROLE_DEFINITIONS.items():
         if role_key in existing:
-            bindings.append(existing[role_key])
+            binding = existing[role_key]
+            existing_codes = set(
+                (
+                    await session.scalars(
+                        select(Permission.code).where(Permission.position_id == binding.position_id)
+                    )
+                ).all()
+            )
+            for code in codes:
+                if code not in existing_codes:
+                    session.add(Permission(position_id=binding.position_id, code=code))
+            bindings.append(binding)
             continue
         position = Position(
             org_id=sc.org_id,

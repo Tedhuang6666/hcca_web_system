@@ -143,6 +143,122 @@ function UserPicker({
   );
 }
 
+function RepresentativeSetupPanel({ classes }: { classes: SchoolClassListItem[] }) {
+  const activeClasses = useMemo(
+    () => classes.filter((item) => item.is_active),
+    [classes],
+  );
+  const [holders, setHolders] = useState<Record<string, string[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [pickingClass, setPickingClass] = useState<SchoolClassListItem | null>(null);
+  const [savingClassId, setSavingClassId] = useState<string | null>(null);
+
+  const loadRepresentatives = useCallback(async () => {
+    if (!activeClasses.length) {
+      setHolders({});
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const roleLists = await Promise.all(activeClasses.map((item) => classApi.roles(item.id)));
+      setHolders(Object.fromEntries(roleLists.map((roles, index) => {
+        const representative = roles.find((role) => role.role_key === "class_representative");
+        return [activeClasses[index].id, representative?.holders.map((holder) => holder.display_name) ?? []];
+      })));
+    } catch (error) {
+      toast.error(getErrorMessage(error, "載入班級議員失敗"));
+    } finally {
+      setLoading(false);
+    }
+  }, [activeClasses]);
+
+  useEffect(() => {
+    void loadRepresentatives();
+  }, [loadRepresentatives]);
+
+  const assignRepresentative = async (user: UserSummary) => {
+    if (!pickingClass) return;
+    setSavingClassId(pickingClass.id);
+    try {
+      await classApi.assignRole(pickingClass.id, "class_representative", { user_id: user.id });
+      toast.success(`${classTitle(pickingClass)}已任命 ${user.display_name} 為議員`);
+      setPickingClass(null);
+      await loadRepresentatives();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "任命議員失敗"));
+    } finally {
+      setSavingClassId(null);
+    }
+  };
+
+  if (!activeClasses.length) return null;
+
+  const assignedCount = Object.values(holders).filter((names) => names.length > 0).length;
+
+  return (
+    <section className="rounded-md p-5" style={{ border: "1px solid var(--border)" }}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            班級議員快速設定
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            直接逐班任命議員；系統會同步班代、議員與議事權限。
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
+          style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+          <BadgeCheck size={15} /> {loading ? "讀取中…" : `${assignedCount}/${activeClasses.length} 班已設定`}
+        </span>
+      </div>
+
+      {pickingClass && (
+        <div className="mt-4 rounded-md p-3" style={{ background: "var(--bg-elevated)" }}>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              為 {classTitle(pickingClass)} 任命議員
+            </p>
+            <button type="button" onClick={() => setPickingClass(null)} className="text-xs"
+              style={{ color: "var(--text-muted)" }}>
+              取消
+            </button>
+          </div>
+          <UserPicker placeholder="搜尋姓名、Email 或學號" onPick={assignRepresentative} />
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {activeClasses.map((item) => {
+          const names = holders[item.id] ?? [];
+          const isSaving = savingClassId === item.id;
+          return (
+            <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md px-3 py-2.5"
+              style={{ border: "1px solid var(--border)" }}>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                  {classTitle(item)}
+                </p>
+                <p className="truncate text-xs" style={{ color: names.length ? "var(--text-secondary)" : "var(--text-muted)" }}>
+                  {loading ? "讀取中…" : names.length ? names.join("、") : "尚未設定議員"}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => setPickingClass(item)}
+                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
+                style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
+                {isSaving ? "處理中…" : names.length ? "加任議員" : "任命議員"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
   const defaultYear = String(new Date().getFullYear() - 1911);
   const [mode, setMode] = useState<"single" | "bulk">("bulk");
@@ -1344,6 +1460,8 @@ export default function ClassesAdminPage() {
           {loading ? "載入中" : `${classes.length} 個班級`}
         </span>
       </header>
+
+      <RepresentativeSetupPanel classes={classes} />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
         <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
