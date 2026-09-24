@@ -50,6 +50,7 @@ class PetitionCreate(BaseModel):
     type_id: uuid.UUID
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1, max_length=10000)
+    is_confidential: bool = False
 
 
 class PetitionAdminCreate(BaseModel):
@@ -92,6 +93,7 @@ class PetitionCreatedOut(BaseModel):
     share_token: str
     status: PetitionStatus
     title: str
+    is_confidential: bool = False
     status_label: str
     status_public_message: str
     next_action: str
@@ -149,6 +151,7 @@ class PetitionCaseListItem(BaseModel):
     status: PetitionStatus
     public_status: PetitionPublicStatus
     title: str
+    is_confidential: bool
     current_org_id: uuid.UUID
     assigned_to_id: uuid.UUID | None
     submitted_at: datetime

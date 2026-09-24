@@ -30508,6 +30508,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Confidential */
+            is_confidential: boolean;
             /**
              * Next Action
              * @default
@@ -30619,6 +30621,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Confidential */
+            is_confidential: boolean;
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
@@ -30695,6 +30699,11 @@ export interface components {
         PetitionCreate: {
             /** Content */
             content: string;
+            /**
+             * Is Confidential
+             * @default false
+             */
+            is_confidential: boolean;
             /** Title */
             title: string;
             /**
@@ -30728,6 +30737,11 @@ export interface components {
             status_public_message: string;
             /** Title */
             title: string;
+            /**
+             * Is Confidential
+             * @default false
+             */
+            is_confidential: boolean;
             /** Verification Code */
             verification_code: string;
         };
