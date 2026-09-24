@@ -1646,10 +1646,7 @@ def render_petition_print_html(case_obj: PetitionCase) -> str:
     assigned_name = (
         getattr(getattr(case_obj, "assigned_to", None), "display_name", None) or "尚未分案"
     )
-    submitter = getattr(case_obj, "submitter", None)
-    contact_email = (
-        getattr(case_obj, "contact_email", None) or getattr(submitter, "email", None) or "未提供"
-    )
+    contact_email = "hchshcca@gmail.com"
     org_name = getattr(getattr(case_obj, "current_org", None), "name", None) or "未設定"
     type_name = getattr(getattr(case_obj, "type", None), "name", None) or "未分類"
     generated_at = print_datetime(dt.datetime.now(TAIPEI))
@@ -1791,10 +1788,10 @@ def render_petition_print_html(case_obj: PetitionCase) -> str:
       word-break: normal;
     }}
     .page {{ width: 146mm; margin: 0 auto; }}
-    .print-time {{ margin: 0 0 7mm; }}
+    .print-time {{ margin: 0 0 7mm; font-size: 10.5pt; line-height: 1.4; }}
     h1 {{
-      margin: 0 0 1mm;
-      font-family: "OfficialTitle", "OfficialKai", serif;
+      margin: 0 0 3mm;
+      font-family: "標楷體", "OfficialKai", "DFKai-SB", serif;
       color: #111;
       font-size: 18pt;
       font-weight: 400;
@@ -1810,7 +1807,12 @@ def render_petition_print_html(case_obj: PetitionCase) -> str:
       overflow-wrap: anywhere;
       word-break: break-word;
     }}
-    .last-updated {{ margin: 1mm 0 5mm; text-align: right; }}
+    .last-updated {{
+      margin: 1mm 0 5mm;
+      font-size: 10.5pt;
+      line-height: 1.4;
+      text-align: right;
+    }}
     .handler-line {{ margin: 0 0 1mm; }}
   </style>
 </head>

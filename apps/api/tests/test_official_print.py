@@ -120,7 +120,7 @@ def test_render_petition_print_html_uses_intake_detail_layout() -> None:
         case_number="1150018",
         title="數學課相關問題",
         content="第一段陳情內容\n第二段陳情內容",
-        contact_email="hchshcca@gmail.com",
+        contact_email="submitter@example.com",
         current_org=SimpleNamespace(name="竹嶺班聯"),
         type=SimpleNamespace(name="其餘事務(或無法分類)"),
         assigned_to=SimpleNamespace(display_name="黃丞廷"),
@@ -138,6 +138,9 @@ def test_render_petition_print_html_uses_intake_detail_layout() -> None:
     assert "最後更新：更新 09/21 下午 02 點 51 分" in html
     assert "陳情承辦人：黃丞廷" in html
     assert 'href="mailto:hchshcca@gmail.com"' in html
+    assert "submitter@example.com" not in html
+    assert 'font-family: "標楷體", "OfficialKai", "DFKai-SB", serif' in html
+    assert ".print-time" in html and ".last-updated" in html
     assert "正式回覆" not in html
     assert "處理時間軸" not in html
 
