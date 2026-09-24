@@ -229,7 +229,7 @@ async def is_blacklisted(
         result = bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
         set_redis_client_healthy("state", True)
         return result
-    except (RedisError, TimeoutError) as exc:
+    except (RedisError, TimeoutError, OSError) as exc:
         set_redis_client_healthy("state", False)
         logger.error(
             "黑名單檢查 Redis 不可用，模式=%s",
@@ -309,7 +309,7 @@ async def is_session_revoked(session_id: str | None, *, fail_closed: bool = Fals
         return False
     try:
         return bool(await redis_client.exists(f"{SESSION_REVOKED_PREFIX}{session_id}"))
-    except (RedisError, TimeoutError) as exc:
+    except (RedisError, TimeoutError, OSError) as exc:
         logger.error("session 撤銷狀態 Redis 不可用", exc_info=True)
         if fail_closed:
             raise RedisUnavailableError(
