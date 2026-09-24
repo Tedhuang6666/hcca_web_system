@@ -38,7 +38,6 @@ MODULES: dict[str, ModuleSpec] = {
     "announcements": ModuleSpec("校內公告", ("/announcements",)),
     "shop": ModuleSpec("商品訂購", ("/shop",)),
     "merchandiseSubmissions": ModuleSpec("校商投稿", ("/merchandise-submissions",)),
-    "meal": ModuleSpec("學餐訂購", ("/meal",)),
     "surveys": ModuleSpec("問卷系統", ("/surveys",)),
     "petitions": ModuleSpec("陳情中心", ("/petitions",)),
     "examPapers": ModuleSpec("段考題庫", ("/exam-papers",)),
@@ -46,15 +45,12 @@ MODULES: dict[str, ModuleSpec] = {
     "recommendedVendors": ModuleSpec("推薦商家", ("/recommended-vendors",)),
     "line": ModuleSpec("LINE 通知", ("/line",)),
     "discord": ModuleSpec("Discord 機器人", ("/discord",)),
-    "governance": ModuleSpec("治理中樞", ("/governance",)),
-    "matters": ModuleSpec("整合工作台", ("/matters",)),
-    "activities": ModuleSpec("活動管理", ("/activities",)),
     "elections": ModuleSpec("選舉開票", ("/elections",)),
     "seating": ModuleSpec("票務劃位", ("/seating",)),
     "finance": ModuleSpec("財務與收款", ("/finance", "/receivables")),
     "publications": ModuleSpec("發布中心", ("/publications",)),
     "email": ModuleSpec("電子郵件", ("/email",)),
-    "operations": ModuleSpec("營運中心", ("/tasks", "/work-items", "/loans", "/inventory")),
+    "operations": ModuleSpec("營運中心", ("/tasks", "/work-items", "/loans")),
 }
 
 MODULE_IDS: tuple[str, ...] = tuple(MODULES.keys())

@@ -46,7 +46,6 @@ class Domain(StrEnum):
     MEETING = "meeting"
     CALENDAR = "calendar"
     SURVEY = "survey"
-    MEAL = "meal"
     SHOP = "shop"
     REGULATION = "regulation"
     TASK = "task"
@@ -72,7 +71,6 @@ _DOMAIN_EMOJI: dict[Domain, str] = {
     Domain.MEETING: "🤝",
     Domain.CALENDAR: "📅",
     Domain.SURVEY: "📝",
-    Domain.MEAL: "🍱",
     Domain.SHOP: "🛒",
     Domain.REGULATION: "⚖️",
     Domain.TASK: "✅",
@@ -89,7 +87,6 @@ _DOMAIN_LABEL: dict[Domain, str] = {
     Domain.MEETING: "會議",
     Domain.CALENDAR: "行事曆",
     Domain.SURVEY: "問卷",
-    Domain.MEAL: "學餐",
     Domain.SHOP: "福利社",
     Domain.REGULATION: "法規",
     Domain.TASK: "待辦",

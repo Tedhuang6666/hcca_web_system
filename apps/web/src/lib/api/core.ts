@@ -1,6 +1,6 @@
 import { API_BASE } from "../config";
 import { ApiError } from "../api-helpers";
-import { clearAuthCache, clearImpersonationSession, getImpersonationSession } from "../auth-cache";
+import { clearAuthCache } from "../auth-cache";
 import { reportClientError } from "../client-error-reporter";
 import { beginApiRequest, recordApiMetric, recordCircuitOpen } from "../client-metrics";
 import { apiErrorFromResponse, errorMessageFromResponse, formatErrorDetail } from "./errors";
@@ -91,14 +91,8 @@ export async function request<T>(
   else recordReachable(key);
 
   if (response.status === 401) {
-    const impersonation = getImpersonationSession();
-    if (impersonation && !init.skipImpersonation) {
-      clearImpersonationSession();
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") window.location.reload();
-      throw new ApiError(401, "模擬登入已過期，已返回原本的管理員身分");
-    }
     const hasLocalLogin = typeof window === "undefined" || Boolean(window.localStorage.getItem("user_id"));
-    if (!hasLocalLogin && !impersonation) throw await apiErrorFromResponse(response);
+    if (!hasLocalLogin) throw await apiErrorFromResponse(response);
 
     const refreshStatus = await refreshWithStatus();
     if (refreshStatus === "ok") {

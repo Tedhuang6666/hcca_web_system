@@ -7,8 +7,6 @@ import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useFetch } from "@/hooks/useFetch";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
-import ActivitySelect from "@/components/activities/ActivitySelect";
-import type { Activity } from "@/lib/types";
 
 const AUDIENCE_LABEL: Record<string, string> = {
   all: "全體",
@@ -45,10 +43,8 @@ export default function AnnouncementsClient({
   initialItems?: AnnouncementListItem[];
 }) {
   const [showDrafts, setShowDrafts] = useState(false);
-  const [activityId, setActivityId] = useState("");
-  const [activities, setActivities] = useState<Activity[]>([]);
   const { can, canAny } = usePermissions();
-  const canCreate = can("announcement:create") || activities.length > 0;
+  const canCreate = can("announcement:create");
   const canListDrafts = can("announcement:create");
   const canManage = canAny(
     "announcement:create",
@@ -60,21 +56,16 @@ export default function AnnouncementsClient({
 
   const [items, loading] = useFetch(
     () => {
-      const params = { limit: 100, activity_id: activityId || undefined };
+      const params = { limit: 100 };
       return showDrafts && canListDrafts
         ? announcementsApi.listAll(params)
         : announcementsApi.list(params);
     },
-    [activityId, showDrafts, canListDrafts],
+    [showDrafts, canListDrafts],
     "載入公告失敗",
     initialItems,
     "announcements/list",
     true,
-  );
-
-  const activityNameById = useMemo(
-    () => new Map(activities.map((activity) => [activity.id, activity.name])),
-    [activities],
   );
 
   const sorted = useMemo(
@@ -110,17 +101,6 @@ export default function AnnouncementsClient({
         </div>
       </div>
 
-      <section className="card p-4">
-        <ActivitySelect
-          value={activityId}
-          onChange={setActivityId}
-          label="依活動篩選"
-          noneLabel="全部公告"
-          scope="all"
-          onActivitiesLoaded={setActivities}
-        />
-      </section>
-
       {loading ? (
         <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : sorted.length === 0 ? (
@@ -142,11 +122,6 @@ export default function AnnouncementsClient({
                     {item.audience_type !== "all" && (
                       <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
                         {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
-                      </span>
-                    )}
-                    {item.activity_id && (
-                      <span className="badge" style={{ color: "var(--info)", background: "var(--info-dim)", borderColor: "var(--border-strong)" }}>
-                        {activityNameById.get(item.activity_id) ?? "活動公告"}
                       </span>
                     )}
                     <span className="text-xs" style={{ color: "var(--text-muted)" }}>

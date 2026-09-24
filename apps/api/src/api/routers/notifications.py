@@ -115,8 +115,6 @@ class NotificationPreferencesOut(BaseModel):
     petition_assigned: ChannelPref
     petition_replied: ChannelPref
     petition_status_updated: ChannelPref
-    meal_class_collecting: ChannelPref
-    meal_pickup_ready: ChannelPref
     merchandise_submission_received: ChannelPref
     merchandise_submission_status: ChannelPref
     shop_order_paid: ChannelPref
@@ -145,8 +143,6 @@ class NotificationPreferencesIn(BaseModel):
     petition_assigned: ChannelPref | None = None
     petition_replied: ChannelPref | None = None
     petition_status_updated: ChannelPref | None = None
-    meal_class_collecting: ChannelPref | None = None
-    meal_pickup_ready: ChannelPref | None = None
     merchandise_submission_received: ChannelPref | None = None
     merchandise_submission_status: ChannelPref | None = None
     shop_order_paid: ChannelPref | None = None

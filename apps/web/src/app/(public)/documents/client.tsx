@@ -10,13 +10,12 @@ import { usersApi } from "@/lib/api/users";
 import { apiErrorMessage, withFallback } from "@/lib/api-helpers";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import type { UserSummary } from "@/lib/api/core";
-import type { Activity, BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
+import type { BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
-import ActivitySelect from "@/components/activities/ActivitySelect";
 
 const TABS: { key: DocumentStatus | "all"; label: string }[] = [
   { key: "all",      label: "全部" },
@@ -79,7 +78,6 @@ type FilterState = {
   recipientKeyword: string;
   myOnly: boolean;
   orgId: string;
-  activityId: string;
 };
 
 const EMPTY_FILTERS: FilterState = {
@@ -96,7 +94,6 @@ const EMPTY_FILTERS: FilterState = {
   recipientKeyword: "",
   myOnly: false,
   orgId: "",
-  activityId: "",
 };
 
 type FilterAction =
@@ -213,11 +210,9 @@ export default function DocumentListClient({
       recipientKeyword: searchParams.get("recipient_keyword") ?? "",
       myOnly:           canViewAll && searchParams.get("my_only") === "true",
       orgId:            searchParams.get("org_id") ?? "",
-      activityId:       searchParams.get("activity_id") ?? "",
     })
   );
   const [orgs, setOrgs] = useState<OrgRead[]>(() => cacheGet<OrgRead[]>("documents/orgs") ?? []);
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedFilterOut[]>([]);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -233,7 +228,7 @@ export default function DocumentListClient({
     filters.dateFrom || filters.dateTo ||
     filters.issuedFrom || filters.issuedTo ||
     filters.rocYear || filters.serialPrefix || filters.handlerKeyword || filters.recipientKeyword ||
-    filters.myOnly || filters.orgId || filters.activityId
+    filters.myOnly || filters.orgId
   );
   // 訪客由後端依 OptionalUser 限制為公開資料；登入者則由後端依自身權限篩選，
   // 不要預設套用單一可見度，否則會漏掉「登入」或機關可見的公文。
@@ -264,7 +259,6 @@ export default function DocumentListClient({
     if (filters.recipientKeyword) initialParams.recipient_keyword = filters.recipientKeyword;
     if (filters.myOnly) initialParams.my_only = "true";
     if (filters.orgId) initialParams.org_id = filters.orgId;
-    if (filters.activityId) initialParams.activity_id = filters.activityId;
 
     const documentsRequest = initialDocs !== null && !userId
       ? Promise.resolve(initialDocs)
@@ -312,7 +306,6 @@ export default function DocumentListClient({
     if (filters.recipientKeyword) q.set("recipient_keyword", filters.recipientKeyword);
     if (filters.myOnly) q.set("my_only", "true");
     if (filters.orgId) q.set("org_id", filters.orgId);
-    if (filters.activityId) q.set("activity_id", filters.activityId);
     const next = q.toString() ? `/documents?${q}` : "/documents";
     router.replace(next, { scroll: false });
   }, [activeTab, debouncedSearch, filters, queryVisibility, router]);
@@ -335,7 +328,6 @@ export default function DocumentListClient({
     if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
     if (filters.myOnly) params.my_only = "true";
     if (filters.orgId) params.org_id = filters.orgId;
-    if (filters.activityId) params.activity_id = filters.activityId;
 
     const cacheKey = `documents/list/${JSON.stringify(params)}`;
     const cached = cacheGet<DocumentListItem[]>(cacheKey);
@@ -399,7 +391,6 @@ export default function DocumentListClient({
         recipientKeyword: s("recipient_keyword"),
         myOnly:           s("my_only") === "true",
         orgId:            s("org_id"),
-        activityId:       s("activity_id"),
       },
     });
     setShowFilters(true);
@@ -431,7 +422,6 @@ export default function DocumentListClient({
     if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
     if (filters.myOnly) params.my_only = "true";
     if (filters.orgId) params.org_id = filters.orgId;
-    if (filters.activityId) params.activity_id = filters.activityId;
     const share_path = (() => {
       const q = new URLSearchParams(params as Record<string, string>);
       return q.toString() ? `/documents?${q.toString()}` : "/documents";
@@ -481,7 +471,6 @@ export default function DocumentListClient({
       if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
       if (filters.myOnly) params.my_only = "true";
       if (filters.orgId) params.org_id = filters.orgId;
-      if (filters.activityId) params.activity_id = filters.activityId;
       const more = await documentsApi.list(params);
       setDocs(prev => [...prev, ...more]);
       setOffset(nextOffset);
@@ -492,11 +481,6 @@ export default function DocumentListClient({
       setLoadingMore(false);
     }
   };
-
-  const activityNameById = useMemo(
-    () => new Map(activities.map((a) => [a.id, a.name])),
-    [activities]
-  );
 
   const sorted = useMemo(() => [...docs].filter((doc) => doc.status !== "archived").sort((a, b) => {
     const serialNumber = (value: string | null) => {
@@ -585,7 +569,6 @@ export default function DocumentListClient({
     if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
     if (filters.myOnly) params.my_only = "true";
     if (filters.orgId) params.org_id = filters.orgId;
-    if (filters.activityId) params.activity_id = filters.activityId;
     try {
       const data = await documentsApi.list(params);
       setDocs(data);
@@ -1043,17 +1026,6 @@ export default function DocumentListClient({
                 </div>
               )}
 
-              <div className="w-56 space-y-1.5">
-                <ActivitySelect
-                  value={filters.activityId}
-                  onChange={v => dispatchFilter({ type: "set", key: "activityId", value: v })}
-                  label="活動"
-                  noneLabel="全部活動"
-                  scope="all"
-                  onActivitiesLoaded={setActivities}
-                />
-              </div>
-
               {/* 僅顯示我的 */}
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>其他</p>
@@ -1290,12 +1262,6 @@ export default function DocumentListClient({
                             {doc.summary || doc.subject || doc.title}
                           </Link>
                         )}
-                        {doc.activity_id && (
-                          <span className="mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px]"
-                            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-                            {activityNameById.get(doc.activity_id) ?? "活動公文"}
-                          </span>
-                        )}
                       </td>
                       <td className="px-5 py-4">
                         <UrgencyBadge urgency={doc.urgency} />
@@ -1426,12 +1392,6 @@ export default function DocumentListClient({
                             限辦 {new Date(doc.due_date).toLocaleDateString("zh-TW")}
                             {isOverdue && " · 已逾期"}
                           </p>
-                        )}
-                        {doc.activity_id && (
-                          <span className="mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px]"
-                            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-                            {activityNameById.get(doc.activity_id) ?? "活動公文"}
-                          </span>
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">

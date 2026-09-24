@@ -19,13 +19,7 @@ import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave
 import { RecipientSearch, type RecipientDraft } from "@/components/documents/RecipientSearch";
 import { OrganizationEmailRecipientSettings } from "@/components/documents/OrganizationEmailRecipientSettings";
 import { PetitionLinkSelector, type PetitionLinkOption } from "@/components/documents/PetitionLinkSelector";
-import ActivitySelect from "@/components/activities/ActivitySelect";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
-import {
-  GovernanceLinkNotice,
-  createGovernanceBacklink,
-  governanceContextFromParams,
-} from "@/lib/governanceLinking";
 
 interface Recipient {
   id: string;
@@ -53,7 +47,6 @@ type DocumentDraft = {
   summary: string;
   category: DocumentCategory;
   selectedOrgId: string;
-  activityId: string;
   docDescription: string;
   actionRequired: string;
   meetingPurpose: string;
@@ -352,16 +345,12 @@ export default function NewDocumentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get("template_id");
-  const governanceContext = useMemo(
-    () => governanceContextFromParams(searchParams),
-    [searchParams],
-  );
   const [saving, setSaving] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [urgency, setUrgency] = useState<DocumentUrgency>("normal");
   const [classification, setClassification] = useState<DocumentClassification>("normal");
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState(governanceContext?.matterTitle ?? "");
+  const [subject, setSubject] = useState("");
   const [summary, setSummary] = useState("");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [category, setCategory] = useState<DocumentCategory>("letter");
@@ -377,8 +366,7 @@ export default function NewDocumentPage() {
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [orgHierarchy, setOrgHierarchy] = useState<OrgRead[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>(governanceContext?.orgId ?? "");
-  const [activityId, setActivityId] = useState("");
+  const [selectedOrgId, setSelectedOrgId] = useState<string>("");
   const selectedOrg = orgs.find(o => o.id === selectedOrgId) ?? null;
 
   // 自動標題
@@ -477,7 +465,6 @@ export default function NewDocumentPage() {
     summary,
     category,
     selectedOrgId,
-    activityId,
     docDescription,
     actionRequired,
     meetingPurpose,
@@ -508,7 +495,6 @@ export default function NewDocumentPage() {
     selectedPetition,
   }), [
     actionRequired,
-    activityId,
     basis,
     category,
     classificationNumber,
@@ -552,7 +538,6 @@ export default function NewDocumentPage() {
     setSummary(draft.summary ?? "");
     setCategory(draft.category ?? "letter");
     setSelectedOrgId(draft.selectedOrgId ?? "");
-    setActivityId(draft.activityId ?? "");
     setDocDescription(draft.docDescription ?? "");
     setActionRequired(draft.actionRequired ?? "");
     setMeetingPurpose(draft.meetingPurpose ?? "");
@@ -745,7 +730,6 @@ export default function NewDocumentPage() {
         due_date: dueDate || undefined,
         visibility_level: visibilityLevel,
         org_id: selectedOrgId,
-        activity_id: activityId || null,
         petition_case_id: selectedPetition?.id ?? null,
         recipients: recipients.map((r) => ({
           recipient_type: r.recipient_type,
@@ -764,13 +748,6 @@ export default function NewDocumentPage() {
       for (const file of pendingFiles) {
         await documentsApi.uploadAttachment(doc.id, file);
       }
-      await createGovernanceBacklink({
-        context: governanceContext,
-        targetType: "document",
-        targetId: doc.id,
-        title: doc.title,
-        href: `/documents/${encodeURIComponent(doc.serial_number)}`,
-      });
       clearDraft();
       clearDraftFiles();
       toast.success("草稿已儲存");
@@ -889,8 +866,6 @@ export default function NewDocumentPage() {
         </div>
       </div>
 
-      <GovernanceLinkNotice context={governanceContext} />
-
       <GuidedForm
         steps={DOCUMENT_STEPS}
         activeStep={activeStep}
@@ -957,7 +932,6 @@ export default function NewDocumentPage() {
               )}
             </div>
 
-            <ActivitySelect value={activityId} onChange={setActivityId} />
 
             <div className="grid grid-cols-2 gap-3">
               {[

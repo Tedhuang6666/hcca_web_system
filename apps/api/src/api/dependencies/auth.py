@@ -29,17 +29,6 @@ def _token_from_request(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None,
 ) -> str | None:
-    # 瀏覽器一般登入只接受 HttpOnly cookie；唯一保留的 Bearer 例外是既有的
-    # 管理員 impersonation token。它必須優先於 cookie，否則管理員無法在自己的
-    # cookie 仍有效時代行目標使用者。
-    if credentials is not None:
-        try:
-            payload = decode_token(credentials.credentials)
-        except (ExpiredSignatureError, InvalidTokenError):
-            pass
-        else:
-            if payload.get("type") == "impersonation":
-                return credentials.credentials
     return access_token_from_cookies(request.cookies)
 
 
@@ -51,7 +40,7 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     except (ExpiredSignatureError, InvalidTokenError):
         return None
     token_type = payload.get("type")
-    if token_type not in {"access", "impersonation"}:
+    if token_type != "access":
         return None
     raw_user_id: str | None = payload.get("sub")
     if not raw_user_id:
@@ -90,24 +79,6 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
         if active_session is None:
             return None
 
-    if token_type == "impersonation":
-        raw_actor_id = payload.get("imp")
-        if not raw_actor_id:
-            return None
-        try:
-            actor_id = uuid.UUID(str(raw_actor_id))
-        except (TypeError, ValueError):
-            return None
-        actor = await db.scalar(select(User).where(User.id == actor_id))
-        if actor is None or not actor.is_active:
-            return None
-        if not actor.is_superuser:
-            from api.core.permission_codes import PermissionCode
-            from api.services.permission import get_user_permission_codes
-
-            actor_permissions = await get_user_permission_codes(db, actor.id)
-            if PermissionCode.ADMIN_IMPERSONATE not in actor_permissions:
-                return None
     return user
 
 
@@ -153,7 +124,7 @@ async def get_current_user(
     except InvalidTokenError as e:
         raise _CREDENTIALS_EXCEPTION from e
 
-    if payload.get("type") not in {"access", "impersonation"}:
+    if payload.get("type") != "access":
         raise _CREDENTIALS_EXCEPTION
 
     user = await _user_from_access_token(token, db)

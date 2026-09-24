@@ -21,7 +21,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 const OPTION_GROUPS = [
   { id: "governance", label: "公文與法規", desc: "簽核、起草與法規流程的提醒" },
   { id: "schedule", label: "會議與行程", desc: "受邀會議、會議紀錄與行程異動" },
-  { id: "campus", label: "校園服務", desc: "陳情、學餐、商品、問卷與公告" },
+  { id: "campus", label: "校園服務", desc: "陳情、商品、問卷與公告" },
   { id: "personal", label: "工作與系統", desc: "個人工作與帳號、系統安全提醒" },
 ] as const;
 
@@ -161,18 +161,6 @@ const OPTIONS: NotificationOption[] = [
     key: "petition_status_updated",
     label: "陳情狀態",
     desc: "陳情轉派、結案或狀態改變時提醒",
-    group: "campus",
-  },
-  {
-    key: "meal_class_collecting",
-    label: "學餐收單",
-    desc: "班級收款、結單或訂購管理提醒",
-    group: "campus",
-  },
-  {
-    key: "meal_pickup_ready",
-    label: "學餐取餐",
-    desc: "取餐時段、未取餐與核銷提醒",
     group: "campus",
   },
   {

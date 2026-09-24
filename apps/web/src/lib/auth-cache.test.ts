@@ -3,11 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cacheCurrentUser,
   clearAuthCache,
-  clearImpersonationSession,
   getAuthItem,
-  getImpersonationSession,
   getSecureAuthItem,
-  saveImpersonationSession,
 } from "./auth-cache";
 
 describe("auth cache", () => {
@@ -42,47 +39,7 @@ describe("auth cache", () => {
     expect(sessionStorage.getItem("permissions")).toBeNull();
   });
 
-  it("only exposes a non-sensitive SSR flag while impersonating", () => {
-    saveImpersonationSession({
-      token: "secret-token-must-not-appear-in-cookie",
-      target_user_id: "target-1",
-      target_email: "target@example.com",
-      target_display_name: "目標使用者",
-      actor_email: "admin@example.com",
-      actor_display_name: "管理員",
-      expires_at: Date.now() + 60_000,
-    });
-
-    expect(document.cookie).toContain("hcca_impersonating=1");
-    expect(document.cookie).not.toContain("secret-token-must-not-appear-in-cookie");
-
-    clearImpersonationSession();
-    expect(document.cookie).not.toContain("hcca_impersonating=1");
-  });
-
-  it("reads valid impersonation sessions and clears expired sessions", () => {
-    const session = {
-      token: "temporary-token",
-      target_user_id: "target-1",
-      target_email: "target@example.com",
-      target_display_name: "目標使用者",
-      actor_email: "admin@example.com",
-      actor_display_name: "管理員",
-      expires_at: Date.now() + 60_000,
-    };
-    saveImpersonationSession(session);
-
-    expect(getImpersonationSession()).toEqual(session);
-
-    saveImpersonationSession({ ...session, expires_at: Date.now() - 1 });
-    expect(getImpersonationSession()).toBeNull();
-    expect(sessionStorage.getItem("hcca_impersonation")).toBeNull();
-  });
-
-  it("clears malformed impersonation data and exposes both cache stores", () => {
-    sessionStorage.setItem("hcca_impersonation", "{broken");
-    expect(getImpersonationSession()).toBeNull();
-
+  it("exposes both cache stores", () => {
     cacheCurrentUser({ id: "user-2", permissions: ["document:create"] });
     expect(getAuthItem("user_id")).toBe("user-2");
     expect(getSecureAuthItem("permissions")).toBe('["document:create"]');

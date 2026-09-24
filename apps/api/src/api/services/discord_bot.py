@@ -754,80 +754,6 @@ async def emit_survey_closed(
     )
 
 
-# ── 學餐 ──────────────────────────────────────────────────────────────────────
-
-
-async def emit_meal_order_open(
-    db: AsyncSession, schedule: Any, vendor_org_id: uuid.UUID, vendor_name: str
-) -> None:
-    fields: list[EmbedField] = [
-        {"name": "商家", "value": vendor_name, "inline": True},
-        {"name": "供餐日期", "value": str(getattr(schedule, "date", "—")), "inline": True},
-    ]
-    if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
-        fields.append({"name": "結單時間", "value": dt, "inline": True})
-    link = f"/meal/schedules/{schedule.id}"
-    embed = build_embed(
-        Domain.MEAL,
-        Severity.INFO,
-        title=f"學餐開放訂購：{vendor_name}",
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEAL)
-    await _emit_org_channels(
-        db,
-        org_ids={vendor_org_id},
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
-async def emit_meal_order_closing_soon(
-    db: AsyncSession, schedule: Any, user_id: uuid.UUID, vendor_name: str
-) -> None:
-    link = f"/meal/schedules/{schedule.id}"
-    fields: list[EmbedField] = [{"name": "商家", "value": vendor_name, "inline": True}]
-    if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
-        fields.append({"name": "結單時間", "value": dt, "inline": True})
-    embed = build_embed(
-        Domain.MEAL,
-        Severity.WARNING,
-        title=f"學餐即將結單：{vendor_name}",
-        body="你尚未訂購此排程的學餐，請把握時間結單前下單。",
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEAL)
-    await emit_user_dm(
-        db,
-        user_id=user_id,
-        embed=embed,
-        components=[components] if components else None,
-        category="meal_closing",
-    )
-
-
-async def emit_meal_order_closed(
-    db: AsyncSession, schedule: Any, vendor_org_id: uuid.UUID, vendor_name: str, order_count: int
-) -> None:
-    link = f"/meal/schedules/{schedule.id}"
-    embed = build_embed(
-        Domain.MEAL,
-        Severity.NEUTRAL,
-        title=f"學餐結單：{vendor_name}",
-        body=f"本次共 {order_count} 筆訂單，承辦人請至平台確認備餐與取餐安排。",
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEAL)
-    await _emit_org_channels(
-        db,
-        org_ids={vendor_org_id},
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
 # ── 福利社 ────────────────────────────────────────────────────────────────────
 
 
@@ -1122,9 +1048,6 @@ __all__ = [
     "emit_calendar_event_published",
     "emit_calendar_event_reminder",
     "emit_document_pending_to_approver",
-    "emit_meal_order_closed",
-    "emit_meal_order_closing_soon",
-    "emit_meal_order_open",
     "emit_meeting_agenda_changed",
     "emit_meeting_invited",
     "emit_meeting_minutes_published",

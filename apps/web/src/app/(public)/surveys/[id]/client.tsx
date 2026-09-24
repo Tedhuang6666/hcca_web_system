@@ -40,7 +40,6 @@ import { clearAuthCache } from "@/lib/auth-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { recordRecent } from "@/lib/recents";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import SurveyImageViewer from "@/components/surveys/SurveyImageViewer";
 import Combobox from "@/components/ui/Combobox";
 import type { ComboboxOption } from "@/components/ui/Combobox";
@@ -73,7 +72,6 @@ function SwitchAccountButton({ surveyId, className }: { surveyId: string; classN
       await authFetch(apiUrl("/auth/logout"), {
         method: "POST",
         credentials: "include",
-        skipImpersonation: true,
       });
     } catch {
       // 即使 session 已經失效，也必須清掉本機快取，避免登入頁立即導回原帳號。
@@ -1453,13 +1451,6 @@ export default function SurveyDetailClient({
         </div>
         {/* 操作列 */}
         <div className="flex gap-2 flex-wrap sm:flex-shrink-0">
-          <GovernanceLinkPanel
-            entityType="survey"
-            entityId={survey.id}
-            title={survey.title}
-            href={`/surveys/${encodeURIComponent(survey.title)}`}
-            compact
-          />
           <button
             onClick={() => setShareOpen(true)}
             className="btn btn-ghost text-xs"

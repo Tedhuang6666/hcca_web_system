@@ -27,9 +27,9 @@ const ACTION_GROUPS = [
   { heading: "現在要處理", ids: ["dashboard", "tasks", "workItems", "calendar", "announcements"] },
   {
     heading: "治理事務",
-    ids: ["matters", "governanceHub", "documents", "regulations", "meetings", "councilProposals", "petitions", "judicialPetitions"],
+    ids: ["documents", "regulations", "meetings", "councilProposals", "petitions", "judicialPetitions"],
   },
-  { heading: "校園服務", ids: ["surveys", "meal", "shop", "partnerMap", "recommendedVendors", "examPapers"] },
+  { heading: "校園服務", ids: ["surveys", "shop", "partnerMap", "recommendedVendors", "examPapers"] },
 ] as const;
 
 function canSeeMeetings(): boolean {
@@ -117,7 +117,6 @@ export default function CommandMenu() {
       || permissions.has("admin:all")
       || hasPrefix("announcement:")
       || hasPrefix("email:")
-      || hasPrefix("activity:")
       || hasPrefix("site:")
       || hasPrefix("analytics:")
       || hasPrefix("finance:")
@@ -131,7 +130,6 @@ export default function CommandMenu() {
       || hasPrefix("exam:")
       || hasPrefix("shop:")
       || hasPrefix("merchandise_submission:")
-      || hasPrefix("meal:")
       || hasPrefix("partner_map:")
       || hasPrefix("election:")
       || hasPrefix("petition:")

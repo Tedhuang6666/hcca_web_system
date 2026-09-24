@@ -158,7 +158,7 @@ export default function ApiKeysPage() {
             type="text"
             value={scopes}
             onChange={(e) => setScopes(e.target.value)}
-            placeholder="scopes（逗號分隔，例：read:document,write:meal）"
+            placeholder="scopes（逗號分隔，例：read:document,write:shop）"
             className="input font-mono text-xs"
           />
           <input

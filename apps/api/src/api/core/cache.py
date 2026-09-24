@@ -100,14 +100,12 @@ async def cache_invalidate_dashboard(user_id: str | None = None) -> None:
         patterns = (
             f"dashboard:{user_id}*",
             f"task_inbox:{user_id}",
-            f"dashboard:matters:{user_id}",
             f"dashboard:announcements:{user_id}",
         )
     else:
         patterns = (
             "dashboard:*",
             "task_inbox:*",
-            "dashboard:matters:*",
             "dashboard:announcements:*",
         )
     for pattern in patterns:

@@ -9,12 +9,10 @@ import {
   ClipboardList,
   Database,
   FileUp,
-  Headset,
   Puzzle,
   Settings,
   Shield,
   SlidersHorizontal,
-  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -105,7 +103,6 @@ type QuickAction = {
 const QUICK_ACTIONS: QuickAction[] = [
   { href: "/admin/people",       icon: Users,      label: "人員管理",   desc: "新增、搜尋與管理人員身分" },
   { href: "/admin/users",        icon: Users,      label: "帳號維護",   desc: "帳號狀態、連結 Email 與 MFA 管理", requiredPermission: "admin:users" },
-  { href: "/admin/support",      icon: Headset,    label: "客服作業平台", desc: "搜尋使用者、處理工單與問題排查", requiredPermissions: ["support.users.read", "support.tickets.read"] },
   { href: "/admin/permissions",  icon: BookUser,   label: "權限管理",   desc: "組織職位與使用者權限指派" },
   { href: "/admin/cadre-import", icon: FileUp,     label: "幹部名冊匯入", desc: "依通訊錄建立班級、職位與權限" },
   { href: "/admin/classes",      icon: Users,      label: "班級管理",   desc: "班級名冊、幹部與學年度設定" },
@@ -113,7 +110,6 @@ const QUICK_ACTIONS: QuickAction[] = [
   { href: "/admin/settings",     icon: Settings,   label: "系統設定",   desc: "全站設定與功能參數調整" },
   { href: "/admin/modules",      icon: Puzzle,     label: "模組維護",   desc: "查看各模組狀態、手動恢復" },
   { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", desc: "管理角色視角與專屬導覽", requiredPermission: "admin:all" },
-  { href: "/admin/impersonation", icon: UserCog, label: "代理登入", desc: "以特定使用者視角檢查平台", requiredPermission: "admin:impersonate" },
   { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌", desc: "追蹤所有操作紀錄" },
   { href: "/admin/diagnostics",  icon: Database,   label: "系統診斷",   desc: "資料庫、Redis 與 Celery 健康度" },
   { href: "/admin/system/observability", icon: Activity, label: "效能觀測", desc: "全站 PSI、真實使用者、錯誤與慢查詢" },
@@ -125,7 +121,7 @@ const ADMIN_CACHE_KEY = "admin/dashboard";
 
 export default function AdminDashboardPage() {
   const { isAdmin, can } = usePermissions();
-  const canAccessAdmin = isAdmin || can("admin:users") || can("support.users.read") || can("support.tickets.read");
+  const canAccessAdmin = isAdmin || can("admin:users");
 
   const [userCount, setUserCount] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/userCount") ?? null);
   const [downModules, setDownModules] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/downModules") ?? null);

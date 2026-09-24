@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.document import ApprovalStepStatus, Document, DocumentApproval, DocumentStatus
-from api.models.governance import Matter
 from api.models.org import Org
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
@@ -39,16 +38,13 @@ async def test_tasks_and_count_return_consistent_totals(
     db_session: AsyncSession,
 ) -> None:
     user = await _seed_user(db_session)
-    matter = Matter(title="校慶籌辦", created_by_id=user.id)
-    db_session.add(matter)
-    await db_session.flush()
     db_session.add(
         WorkItem(
             title="確認公告稿",
             status=WorkItemStatus.OPEN,
             assigned_to_id=user.id,
-            source_type="matter",
-            source_id=matter.id,
+            source_type="work_item",
+            source_id=None,
             is_active=True,
         )
     )
@@ -68,7 +64,7 @@ async def test_tasks_and_count_return_consistent_totals(
         "by_module": {"work_item": 1},
         "urgent_count": 0,
     }
-    assert inbox["items"][0]["href"] == f"/governance/{matter.id}#tasks"
+    assert inbox["items"][0]["href"] == "/tasks"
 
 
 async def test_task_count_requires_auth(client: AsyncClient) -> None:

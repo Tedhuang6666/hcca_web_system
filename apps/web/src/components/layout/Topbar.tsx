@@ -180,7 +180,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       await authFetch(apiUrl("/auth/logout"), {
         method: "POST",
         credentials: "include",
-        skipImpersonation: true,
       });
     } catch { /* ignore */ }
     clearAuthCache();

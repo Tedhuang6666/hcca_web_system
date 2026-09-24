@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { adminApi, classApi, meetingsApi, orgsApi, serialTemplatesApi } from "@/lib/api";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type {
@@ -481,13 +480,6 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
           回會議頁
         </Link>
       </div>
-
-      <GovernanceLinkPanel
-        entityType="meeting"
-        entityId={meeting.id}
-        title={meeting.title}
-        href={`/meetings/${meeting.id}`}
-      />
 
       {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
       {notice && <p className="mb-4 text-sm text-emerald-500">{notice}</p>}

@@ -11,7 +11,6 @@ import re
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from urllib.parse import unquote
 
 from linebot.v3.exceptions import InvalidSignatureError
@@ -25,27 +24,15 @@ from linebot.v3.messaging import (
 )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
-from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.security import redis_client
 from api.models.line_account import LineAccountLink
-from api.models.meal import (
-    MealOrder,
-    MealOrderStatus,
-    MealPickupSlot,
-    MealProductAvailability,
-    MenuItem,
-    MenuSchedule,
-)
 from api.models.notification import Notification
 from api.models.user import User
-from api.schemas.meal import MealOrderCreate, MealOrderItemCreate
 from api.services import announcement as announcement_svc
-from api.services import meal as meal_svc
 from api.services.announcement import ViewerScope
 from api.services.permission import get_user_org_ids
 from api.services.task_inbox import build_task_inbox
@@ -285,11 +272,6 @@ async def _current_user_for_line(db: AsyncSession, line_user_id: str) -> User | 
 def _help_text(bound: bool) -> str:
     lines = [
         "可用指令：",
-        "學餐 - 查看近期可訂餐點",
-        "訂餐 編號 數量 [時段] - 例：訂餐 1 2",
-        "我的餐 - 查看最近訂單",
-        "取餐碼 - 查看可取餐訂單代碼",
-        "取消餐 訂單字號 - 取消自己的訂單",
         "未讀通知 / 我的待辦 / 今日會議 / 公告",
         "公文 / 法規 / 問卷 / 陳情 / 購票 - 開啟對應功能",
     ]
@@ -328,20 +310,6 @@ async def _handle_text_command(*, line_user_id: str, user_text: str) -> str:
             if user is None:
                 return "請先登入平台產生綁定碼，再輸入「綁定 123456」。"
 
-            if text in {"學餐", "今日學餐", "菜單", "餐點"}:
-                return await _meal_menu_text(db)
-            if text.startswith("訂餐"):
-                reply = await _create_meal_order_from_text(db, user, text)
-                await db.commit()
-                return reply
-            if text in {"我的餐", "我的學餐", "訂單"}:
-                return await _my_meal_orders_text(db, user)
-            if text == "取餐碼":
-                return await _pickup_codes_text(db, user)
-            if text.startswith("取消餐"):
-                reply = await _cancel_meal_order_from_text(db, user, text)
-                await db.commit()
-                return reply
             if text == "我的待辦":
                 return await _tasks_text(db, user)
             if text in {"公文", "待簽核"}:
@@ -365,179 +333,6 @@ async def _handle_text_command(*, line_user_id: str, user_text: str) -> str:
             await db.rollback()
             logger.warning("LINE command failed text=%s user=%s", text, line_user_id, exc_info=True)
             return "處理時發生錯誤，請稍後再試。"
-
-
-async def _line_meal_options(db: AsyncSession) -> list[dict[str, Any]]:
-    today = local_today()
-    date_to = today + timedelta(days=7)
-    now = datetime.now(UTC)
-    options: list[dict[str, Any]] = []
-
-    availability_rows = await meal_svc.list_availabilities(
-        db, date_from=today, date_to=date_to, active_only=True, limit=30
-    )
-    for availability in availability_rows:
-        slots = [
-            slot
-            for slot in sorted(
-                availability.pickup_slots, key=lambda s: (s.pickup_start, s.sort_order)
-            )
-            if slot.is_active and slot.order_deadline >= now
-        ]
-        if not slots:
-            continue
-        options.append({"kind": "availability", "availability": availability, "slots": slots})
-
-    schedule_result = await db.execute(
-        select(MenuSchedule)
-        .options(selectinload(MenuSchedule.items))
-        .where(MenuSchedule.date >= today)
-        .where(MenuSchedule.date <= date_to)
-        .where(MenuSchedule.is_closed.is_(False))
-        .where(MenuSchedule.order_deadline >= now)
-        .order_by(MenuSchedule.date, MenuSchedule.created_at)
-        .limit(10)
-    )
-    for schedule in schedule_result.scalars().unique().all():
-        for item in schedule.items:
-            if item.is_available:
-                options.append({"kind": "menu_item", "schedule": schedule, "item": item})
-    return options
-
-
-async def _meal_menu_text(db: AsyncSession) -> str:
-    options = await _line_meal_options(db)
-    if not options:
-        return "目前沒有可訂的學餐。"
-
-    lines = ["近期可訂學餐："]
-    for index, option in enumerate(options[:10], start=1):
-        if option["kind"] == "availability":
-            availability: MealProductAvailability = option["availability"]
-            name = availability.product.name if availability.product else "餐點"
-            slots: list[MealPickupSlot] = option["slots"]
-            slot_text = "、".join(f"{i + 1}.{slot.label}" for i, slot in enumerate(slots[:3]))
-            lines.append(
-                f"{index}. {availability.service_date} {name} ${availability.price} "
-                f"時段：{slot_text}"
-            )
-        else:
-            schedule: MenuSchedule = option["schedule"]
-            item: MenuItem = option["item"]
-            lines.append(f"{index}. {schedule.date} {item.name} ${item.price}")
-    lines.append("下單：訂餐 編號 數量 [時段]\n例：訂餐 1 2")
-    return "\n".join(lines)
-
-
-async def _create_meal_order_from_text(db: AsyncSession, user: User, text: str) -> str:
-    match = re.fullmatch(r"訂餐\s+(\d{1,2})\s+(\d{1,2})(?:\s+(\d{1,2}))?", text)
-    if not match:
-        return "格式：訂餐 編號 數量 [時段]\n例：訂餐 1 2 或 訂餐 1 2 2"
-    index = int(match.group(1))
-    quantity = int(match.group(2))
-    slot_index = int(match.group(3) or "1")
-    if quantity < 1 or quantity > 20:
-        return "數量需介於 1 到 20。"
-    options = await _line_meal_options(db)
-    if index < 1 or index > len(options):
-        return "找不到這個餐點編號，請輸入「學餐」重新查看。"
-    option = options[index - 1]
-    try:
-        if option["kind"] == "availability":
-            availability: MealProductAvailability = option["availability"]
-            slots: list[MealPickupSlot] = option["slots"]
-            if slot_index < 1 or slot_index > len(slots):
-                return "找不到這個取餐時段，請輸入「學餐」重新查看。"
-            order = await meal_svc.create_meal_order(
-                db,
-                user_id=user.id,
-                data=MealOrderCreate(
-                    pickup_slot_id=slots[slot_index - 1].id,
-                    items=[
-                        MealOrderItemCreate(
-                            availability_id=availability.id,
-                            quantity=quantity,
-                        )
-                    ],
-                ),
-            )
-        else:
-            schedule: MenuSchedule = option["schedule"]
-            item: MenuItem = option["item"]
-            order = await meal_svc.create_meal_order(
-                db,
-                user_id=user.id,
-                data=MealOrderCreate(
-                    schedule_id=schedule.id,
-                    items=[MealOrderItemCreate(menu_item_id=item.id, quantity=quantity)],
-                ),
-            )
-    except ValueError as exc:
-        return str(exc)
-    except Exception:
-        logger.warning("LINE meal order failed user=%s", user.id, exc_info=True)
-        return "訂餐失敗，可能已訂過或餐點已額滿。請到平台確認。"
-
-    refreshed = await meal_svc.get_meal_order(db, order.id)
-    return _format_meal_order(refreshed or order, prefix="下單完成")
-
-
-def _format_meal_order(order: MealOrder, *, prefix: str = "學餐訂單") -> str:
-    item_text = "、".join(
-        f"{item.product_name_snapshot or (item.menu_item.name if item.menu_item else '餐點')}x{item.quantity}"
-        for item in order.items
-    )
-    status_label = {
-        MealOrderStatus.PENDING: "待確認",
-        MealOrderStatus.CONFIRMED: "已確認",
-        MealOrderStatus.CANCELLED: "已取消",
-        MealOrderStatus.COMPLETED: "已完成",
-    }.get(order.status, str(order.status))
-    return (
-        f"{prefix}\n"
-        f"{order.serial_number}｜{status_label}\n"
-        f"{item_text or '餐點'}\n"
-        f"金額：${order.total_price}\n"
-        f"取餐碼：{order.pickup_code}"
-    )
-
-
-async def _my_meal_orders_text(db: AsyncSession, user: User) -> str:
-    orders = await meal_svc.list_meal_orders(db, user_id=user.id, limit=5)
-    if not orders:
-        return f"目前沒有學餐訂單。\n{await create_open_url(user.id, '/meal')}"
-    loaded = [await meal_svc.get_meal_order(db, order.id) for order in orders]
-    return "\n\n".join(_format_meal_order(order) for order in loaded if order is not None)
-
-
-async def _pickup_codes_text(db: AsyncSession, user: User) -> str:
-    orders = await meal_svc.list_meal_orders(db, user_id=user.id, limit=10)
-    active = [
-        order
-        for order in orders
-        if order.status in {MealOrderStatus.PENDING, MealOrderStatus.CONFIRMED}
-    ]
-    if not active:
-        return "目前沒有可取餐的訂單。"
-    lines = ["取餐碼："]
-    for order in active[:5]:
-        lines.append(f"{order.serial_number}：{order.pickup_code}｜${order.total_price}")
-    return "\n".join(lines)
-
-
-async def _cancel_meal_order_from_text(db: AsyncSession, user: User, text: str) -> str:
-    serial = text.removeprefix("取消餐").strip().upper()
-    if not serial:
-        return "格式：取消餐 訂單字號\n例：取消餐 MEAL-2026-000001"
-    order = await meal_svc.get_order_by_serial(db, serial)
-    if order is None or order.user_id != user.id:
-        return "找不到您的這筆學餐訂單。"
-    try:
-        await meal_svc.cancel_meal_order(db, order, requested_by=user.id, reason="LINE Bot 取消")
-    except (PermissionError, ValueError) as exc:
-        return str(exc)
-    refreshed = await meal_svc.get_meal_order(db, order.id)
-    return _format_meal_order(refreshed or order, prefix="已取消")
 
 
 async def _tasks_text(db: AsyncSession, user: User) -> str:

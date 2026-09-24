@@ -60,9 +60,6 @@ import type {
   RegulationRevisionOut,
 } from "@/lib/types";
 
-const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
-  ssr: false,
-});
 const RegulationMarkdownContent = dynamic(
   () => import("@/components/regulations/RegulationMarkdownContent"),
   { ssr: false },
@@ -633,17 +630,6 @@ export default function RegulationDetailPageClient({
 
               {/* 工具列 */}
               <div className="regulation-detail-toolbar no-print">
-                <div className="regulation-detail-governance">
-                  {currentUserId && (
-                    <GovernanceLinkPanel
-                      entityType="regulation"
-                      entityId={reg.id}
-                      title={reg.title}
-                      href={currentRegHref}
-                      compact
-                    />
-                  )}
-                </div>
 
                 <div className="regulation-detail-action-groups">
                 <div className="regulation-detail-tool-group" role="group" aria-label="閱讀工具">

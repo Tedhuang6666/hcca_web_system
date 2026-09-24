@@ -13,20 +13,6 @@ export interface CurrentUserCache {
 }
 
 export const AUTH_CACHE_EVENT = "hcca:auth-cache-updated";
-export const IMPERSONATION_EVENT = "hcca:impersonation-updated";
-const IMPERSONATION_STORAGE_KEY = "hcca_impersonation";
-const IMPERSONATION_RENDER_FLAG_COOKIE = "hcca_impersonating";
-
-export interface ImpersonationSession {
-  token: string;
-  target_user_id: string;
-  target_email: string;
-  target_display_name: string;
-  actor_email: string;
-  actor_display_name: string;
-  expires_at: number;
-  read_only?: boolean;
-}
 
 // SECURITY: 敏感權限資料（is_superuser、is_owner、permissions）改存 sessionStorage，
 // 在瀏覽器關閉後自動清除，減少 XSS 或本機存取攻擊的曝露窗口。
@@ -42,24 +28,6 @@ function ss(): Storage | null {
 
 function notifyAuthCacheUpdated(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CACHE_EVENT));
-}
-
-function notifyImpersonationUpdated(): void {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(IMPERSONATION_EVENT));
-}
-
-/**
- * 此 cookie 只標示 SSR 不可安全預載個人資料；不包含 token、身分或權限資料。
- */
-function setImpersonationRenderFlag(expiresAt?: number): void {
-  if (typeof document === "undefined") return;
-  const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  if (!expiresAt || expiresAt <= Date.now()) {
-    document.cookie = `${IMPERSONATION_RENDER_FLAG_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
-    return;
-  }
-  const maxAge = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1_000));
-  document.cookie = `${IMPERSONATION_RENDER_FLAG_COOKIE}=1; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
 }
 
 function clearServiceWorkerPrivateCaches(): void {
@@ -78,37 +46,6 @@ function setServiceWorkerCacheUser(userId: string): void {
   }).catch(() => {
     // Service Worker is optional; auth state remains authoritative.
   });
-}
-
-export function saveImpersonationSession(session: ImpersonationSession): void {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(IMPERSONATION_STORAGE_KEY, JSON.stringify(session));
-  setImpersonationRenderFlag(session.expires_at);
-  notifyImpersonationUpdated();
-}
-
-export function getImpersonationSession(): ImpersonationSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(IMPERSONATION_STORAGE_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw) as ImpersonationSession;
-    if (!session.token || session.expires_at <= Date.now()) {
-      clearImpersonationSession();
-      return null;
-    }
-    return session;
-  } catch {
-    clearImpersonationSession();
-    return null;
-  }
-}
-
-export function clearImpersonationSession(): void {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
-  setImpersonationRenderFlag();
-  notifyImpersonationUpdated();
 }
 
 export function cacheCurrentUser(me: CurrentUserCache): void {
@@ -145,7 +82,6 @@ export function clearAuthCache(): void {
   ss()?.removeItem("is_superuser");
   ss()?.removeItem("is_owner");
   ss()?.removeItem("permissions");
-  clearImpersonationSession();
   cachePurge();
   clearServiceWorkerPrivateCaches();
   notifyAuthCacheUpdated();

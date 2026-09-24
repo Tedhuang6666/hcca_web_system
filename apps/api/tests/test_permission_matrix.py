@@ -50,10 +50,7 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     # 匿名 React Profiler 回報同樣需支援未登入頁面，且只接受受限數值 schema。
     ("/analytics/component-metrics", "POST"),
     ("/analytics/component-metrics/batch", "POST"),
-    # 支援平台驗證連結；用於未登入的客服工作階段驗證。
-    ("/support/verify-email", "GET"),
     # 模組健康探測（每個 router 一條 __module_health__ 端點）
-    ("/activities/__module_health__", "GET"),
     ("/announcements/__module_health__", "GET"),
     ("/documents/__module_health__", "GET"),
     ("/calendar/__module_health__", "GET"),
@@ -61,11 +58,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/discord/__module_health__", "GET"),
     ("/elections/__module_health__", "GET"),
     ("/exam-papers/__module_health__", "GET"),
-    ("/governance/__module_health__", "GET"),
     ("/judicial-petitions/__module_health__", "GET"),
     ("/line/__module_health__", "GET"),
-    ("/matters/__module_health__", "GET"),
-    ("/meal/__module_health__", "GET"),
     ("/meetings/__module_health__", "GET"),
     ("/merchandise-submissions/__module_health__", "GET"),
     ("/partner-map/__module_health__", "GET"),

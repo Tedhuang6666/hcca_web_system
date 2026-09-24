@@ -19,7 +19,6 @@ DEFAULT_DM_CATEGORIES: dict[str, bool] = {
     "document_pending": True,
     "meeting_invited": True,
     "calendar_reminder": True,
-    "meal_closing": True,
     "survey_closing": True,
     "shop_ready": True,
     "tenure": True,

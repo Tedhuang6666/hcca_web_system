@@ -23,10 +23,6 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PetitionLinkSelector, type PetitionLinkOption } from "@/components/documents/PetitionLinkSelector";
 
 const DeferredPanel = () => <div className="card min-h-24 animate-pulse" aria-hidden="true" />;
-const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
-  loading: () => <div className="min-h-11" aria-hidden="true" />,
-  ssr: false,
-});
 const ApprovalPanel = dynamic(
   () => import("@/components/documents/ApprovalPanel").then((module) => module.ApprovalPanel),
   { loading: () => <DeferredPanel />, ssr: false },
@@ -606,16 +602,6 @@ export default function DocumentDetailPageClient({
         </div>
 
         <div className="document-detail-actions">
-          <div className="document-detail-governance">
-            <GovernanceLinkPanel
-              entityType="document"
-              entityId={doc.id}
-              title={doc.serial_number ? `${doc.serial_number} ${doc.title}` : doc.title}
-              href={`/documents/${doc.id}`}
-              compact
-            />
-          </div>
-
           <div className="document-detail-action-buttons">
           {/* 縮放控制 */}
           <div className="flex items-center gap-0.5 rounded-lg overflow-hidden"

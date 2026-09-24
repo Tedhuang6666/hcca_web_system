@@ -1,5 +1,5 @@
 import type {
-  AgendaItemType, AttendanceRole, AttendanceSourceType, AttendanceStatus, BallotChoice, MeetingAgendaAttachmentOut, MeetingAgendaItemOut, MeetingArtifactLinkOut, MeetingArtifactType, MeetingAttendanceOut, MeetingAttendanceSourceOut, MeetingAttendanceSourcePreviewOut, MeetingBallotOut, MeetingBillStage, MeetingDecisionOut, MeetingDecisionStatus, MeetingEventOut, MeetingJoinOut, MeetingListItem, MeetingMinutesOut, MeetingMode, MeetingMotionOut, MeetingMotionStatus, MeetingMotionType, MeetingOut, MeetingRegulationBrief, MeetingRequestOut, MeetingRequestStatus, MeetingRequestType, MeetingScreenOut, MeetingScreenReadingMode, MeetingScreenStateOut, MeetingSpeechQueueItemOut, MeetingSpeechQueueStatus, MeetingVoteOption, MeetingVoteOut, MeetingVoteRecordMethod, MeetingWorkspaceOut, VoteThresholdType, VoteVisibility,
+  AgendaItemType, AttendanceRole, AttendanceSourceType, AttendanceStatus, BallotChoice, DecisionOut, MeetingAgendaAttachmentOut, MeetingAgendaItemOut, MeetingArtifactLinkOut, MeetingArtifactType, MeetingAttendanceOut, MeetingAttendanceSourceOut, MeetingAttendanceSourcePreviewOut, MeetingBallotOut, MeetingBillStage, MeetingDecisionStatus, MeetingEventOut, MeetingJoinOut, MeetingListItem, MeetingMinutesOut, MeetingMode, MeetingMotionOut, MeetingMotionStatus, MeetingMotionType, MeetingOut, MeetingRegulationBrief, MeetingRequestOut, MeetingRequestStatus, MeetingRequestType, MeetingScreenOut, MeetingScreenReadingMode, MeetingScreenStateOut, MeetingSpeechQueueItemOut, MeetingSpeechQueueStatus, MeetingVoteOption, MeetingVoteOut, MeetingVoteRecordMethod, MeetingWorkspaceOut, VoteThresholdType, VoteVisibility,
 } from "../types";
 import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
@@ -230,7 +230,7 @@ export const meetingsApi = {
     follow_up_assignee_id?: string | null;
     follow_up_due_at?: string | null;
     create_document_draft?: boolean;
-  }) => post<MeetingDecisionOut>(`/meetings/${id}/decisions`, body),
+  }) => post<DecisionOut>(`/meetings/${id}/decisions`, body),
   updateDecision: (id: string, decisionId: string, body: Partial<{
     motion_id: string | null;
     vote_id: string | null;
@@ -238,7 +238,7 @@ export const meetingsApi = {
     content: string;
     status: MeetingDecisionStatus;
     regulation_transition_to: string | null;
-  }>) => patch<MeetingDecisionOut>(`/meetings/${id}/decisions/${decisionId}`, body),
+  }>) => patch<DecisionOut>(`/meetings/${id}/decisions/${decisionId}`, body),
   openVote: (id: string, voteId: string) =>
     post<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}/open`),
   closeVote: (id: string, voteId: string) =>

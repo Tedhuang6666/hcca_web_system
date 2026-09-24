@@ -61,20 +61,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", href: "/dashboard", iconKey: "dashboard", label: "平台首頁", end: true },
   { id: "tasks", href: "/tasks", iconKey: "tasks", label: "我的待辦" },
   { id: "workItems", href: "/work-items", iconKey: "tasks", label: "我的工作" },
-  {
-    id: "matters",
-    href: "/matters",
-    iconKey: "governance",
-    label: "整合工作台",
-    perms: ["activity:manage", "meeting:manage", "document:admin", "admin:all"],
-  },
-  {
-    id: "governanceHub",
-    href: "/governance",
-    iconKey: "governance",
-    label: "工作中心",
-    perms: ["governance:manage", "meeting:manage", "activity:manage", "document:admin", "admin:all"],
-  },
   { id: "announcements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
   { id: "publicRegulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
   { id: "publicDocuments", href: "/documents", iconKey: "documents", label: "公文查詢" },
@@ -88,16 +74,8 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" },
   { id: "councilProposals", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
-  { id: "meal", href: "/meal", iconKey: "meal", label: "學餐訂購" },
   { id: "shop", href: "/shop", iconKey: "shop", label: "商品訂購" },
   { id: "merchandiseSubmissions", href: "/merchandise-submissions", iconKey: "shop", label: "校商投稿" },
-  {
-    id: "inventoryAdmin",
-    href: "/admin/inventory",
-    iconKey: "inventory",
-    label: "物資管理",
-    perm: "inventory:*",
-  },
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
   { id: "credential", href: "/credential", iconKey: "credential", label: "電子證件" },
   { id: "recommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
@@ -108,13 +86,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
   { id: "orgs", href: "/orgs", iconKey: "org", label: "組織管理", perm: "org:*" },
-  {
-    id: "activitiesAdmin",
-    href: "/admin/activities",
-    iconKey: "calendar",
-    label: "活動/專案",
-    perm: "activity:manage",
-  },
   {
     id: "raffleAdmin",
     href: "/admin/raffle",
@@ -155,7 +126,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin",
     iconKey: "dashboard",
     label: "管理後台",
-    perms: ["admin:users", "support.users.read", "support.tickets.read", "admin:all"],
+    perms: ["admin:users", "admin:all"],
     end: true,
   },
   {
@@ -257,7 +228,6 @@ export const NAV_ITEMS: NavItem[] = [
       "shop:manage",
     ],
   },
-  { id: "mealVendor", href: "/meal/vendor", iconKey: "mealVendor", label: "餐商管理", perm: "meal:manage" },
   {
     id: "partnerMapAdmin",
     href: "/partner-map/admin",
@@ -337,7 +307,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "work",
     heading: "工作入口",
-    items: byIds(["dashboard", "tasks", "governanceHub", "calendar"]),
+    items: byIds(["dashboard", "tasks", "calendar"]),
   },
   {
     id: "governance",
@@ -355,7 +325,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "services",
     heading: "校園服務",
-    items: byIds(["shop", "merchandiseSubmissions", "meal", "surveys", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
+    items: byIds(["shop", "merchandiseSubmissions", "surveys", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
   },
   {
     id: "operations",
@@ -366,10 +336,8 @@ export const NAV_DEF: NavEntry[] = [
       "operations",
       "publications",
       "email",
-      "activitiesAdmin",
       "finance",
       "receivables",
-      "inventoryAdmin",
       "merchandiseSubmissionsAdmin",
     ]),
   },
@@ -413,7 +381,7 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   {
     id: "teacher-services",
     heading: "常用模組",
-    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "credential", "recommendedVendors"]),
+    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "credential", "recommendedVendors"]),
   },
 ];
 
@@ -426,7 +394,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-services",
     heading: "常用入口",
-    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
+    items: byIds(["shop", "merchandiseSubmissions", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
   },
 ];
 
@@ -439,19 +407,6 @@ export const NAV_DEF_VENDOR: NavEntry[] = [
   {
     id: "vendor-services",
     heading: "營運入口",
-    items: byIds(["announcements", "activitiesAdmin"]),
-  },
-];
-
-export const NAV_DEF_MEAL_VENDOR: NavEntry[] = [
-  {
-    id: "meal-vendor-main",
-    heading: "餐商工作台",
-    items: byIds(["dashboard", "tasks", "mealVendor", "meal", "credential"]),
-  },
-  {
-    id: "meal-vendor-services",
-    heading: "營運入口",
     items: byIds(["announcements"]),
   },
 ];
@@ -460,10 +415,7 @@ export const DEFAULT_DESKTOP_ORDER = NAV_ITEMS.map((item) => item.id);
 export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
   "tasks",
-  "governanceHub",
   "calendar",
-  "matters",
-  "activitiesAdmin",
   "announcements",
   "publications",
   "councilProposals",
@@ -473,7 +425,6 @@ export const DEFAULT_MOBILE_ORDER = [
   "receivables",
   "shop",
   "merchandiseSubmissions",
-  "meal",
   "surveys",
   "petitions",
   "judicialPetitions",
@@ -502,19 +453,19 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
   student: {
     id: "student",
     label: "學生服務視角",
-    description: "把一般學生常用的公告、問卷、陳情、學餐、商品與特約地圖集中成服務入口。",
+    description: "把一般學生常用的公告、問卷、陳情、商品與特約地圖集中成服務入口。",
     audience: "一般學生、未持有行政或商家權限的登入使用者",
     desktopSections: NAV_DEF_STUDENT,
-    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "credential"],
+    mobileOrder: ["dashboard", "announcements", "surveys", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "credential"],
   },
   teacher: {
     id: "teacher",
     label: "教職員視角",
-    description: "保留教職員常用的通知、行事曆、問卷、題庫、商品與學餐入口。",
+    description: "保留教職員常用的通知、行事曆、問卷、題庫與商品入口。",
     audience: "導師、行政老師、協助班級或教學服務的教職員",
     ...NAVIGATION_PROFILE_RULES.teacher,
     desktopSections: NAV_DEF_TEACHER,
-    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "merchandiseSubmissions", "meal"],
+    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "merchandiseSubmissions"],
   },
   vendor: {
     id: "vendor",
@@ -524,15 +475,6 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     ...NAVIGATION_PROFILE_RULES.vendor,
     desktopSections: NAV_DEF_VENDOR,
     mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "credential", "announcements"],
-  },
-  mealVendor: {
-    id: "mealVendor",
-    label: "餐商視角",
-    description: "把畫面集中在餐商管理、學餐訂購狀態與待辦。",
-    audience: "學生餐廳、合作餐商、供餐窗口",
-    ...NAVIGATION_PROFILE_RULES.mealVendor,
-    desktopSections: NAV_DEF_MEAL_VENDOR,
-    mobileOrder: ["dashboard", "tasks", "mealVendor", "meal", "announcements"],
   },
 };
 
@@ -583,12 +525,11 @@ export function navItemsFromEntries(entries: NavEntry[]): NavItem[] {
 }
 
 export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): boolean {
-  if (item.id === "userAccountAdmin" || item.id === "supportConsole") return false;
+  if (item.id === "userAccountAdmin") return false;
   if (options.isModuleClosed?.(item)) return false;
   if (item.id === "tasks" && !options.hasPrefix("document:") && !options.hasPrefix("regulation:")) {
     return false;
   }
-  if (item.id === "governanceHub" && options.navigationProfile !== "default") return false;
   if (item.id === "systemDefense" && !options.isAdmin) return false;
   if (item.id === "moduleBackoffice") {
     return (
@@ -599,7 +540,6 @@ export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): 
       || options.hasPrefix("exam:")
       || options.hasPrefix("shop:")
       || options.hasPrefix("merchandise_submission:")
-      || options.hasPrefix("meal:")
       || options.hasPrefix("partner_map:")
       || options.hasPrefix("recommended_vendor:")
       || options.hasPrefix("election:")

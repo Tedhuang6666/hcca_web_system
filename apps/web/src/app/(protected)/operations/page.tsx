@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, CalendarDays, Mail, Megaphone, ReceiptText, Settings } from "lucide-react";
+import { BarChart3, Mail, Megaphone, ReceiptText, Settings } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const TOOLS = [
@@ -18,13 +18,6 @@ const TOOLS = [
     label: "電子郵件",
     desc: "寄送、名單、模板、紀錄與成效",
     prefixes: ["email:"],
-  },
-  {
-    href: "/admin/activities",
-    icon: CalendarDays,
-    label: "活動管理",
-    desc: "活動資料、時程與公開頁內容",
-    perms: ["activity:manage"],
   },
   {
     href: "/admin/public-site",

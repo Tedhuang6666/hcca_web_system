@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import load_only, selectinload
+from sqlalchemy.orm import load_only
 
 from api.core.clock import local_today
 from api.core.database import engine
@@ -22,7 +22,6 @@ from api.models.announcement import Announcement
 from api.models.calendar import CalendarEvent, CalendarEventParticipant
 from api.models.discord_account import DEFAULT_DM_CATEGORIES, DiscordNotificationPreference
 from api.models.document import Document, DocumentStatus
-from api.models.meal import MealOrderStatus, MealVendor, MenuSchedule
 from api.models.meeting import Meeting, MeetingStatus
 from api.models.org import Position, UserPosition
 from api.models.petition import PetitionStatus
@@ -33,7 +32,6 @@ from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.announcement import AnnouncementAudience, AnnouncementCreate
 from api.schemas.calendar import CalendarEventCreate
 from api.schemas.document import RejectMode
-from api.schemas.meal import MealOrderCreate, MealOrderItemCreate
 from api.schemas.meeting import MeetingCreate
 from api.schemas.petition import PetitionCreate, PetitionInternalNoteCreate, PetitionStatusUpdate
 from api.schemas.survey import SurveyCreate
@@ -43,7 +41,6 @@ from api.services import audit as audit_svc
 from api.services import calendar as calendar_svc
 from api.services import defense as defense_svc
 from api.services import document as document_svc
-from api.services import meal as meal_svc
 from api.services import meeting as meeting_svc
 from api.services import petition as petition_svc
 from api.services import survey as survey_svc
@@ -870,127 +867,6 @@ async def execute(
         if not path.startswith("/"):
             raise DiscordCommandError("path 必須以 / 開頭。")
         return {"url": await create_open_url(user.id, path)}
-
-    if operation == "meal_today":
-        today = local_today()
-        rows = (
-            await db.execute(
-                select(MenuSchedule, MealVendor)
-                .join(MealVendor, MealVendor.id == MenuSchedule.vendor_id)
-                .where(MenuSchedule.date == today)
-                .options(selectinload(MenuSchedule.items))
-                .order_by(MenuSchedule.order_deadline.asc().nullslast())
-                .limit(25)
-            )
-        ).all()
-        return {
-            "date": today.isoformat(),
-            "schedules": [
-                {
-                    "id": str(schedule.id),
-                    "vendor_name": vendor.name,
-                    "is_closed": schedule.is_closed,
-                    "order_deadline": (
-                        schedule.order_deadline.isoformat() if schedule.order_deadline else None
-                    ),
-                    "items": [
-                        {
-                            "id": str(item.id),
-                            "name": item.name,
-                            "description": item.description,
-                            "price": str(item.price),
-                            "is_available": item.is_available,
-                        }
-                        for item in schedule.items
-                    ],
-                    "url": await create_open_url(user.id, f"/meal/schedules/{schedule.id}"),
-                }
-                for schedule, vendor in rows
-            ],
-        }
-
-    if operation == "meal_week":
-        today = local_today()
-        schedules = await meal_svc.list_schedules(
-            db,
-            date_from=today,
-            date_to=today + timedelta(days=7),
-            limit=40,
-        )
-        vendors = {row.id: row.name for row in (await db.execute(select(MealVendor))).scalars()}
-        return {
-            "items": [
-                {
-                    "date": row.date.isoformat(),
-                    "vendor_name": vendors.get(row.vendor_id, "商家"),
-                }
-                for row in schedules
-            ]
-        }
-
-    if operation in {"meal_orders", "meal_cancel_choices"}:
-        statuses = (
-            [MealOrderStatus.PENDING, MealOrderStatus.CONFIRMED]
-            if operation == "meal_cancel_choices"
-            else [None]
-        )
-        orders = []
-        for order_status in statuses:
-            orders.extend(
-                await meal_svc.list_meal_orders(
-                    db,
-                    user_id=user.id,
-                    status=order_status,
-                    limit=25 if operation == "meal_cancel_choices" else 10,
-                )
-            )
-        return {
-            "items": [
-                {
-                    "id": str(row.id),
-                    "serial_number": row.serial_number,
-                    "pickup_code": row.pickup_code,
-                    "total_price": str(row.total_price),
-                    "status": str(row.status),
-                    "created_at": row.created_at.isoformat() if row.created_at else None,
-                }
-                for row in orders[:25]
-            ]
-        }
-
-    if operation == "meal_order":
-        try:
-            order = await meal_svc.create_meal_order(
-                db,
-                user_id=user.id,
-                data=MealOrderCreate(
-                    schedule_id=uuid.UUID(str(arguments["schedule_id"])),
-                    items=[
-                        MealOrderItemCreate(
-                            menu_item_id=uuid.UUID(str(arguments["menu_item_id"])),
-                            quantity=1,
-                        )
-                    ],
-                ),
-            )
-        except (ValueError, PermissionError) as exc:
-            raise DiscordCommandError(str(exc)) from exc
-        return {
-            "serial_number": order.serial_number,
-            "pickup_code": order.pickup_code,
-            "total_price": str(order.total_price),
-            "url": await create_open_url(user.id, f"/meal/orders/{order.id}"),
-        }
-
-    if operation == "meal_cancel":
-        order = await meal_svc.get_meal_order(db, uuid.UUID(str(arguments["order_id"])))
-        if order is None:
-            raise DiscordCommandError("找不到此訂單。")
-        try:
-            await meal_svc.cancel_meal_order(db, order, requested_by=user.id)
-        except (ValueError, PermissionError) as exc:
-            raise DiscordCommandError(str(exc)) from exc
-        return {"serial_number": order.serial_number}
 
     if operation in {"announcement_create", "meeting_create", "calendar_create", "survey_create"}:
         permission = {

@@ -1,20 +1,6 @@
-export type NavigationProfile = "default" | "student" | "teacher" | "vendor" | "mealVendor";
+export type NavigationProfile = "default" | "student" | "teacher" | "vendor";
 
 export const NAVIGATION_PROFILE_RULES = {
-  mealVendor: {
-    matchAnyPrefixes: ["meal:"],
-    matchAnyPermissions: [] as string[],
-    excludePrefixes: [
-      "document:",
-      "regulation:",
-      "admin:",
-      "shop:",
-      "finance:",
-      "org:",
-      "petition:",
-      "election:",
-    ],
-  },
   vendor: {
     matchAnyPrefixes: ["partner_map:", "electronic_credential:"],
     matchAnyPermissions: [] as string[],
@@ -53,7 +39,7 @@ export function resolveNavigationProfile(
 
   if (hasGovernanceOrBackoffice) return "default";
 
-  for (const id of ["mealVendor", "vendor", "teacher"] as const) {
+  for (const id of ["vendor", "teacher"] as const) {
     const profile = NAVIGATION_PROFILE_RULES[id];
     const matchedPrefix = profile.matchAnyPrefixes.some(hasPrefix);
     const matchedPermission = profile.matchAnyPermissions.some((code) => permissions.has(code));

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, announcementsApi, apiErrorMessage } from "@/lib/api";
+import { announcementsApi, apiErrorMessage } from "@/lib/api";
 import type { AnnouncementMediaOut, AnnouncementOut } from "@/lib/types";
 import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
 import AnnouncementAudiencePicker, {
@@ -13,9 +13,6 @@ import AnnouncementAudiencePicker, {
 import { contentFromMarkdown, markdownFromContent } from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
-import ActivitySelect from "@/components/activities/ActivitySelect";
-import type { Activity } from "@/lib/types";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 const DEFAULT_AUDIENCE: AudienceValue = {
   audience_type: "all",
@@ -44,15 +41,12 @@ export default function EditAnnouncementPage() {
   const [showOnEveryVisit, setShowOnEveryVisit] = useState(false);
   const [media, setMedia] = useState<AnnouncementMediaOut[]>([]);
   const [audience, setAudience] = useState<AudienceValue>(DEFAULT_AUDIENCE);
-  const [activityId, setActivityId] = useState("");
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const managesItemActivity = Boolean(item?.activity_id && activities.some((activity) => activity.id === item.activity_id));
-  const canEdit = can("announcement:edit") || managesItemActivity;
-  const canPublish = can("announcement:publish") || managesItemActivity;
+  const canEdit = can("announcement:edit");
+  const canPublish = can("announcement:publish");
   const canUrgent = can("announcement:set_urgent");
-  const canMedia = can("announcement:media_manage") || managesItemActivity;
+  const canMedia = can("announcement:media_manage");
   const draftValue = useMemo<AnnouncementEditDraft>(
     () => ({ title, markdown, linkUrl, linkLabel }),
     [linkLabel, linkUrl, markdown, title],
@@ -82,7 +76,6 @@ export default function EditAnnouncementPage() {
   });
 
   useEffect(() => {
-    activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
     announcementsApi.get(id)
       .then((data) => {
         setItem(data);
@@ -94,7 +87,6 @@ export default function EditAnnouncementPage() {
         setLinkLabel(data.link_label ?? "");
         setShowOnEveryVisit(data.show_on_every_visit);
         setMedia(data.media);
-        setActivityId(data.activity_id ?? "");
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入公告失敗")));
   }, [id]);
@@ -123,7 +115,6 @@ export default function EditAnnouncementPage() {
         audience_type: audience.audience_type,
         audience_org_ids: audience.audience_org_ids,
         audience_user_ids: audience.audience_user_ids,
-        activity_id: activityId || null,
       });
       setItem(updated);
       clearDraft();
@@ -211,13 +202,6 @@ export default function EditAnnouncementPage() {
         </div>
       </div>
 
-      <GovernanceLinkPanel
-        entityType="announcement"
-        entityId={item.id}
-        title={item.title}
-        href={`/announcements/${item.id}`}
-      />
-
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -279,13 +263,6 @@ export default function EditAnnouncementPage() {
             initialMembers={item.audience_members}
             onChange={setAudience}
           />
-          <section className="card p-4">
-            <ActivitySelect
-              value={activityId}
-              onChange={setActivityId}
-              onActivitiesLoaded={setActivities}
-            />
-          </section>
         </>
       )}
 

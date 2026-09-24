@@ -5,7 +5,6 @@ import {
   NAV_DEF_LOGGED_OUT,
   NAV_ITEMS,
   NAVIGATION_PROFILES,
-  filterNavItems,
   navItemsFromEntries,
   navProfileFromApi,
   resolveNavigationProfile,
@@ -64,21 +63,9 @@ describe("navigation visibility", () => {
     expect(resolveNavigationProfile(new Set(["shop:manage"]), false)).toBe("default");
   });
 
-  it("restricts governance workspaces to their managers", () => {
-    const can = (code: string) => code === "governance:manage";
-    const hasPrefix = () => false;
-
-    const visibleIds = filterNavItems(NAV_ITEMS, can, hasPrefix).map((item) => item.id);
-
-    expect(visibleIds).toContain("governanceHub");
-    expect(visibleIds).not.toContain("matters");
-  });
-
   it("resolves specialized navigation profiles without loading full navigation definitions", () => {
-    expect(resolveNavigationProfile(new Set(["meal:view"]), false)).toBe("mealVendor");
     expect(resolveNavigationProfile(new Set(["partner_map:business_manage"]), false)).toBe("vendor");
     expect(resolveNavigationProfile(new Set(["class:manage"]), false)).toBe("teacher");
-    expect(resolveNavigationProfile(new Set(["meal:view", "document:view_all"]), false))
-      .toBe("student");
+    expect(resolveNavigationProfile(new Set(["document:view_all"]), false)).toBe("student");
   });
 });

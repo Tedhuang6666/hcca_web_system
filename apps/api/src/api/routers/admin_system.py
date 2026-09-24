@@ -107,7 +107,7 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 _PROCESS_START_MONO = time.monotonic()
 
 # diagnostics 觀測的 Celery queue（與 docker-compose worker --queues 對齊）
-_DIAGNOSTIC_QUEUES = ["default", "email", "meal", "documents", "backup", "recovery", "celery"]
+_DIAGNOSTIC_QUEUES = ["default", "email", "documents", "backup", "recovery", "celery"]
 
 
 async def require_superuser(user: User = Depends(get_current_active_user)) -> User:

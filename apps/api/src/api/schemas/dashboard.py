@@ -8,7 +8,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.announcement import AnnouncementListItem
-from api.schemas.governance import MatterListItem
 from api.schemas.task import TaskInboxResponse
 
 WidgetKey = Literal[
@@ -19,7 +18,6 @@ WidgetKey = Literal[
     "regulation_publish",
     "petition_assigned",
     "open_surveys",
-    "today_meal",
     "announcements_recent",
     "class_order_collecting",
 ]
@@ -77,5 +75,4 @@ class DashboardCompositeResponse(BaseModel):
 
     dashboard: DashboardResponse
     tasks: TaskInboxResponse | None = None
-    matters: list[MatterListItem] | None = None
     announcements: list[AnnouncementListItem] | None = None

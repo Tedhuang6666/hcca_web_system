@@ -1,8 +1,7 @@
 import { API_BASE } from "../config";
-import { getImpersonationSession } from "../auth-cache";
 import { reportClientError } from "../client-error-reporter";
 
-export type HccaRequestInit = RequestInit & { skipImpersonation?: boolean };
+export type HccaRequestInit = RequestInit;
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -49,16 +48,13 @@ export function traceHeaders(): { traceId: string; headers: Record<string, strin
 }
 
 export function requestInitWithTrace(init: HccaRequestInit, trace: Record<string, string>): RequestInit {
-  const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
-  const impersonation = _skipImpersonation ? null : getImpersonationSession();
   return {
-    ...requestInit,
+    ...init,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...csrfHeaders(init.method),
       ...init.headers,
-      ...(impersonation ? { Authorization: `Bearer ${impersonation.token}` } : {}),
       ...trace,
     },
   };
@@ -160,14 +156,11 @@ export async function fetchWithRetry(
 
 /** 供下載、上傳等需要讀取原始 Response 的呼叫沿用同一套身分標頭。 */
 export function authFetch(input: RequestInfo | URL, init: HccaRequestInit = {}): Promise<Response> {
-  const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
-  const impersonation = _skipImpersonation ? null : getImpersonationSession();
   const headers = new Headers(
     typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
   );
-  new Headers(requestInit.headers).forEach((value, key) => headers.set(key, value));
-  if (impersonation) headers.set("Authorization", `Bearer ${impersonation.token}`);
-  return fetch(input, { credentials: "include", ...requestInit, headers });
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+  return fetch(input, { credentials: "include", ...init, headers });
 }
 
 export type UploadProgressHandler = (progress: number) => void;
@@ -183,19 +176,16 @@ export function uploadWithProgress(
 ): Promise<Response> {
   if (!onProgress || typeof XMLHttpRequest === "undefined") return authFetch(input, init);
 
-  const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
-  const impersonation = _skipImpersonation ? null : getImpersonationSession();
   const headers = new Headers(
     typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
   );
-  new Headers(requestInit.headers).forEach((value, key) => headers.set(key, value));
-  if (impersonation) headers.set("Authorization", `Bearer ${impersonation.token}`);
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value));
 
   const url = input instanceof URL ? input.toString() : input.toString();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open(requestInit.method ?? "POST", url, true);
-    xhr.withCredentials = requestInit.credentials === "omit" ? false : true;
+    xhr.open(init.method ?? "POST", url, true);
+    xhr.withCredentials = init.credentials === "omit" ? false : true;
     headers.forEach((value, key) => xhr.setRequestHeader(key, value));
     xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);
@@ -214,6 +204,6 @@ export function uploadWithProgress(
     };
     xhr.onerror = () => reject(new NetworkRequestError(`無法連線至 API：${url}`));
     xhr.onabort = () => reject(new NetworkRequestError("上傳已取消"));
-    xhr.send(requestInit.body as XMLHttpRequestBodyInit | null);
+    xhr.send(init.body as XMLHttpRequestBodyInit | null);
   });
 }

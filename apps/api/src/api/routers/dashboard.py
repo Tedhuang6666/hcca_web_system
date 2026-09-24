@@ -6,9 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
-from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_any
 from api.models.user import User
 from api.schemas.dashboard import DashboardCompositeResponse, DashboardResponse
 from api.services.dashboard import build_dashboard, build_dashboard_composite
@@ -17,15 +15,6 @@ router = APIRouter(prefix="/dashboard", tags=["儀表板"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
-GovernanceManagerChecker = require_any(
-    PermissionCode.GOVERNANCE_MANAGE,
-    PermissionCode.MEETING_MANAGE,
-    PermissionCode.ACTIVITY_MANAGE,
-    PermissionCode.DOCUMENT_ADMIN,
-    PermissionCode.ADMIN_ALL,
-)
-
-
 @router.get(
     "",
     response_model=DashboardResponse,
@@ -45,18 +34,14 @@ async def get_dashboard_composite(
     db: DbDep,
     user: CurrentUser,
     include_tasks: bool = Query(True),
-    include_matters: bool = Query(False),
     include_announcements: bool = Query(True),
     compact_dashboard: bool = Query(False),
 ) -> DashboardCompositeResponse:
-    """以單次 API 回傳 dashboard、待辦、治理摘要與最新公告。"""
-    if include_matters:
-        await GovernanceManagerChecker(current_user=user, db=db)
+    """以單次 API 回傳 dashboard、待辦與最新公告。"""
     return await build_dashboard_composite(
         db,
         user,
         include_tasks=include_tasks,
-        include_matters=include_matters,
         include_announcements=include_announcements,
         compact_dashboard=compact_dashboard,
     )

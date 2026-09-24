@@ -5,24 +5,22 @@ import Link from "next/link";
 import {
   FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
   CheckSquare, ChevronRight, Plus, Loader2, Clock, ArrowUpRight,
-  Layers3, ShoppingCart, Utensils, CalendarDays, Inbox, ShieldCheck,
+  ShoppingCart, CalendarDays, ShieldCheck,
   Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
 } from "lucide-react";
 import { announcementsApi } from "@/lib/api/announcements";
 import { dashboardApi, type DashboardResponse } from "@/lib/api/dashboard";
-import { governanceApi } from "@/lib/api/governance";
 import {
   tasksApi,
   type TaskInboxResponse,
   type TaskItem,
   type TaskModule,
 } from "@/lib/api/tasks";
-import type { AnnouncementListItem, MatterListItem } from "@/lib/types";
+import type { AnnouncementListItem } from "@/lib/types";
 import { cacheGet, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation-profile";
-import { riskColor, sortMattersByInsight } from "@/lib/governanceInsights";
 
 const DashboardWidgets = dynamic(() => import("./DashboardWidgets"), { ssr: false });
 
@@ -50,7 +48,6 @@ const HINT_LABEL: Record<string, string> = {
   student: "學生視角",
   teacher: "師長視角",
   vendor: "合作夥伴視角",
-  mealVendor: "餐商視角",
   default: "完整平台視角",
   officer: "幹部視角",
   leader: "領導視角",
@@ -63,7 +60,6 @@ const MODULE_LABEL: Record<TaskModule, string> = {
   petition: "陳情",
   survey: "問卷",
   shop: "商品",
-  meal: "學餐",
   announcement: "公告",
   calendar: "行事曆",
   work_item: "工作",
@@ -76,7 +72,6 @@ const TASK_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
   petition: (p) => <MessageSquare {...p} />,
   survey: (p) => <CheckSquare {...p} />,
   shop: (p) => <ShoppingCart {...p} />,
-  meal: (p) => <Utensils {...p} />,
   announcement: (p) => <Megaphone {...p} />,
   calendar: (p) => <CalendarDays {...p} />,
   work_item: (p) => <ListChecks {...p} />,
@@ -149,7 +144,6 @@ export type DashboardPageInitialData = {
   greeting: string;
   dashboard: DashboardResponse | null;
   tasks: TaskInboxResponse | null;
-  matters: MatterListItem[] | null;
   announcements: AnnouncementListItem[] | null;
 };
 
@@ -163,7 +157,6 @@ export default function DashboardPageClient({
   // hydration 完成後再載入快取，仍可保留切頁回來的即時顯示效果。
   const [cachedDashboard, setCachedDashboard] = useState<DashboardResponse | undefined>();
   const [cachedTasks, setCachedTasks] = useState<TaskInboxResponse | undefined>();
-  const [cachedMatters, setCachedMatters] = useState<MatterListItem[] | undefined>();
   const [cachedAnnouncements, setCachedAnnouncements] = useState<
     AnnouncementListItem[] | undefined
   >();
@@ -175,9 +168,6 @@ export default function DashboardPageClient({
   );
   const [tasks, setTasks] = useState<TaskInboxResponse | null>(
     () => initialData?.tasks ?? null,
-  );
-  const [matters, setMatters] = useState<MatterListItem[]>(
-    () => initialData?.matters ?? [],
   );
   const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>(
     () => initialData?.announcements ?? [],
@@ -203,7 +193,6 @@ export default function DashboardPageClient({
   useEffect(() => {
     setCachedDashboard(cacheGet<DashboardResponse>("dashboard/data"));
     setCachedTasks(cacheGet<TaskInboxResponse>("dashboard/tasks"));
-    setCachedMatters(cacheGet<MatterListItem[]>("dashboard/matters"));
     setCachedAnnouncements(cacheGet<AnnouncementListItem[]>("dashboard/announcements"));
     setCacheHydrated(true);
   }, []);
@@ -216,12 +205,6 @@ export default function DashboardPageClient({
     || Array.from(permissions).some(
       (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
     );
-  const canViewGovernanceWork = canAny(
-    "governance:manage",
-    "meeting:manage",
-    "activity:manage",
-    "document:admin",
-  );
   const recents = useRecentItems(6);
 
   useEffect(() => {
@@ -241,7 +224,6 @@ export default function DashboardPageClient({
     }
     if (!initialData?.dashboard && cachedDashboard) setData(cachedDashboard);
     if (!initialData?.tasks && cachedTasks) setTasks(cachedTasks);
-    if (initialData?.matters == null && cachedMatters) setMatters(cachedMatters);
     if (initialData?.announcements == null && cachedAnnouncements) {
       setAnnouncements(cachedAnnouncements);
     }
@@ -250,34 +232,26 @@ export default function DashboardPageClient({
     // heaviest dashboard request and delayed the first usable interaction.
     const refreshDashboard = !initialData?.dashboard && !cachedDashboard;
     const refreshTasks = !initialData?.tasks && !cachedTasks;
-    const refreshMatters = canViewGovernanceWork && initialData?.matters == null && !cachedMatters;
     const refreshAnnouncements = initialData?.announcements == null && !cachedAnnouncements;
     if (refreshTasks) setPriorityLoading(true);
-    if (refreshDashboard || refreshMatters || refreshAnnouncements) setSecondaryLoading(true);
+    if (refreshDashboard || refreshAnnouncements) setSecondaryLoading(true);
 
     const compositePromise = refreshDashboard
-      ? dashboardApi.composite({ includeTasks: false, includeMatters: canViewGovernanceWork })
+      ? dashboardApi.composite({ includeTasks: false })
       : null;
     const tasksPromise = refreshTasks ? tasksApi.list() : null;
-    const mattersPromise = !refreshDashboard && refreshMatters
-      ? governanceApi.listMatters({ status: "active", limit: 6 })
-      : null;
     const announcementsPromise = !refreshDashboard && refreshAnnouncements
       ? announcementsApi.list({ limit: 3 })
       : null;
 
-    Promise.allSettled([compositePromise, tasksPromise, mattersPromise, announcementsPromise])
-      .then(([compositeRes, tasksRes, mattersRes, announcementsRes]) => {
+    Promise.allSettled([compositePromise, tasksPromise, announcementsPromise])
+      .then(([compositeRes, tasksRes, announcementsRes]) => {
         if (compositeRes.status === "fulfilled" && compositeRes.value) {
           setData(compositeRes.value.dashboard);
           cacheSet("dashboard/data", compositeRes.value.dashboard);
           if (compositeRes.value.tasks) {
             setTasks(compositeRes.value.tasks);
             cacheSet("dashboard/tasks", compositeRes.value.tasks);
-          }
-          if (compositeRes.value.matters) {
-            setMatters(compositeRes.value.matters);
-            cacheSet("dashboard/matters", compositeRes.value.matters);
           }
           if (compositeRes.value.announcements) {
             setAnnouncements(compositeRes.value.announcements);
@@ -291,10 +265,6 @@ export default function DashboardPageClient({
           setTasks(tasksRes.value);
           cacheSet("dashboard/tasks", tasksRes.value);
         }
-        if (mattersRes.status === "fulfilled" && mattersRes.value) {
-          setMatters(mattersRes.value);
-          cacheSet("dashboard/matters", mattersRes.value);
-        }
         if (announcementsRes.status === "fulfilled" && announcementsRes.value) {
           setAnnouncements(announcementsRes.value);
           cacheSet("dashboard/announcements", announcementsRes.value);
@@ -304,7 +274,7 @@ export default function DashboardPageClient({
         if (refreshTasks) setPriorityLoading(false);
         setSecondaryLoading(false);
       });
-  }, [cacheHydrated, canViewGovernanceWork, cachedAnnouncements, cachedDashboard, cachedMatters, cachedTasks, initialData]);
+  }, [cacheHydrated, cachedAnnouncements, cachedDashboard, cachedTasks, initialData]);
 
   const widgets = data?.widgets ?? [];
   const layoutHint = data?.layout_hint ?? "student";
@@ -325,9 +295,6 @@ export default function DashboardPageClient({
     .slice()
     .sort((a, b) => b.priority_score - a.priority_score)
     .slice(0, 3);
-  const priorityMatters = canViewGovernanceWork
-    ? sortMattersByInsight(matters).slice(0, 2)
-    : [];
   const latestAnnouncements = useMemo(
     () => [...announcements]
       .sort((a, b) => (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at))
@@ -397,12 +364,9 @@ export default function DashboardPageClient({
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => <TaskSkeleton key={i} />)}
             </div>
-          ) : priorityTasks.length > 0 || priorityMatters.length > 0 ? (
+          ) : priorityTasks.length > 0 ? (
             <ul className="space-y-2">
               {priorityTasks.map((task) => <PriorityTaskRow key={task.id} task={task} />)}
-              {priorityMatters.map(({ matter, insight }) => (
-                <GovernanceMatterFocusRow key={matter.id} matter={matter} insight={insight} />
-              ))}
             </ul>
           ) : (
             <div className="dashboard-quiet-state">
@@ -476,51 +440,6 @@ export default function DashboardPageClient({
         </div>
       </details>
 
-      {dashboardContent.showGovernance && (
-      <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-          <span>
-            <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>活動與事情</span>
-          </span>
-          <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
-        </summary>
-        <Link href="/governance" className="dashboard-text-link mt-3 justify-end">
-          進入工作中心 <ChevronRight size={14} aria-hidden={true} />
-        </Link>
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {matters.length === 0 && (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              尚未有進行中的工作。建立活動或事情後，會集中出現在這裡。
-            </p>
-          )}
-          {priorityMatters.map(({ matter, insight }) => (
-            <Link
-              key={matter.id}
-              href={`/governance/${matter.id}`}
-              className="rounded-lg border p-3 transition-colors"
-              style={{ borderColor: "var(--border)", color: "var(--text-primary)", textDecoration: "none" }}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{matter.title}</p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {matter.matter_type === "activity" ? "活動" : "事情"} · {matter.open_task_count} 待辦 · {matter.link_count} 關聯
-                  </p>
-                  <p className="mt-1 truncate text-[11px]" style={{ color: riskColor(insight.risk_level) }}>
-                    {insight.recommended_action.label}
-                  </p>
-                </div>
-                <ChevronRight size={14} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
-                <div className="h-full rounded-full" style={{ width: `${matter.progress_percent}%`, background: "var(--primary)" }} />
-              </div>
-            </Link>
-          ))}
-        </div>
-      </details>
-      )}
-
       {adminActions.length > 0 && (
         <details className="dashboard-admin-strip">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -593,51 +512,6 @@ export default function DashboardPageClient({
   );
 }
 
-function GovernanceMatterFocusRow({
-  matter,
-  insight,
-}: {
-  matter: MatterListItem;
-  insight: ReturnType<typeof sortMattersByInsight>[number]["insight"];
-}) {
-  return (
-    <li>
-      <Link
-        href={`/governance/${matter.id}`}
-        className="dashboard-task-row"
-        style={{ borderColor: riskColor(insight.risk_level) }}
-      >
-        <span
-          className="dashboard-task-icon"
-          style={{
-            color: riskColor(insight.risk_level),
-            background: "var(--bg-hover)",
-            borderColor: "var(--border)",
-          }}
-          aria-hidden="true"
-        >
-          <Layers3 size={16} aria-hidden={true} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="dashboard-task-title">{matter.title}</span>
-          <span className="dashboard-task-meta">
-            <span>治理</span>
-            <span>{matter.open_task_count} 待辦</span>
-            <span>{matter.link_count} 關聯</span>
-          </span>
-          <span className="dashboard-task-recommend">
-            {insight.recommended_action.label}：{insight.recommended_action.reason}
-          </span>
-        </span>
-        <span className="dashboard-task-due" style={{ color: riskColor(insight.risk_level) }}>
-          {insight.risk_label}
-        </span>
-        <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
-      </Link>
-    </li>
-  );
-}
-
 type DashboardAction = {
   href: string;
   label: string;
@@ -654,7 +528,6 @@ type DashboardContent = {
   quickActions: DashboardAction[];
   serviceTitle: string;
   services: DashboardAction[];
-  showGovernance: boolean;
 };
 
 function getDashboardContent(
@@ -673,7 +546,6 @@ function getDashboardContent(
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "常用治理入口",
       services: getServiceActions("default", can, canAny),
-      showGovernance: true,
     },
     student: {
       busySubtitle: "待填寫與待確認事項已排在最前面。",
@@ -683,7 +555,6 @@ function getDashboardContent(
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "你常用的校園服務",
       services: getServiceActions("student", can, canAny),
-      showGovernance: false,
     },
     teacher: {
       busySubtitle: "班級、問卷與通知待辦已集中在這裡。",
@@ -693,7 +564,6 @@ function getDashboardContent(
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "師長常用工具",
       services: getServiceActions("teacher", can, canAny),
-      showGovernance: false,
     },
     vendor: {
       busySubtitle: "合作資料與待處理事項已集中在這裡。",
@@ -703,17 +573,6 @@ function getDashboardContent(
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "合作夥伴服務",
       services: getServiceActions("vendor", can, canAny),
-      showGovernance: false,
-    },
-    mealVendor: {
-      busySubtitle: "訂單、核銷與結單提醒已排在最前面。",
-      emptySubtitle: "目前沒有急迫事項。",
-      actionHeading: "今日供餐工作",
-      primaryAction,
-      quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceTitle: "餐商營運服務",
-      services: getServiceActions("mealVendor", can, canAny),
-      showGovernance: false,
     },
   }[profile];
 }
@@ -723,9 +582,6 @@ function getPrimaryAction(
   can: (code: string) => boolean,
   isOperator: boolean,
 ): DashboardAction {
-  if (profile === "mealVendor") {
-    return { href: "/meal/vendor", label: "管理今日餐單", detail: "菜單、訂單與核銷", icon: Utensils };
-  }
   if (profile === "vendor") {
     return { href: "/partner-map/admin", label: "管理特約資訊", detail: "商家、優惠與曝光", icon: ShoppingCart };
   }
@@ -759,7 +615,6 @@ function getQuickActions(
     { href: "/tasks", label: "我的待辦", detail: "簽核、問卷、訂單集中處理", icon: ListChecks, tone: "primary" },
     { href: "/announcements", label: "最新公告", detail: "校內訊息與公開事項", icon: Bell },
     { href: "/surveys", label: "問卷專區", detail: "快速填寫與查看結果", icon: PenLine },
-    { href: "/meal", label: "學餐訂購", detail: "菜單、訂單與取餐資訊", icon: Utensils },
     { href: "/shop", label: "商品訂購", detail: "活動票券與班級訂單", icon: ShoppingCart },
     { href: "/search", label: "全站搜尋", detail: "找公文、法規與公告", icon: Search },
   ];
@@ -782,7 +637,6 @@ function getServiceActions(
     { href: "/announcements", label: "看最新公告", detail: "校內訊息與公開事項", icon: Bell },
     { href: "/surveys", label: "填寫問卷", detail: "參與校園決策與回饋", icon: PenLine },
     { href: "/petitions/new", label: "我要陳情", detail: "提交問題、建議或申訴", icon: MessageSquare },
-    { href: "/meal", label: "查看餐單", detail: "菜單、訂單與取餐資訊", icon: Utensils },
     { href: "/shop", label: "購買商品票券", detail: "活動商品與票券訂購", icon: ShoppingCart },
     { href: "/partner-map", label: "找特約商家", detail: "優惠、地點與合作店家", icon: Search },
   ];
@@ -793,7 +647,6 @@ function getServiceActions(
       { href: "/announcements", label: "看校內公告", detail: "掌握近期校務與活動", icon: Bell },
       { href: "/surveys", label: "問卷與回覆", detail: "查看需協助的問卷事項", icon: PenLine },
       { href: "/exam-papers", label: "段考題庫", detail: "查找與管理教學資料", icon: FileText },
-      { href: "/meal", label: "查看學餐", detail: "菜單與訂餐狀態", icon: Utensils },
       { href: "/calendar", label: "查看行事曆", detail: "會議、活動與重要日期", icon: CalendarDays },
     ];
     if (can("class:shop_collect")) {
@@ -815,20 +668,8 @@ function getServiceActions(
       { href: "/settings", label: "帳號設定", detail: "通知、安全與介面偏好", icon: Settings },
     ];
   }
-  if (profile === "mealVendor") {
-    return [
-      { href: "/meal/vendor", label: "管理今日餐單", detail: "菜單、排程、供應商與結單", icon: Utensils },
-      { href: "/meal/orders", label: "查看學餐訂單", detail: "核銷、確認與匯出訂單", icon: ListChecks },
-      { href: "/meal", label: "查看學生頁面", detail: "確認餐點呈現與開放狀態", icon: Search },
-      { href: "/tasks", label: "處理待辦", detail: "結單、核銷與通知集中處理", icon: Inbox },
-      { href: "/announcements", label: "供餐公告", detail: "查看校內與營運通知", icon: Bell },
-      { href: "/settings", label: "帳號設定", detail: "通知、安全與介面偏好", icon: Settings },
-    ];
-  }
-
   const actions: DashboardAction[] = [
     { href: "/tasks", label: "我的待辦", detail: "簽核、問卷、訂單集中處理", icon: ListChecks, tone: "primary" },
-    { href: "/governance", label: "工作中心", detail: "活動、事情與跨模組追蹤", icon: Layers3 },
     { href: "/documents", label: "公文作業", detail: "草稿、簽核與公文查找", icon: FileText },
     { href: "/regulations", label: "法規資料庫", detail: "查詢、修正與公布法規", icon: Scale },
     { href: "/announcements", label: "發布與公告", detail: "公告、電子郵件與通知", icon: Megaphone },
@@ -836,9 +677,6 @@ function getServiceActions(
   ];
   if (canAny("meeting:manage", "meeting:create")) {
     actions.splice(2, 0, { href: "/meetings", label: "議事管理", detail: "議程、出席、決議", icon: Landmark });
-  }
-  if (can("meal:manage")) {
-    actions.push({ href: "/meal/vendor", label: "餐商管理", detail: "菜單、訂單與供應商", icon: Utensils });
   }
   return actions.slice(0, 6);
 }
@@ -858,9 +696,6 @@ function getAdminActions(
   }
   if (can("shop:manage")) {
     actions.push({ href: "/shop/admin", label: "商品後台", detail: "商品、訂單與結單", icon: ShoppingCart });
-  }
-  if (can("meal:manage")) {
-    actions.push({ href: "/meal/vendor", label: "餐商管理", detail: "菜單、取餐與供應商", icon: Utensils });
   }
   if (isAdmin || can("admin:all")) {
     actions.push({ href: "/admin/modules", label: "模組維護", detail: "開關、維護與公告", icon: Wrench });
@@ -943,7 +778,6 @@ function EmptyState() {
     { href: "/announcements", label: "看公告" },
     { href: "/regulations", label: "查法規" },
     { href: "/shop", label: "商品訂購" },
-    { href: "/meal", label: "學餐訂購" },
     { href: "/surveys", label: "問卷" },
   ];
   return (

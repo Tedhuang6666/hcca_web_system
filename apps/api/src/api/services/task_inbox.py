@@ -29,7 +29,6 @@ from api.models.document import (
     DocumentApproval,
     DocumentApprovalDelegation,
 )
-from api.models.meal import MenuSchedule
 from api.models.meeting import (
     AttendanceStatus,
     Meeting,
@@ -77,12 +76,7 @@ def _severity_by_due(due_at: datetime | None) -> str:
 
 
 def _work_item_href(item: WorkItem) -> str:
-    """回到工作項目的來源頁；沒有來源時才回待辦中心。"""
-    if item.source_id is not None:
-        if item.source_type == "matter":
-            return f"/governance/{item.source_id}#tasks"
-        if item.source_type == "activity":
-            return f"/activities/{item.source_id}"
+    """回到仍啟用的工作項目來源頁；沒有來源時回待辦中心。"""
     return "/tasks"
 
 
@@ -489,46 +483,6 @@ async def _shop_sales_to_manage(
     ]
 
 
-async def _meal_deadlines_to_manage(
-    db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
-) -> list[TaskItem]:
-    if not (
-        is_admin
-        or _has(perms, is_admin, "meal:manage")
-        or _has(perms, is_admin, "meal:manage_schedule")
-    ):
-        return []
-    now = datetime.now(UTC)
-    cutoff = now + timedelta(hours=48)
-    rows = (
-        (
-            await db.execute(
-                select(MenuSchedule)
-                .where(MenuSchedule.is_closed.is_(False))
-                .where(MenuSchedule.order_deadline >= now, MenuSchedule.order_deadline <= cutoff)
-                .order_by(MenuSchedule.order_deadline.asc())
-                .limit(20)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [
-        TaskItem(
-            id=f"meal:{schedule.id}:manage",
-            module="meal",
-            action="manage",
-            title="學餐即將結單",
-            subtitle=schedule.note,
-            href="/meal/vendor",
-            due_at=schedule.order_deadline,
-            severity=_severity_by_due(schedule.order_deadline),
-            created_at=schedule.created_at,
-        )
-        for schedule in rows
-    ]
-
-
 async def _work_items_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
     rows = (
         (
@@ -662,14 +616,6 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
                 db,
                 "shop_sales",
                 lambda source_db: _shop_sales_to_manage(source_db, user, perms, is_admin),
-            )
-        )
-    if _has(perms, is_admin, "meal:manage") or _has(perms, is_admin, "meal:manage_schedule"):
-        source_calls.append(
-            _run_source(
-                db,
-                "meal_deadlines",
-                lambda source_db: _meal_deadlines_to_manage(source_db, user, perms, is_admin),
             )
         )
     if isinstance(db.bind, AsyncEngine):
@@ -884,23 +830,6 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
                 .where(Product.sale_end >= now, Product.sale_end <= cutoff_48h),
             )
         )
-    if (
-        is_admin
-        or _has(perms, is_admin, "meal:manage")
-        or _has(perms, is_admin, "meal:manage_schedule")
-    ):
-        count_queries.append(
-            (
-                "meal",
-                select(func.count(MenuSchedule.id), literal(0))
-                .select_from(MenuSchedule)
-                .where(MenuSchedule.is_closed.is_(False))
-                .where(
-                    MenuSchedule.order_deadline >= now, MenuSchedule.order_deadline <= cutoff_48h
-                ),
-            )
-        )
-
     combined = (
         union_all(
             *[

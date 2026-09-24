@@ -2,12 +2,11 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, shopApi, classApi, apiErrorMessage } from "@/lib/api";
+import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
-import ActivitySelect from "@/components/activities/ActivitySelect";
 import type {
   SchoolClassListItem,
   ProductCategoryOut,
@@ -16,7 +15,6 @@ import type {
   ProductVariantGroupOut,
   ProductVariantOptionOut,
   OrderSummaryOut,
-  Activity,
 } from "@/lib/types";
 
 // ── 共用小元件 ────────────────────────────────────────────────────────────────
@@ -110,9 +108,6 @@ function EntityModal({
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
-  const [activityId, setActivityId] = useState(
-    kind === "category" ? ((initial as ProductCategoryOut | null)?.activity_id ?? "") : "",
-  );
   const [busy, setBusy] = useState(false);
 
   const label = kind === "category" ? "主題" : "系列";
@@ -130,9 +125,6 @@ function EntityModal({
         <Field label="圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
-        {kind === "category" && (
-          <ActivitySelect value={activityId} onChange={setActivityId} />
-        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="排序">
             <input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="input w-full" inputMode="numeric" />
@@ -157,9 +149,9 @@ function EntityModal({
                   is_active: isActive,
                 };
                 if (kind === "category") {
-                  if (editing) await shopApi.updateCategory(initial!.id, { ...body, activity_id: activityId || null });
+                  if (editing) await shopApi.updateCategory(initial!.id, body);
                   else {
-                    await shopApi.createCategory({ ...body, activity_id: activityId || null });
+                    await shopApi.createCategory(body);
                   }
                 } else {
                   await shopApi.updateSeries(initial!.id, body);
@@ -795,7 +787,7 @@ function VariantManager({
 
 // ── 統計分頁 ──────────────────────────────────────────────────────────────────
 
-function StatsView({ activityId }: { activityId: string }) {
+function StatsView() {
   const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
   const [data, setData] = useState<OrderSummaryOut | null>(null);
   const [loading, setLoading] = useState(true);
@@ -815,9 +807,9 @@ function StatsView({ activityId }: { activityId: string }) {
 
   useEffect(() => {
     Promise.all([
-      shopApi.listProducts({ limit: "100", activity_id: activityId }).catch(() => []),
+      shopApi.listProducts({ limit: "100" }).catch(() => []),
       classApi.list({ limit: "500" }).catch(() => []),
-      shopApi.orderSummary({ group_by: "user", activity_id: activityId }).catch(() => null),
+      shopApi.orderSummary({ group_by: "user" }).catch(() => null),
     ]).then(([loadedProducts, loadedClasses, userSummary]) => {
       setProducts(loadedProducts);
       setClasses(loadedClasses);
@@ -827,14 +819,13 @@ function StatsView({ activityId }: { activityId: string }) {
           .map((row) => ({ id: row.key, label: row.label })) ?? []
       );
     });
-  }, [activityId]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     shopApi.orderSummary({
       group_by: groupBy,
-      activity_id: activityId,
       product_id: productId,
       grade,
       class_id: classId,
@@ -850,7 +841,7 @@ function StatsView({ activityId }: { activityId: string }) {
         setError(apiErrorMessage(e, "統計載入失敗"));
       })
       .finally(() => setLoading(false));
-  }, [activityId, classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId]);
+  }, [classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId]);
 
   const groupOptions = [
     ["class", "依班級"],
@@ -1093,9 +1084,7 @@ export default function ShopAdminPage() {
   const { can } = usePermissions();
 
   const [tab, setTab] = useState<"catalog" | "stats">("catalog");
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [activityId, setActivityId] = useState("");
-  const allowed = can("shop:manage") || activities.length > 0;
+  const allowed = can("shop:manage");
 
   // 一層一層的選取狀態
   const [cat, setCat] = useState<ProductCategoryOut | null>(null);
@@ -1117,10 +1106,10 @@ export default function ShopAdminPage() {
 
   const loadCategories = useCallback(() => {
     shopApi
-      .listCategories(activityId ? { activity_id: activityId } : undefined)
+      .listCategories()
       .then(setCategories)
       .catch(() => setCategories([]));
-  }, [activityId]);
+  }, []);
   const loadSeries = useCallback((categoryId: string) => {
     shopApi.listSeries({ category_id: categoryId }).then(setSeriesList).catch(() => setSeriesList([]));
   }, []);
@@ -1128,22 +1117,21 @@ export default function ShopAdminPage() {
     shopApi.listProducts({ series_id: sid }).then(setProducts).catch(() => setProducts([]));
   }, []);
   const loadAllProducts = useCallback(() => {
-    shopApi.listProducts({ limit: "100", activity_id: activityId }).then(setAllProducts).catch(() => setAllProducts([]));
-  }, [activityId]);
+    shopApi.listProducts({ limit: "100" }).then(setAllProducts).catch(() => setAllProducts([]));
+  }, []);
   const loadProduct = useCallback((pid: string) => {
     shopApi.getProduct(pid).then(setProduct).catch(() => setProduct(null));
   }, []);
 
   useEffect(() => {
-    activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
     shopApi
-      .listCategories(activityId ? { activity_id: activityId } : undefined)
+      .listCategories()
       .then(setCategories)
       .catch(() => setCategories([]));
     if (!allowed) return;
     loadCategories();
     loadAllProducts();
-  }, [activityId, allowed, loadAllProducts, loadCategories]);
+  }, [allowed, loadAllProducts, loadCategories]);
 
   useEffect(() => { if (cat) loadSeries(cat.id); }, [cat, loadSeries]);
   useEffect(() => { if (series) loadProducts(series.id); }, [series, loadProducts]);
@@ -1299,22 +1287,8 @@ export default function ShopAdminPage() {
         ))}
       </div>
 
-      <div className="card p-4">
-        <ActivitySelect
-          value={activityId}
-          onChange={(next) => {
-            setActivityId(next);
-            selectCategory(null);
-          }}
-          label="活動篩選"
-          noneLabel="全部商品主題"
-          scope="all"
-          onActivitiesLoaded={setActivities}
-        />
-      </div>
-
       {tab === "stats" ? (
-        <StatsView activityId={activityId} />
+        <StatsView />
       ) : (
         <div className="card overflow-hidden min-h-[620px]">
           <div className="grid grid-cols-1 lg:grid-cols-[240px_360px_1fr] min-h-[620px]">

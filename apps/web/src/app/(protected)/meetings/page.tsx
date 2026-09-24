@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { CalendarDays, Plus, Radio, ScreenShare, Settings } from "lucide-react";
 import { meetingsApi, orgsApi } from "@/lib/api";
 import type { MeetingListItem, MeetingWorkspaceOut, OrgRead } from "@/lib/types";
@@ -10,11 +10,6 @@ import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { orgDisplayName } from "@/lib/orgs";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
-import {
-  GovernanceLinkNotice,
-  createGovernanceBacklink,
-  governanceContextFromParams,
-} from "@/lib/governanceLinking";
 
 const statusLabel: Record<string, string> = {
   draft: "草稿",
@@ -68,16 +63,10 @@ const MTG_ORGS_KEY = "meetings/orgs";
 
 export default function MeetingsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const governanceContext = useMemo(
-    () => governanceContextFromParams(searchParams),
-    [searchParams],
-  );
-  const governanceOrgId = governanceContext?.orgId;
   const [items, setItems] = useState<MeetingListItem[]>(() => cacheGet<MeetingListItem[]>(MTG_LIST_KEY) ?? []);
   const [orgs, setOrgs] = useState<OrgRead[]>(() => cacheGet<OrgRead[]>(MTG_ORGS_KEY) ?? []);
   const [workspace, setWorkspace] = useState<MeetingWorkspaceOut | null>(null);
-  const [title, setTitle] = useState(governanceContext?.matterTitle ?? "");
+  const [title, setTitle] = useState("");
   // 記住上次建立會議所選的組織，常為同一組織辦會議者免每次重選。
   const [orgId, setOrgId] = usePersistedState<string>("hcca:pref:meetings:org:v1", "");
   const [loading, setLoading] = useState(!cacheHas(MTG_LIST_KEY));
@@ -116,9 +105,6 @@ export default function MeetingsPage() {
       setOrgs(orgList);
       cacheSet(MTG_ORGS_KEY, orgList);
       setOrgId((current) => {
-        if (governanceOrgId && orgList.some((org) => org.id === governanceOrgId)) {
-          return governanceOrgId;
-        }
         return current || orgList[0]?.id || "";
       });
     } catch (err) {
@@ -126,7 +112,7 @@ export default function MeetingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [governanceOrgId, setOrgId]);
+  }, [setOrgId]);
 
   useEffect(() => {
     void load();
@@ -142,13 +128,6 @@ export default function MeetingsPage() {
         expected_voters: 0,
         quorum_count: 0,
         default_pass_threshold: 0,
-      });
-      await createGovernanceBacklink({
-        context: governanceContext,
-        targetType: "meeting",
-        targetId: meeting.id,
-        title: meeting.title,
-        href: `/meetings/${meeting.id}`,
       });
       setTitle("");
       // 保留 orgId 作為下次預設（常為同一組織連續辦會議）。
@@ -173,8 +152,6 @@ export default function MeetingsPage() {
         </Link>
         <Link href="/meetings/screen/demo" className="hidden" aria-hidden="true" />
       </div>
-
-      <GovernanceLinkNotice context={governanceContext} />
 
       {canCreateMeeting ? (
         <section className="mb-6 grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-[var(--border)] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">

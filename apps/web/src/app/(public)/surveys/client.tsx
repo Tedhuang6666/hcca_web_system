@@ -9,8 +9,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
-import ActivitySelect from "@/components/activities/ActivitySelect";
-import type { Activity } from "@/lib/types";
 
 const STATUS_CFG: Record<SurveyStatus, { label: string; color: string; bg: string }> = {
   draft:    { label: "草稿",    color: "var(--text-muted)", bg: "var(--bg-elevated)" },
@@ -36,22 +34,17 @@ export default function SurveysClient({
   const [tab, setTab] = usePersistedState<"open" | "all">("hcca:pref:surveys:tab:v1", "open");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = usePersistedState<string>("hcca:pref:surveys:sort:v1", "newest");
-  const [activityId, setActivityId] = usePersistedState<string>("hcca:pref:surveys:activity:v1", "");
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [serviceError, setServiceError] = useState<"closed" | "unavailable" | null>(
     initialFailureStatus === 503 ? "closed" : initialFailureStatus === null ? null : "unavailable",
   );
   const { can } = usePermissions();
-  const canManage = can("survey:manage") || activities.length > 0;
+  const canManage = can("survey:manage");
 
   // 未登入者改用公開問卷列表（僅 is_public 且開放/已截止的問卷）
   const [surveys, loading] = useFetch(
     () => {
-      const params = {
-        ...(tab === "open" ? { status: "open" } : {}),
-        ...(activityId ? { activity_id: activityId } : {}),
-      };
+      const params = tab === "open" ? { status: "open" } : {};
       const isLoggedIn = typeof window !== "undefined" && !!localStorage.getItem("user_id");
       const request = isLoggedIn
         ? surveysApi.list(params)
@@ -66,13 +59,11 @@ export default function SurveysClient({
           throw error;
         });
     },
-    [activityId, tab, reloadVersion],
+    [tab, reloadVersion],
     "載入失敗",
     initialSurveys,
     "surveys/list",
   );
-
-  const activityNameById = new Map(activities.map((activity) => [activity.id, activity.name]));
 
   const displayed = surveys
     .filter(s => !search.trim() || s.title.toLowerCase().includes(search.toLowerCase()))
@@ -104,16 +95,6 @@ export default function SurveysClient({
 
       {/* 搜尋 + 排序 + 分頁 */}
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end">
-        <ActivitySelect
-          value={activityId}
-          onChange={setActivityId}
-          label="活動"
-          noneLabel="全部問卷"
-          scope="all"
-          hideWhenUnauthenticated
-          className="w-full shrink-0 md:w-52"
-          onActivitiesLoaded={setActivities}
-        />
         <div className="relative w-full min-w-0 flex-1">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
             width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -191,7 +172,7 @@ export default function SurveysClient({
         />
       ) : (
         <div
-          key={`${tab}:${sortKey}:${search}:${activityId}`}
+          key={`${tab}:${sortKey}:${search}`}
           className="survey-list-results space-y-3"
         >
           {displayed.map((survey, index) => {
@@ -227,12 +208,6 @@ export default function SurveysClient({
                       <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
                         style={{ background: "var(--info-dim)", color: "var(--info)" }}>
                         匿名
-                      </span>
-                    )}
-                    {survey.activity_id && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-                        {activityNameById.get(survey.activity_id) ?? "活動問卷"}
                       </span>
                     )}
                   </div>

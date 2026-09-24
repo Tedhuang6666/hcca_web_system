@@ -13,9 +13,7 @@
 目前涵蓋模組：
   - 商品訂單 (GET /shop/orders/{order_id})
   - 通知 (GET /notifications/{notification_id})
-  - 活動 Discord 工作區 (PUT /activities/{activity_id}/discord-workspace)
   - 問卷填答記錄列表 (GET /surveys/{survey_id}/responses) — 需 survey:manage 或活動負責人
-  - 學餐訂單／班級訂購 (GET /meal/orders/{order_id}) — 僅本人／管理權限／協助班級幹部可查看
   - 陳情案件 (GET /petitions/{case_id}) — 以 id 直查時仍需 _assert_case_access 檢查
 """
 
@@ -236,54 +234,6 @@ async def test_survey_responses_list_idor(db_session: AsyncSession) -> None:
     assert resp.status_code == 403, (
         f"User B 沒有 survey:manage 權限也非活動負責人，"
         f"不應能列出他人問卷的填答記錄，期望 403，實際 {resp.status_code}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 學餐訂單（班級訂購）IDOR
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_meal_order_idor_returns_403(db_session: AsyncSession) -> None:
-    """User B 無法查看 User A 的學餐訂單，應得 403。
-
-    保護邏輯位於 apps/api/src/api/routers/meal.py GET /meal/orders/{order_id}：
-    非本人、非超級管理員、且非該訂單所屬班級的協助幹部時，回傳 403。
-    """
-    from api.models.meal import MealOrder, MealOrderStatus, MealVendor
-    from api.models.org import Org
-
-    org = Org(name=f"IDOR學餐組織-{uuid.uuid4().hex[:6]}")
-    db_session.add(org)
-    await db_session.flush()
-
-    user_a = await _make_user(db_session)
-    user_b = await _make_user(db_session)
-
-    vendor = MealVendor(
-        name=f"IDOR測試商家-{uuid.uuid4().hex[:6]}", org_id=org.id, created_by=user_a.id
-    )
-    db_session.add(vendor)
-    await db_session.flush()
-
-    order = MealOrder(
-        serial_number=f"MEAL-IDOR-{uuid.uuid4().hex[:8]}",
-        pickup_code=str(uuid.uuid4().int)[:5],
-        user_id=user_a.id,
-        schedule_id=None,
-        vendor_id=vendor.id,
-        status=MealOrderStatus.PENDING,
-        total_price=0,
-    )
-    db_session.add(order)
-    await db_session.flush()
-
-    async with _make_authed_client(db_session, user_b) as client_b:
-        resp = await client_b.get(f"/meal/orders/{order.id}")
-
-    assert resp.status_code == 403, (
-        f"User B 不應能查看 User A 的學餐訂單，期望 403，實際 {resp.status_code}"
     )
 
 

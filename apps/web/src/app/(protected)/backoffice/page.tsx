@@ -9,7 +9,6 @@ import {
   Network,
   Store,
   Ticket,
-  Truck,
   Users,
   Vote,
 } from "lucide-react";
@@ -64,13 +63,6 @@ const TOOLS = [
     label: "班級訂單",
     desc: "班級代收、統計與訂單彙整",
     perms: ["class:shop_collect"],
-  },
-  {
-    href: "/meal/vendor",
-    icon: Truck,
-    label: "餐商管理",
-    desc: "供應商、菜單、取餐與結單設定",
-    prefixes: ["meal:"],
   },
   {
     href: "/partner-map/admin",
