@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.cache import cache_invalidate, cache_invalidate_dashboard
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
@@ -97,6 +98,14 @@ async def _response_with_answers(session: AsyncSession, response_id: uuid.UUID) 
         .where(SurveyResponse.id == response_id)
     )
     return result.scalar_one()
+
+
+async def _invalidate_response_caches(user: User | None) -> None:
+    if user is None:
+        return
+    user_id = str(user.id)
+    await cache_invalidate_dashboard(user_id)
+    await cache_invalidate(f"task_count:{user_id}")
 
 
 # ── 圖片上傳 ──────────────────────────────────────────────────────────────────
@@ -501,6 +510,7 @@ async def submit_response(
         },
         summary=f"提交問卷「{survey.title}」填答",
     )
+    await _invalidate_response_caches(user)
 
     reloaded = await _response_with_answers(session, response.id)
 
@@ -609,6 +619,7 @@ async def update_response(
         },
         summary=f"更新問卷「{survey.title}」填答",
     )
+    await _invalidate_response_caches(user)
     reloaded = await _response_with_answers(session, response.id)
 
     if payload.email_copy and user and user.email:

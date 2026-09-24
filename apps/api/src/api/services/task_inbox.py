@@ -39,7 +39,7 @@ from api.models.meeting import (
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.shop import Product, ProductStatus
-from api.models.survey import Survey, SurveyStatus
+from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.task import TaskCountResponse, TaskInboxResponse, TaskItem
@@ -314,11 +314,26 @@ async def _petitions_assigned(
 
 
 async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
+    completed_response = (
+        select(SurveyResponse.id)
+        .where(
+            SurveyResponse.survey_id == Survey.id,
+            SurveyResponse.respondent_id == user.id,
+        )
+        .exists()
+    )
     rows = (
         (
             await db.execute(
                 select(Survey)
                 .where(Survey.status == SurveyStatus.OPEN)
+                .where(
+                    or_(
+                        Survey.is_anonymous.is_(True),
+                        Survey.allow_multiple.is_(True),
+                        ~completed_response,
+                    )
+                )
                 .order_by(desc(Survey.updated_at))
                 .limit(20)
             )
@@ -694,6 +709,14 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
     cutoff_72h = now + timedelta(hours=72)
     cutoff_48h = now + timedelta(hours=48)
     count_queries: list[tuple[str, object]] = []
+    completed_response = (
+        select(SurveyResponse.id)
+        .where(
+            SurveyResponse.survey_id == Survey.id,
+            SurveyResponse.respondent_id == user.id,
+        )
+        .exists()
+    )
 
     if _has(perms, is_admin, "document:approve"):
         active_assignment = select(DocumentApprovalDelegation.id).where(
@@ -751,7 +774,14 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
                 "survey",
                 select(func.count(Survey.id), literal(0))
                 .select_from(Survey)
-                .where(Survey.status == SurveyStatus.OPEN),
+                .where(Survey.status == SurveyStatus.OPEN)
+                .where(
+                    or_(
+                        Survey.is_anonymous.is_(True),
+                        Survey.allow_multiple.is_(True),
+                        ~completed_response,
+                    )
+                ),
             ),
             (
                 "calendar",

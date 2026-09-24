@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -11,6 +13,7 @@ from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.main import app
 from api.models.announcement import Announcement, AnnouncementRead
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
 
 
@@ -59,6 +62,56 @@ async def test_get_active_urgent_returns_null_when_none(client: AsyncClient) -> 
     resp = await client.get("/announcements/active-urgent")
     assert resp.status_code == 200
     assert resp.json() is None
+
+
+@pytest.mark.asyncio
+async def test_get_active_urgent_hides_completed_survey_for_that_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    author = await _seed_user_with_codes(db_session, "survey-ann-author@school.edu", [])
+    viewer = await _seed_user_with_codes(db_session, "survey-ann-viewer@school.edu", [])
+    other_viewer = await _seed_user_with_codes(db_session, "survey-ann-other@school.edu", [])
+    org = Org(name="重要問卷公告組織")
+    db_session.add(org)
+    await db_session.flush()
+    announcement = Announcement(
+        title="問卷重要公告",
+        content={},
+        author_id=author.id,
+        is_urgent=True,
+        is_published=True,
+        published_at=datetime.now(UTC),
+        audience_type="all",
+    )
+    db_session.add(announcement)
+    await db_session.flush()
+    survey = Survey(
+        title="重要問卷",
+        org_id=org.id,
+        created_by=author.id,
+        status=SurveyStatus.OPEN,
+        announcement_id=announcement.id,
+    )
+    db_session.add(survey)
+    await db_session.flush()
+    db_session.add(
+        SurveyResponse(
+            survey_id=survey.id,
+            respondent_id=viewer.id,
+            submitted_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+
+    _override_user(viewer)
+    hidden = await client.get("/announcements/active-urgent")
+    assert hidden.status_code == 200
+    assert hidden.json() is None
+
+    _override_user(other_viewer)
+    visible = await client.get("/announcements/active-urgent")
+    assert visible.status_code == 200
+    assert visible.json()["title"] == "問卷重要公告"
 
 
 @pytest.mark.asyncio

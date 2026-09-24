@@ -23,6 +23,7 @@ from api.models.announcement import (
     announcement_audience_users,
 )
 from api.models.org import Org
+from api.models.survey import Survey, SurveyResponse
 from api.models.user import User
 from api.schemas.announcement import AnnouncementCreate, AnnouncementStatsOut, AnnouncementUpdate
 from api.services.permission import get_user_org_ids
@@ -404,5 +405,17 @@ async def get_active_urgent(
     )
     if scope is not None:
         q = q.where(_audience_clause(scope))
+        if scope.user_id is not None:
+            completed_survey = (
+                select(SurveyResponse.id)
+                .join(Survey, Survey.id == SurveyResponse.survey_id)
+                .where(
+                    Survey.announcement_id == Announcement.id,
+                    Survey.allow_multiple.is_(False),
+                    SurveyResponse.respondent_id == scope.user_id,
+                )
+                .exists()
+            )
+            q = q.where(~completed_survey)
     result = await db.execute(q)
     return result.scalar_one_or_none()
