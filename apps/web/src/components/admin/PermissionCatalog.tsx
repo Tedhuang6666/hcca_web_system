@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { PermissionCodeInfo } from "@/lib/types";
@@ -170,6 +170,22 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
     [permCodes, selected],
   );
   const highRiskSelected = selectedItems.filter((item) => isHighRiskPermission(item.code));
+  const visibleCodes = useMemo(
+    () => permGroups.flatMap((group) => group.items.map((item) => item.code)),
+    [permGroups],
+  );
+  const allVisibleSelected = visibleCodes.length > 0 && visibleCodes.every((code) => selected.includes(code));
+
+  useEffect(() => {
+    const groupsWithSelected = permGroups
+      .filter((group) => group.items.some((item) => selected.includes(item.code)))
+      .map((group) => group.label);
+    const groupsToOpen = keyword || groupFilter !== "all"
+      ? permGroups.map((group) => group.label)
+      : groupsWithSelected;
+    if (!groupsToOpen.length) return;
+    setExpanded((prev) => new Set([...prev, ...groupsToOpen]));
+  }, [groupFilter, keyword, permGroups, selected]);
 
   const toggle = (code: string) =>
     onChange(selected.includes(code) ? selected.filter((c) => c !== code) : [...selected, code]);
@@ -183,7 +199,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_180px]">
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" width="13" height="13"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -193,19 +209,47 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜尋權限名稱、代碼或說明"
-            className="w-full text-xs pl-8 pr-3 py-2 rounded-lg outline-none"
+            aria-label="搜尋權限名稱、代碼或說明"
+            className="min-h-10 w-full rounded-lg px-3 pl-8 pr-3 text-xs outline-none"
             style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
           />
         </div>
         <select
           value={groupFilter}
           onChange={(e) => setGroupFilter(e.target.value)}
-          className="w-full text-xs px-3 py-2 rounded-lg outline-none"
+          aria-label="依模組篩選權限"
+          className="min-h-10 w-full rounded-lg px-3 text-xs outline-none"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
         >
           <option value="all">全部模組</option>
           {allGroups.map((group) => <option key={group} value={group}>{group}</option>)}
         </select>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+        <span>目前顯示 {visibleCodes.length} 項 · 已選 {selected.length} 項</span>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(allVisibleSelected
+              ? selected.filter((code) => !visibleCodes.includes(code))
+              : Array.from(new Set([...selected, ...visibleCodes])))}
+            disabled={visibleCodes.length === 0}
+            className="min-h-9 rounded-lg px-2.5 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+          >
+            {allVisibleSelected ? "清除目前顯示" : "選取目前顯示"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpanded(new Set(permGroups.map((group) => group.label)))}
+            disabled={visibleCodes.length === 0}
+            className="min-h-9 rounded-lg px-2.5 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+          >
+            展開目前模組
+          </button>
+        </div>
       </div>
 
       {selected.length > 0 && (
@@ -248,7 +292,11 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
       )}
 
       <div className="space-y-2 overflow-y-auto" style={{ maxHeight: "min(60vh, 480px)" }}>
-      {permGroups.map((g) => {
+      {permGroups.length === 0 ? (
+        <div className="rounded-xl px-4 py-8 text-center text-xs" style={{ color: "var(--text-muted)", border: "1px dashed var(--border)" }}>
+          找不到符合條件的權限。請換個關鍵字或清除模組篩選。
+        </div>
+      ) : permGroups.map((g) => {
         const groupCodes = g.items.map((item) => item.code);
         if (!groupCodes.length) return null;
         const isOpen = expanded.has(g.label);

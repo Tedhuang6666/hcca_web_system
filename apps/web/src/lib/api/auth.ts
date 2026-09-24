@@ -58,6 +58,7 @@ function fetchCurrentUser(): Promise<AuthenticatedUser> {
 
 export const authApi = {
   me: () => Promise.resolve(cachedAuthUser() ?? fetchCurrentUser()),
+  refresh: () => fetchCurrentUser(),
   googleOneTap: (credential: string, next?: string) =>
     post<{
       mfa_required: boolean;
