@@ -38,7 +38,7 @@ from api.models.meeting import (
 )
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
-from api.models.survey import Survey, SurveyStatus
+from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
 from api.schemas.announcement import AnnouncementListItem
 from api.schemas.dashboard import (
@@ -529,10 +529,25 @@ async def _w_petition_assigned(
 
 
 async def _w_open_surveys(db: AsyncSession, user: User) -> DashboardWidget | None:
+    completed_response = (
+        select(SurveyResponse.id)
+        .where(
+            SurveyResponse.survey_id == Survey.id,
+            SurveyResponse.respondent_id == user.id,
+        )
+        .exists()
+    )
     stmt = (
         select(Survey)
         .options(load_only(Survey.id, Survey.title, Survey.updated_at))
         .where(Survey.status == SurveyStatus.OPEN)
+        .where(
+            or_(
+                Survey.is_anonymous.is_(True),
+                Survey.allow_multiple.is_(True),
+                ~completed_response,
+            )
+        )
         .order_by(desc(Survey.updated_at))
         .limit(5)
     )
