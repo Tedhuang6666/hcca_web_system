@@ -1623,115 +1623,42 @@ def render_regulation_print_html(reg: Regulation) -> str:
 
 
 def render_petition_print_html(case_obj: PetitionCase) -> str:
-    """Render a petition case file for internal school-office handling."""
-    status_value = _enum_value(case_obj.status)
-    status_label = {
-        "submitted": "已收件",
-        "assigned": "已分案",
-        "in_progress": "承辦中",
-        "needs_info": "等待補件",
-        "transferred": "已轉派",
-        "resolved": "已回覆",
-        "closed": "已結案",
-        "rejected": "不受理",
-    }.get(status_value, status_value or "未設定")
+    """Render a petition intake detail sheet in the campus-office format."""
 
     def print_datetime(value: object | None) -> str:
         if not isinstance(value, dt.datetime):
-            return _roc_date(value, blank="未載明")
+            return "未載明"
         if value.tzinfo is not None:
             value = value.astimezone(TAIPEI)
-        return _roc_datetime(value)
+        period = "上午" if value.hour < 12 else "下午"
+        hour = value.hour % 12 or 12
+        return f"{value:%Y/%m/%d} {period} {hour:02d} 點 {value.minute:02d} 分"
 
-    def print_file_size(value: object | None) -> str:
-        if value is None:
-            return "大小未提供"
-        size = max(0, int(value))
-        units = ("B", "KB", "MB", "GB")
-        unit_index = 0
-        size_value = float(size)
-        while size_value >= 1024 and unit_index < len(units) - 1:
-            size_value /= 1024
-            unit_index += 1
-        return f"{size_value:.1f} {units[unit_index]}" if unit_index else f"{size} B"
+    def print_updated_at(value: object | None) -> str:
+        if not isinstance(value, dt.datetime):
+            return "更新 未載明"
+        if value.tzinfo is not None:
+            value = value.astimezone(TAIPEI)
+        period = "上午" if value.hour < 12 else "下午"
+        hour = value.hour % 12 or 12
+        return f"更新 {value:%m/%d} {period} {hour:02d} 點 {value.minute:02d} 分"
 
-    submitter = getattr(case_obj, "submitter", None)
-    submitter_name = (
-        getattr(case_obj, "contact_name", None)
-        or getattr(submitter, "display_name", None)
-        or "未提供"
-    )
-    submitter_email = (
-        getattr(case_obj, "contact_email", None) or getattr(submitter, "email", None) or "未提供"
-    )
     assigned_name = (
         getattr(getattr(case_obj, "assigned_to", None), "display_name", None) or "尚未分案"
     )
+    submitter = getattr(case_obj, "submitter", None)
+    contact_email = (
+        getattr(case_obj, "contact_email", None) or getattr(submitter, "email", None) or "未提供"
+    )
     org_name = getattr(getattr(case_obj, "current_org", None), "name", None) or "未設定"
     type_name = getattr(getattr(case_obj, "type", None), "name", None) or "未分類"
-
-    events = []
-    for event in getattr(case_obj, "events", []) or []:
-        visibility = _enum_value(getattr(event, "visibility", ""))
-        visibility_label = "內部紀錄" if visibility == "internal" else "陳情人可見"
-        from_status = _enum_value(getattr(event, "from_status", ""))
-        to_status = _enum_value(getattr(event, "to_status", ""))
-        status_change = ""
-        if from_status or to_status:
-            status_change = (
-                f'<span class="event-status">{_esc(from_status or "—")} → '
-                f"{_esc(to_status or '—')}</span>"
-            )
-        event_content = _br(getattr(event, "content", None)) or "—"
-        events.append(
-            f"""
-      <li class="timeline-item">
-        <div class="timeline-item-head">
-          <strong>{_esc(getattr(event, "title", "案件更新"))}</strong>
-          <span>{_esc(print_datetime(getattr(event, "created_at", None)))}</span>
-        </div>
-        <div class="timeline-meta">{_esc(visibility_label)} {status_change}</div>
-        <div class="timeline-content">{event_content}</div>
-      </li>"""
-        )
-
-    attachments = []
-    for attachment in getattr(case_obj, "attachments", []) or []:
-        visibility = _enum_value(getattr(attachment, "visibility", ""))
-        visibility_label = "提供給陳情人" if visibility == "public" else "內部附件"
-        filename = getattr(attachment, "display_name", None) or getattr(
-            attachment, "filename", "未命名附件"
-        )
-        attachments.append(
-            f"""
-      <li class="attachment-row">
-        <div>
-          <strong>{_esc(filename)}</strong>
-          <span>{_esc(getattr(attachment, "content_type", None) or "檔案")}</span>
-        </div>
-        <div class="attachment-meta">{_esc(visibility_label)} · {_esc(print_file_size(getattr(attachment, "file_size", None)))}</div>
-      </li>"""
-        )
-
-    reply_html = (
-        f'<div class="content-block reply-block">{_br(case_obj.public_reply)}</div>'
-        if case_obj.public_reply
-        else '<p class="empty-copy">尚未建立正式回覆。</p>'
-    )
-    note_html = (
-        f'<div class="content-block note-block">{_br(case_obj.latest_internal_note)}</div>'
-        if case_obj.latest_internal_note
-        else '<p class="empty-copy">尚無最新內部備註。</p>'
-    )
-    event_html = "".join(events) or '<li class="empty-copy">尚無處理紀錄。</li>'
-    attachment_html = "".join(attachments) or '<li class="empty-copy">本案未上傳附件。</li>'
     generated_at = print_datetime(dt.datetime.now(TAIPEI))
 
     return f"""<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>陳情案件 {_esc(case_obj.case_number)} 詳情</title>
+  <title>{_esc(org_name)}陳情收案詳情</title>
   <style>
     {_font_faces()}
     @page {{
@@ -1851,58 +1778,55 @@ def render_petition_print_html(case_obj: PetitionCase) -> str:
     .attachment-row span, .attachment-meta {{ color: #748397; font-size: 8.5pt; }}
     .attachment-meta {{ flex: 0 0 auto; text-align: right; }}
     .print-footer {{ margin-top: 8mm; padding-top: 2.5mm; border-top: 1px solid #cbd5e1; color: #748397; font-size: 8.5pt; text-align: right; }}
+    @page {{
+      margin: 15mm;
+      @bottom-center {{ content: none; }}
+    }}
+    body {{
+      color: #111;
+      font-family: "OfficialKai", serif;
+      font-size: 13pt;
+      line-height: 1.45;
+      overflow-wrap: normal;
+      word-break: normal;
+    }}
+    .page {{ width: 146mm; margin: 0 auto; }}
+    .print-time {{ margin: 0 0 7mm; }}
+    h1 {{
+      margin: 0 0 1mm;
+      font-family: "OfficialTitle", "OfficialKai", serif;
+      color: #111;
+      font-size: 18pt;
+      font-weight: 400;
+      line-height: 1.3;
+      text-align: center;
+    }}
+    .case-line {{ margin: 0 0 1mm; line-height: 1.15; }}
+    .content-label {{ margin: 1mm 0 1mm; line-height: 1.15; }}
+    .petition-content {{
+      padding: 2mm 3mm;
+      border: 1px solid #111;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }}
+    .last-updated {{ margin: 1mm 0 5mm; text-align: right; }}
+    .handler-line {{ margin: 0 0 1mm; }}
   </style>
 </head>
 <body>
   <div class="no-print"><button onclick="window.print()">列印 / 另存 PDF</button></div>
   <main class="page">
-    <header class="print-header">
-      <div class="brand">校園自治整合平台</div>
-      <h1>陳情案件詳情</h1>
-      <div class="case-number">案號：{_esc(case_obj.case_number)}</div>
-      <div class="status">案件狀態：{_esc(status_label)}</div>
-    </header>
-
-    <p class="notice">本文件供校內承辦與相關處室辦理參考；標示為「內部紀錄」的內容不對外公開。</p>
-
-    <section class="section">
-      <h2 class="section-title">案件摘要 <span>Case summary</span></h2>
-      <table class="meta-table">
-        <tbody>
-          <tr><th>案件標題</th><td>{_esc(case_obj.title)}</td><th>陳情類型</th><td>{_esc(type_name)}</td></tr>
-          <tr><th>負責機關</th><td>{_esc(org_name)}</td><th>承辦人</th><td>{_esc(assigned_name)}</td></tr>
-          <tr><th>陳情人</th><td>{_esc(submitter_name)}</td><th>聯絡信箱</th><td>{_esc(submitter_email)}</td></tr>
-          <tr><th>送件時間</th><td>{_esc(print_datetime(case_obj.submitted_at))}</td><th>最後更新</th><td>{_esc(print_datetime(case_obj.updated_at))}</td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">陳情原文 <span>Original petition</span></h2>
-      <div class="content-block">{_br(case_obj.content)}</div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">正式回覆 <span>Official response</span></h2>
-      {reply_html}
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">附件清單 <span>Attachments</span></h2>
-      <ul class="attachment-list">{attachment_html}</ul>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">最新內部備註 <span>Internal note</span></h2>
-      {note_html}
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">處理時間軸 <span>Case history</span></h2>
-      <ol class="timeline">{event_html}</ol>
-    </section>
-
-    <footer class="print-footer">列印時間：{_esc(generated_at)}　·　校園自治整合平台</footer>
+    <div class="print-time">列印時間：{_esc(generated_at)}</div>
+    <h1>{_esc(org_name)}陳情收案詳情</h1>
+    <p class="case-line">案件編號：{_esc(case_obj.case_number)}</p>
+    <p class="case-line">案件分類：{_esc(type_name)}</p>
+    <p class="case-line">案件標題：{_esc(case_obj.title)}</p>
+    <p class="content-label">陳情內文：</p>
+    <div class="petition-content">{_br(case_obj.content)}</div>
+    <p class="last-updated">最後更新：{_esc(print_updated_at(case_obj.updated_at))}</p>
+    <p class="handler-line">陳情承辦人：{_esc(assigned_name)}</p>
+    <p class="handler-line">聯絡信箱：<a href="mailto:{_esc(contact_email)}">{_esc(contact_email)}</a></p>
   </main>
 </body>
 </html>"""
