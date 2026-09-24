@@ -65,7 +65,6 @@ async def _create_case(
     petition_type: PetitionType,
     *,
     submitter: User | None = None,
-    is_confidential: bool = False,
 ):
     from api.schemas.petition import PetitionCreate
 
@@ -75,7 +74,6 @@ async def _create_case(
         type_id=petition_type.id,
         title="教室冷氣故障",
         content="B302 教室冷氣無法啟動，請盡快派員維修。",
-        is_confidential=is_confidential,
     )
     case_obj, code, _share_token = await petition_svc.create_case(
         db, data=data, submitter=submitter
@@ -568,15 +566,25 @@ async def test_list_manage_cases_scoped_to_org_permission(
 
 
 async def test_confidential_petition_is_visible_only_to_submitter(
-    db_session, authed_client_factory
+    db_session, authed_client_factory, admin_user: User
 ) -> None:
     org, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:view_org")
-    case_obj, _code = await _create_case(
-        db_session, petition_type, submitter=owner, is_confidential=True
+    case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
+
+    unauthorized = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/confidential"
     )
+    assert unauthorized.status_code == 403
+
+    marked = await authed_client_factory(admin_user).post(
+        f"/petitions/{case_obj.id}/confidential"
+    )
+    assert marked.status_code == 200
+    assert marked.json() == {"id": str(case_obj.id), "is_confidential": True}
+
     case_obj.status = PetitionStatus.CLOSED
     case_obj.public_status = PetitionPublicStatus.PUBLISHED
     await db_session.flush()
@@ -588,10 +596,23 @@ async def test_confidential_petition_is_visible_only_to_submitter(
     handler_detail = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}")
     assert handler_detail.status_code == 403
     assert (await authed_client_factory(handler).get("/petitions/manage")).json() == []
+    assert (await authed_client_factory(admin_user).get("/petitions/manage")).json() == []
 
     own_cases = await authed_client_factory(owner).get("/petitions/my")
     assert own_cases.status_code == 200
     assert [item["id"] for item in own_cases.json()] == [str(case_obj.id)]
+
+    lookup = await authed_client_factory(owner).get(
+        "/petitions/lookup",
+        params={"case_number": case_obj.case_number, "verification_code": code},
+    )
+    assert lookup.status_code == 404
+
+    public_request = await authed_client_factory(admin_user).post(
+        f"/petitions/{case_obj.id}/public-request",
+        json={"title": "不應公開", "content": "不應公開"},
+    )
+    assert public_request.status_code == 403
 
     public_cases = await authed_client_factory(owner).get("/petitions/public")
     assert public_cases.status_code == 200

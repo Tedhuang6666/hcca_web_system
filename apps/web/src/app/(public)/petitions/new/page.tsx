@@ -13,7 +13,6 @@ type PetitionDraft = {
   typeId: string;
   title: string;
   content: string;
-  isConfidential: boolean;
 };
 
 export default function NewPetitionPage() {
@@ -21,7 +20,6 @@ export default function NewPetitionPage() {
   const [typeId, setTypeId] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [isConfidential, setIsConfidential] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<PetitionCreatedOut | null>(null);
@@ -56,13 +54,12 @@ export default function NewPetitionPage() {
     setTypeId(draft.typeId);
     setTitle(draft.title);
     setContent(draft.content);
-    setIsConfidential(draft.isConfidential);
     toast.info("已復原未送出的陳情草稿");
   }, []);
 
   const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<PetitionDraft>({
     key: `petitions:new:${draftScope}`,
-    value: { typeId, title, content, isConfidential },
+    value: { typeId, title, content },
     onRestore: restoreDraft,
     enabled: authState === "authenticated",
     isEmpty: useCallback((draft: PetitionDraft) => (
@@ -85,7 +82,6 @@ export default function NewPetitionPage() {
         type_id: typeId,
         title,
         content,
-        is_confidential: isConfidential,
       });
       for (const file of files) {
           await petitionsApi.uploadAttachment(result.id, file, { verification_code: result.verification_code });
@@ -210,20 +206,6 @@ export default function NewPetitionPage() {
         </label>
         <input className="input w-full" placeholder="標題" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
         <textarea className="input w-full min-h-52" placeholder="請描述事實、期待處理方式與相關時間地點" value={content} onChange={(e) => setContent(e.target.value)} required />
-        <label className="flex items-start gap-3 rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={isConfidential}
-            onChange={(e) => setIsConfidential(e.target.checked)}
-          />
-          <span>
-            <span className="block text-sm font-medium">申請密件處理</span>
-            <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              勾選後僅本人可查看此案件，案件不會出現在承辦工作台、公開陳情、通知或 Discord 路由中。
-            </span>
-          </span>
-        </label>
         <AnimatedFileUpload
           accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
           multiple
