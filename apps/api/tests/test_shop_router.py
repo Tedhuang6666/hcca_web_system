@@ -139,6 +139,17 @@ async def test_list_categories_requires_login_only(
     assert len(resp.json()) == 1
 
 
+async def test_public_catalog_does_not_require_login(client, db_session, member_user) -> None:
+    product = await _make_active_product(db_session, member_user, price=80)
+
+    response = await client.get("/shop/catalog")
+    assert response.status_code == 200
+    assert response.json()[0]["series"][0]["products"][0]["id"] == str(product.id)
+
+    detail = await client.get(f"/shop/products/{product.id}")
+    assert detail.status_code == 200
+
+
 async def test_create_category_without_permission_returns_403(
     member_user, authed_client_factory
 ) -> None:
@@ -458,6 +469,38 @@ async def test_checkout_happy_path_creates_order_and_clears_cart(
 
     cart = await ac.get("/shop/cart")
     assert cart.json()["items"] == []
+
+
+async def test_checkout_applies_account_coupon_and_snapshots_discount(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    product = await _make_active_product(db_session, member_user, price=100, stock=5)
+    manager_client = authed_client_factory(member_user)
+    promotion = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "測試優惠",
+            "target_email": member_user.email,
+            "code": "SAVE20",
+            "discount_type": "percentage",
+            "discount_value": 20,
+        },
+    )
+    assert promotion.status_code == 201
+
+    await manager_client.post(
+        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 2}
+    )
+    response = await manager_client.post(
+        "/shop/cart/checkout", json={"coupon_code": "save20", "payment_method": "bank_transfer"}
+    )
+    assert response.status_code == 201
+    order = response.json()[0]
+    assert order["subtotal_price"] == 200
+    assert order["discount_amount"] == 40
+    assert order["total_price"] == 160
+    assert order["promotion_code"] == "SAVE20"
 
 
 # ── 訂單 ──────────────────────────────────────────────────────────────────────

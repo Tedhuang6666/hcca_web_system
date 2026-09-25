@@ -10,6 +10,7 @@ export interface CurrentUserCache {
   is_owner?: boolean;
   permissions?: string[];
   allow_external_login?: boolean;
+  is_school_email?: boolean;
 }
 
 export const AUTH_CACHE_EVENT = "hcca:auth-cache-updated";
@@ -54,6 +55,7 @@ export function cacheCurrentUser(me: CurrentUserCache): void {
   ls()?.setItem("user_name", me.display_name ?? "");
   ls()?.setItem("user_avatar", me.avatar_url ?? "");
   ls()?.setItem("is_external", String(me.allow_external_login ?? false));
+  ls()?.setItem("is_school_email", String(me.is_school_email ?? false));
 
   // 敏感欄位存 sessionStorage（tab 關閉即清除）
   ss()?.setItem("is_superuser", String(me.is_superuser ?? false));
@@ -74,6 +76,7 @@ export function clearAuthCache(): void {
   ls()?.removeItem("user_name");
   ls()?.removeItem("user_avatar");
   ls()?.removeItem("is_external");
+  ls()?.removeItem("is_school_email");
   // legacy cleanup
   ls()?.removeItem("is_superuser");
   ls()?.removeItem("is_owner");

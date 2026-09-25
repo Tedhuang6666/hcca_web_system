@@ -178,6 +178,8 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
     # 權限異動流程會主動失效 Redis 快取；正常讀取沿用短期快取，避免每次
     # /auth/me 都重新查詢 UserPosition/Position/Permission JOIN。
     codes = await get_user_permission_codes(db, user.id)
+    email = user.email.strip().lower()
+    domain = email.rsplit("@", maxsplit=1)[-1] if "@" in email else ""
     return {
         "id": str(user.id),
         "email": user.email,
@@ -186,6 +188,8 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
         "is_superuser": user.is_superuser,
         "is_owner": user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),
+        "is_school_email": bool(user.student_id)
+        or domain in {item.lower().lstrip("@") for item in settings.LOGIN_ALLOWED_EMAIL_DOMAINS},
     }
 
 

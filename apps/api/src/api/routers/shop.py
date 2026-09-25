@@ -15,7 +15,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from api.core.clock import local_today
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
-from api.dependencies.auth import get_current_active_user
+from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_any, require_permission
 from api.models.shop import (
     Order,
@@ -26,6 +26,7 @@ from api.models.shop import (
     ProductStatus,
     ProductVariantGroup,
     ProductVariantOption,
+    ShopPromotion,
 )
 from api.models.user import User
 from api.routers._common import or_404
@@ -62,6 +63,9 @@ from api.schemas.shop import (
     ShopClassSummaryOut,
     ShopOrderCloseCreate,
     ShopOrderCloseOut,
+    ShopPromotionCreate,
+    ShopPromotionOut,
+    ShopPromotionUpdate,
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
@@ -77,6 +81,7 @@ router = APIRouter(prefix="/shop", tags=["商品訂購"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.SHOP_MANAGE))]
 
 _ADMIN_VIEW_CODES = {
@@ -122,6 +127,11 @@ async def _get_variant_option_or_404(
 async def _get_order_or_404(order_id: uuid.UUID, session: AsyncSession) -> Order:
     o = await shop_svc.get_order(session, order_id)
     return or_404(o, "找不到此訂單")
+
+
+async def _get_promotion_or_404(promotion_id: uuid.UUID, session: AsyncSession) -> ShopPromotion:
+    promotion = await shop_svc.get_promotion(session, promotion_id)
+    return or_404(promotion, "找不到此優惠")
 
 
 async def _broadcast_shop_order(order: Order) -> None:
@@ -300,7 +310,7 @@ async def delete_series(series_id: uuid.UUID, session: DbDep, current_user: Curr
 @router.get("/catalog", response_model=list[CatalogCategoryOut], summary="購買頁瀏覽樹")
 async def get_catalog(
     session: DbDep,
-    _: CurrentUser,
+    _: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
 ) -> list[CatalogCategoryOut]:
     return await shop_svc.build_catalog_tree(session, activity_id=activity_id)
@@ -312,7 +322,7 @@ async def get_catalog(
 @router.get("/products", response_model=list[ProductOut], summary="列出商品")
 async def list_products(
     session: DbDep,
-    _: CurrentUser,
+    _: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
     series_id: uuid.UUID | None = Query(None),
     status_filter: ProductStatus | None = Query(None, alias="status"),
@@ -330,8 +340,54 @@ async def list_products(
 
 
 @router.get("/products/{product_id}", response_model=ProductOut, summary="取得商品詳情")
-async def get_product(product_id: uuid.UUID, session: DbDep, _: CurrentUser) -> Product:
+async def get_product(product_id: uuid.UUID, session: DbDep, _: OptionalUser) -> Product:
     return await _get_product_or_404(product_id, session)
+
+
+# ── 優惠管理 ──────────────────────────────────────────────────────────────────
+
+
+@router.get("/promotions", response_model=list[ShopPromotionOut], summary="列出校商優惠")
+async def list_promotions(
+    session: DbDep,
+    _: ManagerUser,
+    include_inactive: bool = Query(False),
+) -> list[ShopPromotionOut]:
+    promotions = await shop_svc.list_promotions(session, include_inactive=include_inactive)
+    return [shop_svc.serialize_promotion(promotion) for promotion in promotions]
+
+
+@router.post(
+    "/promotions",
+    response_model=ShopPromotionOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立校商優惠",
+)
+async def create_promotion(
+    payload: ShopPromotionCreate, session: DbDep, current_user: ManagerUser
+) -> ShopPromotionOut:
+    try:
+        promotion = await shop_svc.create_promotion(
+            session, data=payload, created_by=current_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    return shop_svc.serialize_promotion(promotion)
+
+
+@router.patch("/promotions/{promotion_id}", response_model=ShopPromotionOut, summary="更新校商優惠")
+async def update_promotion(
+    promotion_id: uuid.UUID,
+    payload: ShopPromotionUpdate,
+    session: DbDep,
+    _: ManagerUser,
+) -> ShopPromotionOut:
+    promotion = await _get_promotion_or_404(promotion_id, session)
+    try:
+        updated = await shop_svc.update_promotion(session, promotion, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    return shop_svc.serialize_promotion(updated)
 
 
 @router.post(
@@ -605,7 +661,13 @@ async def checkout(
     payload: CheckoutRequest, session: DbDep, current_user: CurrentUser
 ) -> list[OrderOut]:
     try:
-        orders = await shop_svc.checkout(session, current_user, notes=payload.notes)
+        orders = await shop_svc.checkout(
+            session,
+            current_user,
+            notes=payload.notes,
+            coupon_code=payload.coupon_code,
+            payment_method=payload.payment_method,
+        )
     except StaleDataError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

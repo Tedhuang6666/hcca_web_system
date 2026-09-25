@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
 import { CircleAlert, CircleCheck, Package, ShoppingBag } from "lucide-react";
-import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
+import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
   CatalogCategoryOut,
@@ -17,6 +17,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { addGuestCartItem, guestCartCount } from "@/lib/shop-guest-cart";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -51,11 +52,13 @@ function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?
 function ProductModal({
   productId,
   classClosed,
+  isLoggedIn,
   onClose,
   onAdded,
 }: {
   productId: string;
   classClosed: boolean;
+  isLoggedIn: boolean;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -137,11 +140,15 @@ function ProductModal({
     }
     setLoading(true);
     try {
-      await shopApi.addCartItem({
-        product_id: product.id,
-        quantity: qty,
-        option_ids: Object.values(picked),
-      });
+      if (isLoggedIn) {
+        await shopApi.addCartItem({
+          product_id: product.id,
+          quantity: qty,
+          option_ids: Object.values(picked),
+        });
+      } else {
+        addGuestCartItem(product, qty, Object.values(picked));
+      }
       toast.success("已加入購物車");
       onAdded();
     } catch (e) {
@@ -340,6 +347,7 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
@@ -372,16 +380,32 @@ export default function ShopPage() {
   }, [setSelectedCategoryId, catalogCacheKey]);
 
   const loadCart = useCallback(() => {
+    if (!isLoggedIn) {
+      setCartCount(guestCartCount());
+      return;
+    }
     shopApi
       .getCart()
       .then((c) => setCartCount(c.items.reduce((n, i) => n + i.quantity, 0)))
       .catch(() => {});
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     loadCatalog();
-    loadCart();
-  }, [loadCatalog, loadCart]);
+    void authApi.me()
+      .then(() => setIsLoggedIn(true))
+      .catch(() => setIsLoggedIn(false));
+  }, [loadCatalog]);
+
+  useEffect(() => { loadCart(); }, [loadCart]);
+
+  useEffect(() => {
+    const refreshGuestCart = () => {
+      if (!isLoggedIn) setCartCount(guestCartCount());
+    };
+    window.addEventListener("hcca:guest-cart-updated", refreshGuestCart);
+    return () => window.removeEventListener("hcca:guest-cart-updated", refreshGuestCart);
+  }, [isLoggedIn]);
 
   const selectedCategory =
     catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
@@ -562,6 +586,7 @@ export default function ShopPage() {
         <ProductModal
           productId={openProduct}
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
+          isLoggedIn={isLoggedIn}
           onClose={() => setOpenProduct(null)}
           onAdded={() => {
             setOpenProduct(null);

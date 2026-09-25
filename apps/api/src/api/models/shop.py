@@ -49,6 +49,11 @@ class OrderStatus(enum.StrEnum):
     REFUNDED = "refunded"  # 已退款
 
 
+class ShopDiscountType(enum.StrEnum):
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
+
+
 # ── 分類階層：主題 → 系列 ──────────────────────────────────────────────────────
 
 
@@ -326,7 +331,18 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         index=True,
     )
     # 訂單總金額（新台幣，整數）
+    subtotal_price: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # 優惠折抵後的訂單總金額（新台幣，整數）
+    discount_amount: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     total_price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    promotion_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    payment_method: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="cash_on_pickup", server_default="cash_on_pickup"
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
@@ -421,12 +437,47 @@ class ShopOrderClose(Base, TimestampMixin):
     reopened_by: Mapped[User | None] = relationship("User", foreign_keys=[reopened_by_id])
 
 
+class ShopPromotion(Base, TimestampMixin):
+    """校商優惠：可指定帳號自動套用，或建立優惠碼供結帳時輸入。"""
+
+    __tablename__ = "shop_promotions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(80), nullable=True, unique=True, index=True)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    discount_type: Mapped[ShopDiscountType] = mapped_column(
+        Enum(ShopDiscountType, name="shopdiscounttype"), nullable=False
+    )
+    discount_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_order_price: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
+    target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
+    creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
+
+
 __all__ = [
     "Cart",
     "CartItem",
     "Order",
     "OrderItem",
     "OrderStatus",
+    "ShopDiscountType",
     "Product",
     "ProductCategory",
     "ProductSeries",
@@ -434,4 +485,5 @@ __all__ = [
     "ProductVariantGroup",
     "ProductVariantOption",
     "ShopOrderClose",
+    "ShopPromotion",
 ]

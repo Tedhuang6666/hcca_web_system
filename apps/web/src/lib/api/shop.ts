@@ -1,5 +1,5 @@
 import type {
-  CartOut, CatalogCategoryOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut,
+  CartOut, CatalogCategoryOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
@@ -27,7 +27,16 @@ export const shopApi = {
     patch<CartOut>(`/shop/cart/items/${itemId}`, { quantity }),
   removeCartItem: (itemId: string) => del<CartOut>(`/shop/cart/items/${itemId}`),
   clearCart: () => del<CartOut>("/shop/cart"),
-  checkout: (notes?: string) => post<OrderOut[]>("/shop/cart/checkout", { notes }),
+  checkout: (body?: { notes?: string; coupon_code?: string; payment_method?: string }) =>
+    post<OrderOut[]>("/shop/cart/checkout", body ?? {}),
+
+  // 優惠管理（shop:manage）
+  listPromotions: (includeInactive = true) =>
+    get<ShopPromotionOut[]>(`/shop/promotions?include_inactive=${includeInactive}`),
+  createPromotion: (body: ShopPromotionCreate) =>
+    post<ShopPromotionOut>("/shop/promotions", body),
+  updatePromotion: (id: string, body: ShopPromotionUpdate) =>
+    patch<ShopPromotionOut>(`/shop/promotions/${id}`, body),
 
   // 訂單
   listOrders: (params?: Record<string, string>) => {

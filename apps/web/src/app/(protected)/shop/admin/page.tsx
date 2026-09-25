@@ -16,6 +16,7 @@ import type {
   ProductVariantOptionOut,
   OrderSummaryOut,
 } from "@/lib/types";
+import ShopPromotionPanel from "./ShopPromotionPanel";
 
 // ── 共用小元件 ────────────────────────────────────────────────────────────────
 
@@ -1083,7 +1084,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function ShopAdminPage() {
   const { can } = usePermissions();
 
-  const [tab, setTab] = useState<"catalog" | "stats">("catalog");
+  const [tab, setTab] = useState<"catalog" | "stats" | "promotions">("catalog");
   const allowed = can("shop:manage");
 
   // 一層一層的選取狀態
@@ -1276,7 +1277,7 @@ export default function ShopAdminPage() {
 
       <div className="flex gap-0.5 p-1 rounded-xl w-fit"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-        {([["catalog", "商品目錄"], ["stats", "訂購統計"]] as const).map(([k, label]) => (
+        {([["catalog", "商品目錄"], ["stats", "訂購統計"], ["promotions", "優惠設定"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className="px-4 py-1.5 rounded-lg text-xs font-medium"
             style={tab === k
@@ -1289,6 +1290,8 @@ export default function ShopAdminPage() {
 
       {tab === "stats" ? (
         <StatsView />
+      ) : tab === "promotions" ? (
+        <ShopPromotionPanel />
       ) : (
         <div className="card overflow-hidden min-h-[620px]">
           <div className="grid grid-cols-1 lg:grid-cols-[240px_360px_1fr] min-h-[620px]">

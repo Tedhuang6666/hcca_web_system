@@ -367,7 +367,9 @@ from api.models.shop import (  # noqa: F401
     ProductStatus,
     ProductVariantGroup,
     ProductVariantOption,
+    ShopDiscountType,
     ShopOrderClose,
+    ShopPromotion,
 )
 from api.models.site import (  # noqa: F401
     PublicLink,
