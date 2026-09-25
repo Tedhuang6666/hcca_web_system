@@ -626,7 +626,8 @@ async def list_documents(
             or_(
                 Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
                 Document.is_public.is_(True),
-            )
+            ),
+            ~Document.classification.in_(SENSITIVE_DOCUMENT_CLASSIFICATIONS),
         )
     elif viewer_id is not None:
         visibility_conditions = await _build_visibility_filter(session, viewer_id)

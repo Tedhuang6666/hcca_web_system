@@ -565,8 +565,23 @@ async def test_list_documents_public_only_excludes_non_open_docs(
         is_public=True,
         title="舊欄位公開公文",
     )
+    sensitive_public_doc = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.PUBLICLY_OPEN,
+        classification=DocumentClassification.SECRET,
+        title="公開密件",
+    )
     private_doc = _make_doc(org, creator, visibility_level=DocumentVisibility.ORG_ONLY)
-    db_session.add_all([open_doc, legacy_public_doc, legacy_flag_doc, private_doc])
+    db_session.add_all(
+        [
+            open_doc,
+            legacy_public_doc,
+            legacy_flag_doc,
+            sensitive_public_doc,
+            private_doc,
+        ]
+    )
     await db_session.flush()
 
     results = await list_documents(db_session, public_only=True)
@@ -575,6 +590,7 @@ async def test_list_documents_public_only_excludes_non_open_docs(
     assert open_doc.id in result_ids
     assert legacy_public_doc.id not in result_ids
     assert legacy_flag_doc.id in result_ids
+    assert sensitive_public_doc.id not in result_ids
     assert private_doc.id not in result_ids
 
     filtered_results = await list_documents(
