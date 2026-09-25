@@ -382,12 +382,15 @@ async def update_submitter(
     return case_obj
 
 
-async def set_confidential(session: AsyncSession, case_obj: PetitionCase) -> PetitionCase:
+async def set_confidential(
+    session: AsyncSession, case_obj: PetitionCase, *, reason: str
+) -> PetitionCase:
     if case_obj.submitter_id is None:
         raise ValueError("案件尚未綁定平台帳號，無法指定密件擁有者")
     if case_obj.is_confidential:
         raise ValueError("此案件已標註為密件")
     case_obj.is_confidential = True
+    case_obj.confidential_reason = reason
     await session.flush()
     return case_obj
 
@@ -466,6 +469,7 @@ async def list_cases(
     assigned_to_id: uuid.UUID | None = None,
     status: PetitionStatus | None = None,
     keyword: str | None = None,
+    include_confidential: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> list[PetitionCase]:
@@ -479,6 +483,7 @@ async def list_cases(
                 PetitionCase.status,
                 PetitionCase.public_status,
                 PetitionCase.is_confidential,
+                PetitionCase.submitter_id,
                 PetitionCase.title,
                 PetitionCase.current_org_id,
                 PetitionCase.assigned_to_id,
@@ -511,7 +516,7 @@ async def list_cases(
         stmt = stmt.where(
             PetitionCase.title.ilike(pattern) | PetitionCase.case_number.ilike(pattern)
         )
-    if submitter_id is None:
+    if submitter_id is None and not include_confidential:
         stmt = stmt.where(PetitionCase.is_confidential.is_(False))
     result = await session.execute(stmt)
     return list(result.scalars().all())
@@ -958,7 +963,6 @@ async def stats(
 
     now = datetime.now(UTC)
     base_filter = []
-    base_filter.append(PetitionCase.is_confidential.is_(False))
     if org_ids is not None:
         base_filter.append(PetitionCase.current_org_id.in_(org_ids))
 
@@ -1041,7 +1045,6 @@ async def org_stats(
         if not org_ids:
             return []
         stmt = stmt.where(PetitionCase.current_org_id.in_(org_ids))
-    stmt = stmt.where(PetitionCase.is_confidential.is_(False))
     result = await session.execute(stmt)
     rows = result.all()
     return [

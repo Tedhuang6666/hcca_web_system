@@ -188,7 +188,14 @@ export default function PetitionsPageClient({
                 <Link key={item.id} href={`/petitions/${item.id}`} className="block rounded-lg p-3" style={{ border: "1px solid var(--border)", textDecoration: "none" }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                        {item.is_confidential && (
+                          <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                            密件處理
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>#{item.case_number} · {fmt(item.updated_at)} · {item.next_action}</p>
                     </div>
                     <PetitionStatusBadge status={item.status} />

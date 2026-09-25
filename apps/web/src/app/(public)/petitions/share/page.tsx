@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCaseOut } from "@/lib/types";
+import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 
 function fmt(iso: string | null) {
   return iso ? new Date(iso).toLocaleString("zh-TW") : "未設定";
@@ -46,6 +47,13 @@ export default function PetitionSharePage() {
       </div>
     );
   }
+  if (item.confidential_blocked) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <PetitionConfidentialBlocked item={item} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -55,8 +63,22 @@ export default function PetitionSharePage() {
           <h1 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{item.title}</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{item.current_org_name} · {item.type_name}</p>
         </div>
-        <PetitionStatusBadge status={item.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          {item.is_confidential && (
+            <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+              密件處理
+            </span>
+          )}
+          <PetitionStatusBadge status={item.status} />
+        </div>
       </div>
+      {item.is_confidential && (
+        <div className="rounded-lg p-4 space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+          <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>密件原因：{item.confidential_reason || "未提供密件原因。"}</p>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>案件無法公開。</p>
+        </div>
+      )}
       <section className="card p-5 space-y-4">
         <div className="grid sm:grid-cols-4 gap-3">
           <div><p className="text-xs text-muted">目前階段</p><p className="font-medium">{item.status_label}</p></div>

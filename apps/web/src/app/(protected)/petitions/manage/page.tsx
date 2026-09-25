@@ -12,6 +12,7 @@ import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
+import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 
 type QueueKey = "all" | "pending" | "mine" | "active" | "needs_info" | "done";
 type ActionKey = "assign" | "handle" | "transfer" | "reject_close" | "public" | "attachments";
@@ -84,6 +85,7 @@ export default function PetitionManagePage() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingConfidential, setConfirmingConfidential] = useState(false);
+  const [confidentialReason, setConfidentialReason] = useState("");
   const { can } = usePermissions();
 
   const effectiveStatus = status || queueStatus(queue);
@@ -126,6 +128,7 @@ export default function PetitionManagePage() {
     setEditingEventId(null);
     setEditingEventTitle("");
     setEditingEventContent("");
+    setConfidentialReason("");
   };
 
   const openExternalIntake = async () => {
@@ -189,6 +192,11 @@ export default function PetitionManagePage() {
       setSubmitterEmail(detail.contact_email || detail.submitter?.contact_email || "");
       setPublicTitle(detail.public_title || detail.title);
       setPublicContent(detail.public_content || detail.content);
+      if (detail.confidential_blocked) {
+        setUsers([]);
+        setAssignee("");
+        return;
+      }
       const assignable = await petitionsApi.assignableUsers(id).catch(() => []);
       setUsers(assignable);
       setAssignee(detail.assigned_to_id || assignable[0]?.id || "");
@@ -257,10 +265,16 @@ export default function PetitionManagePage() {
   };
 
   const setConfidential = async () => {
-    if (!selected || busy || selected.is_confidential || !selected.submitter_id) return;
+    if (
+      !selected
+      || busy
+      || selected.is_confidential
+      || !selected.submitter_id
+      || !confidentialReason.trim()
+    ) return;
     setBusy(true);
     try {
-      await petitionsApi.setConfidential(selected.id);
+      await petitionsApi.setConfidential(selected.id, confidentialReason.trim());
       setSelected(null);
       setConfirmingConfidential(false);
       await load();
@@ -498,7 +512,14 @@ export default function PetitionManagePage() {
                 }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                      {item.is_confidential && (
+                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                          密件
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                       #{item.case_number} · {item.current_org_name} · {item.assigned_to_name || "未分案"}
                     </p>
@@ -516,6 +537,8 @@ export default function PetitionManagePage() {
             <div className="text-sm" style={{ color: "var(--text-muted)" }}>
               請從左側選擇案件。建議先處理「待分案」與「我承辦」，再看跨機關轉派或補件中的案件。
             </div>
+          ) : selected.confidential_blocked ? (
+            <PetitionConfidentialBlocked item={selected} />
           ) : (
             <>
               <div className="flex items-start justify-between gap-3">
@@ -538,10 +561,22 @@ export default function PetitionManagePage() {
                   {can("petition:admin") && !selected.is_confidential && selected.submitter_id && (
                     confirmingConfidential ? (
                       <div className="flex flex-wrap items-center justify-end gap-2" role="group" aria-label="確認標註密件">
-                        <span className="text-xs" style={{ color: "var(--warning)" }}>
-                          設定後僅陳情人本人可查看，且無法再公開。
-                        </span>
-                        <button className="btn btn-primary" disabled={busy} onClick={() => void setConfidential()}>
+                        <label className="w-full text-left space-y-1" htmlFor="confidential-reason">
+                          <span className="text-xs font-medium" style={{ color: "var(--warning)" }}>密件原因（必填）</span>
+                          <textarea
+                            id="confidential-reason"
+                            className="input w-full min-h-20"
+                            value={confidentialReason}
+                            onChange={(e) => setConfidentialReason(e.target.value)}
+                            placeholder="請說明為何需要密件處理"
+                            maxLength={2000}
+                            autoFocus
+                          />
+                        </label>
+                        <p className="w-full text-xs text-left" style={{ color: "var(--text-muted)" }}>
+                          設定後僅陳情人與目前承辦人可查看完整內容，其他人只能看到封鎖頁面與此原因，且案件無法公開。
+                        </p>
+                        <button className="btn btn-primary" disabled={busy || !confidentialReason.trim()} onClick={() => void setConfidential()}>
                           {busy ? "設定中…" : "確認設為密件"}
                         </button>
                         <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmingConfidential(false)}>
@@ -554,9 +589,22 @@ export default function PetitionManagePage() {
                       </button>
                     )
                   )}
+                  {selected.is_confidential && !selected.confidential_blocked && (
+                    <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                      密件處理
+                    </span>
+                  )}
                   <PetitionStatusBadge status={selected.status} />
                 </div>
               </div>
+
+              {selected.is_confidential && !selected.confidential_blocked && (
+                <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+                  <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
+                  <p style={{ color: "var(--text-secondary)" }}>密件原因：{selected.confidential_reason || "未提供密件原因。"}</p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅案件擁有者與目前承辦人可查看。</p>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {FLOW.map((step, index) => {

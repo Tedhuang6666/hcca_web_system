@@ -102,6 +102,7 @@ class PetitionCreatedOut(BaseModel):
 class PetitionConfidentialityOut(BaseModel):
     id: uuid.UUID
     is_confidential: bool
+    confidential_reason: str
 
 
 class PetitionSubmitterOut(BaseModel):
@@ -172,6 +173,8 @@ class PetitionCaseListItem(BaseModel):
 
 
 class PetitionCaseOut(PetitionCaseListItem):
+    confidential_reason: str | None = None
+    confidential_blocked: bool = False
     content: str
     public_reply: str | None
     public_title: str | None
@@ -207,6 +210,18 @@ class PetitionShareLookup(BaseModel):
     """以高熵分享 token 查詢案件；token 僅透過 request body 傳送。"""
 
     share_token: str = Field(..., min_length=32, max_length=256)
+
+
+class PetitionConfidentialityCreate(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("密件原因不可為空白")
+        return value
 
 
 class PetitionSupplementCreate(BaseModel):
