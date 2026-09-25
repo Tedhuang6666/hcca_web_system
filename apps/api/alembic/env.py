@@ -5,6 +5,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
+import api.legacy_models  # noqa: F401
+
 # --- 載入完整 ORM registry（Autogenerate 必需）---
 import api.models  # noqa: F401
 from api.core.config import settings
