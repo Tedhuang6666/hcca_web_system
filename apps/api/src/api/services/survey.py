@@ -375,8 +375,30 @@ async def close_survey(session: AsyncSession, survey: Survey) -> Survey:
     if survey.status != SurveyStatus.OPEN:
         raise ValueError("只有開放中的問卷才能關閉")
     survey.status = SurveyStatus.CLOSED
+    await sync_announcement(session, survey, author_id=survey.created_by)
     await session.flush()
     return survey
+
+
+async def close_expired_surveys(session: AsyncSession, *, now: datetime | None = None) -> int:
+    """關閉所有已超過截止時間的開放問卷，回傳本次關閉數量。"""
+    cutoff = now or datetime.now(UTC)
+    result = await session.execute(
+        select(Survey)
+        .where(
+            Survey.status == SurveyStatus.OPEN,
+            Survey.closes_at.is_not(None),
+            Survey.closes_at <= cutoff,
+        )
+        .with_for_update(skip_locked=True)
+    )
+    surveys = list(result.scalars().all())
+    for survey in surveys:
+        survey.status = SurveyStatus.CLOSED
+        await sync_announcement(session, survey, author_id=survey.created_by)
+    if surveys:
+        await session.flush()
+    return len(surveys)
 
 
 async def archive_survey(session: AsyncSession, survey: Survey) -> Survey:
@@ -606,7 +628,7 @@ async def _check_can_respond(
         raise ValueError("此問卷目前不開放填答")
     if survey.opens_at and now < survey.opens_at:
         raise ValueError("問卷尚未開放")
-    if survey.closes_at and now > survey.closes_at:
+    if survey.closes_at and now >= survey.closes_at:
         raise ValueError("問卷已截止")
 
     if response_id is not None or survey.allow_multiple:
@@ -1093,7 +1115,7 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
 
 
 async def list_responses(
-    session: AsyncSession, survey: Survey, *, limit: int = 200, offset: int = 0
+    session: AsyncSession, survey: Survey, *, limit: int = 1000, offset: int = 0
 ) -> list[SurveyResponse]:
     """後台檢視用：列出問卷所有填答記錄（含答案，依提交時間新到舊）。"""
     result = await session.execute(

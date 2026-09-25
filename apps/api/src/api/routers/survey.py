@@ -666,7 +666,7 @@ async def list_survey_responses(
     survey_id: str,
     session: DbDep,
     user: CurrentUser,
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(1000, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> list[SurveyResponse]:
     survey = await _survey_or_404(survey_id, session)

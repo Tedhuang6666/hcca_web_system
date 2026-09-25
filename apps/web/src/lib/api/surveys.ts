@@ -77,8 +77,15 @@ export const surveysApi = {
       body,
     ),
   stats: (id: string) => get<SurveyStats>(`/surveys/${pathSegment(id)}/stats`),
-  responses: (id: string) =>
-    get<SurveyResponseAdminItem[]>(`/surveys/${pathSegment(id)}/responses`),
+  responses: (id: string, params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit !== undefined) query.set("limit", String(params.limit));
+    if (params?.offset !== undefined) query.set("offset", String(params.offset));
+    const qs = query.toString();
+    return get<SurveyResponseAdminItem[]>(
+      `/surveys/${pathSegment(id)}/responses${qs ? `?${qs}` : ""}`,
+    );
+  },
   deleteResponse: (id: string, responseId: string) =>
     del<void>(`/surveys/${pathSegment(id)}/responses/${pathSegment(responseId)}`),
   clearResponses: (id: string) => del<void>(`/surveys/${pathSegment(id)}/responses`),
