@@ -212,12 +212,13 @@ function computeHidden(questions: SurveyQuestionOut[], answers: AnswerMap): Set<
 
 /* ── 排序題：可拖拉的「已選」清單 + 可點擊新增的「未選」清單 ───────────── */
 function RankingInput({
-  selected, unselected, minN, maxN, onMove, onAdd, onRemove,
+  selected, unselected, minN, maxN, disabled, onMove, onAdd, onRemove,
 }: {
   selected: string[];
   unselected: string[];
   minN: number;
   maxN: number;
+  disabled?: boolean;
   onMove: (event: DragEndEvent) => void;
   onAdd: (opt: string) => void;
   onRemove: (opt: string) => void;
@@ -235,11 +236,16 @@ function RankingInput({
       </p>
 
       {selected.length > 0 && (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onMove}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={disabled ? undefined : onMove}
+        >
           <SortableContext items={selected} strategy={verticalListSortingStrategy}>
             <div className="space-y-1.5">
               {selected.map((opt, idx) => (
                 <SortableRankRow key={opt} id={opt} rank={idx + 1} label={opt}
+                  disabled={disabled}
                   onRemove={() => onRemove(opt)} />
               ))}
             </div>
@@ -257,7 +263,7 @@ function RankingInput({
               key={opt}
               type="button"
               onClick={() => onAdd(opt)}
-              disabled={!canAdd}
+              disabled={disabled || !canAdd}
               className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
               style={{
                 background: "var(--bg-elevated)",
@@ -284,8 +290,8 @@ function RankingInput({
 }
 
 /* ── 排序題的單一可拖拉項目 ───────────────────────────────────────────────── */
-function SortableRankRow({ id, rank, label, onRemove }: {
-  id: string; rank: number; label: string; onRemove: () => void;
+function SortableRankRow({ id, rank, label, disabled, onRemove }: {
+  id: string; rank: number; label: string; disabled?: boolean; onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return (
@@ -303,6 +309,7 @@ function SortableRankRow({ id, rank, label, onRemove }: {
         type="button"
         {...attributes}
         {...listeners}
+        disabled={disabled}
         className="cursor-grab active:cursor-grabbing touch-none p-1 rounded"
         style={{ color: "var(--text-muted)" }}
         aria-label="拖拉調整順序">
@@ -318,6 +325,7 @@ function SortableRankRow({ id, rank, label, onRemove }: {
       <button
         type="button"
         onClick={onRemove}
+        disabled={disabled}
         className="topbar-icon-btn"
         aria-label="從排序中移除"
         style={{ color: "var(--danger)" }}>
@@ -332,10 +340,11 @@ function SortableRankRow({ id, rank, label, onRemove }: {
 
 /* ── 各題型的填答元件 ─────────────────────────────────────────────────────── */
 function QuestionInput({
-  question, value, onChange,
+  question, value, disabled = false, onChange,
 }: {
   question: SurveyQuestionOut;
   value: AnswerValue;
+  disabled?: boolean;
   onChange: (val: AnswerValue) => void;
 }) {
   const {
@@ -422,6 +431,7 @@ function QuestionInput({
         <input
           value={value.text}
           onChange={e => onChange({ ...value, text: e.target.value })}
+          readOnly={disabled}
           placeholder={placeholder ?? "請輸入…"}
           maxLength={question.max_length ?? undefined}
           className="input"
@@ -437,6 +447,7 @@ function QuestionInput({
         <textarea
           value={value.text}
           onChange={e => onChange({ ...value, text: e.target.value })}
+          readOnly={disabled}
           rows={3}
           placeholder={placeholder ?? "請輸入…"}
           maxLength={question.max_length ?? undefined}
@@ -452,6 +463,7 @@ function QuestionInput({
         type="date"
         value={value.text}
         onChange={e => onChange({ ...value, text: e.target.value })}
+        readOnly={disabled}
         className="input"
         style={{ colorScheme: "dark" }}
       />
@@ -471,6 +483,7 @@ function QuestionInput({
                 name={question.id}
                 checked={value.options[0] === opt}
                 onChange={() => onChange({ ...value, options: [opt] })}
+                disabled={disabled}
                 className="accent-sky-400"
               />
               <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
@@ -526,7 +539,7 @@ function QuestionInput({
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(opt)}
-                  disabled={!checked && !isExcl && limitReached}
+                  disabled={disabled || (!checked && !isExcl && limitReached)}
                   className="accent-sky-400"
                 />
                 <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
@@ -541,6 +554,7 @@ function QuestionInput({
                 <input
                   value={value.other_text ?? ""}
                   onChange={e => onChange({ ...value, other_text: e.target.value })}
+                  readOnly={disabled}
                   placeholder="請輸入..."
                   maxLength={2000}
                   className="input mt-1.5 ml-7"
@@ -586,6 +600,7 @@ function QuestionInput({
         unselected={unselected}
         minN={minN}
         maxN={maxN}
+        disabled={disabled}
         onMove={move}
         onAdd={addOpt}
         onRemove={removeOpt}
@@ -601,6 +616,7 @@ function QuestionInput({
             key={n}
             type="button"
             onClick={() => onChange({ ...value, text: String(n) })}
+            disabled={disabled}
             className="w-10 h-10 rounded-xl text-sm font-semibold transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={current === n
               ? { background: "var(--primary)", color: "white", border: "none" }
@@ -770,15 +786,17 @@ function StatsView({
   const [chartTypes, setChartTypes] = useState<Record<string, string>>({});
   const [view, setView] = useState<"charts" | "responses">("charts");
   const [selectedRespondentKey, setSelectedRespondentKey] = useState("");
+  const [responsePage, setResponsePage] = useState(0);
   const [deletingResponseId, setDeletingResponseId] = useState<string | null>(null);
   const [clearingResponses, setClearingResponses] = useState(false);
+  const responsePageSize = 100;
 
   const loadStats = useCallback(async () => {
     setLoading(true);
     try {
       const [nextStats, nextResponses] = await Promise.all([
         surveysApi.stats(surveyId),
-        surveysApi.responses(surveyId),
+        surveysApi.responses(surveyId, { limit: 1000 }),
       ]);
       setStats(nextStats);
       setResponses(nextResponses);
@@ -812,6 +830,21 @@ function StatsView({
       : responses,
     [responses, selectedRespondentKey],
   );
+  const responsePageCount = Math.ceil(filteredResponses.length / responsePageSize);
+  const pagedResponses = useMemo(
+    () => filteredResponses.slice(
+      responsePage * responsePageSize,
+      (responsePage + 1) * responsePageSize,
+    ),
+    [filteredResponses, responsePage],
+  );
+
+  useEffect(() => {
+    setResponsePage(0);
+  }, [selectedRespondentKey]);
+  useEffect(() => {
+    setResponsePage(page => Math.min(page, Math.max(responsePageCount - 1, 0)));
+  }, [responsePageCount]);
 
   const deleteResponse = async (responseId: string) => {
     if (!confirm("確定刪除這筆回應？刪除後無法復原。")) return;
@@ -1086,7 +1119,7 @@ function StatsView({
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredResponses.map(r => (
+                {pagedResponses.map(r => (
                   <div key={r.id} className="card p-4 space-y-3">
                     <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
                       <span className="pt-0.5 text-xs font-semibold" style={{ color: "var(--primary)" }}>
@@ -1139,6 +1172,29 @@ function StatsView({
                 ))}
               </div>
             )}
+            {responsePageCount > 1 && (
+              <nav className="flex items-center justify-center gap-3 pt-2" aria-label="個別回應分頁">
+                <button
+                  type="button"
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setResponsePage(page => Math.max(page - 1, 0))}
+                  disabled={responsePage === 0}
+                >
+                  上一頁
+                </button>
+                <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                  第 {responsePage + 1} / {responsePageCount} 頁（每頁 {responsePageSize} 份）
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setResponsePage(page => Math.min(page + 1, responsePageCount - 1))}
+                  disabled={responsePage >= responsePageCount - 1}
+                >
+                  下一頁
+                </button>
+              </nav>
+            )}
           </div>
         )
       )}
@@ -1179,18 +1235,23 @@ export default function SurveyDetailClient({
     () => (survey ? computeHidden(survey.questions, answers) : new Set<string>()),
     [survey, answers],
   );
+  const isReadOnly = survey?.status === "closed" || survey?.status === "archived";
+  const displayedHiddenIds = useMemo(
+    () => isReadOnly ? new Set<string>() : hiddenIds,
+    [isReadOnly, hiddenIds],
+  );
   const numberMap = useMemo(() => {
     const m = new Map<string, number>();
     if (!survey) return m;
     let n = 0;
     for (const q of survey.questions) {
-      if (!DISPLAY_TYPES.has(q.question_type) && !hiddenIds.has(q.id)) {
+      if (!DISPLAY_TYPES.has(q.question_type) && !displayedHiddenIds.has(q.id)) {
         n += 1;
         m.set(q.id, n);
       }
     }
     return m;
-  }, [survey, hiddenIds]);
+  }, [survey, displayedHiddenIds]);
   const restoreAnswerDraft = useCallback((draft: AnswerMap) => {
     setAnswers(prev => ({ ...prev, ...draft }));
     toast.info("已復原未送出的問卷填答草稿");
@@ -1234,7 +1295,7 @@ export default function SurveyDetailClient({
         )).filter((response): response is SurveyResponseOut => response !== null);
         setAnonymousResponseTokens(tokens);
         setMyResponses(responses);
-        if (!loadedSurvey.allow_multiple && responses[0]) {
+        if (responses[0] && (!loadedSurvey.allow_multiple || loadedSurvey.status !== "open")) {
           setEditingResponseId(responses[0].id);
           setEditingAnonToken(tokens[responses[0].id] ?? null);
           setAnswers(answersFromResponse(loadedSurvey, responses[0]));
@@ -1247,7 +1308,7 @@ export default function SurveyDetailClient({
         const responses = await surveysApi.myResponses(id);
         setMyResponses(responses);
         setAnonymousResponseTokens({});
-        if (!loadedSurvey.allow_multiple && responses[0]) {
+        if (responses[0] && (!loadedSurvey.allow_multiple || loadedSurvey.status !== "open")) {
           setEditingResponseId(responses[0].id);
           setEditingAnonToken(null);
           setAnswers(answersFromResponse(loadedSurvey, responses[0]));
@@ -1579,17 +1640,37 @@ export default function SurveyDetailClient({
             <Link href="/surveys" className="btn btn-ghost">返回問卷列表</Link>
           </div>
         </section>
-      ) : !isOpen ? (
+      ) : !isOpen && !isReadOnly ? (
         <div className="card p-8 text-center">
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>此問卷目前不開放填答</p>
         </div>
       ) : (
-        <form onSubmit={e => { e.preventDefault(); submit(); }} className="survey-response-form space-y-4">
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            標示 <span className="font-semibold" style={{ color: "var(--danger)" }}>「必填」</span>
-            的題目須完成後才能送出。
-          </p>
-          {(!survey.is_anonymous || myResponses.length > 0) && (
+        <form
+          onSubmit={e => { e.preventDefault(); if (isOpen) void submit(); }}
+          className="survey-response-form space-y-4"
+          style={isReadOnly ? { opacity: 0.58, filter: "grayscale(0.12)" } : undefined}
+        >
+          {isReadOnly ? (
+            <section
+              className="rounded-xl px-4 py-3"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+            >
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                此問卷已截止或封存，表單僅供檢視
+              </p>
+              <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
+                {myResponses.length > 0
+                  ? "以下顯示你最近一次的填答內容，無法再修改。"
+                  : "你尚未填寫過此問卷，以下為問卷題目。"}
+              </p>
+            </section>
+          ) : (
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              標示 <span className="font-semibold" style={{ color: "var(--danger)" }}>「必填」</span>
+              的題目須完成後才能送出。
+            </p>
+          )}
+          {!isReadOnly && (!survey.is_anonymous || myResponses.length > 0) && (
             <section
               className="space-y-3 rounded-xl px-4 py-3"
               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
@@ -1648,7 +1729,7 @@ export default function SurveyDetailClient({
               ) : null}
             </section>
           )}
-          <aside className="survey-response-meter" aria-label="填答進度" aria-live="polite">
+          {!isReadOnly && <aside className="survey-response-meter" aria-label="填答進度" aria-live="polite">
             <div className="flex items-center justify-between gap-4">
               <span>填答進度</span>
               <strong className="tabular-nums">{answeredQuestionCount} / {questionCount} 題</strong>
@@ -1666,9 +1747,10 @@ export default function SurveyDetailClient({
                 })} 自動儲存到此裝置`
                 : "填答內容會自動儲存到裝置，不用擔心!"}
             </p>
-          </aside>
+          </aside>}
+          <fieldset disabled={!isOpen} className="space-y-4 min-w-0">
           {survey.questions.map((q) => {
-            if (hiddenIds.has(q.id)) return null;
+            if (displayedHiddenIds.has(q.id)) return null;
             const isDisplay = DISPLAY_TYPES.has(q.question_type);
             const isAnswered = hasAnswerContent(answers[q.id]);
             const validationError = validationErrors[q.id];
@@ -1724,6 +1806,7 @@ export default function SurveyDetailClient({
               <QuestionInput
                 question={q}
                 value={answers[q.id] ?? { text: "", options: [] }}
+                disabled={isReadOnly}
                 onChange={val => {
                   setAnswers(prev => ({ ...prev, [q.id]: val }));
                   setValidationErrors(previous => {
@@ -1749,8 +1832,9 @@ export default function SurveyDetailClient({
             </div>
             );
           })}
+          </fieldset>
 
-          <label className="flex items-center gap-2 cursor-pointer pt-1">
+          {!isReadOnly && <label className="flex items-center gap-2 cursor-pointer pt-1">
             <input
               type="checkbox"
               checked={emailCopy}
@@ -1760,9 +1844,9 @@ export default function SurveyDetailClient({
             <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
               將回答副本寄送到我的電子郵件信箱
             </span>
-          </label>
+          </label>}
 
-          <div className="flex gap-3 pt-2">
+          {!isReadOnly && <div className="flex gap-3 pt-2">
             <button
               type="submit"
               disabled={submitting}
@@ -1771,8 +1855,8 @@ export default function SurveyDetailClient({
               aria-busy={submitting}>
               {submitting ? (editingResponseId ? "儲存中…" : "提交中…") : (editingResponseId ? "儲存變更" : "提交填答")}
             </button>
-          </div>
-          {survey.is_anonymous && (
+          </div>}
+          {!isReadOnly && survey.is_anonymous && (
             <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
               此為匿名問卷，您的身份不會公開
             </p>

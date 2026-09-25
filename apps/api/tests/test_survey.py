@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -124,6 +124,31 @@ async def test_list_surveys_includes_response_count(db_session: AsyncSession) ->
     surveys = await survey_svc.list_surveys(db_session)
     match = next(s for s in surveys if s.id == survey.id)
     assert match.response_count == 1
+
+
+async def test_close_expired_surveys_changes_only_expired_open_surveys(
+    db_session: AsyncSession,
+) -> None:
+    now = datetime.now(UTC)
+    expired = await _make_draft_survey(db_session)
+    expired.status = SurveyStatus.OPEN
+    expired.closes_at = now - timedelta(seconds=1)
+
+    upcoming = await _make_draft_survey(db_session)
+    upcoming.status = SurveyStatus.OPEN
+    upcoming.closes_at = now + timedelta(minutes=1)
+
+    already_closed = await _make_draft_survey(db_session)
+    already_closed.status = SurveyStatus.CLOSED
+    already_closed.closes_at = now - timedelta(minutes=1)
+    await db_session.flush()
+
+    closed_count = await survey_svc.close_expired_surveys(db_session, now=now)
+
+    assert closed_count == 1
+    assert expired.status == SurveyStatus.CLOSED
+    assert upcoming.status == SurveyStatus.OPEN
+    assert already_closed.status == SurveyStatus.CLOSED
 
 
 # ── 圖片題型 ──────────────────────────────────────────────────────────────────

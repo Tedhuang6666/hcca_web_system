@@ -121,6 +121,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.email_tasks",
     "api.services.shop_tasks",
     "api.services.meeting_tasks",
+    "api.services.survey_tasks",
     "api.services.backup_tasks",
     "api.services.permission_tasks",
     "api.services.digest_tasks",
@@ -178,6 +179,11 @@ celery_app.conf.beat_schedule = {
     # 每 60 秒清除過期的劃位暫時保留鎖
     "cleanup-expired-seat-holds-every-60s": {
         "task": "api.services.shop_tasks.cleanup_expired_seat_holds",
+        "schedule": 60.0,
+    },
+    # 每 60 秒關閉已超過截止時間的問卷
+    "close-expired-surveys-every-60s": {
+        "task": "api.services.survey_tasks.close_expired_surveys",
         "schedule": 60.0,
     },
     # 每 60 秒檢查即將開始的會議並推播開會提醒
