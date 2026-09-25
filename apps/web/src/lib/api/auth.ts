@@ -8,6 +8,7 @@ type AuthenticatedUser = {
   is_superuser?: boolean;
   is_owner?: boolean;
   permissions: string[];
+  is_school_email?: boolean;
 };
 
 // /auth/me is used by the shell on every navigation. Keep the session check

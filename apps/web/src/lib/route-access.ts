@@ -54,6 +54,7 @@ const INDEXABLE_EXACT_PATHS = new Set([
   "/officers",
   "/pages",
   "/public",
+  "/shop",
   "/system-info",
   "/announcements",
   "/documents",
@@ -119,6 +120,7 @@ const MAINTENANCE_EXEMPT_PREFIXES = [
   "/login",
   "/maintenance",
   "/public",
+  "/shop",
 ];
 
 const ROBOTS_DISALLOW_PATHS = [
@@ -148,6 +150,7 @@ const ROBOTS_ALLOW_PATHS = [
   "/partner-map",
   "/petitions/public",
   "/public",
+  "/shop",
   "/regulations",
   "/surveys",
 ];
@@ -167,6 +170,7 @@ export function requiresAuthentication(pathname: string): boolean {
 }
 
 export function isBareRoute(pathname: string): boolean {
+  if (pathname === "/shop" || pathname === "/shop/cart") return true;
   return BARE_ROUTE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 

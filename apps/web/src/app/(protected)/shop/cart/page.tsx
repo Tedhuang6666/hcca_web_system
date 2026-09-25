@@ -3,9 +3,16 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
+import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type { CartOut, CartItemOut } from "@/lib/types";
+import {
+  clearGuestCart,
+  getGuestCart,
+  guestCartAsCartOut,
+  removeGuestCartItem,
+  updateGuestCartItem,
+} from "@/lib/shop-guest-cart";
 
 type CartProductGroup = {
   product_id: string;
@@ -128,19 +135,37 @@ export default function CartPage() {
   const [cart, setCart] = useState<CartOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash_on_pickup");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isSchoolEmail, setIsSchoolEmail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [closedCategoryNames, setClosedCategoryNames] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const cartData = await shopApi.getCart();
+      const user = await authApi.me().catch(() => null);
+      setIsLoggedIn(Boolean(user));
+      setIsSchoolEmail(Boolean(user?.is_school_email));
+      if (user) {
+        const guestItems = getGuestCart();
+        for (const item of guestItems) {
+          await shopApi.addCartItem({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            option_ids: item.selected_options.map((option) => option.option_id),
+          });
+        }
+        if (guestItems.length) clearGuestCart();
+      }
+      const cartData = user ? await shopApi.getCart() : guestCartAsCartOut();
       setCart(cartData);
       // best-effort 結單檢查
       if (cartData.items.length) {
         const [catalog, schoolClass] = await Promise.all([
           shopApi.catalog().catch(() => []),
-          classApi.myClass().catch(() => null),
+          user ? classApi.myClass().catch(() => null) : Promise.resolve(null),
         ]);
         if (schoolClass && catalog.length) {
           const productCatMap = new Map<string, string>();
@@ -174,6 +199,15 @@ export default function CartPage() {
   useEffect(() => { load(); }, [load]);
 
   const changeQty = async (itemId: string, qty: number) => {
+    if (!isLoggedIn) {
+      const nextItems = updateGuestCartItem(itemId, qty);
+      setCart({
+        ...cart!,
+        items: nextItems,
+        total_price: nextItems.reduce((sum, item) => sum + (item.available ? item.subtotal : 0), 0),
+      });
+      return;
+    }
     try {
       setCart(await shopApi.updateCartItem(itemId, qty));
     } catch (e) {
@@ -182,6 +216,11 @@ export default function CartPage() {
   };
 
   const remove = async (itemId: string) => {
+    if (!isLoggedIn) {
+      const nextItems = removeGuestCartItem(itemId);
+      setCart({ ...cart!, items: nextItems, total_price: nextItems.reduce((sum, item) => sum + (item.available ? item.subtotal : 0), 0) });
+      return;
+    }
     try {
       setCart(await shopApi.removeCartItem(itemId));
     } catch (e) {
@@ -190,9 +229,17 @@ export default function CartPage() {
   };
 
   const checkout = async () => {
+    if (!isLoggedIn) {
+      router.push("/login?next=%2Fshop%2Fcart");
+      return;
+    }
     setSubmitting(true);
     try {
-      const orders = await shopApi.checkout(notes || undefined);
+      const orders = await shopApi.checkout({
+        notes: notes || undefined,
+        coupon_code: couponCode.trim() || undefined,
+        payment_method: isSchoolEmail ? undefined : paymentMethod,
+      });
       toast.success(`送單成功，共 ${orders.length} 張訂單`);
       router.push("/shop/orders");
     } catch (e) {
@@ -253,7 +300,7 @@ export default function CartPage() {
           </div>
 
           <div className="card p-5 space-y-4">
-            <div>
+            <div className="space-y-4">
               <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>
                 備註（選填）
               </label>
@@ -263,6 +310,41 @@ export default function CartPage() {
                 placeholder="特殊需求…"
                 className="input w-full"
               />
+              {isLoggedIn ? (
+                <>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                      優惠碼（選填）
+                    </span>
+                    <input
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      placeholder="輸入優惠碼"
+                      className="input w-full"
+                      autoCapitalize="characters"
+                    />
+                  </label>
+                  {isSchoolEmail ? (
+                    <div className="rounded-lg px-3 py-2.5 text-xs" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border)", color: "var(--success)" }}>
+                      校務信箱已確認身分，訂單會沿用校內收款流程，不需要選擇付款方式。
+                    </div>
+                  ) : (
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                        付款方式
+                      </span>
+                      <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="input w-full">
+                        <option value="cash_on_pickup">取貨時付款</option>
+                        <option value="bank_transfer">銀行轉帳</option>
+                      </select>
+                    </label>
+                  )}
+                </>
+              ) : (
+                <div className="rounded-lg px-3 py-2.5 text-xs" style={{ background: "var(--primary-dim)", border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                  結帳時才需要登入；購物車內容會保留。登入後系統會依帳號套用可用優惠。
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -292,7 +374,7 @@ export default function CartPage() {
               className="btn w-full"
               style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
               aria-busy={submitting}>
-              {submitting ? "送單中…" : "送出訂單"}
+              {submitting ? "送單中…" : isLoggedIn ? "送出訂單" : "登入後結帳"}
             </button>
           </div>
         </>

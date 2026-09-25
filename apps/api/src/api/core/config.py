@@ -301,7 +301,7 @@ class Settings(BaseSettings):
         description="額外允許登入的完整 Email，適合管理員 Gmail 例外",
     )
     LOGIN_ALLOW_EXTERNAL_USERS: bool = Field(
-        default=False,
+        default=True,
         description=(
             "允許任何 Google 帳號登入；校外/外校帳號登入後不會被分配職位，"
             "僅有公開頁等級的檢視權限與陳情送件功能。"

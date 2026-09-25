@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
+from api.core.config import settings
 from api.models.shop import (
     Cart,
     CartItem,
@@ -45,8 +46,11 @@ from api.services.shop._catalog import (
     generate_order_serial,
     get_product,
 )
+from api.services.shop._promotions import resolve_promotion
 
 logger = logging.getLogger(__name__)
+
+_PAYMENT_METHODS = {"cash_on_pickup", "bank_transfer"}
 
 
 def _resolve_selected_options(product: Product, option_ids: list[uuid.UUID]) -> list[dict]:
@@ -225,8 +229,10 @@ async def _create_order_from_items(
     notes: str | None,
     assistance_scope: str = "self",
     assisted_by_id: uuid.UUID | None = None,
+    coupon_code: str | None = None,
+    payment_method: str = "cash_on_pickup",
 ) -> Order:
-    total_price = 0
+    subtotal_price = 0
     specs: list[dict] = []
     now = datetime.now(UTC)
 
@@ -264,7 +270,7 @@ async def _create_order_from_items(
             if product.stock_quantity == 0:
                 product.status = ProductStatus.SOLD_OUT
 
-        total_price += unit_price * cart_item.quantity
+        subtotal_price += unit_price * cart_item.quantity
         specs.append(
             {
                 "product_id": product.id,
@@ -274,6 +280,17 @@ async def _create_order_from_items(
             }
         )
 
+    promotion_result = await resolve_promotion(
+        session,
+        user_id=user_id,
+        subtotal=subtotal_price,
+        code=coupon_code,
+    )
+    promotion = promotion_result.promotion
+    if promotion is not None:
+        promotion.used_count += 1
+    discount_amount = promotion_result.discount_amount
+    total_price = max(0, subtotal_price - discount_amount)
     serial = await generate_order_serial(session)
     order = Order(
         serial_number=serial,
@@ -282,7 +299,11 @@ async def _create_order_from_items(
         assistance_scope=assistance_scope,
         assisted_by_id=assisted_by_id,
         status=OrderStatus.PENDING,
+        subtotal_price=subtotal_price,
+        discount_amount=discount_amount,
         total_price=total_price,
+        promotion_code=promotion.code if promotion else None,
+        payment_method=payment_method,
         notes=notes,
     )
     session.add(order)
@@ -336,7 +357,14 @@ async def create_direct_order(
     return [order]
 
 
-async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> list[Order]:
+async def checkout(
+    session: AsyncSession,
+    user,
+    *,
+    notes: str | None = None,
+    coupon_code: str | None = None,
+    payment_method: str | None = None,
+) -> list[Order]:
     cart = await get_or_create_cart(session, user.id)
     if not cart.items:
         raise ValueError("購物車是空的")
@@ -363,6 +391,12 @@ async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> 
         class_id=class_id,
         cart_items=list(cart.items),
         notes=notes,
+        coupon_code=coupon_code,
+        payment_method=(
+            "school_collection"
+            if _is_school_email(user)
+            else _validate_payment_method(payment_method)
+        ),
     )
     await receivable_svc.sync_shop_order(session, order)
     orders = [order]
@@ -370,6 +404,21 @@ async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> 
     cart.items.clear()
     await session.flush()
     return orders
+
+
+def _validate_payment_method(payment_method: str | None) -> str:
+    selected = payment_method or "cash_on_pickup"
+    if selected not in _PAYMENT_METHODS:
+        raise ValueError("不支援的付款方式")
+    return selected
+
+
+def _is_school_email(user) -> bool:
+    email = (user.email or "").strip().lower()
+    domain = email.rsplit("@", maxsplit=1)[-1] if "@" in email else ""
+    return bool(user.student_id) or domain in {
+        item.lower().lstrip("@") for item in settings.LOGIN_ALLOWED_EMAIL_DOMAINS
+    }
 
 
 async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
@@ -525,7 +574,11 @@ def serialize_order(order: Order) -> OrderOut:
         user_id=order.user_id,
         activity_id=_order_activity_id(order),
         status=order.status,
+        subtotal_price=order.subtotal_price,
+        discount_amount=order.discount_amount,
         total_price=order.total_price,
+        promotion_code=order.promotion_code,
+        payment_method=order.payment_method,
         notes=order.notes,
         class_id=order.class_id,
         class_label=class_svc.class_display_label(order.school_class),
@@ -547,7 +600,11 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         user_name=order.user.display_name if order.user else None,
         activity_id=_order_activity_id(order),
         status=order.status,
+        subtotal_price=order.subtotal_price,
+        discount_amount=order.discount_amount,
         total_price=order.total_price,
+        promotion_code=order.promotion_code,
+        payment_method=order.payment_method,
         class_id=order.class_id,
         class_label=class_svc.class_display_label(order.school_class),
         assistance_scope=order.assistance_scope,
@@ -613,8 +670,12 @@ async def replace_order_items(
         notes=data.notes,
         assistance_scope=order.assistance_scope,
         assisted_by_id=order.assisted_by_id,
+        payment_method=order.payment_method,
     )
+    order.subtotal_price = specs_order.subtotal_price
+    order.discount_amount = specs_order.discount_amount
     order.total_price = specs_order.total_price
+    order.promotion_code = specs_order.promotion_code
     order.notes = data.notes
     temp_result = await session.execute(
         select(OrderItem).where(OrderItem.order_id == specs_order.id)

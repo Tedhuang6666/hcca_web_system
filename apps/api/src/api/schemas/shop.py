@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.models.shop import OrderStatus, ProductStatus
+from api.models.shop import OrderStatus, ProductStatus, ShopDiscountType
 
 # ── 變體 ─────────────────────────────────────────────────────────────────────
 
@@ -299,7 +299,11 @@ class OrderOut(BaseModel):
     user_id: uuid.UUID
     activity_id: uuid.UUID | None = None
     status: OrderStatus
+    subtotal_price: int = 0
+    discount_amount: int = 0
     total_price: int
+    promotion_code: str | None = None
+    payment_method: str = "cash_on_pickup"
     notes: str | None = None
     class_id: uuid.UUID | None = None
     class_label: str | None = None
@@ -319,7 +323,11 @@ class OrderListItem(BaseModel):
     user_name: str | None = None
     activity_id: uuid.UUID | None = None
     status: OrderStatus
+    subtotal_price: int = 0
+    discount_amount: int = 0
     total_price: int
+    promotion_code: str | None = None
+    payment_method: str = "cash_on_pickup"
     class_id: uuid.UUID | None = None
     class_label: str | None = None
     assistance_scope: str = "self"
@@ -330,6 +338,8 @@ class OrderListItem(BaseModel):
 
 class CheckoutRequest(BaseModel):
     notes: str | None = Field(None, max_length=500, description="備註")
+    coupon_code: str | None = Field(None, max_length=80, description="優惠碼")
+    payment_method: str | None = Field(None, max_length=30, description="付款方式")
 
 
 class OrderCancelRequest(BaseModel):
@@ -338,6 +348,52 @@ class OrderCancelRequest(BaseModel):
 
 class OrderPaymentUpdate(BaseModel):
     is_paid: bool = Field(..., description="是否已繳費")
+
+
+class ShopPromotionCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    target_email: str | None = Field(None, max_length=255, description="指定帳號 Email")
+    code: str | None = Field(None, max_length=80, description="優惠碼；留空則指定帳號自動套用")
+    discount_type: ShopDiscountType
+    discount_value: int = Field(..., gt=0)
+    min_order_price: int = Field(0, ge=0)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    max_uses: int | None = Field(None, ge=1)
+    description: str | None = Field(None, max_length=500)
+
+
+class ShopPromotionUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    target_email: str | None = Field(None, max_length=255)
+    code: str | None = Field(None, max_length=80)
+    discount_type: ShopDiscountType | None = None
+    discount_value: int | None = Field(None, gt=0)
+    min_order_price: int | None = Field(None, ge=0)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    max_uses: int | None = Field(None, ge=1)
+    description: str | None = Field(None, max_length=500)
+    is_active: bool | None = None
+
+
+class ShopPromotionOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    code: str | None = None
+    target_user_id: uuid.UUID | None = None
+    target_email: str | None = None
+    discount_type: ShopDiscountType
+    discount_value: int
+    min_order_price: int
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    max_uses: int | None = None
+    used_count: int
+    is_active: bool
+    description: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 # ── 後台統計 ─────────────────────────────────────────────────────────────────

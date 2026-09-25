@@ -71,6 +71,14 @@ from api.services.shop._orders import (
     set_order_paid,
     update_cart_item,
 )
+from api.services.shop._promotions import (
+    create_promotion,
+    get_promotion,
+    list_promotions,
+    resolve_promotion,
+    serialize_promotion,
+    update_promotion,
+)
 
 __all__ = [
     # catalog
@@ -107,6 +115,12 @@ __all__ = [
     "get_or_create_cart",
     "add_cart_item",
     "update_cart_item",
+    "create_promotion",
+    "get_promotion",
+    "list_promotions",
+    "resolve_promotion",
+    "serialize_promotion",
+    "update_promotion",
     "remove_cart_item",
     "clear_cart",
     "class_order_summary",
