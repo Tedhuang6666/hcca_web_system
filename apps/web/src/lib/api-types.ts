@@ -25606,6 +25606,13 @@ export interface components {
             case_number: string;
             /** Closed At */
             closed_at: string | null;
+            /**
+             * Confidential Blocked
+             * @default false
+             */
+            confidential_blocked: boolean;
+            /** Confidential Reason */
+            confidential_reason?: string | null;
             /** Contact Email */
             contact_email?: string | null;
             /** Contact Name */
@@ -25642,10 +25649,6 @@ export interface components {
             id: string;
             /** Is Confidential */
             is_confidential: boolean;
-            /** Confidential Reason */
-            confidential_reason?: string | null;
-            /** Confidential Blocked */
-            confidential_blocked?: boolean;
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
@@ -25709,8 +25712,15 @@ export interface components {
              */
             updated_at: string;
         };
+        /** PetitionConfidentialityCreate */
+        PetitionConfidentialityCreate: {
+            /** Reason */
+            reason: string;
+        };
         /** PetitionConfidentialityOut */
         PetitionConfidentialityOut: {
+            /** Confidential Reason */
+            confidential_reason: string;
             /**
              * Id
              * Format: uuid
@@ -25873,6 +25883,13 @@ export interface components {
             case_number: string;
             /** Closed At */
             closed_at: string | null;
+            /**
+             * Confidential Blocked
+             * @default false
+             */
+            confidential_blocked: boolean;
+            /** Confidential Reason */
+            confidential_reason?: string | null;
             /** Contact Email */
             contact_email?: string | null;
             /** Contact Name */
@@ -53687,7 +53704,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionConfidentialityCreate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
