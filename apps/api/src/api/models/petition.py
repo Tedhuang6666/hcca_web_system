@@ -133,6 +133,7 @@ class PetitionCase(Base, TimestampMixin):
     is_confidential: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"), index=True
     )
+    confidential_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitter_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )

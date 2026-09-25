@@ -565,25 +565,35 @@ async def test_list_manage_cases_scoped_to_org_permission(
     assert payload[0]["current_org_id"] == str(org_a.id)
 
 
-async def test_confidential_petition_is_visible_only_to_submitter(
+async def test_confidential_petition_access_is_scoped_by_role(
     db_session, authed_client_factory, admin_user: User
 ) -> None:
     org, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
+    viewer = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:view_org")
+    await _grant_org_permission(db_session, viewer, org, "petition:view_org")
     case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj.assigned_to_id = handler.id
+    case_obj.status = PetitionStatus.ASSIGNED
+    await db_session.flush()
 
-    unauthorized = await authed_client_factory(handler).post(
+    unauthorized = await authed_client_factory(viewer).post(
         f"/petitions/{case_obj.id}/confidential"
     )
     assert unauthorized.status_code == 403
 
     marked = await authed_client_factory(admin_user).post(
-        f"/petitions/{case_obj.id}/confidential"
+        f"/petitions/{case_obj.id}/confidential",
+        json={"reason": "涉及個人安全與敏感聯絡資料"},
     )
     assert marked.status_code == 200
-    assert marked.json() == {"id": str(case_obj.id), "is_confidential": True}
+    assert marked.json() == {
+        "id": str(case_obj.id),
+        "is_confidential": True,
+        "confidential_reason": "涉及個人安全與敏感聯絡資料",
+    }
 
     case_obj.status = PetitionStatus.CLOSED
     case_obj.public_status = PetitionPublicStatus.PUBLISHED
@@ -592,11 +602,34 @@ async def test_confidential_petition_is_visible_only_to_submitter(
     owner_detail = await authed_client_factory(owner).get(f"/petitions/{case_obj.id}")
     assert owner_detail.status_code == 200
     assert owner_detail.json()["is_confidential"] is True
+    assert owner_detail.json()["confidential_blocked"] is False
+    assert owner_detail.json()["confidential_reason"] == "涉及個人安全與敏感聯絡資料"
+    assert owner_detail.json()["content"]
 
     handler_detail = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}")
-    assert handler_detail.status_code == 403
-    assert (await authed_client_factory(handler).get("/petitions/manage")).json() == []
-    assert (await authed_client_factory(admin_user).get("/petitions/manage")).json() == []
+    assert handler_detail.status_code == 200
+    assert handler_detail.json()["confidential_blocked"] is False
+    assert handler_detail.json()["content"]
+
+    admin_detail = await authed_client_factory(admin_user).get(f"/petitions/{case_obj.id}")
+    assert admin_detail.status_code == 200
+    assert admin_detail.json()["confidential_blocked"] is False
+    assert admin_detail.json()["content"]
+
+    viewer_detail = await authed_client_factory(viewer).get(f"/petitions/{case_obj.id}")
+    assert viewer_detail.status_code == 200
+    assert viewer_detail.json()["title"] == "此案件已被設為密件"
+    assert viewer_detail.json()["confidential_blocked"] is True
+    assert viewer_detail.json()["content"] == ""
+    assert viewer_detail.json()["confidential_reason"] == "涉及個人安全與敏感聯絡資料"
+
+    viewer_cases = (await authed_client_factory(viewer).get("/petitions/manage")).json()
+    assert viewer_cases[0]["id"] == str(case_obj.id)
+    assert viewer_cases[0]["title"] == "此案件已被設為密件"
+    handler_cases = (await authed_client_factory(handler).get("/petitions/manage")).json()
+    assert handler_cases[0]["title"] == "教室冷氣故障"
+    admin_cases = (await authed_client_factory(admin_user).get("/petitions/manage")).json()
+    assert admin_cases[0]["title"] == "教室冷氣故障"
 
     own_cases = await authed_client_factory(owner).get("/petitions/my")
     assert own_cases.status_code == 200
@@ -612,13 +645,26 @@ async def test_confidential_petition_is_visible_only_to_submitter(
         f"/petitions/{case_obj.id}/public-request",
         json={"title": "不應公開", "content": "不應公開"},
     )
-    assert public_request.status_code == 403
+    assert public_request.status_code == 409
 
     public_cases = await authed_client_factory(owner).get("/petitions/public")
     assert public_cases.status_code == 200
     assert all(item["id"] != str(case_obj.id) for item in public_cases.json())
     public_detail = await authed_client_factory(owner).get(f"/petitions/public/{case_obj.id}")
     assert public_detail.status_code == 404
+
+
+async def test_petition_confidentiality_reason_is_required(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    response = await authed_client_factory(admin_user).post(
+        f"/petitions/{case_obj.id}/confidential", json={"reason": "   "}
+    )
+    assert response.status_code == 422
 
 
 async def test_get_stats_scoped_by_org(db_session, authed_client_factory) -> None:

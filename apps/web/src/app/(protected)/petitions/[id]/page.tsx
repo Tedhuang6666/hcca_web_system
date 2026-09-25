@@ -11,6 +11,7 @@ import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent"
 import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 
 function fmt(iso: string | null) {
   if (!iso) return "未設定";
@@ -65,6 +66,13 @@ export default function PetitionDetailPage() {
       </div>
     );
   }
+  if (item.confidential_blocked) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <PetitionConfidentialBlocked item={item} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -75,9 +83,22 @@ export default function PetitionDetailPage() {
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{item.current_org_name} · {item.type_name}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {item.is_confidential && (
+            <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+              密件處理
+            </span>
+          )}
           <PetitionStatusBadge status={item.status} />
         </div>
       </div>
+
+      {item.is_confidential && (
+        <div className="rounded-lg p-4 space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+          <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>密件原因：{item.confidential_reason || "未提供密件原因。"}</p>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅案件擁有者與目前承辦人可查看，案件無法公開。</p>
+        </div>
+      )}
 
       <section className="card p-5 space-y-4">
         <div className="grid sm:grid-cols-4 gap-3">

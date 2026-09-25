@@ -98,8 +98,11 @@ export const petitionsApi = {
     get<{ id: string; display_name: string; email: string }[]>(`/petitions/${id}/assignable-users`),
   updateSubmitter: (id: string, body: PetitionSubmitterUpdate) =>
     patch<PetitionCaseOut>(`/petitions/${id}/submitter`, body),
-  setConfidential: (id: string) =>
-    post<{ id: string; is_confidential: boolean }>(`/petitions/${id}/confidential`, {}),
+  setConfidential: (id: string, reason: string) =>
+    post<{ id: string; is_confidential: boolean; confidential_reason: string }>(
+      `/petitions/${id}/confidential`,
+      { reason },
+    ),
   supplement: (id: string, body: { content: string; verification_code?: string | null }) =>
     post<PetitionCaseOut>(`/petitions/${id}/supplement`, body),
   assign: (id: string, body: { assigned_to_id: string; internal_note?: string | null }) =>

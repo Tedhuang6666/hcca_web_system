@@ -51,6 +51,7 @@ from api.schemas.petition import (
     PetitionAttachmentOut,
     PetitionCaseListItem,
     PetitionCaseOut,
+    PetitionConfidentialityCreate,
     PetitionConfidentialityOut,
     PetitionContentUpdate,
     PetitionCreate,
@@ -109,6 +110,16 @@ def _has_all_scope(codes: frozenset[str], user: User) -> bool:
     )
 
 
+def _has_confidential_full_scope(codes: frozenset[str], user: User) -> bool:
+    return user.is_superuser or bool(
+        codes
+        & {
+            str(PermissionCode.ADMIN_ALL),
+            str(PermissionCode.PETITION_ADMIN),
+        }
+    )
+
+
 async def _case_or_404(session: AsyncSession, case_id: uuid.UUID) -> PetitionCase:
     case_obj = await petition_svc.get_case(session, case_id)
     return or_404(case_obj, "找不到此陳情案件")
@@ -117,7 +128,17 @@ async def _case_or_404(session: AsyncSession, case_id: uuid.UUID) -> PetitionCas
 async def _case_detail_response(
     session: AsyncSession, case_obj: PetitionCase, user: User
 ) -> PetitionCaseOut:
-    include_internal, can_view_submitter = await _assert_case_access(session, case_obj, user)
+    include_internal, can_view_submitter = await _assert_case_access(
+        session, case_obj, user, allow_confidential_blocked=True
+    )
+    confidential_blocked = case_obj.is_confidential and not can_view_submitter
+    if confidential_blocked:
+        return await _decorate_case(
+            case_obj,
+            include_internal=False,
+            can_view_submitter=False,
+            confidential_blocked=True,
+        )
     permission_codes = await get_user_permission_codes(session, user.id)
     can_edit_events = user.is_superuser or bool(
         permission_codes
@@ -131,7 +152,7 @@ async def _case_detail_response(
         case_obj,
         include_internal=include_internal,
         can_view_submitter=can_view_submitter,
-        can_respond_public=case_obj.submitter_id == user.id,
+        can_respond_public=case_obj.submitter_id == user.id and not case_obj.is_confidential,
         can_edit_content=case_obj.submitter_id == user.id,
         editor_user_id=user.id if can_edit_events else None,
     )
@@ -150,12 +171,33 @@ async def _manageable_org_ids(
 
 
 async def _assert_case_access(
-    session: AsyncSession, case_obj: PetitionCase, user: User
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    user: User,
+    *,
+    allow_confidential_blocked: bool = False,
 ) -> tuple[bool, bool]:
     """回傳 (include_internal, can_view_submitter)。"""
     if case_obj.is_confidential:
+        codes = await get_user_permission_codes(session, user.id)
+        if _has_confidential_full_scope(codes, user):
+            return True, True
         if case_obj.submitter_id == user.id:
             return False, True
+        if case_obj.assigned_to_id == user.id:
+            return True, True
+        if allow_confidential_blocked:
+            org_ids = await _manageable_org_ids(
+                session,
+                user,
+                str(PermissionCode.PETITION_VIEW_ORG),
+                str(PermissionCode.PETITION_ASSIGN),
+                str(PermissionCode.PETITION_HANDLE),
+                str(PermissionCode.PETITION_TRANSFER),
+                str(PermissionCode.PETITION_ANALYTICS_ORG),
+            )
+            if org_ids is None or case_obj.current_org_id in org_ids:
+                return False, False
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此密件陳情")
     codes = await get_user_permission_codes(session, user.id)
     if case_obj.submitter_id == user.id:
@@ -180,6 +222,12 @@ async def _assert_case_access(
     if case_obj.current_org_id in org_ids:
         return True, True
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此陳情案件")
+
+
+def _can_view_confidential_case(
+    case_obj: PetitionCase, user: User, *, has_full_scope: bool = False
+) -> bool:
+    return has_full_scope or user.id in {case_obj.submitter_id, case_obj.assigned_to_id}
 
 
 async def _notify(
@@ -308,14 +356,16 @@ def _petition_notification_body(case_obj: PetitionCase, update: str | None = Non
     return "\n".join(lines)
 
 
-def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
+def _decorate_list_item(
+    case_obj: PetitionCase, *, redact_confidential: bool = False
+) -> PetitionCaseListItem:
     return PetitionCaseListItem(
         id=case_obj.id,
         case_number=case_obj.case_number,
         type_id=case_obj.type_id,
         status=case_obj.status,
         public_status=case_obj.public_status,
-        title=case_obj.title,
+        title="此案件已被設為密件" if redact_confidential else case_obj.title,
         is_confidential=case_obj.is_confidential,
         current_org_id=case_obj.current_org_id,
         assigned_to_id=case_obj.assigned_to_id,
@@ -341,11 +391,12 @@ async def _decorate_case(
     can_respond_public: bool = False,
     can_edit_content: bool = False,
     editor_user_id: uuid.UUID | None = None,
+    confidential_blocked: bool = False,
 ) -> PetitionCaseOut:
     storage = get_storage()
     now = datetime.now(UTC)
     events = []
-    for event in case_obj.events:
+    for event in [] if confidential_blocked else case_obj.events:
         if not include_internal and event.visibility != PetitionEventVisibility.PUBLIC:
             continue
         event_out = PetitionEventOut.model_validate(event)
@@ -360,7 +411,7 @@ async def _decorate_case(
         )
         events.append(event_out)
     attachments = []
-    for att in case_obj.attachments:
+    for att in [] if confidential_blocked else case_obj.attachments:
         if not include_internal and att.visibility == PetitionAttachmentVisibility.INTERNAL:
             continue
         out = PetitionAttachmentOut.model_validate(att)
@@ -379,26 +430,36 @@ async def _decorate_case(
         )
 
     return PetitionCaseOut(
-        **_decorate_list_item(case_obj).model_dump(),
-        content=case_obj.content,
-        public_reply=case_obj.public_reply,
-        public_title=case_obj.public_title,
-        public_content=case_obj.public_content,
-        public_requested_at=case_obj.public_requested_at,
-        public_user_responded_at=case_obj.public_user_responded_at,
-        public_published_at=case_obj.public_published_at,
+        **_decorate_list_item(case_obj, redact_confidential=confidential_blocked).model_dump(),
+        confidential_reason=case_obj.confidential_reason if case_obj.is_confidential else None,
+        confidential_blocked=confidential_blocked,
+        content="" if confidential_blocked else case_obj.content,
+        public_reply=None if confidential_blocked else case_obj.public_reply,
+        public_title=None if confidential_blocked else case_obj.public_title,
+        public_content=None if confidential_blocked else case_obj.public_content,
+        public_requested_at=None if confidential_blocked else case_obj.public_requested_at,
+        public_user_responded_at=None
+        if confidential_blocked
+        else case_obj.public_user_responded_at,
+        public_published_at=None if confidential_blocked else case_obj.public_published_at,
         latest_internal_note=case_obj.latest_internal_note if include_internal else None,
-        supplement_request=case_obj.supplement_request,
-        rejection_reason=case_obj.rejection_reason,
-        submitter_id=case_obj.submitter_id if can_view_submitter else None,
-        contact_name=case_obj.contact_name if can_view_submitter else None,
-        contact_email=case_obj.contact_email if can_view_submitter else None,
+        supplement_request=None if confidential_blocked else case_obj.supplement_request,
+        rejection_reason=None if confidential_blocked else case_obj.rejection_reason,
+        submitter_id=case_obj.submitter_id
+        if can_view_submitter and not confidential_blocked
+        else None,
+        contact_name=case_obj.contact_name
+        if can_view_submitter and not confidential_blocked
+        else None,
+        contact_email=case_obj.contact_email
+        if can_view_submitter and not confidential_blocked
+        else None,
         assigned_at=case_obj.assigned_at,
         first_response_at=case_obj.first_response_at,
         resolved_at=case_obj.resolved_at,
         closed_at=case_obj.closed_at,
         can_edit_content=can_edit_content and petition_svc.can_edit_content(case_obj),
-        can_supplement=case_obj.status == PetitionStatus.NEEDS_INFO,
+        can_supplement=(case_obj.status == PetitionStatus.NEEDS_INFO) and not confidential_blocked,
         can_respond_public=can_respond_public,
         can_view_submitter=can_view_submitter,
         submitter=submitter,
@@ -936,12 +997,24 @@ async def list_manage_cases(
         session,
         org_ids=org_ids,
         assigned_to_id=user.id if assigned_to_me else None,
+        include_confidential=True,
         status=status_filter,
         keyword=keyword,
         limit=limit,
         offset=offset,
     )
-    return [_decorate_list_item(c) for c in cases]
+    permission_codes = await get_user_permission_codes(session, user.id)
+    has_confidential_full_scope = _has_confidential_full_scope(permission_codes, user)
+    return [
+        _decorate_list_item(
+            c,
+            redact_confidential=c.is_confidential
+            and not _can_view_confidential_case(
+                c, user, has_full_scope=has_confidential_full_scope
+            ),
+        )
+        for c in cases
+    ]
 
 
 @router.patch(
@@ -989,13 +1062,14 @@ async def update_case_submitter(
 )
 async def set_case_confidential(
     case_id: uuid.UUID,
+    payload: PetitionConfidentialityCreate,
     session: DbDep,
     user: CurrentUser,
 ) -> PetitionConfidentialityOut:
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
     try:
-        case_obj = await petition_svc.set_confidential(session, case_obj)
+        case_obj = await petition_svc.set_confidential(session, case_obj, reason=payload.reason)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     await audit_svc.record(
@@ -1005,10 +1079,14 @@ async def set_case_confidential(
         action="petition.confidentiality.set",
         actor_id=str(user.id),
         actor_email=user.email,
-        meta={"case_number": case_obj.case_number},
+        meta={"case_number": case_obj.case_number, "reason": payload.reason},
         summary=f"陳情案件 {case_obj.case_number} 標註為密件",
     )
-    return PetitionConfidentialityOut(id=case_obj.id, is_confidential=True)
+    return PetitionConfidentialityOut(
+        id=case_obj.id,
+        is_confidential=True,
+        confidential_reason=case_obj.confidential_reason or payload.reason,
+    )
 
 
 @router.get("/stats", response_model=PetitionStatsOut, summary="陳情案件統計")

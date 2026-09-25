@@ -25642,6 +25642,10 @@ export interface components {
             id: string;
             /** Is Confidential */
             is_confidential: boolean;
+            /** Confidential Reason */
+            confidential_reason?: string | null;
+            /** Confidential Blocked */
+            confidential_blocked?: boolean;
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
