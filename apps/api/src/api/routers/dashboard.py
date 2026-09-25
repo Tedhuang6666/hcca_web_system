@@ -15,6 +15,8 @@ router = APIRouter(prefix="/dashboard", tags=["儀表板"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
 @router.get(
     "",
     response_model=DashboardResponse,
