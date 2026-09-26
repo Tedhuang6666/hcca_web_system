@@ -6,10 +6,12 @@ import { notFound } from "next/navigation";
 
 import ArticleMarkdown from "@/components/site/ArticleMarkdown";
 import ArticleViewTracker from "@/components/site/ArticleViewTracker";
+import ExamScopeExplorer from "@/components/site/ExamScopeExplorer";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { articleReadingTime, extractArticleHeadings } from "@/lib/article-utils";
 import { BRANDING } from "@/lib/branding";
 import { uploadUrl } from "@/lib/config";
+import { parseExamScopeMarkdown } from "@/lib/exam-scope";
 import { fetchPublicPage, fetchPublicShellData } from "@/lib/serverFetch";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
@@ -40,7 +42,8 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
   const path = `/articles/${encodeURIComponent(slug)}`;
   const canonical = absoluteUrl(path);
   const coverImageUrl = uploadUrl(page.cover_image_url);
-  const headings = extractArticleHeadings(page.body_md, [2]);
+  const examScope = parseExamScopeMarkdown(page.body_md);
+  const headings = examScope ? [] : extractArticleHeadings(page.body_md, [2]);
   const readingTime = articleReadingTime(page.body_md);
 
   return (
@@ -72,14 +75,14 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
         urgentAnnouncement={urgentAnnouncement}
       >
         <ArticleViewTracker slug={slug} />
-        <div className="public-article-detail">
+        <div className={`public-article-detail${examScope ? " is-exam-scope-article" : ""}`}>
           <Link href="/articles" className="public-article-back"><ArrowLeft size={16} aria-hidden /> 返回文章專欄</Link>
 
-          <header className="public-article-detail-header">
+          <header className={`public-article-detail-header${examScope ? " is-exam-scope-header" : ""}`}>
             <div className="public-article-detail-copy">
-              <p className="public-articles-mark"><BookOpenText size={16} aria-hidden /> 校園文章</p>
+              {!examScope && <p className="public-articles-mark"><BookOpenText size={16} aria-hidden /> 校園文章</p>}
               <h1>{page.title}</h1>
-              {page.summary && <p className="public-article-detail-summary">{page.summary}</p>}
+              {!examScope && page.summary && <p className="public-article-detail-summary">{page.summary}</p>}
               <div className="public-article-meta">
                 <time dateTime={page.updated_at}>更新於 {new Date(page.updated_at).toLocaleDateString("zh-TW")}</time>
                 <span aria-hidden="true">·</span>
@@ -100,23 +103,27 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
             )}
           </header>
 
-          <div className="public-article-reading-layout">
-            {headings.length > 0 && (
-              <aside className="public-article-toc" aria-label="文章段落目錄">
-                <div className="public-article-toc-heading"><List size={16} aria-hidden /> 文章段落</div>
-                <nav>
-                  {headings.map((heading) => (
-                    <a key={heading.id} href={`#${heading.id}`} className={heading.level === 3 ? "is-subsection" : undefined}>
-                      {heading.label}
-                    </a>
-                  ))}
-                </nav>
-              </aside>
-            )}
-            <article className="public-article-body">
-              <ArticleMarkdown markdown={page.body_md} skipFirstTitle />
-            </article>
-          </div>
+          {examScope ? (
+            <ExamScopeExplorer scope={examScope} />
+          ) : (
+            <div className="public-article-reading-layout">
+              {headings.length > 0 && (
+                <aside className="public-article-toc" aria-label="文章段落目錄">
+                  <div className="public-article-toc-heading"><List size={16} aria-hidden /> 文章段落</div>
+                  <nav>
+                    {headings.map((heading) => (
+                      <a key={heading.id} href={`#${heading.id}`} className={heading.level === 3 ? "is-subsection" : undefined}>
+                        {heading.label}
+                      </a>
+                    ))}
+                  </nav>
+                </aside>
+              )}
+              <article className="public-article-body">
+                <ArticleMarkdown markdown={page.body_md} skipFirstTitle />
+              </article>
+            </div>
+          )}
         </div>
       </PublicSiteShell>
     </>
