@@ -87,7 +87,7 @@ export default async function PublicSiteShell({
               </span>
               <span>
                 <strong>{BRANDING.orgName}</strong>
-                <span>校園自治公開資訊</span>
+                <span>數位整合系統</span>
               </span>
             </Link>
           </div>
