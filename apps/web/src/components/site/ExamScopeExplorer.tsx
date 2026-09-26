@@ -35,7 +35,7 @@ export default function ExamScopeExplorer({
   scope: ExamScopeData;
   defaultSection?: string | null;
 }) {
-  const [order, setOrder] = useState<BrowseOrder>("subject");
+  const [order, setOrder] = useState<BrowseOrder>("grade");
   const [subject, setSubject] = useState(ALL);
   const [grade, setGrade] = useState(ALL);
   const [section, setSection] = useState(() => resolvedDefaultSection(scope, defaultSection));
@@ -78,7 +78,7 @@ export default function ExamScopeExplorer({
 
   const reset = () => {
     gradeWasChosen.current = false;
-    setOrder("subject");
+    setOrder("grade");
     setSubject(ALL);
     setGrade(personalGrade ?? ALL);
     setSection(defaultSectionValue);
