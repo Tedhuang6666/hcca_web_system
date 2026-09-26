@@ -217,8 +217,8 @@ function PublicSiteHeaderContent({
             />
           </span>
           <span className="min-w-0">
-            <span className="block truncate">{BRANDING.orgShortName}</span>
-            <span className="block truncate text-xs font-normal text-[var(--public-muted)]">
+            <span className="block whitespace-nowrap text-[13px] sm:text-sm">{BRANDING.orgShortName}</span>
+            <span className="block whitespace-nowrap text-[10px] font-normal text-[var(--public-muted)] sm:text-xs">
               {BRANDING.acronym}
             </span>
           </span>
