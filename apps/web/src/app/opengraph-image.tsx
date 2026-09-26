@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 import { BRANDING } from "@/lib/branding";
+import { OG_FONT_FAMILY, ogFontOptions } from "@/lib/og-font";
 
 export const alt = BRANDING.appName;
 
@@ -15,10 +16,10 @@ export const size = {
 export const contentType = "image/png";
 
 export default async function Image() {
-  const emblemData = await readFile(
-    join(process.cwd(), "public/brand/hcca-emblem.png"),
-    "base64",
-  );
+  const [emblemData, fonts] = await Promise.all([
+    readFile(join(process.cwd(), "public/brand/hcca-emblem.png"), "base64"),
+    ogFontOptions(),
+  ]);
   const emblemSrc = `data:image/png;base64,${emblemData}`;
 
   return new ImageResponse(
@@ -33,7 +34,7 @@ export default async function Image() {
           padding: 72,
           background: BRANDING.themeColor,
           color: "#f8fafc",
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
         <div
@@ -80,6 +81,6 @@ export default async function Image() {
         </div>
       </div>
     ),
-    size,
+    { ...size, fonts },
   );
 }
