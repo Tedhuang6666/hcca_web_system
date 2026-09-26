@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import proxy from "./proxy";
 
 describe("proxy search metadata routes", () => {
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
 
   it.each(["/robots.txt", "/sitemap.xml"])("does not add noindex to %s", async (pathname) => {
     const request = new NextRequest(`https://hcca.tw${pathname}`, {
@@ -60,5 +63,20 @@ describe("proxy search metadata routes", () => {
     expect(response.headers.get("Cache-Control")).toContain("max-age=2592000");
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(response.headers.get("Permissions-Policy")).toContain("microphone=()");
+  });
+
+  it("keeps social preview images public and outside HTML access checks", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("https://hcca.tw/og/news/example-id");
+    const response = await proxy(request);
+
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=300, s-maxage=86400, stale-while-revalidate=3600",
+    );
+    expect(response.headers.get("X-Robots-Tag")).toBeNull();
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
