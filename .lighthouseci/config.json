@@ -9,6 +9,6 @@
       "deviceScaleFactor": 1.75,
       "disabled": false
     },
-    "throttlingMethod": "simulate"
+    "throttlingMethod": "devtools"
   }
 }
