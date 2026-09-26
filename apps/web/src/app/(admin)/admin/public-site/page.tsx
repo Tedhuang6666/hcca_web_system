@@ -66,6 +66,7 @@ import {
   readSpecialAgreementContent,
 } from "@/lib/specialAgreement";
 import { LUNCH_GUIDE_MARKDOWN } from "@/lib/article-content";
+import { getExamScopeDefaultSection } from "@/lib/exam-scope";
 
 type Tab = "homepage" | "system" | "contact" | "special" | "nav" | "pages" | "links" | "officers" | "advanced";
 
@@ -82,6 +83,8 @@ const EMPTY_PAGE_DRAFT = {
   is_published: false,
   cover_image_url: "",
   cover_image_alt: "",
+  layout_config: {} as Record<string, unknown>,
+  exam_scope_default_section: "",
 };
 
 /** 後台導覽列分頁的群組顯示順序。 */
@@ -792,6 +795,8 @@ export default function PublicSiteAdminPage() {
       is_published: page.is_published,
       cover_image_url: page.cover_image_url ?? "",
       cover_image_alt: page.cover_image_alt ?? "",
+      layout_config: page.layout_config ?? {},
+      exam_scope_default_section: getExamScopeDefaultSection(page.layout_config) ?? "",
     });
   };
 
@@ -813,13 +818,20 @@ export default function PublicSiteAdminPage() {
       return;
     }
     try {
+      const { exam_scope_default_section, ...pageDraftData } = pageDraft;
+      const layoutConfig = { ...pageDraft.layout_config };
+      if (exam_scope_default_section) {
+        layoutConfig.exam_scope_default_section = exam_scope_default_section;
+      } else {
+        delete layoutConfig.exam_scope_default_section;
+      }
       const body = {
-        ...pageDraft,
+        ...pageDraftData,
         slug: pageDraft.slug.trim(),
         title: pageDraft.title.trim(),
         summary: pageDraft.summary || null,
         nav_label: pageDraft.nav_label || null,
-        layout_config: {},
+        layout_config: layoutConfig,
         content_blocks: {},
         cover_image_url: pageDraft.cover_image_url || null,
         cover_image_alt: pageDraft.cover_image_alt || null,
@@ -1636,6 +1648,22 @@ export default function PublicSiteAdminPage() {
             <Field label="內文 Markdown" hint="用 ## 建立可跳轉的主要段落；按「加入照片」即可上傳並插入圖片。">
               <ArticleMarkdownEditor value={pageDraft.body_md} onChange={(value) => setPageDraft({ ...pageDraft, body_md: value })} rows={18} />
             </Field>
+            {pageDraft.page_kind === "article" && (
+              <Field
+                label="考試範圍預設段次"
+                hint="僅套用在含有科目、年級與段次結構的文章；登入學生會再自動帶入年級。"
+              >
+                <Select
+                  value={pageDraft.exam_scope_default_section}
+                  onChange={(e) => setPageDraft({ ...pageDraft, exam_scope_default_section: e.target.value })}
+                >
+                  <option value="">不預設段次</option>
+                  <option value="一段">一段</option>
+                  <option value="二段">二段</option>
+                  <option value="三段">三段</option>
+                </Select>
+              </Field>
+            )}
             <ImageField
               label="封面照片"
               hint="選填。會顯示在文章專欄首圖與文章頁首；可貼網址或直接上傳。"
