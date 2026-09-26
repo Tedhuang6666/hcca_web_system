@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import SystemAdminTabs from "@/components/admin/SystemAdminTabs";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
 import { ApiError, systemApi, type SystemDiagnostics, type VersionStatus } from "@/lib/api";
 import { isFatalApiStatus } from "@/lib/polling";
@@ -117,6 +118,7 @@ export default function DiagnosticsPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 p-6">
+      <SystemAdminTabs activeTab="diagnostics" />
       <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Activity className="text-[var(--primary)]" size={22} aria-hidden />

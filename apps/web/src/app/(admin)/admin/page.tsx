@@ -7,11 +7,9 @@ import {
   AlertTriangle,
   BookUser,
   ClipboardList,
-  Database,
   FileUp,
   Puzzle,
   Settings,
-  Shield,
   SlidersHorizontal,
   Users,
   type LucideIcon,
@@ -106,13 +104,10 @@ const QUICK_ACTIONS: QuickAction[] = [
   { href: "/admin/permissions",  icon: BookUser,   label: "權限管理",   desc: "組織職位與使用者權限指派" },
   { href: "/admin/cadre-import", icon: FileUp,     label: "幹部名冊匯入", desc: "依通訊錄建立班級、職位與權限" },
   { href: "/admin/classes",      icon: Users,      label: "班級管理",   desc: "班級名冊、幹部與學年度設定" },
-  { href: "/admin/system",       icon: Shield,     label: "系統防護",   desc: "維護模式、限流與封鎖規則" },
   { href: "/admin/settings",     icon: Settings,   label: "系統設定",   desc: "全站設定與功能參數調整" },
-  { href: "/admin/modules",      icon: Puzzle,     label: "模組維護",   desc: "查看各模組狀態、手動恢復" },
+  { href: "/admin/system",       icon: Activity,   label: "系統營運",   desc: "防護、診斷、效能觀測與模組維護", requiredPermission: "admin:all" },
   { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", desc: "管理角色視角與專屬導覽", requiredPermission: "admin:all" },
   { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌", desc: "追蹤所有操作紀錄" },
-  { href: "/admin/diagnostics",  icon: Database,   label: "系統診斷",   desc: "資料庫、Redis 與 Celery 健康度" },
-  { href: "/admin/system/observability", icon: Activity, label: "效能觀測", desc: "全站 PSI、真實使用者、錯誤與慢查詢" },
 ];
 
 /* ── 主頁面 ──────────────────────────────────────────────────────────────── */

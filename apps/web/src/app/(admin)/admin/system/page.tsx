@@ -29,6 +29,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import SystemAdminTabs from "@/components/admin/SystemAdminTabs";
 import { useResilientPoll, type PollOutcome } from "@/hooks/useResilientPoll";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
@@ -588,6 +589,7 @@ export default function SystemDefensePage() {
 
   return (
     <main className="mx-auto max-w-7xl p-4 md:p-6">
+      <SystemAdminTabs activeTab="defense" />
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">

@@ -5,6 +5,7 @@ import { Gauge, LoaderCircle, RefreshCw } from "lucide-react";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { authFetch, post, request } from "@/lib/api/core";
 import { apiUrl } from "@/lib/config";
+import SystemAdminTabs from "@/components/admin/SystemAdminTabs";
 
 type HealthItem = { name: string; healthy: boolean; detail?: Record<string, unknown> };
 type AuditItem = { id: string; title: string; score: number | null; numeric_value: number | null; display_value: string | null };
@@ -281,6 +282,7 @@ export default function ObservabilityPage() {
   }
 
   return <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
+    <SystemAdminTabs activeTab="observability" />
     <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: "var(--border)" }}>
       <div><p className="text-sm" style={{ color: "var(--text-muted)" }}>Production observability</p><h1 className="mt-1 text-2xl font-semibold sm:text-3xl">系統可觀測性</h1><p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>追蹤 sitemap 全部公開頁面、登入後真實使用者體驗，以及部署端的錯誤與慢查詢。</p></div>
       <div className="flex flex-col items-stretch gap-2 sm:items-end">
