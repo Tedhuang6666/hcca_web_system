@@ -389,6 +389,12 @@ async function blockedRedirect(req: NextRequest) {
 function publicAssetCacheControl(pathname: string): string | null {
   if (pathname === "/sw.js") return "public, max-age=0, must-revalidate";
   if (pathname === "/theme.v1.js") return "public, max-age=31536000, immutable";
+  // Social crawlers must be able to fetch OG images without depending on the
+  // maintenance/access checks used by HTML pages. Cache the generated PNG at
+  // the edge so repeated crawler retries do not rerun Satori and the API read.
+  if (pathname === "/opengraph-image" || pathname.startsWith("/og/")) {
+    return "public, max-age=300, s-maxage=86400, stale-while-revalidate=3600";
+  }
   if (
     pathname === "/robots.txt"
     || pathname === "/manifest.webmanifest"
