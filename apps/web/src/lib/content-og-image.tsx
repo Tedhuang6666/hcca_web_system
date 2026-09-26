@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 import { BRANDING } from "@/lib/branding";
+import { OG_FONT_FAMILY, ogFontOptions } from "@/lib/og-font";
 
 export const CONTENT_OG_SIZE = {
   width: 1200,
@@ -40,8 +41,11 @@ async function emblemSource() {
 }
 
 export async function renderContentOgImage({ title, category, date }: ContentOgImageInput) {
-  const emblemSrc = await emblemSource();
-  const publishedDate = formatDate(date);
+  const [emblemSrc, publishedDate, fonts] = await Promise.all([
+    emblemSource(),
+    formatDate(date),
+    ogFontOptions(),
+  ]);
 
   return new ImageResponse(
     (
@@ -55,7 +59,7 @@ export async function renderContentOgImage({ title, category, date }: ContentOgI
           padding: 68,
           background: BRANDING.themeColor,
           color: "#f8fafc",
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -126,6 +130,6 @@ export async function renderContentOgImage({ title, category, date }: ContentOgI
         </div>
       </div>
     ),
-    CONTENT_OG_SIZE,
+    { ...CONTENT_OG_SIZE, fonts },
   );
 }

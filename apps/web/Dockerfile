@@ -19,6 +19,7 @@ COPY apps/web/package.json apps/web/package-lock.json* apps/web/.npmrc* ./
 RUN npm ci
 
 COPY apps/web/ .
+COPY fonts/LXGWWenKaiTC-Regular.ttf ./fonts/LXGWWenKaiTC-Regular.ttf
 
 # 建置時注入公開環境變數；API 空值代表使用同源 /api 代理
 ARG NEXT_PUBLIC_API_URL=
@@ -61,6 +62,7 @@ WORKDIR /app
 
 # 複製建置產出
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/fonts/LXGWWenKaiTC-Regular.ttf ./fonts/LXGWWenKaiTC-Regular.ttf
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
