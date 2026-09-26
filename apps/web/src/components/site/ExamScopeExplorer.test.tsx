@@ -46,10 +46,13 @@ describe("ExamScopeExplorer", () => {
   it("uses the configured stage by default and restores it after reset", () => {
     render(<ExamScopeExplorer scope={scope} defaultSection="一段" />);
 
+    expect(screen.getByRole("button", { name: "依年級" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "一段" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "依科目" }));
     fireEvent.click(screen.getByRole("button", { name: "二段" }));
     fireEvent.click(screen.getByRole("button", { name: "重設查詢" }));
 
+    expect(screen.getByRole("button", { name: "依年級" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "一段" })).toHaveAttribute("aria-pressed", "true");
   });
 
