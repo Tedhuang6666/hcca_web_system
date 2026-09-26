@@ -89,6 +89,7 @@ from api.services.incident import (
     get_incident,
     list_incident_events,
     list_incidents,
+    persist_client_error_incident,
 )
 from api.services.recovery_agent import RecoveryAction, execute_recovery
 
@@ -1490,6 +1491,7 @@ class RecentErrorItem(BaseModel):
     path: str
     status_code: int
     traceback_head: str
+    context: dict[str, object] = Field(default_factory=dict)
     first_seen: float
     last_seen: float
     occurrences: int
@@ -1703,6 +1705,21 @@ async def recover_incident(
     }
 
 
+class ClientErrorContext(BaseModel):
+    """有限且無 query string 的瀏覽器診斷欄位。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    release: str | None = Field(None, max_length=128)
+    language: str | None = Field(None, max_length=32)
+    timezone: str | None = Field(None, max_length=100)
+    viewport: str | None = Field(None, max_length=32)
+    connection_type: str | None = Field(None, max_length=32)
+    referrer_path: str | None = Field(None, max_length=500)
+    online: bool | None = None
+    visibility_state: str | None = Field(None, max_length=32)
+
+
 class ClientErrorReport(BaseModel):
     """瀏覽器 runtime error 的最小且有長度限制的回報格式。"""
 
@@ -1712,6 +1729,7 @@ class ClientErrorReport(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     stack: str = Field(default="", max_length=6000)
     pathname: str = Field(default="", max_length=500)
+    context: ClientErrorContext = Field(default_factory=ClientErrorContext)
 
 
 @public_router.post(
@@ -1722,11 +1740,25 @@ class ClientErrorReport(BaseModel):
 )
 async def report_client_error(body: ClientErrorReport, request: Request) -> dict[str, str]:
     """接收匿名前端錯誤；不依賴登入，才能記錄登入頁與公開頁面的崩潰。"""
+    path = body.pathname.split("?", 1)[0].split("#", 1)[0]
     error_id = await record_client_error(
         message=body.message,
         stack=body.stack,
         scope=body.scope,
-        path=body.pathname,
+        path=path,
+        request_id=getattr(request.state, "request_id", None),
+        trace_id=getattr(request.state, "trace_id", None),
+        client_ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        context=body.context.model_dump(exclude_none=True),
+    )
+    await persist_client_error_incident(
+        error_id=error_id,
+        message=body.message,
+        stack=body.stack,
+        scope=body.scope,
+        path=path,
+        context=body.context.model_dump(exclude_none=True),
         request_id=getattr(request.state, "request_id", None),
         trace_id=getattr(request.state, "trace_id", None),
         client_ip=request.client.host if request.client else None,

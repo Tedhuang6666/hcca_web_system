@@ -67,12 +67,14 @@ async def test_record_client_error_is_not_classified_as_server_exception(
         stack="Error: browser failure",
         scope="window.error",
         path="/admin/system",
+        context={"release": "web@abc123", "viewport": "390x844"},
     )
 
     items = await isolated_error_audit.get_recent_errors()
     assert len(items) == 1
     assert items[0]["category"] == "client"
     assert items[0]["status_code"] == 0
+    assert items[0]["context"] == {"release": "web@abc123", "viewport": "390x844"}
 
 
 async def test_recent_errors_normalize_legacy_client_events(
@@ -145,24 +147,34 @@ async def test_client_error_endpoint_is_anonymous_and_returns_error_id(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    received: dict[str, object] = {}
+
     async def record(**_kwargs) -> str:
         return "client-error-1"
+
+    async def persist(**kwargs) -> None:
+        received.update(kwargs)
 
     from api.routers import admin_system
 
     monkeypatch.setattr(admin_system, "record_client_error", record)
+    monkeypatch.setattr(admin_system, "persist_client_error_incident", persist)
     response = await client.post(
         "/system/client-errors",
         json={
             "scope": "window.error",
             "message": "Something broke",
             "stack": "Error: Something broke",
-            "pathname": "/documents",
+            "pathname": "/documents?token=should-not-be-retained#section",
+            "context": {"release": "web@abc123", "viewport": "390x844", "online": True},
         },
     )
 
     assert response.status_code == 202
     assert response.json()["error_id"] == "client-error-1"
+    assert received["error_id"] == "client-error-1"
+    assert received["path"] == "/documents"
+    assert received["context"] == {"release": "web@abc123", "viewport": "390x844", "online": True}
 
 
 async def test_validation_errors_are_recorded(

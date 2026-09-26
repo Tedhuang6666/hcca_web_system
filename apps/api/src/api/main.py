@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+import traceback
 import uuid
 from asyncio import timeout
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -549,6 +550,14 @@ def create_app() -> FastAPI:
                     category=incident_category,
                     trace_id=getattr(request.state, "trace_id", None),
                     request_id=getattr(request.state, "request_id", None),
+                    details={
+                        "method": request.method,
+                        "client_ip": request.client.host if request.client else None,
+                        "user_agent": request.headers.get("user-agent"),
+                        "traceback_head": "".join(
+                            traceback.format_exception(type(exc), exc, exc.__traceback__)
+                        ),
+                    },
                 )
         except Exception:
             logger.exception("Error audit pipeline failed id=%s", error_id)

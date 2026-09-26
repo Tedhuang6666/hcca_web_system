@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { installGlobalClientErrorReporter } from "./client-error-reporter";
+import { installGlobalClientErrorReporter, reportClientError } from "./client-error-reporter";
 
 describe("client error reporter", () => {
   it("filters known third-party, optional asset, and WebView noise", () => {
@@ -26,5 +26,24 @@ describe("client error reporter", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     uninstall();
+  });
+
+  it("sends bounded browser context with each report", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error_id: "client-error-1" }), { status: 202 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await reportClientError({ message: "Browser failed", pathname: "/documents" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(payload.pathname).toBe("/documents");
+    expect(payload.context).toMatchObject({
+      language: expect.any(String),
+      viewport: expect.stringMatching(/^\d+x\d+$/),
+      online: expect.any(Boolean),
+      visibility_state: expect.any(String),
+    });
   });
 });

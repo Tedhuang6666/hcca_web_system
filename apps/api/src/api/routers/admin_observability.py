@@ -1,8 +1,9 @@
 # ruff: noqa: E702
 import asyncio
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,7 @@ from api.core.metrics import get_celery_stats, get_redis_stats
 from api.core.query_audit import get_slow_queries
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
+from api.services.incident import export_incidents_csv, incident_summary, list_incidents
 from api.services.observability import (
     client_route_analytics,
     collect_crux_daily,
@@ -69,11 +71,21 @@ async def errors(
     session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
 ) -> dict[str, Any]:
     recent = await get_recent_errors(top=50)
+    incidents = await list_incidents(session, limit=200)
     slow_queries = get_slow_queries(top=50)
     sentry = (await provider_snapshot()).get("sentry", {})
+    active_statuses = {"open", "investigating", "mitigated", "monitoring", "regression"}
+    active_issues = sum(incident.status in active_statuses for incident in incidents)
     return {
-        "new_issues": len(recent),
-        "regressions": None,
+        "new_issues": active_issues,
+        "regressions": sum(incident.status == "regression" for incident in incidents),
+        "resolved_issues": sum(incident.status == "resolved" for incident in incidents),
+        "auto_resolve_after_hours": (
+            settings.INCIDENT_AUTO_RESOLVE_AFTER_HOURS
+            if settings.INCIDENT_AUTO_RESOLVE_ENABLED
+            else None
+        ),
+        "incidents": [incident_summary(incident) for incident in incidents],
         "affected_users": None,
         "error_rate": None,
         "top_exceptions": recent,
@@ -82,6 +94,19 @@ async def errors(
         "slow_query_source": "in_memory_query_audit",
         "source": "sentry",
     }
+
+
+@router.get("/errors/export.csv", response_class=Response, summary="匯出錯誤事故 CSV")
+async def export_errors_csv(
+    session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
+) -> Response:
+    content = await export_incidents_csv(session)
+    filename = f"incident_report_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content="\ufeff" + content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/real-users")

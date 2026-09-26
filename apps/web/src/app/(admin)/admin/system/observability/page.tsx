@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Gauge, LoaderCircle, RefreshCw } from "lucide-react";
-import { post, request } from "@/lib/api/core";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import { authFetch, post, request } from "@/lib/api/core";
+import { apiUrl } from "@/lib/config";
 
 type HealthItem = { name: string; healthy: boolean; detail?: Record<string, unknown> };
 type AuditItem = { id: string; title: string; score: number | null; numeric_value: number | null; display_value: string | null };
@@ -32,7 +34,39 @@ type Overview = {
   slow_queries: SlowQuery[];
   providers?: Providers;
 };
-type ErrorsData = { new_issues: number; regressions: number | null; top_exceptions: RecentError[]; slow_transactions: SlowQuery[]; sentry?: { configured?: boolean; error?: string; stats?: unknown }; slow_query_source?: string };
+type IncidentStatus = "open" | "investigating" | "mitigated" | "monitoring" | "resolved" | "ignored" | "regression";
+type Incident = {
+  id: string;
+  error_id: string;
+  severity: "P0" | "P1" | "P2" | "P3";
+  status: IncidentStatus;
+  service: string;
+  environment: string;
+  release_version: string | null;
+  title: string;
+  summary: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  occurrence_count: number;
+  trace_id: string | null;
+  request_id: string | null;
+  automatic_recovery_attempted: boolean;
+  automatic_recovery_succeeded: boolean | null;
+  recovery_action: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+};
+type ErrorsData = {
+  new_issues: number;
+  regressions: number | null;
+  resolved_issues?: number;
+  auto_resolve_after_hours?: number | null;
+  incidents?: Incident[];
+  top_exceptions: RecentError[];
+  slow_transactions: SlowQuery[];
+  sentry?: { configured?: boolean; error?: string; stats?: unknown };
+  slow_query_source?: string;
+};
 type BudgetStatus = "good" | "needs_improvement" | "poor" | "pending";
 type Percentiles = { p50_ms: number | null; p75_ms: number | null; p95_ms: number | null; p99_ms: number | null };
 type ApiLatencyBudget = Percentiles & { budget_ms: number; status: BudgetStatus };
@@ -119,6 +153,11 @@ function normalizeTabData(tab: Tab, value: ErrorsData | RealUsersData | Performa
     const raw = (value ?? {}) as Partial<ErrorsData>;
     return {
       ...raw,
+      new_issues: raw.new_issues ?? 0,
+      regressions: raw.regressions ?? 0,
+      resolved_issues: raw.resolved_issues ?? 0,
+      auto_resolve_after_hours: raw.auto_resolve_after_hours ?? null,
+      incidents: asArray<Incident>(raw.incidents),
       top_exceptions: asArray<RecentError>(raw.top_exceptions),
       slow_transactions: asArray<SlowQuery>(raw.slow_transactions),
     } as ErrorsData;
@@ -295,8 +334,86 @@ function budgetStatus(value: number | null | undefined, good: number, needs: num
   return value <= good ? "good" : value <= needs ? "needs_improvement" : "poor";
 }
 
+function incidentStatusLabel(status: IncidentStatus) {
+  return {
+    open: "待處理",
+    investigating: "調查中",
+    mitigated: "已緩解",
+    monitoring: "觀察中",
+    resolved: "已結案",
+    ignored: "已忽略",
+    regression: "再次發生",
+  }[status];
+}
+
+function incidentTone(status: IncidentStatus) {
+  if (status === "resolved" || status === "ignored") return "var(--success)";
+  if (status === "mitigated" || status === "monitoring") return "var(--warning)";
+  return "var(--error)";
+}
+
 function ErrorsPanel({ data }: { data: ErrorsData }) {
-  return <div className="space-y-6"><section className="grid gap-3 sm:grid-cols-3"><SummaryMetric label="最近錯誤" value={data.new_issues} detail="來自跨 worker 錯誤緩衝" tone={data.new_issues ? "var(--error)" : "var(--success)"} /><SummaryMetric label="Sentry" value={data.sentry?.configured ? "已連線" : "未設定"} detail={data.sentry?.error ?? "錯誤資料仍可由本機緩衝查看"} /><SummaryMetric label="慢查詢來源" value="即時" detail={data.slow_query_source ?? "query audit"} /></section><DataList title="近期錯誤" empty="目前沒有被保留的錯誤" items={data.top_exceptions} render={(item) => <div><div className="font-medium">{item.exc_type || item.category || "未分類錯誤"}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{item.path || "—"} · {item.occurrences ?? 1} 次 · HTTP {item.status_code ?? "—"}</div><div className="mt-1 truncate text-sm" style={{ color: "var(--text-secondary)" }}>{item.message || "—"}</div></div>} /><DataList title="慢查詢" empty="目前沒有超過門檻的慢查詢" items={data.slow_transactions} render={(item) => <div><div className="font-mono text-xs">{item.template}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最高 {formatNumber(item.max_ms, " ms")} · {item.occurrences} 次 · {item.paths?.[0]?.path || "—"}</div></div>} /></div>;
+  const incidents = data.incidents ?? [];
+  const autoResolveDetail = data.auto_resolve_after_hours
+    ? `連續 ${data.auto_resolve_after_hours} 小時未再發生會自動結案`
+    : "自動結案目前已停用";
+
+  return <div className="space-y-6">
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <SummaryMetric label="進行中議題" value={data.new_issues} detail={autoResolveDetail} tone={data.new_issues ? "var(--error)" : "var(--success)"} />
+      <SummaryMetric label="再次發生" value={data.regressions ?? 0} detail="結案後重新出現的同一錯誤" tone={data.regressions ? "var(--warning)" : "var(--success)"} />
+      <SummaryMetric label="Sentry" value={data.sentry?.configured ? "已連線" : "未設定"} detail={data.sentry?.error ?? "錯誤資料仍會寫入本機事故庫"} />
+      <SummaryMetric label="慢查詢來源" value="即時" detail={data.slow_query_source ?? "query audit"} />
+    </section>
+
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold">可追蹤事故</h2>
+          <p className="mt-1 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>
+            每筆會保留出現次數、版本、追蹤 ID 與事件歷程；已解除且持續未再發生的議題會自動結案。
+          </p>
+        </div>
+        <AnimatedDownloadButton
+          className="min-h-11 rounded-md border px-3 text-sm font-semibold hover:bg-[var(--bg-hover)]"
+          style={{ borderColor: "var(--border-strong)", color: "var(--text-primary)" }}
+          request={() => authFetch(apiUrl("/admin/system/observability/errors/export.csv"), { credentials: "include" })}
+          filename={`incident_report_${new Date().toISOString().slice(0, 10)}.csv`}
+          label="下載錯誤報表 CSV"
+          completeLabel="已下載"
+          errorLabel="重試下載" />
+      </div>
+      {incidents.length === 0 ? <EmptyState title="目前沒有可追蹤事故" detail="新的 API、背景工作與瀏覽器錯誤會在這裡建立可結案的議題。" /> : (
+        <div className="divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
+          {incidents.map((incident) => <article key={incident.id} className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="min-w-0 break-words font-medium">{incident.title}</h3>
+                <span className="rounded-full border px-2 py-0.5 text-xs font-semibold" style={{ borderColor: incidentTone(incident.status), color: incidentTone(incident.status) }}>{incidentStatusLabel(incident.status)}</span>
+                <span className="rounded-full border px-2 py-0.5 text-xs font-semibold" style={{ borderColor: "var(--border-strong)", color: "var(--text-secondary)" }}>{incident.severity}</span>
+              </div>
+              {incident.summary && <p className="mt-1 break-words text-sm" style={{ color: "var(--text-secondary)" }}>{incident.summary}</p>}
+              <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <div><dt className="sr-only">服務</dt><dd>{incident.service} · {incident.environment}</dd></div>
+                <div><dt className="sr-only">出現次數</dt><dd>{incident.occurrence_count} 次 · 最近 {formatDate(incident.last_seen_at)}</dd></div>
+                {incident.release_version && <div><dt className="sr-only">版本</dt><dd className="font-mono">版本 {incident.release_version}</dd></div>}
+                {incident.request_id && <div><dt className="sr-only">請求 ID</dt><dd className="font-mono">req {incident.request_id}</dd></div>}
+                {incident.trace_id && <div><dt className="sr-only">追蹤 ID</dt><dd className="font-mono">trace {incident.trace_id}</dd></div>}
+              </dl>
+              {incident.status === "resolved" && incident.resolution_note && <p className="mt-2 text-xs" style={{ color: "var(--success)" }}>{incident.resolution_note}</p>}
+            </div>
+            <div className="text-xs lg:text-right" style={{ color: "var(--text-muted)" }}>
+              <div>首次 {formatDate(incident.first_seen_at)}</div>
+              {incident.resolved_at && <div className="mt-1">結案 {formatDate(incident.resolved_at)}</div>}
+            </div>
+          </article>)}
+        </div>
+      )}
+    </section>
+
+    <DataList title="近期原始錯誤" empty="目前沒有被保留的錯誤" items={data.top_exceptions} render={(item) => <div><div className="font-medium">{item.exc_type || item.category || "未分類錯誤"}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{item.path || "—"} · {item.occurrences ?? 1} 次 · HTTP {item.status_code ?? "—"}</div><div className="mt-1 truncate text-sm" style={{ color: "var(--text-secondary)" }}>{item.message || "—"}</div></div>} />
+    <DataList title="慢查詢" empty="目前沒有超過門檻的慢查詢" items={data.slow_transactions} render={(item) => <div><div className="font-mono text-xs">{item.template}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最高 {formatNumber(item.max_ms, " ms")} · {item.occurrences} 次 · {item.paths?.[0]?.path || "—"}</div></div>} />
+  </div>;
 }
 
 function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: RealUsersData; windowHours: number; onWindowHoursChange: (value: number) => void }) {
