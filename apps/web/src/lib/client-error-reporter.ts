@@ -38,6 +38,37 @@ function limit(value: string | undefined, length: number): string {
 
 const recentReports = new Map<string, number>();
 
+type BrowserConnection = { effectiveType?: string; type?: string };
+
+function referrerPath(): string | undefined {
+  if (!document.referrer) return undefined;
+  try {
+    const referrer = new URL(document.referrer);
+    return referrer.origin === window.location.origin ? referrer.pathname : referrer.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function diagnosticContext(): Record<string, string | boolean> {
+  const navigatorWithConnection = navigator as Navigator & { connection?: BrowserConnection };
+  const release = process.env.NEXT_PUBLIC_APP_RELEASE
+    || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA
+    || process.env.NEXT_PUBLIC_APP_VERSION;
+  return {
+    ...(release ? { release: release.slice(0, 128) } : {}),
+    language: navigator.language.slice(0, 32),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone.slice(0, 100),
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    ...(navigatorWithConnection.connection?.effectiveType || navigatorWithConnection.connection?.type
+      ? { connection_type: navigatorWithConnection.connection.effectiveType || navigatorWithConnection.connection.type || "unknown" }
+      : {}),
+    ...(referrerPath() ? { referrer_path: referrerPath()! } : {}),
+    online: navigator.onLine,
+    visibility_state: document.visibilityState,
+  };
+}
+
 function csrfHeader(): Record<string, string> {
   if (typeof document === "undefined") return {};
   const token = document.cookie
@@ -72,6 +103,7 @@ export function reportClientError(input: ClientErrorInput): Promise<ClientErrorR
     stack: limit(input.stack, MAX_STACK_LENGTH),
     scope: limit(input.scope || "runtime", MAX_SCOPE_LENGTH),
     pathname: limit(input.pathname || window.location.pathname, MAX_PATH_LENGTH),
+    context: diagnosticContext(),
   });
 
   return fetch(apiUrl("/system/client-errors"), {
@@ -189,11 +221,20 @@ export function installGlobalClientErrorReporter(): () => void {
     const details = errorDetails(event.reason);
     reportClientError({ ...details, scope: "unhandledrejection" });
   };
+  const onSecurityPolicyViolation = (event: SecurityPolicyViolationEvent) => {
+    reportClientError({
+      message: `CSP blocked ${event.effectiveDirective || "resource"}: ${event.blockedURI || "unknown"}`,
+      scope: "securitypolicyviolation",
+      dedupeKey: `${event.effectiveDirective}:${event.blockedURI}`,
+    });
+  };
 
   window.addEventListener("error", onError, true);
   window.addEventListener("unhandledrejection", onUnhandledRejection);
+  window.addEventListener("securitypolicyviolation", onSecurityPolicyViolation);
   return () => {
     window.removeEventListener("error", onError, true);
     window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    window.removeEventListener("securitypolicyviolation", onSecurityPolicyViolation);
   };
 }

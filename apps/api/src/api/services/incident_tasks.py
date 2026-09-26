@@ -11,6 +11,7 @@ from api.core.config import settings
 from api.core.database import task_session
 from api.services.incident import (
     append_incident_event,
+    auto_resolve_stale_incidents,
     create_error_fingerprint,
     get_incident,
     incident_severity,
@@ -92,6 +93,18 @@ async def _run_auto_recovery(
         await session.commit()
 
 
+async def _resolve_stale_incidents() -> int:
+    if not settings.INCIDENT_DB_ENABLED or not settings.INCIDENT_AUTO_RESOLVE_ENABLED:
+        return 0
+    async with task_session() as session:
+        resolved = await auto_resolve_stale_incidents(
+            session,
+            inactivity_hours=settings.INCIDENT_AUTO_RESOLVE_AFTER_HOURS,
+        )
+        await session.commit()
+        return len(resolved)
+
+
 @shared_task(
     name="api.services.incident_tasks.persist_background_incident",
     ignore_result=True,
@@ -133,4 +146,12 @@ def run_auto_recovery(*, incident_id: str, action: str, target: str) -> None:
     )
 
 
-__all__ = ["persist_background_incident", "run_auto_recovery"]
+@shared_task(
+    name="api.services.incident_tasks.resolve_stale_incidents",
+    ignore_result=True,
+)
+def resolve_stale_incidents() -> None:
+    asyncio.run(_resolve_stale_incidents())
+
+
+__all__ = ["persist_background_incident", "resolve_stale_incidents", "run_auto_recovery"]

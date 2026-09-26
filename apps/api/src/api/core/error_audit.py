@@ -11,7 +11,7 @@ import time
 import traceback
 import uuid
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from api.core.config import settings
@@ -97,6 +97,7 @@ class ErrorSample:
     trace_id: str | None = None
     client_ip: str | None = None
     user_agent: str | None = None
+    context: dict[str, object] = field(default_factory=dict)
 
     def touch(
         self,
@@ -104,6 +105,7 @@ class ErrorSample:
         message: str,
         status_code: int,
         traceback_head: str,
+        context: dict[str, object] | None = None,
     ) -> None:
         self.occurrences += 1
         self.last_seen = time.time()
@@ -112,6 +114,8 @@ class ErrorSample:
         self.status_code = status_code
         if traceback_head:
             self.traceback_head = traceback_head
+        if context:
+            self.context = context
 
 
 _samples: deque[ErrorSample] = deque(maxlen=_RING_MAX)
@@ -141,6 +145,7 @@ def _sample_to_dict(sample: ErrorSample, *, source: str = "memory") -> dict[str,
         "trace_id": sample.trace_id,
         "client_ip": sample.client_ip,
         "user_agent": sample.user_agent,
+        "context": sample.context,
         "category": sample.category,
         "exc_type": sample.exc_type,
         "message": sample.message,
@@ -172,6 +177,7 @@ def _event_payload(sample: ErrorSample) -> dict[str, Any]:
         "client_ip": sample.client_ip,
         "user_agent": sample.user_agent,
         "traceback_head": sample.traceback_head,
+        "context": sample.context,
     }
 
 
@@ -220,6 +226,7 @@ async def _record_event(
     trace_id: str | None,
     client_ip: str | None,
     user_agent: str | None,
+    context: dict[str, object] | None = None,
 ) -> str:
     safe_message = _sanitize_text(message, _MESSAGE_MAX)
     safe_traceback = _sanitize_text(traceback_head, _TRACEBACK_MAX)
@@ -227,7 +234,7 @@ async def _record_event(
     with _lock:
         existing = _index.get(signature)
         if existing is not None:
-            existing.touch(error_id, safe_message, status_code, safe_traceback)
+            existing.touch(error_id, safe_message, status_code, safe_traceback, context)
             existing.request_id = request_id
             existing.trace_id = trace_id
             existing.client_ip = client_ip
@@ -251,6 +258,7 @@ async def _record_event(
                 trace_id=trace_id,
                 client_ip=client_ip,
                 user_agent=user_agent,
+                context=context or {},
             )
             _samples.append(sample)
             _index[signature] = sample
@@ -300,6 +308,7 @@ async def record_error(
     trace_id: str | None = None,
     client_ip: str | None = None,
     user_agent: str | None = None,
+    context: dict[str, object] | None = None,
 ) -> str:
     """記錄一筆錯誤；相同簽章（類別+型別+方法+路徑）只聚合計數。"""
     exc_type = type(exc).__name__
@@ -324,6 +333,7 @@ async def record_error(
         trace_id=trace_id,
         client_ip=client_ip,
         user_agent=user_agent,
+        context=context,
     )
 
 
@@ -337,6 +347,7 @@ async def record_client_error(
     trace_id: str | None = None,
     client_ip: str | None = None,
     user_agent: str | None = None,
+    context: dict[str, object] | None = None,
 ) -> str:
     """記錄瀏覽器 runtime error，與伺服器例外共用同一個 audit pipeline。"""
     return await _record_event(
@@ -352,6 +363,7 @@ async def record_client_error(
         trace_id=trace_id,
         client_ip=client_ip,
         user_agent=user_agent,
+        context=context,
     )
 
 
@@ -375,7 +387,9 @@ def record_background_error(
     with _lock:
         existing = _index.get(signature)
         if existing is not None:
-            existing.touch(error_id, safe_message, 500, safe_traceback)
+            existing.touch(
+                error_id, safe_message, 500, safe_traceback, {"task": task, "task_id": task_id}
+            )
             existing.request_id = task_id
             existing.trace_id = trace_id
             sample = existing
@@ -395,6 +409,7 @@ def record_background_error(
                 last_seen=now,
                 request_id=task_id,
                 trace_id=trace_id,
+                context={"task": task, "task_id": task_id},
             )
             _samples.append(sample)
             _index[signature] = sample
@@ -487,6 +502,7 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
                     "path": str(item.get("path") or ""),
                     "status_code": status_code,
                     "traceback_head": str(item.get("traceback_head") or ""),
+                    "context": item.get("context") if isinstance(item.get("context"), dict) else {},
                     "first_seen": float(item.get("first_seen") or occurred_at),
                     "last_seen": occurred_at,
                     "occurrences": 1,
@@ -508,6 +524,9 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
                             "traceback_head": str(
                                 item.get("traceback_head") or current["traceback_head"]
                             ),
+                            "context": item.get("context")
+                            if isinstance(item.get("context"), dict)
+                            else current["context"],
                             "last_seen": occurred_at,
                         }
                     )
@@ -566,6 +585,7 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
             "path": path,
             "status_code": status_code,
             "traceback_head": str(item.get("traceback_head") or ""),
+            "context": item.get("context") if isinstance(item.get("context"), dict) else {},
             "first_seen": occurred_at,
             "last_seen": occurred_at,
             "occurrences": 1,

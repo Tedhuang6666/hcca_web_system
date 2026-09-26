@@ -209,6 +209,8 @@ class Settings(BaseSettings):
     # --- Incident persistence / recovery guardrails ---
     INCIDENT_DB_ENABLED: bool = True
     INCIDENT_AUTO_RECOVERY_ENABLED: bool = False
+    INCIDENT_AUTO_RESOLVE_ENABLED: bool = True
+    INCIDENT_AUTO_RESOLVE_AFTER_HOURS: int = Field(default=24, ge=1, le=720)
     RECOVERY_AGENT_URL: str = ""
     RECOVERY_AGENT_TOKEN: str = ""
     RECOVERY_MAX_RESTARTS_PER_HOUR: int = Field(default=2, ge=1, le=10)

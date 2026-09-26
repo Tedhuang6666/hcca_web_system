@@ -417,3 +417,14 @@ async def test_public_performance_results_are_recorded_for_both_strategies(
     assert response.json()["created"] == 2
     rows = (await db_session.scalars(select(PageSpeedRun))).all()
     assert {row.strategy for row in rows} == {"public-mobile", "public-desktop"}
+
+
+async def test_error_report_export_returns_csv(admin_user, authed_client_factory) -> None:
+    client = authed_client_factory(admin_user)
+
+    response = await client.get("/admin/system/observability/errors/export.csv")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert 'attachment; filename="incident_report_' in response.headers["content-disposition"]
+    assert response.text.startswith("\ufeffincident_id,error_id,status")

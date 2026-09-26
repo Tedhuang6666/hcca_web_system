@@ -142,6 +142,10 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
 ]
 
 celery_app.conf.beat_schedule = {
+    "resolve-stale-incidents-hourly": {
+        "task": "api.services.incident_tasks.resolve_stale_incidents",
+        "schedule": 3600.0,
+    },
     "observability-pagespeed-every-6-hours": {
         "task": "api.services.observability_tasks.collect_pagespeed_scheduled",
         "schedule": 21600.0,
