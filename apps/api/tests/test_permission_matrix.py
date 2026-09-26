@@ -149,6 +149,10 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     # 選舉（公開資訊與即時牆）
     ("/elections/public", "GET"),
     ("/elections/public/{election_ref}/live", "GET"),
+    # 校商公開商品目錄與商品詳情
+    ("/shop/catalog", "GET"),
+    ("/shop/products", "GET"),
+    ("/shop/products/{product_id}", "GET"),
     # 校外合作地圖（公開）
     ("/partner-map", "GET"),
     ("/partner-map/businesses/{business_id}", "GET"),
