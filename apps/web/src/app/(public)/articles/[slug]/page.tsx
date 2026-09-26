@@ -11,7 +11,7 @@ import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { articleReadingTime, extractArticleHeadings } from "@/lib/article-utils";
 import { BRANDING } from "@/lib/branding";
 import { uploadUrl } from "@/lib/config";
-import { parseExamScopeMarkdown } from "@/lib/exam-scope";
+import { getExamScopeDefaultSection, parseExamScopeMarkdown } from "@/lib/exam-scope";
 import { fetchPublicPage, fetchPublicShellData } from "@/lib/serverFetch";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
 import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
@@ -43,6 +43,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
   const canonical = absoluteUrl(path);
   const coverImageUrl = uploadUrl(page.cover_image_url);
   const examScope = parseExamScopeMarkdown(page.body_md);
+  const examScopeDefaultSection = getExamScopeDefaultSection(page.layout_config);
   const headings = examScope ? [] : extractArticleHeadings(page.body_md, [2]);
   const readingTime = articleReadingTime(page.body_md);
 
@@ -104,7 +105,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
           </header>
 
           {examScope ? (
-            <ExamScopeExplorer scope={examScope} />
+            <ExamScopeExplorer scope={examScope} defaultSection={examScopeDefaultSection} />
           ) : (
             <div className="public-article-reading-layout">
               {headings.length > 0 && (

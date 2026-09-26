@@ -1,9 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpenCheck, ListFilter, RotateCcw } from "lucide-react";
 
-import type { ExamScopeData, ExamScopeEntry } from "@/lib/exam-scope";
+import { usersApi } from "@/lib/api/users";
+import {
+  getExamScopeGradeFromStudentId,
+  type ExamScopeData,
+  type ExamScopeEntry,
+} from "@/lib/exam-scope";
 
 import ArticleMarkdown from "./ArticleMarkdown";
 
@@ -19,12 +24,25 @@ function entryTitle(entry: ExamScopeEntry, order: BrowseOrder): string {
   return variant ? `${entry.subject}（${variant}）` : entry.subject;
 }
 
-export default function ExamScopeExplorer({ scope }: { scope: ExamScopeData }) {
+function resolvedDefaultSection(scope: ExamScopeData, defaultSection: string | null | undefined): string {
+  return defaultSection && scope.sections.includes(defaultSection) ? defaultSection : ALL;
+}
+
+export default function ExamScopeExplorer({
+  scope,
+  defaultSection,
+}: {
+  scope: ExamScopeData;
+  defaultSection?: string | null;
+}) {
   const [order, setOrder] = useState<BrowseOrder>("subject");
   const [subject, setSubject] = useState(ALL);
   const [grade, setGrade] = useState(ALL);
-  const [section, setSection] = useState(ALL);
+  const [section, setSection] = useState(() => resolvedDefaultSection(scope, defaultSection));
+  const [personalGrade, setPersonalGrade] = useState<string | null>(null);
+  const gradeWasChosen = useRef(false);
   const examSections = scope.sections.filter((item) => item !== "計分方式");
+  const defaultSectionValue = resolvedDefaultSection(scope, defaultSection);
 
   const visibleEntries = useMemo(
     () => scope.entries.filter((entry) => (
@@ -35,16 +53,47 @@ export default function ExamScopeExplorer({ scope }: { scope: ExamScopeData }) {
     [grade, scope.entries, section, subject],
   );
   const primaryGroups = order === "subject" ? scope.subjects : scope.grades;
+  const showEntryTitle = order === "subject" ? grade === ALL : subject === ALL;
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void usersApi.me()
+      .then((user) => {
+        const detectedGrade = getExamScopeGradeFromStudentId(user.student_id);
+        if (!isCurrent || gradeWasChosen.current || !detectedGrade || !scope.grades.includes(detectedGrade)) {
+          return;
+        }
+        setPersonalGrade(detectedGrade);
+        setGrade(detectedGrade);
+      })
+      .catch(() => {
+        // 未登入與無法辨認的學號都維持文章設定的預設查詢。
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [scope.grades]);
 
   const reset = () => {
+    gradeWasChosen.current = false;
     setOrder("subject");
     setSubject(ALL);
-    setGrade(ALL);
-    setSection(ALL);
+    setGrade(personalGrade ?? ALL);
+    setSection(defaultSectionValue);
   };
 
   return (
     <section className="exam-scope" aria-labelledby="exam-scope-title">
+      <header className="exam-scope-header">
+        <div className="exam-scope-title-row">
+          <BookOpenCheck size={24} aria-hidden />
+          <h2 id="exam-scope-title">考試範圍速查</h2>
+        </div>
+        <p>依科目、年級與段次快速查詢範圍。</p>
+      </header>
+
       <div className="exam-scope-controls" aria-label="考試範圍查詢條件">
         <fieldset className="exam-scope-order-control">
           <legend>排列方式</legend>
@@ -97,10 +146,13 @@ export default function ExamScopeExplorer({ scope }: { scope: ExamScopeData }) {
           <legend>年級</legend>
           <div className="exam-scope-choice-row">
             <button
-              type="button"
-              className={grade === ALL ? "is-selected" : undefined}
-              aria-pressed={grade === ALL}
-              onClick={() => setGrade(ALL)}
+                type="button"
+                className={grade === ALL ? "is-selected" : undefined}
+                aria-pressed={grade === ALL}
+                onClick={() => {
+                  gradeWasChosen.current = true;
+                  setGrade(ALL);
+                }}
             >
               全部年級
             </button>
@@ -110,7 +162,10 @@ export default function ExamScopeExplorer({ scope }: { scope: ExamScopeData }) {
                 type="button"
                 className={grade === item ? "is-selected" : undefined}
                 aria-pressed={grade === item}
-                onClick={() => setGrade(item)}
+                onClick={() => {
+                  gradeWasChosen.current = true;
+                  setGrade(item);
+                }}
               >
                 {item}
               </button>
@@ -176,7 +231,7 @@ export default function ExamScopeExplorer({ scope }: { scope: ExamScopeData }) {
                       <div className="exam-scope-entries">
                         {sectionEntries.map((entry) => (
                           <article className="exam-scope-entry" key={entry.id}>
-                            <h5>{entryTitle(entry, order)}</h5>
+                            {showEntryTitle && <h5>{entryTitle(entry, order)}</h5>}
                             <ArticleMarkdown markdown={entry.content} />
                           </article>
                         ))}

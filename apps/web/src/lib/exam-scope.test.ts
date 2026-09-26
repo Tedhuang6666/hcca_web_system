@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseExamScopeMarkdown } from "./exam-scope";
+import {
+  getExamScopeDefaultSection,
+  getExamScopeGradeFromStudentId,
+  parseExamScopeMarkdown,
+} from "./exam-scope";
 
 const markdown = `# 國文
 ## 計分方式
@@ -36,5 +40,14 @@ describe("parseExamScopeMarkdown", () => {
 
   it("leaves ordinary articles on the standard reader", () => {
     expect(parseExamScopeMarkdown("# 午餐指南\n## 校內學餐\n今天吃什麼？")).toBeNull();
+  });
+
+  it("reads only supported defaults and known student-id grade prefixes", () => {
+    expect(getExamScopeDefaultSection({ exam_scope_default_section: "一段" })).toBe("一段");
+    expect(getExamScopeDefaultSection({ exam_scope_default_section: "期中考" })).toBeNull();
+    expect(getExamScopeGradeFromStudentId("03101234")).toBe("高三");
+    expect(getExamScopeGradeFromStudentId("04101234")).toBe("高二");
+    expect(getExamScopeGradeFromStudentId("05101234")).toBe("高一");
+    expect(getExamScopeGradeFromStudentId("99101234")).toBeNull();
   });
 });

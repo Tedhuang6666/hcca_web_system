@@ -17,6 +17,13 @@ export type ExamScopeData = {
 const headingPattern = /^(#{1,3})[ \t]+(.+?)[ \t]*$/u;
 const separatorPattern = /^[*_\-]{3,}[ \t]*$/u;
 const gradePattern = /^(高[一二三])/u;
+const examSectionPattern = /^[一二三]段$/u;
+
+const gradeByStudentIdPrefix: Record<string, string> = {
+  "03": "高三",
+  "04": "高二",
+  "05": "高一",
+};
 
 function cleanLabel(value: string): string {
   return value.replace(/\s+#+\s*$/u, "").trim();
@@ -34,6 +41,19 @@ function sectionRank(section: string): number {
 
 function isScoreDetail(label: string): boolean {
   return /(?:考試|成績).*(?:%|％)|(?:%|％).*?(?:考試|成績)/u.test(label);
+}
+
+export function getExamScopeDefaultSection(layoutConfig: unknown): string | null {
+  if (!layoutConfig || typeof layoutConfig !== "object" || Array.isArray(layoutConfig)) {
+    return null;
+  }
+  const section = (layoutConfig as Record<string, unknown>).exam_scope_default_section;
+  return typeof section === "string" && examSectionPattern.test(section) ? section : null;
+}
+
+export function getExamScopeGradeFromStudentId(studentId: string | null | undefined): string | null {
+  const prefix = studentId?.trim().slice(0, 2);
+  return prefix ? gradeByStudentIdPrefix[prefix] ?? null : null;
 }
 
 /**
@@ -106,7 +126,7 @@ export function parseExamScopeMarkdown(markdown: string | null | undefined): Exa
 
   const isExamScope = subjects.length >= 2
     && grades.some((grade) => gradePattern.test(grade))
-    && sections.some((section) => /^[一二三]段$/u.test(section));
+    && sections.some((section) => examSectionPattern.test(section));
 
   return isExamScope ? { entries: contentEntries, subjects, grades, sections } : null;
 }
