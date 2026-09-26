@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_permission
@@ -154,6 +155,9 @@ async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> 
             f"新增 {result.created_count}"
         ),
     )
+    await db.commit()
+    for user_id in result.affected_user_ids:
+        await cache_invalidate_user_permissions(str(user_id))
 
     return ExecuteOut(
         batch_id=result.batch_id,
@@ -195,6 +199,9 @@ async def rollback_rollover(
             f"刪除 {result['deleted_new_assignments']}"
         ),
     )
+    await db.commit()
+    for user_id in result["affected_user_ids"]:
+        await cache_invalidate_user_permissions(str(user_id))
 
     return RollbackOut(
         batch_id=batch_id,

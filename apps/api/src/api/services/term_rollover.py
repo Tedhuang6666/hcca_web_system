@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.audit_log import AuditLog
 from api.models.org import Position, UserPosition
 from api.models.user import User
+from api.services.notification import notify_users
 
 # ── Schemas ────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ class ExecuteResult:
     created_count: int
     started_at: datetime
     finished_at: datetime
+    affected_user_ids: set[uuid.UUID]
 
 
 # ── 內部 helpers ────────────────────────────────────────────────────────────
@@ -114,6 +116,24 @@ async def _position_meta(
         )
     ).all()
     return {r[0]: (r[1], r[2]) for r in rows}
+
+
+async def _notify_affected_users(
+    session: AsyncSession,
+    user_ids: set[uuid.UUID],
+    *,
+    body: str,
+) -> None:
+    """建立換屆後的權限異動通知；快取須在交易提交後才可清除。"""
+    await notify_users(
+        session,
+        user_ids=user_ids,
+        type="system",
+        title="你的系統權限已更新",
+        body=body,
+        link="/notifications",
+        exclude_user_ids=(),
+    )
 
 
 # ── Dry-run ────────────────────────────────────────────────────────────────
@@ -293,17 +313,24 @@ async def execute(
         created_count=len(created_ids),
         started_at=started,
         finished_at=finished,
+        affected_user_ids={item.user_id for item in plan.terminations}
+        | {item.user_id for item in new_assignments},
     )
     snapshot["actor_id"] = actor_id_str
     snapshot["started_at"] = started.isoformat()
     snapshot["finished_at"] = finished.isoformat()
+    await _notify_affected_users(
+        session,
+        result.affected_user_ids,
+        body="系統已完成換屆並重新計算你的可用功能。若認為有誤，請聯絡組織管理員。",
+    )
     return result, snapshot
 
 
 # ── Rollback ──────────────────────────────────────────────────────────────
 
 
-async def rollback(session: AsyncSession, *, batch_id: str) -> dict[str, int]:
+async def rollback(session: AsyncSession, *, batch_id: str) -> dict[str, Any]:
     """還原一次 term_rollover：找對應 audit log 取 snapshot → 恢復舊 end_date、刪新 user_positions。"""
     stmt = (
         select(AuditLog)
@@ -319,11 +346,13 @@ async def rollback(session: AsyncSession, *, batch_id: str) -> dict[str, int]:
 
     snapshot = audit.meta or {}
     restored = 0
+    affected_user_ids: set[uuid.UUID] = set()
     for t in snapshot.get("terminations", []):
         up = await session.get(UserPosition, uuid.UUID(t["user_position_id"]))
         if up is None:
             continue
         up.end_date = date.fromisoformat(t["old_end_date"]) if t["old_end_date"] else None
+        affected_user_ids.add(up.user_id)
         restored += 1
 
     deleted = 0
@@ -331,7 +360,17 @@ async def rollback(session: AsyncSession, *, batch_id: str) -> dict[str, int]:
         up = await session.get(UserPosition, uuid.UUID(new_id))
         if up is None:
             continue
+        affected_user_ids.add(up.user_id)
         await session.delete(up)
         deleted += 1
 
-    return {"restored_terminations": restored, "deleted_new_assignments": deleted}
+    await _notify_affected_users(
+        session,
+        affected_user_ids,
+        body="系統已復原換屆作業並重新計算你的可用功能。若認為有誤，請聯絡組織管理員。",
+    )
+    return {
+        "restored_terminations": restored,
+        "deleted_new_assignments": deleted,
+        "affected_user_ids": sorted(str(user_id) for user_id in affected_user_ids),
+    }

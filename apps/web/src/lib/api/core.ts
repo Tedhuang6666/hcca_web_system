@@ -3,6 +3,7 @@ import { ApiError } from "../api-helpers";
 import { clearAuthCache } from "../auth-cache";
 import { reportClientError } from "../client-error-reporter";
 import { beginApiRequest, recordApiMetric, recordCircuitOpen } from "../client-metrics";
+import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "../permission-events";
 import { apiErrorFromResponse, errorMessageFromResponse, formatErrorDetail } from "./errors";
 import { circuitKey, circuitOpen, recordHardFailure, recordReachable } from "./circuit";
 import { refreshWithStatus, silentRefresh } from "./refresh";
@@ -49,6 +50,12 @@ function redirectToLoginAfterExpiry(): void {
   if (window.location.pathname === "/login") return;
   const next = `${window.location.pathname}${window.location.search}`;
   window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+}
+
+function dispatchPermissionDenied(path: string, error: ApiError): void {
+  if (typeof window === "undefined" || error.status !== 403) return;
+  const detail: PermissionDeniedDetail = { path, message: error.message };
+  window.dispatchEvent(new CustomEvent(PERMISSION_DENIED_EVENT, { detail }));
 }
 
 export async function request<T>(
@@ -111,7 +118,9 @@ export async function request<T>(
         redirectToLoginAfterExpiry();
         throw new ApiError(401, "登入已過期，請重新登入", retry.headers.get("X-Request-ID"));
       }
-      throw await apiErrorFromResponse(retry);
+      const retryError = await apiErrorFromResponse(retry);
+      dispatchPermissionDenied(path, retryError);
+      throw retryError;
     }
     if (refreshStatus === "unavailable") {
       throw new ApiError(503, "登入服務暫時不可用，請稍後再試", response.headers.get("X-Request-ID"));
@@ -158,7 +167,9 @@ export async function request<T>(
       window.location.replace(`/settings/security?mfa_required=1&next=${next}`);
       throw new ApiError(403, "需要設定雙重驗證才能存取此功能");
     }
-    throw await apiErrorFromResponse(response);
+    const error = await apiErrorFromResponse(response);
+    dispatchPermissionDenied(path, error);
+    throw error;
   }
   if (response.status === 204) return undefined as T;
   return response.json();

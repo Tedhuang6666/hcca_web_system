@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError, apiErrorMessage, withFallback } from "./api-helpers";
 import { request } from "./api/core";
 import { apiErrorFromResponse } from "./api/errors";
+import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "./permission-events";
 
 describe("API helpers", () => {
   it("returns successful values without invoking the error hook", async () => {
@@ -51,6 +52,24 @@ describe("API helpers", () => {
     expect(error.message).toBe("此問卷僅限校務帳號填答");
     expect(error.errorId).toBe("error-1");
     expect(error.requestId).toBe("request-1");
+  });
+
+  it("announces a standard 403 so the shell can refresh permissions", async () => {
+    const listener = vi.fn();
+    window.addEventListener(PERMISSION_DENIED_EVENT, listener);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      detail: "需要權限：document:create",
+    }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    await expect(request("/documents")).rejects.toMatchObject({ status: 403 });
+
+    const event = listener.mock.calls[0]?.[0] as CustomEvent<PermissionDeniedDetail>;
+    expect(event.detail).toEqual({ path: "/documents", message: "需要權限：document:create" });
+    window.removeEventListener(PERMISSION_DENIED_EVENT, listener);
+    vi.unstubAllGlobals();
   });
 
   it("does not report an already-counted circuit-open state as another client error", async () => {
