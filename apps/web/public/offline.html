@@ -4,22 +4,267 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>目前離線｜HCCA</title>
+    <meta name="theme-color" content="#1a1a2e" />
+    <title>暫時離線｜HCCA</title>
     <style>
-      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f8fa; color: #1f2937; }
-      main { max-width: 32rem; padding: 2rem; text-align: center; }
-      h1 { margin-bottom: .75rem; font-size: 1.5rem; }
-      p { line-height: 1.7; color: #5b6472; }
-      button { min-height: 44px; padding: .7rem 1rem; border: 0; border-radius: .75rem; background: #1f3a5f; color: white; font: inherit; cursor: pointer; }
-      @media (prefers-color-scheme: dark) { body { background: #111827; color: #f3f4f6; } p { color: #c4cad4; } }
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+        --brand-ink: #1a1a2e;
+        --brand-gold: #c9a84c;
+        --bg-base: #faf8f3;
+        --bg-surface: #fffef9;
+        --bg-hover: #f5f2ea;
+        --text-muted: #5f6b7e;
+        --border: #e8e2d6;
+        --border-strong: #d5cfc4;
+        --shadow-md: 0 6px 14px rgba(26, 26, 46, 0.09);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        display: grid;
+        min-width: 320px;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        background: var(--bg-base);
+        color: var(--brand-ink);
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button { font: inherit; }
+
+      button:focus-visible {
+        outline: 2px solid var(--brand-gold);
+        outline-offset: 3px;
+      }
+
+      ::selection {
+        background: rgba(201, 168, 76, 0.24);
+        color: var(--brand-ink);
+      }
+
+      .offline-page {
+        width: min(100% - 32px, 480px);
+        padding: 24px 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        color: var(--brand-ink);
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 9px;
+        background: var(--brand-ink);
+        color: var(--brand-gold);
+      }
+
+      .brand-mark svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .brand-name {
+        display: grid;
+        gap: 0;
+      }
+
+      .brand-name strong {
+        font-size: 0.9rem;
+        letter-spacing: 0.04em;
+      }
+
+      .brand-name span {
+        color: var(--text-muted);
+        font-size: 0.72rem;
+      }
+
+      .card {
+        padding: 32px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg-surface);
+        box-shadow: var(--shadow-md);
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+        padding: 5px 10px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--bg-hover);
+        color: var(--text-muted);
+        font-size: 0.78rem;
+      }
+
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #c88b31;
+      }
+
+      h1 {
+        margin: 24px 0 10px;
+        font-size: clamp(1.7rem, 5vw, 2.15rem);
+        letter-spacing: -0.03em;
+        line-height: 1.25;
+      }
+
+      .description {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.98rem;
+        line-height: 1.75;
+      }
+
+      .retry-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 44px;
+        margin-top: 24px;
+        padding: 9px 16px;
+        border: 1px solid var(--brand-gold);
+        border-radius: 10px;
+        background: var(--brand-gold);
+        color: var(--brand-ink);
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 700;
+        transition: background-color 180ms ease, border-color 180ms ease;
+      }
+
+      .retry-button:hover {
+        border-color: #b8962f;
+        background: #d4b45e;
+      }
+
+      .retry-button svg {
+        width: 17px;
+        height: 17px;
+      }
+
+      .safety-note {
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        gap: 10px;
+        margin-top: 28px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        line-height: 1.7;
+      }
+
+      .safety-note svg {
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        color: #856518;
+      }
+
+      .safety-note p { margin: 0; }
+
+      .page-footer {
+        margin: 16px 0 0;
+        color: #817d70;
+        font-size: 0.72rem;
+        text-align: center;
+      }
+
+      @media (max-width: 520px) {
+        .offline-page {
+          width: min(100% - 24px, 480px);
+          padding: 20px 0;
+        }
+
+        .card { padding: 24px 22px; }
+        .brand { margin-bottom: 16px; }
+        .retry-button { width: 100%; }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --bg-base: #0f1117;
+          --bg-surface: #1a1d27;
+          --bg-hover: #252a3a;
+          --text-muted: #aaa8ba;
+          --border: #2a2d3e;
+          --border-strong: #3d425d;
+          --shadow-md: 0 6px 14px rgba(0, 0, 0, 0.28);
+        }
+
+        .brand { color: #e8e6f0; }
+        .safety-note svg { color: #d4b45e; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <h1>目前沒有網路連線</h1>
-      <p>公開頁面會在恢復連線後重新載入。為保護帳號資料，登入後的頁面不會離線快取。</p>
-      <button type="button" onclick="location.reload()">重新嘗試</button>
+    <main class="offline-page">
+      <header class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M5 6.5h14M5 11.9h14M5 17.3h8" />
+            <circle cx="17.5" cy="17.3" r="1.9" fill="currentColor" stroke="none" />
+          </svg>
+        </span>
+        <span class="brand-name">
+          <strong>HCCA</strong>
+          <span>竹嶺班聯數位整合系統</span>
+        </span>
+      </header>
+
+      <section class="card" aria-labelledby="offline-title">
+        <div class="status" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          目前離線
+        </div>
+        <h1 id="offline-title">網路暫時斷線了</h1>
+        <p class="description">等連線恢復後，再按一次重新載入，就可以繼續使用 HCCA。</p>
+        <button class="retry-button" type="button" onclick="location.reload()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 11a8 8 0 1 0 2 5.3" />
+            <path d="M20 5v6h-6" />
+          </svg>
+          重新載入頁面
+        </button>
+
+        <aside class="safety-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5" y="10" width="14" height="10" rx="2" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+          </svg>
+          <p>公開頁面會在恢復連線後重新載入；登入後的頁面不會在離線時顯示，帳號資料會留在安全範圍內。</p>
+        </aside>
+      </section>
+
+      <footer class="page-footer">竹嶺班聯數位整合系統 · HCCA</footer>
     </main>
   </body>
 </html>
