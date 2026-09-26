@@ -45,14 +45,6 @@ export default function ExamScopeExplorer({ scope }: { scope: ExamScopeData }) {
 
   return (
     <section className="exam-scope" aria-labelledby="exam-scope-title">
-      <header className="exam-scope-header">
-        <div className="exam-scope-title-row">
-          <BookOpenCheck size={24} aria-hidden />
-          <h2 id="exam-scope-title">考試範圍速查</h2>
-        </div>
-        <p>依科目、年級與段次快速查詢範圍。</p>
-      </header>
-
       <div className="exam-scope-controls" aria-label="考試範圍查詢條件">
         <fieldset className="exam-scope-order-control">
           <legend>排列方式</legend>
