@@ -88,8 +88,8 @@ function MaintenanceContent() {
           <div className="flex items-center gap-3">
             <BrandEmblem size={42} framed priority />
             <div>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">校園自治平台</div>
-              <div className="text-xs text-[var(--text-muted)]">HCCA System Status</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">數位整合系統</div>
+              <div className="text-xs text-[var(--text-muted)]">服務狀態</div>
             </div>
           </div>
           <div className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
@@ -173,7 +173,7 @@ function MaintenanceContent() {
         </section>
 
         <footer className="border-t border-[var(--border)] py-4 text-xs text-[var(--text-muted)]">
-          HCCA Campus Self-Governance Platform
+          新竹高中班聯會數位整合系統
         </footer>
       </div>
     </main>

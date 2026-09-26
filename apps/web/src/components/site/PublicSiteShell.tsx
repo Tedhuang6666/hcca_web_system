@@ -105,7 +105,7 @@ export default async function PublicSiteShell({
           </nav>
         </div>
         <div className="public-footer-bottom">
-          <span>HCCA · {BRANDING.schoolName}</span>
+          <span>{BRANDING.orgShortName} · {BRANDING.platformName}</span>
         </div>
       </footer>
     </div>

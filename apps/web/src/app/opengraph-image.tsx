@@ -5,7 +5,7 @@ import { ImageResponse } from "next/og";
 
 import { BRANDING } from "@/lib/branding";
 
-export const alt = `${BRANDING.orgShortName} ${BRANDING.acronym} 竹嶺班聯數位整合系統`;
+export const alt = BRANDING.appName;
 
 export const size = {
   width: 1200,

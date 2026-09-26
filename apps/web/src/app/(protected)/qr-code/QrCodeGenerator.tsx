@@ -58,7 +58,7 @@ const DEFAULT_SETTINGS: QrSettings = {
   size: 640,
   margin: 4,
   showBadge: false,
-  badgeText: "HCCA",
+  badgeText: "自治平台",
   logoDataUrl: DEFAULT_LOGO_PATH,
 };
 
@@ -147,7 +147,7 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
   parts.push(finderPattern(margin, margin + moduleCount - 7, foreground, backgroundPaint));
 
   if (settings.showBadge) {
-    const badgeText = escapeXml(settings.badgeText.trim().slice(0, 8) || "HCCA");
+    const badgeText = escapeXml(settings.badgeText.trim().slice(0, 8) || "自治平台");
     const badgeSize = Math.min(7.2, Math.max(5.2, moduleCount * 0.18));
     const badgeX = margin + (moduleCount - badgeSize) / 2;
     const badgeY = margin + (moduleCount - badgeSize) / 2;
@@ -478,7 +478,7 @@ export default function QrCodeGenerator() {
 
             <div className="qr-setting-section qr-badge-section">
               <label className="qr-toggle-row"><span className="qr-toggle-copy"><span className="qr-toggle-icon"><Type size={15} aria-hidden="true" /></span><span><strong>中央標記</strong><small>在 QR Code 中放入識別文字</small></span></span><input type="checkbox" checked={settings.showBadge} onChange={(event) => updateSetting("showBadge", event.target.checked)} /></label>
-              {settings.showBadge && <input className="qr-badge-input" value={settings.badgeText} maxLength={8} onChange={(event) => updateSetting("badgeText", event.target.value)} aria-label="中央標記文字" placeholder="HCCA" />}
+              {settings.showBadge && <input className="qr-badge-input" value={settings.badgeText} maxLength={8} onChange={(event) => updateSetting("badgeText", event.target.value)} aria-label="中央標記文字" placeholder="自治平台" />}
               {settings.showBadge && settings.errorCorrection !== "H" && <p className="qr-warning"><CircleHelp size={14} aria-hidden="true" />中央標記會遮住少量資料，建議切換至 H 容錯。</p>}
             </div>
 

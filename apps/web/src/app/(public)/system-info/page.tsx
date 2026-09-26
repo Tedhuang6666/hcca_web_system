@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "關於本系統",
-  description: "HCCA 竹嶺班聯數位整合系統的使用協助、回報管道與公開說明。",
+  description: "新竹高中班聯會數位整合系統的使用協助、回報管道與公開說明。",
   path: "/system-info",
   type: "website",
 });

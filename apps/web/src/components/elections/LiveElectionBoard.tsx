@@ -297,7 +297,7 @@ export default function LiveElectionBoard({
             </button>
             <div className="hidden items-center gap-2 text-xs text-[#91a5b5] sm:flex">
               <BrandEmblem size={30} priority />
-              <span>HCCA 即時開票</span>
+              <span>班聯會即時開票</span>
             </div>
           </div>
         </nav>
@@ -310,7 +310,7 @@ export default function LiveElectionBoard({
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e8c970]">
-                {isClosed ? "Final Result" : "HCCA Election Live"}
+                {isClosed ? "Final Result" : "班聯會選舉直播"}
               </p>
               <h1 className={`${vertical ? "text-5xl" : "text-3xl sm:text-4xl lg:text-5xl"} mt-3 font-semibold leading-tight`}>
                 {summary.title}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 export const metadata = {
-  title: "法律專區 · HCCA 校園自治平台",
+  title: "法律專區 · 新竹高中班聯會數位整合系統",
   description: "隱私政策、服務條款、無障礙聲明、安全揭露政策",
 };
 

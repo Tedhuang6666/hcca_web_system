@@ -93,8 +93,8 @@ def _build_digest_embed(
     return build_embed(
         Domain.SYSTEM,
         Severity.INFO,
-        title=f"HCCA {period_label}摘要",
-        body="這是你的個人 HCCA 摘要；用 `/notify` 可關閉。",
+        title=f"班聯會{period_label}摘要",
+        body="這是你的個人班聯會摘要；用 `/notify` 可關閉。",
         fields=[
             {"name": "公文待核", "value": str(pending_documents), "inline": True},
             {"name": f"{period_label}會議", "value": str(pending_meetings), "inline": True},

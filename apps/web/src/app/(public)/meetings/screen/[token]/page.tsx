@@ -136,7 +136,7 @@ export default function MeetingScreenPage({ params }: { params: Promise<{ token:
       <div className="grid min-h-screen grid-rows-[auto_1fr_auto] px-12 py-9">
         <header className="flex items-start justify-between gap-8 border-b border-white/10 pb-5">
           <div className="min-w-0">
-            <p className="text-sm font-semibold tracking-[0.18em] text-amber-300">HCCA PUBLIC DISPLAY</p>
+            <p className="text-sm font-semibold tracking-[0.18em] text-amber-300">公開會議顯示</p>
             <h1 className="mt-2 truncate text-4xl font-semibold tracking-normal">{meeting.title}</h1>
             <p className="mt-2 text-lg text-white/62">
               {meeting.location || "未填地點"} · 主席 {meeting.chair_name || "未填"} · {STATUS_LABEL[meeting.status] ?? meeting.status}

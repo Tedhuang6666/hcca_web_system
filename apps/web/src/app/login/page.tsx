@@ -102,7 +102,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
           <div className="login-brand-stage relative z-10 flex w-full flex-col items-center py-16 text-center">
             <BrandEmblem size={172} />
             <p className="mt-8 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              竹嶺班聯數位整合系統
+              {BRANDING.platformName}
             </p>
             <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
               公文、會議與校園服務
@@ -136,10 +136,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 className="text-3xl font-semibold tracking-[-0.025em] sm:text-4xl"
                 style={{ color: "var(--text-primary)" }}
               >
-                登入管理系統
+                登入校園自治平台
               </h1>
               <p className="mt-3 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-                請先使用 Google 帳戶登入；已完成綁定者可改用 Discord。
+                登入後即可使用需要帳號的校園服務；公告、法規與其他公開資訊仍可直接瀏覽。
+                <br />
+                請使用 Google 帳戶登入；已完成綁定者也可使用 Discord。
               </p>
             </div>
 

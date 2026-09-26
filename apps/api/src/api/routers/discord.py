@@ -245,7 +245,7 @@ class DiscordSyncAllOut(BaseModel):
 
 class DiscordTestMessageIn(BaseModel):
     channel_id: str = Field(..., min_length=1, max_length=32)
-    message: str = Field("HCCA Discord Bot 測試訊息", min_length=1, max_length=500)
+    message: str = Field("班聯會 Discord Bot 測試訊息", min_length=1, max_length=500)
 
 
 class DiscordNotificationRouteIn(BaseModel):

@@ -32,7 +32,7 @@ export default async function HomeHero({
   const configuredHeroTitle = settings?.hero_title?.trim();
   const heroTitle = configuredHeroTitle && configuredHeroTitle !== siteTitle
     ? configuredHeroTitle
-    : "竹嶺班聯";
+    : BRANDING.orgShortName;
   const configuredHeroSubtitle = settings?.hero_subtitle?.trim();
   const heroSubtitle = configuredHeroSubtitle && configuredHeroSubtitle !== LEGACY_HERO_SUBTITLE
     ? configuredHeroSubtitle

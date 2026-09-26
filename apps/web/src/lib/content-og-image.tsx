@@ -87,7 +87,7 @@ export async function renderContentOgImage({ title, category, date }: ContentOgI
                 {BRANDING.orgShortName}
               </div>
               <div style={{ display: "flex", fontSize: 20, color: "#d9e8f7" }}>
-                {BRANDING.acronym} · 校園自治
+                校園自治公開資訊
               </div>
             </div>
           </div>

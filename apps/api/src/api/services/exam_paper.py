@@ -310,7 +310,7 @@ async def build_traced_pdf(
     writer = PdfWriter()
     downloaded_at = now.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     identity = _identity_label(user)
-    footer = f"HCCA Trace {trace_code} | {user.student_id or user.email} | {downloaded_at}"
+    footer = f"班聯會 Trace {trace_code} | {user.student_id or user.email} | {downloaded_at}"
 
     for index, page in enumerate(reader.pages, start=1):
         width = float(page.mediabox.width)
@@ -325,9 +325,9 @@ async def build_traced_pdf(
     writer.add_metadata(
         {
             "/Title": paper.title,
-            "/Subject": f"HCCA Exam Paper Trace {trace_code}",
+            "/Subject": f"班聯會 Exam Paper Trace {trace_code}",
             "/Keywords": f"{trace_code};{user.id};{user.student_id or user.email}",
-            "/Producer": f"HCCA Campus Self-Governance Platform {trace_code}",
+            "/Producer": f"新竹高中班聯會數位整合系統 {trace_code}",
         }
     )
 

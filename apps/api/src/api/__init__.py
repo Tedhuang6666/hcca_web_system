@@ -1,4 +1,4 @@
-"""竹嶺班聯數位整合系統 API package。
+"""新竹高中班聯會數位整合系統 API package。
 
 ⚠️ 此檔刻意保持「空」（只有 docstring）。FastAPI app 主程式在 `api.main`。
 
