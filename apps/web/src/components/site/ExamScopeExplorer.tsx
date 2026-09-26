@@ -16,11 +16,14 @@ type BrowseOrder = "subject" | "grade";
 
 const ALL = "all";
 
-function entryTitle(entry: ExamScopeEntry, order: BrowseOrder): string {
-  if (order === "subject") return entry.grade;
-  const variant = entry.grade === entry.gradeGroup
-    ? ""
-    : entry.grade.replace(`${entry.gradeGroup}－`, "");
+function entryVariant(entry: ExamScopeEntry): string {
+  if (entry.grade === entry.gradeGroup) return "";
+  return entry.grade.slice(entry.gradeGroup.length).replace(/^[\s－–—-]+/u, "").trim();
+}
+
+function entryTitle(entry: ExamScopeEntry, order: BrowseOrder, selectedGrade: string): string {
+  const variant = entryVariant(entry);
+  if (order === "subject") return selectedGrade === ALL || !variant ? entry.grade : variant;
   return variant ? `${entry.subject}（${variant}）` : entry.subject;
 }
 
@@ -53,7 +56,6 @@ export default function ExamScopeExplorer({
     [grade, scope.entries, section, subject],
   );
   const primaryGroups = order === "subject" ? scope.subjects : scope.grades;
-  const showEntryTitle = order === "subject" ? grade === ALL : subject === ALL;
 
   useEffect(() => {
     let isCurrent = true;
@@ -231,7 +233,9 @@ export default function ExamScopeExplorer({
                       <div className="exam-scope-entries">
                         {sectionEntries.map((entry) => (
                           <article className="exam-scope-entry" key={entry.id}>
-                            {showEntryTitle && <h5>{entryTitle(entry, order)}</h5>}
+                            {(entryVariant(entry) || (order === "subject" ? grade === ALL : subject === ALL)) && (
+                              <h5>{entryTitle(entry, order, grade)}</h5>
+                            )}
                             <ArticleMarkdown markdown={entry.content} />
                           </article>
                         ))}

@@ -38,6 +38,46 @@ const scope: ExamScopeData = {
   ],
 };
 
+const mathScope: ExamScopeData = {
+  subjects: ["數學"],
+  grades: ["高二", "高三"],
+  sections: ["一段"],
+  entries: [
+    {
+      id: "math-2a",
+      subject: "數學",
+      section: "一段",
+      grade: "高二－數A",
+      gradeGroup: "高二",
+      content: "指數函數",
+    },
+    {
+      id: "math-2b",
+      subject: "數學",
+      section: "一段",
+      grade: "高二－數B",
+      gradeGroup: "高二",
+      content: "第一單元",
+    },
+    {
+      id: "math-3a",
+      subject: "數學",
+      section: "一段",
+      grade: "高三－數學甲",
+      gradeGroup: "高三",
+      content: "複數與方程式",
+    },
+    {
+      id: "math-3b",
+      subject: "數學",
+      section: "一段",
+      grade: "高三－數學乙",
+      gradeGroup: "高三",
+      content: "複數平面",
+    },
+  ],
+};
+
 describe("ExamScopeExplorer", () => {
   beforeEach(() => {
     vi.mocked(usersApi.me).mockRejectedValue(new Error("not signed in"));
@@ -66,5 +106,28 @@ describe("ExamScopeExplorer", () => {
     });
     expect(screen.queryByRole("heading", { name: "高一", level: 5 })).not.toBeInTheDocument();
     expect(screen.getByText("動物體的組成")).toBeInTheDocument();
+  });
+
+  it("keeps math variants visible when filtering by grade", () => {
+    render(<ExamScopeExplorer scope={mathScope} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "數學" }));
+    fireEvent.click(screen.getByRole("button", { name: "高二" }));
+
+    expect(screen.getByRole("heading", { name: "數學（數A）", level: 5 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "數學（數B）", level: 5 })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "數學（數學甲）", level: 5 })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "依科目" }));
+    expect(screen.getByRole("heading", { name: "數A", level: 5 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "數B", level: 5 })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "高三" }));
+    expect(screen.getByRole("heading", { name: "數學甲", level: 5 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "數學乙", level: 5 })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "依年級" }));
+    expect(screen.getByRole("heading", { name: "數學（數學甲）", level: 5 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "數學（數學乙）", level: 5 })).toBeInTheDocument();
   });
 });
