@@ -418,7 +418,7 @@
   }
 
   .public-home-hero .public-hero-copy h1 {
-    max-width: 11ch;
+    max-width: 100%;
     margin-inline: auto;
   }
 
