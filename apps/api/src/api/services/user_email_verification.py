@@ -128,7 +128,7 @@ async def request_verification(db: AsyncSession, user: User, email: str) -> None
     await redis_client.setex(_pending_key(user.id, normalized_email), CODE_TTL_SECONDS, payload)
     send_branded_email(
         [normalized_email],
-        "HCCA 登入 Email 驗證碼",
+        "新竹高中班聯會登入 Email 驗證碼",
         "generic",
         {
             "heading": "驗證您的登入 Email",

@@ -178,7 +178,7 @@ function PublicSiteHeaderContent({
     + filteredMenuGroups.reduce((count, group) => count + group.items.length, 0)
     + filteredNavPages.length;
   const systemHref = isLoggedIn ? "/dashboard" : "/login?next=%2Fdashboard";
-  const systemLabel = isLoggedIn ? "管理系統" : "登入管理";
+  const systemLabel = isLoggedIn ? "前往平台" : "登入平台";
 
   useEffect(() => {
     setIsLoggedIn(Boolean(window.localStorage.getItem("user_id")));

@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     )
 
     # --- 應用程式基本設定 ---
-    APP_NAME: str = "竹嶺班聯數位整合系統"
+    APP_NAME: str = "新竹高中班聯會數位整合系統"
     APP_VERSION: str = _read_release_version()
     APP_RELEASE: str = ""
     GOOGLE_PAGESPEED_API_KEY: str = ""
@@ -314,7 +314,7 @@ class Settings(BaseSettings):
     # --- Email / Resend 設定 ---
     RESEND_API_KEY: str = Field(default="")
     MAIL_FROM: str = Field(default="noreply@hct.works")
-    MAIL_FROM_NAME: str = Field(default="新竹高中班聯會 HCCA")
+    MAIL_FROM_NAME: str = Field(default="新竹高中班聯會")
     # 部署網址單一來源 — 整個系統對外的基底 URL（前端入口；/api、/ws、OAuth 回呼皆同源轉發）。
     # 只要在此填入正式網址（例如 https://hcca.tw），derive_public_urls 會自動推導
     # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼等仍停留在 localhost 預設的欄位，
@@ -361,7 +361,7 @@ class Settings(BaseSettings):
         description="OAuth 登入完成後 MFA challenge token 有效分鐘數",
     )
     PASSKEY_RP_ID: str = Field(default="localhost", description="WebAuthn relying party ID")
-    PASSKEY_RP_NAME: str = Field(default="HCCA 竹嶺班聯數位整合系統")
+    PASSKEY_RP_NAME: str = Field(default="新竹高中班聯會數位整合系統")
     PASSKEY_ORIGIN: str = Field(default="http://localhost:3000")
     PASSKEY_ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
     PASSKEY_CHALLENGE_TTL_SECONDS: int = Field(default=300, ge=60, le=900)

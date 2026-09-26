@@ -1,12 +1,12 @@
 import { BRANDING } from "@/lib/branding";
 
 export const SOCIAL_SHARE_TITLE = BRANDING.appName;
-export const SOCIAL_SITE_NAME = `${BRANDING.orgShortName} ${BRANDING.acronym}`;
+export const SOCIAL_SITE_NAME = BRANDING.appName;
 export const SOCIAL_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: `${BRANDING.orgShortName} ${BRANDING.acronym} 竹嶺班聯數位整合系統`,
+  alt: `${BRANDING.appName}｜${BRANDING.orgShortName}`,
   type: "image/png",
 };
 

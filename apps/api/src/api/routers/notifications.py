@@ -476,7 +476,7 @@ async def test_web_push(db: DbDep, current_user: CurrentUser) -> dict[str, int]:
     sent = await send_to_user(
         db,
         current_user.id,
-        {"title": "HCCA 推播測試", "body": "你的瀏覽器通知已成功啟用。", "url": "/notifications"},
+        {"title": "班聯會推播測試", "body": "你的瀏覽器通知已成功啟用。", "url": "/notifications"},
     )
     return {"sent": sent}
 

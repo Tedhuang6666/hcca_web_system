@@ -5,7 +5,7 @@ import type {
 } from "./types";
 
 export const DEFAULT_SPECIAL_AGREEMENT_CONTENT: PublicSpecialAgreementContent = {
-  intro_md: "竹嶺班聯特約洽談說明",
+  intro_md: "班聯會特約洽談說明",
   info_md: `## 適合洽談的合作
 
 可依合作對象與學生需求討論不同形式，例如：

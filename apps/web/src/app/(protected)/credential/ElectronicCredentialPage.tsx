@@ -142,7 +142,7 @@ function CredentialCard({ credential }: { credential: ElectronicCredentialOut })
           <BrandEmblem size={44} framed priority />
           <div>
             <p className="text-sm font-semibold tracking-[0.08em] text-[#fffdf7]">HCCA</p>
-            <p className="text-[11px] text-[#b9c3d2]">竹嶺班聯數位整合系統</p>
+            <p className="text-[11px] text-[#b9c3d2]">新竹高中班聯會數位憑證</p>
           </div>
         </div>
         <div className="credential-card__status">
@@ -173,13 +173,13 @@ function CredentialCard({ credential }: { credential: ElectronicCredentialOut })
           </dl>
         </div>
 
-        <div className="credential-card__seal" aria-label="HCCA 身份確認">
+        <div className="credential-card__seal" aria-label="班聯會身份確認">
           <div className="credential-card__seal-ring">
             <BrandEmblem size={72} />
           </div>
           <BadgeCheck size={18} aria-hidden="true" />
           <p>身份確認</p>
-          <span>HCCA · VERIFIED</span>
+          <span>班聯會 · VERIFIED</span>
         </div>
       </div>
 

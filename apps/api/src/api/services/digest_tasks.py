@@ -60,7 +60,7 @@ def _render_digest_html(user: User, notifications: list[Notification]) -> str:
   <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;
               box-shadow:0 1px 3px rgba(0,0,0,0.05);">
     <div style="padding:18px 20px;border-bottom:1px solid #eee;">
-      <h1 style="margin:0;font-size:16px;color:#111;">HCCA 通知摘要</h1>
+      <h1 style="margin:0;font-size:16px;color:#111;">班聯會通知摘要</h1>
       <p style="margin:4px 0 0;font-size:13px;color:#666;">嗨 {name}，您有 {total} 則未讀通知</p>
     </div>
     <table style="width:100%;border-collapse:collapse;">{"".join(rows)}</table>
@@ -104,7 +104,7 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
                 skipped += 1
                 continue
             html = _render_digest_html(user, ntfs)
-            subject = f"HCCA 通知摘要：{len(ntfs)} 則未讀"
+            subject = f"班聯會通知摘要：{len(ntfs)} 則未讀"
             try:
                 enqueue_email(to=user.email, subject=subject, body=html, subtype="html")
                 queued_at = datetime.now(UTC)

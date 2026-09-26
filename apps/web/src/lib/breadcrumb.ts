@@ -159,7 +159,7 @@ export function getBreadcrumbs(pathname: string): Crumb[] {
 export function getPageTitle(pathname: string): string {
   const crumbs = getBreadcrumbs(pathname);
   const last = crumbs[crumbs.length - 1];
-  return last?.label ?? "竹嶺班聯數位整合系統";
+  return last?.label ?? "新竹高中班聯會數位整合系統";
 }
 
 /**

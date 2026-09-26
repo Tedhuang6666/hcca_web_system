@@ -1,4 +1,4 @@
-"""竹嶺班聯數位整合系統 API - FastAPI Application"""
+"""新竹高中班聯會數位整合系統 API - FastAPI Application"""
 
 import asyncio
 import logging
@@ -276,7 +276,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
-        description="竹嶺班聯數位整合系統 RESTful API",
+        description="新竹高中班聯會數位整合系統 RESTful API",
         docs_url="/docs" if (settings.DEBUG or settings.ENABLE_API_DOCS) else None,
         redoc_url="/redoc" if (settings.DEBUG or settings.ENABLE_API_DOCS) else None,
         lifespan=lifespan,

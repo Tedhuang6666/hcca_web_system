@@ -436,7 +436,7 @@ export default function DiscordAdminPage() {
               try {
                 await discordApi.testMessage({
                   channel_id: configDraft.moderation_log_channel_id ?? "",
-                  message: "HCCA Discord Bot 後台測試訊息",
+                  message: "班聯會 Discord Bot 後台測試訊息",
                 });
                 toast.success("測試訊息已排程送出");
               } catch (error) {

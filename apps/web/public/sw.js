@@ -271,7 +271,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   const data = event.data?.json() || {};
-  const title = data.title || "HCCA 通知";
+  const title = data.title || "班聯會通知";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",

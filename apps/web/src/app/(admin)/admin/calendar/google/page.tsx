@@ -152,7 +152,7 @@ export default function GoogleCalendarAdminPage() {
       <div>
         <h1 className="text-xl font-semibold">Google Calendar 同步設定</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          連結後選擇帳戶內要同步的日曆，HCCA 事件將雙向同步到該日曆。
+          連結後選擇帳戶內要同步的日曆，所選組織的事件將雙向同步到該日曆。
         </p>
       </div>
 

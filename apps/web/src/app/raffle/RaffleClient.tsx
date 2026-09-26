@@ -174,7 +174,7 @@ export default function RaffleClient() {
         <Link className={styles.brand} href="/" aria-label={`回到${BRANDING.orgShortName}首頁`}>
           <BrandEmblem size={48} />
           <span className={styles.brandCopy}>
-            <strong>HCCA</strong>
+            <strong>班聯會</strong>
             <small>{BRANDING.orgShortName}</small>
           </span>
         </Link>
@@ -188,7 +188,7 @@ export default function RaffleClient() {
         <section className={styles.stageCard} aria-live="polite">
           <div className={styles.stageTopline}>
             <span>社博集點抽獎</span>
-            <span>竹嶺班聯</span>
+            <span>校園活動</span>
           </div>
 
           {stage === "loading" && <div className={styles.loadingPanel}><div className={styles.loader} /><p>正在確認抽獎台狀態…</p></div>}
