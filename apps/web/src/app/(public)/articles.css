@@ -312,6 +312,24 @@
   object-fit: cover;
 }
 
+.public-article-detail.is-exam-scope-article {
+  padding-top: clamp(1.5rem, 3vw, 2.75rem);
+}
+
+.public-article-detail-header.is-exam-scope-header {
+  display: block;
+  padding: clamp(0.75rem, 2vw, 1.5rem) 0 clamp(1.25rem, 3vw, 2rem);
+}
+
+.is-exam-scope-header .public-article-detail-copy h1 {
+  max-width: none;
+  font-size: clamp(1.85rem, 4vw, 3.25rem);
+}
+
+.is-exam-scope-header .public-article-meta {
+  margin-top: 0.7rem;
+}
+
 .public-article-reading-layout {
   display: grid;
   grid-template-columns: minmax(11rem, 15rem) minmax(0, 44rem);
@@ -478,6 +496,215 @@
   font-size: 0.9em;
 }
 
+.exam-scope {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding-top: clamp(2.5rem, 5vw, 4.5rem);
+}
+
+.exam-scope-header {
+  padding-bottom: clamp(1.75rem, 4vw, 3rem);
+  border-bottom: 1px solid var(--public-border);
+}
+
+.exam-scope-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--public-accent-text);
+}
+
+.exam-scope-title-row h2 {
+  margin: 0;
+  color: var(--public-text);
+  font-size: clamp(1.75rem, 4vw, 2.7rem);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.exam-scope-header p {
+  max-width: 40rem;
+  margin: 0.9rem 0 0;
+  color: var(--public-secondary);
+  line-height: 1.8;
+}
+
+.exam-scope-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem clamp(1rem, 3vw, 2rem);
+  align-items: end;
+  margin-top: 1.5rem;
+  border-block: 1px solid var(--public-border);
+  padding: 1.25rem 0;
+}
+
+.exam-scope-controls fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.exam-scope-order-control,
+.exam-scope-grade-control,
+.exam-scope-section-control {
+  flex: 0 1 auto;
+}
+
+.exam-scope-subject-control {
+  flex: 1 1 20rem;
+}
+
+.exam-scope-controls legend {
+  margin-bottom: 0.55rem;
+  color: var(--public-secondary);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.exam-scope-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.exam-scope-choice-row button,
+.exam-scope-reset {
+  min-height: 2.75rem;
+  border: 1px solid var(--public-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--public-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.exam-scope-choice-row button {
+  padding: 0.5rem 0.8rem;
+}
+
+.exam-scope-choice-row button:hover,
+.exam-scope-choice-row button:focus-visible,
+.exam-scope-choice-row button.is-selected {
+  border-color: var(--public-accent-text);
+  background: var(--public-accent-soft);
+  color: var(--public-accent-text);
+}
+
+.exam-scope-choice-row button:focus-visible,
+.exam-scope-reset:focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: 2px;
+}
+
+.exam-scope-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: end;
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+}
+
+.exam-scope-reset:hover,
+.exam-scope-reset:focus-visible {
+  border-color: var(--public-accent-text);
+  color: var(--public-accent-text);
+}
+
+.exam-scope-result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  color: var(--public-muted);
+  font-size: 0.8rem;
+}
+
+.exam-scope-result-bar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.exam-scope-groups {
+  display: grid;
+  gap: clamp(3rem, 6vw, 5rem);
+  margin-top: clamp(2.5rem, 5vw, 4rem);
+}
+
+.exam-scope-group > h3 {
+  margin: 0;
+  color: var(--public-text);
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.exam-scope-stage {
+  margin-top: 1.75rem;
+}
+
+.exam-scope-stage > h4 {
+  margin: 0;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--public-border);
+  color: var(--public-accent-text);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.exam-scope-entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  border-bottom: 1px solid var(--public-border);
+}
+
+.exam-scope-entry {
+  min-width: 0;
+  padding: 1.15rem 1.25rem 1.45rem;
+}
+
+.exam-scope-entry + .exam-scope-entry {
+  border-left: 1px solid var(--public-border);
+}
+
+.exam-scope-entry h5 {
+  margin: 0 0 0.75rem;
+  color: var(--public-text);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.exam-scope-entry .article-markdown {
+  color: var(--public-secondary);
+  font-size: 0.91rem;
+  line-height: 1.75;
+}
+
+.exam-scope-entry .article-markdown > * + * {
+  margin-top: 0.7rem;
+}
+
+.exam-scope-entry .article-markdown ol,
+.exam-scope-entry .article-markdown ul {
+  padding-left: 1.25rem;
+}
+
+.exam-scope-empty {
+  margin-top: 2rem;
+  border-block: 1px solid var(--public-border);
+  padding: 1.5rem 0;
+  color: var(--public-secondary);
+  line-height: 1.7;
+}
+
 @media (min-width: 640px) {
   .public-articles-page,
   .public-article-detail {
@@ -545,6 +772,14 @@
   .public-article-toc a.is-subsection {
     padding-left: 0.75rem;
   }
+
+  .exam-scope-controls {
+    gap: 1.1rem;
+  }
+
+  .exam-scope-reset {
+    justify-self: start;
+  }
 }
 
 @media (max-width: 639px) {
@@ -577,12 +812,70 @@
   .article-markdown {
     font-size: 1rem;
   }
+
+  .exam-scope-entry + .exam-scope-entry {
+    border-top: 1px solid var(--public-border);
+    border-left: 0;
+  }
+
+  .exam-scope-entry {
+    padding-inline: 0;
+  }
+
+  .exam-scope-result-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .exam-scope-controls fieldset {
+    flex-basis: 100%;
+  }
+
+  .is-exam-scope-article .exam-scope {
+    padding-top: 1.25rem;
+  }
+
+  .is-exam-scope-article .exam-scope-header {
+    padding-bottom: 0.75rem;
+  }
+
+  .is-exam-scope-article .exam-scope-title-row h2 {
+    font-size: 1.6rem;
+  }
+
+  .is-exam-scope-article .exam-scope-header p {
+    margin-top: 0.55rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+
+  .is-exam-scope-article .exam-scope-controls {
+    gap: 0.8rem;
+    margin-top: 1rem;
+    padding-block: 0.9rem;
+  }
+
+  .is-exam-scope-article .exam-scope-order-control,
+  .is-exam-scope-article .exam-scope-reset {
+    flex-basis: auto;
+    order: -1;
+  }
+
+  .is-exam-scope-article .exam-scope-groups {
+    margin-top: 1.5rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .public-article-row,
   .public-article-row-arrow,
   .public-article-read-link {
+    transition: none;
+  }
+
+  .exam-scope-choice-row button,
+  .exam-scope-reset {
     transition: none;
   }
 }
