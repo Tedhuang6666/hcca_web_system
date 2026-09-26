@@ -1015,6 +1015,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/system/observability/errors/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 匯出錯誤事故 CSV */
+        get: operations["export_errors_csv_admin_system_observability_errors_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/system/observability/overview": {
         parameters: {
             query?: never;
@@ -16442,10 +16459,33 @@ export interface components {
             student_id?: string | null;
         };
         /**
+         * ClientErrorContext
+         * @description 有限且無 query string 的瀏覽器診斷欄位。
+         */
+        ClientErrorContext: {
+            /** Connection Type */
+            connection_type?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Online */
+            online?: boolean | null;
+            /** Referrer Path */
+            referrer_path?: string | null;
+            /** Release */
+            release?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Viewport */
+            viewport?: string | null;
+            /** Visibility State */
+            visibility_state?: string | null;
+        };
+        /**
          * ClientErrorReport
          * @description 瀏覽器 runtime error 的最小且有長度限制的回報格式。
          */
         ClientErrorReport: {
+            context?: components["schemas"]["ClientErrorContext"];
             /** Message */
             message: string;
             /**
@@ -17763,7 +17803,7 @@ export interface components {
             channel_id: string;
             /**
              * Message
-             * @default HCCA Discord Bot 測試訊息
+             * @default 班聯會 Discord Bot 測試訊息
              */
             message: string;
         };
@@ -28514,6 +28554,10 @@ export interface components {
             category: string;
             /** Client Ip */
             client_ip?: string | null;
+            /** Context */
+            context?: {
+                [key: string]: unknown;
+            };
             /** Error Id */
             error_id: string;
             /** Exc Type */
@@ -35547,6 +35591,24 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+        };
+    };
+    export_errors_csv_admin_system_observability_errors_export_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
