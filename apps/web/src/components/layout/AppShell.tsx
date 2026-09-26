@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { toast } from "sonner";
 import { PermissionProvider } from "@/contexts/PermissionContext";
 import { InboxCountsProvider } from "@/contexts/InboxCountsContext";
 import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
@@ -23,9 +24,35 @@ import { isBareRoute, isPublicRoute, requiresAuthentication } from "@/lib/route-
 import { ApiError } from "@/lib/api-helpers";
 import { authApi } from "@/lib/api/auth";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
+import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "@/lib/permission-events";
 import type { ServerImportantAnnouncement, ServerSessionUser } from "@/lib/server/session";
 
 const AUTH_CHECK_TIMEOUT_MS = 8_000;
+const AUTH_RETRY_DELAY_MS = 5_000;
+type PermissionSnapshot = Pick<ServerSessionUser, "is_superuser" | "is_owner" | "permissions">;
+
+function hasCachedPermissionSnapshot(): boolean {
+  return ["permissions", "is_superuser", "is_owner"].every(
+    (key) => sessionStorage.getItem(key) !== null,
+  );
+}
+
+function cachedPermissionCodes(): string[] {
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem("permissions") ?? "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function permissionSignature(user: PermissionSnapshot): string {
+  return JSON.stringify({
+    is_superuser: user.is_superuser ?? false,
+    is_owner: user.is_owner ?? false,
+    permissions: [...user.permissions].sort(),
+  });
+}
 
 async function withAuthCheckTimeout<T>(promise: Promise<T>): Promise<T> {
   let timeoutId: number | undefined;
@@ -59,9 +86,12 @@ function SessionGate({
   const authCheckStarted = useRef(false);
   const authVerified = useRef(Boolean(initialUser));
   const redirectedFrom = useRef<string | null>(null);
+  const cachedInitialUser = useRef<ServerSessionUser | null>(null);
+  const permissionRefreshInFlight = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: number | undefined;
 
     if (!requiresAuthentication(pathname)) {
       setIsLoggedIn(Boolean(localStorage.getItem("user_id")));
@@ -76,12 +106,15 @@ function SessionGate({
     // Shell，避免底部導覽列跟著整個 AppShellContent 被卸載又重新掛載。
     const isInitialAuthCheck = !authCheckStarted.current;
     authCheckStarted.current = true;
-    if (initialUser) cacheCurrentUser(initialUser);
+    if (initialUser && cachedInitialUser.current !== initialUser) {
+      cacheCurrentUser(initialUser);
+      cachedInitialUser.current = initialUser;
+    }
     if (isInitialAuthCheck && !initialUser) {
       const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
-      // localStorage 只用來避免畫面被驗證請求阻塞；真正授權仍由 API 驗證。
+      // localStorage 只用來辨認上次登入者；沒有權限快照時不能把空集合當成拒絕。
       setIsLoggedIn(hasLocalLogin);
-      setAuthReady(hasLocalLogin);
+      setAuthReady(hasLocalLogin && hasCachedPermissionSnapshot());
     }
     const verifySession = async () => {
       const loggedIn = Boolean(localStorage.getItem("user_id"));
@@ -113,7 +146,13 @@ function SessionGate({
           authVerified.current = true;
           setIsLoggedIn(true);
           setRedirecting(false);
-          setAuthReady(true);
+          const hasCachedPermissions = hasCachedPermissionSnapshot();
+          setAuthReady(hasCachedPermissions);
+          if (!hasCachedPermissions) {
+            retryTimer = window.setTimeout(() => {
+              if (!cancelled) void verifySession();
+            }, AUTH_RETRY_DELAY_MS);
+          }
           return;
         }
         clearAuthCache();
@@ -148,7 +187,7 @@ function SessionGate({
 
     // server session 暫時失敗時，首次瀏覽器驗證成功後不要在每次 pathname
     // 變更時再次阻塞頁面；focus/visibility 事件仍會在背景重新驗證。
-    if (!isInitialAuthCheck && authVerified.current) {
+    if (!isInitialAuthCheck && authVerified.current && hasCachedPermissionSnapshot()) {
       const revalidate = () => {
         if (document.visibilityState === "visible") void verifySession();
       };
@@ -169,10 +208,42 @@ function SessionGate({
     document.addEventListener("visibilitychange", revalidate);
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       window.removeEventListener("focus", revalidate);
       document.removeEventListener("visibilitychange", revalidate);
     };
   }, [initialUser, pathname, router]);
+
+  useEffect(() => {
+    const refreshPermissionsAfterDenied = async (event: Event) => {
+      if (permissionRefreshInFlight.current) return;
+      permissionRefreshInFlight.current = true;
+      const detail = (event as CustomEvent<PermissionDeniedDetail>).detail;
+      const before = {
+        is_superuser: sessionStorage.getItem("is_superuser") === "true",
+        is_owner: sessionStorage.getItem("is_owner") === "true",
+        permissions: cachedPermissionCodes(),
+      } satisfies PermissionSnapshot;
+
+      try {
+        const current = await withAuthCheckTimeout(authApi.refresh());
+        cacheCurrentUser(current);
+        if (permissionSignature(before) !== permissionSignature(current)) {
+          toast.warning("你的權限已更新，畫面已同步最新可用功能。");
+          router.refresh();
+        } else {
+          toast.error(detail?.message || "你目前沒有使用這項功能的權限。");
+        }
+      } catch {
+        toast.error("無法同步最新權限，請稍後重試。");
+      } finally {
+        permissionRefreshInFlight.current = false;
+      }
+    };
+
+    window.addEventListener(PERMISSION_DENIED_EVENT, refreshPermissionsAfterDenied);
+    return () => window.removeEventListener(PERMISSION_DENIED_EVENT, refreshPermissionsAfterDenied);
+  }, [router]);
 
   // 公開詳情頁不需要等待瀏覽器端驗證；讓伺服器預先輸出的正文直接進入首屏。
   // 受保護路徑仍沿用原本的驗證閘門與登入導向。
@@ -221,7 +292,7 @@ function AppShellContent({
   isLoggedIn: boolean;
   initialImportantAnnouncement: ServerImportantAnnouncement | null | undefined;
 }) {
-  const { can, isAdmin, permissions } = usePermissions();
+  const { can, isAdmin, isReady, permissions } = usePermissions();
   const { isModuleDown, moduleInfo: getModuleInfo } = useModuleStatus();
   const pathname = usePathname();
   const moduleId = moduleForPath(pathname);
@@ -241,6 +312,17 @@ function AppShellContent({
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
+
+  if (isLoggedIn && !isReady) {
+    return (
+      <div className="app-content-loading" aria-live="polite">
+        <LoadingState
+          title="正在同步權限"
+          description="系統正在確認你可使用的功能，請稍候。"
+        />
+      </div>
+    );
+  }
 
   const toggleSidebar = () => {
     if (window.matchMedia("(min-width: 1024px)").matches) {
