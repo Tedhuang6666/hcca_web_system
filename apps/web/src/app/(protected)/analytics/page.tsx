@@ -16,6 +16,7 @@ import type {
   SurveyParticipationItem,
 } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import SystemAdminTabs from "@/components/admin/SystemAdminTabs";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import PerformanceDashboard from "@/components/performance/PerformanceDashboard";
 
@@ -159,6 +160,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
+      <SystemAdminTabs activeTab="performance" />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>

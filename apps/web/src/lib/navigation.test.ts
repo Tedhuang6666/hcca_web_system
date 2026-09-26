@@ -63,6 +63,17 @@ describe("navigation visibility", () => {
     expect(resolveNavigationProfile(new Set(["shop:manage"]), false)).toBe("default");
   });
 
+  it("groups system operations behind one workspace entry", () => {
+    const defaultIds = navItemsFromEntries(NAVIGATION_PROFILES.default.desktopSections)
+      .map((item) => item.id);
+
+    expect(defaultIds).toContain("systemOperations");
+    expect(defaultIds).not.toContain("systemDefense");
+    expect(defaultIds).not.toContain("systemDiagnostics");
+    expect(defaultIds).not.toContain("systemObservability");
+    expect(defaultIds).not.toContain("modulesMaintenance");
+  });
+
   it("resolves specialized navigation profiles without loading full navigation definitions", () => {
     expect(resolveNavigationProfile(new Set(["partner_map:business_manage"]), false)).toBe("vendor");
     expect(resolveNavigationProfile(new Set(["class:manage"]), false)).toBe("teacher");

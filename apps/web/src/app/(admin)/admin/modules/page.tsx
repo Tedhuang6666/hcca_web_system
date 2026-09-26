@@ -5,6 +5,7 @@ import { Boxes, RefreshCcw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import SystemAdminTabs from "@/components/admin/SystemAdminTabs";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useWS } from "@/hooks/useWS";
 import { systemApi, type ModuleStatus, apiErrorMessage } from "@/lib/api";
@@ -205,6 +206,7 @@ export default function ModulesPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <SystemAdminTabs activeTab="modules" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--primary-dim)] text-[var(--primary)]">

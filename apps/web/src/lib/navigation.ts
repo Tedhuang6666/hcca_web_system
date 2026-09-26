@@ -137,31 +137,10 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:users",
   },
   {
-    id: "systemDefense",
+    id: "systemOperations",
     href: "/admin/system",
-    iconKey: "systemDefense",
-    label: "系統防護",
-    perm: "admin:all",
-  },
-  {
-    id: "modulesMaintenance",
-    href: "/admin/modules",
-    iconKey: "modules",
-    label: "模組維護",
-    perm: "admin:all",
-  },
-  {
-    id: "systemDiagnostics",
-    href: "/admin/diagnostics",
-    iconKey: "analytics",
-    label: "系統診斷",
-    perm: "admin:all",
-  },
-  {
-    id: "systemObservability",
-    href: "/admin/system/observability",
-    iconKey: "analytics",
-    label: "效能觀測",
+    iconKey: "systemOperations",
+    label: "系統營運",
     perm: "admin:all",
   },
   {
@@ -351,7 +330,7 @@ export const NAV_DEF: NavEntry[] = [
       "qrCode",
       "moduleBackoffice",
       "adminDashboard",
-      "systemObservability",
+      "systemOperations",
       "about",
     ]),
   },
@@ -530,7 +509,6 @@ export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): 
   if (item.id === "tasks" && !options.hasPrefix("document:") && !options.hasPrefix("regulation:")) {
     return false;
   }
-  if (item.id === "systemDefense" && !options.isAdmin) return false;
   if (item.id === "moduleBackoffice") {
     return (
       options.isAdmin
