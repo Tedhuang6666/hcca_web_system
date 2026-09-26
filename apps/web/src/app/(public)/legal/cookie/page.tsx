@@ -2,7 +2,7 @@ import PolicyDocumentViewer from "@/components/legal/PolicyDocumentViewer";
 
 export const metadata = {
   title: "Cookie 政策 · HCCA",
-  description: "HCCA 校園自治整合平台 Cookie 政策",
+  description: "HCCA 竹嶺班聯數位整合系統 Cookie 政策",
 };
 
 export default function CookiePage() {

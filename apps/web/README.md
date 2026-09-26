@@ -1,6 +1,6 @@
 # apps/web
 
-校園自治整合平台前端（Next.js 16 App Router + React 19 + TypeScript）。
+竹嶺班聯數位整合系統前端（Next.js 16 App Router + React 19 + TypeScript）。
 
 > 完整專案說明請參閱根目錄 [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md)。
 

@@ -1,6 +1,6 @@
 # HCCA API
 
-校園自治整合平台後端，採 FastAPI、SQLAlchemy 2.0 async、PostgreSQL、
+竹嶺班聯數位整合系統後端，採 FastAPI、SQLAlchemy 2.0 async、PostgreSQL、
 Redis 與 Celery。完整架構請先看 [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md)。
 
 ## 啟動

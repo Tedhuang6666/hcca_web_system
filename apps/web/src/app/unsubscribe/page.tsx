@@ -37,7 +37,7 @@ function UnsubscribeInner() {
         <div className="flex items-center gap-3 px-6 py-5" style={{ background: "#1a1a2e" }}>
           <BrandEmblem size={40} />
           <div>
-            <p className="text-sm font-semibold text-white">校園自治整合平台</p>
+            <p className="text-sm font-semibold text-white">竹嶺班聯數位整合系統</p>
             <p className="text-[10px] font-medium tracking-widest" style={{ color: "#c9a84c" }}>
               HCCA
             </p>
