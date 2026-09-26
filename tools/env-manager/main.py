@@ -149,7 +149,7 @@ def backup_env() -> Path | None:
 def render_env(values: dict[str, str], schema: dict[str, dict[str, Any]]) -> str:
     lines = [
         "# ============================================================",
-        "# 校園自治整合平台 - 本機環境變數",
+        "# 竹嶺班聯數位整合系統 - 本機環境變數",
         "# 由 tools/env-manager 產生；修改前會自動建立 .env.backup.*",
         "# ============================================================",
         "",

@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     )
 
     # --- 應用程式基本設定 ---
-    APP_NAME: str = "校園自治整合平台"
+    APP_NAME: str = "竹嶺班聯數位整合系統"
     APP_VERSION: str = _read_release_version()
     APP_RELEASE: str = ""
     GOOGLE_PAGESPEED_API_KEY: str = ""
@@ -359,7 +359,7 @@ class Settings(BaseSettings):
         description="OAuth 登入完成後 MFA challenge token 有效分鐘數",
     )
     PASSKEY_RP_ID: str = Field(default="localhost", description="WebAuthn relying party ID")
-    PASSKEY_RP_NAME: str = Field(default="HCCA 校園自治整合平台")
+    PASSKEY_RP_NAME: str = Field(default="HCCA 竹嶺班聯數位整合系統")
     PASSKEY_ORIGIN: str = Field(default="http://localhost:3000")
     PASSKEY_ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
     PASSKEY_CHALLENGE_TTL_SECONDS: int = Field(default=300, ge=60, le=900)

@@ -1,7 +1,7 @@
 [project]
 name = "campus-platform"
 version = "0.1.0"
-description = "校園自治整合平台"
+description = "竹嶺班聯數位整合系統"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

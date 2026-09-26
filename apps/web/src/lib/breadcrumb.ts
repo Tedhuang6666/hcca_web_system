@@ -159,7 +159,7 @@ export function getBreadcrumbs(pathname: string): Crumb[] {
 export function getPageTitle(pathname: string): string {
   const crumbs = getBreadcrumbs(pathname);
   const last = crumbs[crumbs.length - 1];
-  return last?.label ?? "校園自治整合平台";
+  return last?.label ?? "竹嶺班聯數位整合系統";
 }
 
 /**

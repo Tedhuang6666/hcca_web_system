@@ -5,7 +5,7 @@ import { ImageResponse } from "next/og";
 
 import { BRANDING } from "@/lib/branding";
 
-export const alt = `${BRANDING.orgShortName} ${BRANDING.acronym} 校園自治整合平台`;
+export const alt = `${BRANDING.orgShortName} ${BRANDING.acronym} 竹嶺班聯數位整合系統`;
 
 export const size = {
   width: 1200,

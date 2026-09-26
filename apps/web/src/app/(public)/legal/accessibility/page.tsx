@@ -2,7 +2,7 @@ import PolicyDocumentViewer from "@/components/legal/PolicyDocumentViewer";
 
 export const metadata = {
   title: "無障礙聲明 · HCCA",
-  description: "HCCA 校園自治整合平台無障礙聲明",
+  description: "HCCA 竹嶺班聯數位整合系統無障礙聲明",
 };
 
 export default function AccessibilityPage() {

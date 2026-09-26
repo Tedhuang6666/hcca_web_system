@@ -102,7 +102,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
           <div className="login-brand-stage relative z-10 flex w-full flex-col items-center py-16 text-center">
             <BrandEmblem size={172} />
             <p className="mt-8 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              校園自治整合平台
+              竹嶺班聯數位整合系統
             </p>
             <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
               公文、會議與校園服務
