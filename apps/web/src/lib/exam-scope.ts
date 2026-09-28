@@ -43,6 +43,41 @@ function isScoreDetail(label: string): boolean {
   return /(?:考試|成績).*(?:%|％)|(?:%|％).*?(?:考試|成績)/u.test(label);
 }
 
+const mathVariantLabels: Record<string, readonly string[]> = {
+  高二: ["數A", "數B"],
+  高三: ["數學甲", "數學乙"],
+};
+
+function addImplicitMathVariants(entries: ExamScopeEntry[]): ExamScopeEntry[] {
+  const groups = new Map<string, ExamScopeEntry[]>();
+
+  for (const entry of entries) {
+    if (entry.subject !== "數學" || !mathVariantLabels[entry.gradeGroup]) continue;
+    const key = `${entry.section}\u0000${entry.gradeGroup}`;
+    const group = groups.get(key) ?? [];
+    group.push(entry);
+    groups.set(key, group);
+  }
+
+  return entries.map((entry) => {
+    if (entry.subject !== "數學" || entry.grade !== entry.gradeGroup) return entry;
+
+    const labels = mathVariantLabels[entry.gradeGroup];
+    const group = groups.get(`${entry.section}\u0000${entry.gradeGroup}`);
+    if (!labels || !group || group.length !== labels.length) return entry;
+
+    const usedLabels = new Set(
+      group
+        .filter((item) => item.grade !== item.gradeGroup)
+        .map((item) => item.grade.slice(item.gradeGroup.length).replace(/^[\s－–—-]+/u, "").trim()),
+    );
+    const availableLabels = labels.filter((label) => !usedLabels.has(label));
+    const entryIndex = group.findIndex((item) => item.id === entry.id);
+    const label = availableLabels[entryIndex] ?? availableLabels[0];
+    return label ? { ...entry, grade: `${entry.gradeGroup}－${label}` } : entry;
+  });
+}
+
 export function getExamScopeDefaultSection(layoutConfig: unknown): string | null {
   if (!layoutConfig || typeof layoutConfig !== "object" || Array.isArray(layoutConfig)) {
     return null;
@@ -118,7 +153,7 @@ export function parseExamScopeMarkdown(markdown: string | null | undefined): Exa
     appendContent(line);
   }
 
-  const contentEntries = entries.filter((entry) => entry.content.trim());
+  const contentEntries = addImplicitMathVariants(entries.filter((entry) => entry.content.trim()));
   const subjects = [...new Set(contentEntries.map((entry) => entry.subject))];
   const grades = [...new Set(contentEntries.map((entry) => entry.gradeGroup))];
   const sections = [...new Set(contentEntries.map((entry) => entry.section))]

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ExamScopeData } from "@/lib/exam-scope";
+import { parseExamScopeMarkdown, type ExamScopeData } from "@/lib/exam-scope";
 import { usersApi } from "@/lib/api/users";
 
 import ExamScopeExplorer from "./ExamScopeExplorer";
@@ -127,6 +127,31 @@ describe("ExamScopeExplorer", () => {
     expect(screen.getByRole("heading", { name: "數學乙", level: 5 })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "依年級" }));
+    expect(screen.getByRole("heading", { name: "數學（數學甲）", level: 5 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "數學（數學乙）", level: 5 })).toBeInTheDocument();
+  });
+
+  it("keeps inferred math variants visible when only mathematics is selected", () => {
+    const inferredScope = parseExamScopeMarkdown(`# 國文
+## 一段
+### 高二
+課本 1～4 課
+# 數學
+## 一段
+### 高二
+2-1 指數函數
+### 高二
+第一單元
+### 高三
+複數與方程式
+### 高三
+複數平面`);
+
+    render(<ExamScopeExplorer scope={inferredScope!} />);
+    fireEvent.click(screen.getByRole("button", { name: "數學" }));
+
+    expect(screen.getByRole("heading", { name: "數學（數A）", level: 5 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "數學（數B）", level: 5 })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "數學（數學甲）", level: 5 })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "數學（數學乙）", level: 5 })).toBeInTheDocument();
   });
