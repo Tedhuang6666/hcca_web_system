@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 
 import { BRANDING } from "@/lib/branding";
 import { contentCategoryLabel, DOCUMENT_CATEGORY_LABELS } from "@/lib/content-labels";
@@ -38,7 +37,6 @@ export default async function DocumentDetailRoute({
 }) {
   const { id } = await params;
   const result = await fetchPublicDocumentResult(id);
-  if (result.status === 404) notFound();
   const document = result.data;
   const path = `/documents/${encodeURIComponent(id)}`;
   const canonical = absoluteUrl(path);
