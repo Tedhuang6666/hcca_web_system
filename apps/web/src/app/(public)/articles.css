@@ -663,16 +663,15 @@
 .exam-scope-entries {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  border-inline: 1px solid var(--public-border);
   border-bottom: 1px solid var(--public-border);
 }
 
 .exam-scope-entry {
   min-width: 0;
+  border-inline-end: 1px solid var(--public-border);
+  border-bottom: 1px solid var(--public-border);
   padding: 1.15rem 1.25rem 1.45rem;
-}
-
-.exam-scope-entry + .exam-scope-entry {
-  border-left: 1px solid var(--public-border);
 }
 
 .exam-scope-entry h5 {
@@ -813,12 +812,8 @@
     font-size: 1rem;
   }
 
-  .exam-scope-entry + .exam-scope-entry {
-    border-top: 1px solid var(--public-border);
-    border-left: 0;
-  }
-
   .exam-scope-entry {
+    border-inline-end: 0;
     padding-inline: 0;
   }
 
