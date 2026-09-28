@@ -7,7 +7,6 @@ import type {
   PartnerBusinessOutWithHours,
   PartnerBusinessSelfUpdate,
   PartnerBusinessUpdateWithHours,
-  PartnerEngagementFields,
   UnifiedMapItem,
 } from "../partner-map-types";
 import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, put, del, uploadWithProgress } from "./core";
@@ -22,7 +21,7 @@ type PartnerBusinessContactFields = {
   line_id: string | null;
   other_contact: string | null;
 };
-export type PartnerBusinessDirectoryItem = Omit<PartnerBusinessListItem, PartnerEngagementFields> & PartnerBusinessContactFields;
+export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusinessContactFields;
 export type PartnerLocationWithMapUrl = PartnerLocationOut & { google_maps_url: string | null };
 type PartnerBusinessOutWithFlyer = PartnerBusinessOutWithHours & {
   flyer_image_url: string | null;

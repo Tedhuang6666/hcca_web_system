@@ -8672,40 +8672,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/partner-map/businesses/{business_id}/check-in": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 記錄學生常去 */
-        post: operations["record_business_checkin_partner_map_businesses__business_id__check_in_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/partner-map/businesses/{business_id}/click": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 記錄店家點擊 */
-        post: operations["record_business_click_partner_map_businesses__business_id__click_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/partner-map/businesses/{business_id}/flyer": {
         parameters: {
             query?: never;
@@ -8734,24 +8700,6 @@ export interface paths {
         get: operations["preview_business_image_partner_map_businesses__business_id__images__image_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/partner-map/businesses/{business_id}/ratings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出店家評價 */
-        get: operations["list_business_ratings_partner_map_businesses__business_id__ratings_get"];
-        put?: never;
-        /** 送出店家評價 */
-        post: operations["create_business_rating_partner_map_businesses__business_id__ratings_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8819,23 +8767,6 @@ export interface paths {
         };
         /** 列出我可管理的店家 */
         get: operations["list_my_businesses_partner_map_my_businesses_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/partner-map/rankings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 學生常去排行 */
-        get: operations["list_rankings_partner_map_rankings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -24284,16 +24215,6 @@ export interface components {
             business_hours_text?: string | null;
             /** Category */
             category?: string | null;
-            /**
-             * Checkin Count
-             * @default 0
-             */
-            checkin_count: number;
-            /**
-             * Click Count
-             * @default 0
-             */
-            click_count: number;
             /** Contact Email */
             contact_email?: string | null;
             /** Contact Name */
@@ -24329,18 +24250,6 @@ export interface components {
             name: string;
             /** Other Contact */
             other_contact?: string | null;
-            /**
-             * Popularity Score
-             * @default 0
-             */
-            popularity_score: number;
-            /** Rating Avg */
-            rating_avg?: number | null;
-            /**
-             * Rating Count
-             * @default 0
-             */
-            rating_count: number;
             /** Sort Order */
             sort_order: number;
             /** Status */
@@ -24357,11 +24266,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /**
-             * View Count
-             * @default 0
-             */
-            view_count: number;
         };
         /**
          * PartnerBusinessListingType
@@ -24381,16 +24285,6 @@ export interface components {
             can_view_private_details: boolean;
             /** Category */
             category: string | null;
-            /**
-             * Checkin Count
-             * @default 0
-             */
-            checkin_count: number;
-            /**
-             * Click Count
-             * @default 0
-             */
-            click_count: number;
             /** Contact Email */
             contact_email: string | null;
             /** Contact Name */
@@ -24411,11 +24305,6 @@ export interface components {
             /** Flyer Image Url */
             flyer_image_url?: string | null;
             /**
-             * Has Checked In
-             * @default false
-             */
-            has_checked_in: boolean;
-            /**
              * Id
              * Format: uuid
              */
@@ -24435,8 +24324,6 @@ export interface components {
             locations: components["schemas"]["PartnerLocationOut"][];
             /** Logo Url */
             logo_url: string | null;
-            /** My Rating */
-            my_rating?: number | null;
             /** Name */
             name: string;
             /**
@@ -24446,20 +24333,8 @@ export interface components {
             offers: components["schemas"]["PartnerOfferOut"][];
             /** Other Contact */
             other_contact: string | null;
-            /**
-             * Popularity Score
-             * @default 0
-             */
-            popularity_score: number;
             /** Promo Images */
             promo_images: components["schemas"]["PartnerBusinessImageOut"][];
-            /** Rating Avg */
-            rating_avg?: number | null;
-            /**
-             * Rating Count
-             * @default 0
-             */
-            rating_count: number;
             /** Social Url */
             social_url: string | null;
             /** Sort Order */
@@ -24478,11 +24353,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /**
-             * View Count
-             * @default 0
-             */
-            view_count: number;
             /** Website Url */
             website_url: string | null;
         };
@@ -24743,11 +24613,6 @@ export interface components {
             business_name: string;
             /** Category */
             category: string | null;
-            /**
-             * Checkin Count
-             * @default 0
-             */
-            checkin_count: number;
             /** Cover Image Url */
             cover_image_url: string | null;
             /** Has Active Offer */
@@ -24773,18 +24638,6 @@ export interface components {
             /** Phone */
             phone: string | null;
             /**
-             * Popularity Score
-             * @default 0
-             */
-            popularity_score: number;
-            /** Rating Avg */
-            rating_avg?: number | null;
-            /**
-             * Rating Count
-             * @default 0
-             */
-            rating_count: number;
-            /**
              * Source
              * @default partner
              * @enum {string}
@@ -24794,11 +24647,6 @@ export interface components {
             summary: string | null;
             /** Tags */
             tags: components["schemas"]["PartnerTagOut"][];
-            /**
-             * View Count
-             * @default 0
-             */
-            view_count: number;
         };
         /**
          * PartnerOfferBenefitType
@@ -24909,85 +24757,6 @@ export interface components {
             starts_at?: string | null;
             /** Title */
             title?: string | null;
-        };
-        /** PartnerRankingItem */
-        PartnerRankingItem: {
-            /**
-             * Business Id
-             * Format: uuid
-             */
-            business_id: string;
-            /** Category */
-            category: string | null;
-            /** Checkin Count */
-            checkin_count: number;
-            /** Logo Url */
-            logo_url: string | null;
-            /** Name */
-            name: string;
-            /** Popularity Score */
-            popularity_score: number;
-            /** Rating Avg */
-            rating_avg: number | null;
-            /** Rating Count */
-            rating_count: number;
-            /** Summary */
-            summary: string | null;
-            /** View Count */
-            view_count: number;
-        };
-        /** PartnerRatingCreate */
-        PartnerRatingCreate: {
-            /** Comment */
-            comment?: string | null;
-            /**
-             * Is Public
-             * @default true
-             */
-            is_public: boolean;
-            /** Rating */
-            rating: number;
-            /**
-             * Visit Count
-             * @default 1
-             */
-            visit_count: number;
-        };
-        /** PartnerRatingOut */
-        PartnerRatingOut: {
-            /**
-             * Business Id
-             * Format: uuid
-             */
-            business_id: string;
-            /** Comment */
-            comment: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Is Public */
-            is_public: boolean;
-            /** Rating */
-            rating: number;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
-            /** Visit Count */
-            visit_count: number;
         };
         /** PartnerSubmissionCreate */
         PartnerSubmissionCreate: {
@@ -52480,68 +52249,6 @@ export interface operations {
             };
         };
     };
-    record_business_checkin_partner_map_businesses__business_id__check_in_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                business_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PartnerBusinessOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    record_business_click_partner_map_businesses__business_id__click_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                business_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PartnerBusinessOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     preview_business_flyer_partner_map_businesses__business_id__flyer_get: {
         parameters: {
             query?: never;
@@ -52592,75 +52299,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_business_ratings_partner_map_businesses__business_id__ratings_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                business_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PartnerRatingOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_business_rating_partner_map_businesses__business_id__ratings_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                business_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PartnerRatingCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PartnerRatingOut"];
                 };
             };
             /** @description Validation Error */
@@ -52825,37 +52463,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartnerBusinessListItem"][];
-                };
-            };
-        };
-    };
-    list_rankings_partner_map_rankings_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PartnerRankingItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
