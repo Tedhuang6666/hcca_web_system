@@ -7,7 +7,6 @@ import type {
   PublicOfficerOut,
   PublicSiteBundleOut,
   PublicSitePageOut,
-  PartnerRankingItem,
   PartnerTagOut,
   RegulationListItem,
   SurveyOut,
@@ -148,20 +147,18 @@ export async function fetchPublicPartnerMapData(): Promise<{
   initialItems: UnifiedMapItem[];
   initialContactBusinesses: PartnerBusinessDirectoryItem[];
   initialTags: PartnerTagOut[];
-  initialRankings: PartnerRankingItem[];
 }> {
   const fetchJson = async <T>(path: string): Promise<T> => {
     return (await getCachedPublicJson<T>(path)) ?? ([] as T);
   };
 
-  const [initialItems, initialContactBusinesses, initialTags, initialRankings] = await Promise.all([
+  const [initialItems, initialContactBusinesses, initialTags] = await Promise.all([
     fetchJson<UnifiedMapItem[]>("/partner-map?limit=300"),
     fetchJson<PartnerBusinessDirectoryItem[]>("/partner-map/directory"),
     fetchJson<PartnerTagOut[]>("/partner-map/tags"),
-    fetchJson<PartnerRankingItem[]>("/partner-map/rankings?limit=5"),
   ]);
 
-  return { initialItems, initialContactBusinesses, initialTags, initialRankings };
+  return { initialItems, initialContactBusinesses, initialTags };
 }
 
 export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut | null> {

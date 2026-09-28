@@ -1,5 +1,5 @@
 import type {
-  PartnerBusinessCreate, PartnerBusinessImageOut, PartnerBusinessListItem, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
+  PartnerBusinessCreate, PartnerBusinessImageOut, PartnerBusinessListItem, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
 } from "../types";
 import type {
   PartnerBusinessAccount,
@@ -7,6 +7,7 @@ import type {
   PartnerBusinessOutWithHours,
   PartnerBusinessSelfUpdate,
   PartnerBusinessUpdateWithHours,
+  PartnerEngagementFields,
   UnifiedMapItem,
 } from "../partner-map-types";
 import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, put, del, uploadWithProgress } from "./core";
@@ -21,7 +22,7 @@ type PartnerBusinessContactFields = {
   line_id: string | null;
   other_contact: string | null;
 };
-export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusinessContactFields;
+export type PartnerBusinessDirectoryItem = Omit<PartnerBusinessListItem, PartnerEngagementFields> & PartnerBusinessContactFields;
 export type PartnerLocationWithMapUrl = PartnerLocationOut & { google_maps_url: string | null };
 type PartnerBusinessOutWithFlyer = PartnerBusinessOutWithHours & {
   flyer_image_url: string | null;
@@ -102,17 +103,11 @@ export const partnerMapApi = {
     });
     return get<PartnerBusinessDirectoryItem[]>(`/partner-map/directory${p.size ? `?${p}` : ""}`);
   },
-  rankings: (limit = 10) => get<PartnerRankingItem[]>(`/partner-map/rankings?limit=${limit}`),
   getBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/businesses/${id}`),
   myBusinesses: () => get<PartnerBusinessDirectoryItem[]>("/partner-map/my-businesses"),
   getSelfBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/businesses/${id}/self`),
   updateSelfBusiness: (id: string, body: PartnerBusinessSelfUpdate) =>
     patch<PartnerBusinessDetail>(`/partner-map/businesses/${id}/self`, body),
-  recordClick: (id: string) => post<PartnerBusinessDetail>(`/partner-map/businesses/${id}/click`, {}),
-  checkIn: (id: string) => post<PartnerBusinessDetail>(`/partner-map/businesses/${id}/check-in`, {}),
-  listRatings: (id: string) => get<PartnerRatingOut[]>(`/partner-map/businesses/${id}/ratings`),
-  rateBusiness: (id: string, body: PartnerRatingCreate) =>
-    post<PartnerRatingOut>(`/partner-map/businesses/${id}/ratings`, body),
   submitBusiness: (body: PartnerSubmissionCreate) =>
     post<PartnerSubmissionOut>("/partner-map/submissions", body),
 

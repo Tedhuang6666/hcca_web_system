@@ -44,9 +44,6 @@ from api.schemas.partner_map import (
     PartnerOfferCreate,
     PartnerOfferOut,
     PartnerOfferUpdate,
-    PartnerRankingItem,
-    PartnerRatingCreate,
-    PartnerRatingOut,
     PartnerSubmissionCreate,
     PartnerSubmissionOut,
     PartnerSubmissionReview,
@@ -107,7 +104,6 @@ def _business_out(
     *,
     include_private: bool,
     include_internal: bool = False,
-    viewer_id: uuid.UUID | None = None,
 ) -> PartnerBusinessOut:
     derived_fields = {
         "promo_images",
@@ -115,11 +111,6 @@ def _business_out(
         "locations",
         "offers",
         "flyer_image_url",
-        "rating_avg",
-        "rating_count",
-        "my_rating",
-        "has_checked_in",
-        "popularity_score",
         "can_view_private_details",
     }
     scalar_data = {
@@ -130,7 +121,6 @@ def _business_out(
     scalar_data["promo_images"] = []
     out = PartnerBusinessOut.model_validate(scalar_data)
     out.tags = [PartnerTagOut.model_validate(tag) for tag in business.tags]
-    rating_avg, rating_count = map_svc.rating_stats(business)
     out.can_view_private_details = include_private
     out.internal_note = business.internal_note if include_internal else None
     out.flyer_image_url = (
@@ -154,17 +144,6 @@ def _business_out(
         )
         for image in business.promo_images
     ]
-    out.rating_avg = rating_avg
-    out.rating_count = rating_count
-    out.my_rating = (
-        next((rating.rating for rating in business.ratings if rating.user_id == viewer_id), None)
-        if viewer_id
-        else None
-    )
-    out.has_checked_in = (
-        any(checkin.user_id == viewer_id for checkin in business.checkins) if viewer_id else False
-    )
-    out.popularity_score = map_svc.popularity_score(business)
     out.locations = (
         [
             _location_out(location, include_private=include_private)
@@ -184,12 +163,8 @@ def _business_out(
 
 def _list_item(business: PartnerBusiness) -> PartnerBusinessListItem:
     out = PartnerBusinessListItem.model_validate(business)
-    rating_avg, rating_count = map_svc.rating_stats(business)
     out.location_count = len(business.locations)
     out.active_offer_count = map_svc.active_offer_count(business)
-    out.rating_avg = rating_avg
-    out.rating_count = rating_count
-    out.popularity_score = map_svc.popularity_score(business)
     return out
 
 
@@ -216,7 +191,6 @@ def _discovery_item(business: PartnerBusiness) -> PartnerDiscoveryItem:
 def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMapItem:
     business = location.business
     current_offers = [offer for offer in business.offers if map_svc.is_offer_current(offer)]
-    rating_avg, rating_count = map_svc.rating_stats(business)
     return PartnerMapItem(
         source="partner",
         business_id=business.id,
@@ -237,11 +211,6 @@ def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMap
         has_active_offer=bool(current_offers),
         has_discount_offer=any(offer.benefit_type == "discount" for offer in current_offers),
         active_offer_titles=[offer.title for offer in current_offers],
-        rating_avg=rating_avg,
-        rating_count=rating_count,
-        popularity_score=map_svc.popularity_score(business),
-        view_count=business.view_count,
-        checkin_count=business.checkin_count,
     )
 
 
@@ -434,32 +403,6 @@ async def update_self_business(
     return _business_out(business, include_private=True)
 
 
-@router.get("/rankings", response_model=list[PartnerRankingItem], summary="學生常去排行")
-async def list_rankings(
-    db: DbDep,
-    limit: int = Query(10, ge=1, le=50),
-) -> list[PartnerRankingItem]:
-    businesses = await map_svc.ranking(db, limit=limit)
-    result: list[PartnerRankingItem] = []
-    for business in businesses:
-        rating_avg, rating_count = map_svc.rating_stats(business)
-        result.append(
-            PartnerRankingItem(
-                business_id=business.id,
-                name=business.name,
-                summary=business.summary,
-                category=business.category,
-                logo_url=business.logo_url,
-                rating_avg=rating_avg,
-                rating_count=rating_count,
-                checkin_count=business.checkin_count,
-                view_count=business.view_count,
-                popularity_score=map_svc.popularity_score(business),
-            )
-        )
-    return result
-
-
 @router.get(
     "/businesses/{business_id}", response_model=PartnerBusinessOut, summary="取得特約店家詳情"
 )
@@ -469,10 +412,7 @@ async def get_business_detail(
     business = await _business_or_404(db, business_id)
     if business.status != "active":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    await map_svc.increment_business_metric(db, business, "view")
-    return _business_out(
-        business, include_private=viewer is not None, viewer_id=viewer.id if viewer else None
-    )
+    return _business_out(business, include_private=viewer is not None)
 
 
 @router.get(
@@ -511,77 +451,6 @@ async def preview_business_image(
     if business.status != PartnerBusinessStatus.ACTIVE.value:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
     return await _serve_business_image(await _business_image_or_404(db, business_id, image_id))
-
-
-@router.post(
-    "/businesses/{business_id}/click",
-    response_model=PartnerBusinessOut,
-    summary="記錄店家點擊",
-)
-async def record_business_click(
-    business_id: uuid.UUID, db: DbDep, viewer: OptionalUser
-) -> PartnerBusinessOut:
-    business = await _business_or_404(db, business_id)
-    if business.status != "active":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    business = await map_svc.increment_business_metric(db, business, "click")
-    return _business_out(
-        business, include_private=viewer is not None, viewer_id=viewer.id if viewer else None
-    )
-
-
-@router.post(
-    "/businesses/{business_id}/check-in",
-    response_model=PartnerBusinessOut,
-    summary="記錄學生常去",
-)
-async def record_business_checkin(
-    business_id: uuid.UUID, db: DbDep, viewer: CurrentUser
-) -> PartnerBusinessOut:
-    business = await _business_or_404(db, business_id)
-    if business.status != "active":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    business = await map_svc.record_business_checkin(db, business, viewer.id)
-    return _business_out(business, include_private=True, viewer_id=viewer.id)
-
-
-@router.get(
-    "/businesses/{business_id}/ratings",
-    response_model=list[PartnerRatingOut],
-    summary="列出店家評價",
-)
-async def list_business_ratings(
-    business_id: uuid.UUID,
-    db: DbDep,
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-) -> list[PartnerRatingOut]:
-    business = await _business_or_404(db, business_id)
-    if business.status != "active":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    return [
-        PartnerRatingOut.model_validate(rating)
-        for rating in await map_svc.list_ratings(db, business_id, limit=limit, offset=offset)
-    ]
-
-
-@router.post(
-    "/businesses/{business_id}/ratings",
-    response_model=PartnerRatingOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="送出店家評價",
-)
-async def create_business_rating(
-    business_id: uuid.UUID,
-    body: PartnerRatingCreate,
-    db: DbDep,
-    viewer: CurrentUser,
-) -> PartnerRatingOut:
-    business = await _business_or_404(db, business_id)
-    if business.status != "active":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    rating = await map_svc.upsert_rating(db, business, body, viewer.id)
-    return PartnerRatingOut.model_validate(rating)
 
 
 @router.post(

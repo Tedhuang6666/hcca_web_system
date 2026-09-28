@@ -514,8 +514,12 @@
   height: 257px !important;
 }
 
+.partner-map-theme-light .leaflet-tile-pane {
+  filter: saturate(0.68) brightness(1.03) contrast(0.94);
+}
+
 .partner-map-theme-dark .leaflet-tile-pane {
-  filter: brightness(1.05) contrast(0.86) saturate(0.72) sepia(0.08) hue-rotate(8deg);
+  filter: invert(0.9) hue-rotate(180deg) brightness(0.72) contrast(0.84) saturate(0.58);
 }
 
 .partner-map-theme-dark .partner-map-school-marker,
