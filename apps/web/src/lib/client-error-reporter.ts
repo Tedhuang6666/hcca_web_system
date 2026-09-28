@@ -195,7 +195,22 @@ function recoverFromChunkFailure(url: string | null): void {
 }
 
 function isIgnoredWindowError(message: string): boolean {
-  return /Error invoking postMessage:\s*Java object is gone/i.test(message);
+  return message === "Script error."
+    || /Error invoking postMessage:\s*Java object is gone/i.test(message)
+    || /window\.webkit\.messageHandlers/i.test(message);
+}
+
+function normalizedTransientResourceUrl(url: string | null): string {
+  if (!url) return "unknown";
+  try {
+    const parsed = new URL(url, window.location.href);
+    parsed.search = "";
+    parsed.hash = "";
+    parsed.pathname = parsed.pathname.replace(/\b[a-f\d]{16,}\b/gi, "{asset}");
+    return parsed.href;
+  } catch {
+    return url.replace(/[?#][^\s\]]*$/, "").replace(/\b[a-f\d]{16,}\b/gi, "{asset}");
+  }
 }
 
 /** 安裝 window error / unhandledrejection 入口，涵蓋未經 React boundary 的錯誤。 */
@@ -215,6 +230,7 @@ export function installGlobalClientErrorReporter(): () => void {
         ? `${details.message || "資源載入失敗"}${failedResource ? ` [${failedResource}]` : ""}`
         : details.message,
       scope: resource ? `resource:${target.tagName.toLowerCase()}` : "window.error",
+      ...(resource ? { dedupeKey: `resource:${normalizedTransientResourceUrl(failedResource)}` } : {}),
     });
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -222,10 +238,11 @@ export function installGlobalClientErrorReporter(): () => void {
     reportClientError({ ...details, scope: "unhandledrejection" });
   };
   const onSecurityPolicyViolation = (event: SecurityPolicyViolationEvent) => {
+    const blockedResource = normalizedTransientResourceUrl(event.blockedURI || null);
     reportClientError({
       message: `CSP blocked ${event.effectiveDirective || "resource"}: ${event.blockedURI || "unknown"}`,
       scope: "securitypolicyviolation",
-      dedupeKey: `${event.effectiveDirective}:${event.blockedURI}`,
+      dedupeKey: `${event.effectiveDirective}:${blockedResource}`,
     });
   };
 

@@ -23,8 +23,43 @@ describe("client error reporter", () => {
     window.dispatchEvent(
       new ErrorEvent("error", { message: "Error invoking postMessage: Java object is gone" }),
     );
+    window.dispatchEvent(new ErrorEvent("error", { message: "Script error." }));
+    window.dispatchEvent(
+      new ErrorEvent("error", {
+        message: "undefined is not an object (evaluating 'window.webkit.messageHandlers')",
+      }),
+    );
 
     expect(fetchMock).not.toHaveBeenCalled();
+    uninstall();
+  });
+
+  it("groups cache-busted resources and RSC CSP violations without hiding the first report", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+
+    for (const hash of ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]) {
+      const image = document.createElement("img");
+      image.src = `https://hcca.tw/api/uploads/surveys/${hash}.png?signature=${hash}`;
+      document.body.append(image);
+      image.dispatchEvent(new Event("error"));
+    }
+
+    for (const token of ["first", "second"]) {
+      const event = new Event("securitypolicyviolation");
+      Object.defineProperties(event, {
+        effectiveDirective: { value: "connect-src" },
+        blockedURI: { value: `https://hcca.tw/surveys?_rsc=${token}` },
+      });
+      window.dispatchEvent(event);
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const resourcePayload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    const cspPayload = JSON.parse(String(fetchMock.mock.calls[1][1].body));
+    expect(resourcePayload.message).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png");
+    expect(cspPayload.message).toContain("_rsc=first");
     uninstall();
   });
 

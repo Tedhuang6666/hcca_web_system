@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 _UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f-]{27,}\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"\b\d+\b")
 _WHITESPACE_RE = re.compile(r"\s+")
+_CLIENT_TRANSIENT_QUERY_RE = re.compile(r"[?#][^\s\]]*")
+_CLIENT_TRANSIENT_ASSET_RE = re.compile(r"\b[a-f0-9]{16,}\b", re.IGNORECASE)
 _SENSITIVE_RE = re.compile(
     r"(?i)(bearer\s+|(?:password|passwd|secret|token|api[_-]?key|authorization|cookie)\s*[=:]\s*)[^\s,;]+"
 )
@@ -74,6 +76,15 @@ def normalize_error_message(message: str) -> str:
     normalized = _UUID_RE.sub("{uuid}", sanitize_incident_text(message, 1000))
     normalized = _NUMBER_RE.sub("{id}", normalized)
     return _WHITESPACE_RE.sub(" ", normalized).strip()[:500]
+
+
+def normalize_client_incident_message(message: str, scope: str) -> str:
+    """Collapse cache-busted browser URLs without losing their raw event details."""
+    normalized = normalize_error_message(message)
+    if scope == "securitypolicyviolation" or scope.startswith("resource:"):
+        normalized = _CLIENT_TRANSIENT_QUERY_RE.sub("", normalized)
+        normalized = _CLIENT_TRANSIENT_ASSET_RE.sub("{asset}", normalized)
+    return normalized[:500]
 
 
 def create_error_fingerprint(
@@ -281,10 +292,11 @@ async def persist_client_error_incident(
 ) -> SystemIncident | None:
     """Persist browser failures beside API and Celery incidents for one operational timeline."""
     release = str(context.get("release") or "").strip() or None
+    fingerprint_message = normalize_client_incident_message(message, scope)
     return await persist_error_incident(
         error_id=error_id,
         exception_type="ClientError",
-        message=message,
+        message=fingerprint_message,
         path=path or "unknown",
         status_code=0,
         category="client",
@@ -295,6 +307,7 @@ async def persist_client_error_incident(
         title=f"web: {scope} at {path or 'unknown'}",
         details={
             "scope": scope,
+            "message": message,
             "stack_head": stack,
             "client_context": context,
             "client_ip": client_ip,
@@ -411,8 +424,9 @@ async def export_incidents_csv(
     *,
     status: str | None = None,
     limit: int = 1_000,
+    slow_queries: list[dict[str, object]] | None = None,
 ) -> str:
-    """Build a spreadsheet-safe incident report including each incident's event timeline."""
+    """Build a spreadsheet-safe incident report with its current slow-query snapshot."""
     stmt = (
         select(SystemIncident)
         .order_by(desc(SystemIncident.last_seen_at))
@@ -474,6 +488,10 @@ async def export_incidents_csv(
             "recovery_action",
             "resolution_note",
             "event_timeline",
+            "record_type",
+            "slow_query_template",
+            "slow_query_max_ms",
+            "slow_query_paths",
         ]
     )
     for incident in incidents:
@@ -499,6 +517,56 @@ async def export_incidents_csv(
                 incident.recovery_action or "",
                 incident.resolution_note or "",
                 json.dumps(events_by_incident[incident.id], ensure_ascii=False),
+                "incident",
+                "",
+                "",
+                "",
+            ]
+        )
+    for sample in slow_queries or []:
+        template = sanitize_incident_text(str(sample.get("template") or ""), 240)
+        occurrences = sample.get("occurrences") or 0
+        paths = sample.get("paths") if isinstance(sample.get("paths"), list) else []
+        try:
+            max_ms = float(sample.get("max_ms") or 0)
+        except (TypeError, ValueError):
+            max_ms = 0.0
+        try:
+            last_seen_at = datetime.fromtimestamp(
+                float(sample.get("last_seen") or 0), UTC
+            ).isoformat()
+        except (TypeError, ValueError, OSError):
+            last_seen_at = ""
+        safe_paths = sanitize_incident_details(paths)
+        writer.writerow(
+            [
+                "",
+                "",
+                "observed",
+                IncidentSeverity.P2 if max_ms >= 1_000 else IncidentSeverity.P3,
+                settings.OTEL_SERVICE_NAME,
+                settings.ENVIRONMENT,
+                settings.APP_RELEASE or settings.APP_VERSION,
+                "hcca-api: slow query",
+                template,
+                occurrences,
+                "",
+                last_seen_at,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                json.dumps(
+                    [{"event_type": "slow_query_observed", "details": {"paths": safe_paths}}],
+                    ensure_ascii=False,
+                ),
+                "slow_query",
+                template,
+                round(max_ms, 1),
+                json.dumps(safe_paths, ensure_ascii=False),
             ]
         )
     return output.getvalue()

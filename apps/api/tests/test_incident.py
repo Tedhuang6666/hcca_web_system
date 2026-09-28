@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 from datetime import UTC, datetime, timedelta
+from io import StringIO
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +12,7 @@ from api.services.incident import (
     create_error_fingerprint,
     export_incidents_csv,
     list_incident_events,
+    normalize_client_incident_message,
     upsert_incident,
 )
 
@@ -87,9 +90,47 @@ async def test_export_incidents_csv_contains_event_timeline(
     await _create_incident(db_session)
     await db_session.commit()
 
-    report = await export_incidents_csv(db_session)
+    report = await export_incidents_csv(
+        db_session,
+        slow_queries=[
+            {
+                "template": "SELECT * FROM survey_answers WHERE survey_id = ?",
+                "max_ms": 1_234.5,
+                "occurrences": 7,
+                "last_seen": 1_790_573_400.0,
+                "paths": [{"path": "/surveys/example", "occurrences": 7}],
+            }
+        ],
+    )
 
     assert "incident_id,error_id,status" in report
     assert "web: window.error at /documents" in report
     assert "stack_head" in report
     assert "390x844" in report
+    rows = list(csv.DictReader(StringIO(report)))
+    slow_query = next(row for row in rows if row["record_type"] == "slow_query")
+    assert slow_query["slow_query_template"] == "SELECT * FROM survey_answers WHERE survey_id = ?"
+    assert slow_query["slow_query_max_ms"] == "1234.5"
+    assert slow_query["severity"] == IncidentSeverity.P2
+
+
+def test_normalize_client_incident_message_groups_cache_busted_resources() -> None:
+    first_resource = (
+        "資源載入失敗 [https://hcca.tw/api/uploads/surveys/"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png?signature=first]"
+    )
+    second_resource = (
+        "資源載入失敗 [https://hcca.tw/api/uploads/surveys/"
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png?signature=second]"
+    )
+    assert normalize_client_incident_message(first_resource, "resource:img") == (
+        "資源載入失敗 [https://hcca.tw/api/uploads/surveys/{asset}.png]"
+    )
+    assert normalize_client_incident_message(first_resource, "resource:img") == (
+        normalize_client_incident_message(second_resource, "resource:img")
+    )
+    assert normalize_client_incident_message(
+        "CSP blocked connect-src: https://hcca.tw/surveys?_rsc=first", "securitypolicyviolation"
+    ) == normalize_client_incident_message(
+        "CSP blocked connect-src: https://hcca.tw/surveys?_rsc=second", "securitypolicyviolation"
+    )
