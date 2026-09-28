@@ -1089,6 +1089,10 @@
     display: none;
   }
 
+  .public-task-nav-link.public-shop-nav-link {
+    display: inline-flex;
+  }
+
   .public-desktop-nav {
     justify-content: flex-end;
   }
