@@ -100,7 +100,7 @@ async def errors(
 async def export_errors_csv(
     session: DbDep, _admin: Annotated[User, Depends(require_superuser)]
 ) -> Response:
-    content = await export_incidents_csv(session)
+    content = await export_incidents_csv(session, slow_queries=get_slow_queries(top=50))
     filename = f"incident_report_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     return Response(
         content="\ufeff" + content,
