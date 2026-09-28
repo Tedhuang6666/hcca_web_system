@@ -23,6 +23,9 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
           <nav className="flex shrink-0 items-center gap-2" aria-label="校商導覽">
+            <Link href="/" className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm sm:px-3" style={{ color: "var(--text-secondary)" }}>
+              公開首頁
+            </Link>
             <Link href="/shop/orders" className="hidden rounded-lg px-3 py-2 text-sm sm:inline-flex" style={{ color: "var(--text-secondary)" }}>
               我的訂單
             </Link>

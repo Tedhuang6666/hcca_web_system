@@ -11665,6 +11665,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/classes/{class_id}/payment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 班聯會確認整班繳款 */
+        patch: operations["update_class_payment_shop_orders_classes__class_id__payment_patch"];
+        trace?: never;
+    };
     "/shop/orders/quantities": {
         parameters: {
             query?: never;
@@ -11734,6 +11751,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/{order_id}/collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 班代紀錄本班學生收款 */
+        patch: operations["update_class_collection_shop_orders__order_id__collection_patch"];
+        trace?: never;
+    };
     "/shop/orders/{order_id}/payment": {
         parameters: {
             query?: never;
@@ -11747,7 +11781,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** 標示訂單是否已繳費 */
+        /** 管理員標示單筆訂單是否已繳費 */
         patch: operations["update_order_payment_shop_orders__order_id__payment_patch"];
         trace?: never;
     };
@@ -16066,6 +16100,14 @@ export interface components {
              */
             user_id: string;
         };
+        /** ClassCollectionUpdate */
+        ClassCollectionUpdate: {
+            /**
+             * Is Class Collected
+             * @description 班代是否已向此學生收款（僅供班級紀錄）
+             */
+            is_class_collected: boolean;
+        };
         /** ClassManualMemberCreate */
         ClassManualMemberCreate: {
             /**
@@ -16183,6 +16225,18 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /** ClassPaymentOut */
+        ClassPaymentOut: {
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Is Paid */
+            is_paid: boolean;
+            /** Updated Orders */
+            updated_orders: number;
         };
         /** ClassRoleAssign */
         ClassRoleAssign: {
@@ -23573,6 +23627,11 @@ export interface components {
              */
             id: string;
             /**
+             * Is Class Collected
+             * @default false
+             */
+            is_class_collected: boolean;
+            /**
              * Is Paid
              * @default false
              */
@@ -23613,6 +23672,8 @@ export interface components {
             assistance_scope: string;
             /** Assisted By Id */
             assisted_by_id?: string | null;
+            /** Class Collected At */
+            class_collected_at?: string | null;
             /** Class Id */
             class_id?: string | null;
             /** Class Label */
@@ -23632,6 +23693,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Class Collected
+             * @default false
+             */
+            is_class_collected: boolean;
             /**
              * Is Paid
              * @default false
@@ -59159,6 +59225,12 @@ export interface operations {
                 grade?: number | null;
                 /** @description 按班級篩選（需 SHOP_VIEW_ALL 權限） */
                 class_id?: string | null;
+                product_id?: string | null;
+                category_id?: string | null;
+                is_paid?: boolean | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                search?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -59191,8 +59263,8 @@ export interface operations {
     list_class_orders_shop_orders_class_get: {
         parameters: {
             query?: {
-                /** @description 篩選繳費狀態 */
-                is_paid?: boolean | null;
+                /** @description 篩選班代個人收款紀錄 */
+                is_class_collected?: boolean | null;
                 /** @description 僅顯示班級幹部協助建立的訂單 */
                 assisted_only?: boolean;
                 /** @description 篩選商品 */
@@ -59264,8 +59336,8 @@ export interface operations {
     class_order_summary_shop_orders_class_summary_get: {
         parameters: {
             query?: {
-                /** @description 篩選繳費狀態 */
-                is_paid?: boolean | null;
+                /** @description 篩選班代個人收款紀錄 */
+                is_class_collected?: boolean | null;
                 /** @description 僅顯示班級幹部協助建立的訂單 */
                 assisted_only?: boolean;
                 /** @description 篩選商品 */
@@ -59297,6 +59369,41 @@ export interface operations {
             };
         };
     };
+    update_class_payment_shop_orders_classes__class_id__payment_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderPaymentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassPaymentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     order_quantities_shop_orders_quantities_get: {
         parameters: {
             query?: {
@@ -59306,6 +59413,8 @@ export interface operations {
                 product_id?: string | null;
                 is_paid?: boolean | null;
                 status?: components["schemas"]["OrderStatus"] | null;
+                date_from?: string | null;
+                date_to?: string | null;
             };
             header?: never;
             path?: never;
@@ -59338,6 +59447,7 @@ export interface operations {
             query?: {
                 group_by?: string;
                 product_id?: string | null;
+                category_id?: string | null;
                 grade?: number | null;
                 class_id?: string | null;
                 user_id?: string | null;
@@ -59450,6 +59560,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["OrderCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_class_collection_shop_orders__order_id__collection_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassCollectionUpdate"];
             };
         };
         responses: {

@@ -68,6 +68,8 @@ from api.services.shop._orders import (
     serialize_order,
     serialize_order_item,
     serialize_order_list_item,
+    set_class_collected,
+    set_class_paid,
     set_order_paid,
     update_cart_item,
 )
@@ -140,6 +142,8 @@ __all__ = [
     "cancel_order",
     "replace_order_items",
     "set_order_paid",
+    "set_class_collected",
+    "set_class_paid",
     "order_summary",
     "close_category_for_class",
     "reopen_category_for_class",

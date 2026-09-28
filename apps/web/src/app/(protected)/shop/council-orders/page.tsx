@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart2, Lock, LockOpen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { shopApi, apiErrorMessage } from "@/lib/api";
+import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type {
   CatalogCategoryOut,
@@ -13,6 +13,7 @@ import type {
   OrderQuantityRow,
   OrderSummaryOut,
   OrderSummaryRow,
+  SchoolClassListItem,
 } from "@/lib/types";
 
 type Tab = "summary" | "quantities" | "orders";
@@ -40,6 +41,7 @@ function CloseBadge({ status }: { status: CloseStatusItem | undefined }) {
 
 export default function CouncilOrdersPage() {
   const [tab, setTab] = useState<Tab>("summary");
+  const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
 
   // 篩選
   const [grade, setGrade] = useState("");
@@ -47,35 +49,50 @@ export default function CouncilOrdersPage() {
   const [categoryId, setCategoryId] = useState("");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [search, setSearch] = useState("");
 
   // 資料
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
+  const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
   const [quantities, setQuantities] = useState<OrderQuantityRow[]>([]);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [closeStatus, setCloseStatus] = useState<Record<string, Record<string, CloseStatusItem>>>({});
   const [loading, setLoading] = useState(false);
   const [closeBusy, setCloseBusy] = useState<string | null>(null);
+  const [paymentBusy, setPaymentBusy] = useState<string | null>(null);
 
   // 班聯結單選擇
   const [closeTarget, setCloseTarget] = useState<{ categoryId: string; classId: string; label: string } | null>(null);
 
   useEffect(() => {
     shopApi.catalog().then(setCatalog).catch(() => {});
+    classApi.recipientOptions().then(setClasses).catch(() => {});
   }, []);
+
+  const dateParams = useMemo(() => ({
+    date_from: dateFrom ? new Date(`${dateFrom}T00:00:00+08:00`).toISOString() : undefined,
+    date_to: dateTo ? new Date(`${dateTo}T23:59:59+08:00`).toISOString() : undefined,
+  }), [dateFrom, dateTo]);
 
   const loadSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Parameters<typeof shopApi.orderSummary>[0] = { group_by: "class" };
+      const params: Parameters<typeof shopApi.orderSummary>[0] = { group_by: groupBy, ...dateParams };
       if (grade) params.grade = grade;
       if (classId) params.class_id = classId;
       if (isPaid) params.is_paid = isPaid;
+      if (productId) params.product_id = productId;
+      if (categoryId) params.category_id = categoryId;
+      if (statusFilter) params.status = statusFilter;
       const data = await shopApi.orderSummary(params);
       setSummary(data);
 
       // 批次查詢每個 row 的結單狀態
-      if (data.rows.length && catalog.length) {
+      if (groupBy === "class" && data.rows.length && catalog.length) {
         const catIds = catalog.map((c) => c.id);
         const statusMap: Record<string, Record<string, CloseStatusItem>> = {};
         await Promise.all(
@@ -95,17 +112,18 @@ export default function CouncilOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [grade, classId, isPaid, catalog]);
+  }, [groupBy, grade, classId, isPaid, productId, categoryId, statusFilter, catalog, dateParams]);
 
   const loadQuantities = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Parameters<typeof shopApi.orderQuantities>[0] = {};
+      const params: Parameters<typeof shopApi.orderQuantities>[0] = { ...dateParams };
       if (grade) params!.grade = grade;
       if (classId) params!.class_id = classId;
       if (categoryId) params!.category_id = categoryId;
       if (productId) params!.product_id = productId;
       if (isPaid) params!.is_paid = isPaid;
+      if (statusFilter) params!.status = statusFilter;
       const data = await shopApi.orderQuantities(params);
       setQuantities(data);
     } catch (e) {
@@ -113,16 +131,21 @@ export default function CouncilOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [grade, classId, categoryId, productId, isPaid]);
+  }, [grade, classId, categoryId, productId, isPaid, statusFilter, dateParams]);
 
   const loadOrders = useCallback(async () => {
-    if (!classId && !grade) { setOrders([]); return; }
     setLoading(true);
     try {
-      const params: Record<string, string> = { my_only: "false", limit: "200" };
+      const params: Record<string, string> = { my_only: "false", limit: "500" };
       if (grade) params.grade = grade;
       if (classId) params.class_id = classId;
       if (isPaid) params.is_paid = isPaid;
+      if (productId) params.product_id = productId;
+      if (categoryId) params.category_id = categoryId;
+      if (statusFilter) params.status = statusFilter;
+      if (search.trim()) params.search = search.trim();
+      if (dateParams.date_from) params.date_from = dateParams.date_from;
+      if (dateParams.date_to) params.date_to = dateParams.date_to;
       const data = await shopApi.listOrders(params);
       setOrders(data);
     } catch (e) {
@@ -130,7 +153,23 @@ export default function CouncilOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [grade, classId, isPaid]);
+  }, [grade, classId, isPaid, productId, categoryId, statusFilter, search, dateParams]);
+
+  const updateClassPayment = async (row: OrderSummaryRow, paid: boolean) => {
+    if (row.key === "none") return;
+    const action = paid ? "確認已繳費" : "撤銷繳費確認";
+    if (!window.confirm(`要為「${row.label}」${action}嗎？這會更新該班所有未取消的商品訂單，不受目前篩選條件限制。`)) return;
+    setPaymentBusy(row.key);
+    try {
+      const result = await shopApi.setClassPaid(row.key, paid);
+      toast.success(`已更新 ${result.updated_orders} 筆班級訂單`);
+      await loadSummary();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新整班繳費狀態失敗"));
+    } finally {
+      setPaymentBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (tab === "summary") loadSummary();
@@ -221,11 +260,28 @@ export default function CouncilOrdersPage() {
       {/* 篩選列 */}
       <section className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {tab === "summary" && <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>統計方式</span>
+            <select className="input" value={groupBy} onChange={(e) => setGroupBy(e.target.value as "class" | "grade" | "user")}>
+              <option value="class">依班級</option>
+              <option value="grade">依年級</option>
+              <option value="user">依學生</option>
+            </select>
+          </label>}
           <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>年級</span>
             <select className="input" value={grade} onChange={(e) => { setGrade(e.target.value); setClassId(""); }}>
               <option value="">全部年級</option>
               {gradeOptions.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>班級</span>
+            <select className="input" value={classId} onChange={(e) => setClassId(e.target.value)}>
+              <option value="">全部班級</option>
+              {classes.filter((item) => !grade || item.grade === Number(grade)).map((item) => (
+                <option key={item.id} value={item.id}>{item.label ?? item.class_code}</option>
+              ))}
             </select>
           </label>
           <label className="grid gap-1 text-sm">
@@ -235,15 +291,13 @@ export default function CouncilOrdersPage() {
               {catalog.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          {tab === "quantities" && (
-            <label className="grid gap-1 text-sm">
+          <label className="grid gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>商品</span>
               <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
                 <option value="">全部商品</option>
-                {allProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {allProducts.filter((p) => !categoryId || p.catId === categoryId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-            </label>
-          )}
+          </label>
           <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>繳費狀態</span>
             <select className="input" value={isPaid} onChange={(e) => setIsPaid(e.target.value)}>
@@ -252,6 +306,28 @@ export default function CouncilOrdersPage() {
               <option value="false">未繳費</option>
             </select>
           </label>
+          <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>訂單狀態</span>
+            <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">有效訂單</option>
+              <option value="pending">待確認</option>
+              <option value="confirmed">已確認</option>
+              <option value="cancelled">已取消</option>
+              <option value="refunded">已退款</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>起始日期</span>
+            <input className="input" type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>結束日期</span>
+            <input className="input" type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
+          {tab === "orders" && <label className="grid gap-1 text-sm lg:col-span-2">
+            <span style={{ color: "var(--text-muted)" }}>搜尋訂單編號或學生姓名</span>
+            <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder="輸入編號或姓名" />
+          </label>}
         </div>
       </section>
 
@@ -286,7 +362,7 @@ export default function CouncilOrdersPage() {
             </div>
           )}
 
-          {summary && summary.rows.length > 0 && catalog.length > 0 && (
+          {groupBy === "class" && summary && summary.rows.length > 0 && catalog.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => batchClose(summary.rows, false)} disabled={loading}
                 className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
@@ -311,7 +387,7 @@ export default function CouncilOrdersPage() {
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["班級", "訂單數", "總金額", "已繳", "未繳", ...catalog.map((c) => c.name + "結單"), "操作"].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "總金額", "已繳", "未繳", ...(groupBy === "class" ? catalog.map((c) => c.name + "結單") : []), ...(groupBy === "class" ? ["操作"] : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
                     </tr>
@@ -324,13 +400,27 @@ export default function CouncilOrdersPage() {
                         <td className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: "#16a34a" }}>{money(row.paid_amount)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: "#ef4444" }}>{money(row.unpaid_amount)}</td>
-                        {catalog.map((cat) => (
+                        {groupBy === "class" && catalog.map((cat) => (
                           <td key={cat.id} className="px-4 py-3">
                             <CloseBadge status={closeStatus[row.key]?.[cat.id]} />
                           </td>
                         ))}
-                        <td className="px-4 py-3">
+                        {groupBy === "class" && <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
+                            {row.key !== "none" && <>
+                              <button type="button" disabled={paymentBusy === row.key}
+                                onClick={() => updateClassPayment(row, true)}
+                                className="rounded px-2 py-1 text-xs disabled:opacity-50"
+                                style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
+                                確認整班繳費
+                              </button>
+                              <button type="button" disabled={paymentBusy === row.key}
+                                onClick={() => updateClassPayment(row, false)}
+                                className="rounded px-2 py-1 text-xs disabled:opacity-50"
+                                style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                                撤銷
+                              </button>
+                            </>}
                             {catalog.map((cat) => {
                               const isClosed = closeStatus[row.key]?.[cat.id]?.is_closed ?? false;
                               const isBusy = closeBusy === `${cat.id}:${row.key}`;
@@ -346,7 +436,7 @@ export default function CouncilOrdersPage() {
                               );
                             })}
                           </div>
-                        </td>
+                        </td>}
                       </tr>
                     ))}
                   </tbody>
@@ -362,11 +452,11 @@ export default function CouncilOrdersPage() {
         <section>
           <div className="mb-3 flex justify-end">
             <AnimatedDownloadButton
-              href={`/api/shop/reports/orders.xlsx${grade ? `?grade=${encodeURIComponent(grade)}` : ""}`}
+              href="/api/shop/reports/orders.xlsx"
               className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
               style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
               filename="orders.xlsx"
-              label="匯出 Excel" />
+              label="匯出全部訂單 Excel" />
           </div>
           <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
             {loading ? (
@@ -428,11 +518,7 @@ export default function CouncilOrdersPage() {
       {/* Tab 3：訂單明細 */}
       {tab === "orders" && (
         <section>
-          {!classId && !grade ? (
-            <div className="py-16 text-center rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text-muted)" }}>
-              <p className="text-sm">請先選擇年級或篩選條件後查詢</p>
-            </div>
-          ) : (
+          {(
             <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               {loading ? (
                 <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>

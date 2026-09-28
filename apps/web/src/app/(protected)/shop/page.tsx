@@ -345,6 +345,7 @@ export default function ShopPage() {
 
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
+  const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -355,6 +356,7 @@ export default function ShopPage() {
 
   const loadCatalog = useCallback(() => {
     if (!cacheHas(catalogCacheKey)) setLoading(true);
+    setLoadError(false);
     shopApi
       .catalog()
       .then(async (data) => {
@@ -375,7 +377,7 @@ export default function ShopPage() {
           setMyClass(null);
         }
       })
-      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, [setSelectedCategoryId, catalogCacheKey]);
 
@@ -396,6 +398,18 @@ export default function ShopPage() {
       .then(() => setIsLoggedIn(true))
       .catch(() => setIsLoggedIn(false));
   }, [loadCatalog]);
+
+  useEffect(() => {
+    const productId = new URLSearchParams(window.location.search).get("product");
+    if (!productId || catalog.length === 0) return;
+    const category = catalog.find((item) =>
+      item.series.some((series) => series.products.some((product) => product.id === productId))
+    );
+    if (!category) return;
+    setSelectedCategoryId(category.id);
+    setSelectedSeriesId(null);
+    setOpenProduct(productId);
+  }, [catalog, setSelectedCategoryId]);
 
   useEffect(() => { loadCart(); }, [loadCart]);
 
@@ -418,9 +432,9 @@ export default function ShopPage() {
     <div className="mx-auto min-w-0 max-w-7xl space-y-7">
       <div className="workspace-header flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品訂購</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>校商選購</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            選好想要的商品，統一在購物車確認送單。
+            傳情卡片、舞會票券與校園商品，選好後到購物車確認。
           </p>
         </div>
         <div className="flex w-full gap-2 sm:w-auto">
@@ -456,9 +470,17 @@ export default function ShopPage() {
         </section>
       )}
 
+      {loadError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3"
+          style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)" }}>
+          <p className="text-sm" style={{ color: "var(--text-primary)" }}>目前無法載入商品，請稍後重試。</p>
+          <button type="button" onClick={loadCatalog} className="btn btn-ghost min-h-11">重新載入</button>
+        </div>
+      )}
+
       {loading ? (
         <ListPageSkeleton rows={4} showHeader={false} showFilters={false} />
-      ) : catalog.length === 0 ? (
+      ) : loadError && catalog.length === 0 ? null : catalog.length === 0 ? (
         <SmartEmptyState reason="none" subject="上架商品" message="店家還沒上架任何商品，請稍後再來看看" />
       ) : selectedCategory && (
         <div className="grid grid-cols-1 gap-7 lg:grid-cols-[15rem_minmax(0,1fr)]">

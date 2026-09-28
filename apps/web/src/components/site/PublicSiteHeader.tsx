@@ -146,6 +146,7 @@ function PublicSiteHeaderContent({
   };
   const itemByKey = new Map(Object.values(groups).flat().map((item) => [item.key, item]));
   const taskNav = [
+    ["shop", "校商選購"],
     ["news", "最新公告"],
     ["public-db", "公開資料"],
     ["surveys", "校園調查"],
@@ -228,7 +229,7 @@ function PublicSiteHeaderContent({
             <Link
               key={item.key}
               href={item.href}
-              className="public-nav-link public-task-nav-link"
+              className={`public-nav-link public-task-nav-link${item.key === "shop" ? " public-shop-nav-link" : ""}`}
               aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
             >
               {item.label}

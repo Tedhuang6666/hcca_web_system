@@ -77,6 +77,7 @@
 .public-home-loading,
 .public-home-dynamics,
 .public-home-empty,
+.public-home-shop,
 .public-home-entry-section {
   width: min(100%, 72rem);
   margin: 0 auto;
@@ -277,6 +278,155 @@
   padding-bottom: clamp(3.5rem, 7vw, 5.5rem);
 }
 
+.public-home-shop {
+  padding-top: clamp(3rem, 6vw, 5rem);
+}
+
+.public-home-shop-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border-bottom: 1px solid var(--public-border);
+  padding-bottom: 1.25rem;
+}
+
+.public-home-shop-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.6rem;
+  color: var(--public-accent-text);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.public-home-shop-heading h2 {
+  margin: 0;
+  color: var(--public-text);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 760;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+}
+
+.public-home-shop-heading p {
+  margin: 0.45rem 0 0;
+  color: var(--public-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.public-home-shop-all {
+  display: inline-flex;
+  min-height: 2.75rem;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--public-accent-text);
+  font-size: 0.9rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.public-home-shop-all:hover,
+.public-home-shop-all:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.public-home-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  padding-top: 1.25rem;
+}
+
+.public-home-shop-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--public-border);
+  border-radius: 1rem;
+  background: var(--public-surface);
+  color: var(--public-text);
+  text-decoration: none;
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+
+.public-home-shop-card:hover,
+.public-home-shop-card:focus-visible {
+  border-color: var(--public-accent);
+  transform: translateY(-2px);
+}
+
+.public-home-shop-card:focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: 2px;
+}
+
+.public-home-shop-image {
+  display: grid;
+  aspect-ratio: 16 / 10;
+  place-items: center;
+  overflow: hidden;
+  background: var(--public-accent-soft);
+  color: var(--public-accent-text);
+}
+
+.public-home-shop-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.public-home-shop-card-body {
+  display: flex;
+  min-height: 8.5rem;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.public-home-shop-category {
+  color: var(--public-accent-text);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.public-home-shop-name {
+  color: var(--public-text);
+  font-size: 1.05rem;
+  font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.public-home-shop-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.65rem;
+}
+
+.public-home-shop-card-footer strong {
+  color: var(--public-text);
+  font-size: 0.95rem;
+}
+
+.public-home-shop-card-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--public-accent-text);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
 .public-home-entry-heading {
   margin-bottom: 1.25rem;
 }
@@ -359,6 +509,7 @@
   .public-home-loading,
   .public-home-dynamics,
   .public-home-empty,
+  .public-home-shop,
   .public-home-entry-section {
     padding-inline: 1.5rem;
   }
@@ -413,6 +564,10 @@
 }
 
 @media (max-width: 767px) {
+  .public-home-shop-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .public-home-hero .public-hero-inner {
     padding-top: 2.5rem;
   }
@@ -463,9 +618,33 @@
   .public-home-empty .public-text-link {
     grid-column: 2;
   }
+
+  .public-home-shop-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
 }
 
 @media (max-width: 460px) {
+  .public-home-shop-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-home-shop-card {
+    flex-direction: row;
+  }
+
+  .public-home-shop-image {
+    width: 38%;
+    flex: none;
+    aspect-ratio: auto;
+  }
+
+  .public-home-shop-card-body {
+    min-height: 8.5rem;
+  }
+
   .public-home-hero .public-hero-actions {
     width: 100%;
   }
@@ -487,6 +666,7 @@
 @media (prefers-reduced-motion: reduce) {
   .public-home-activity-row,
   .public-home-feature-card,
+  .public-home-shop-card,
   .public-feature-arrow {
     transition-duration: 0.01ms !important;
   }

@@ -621,7 +621,7 @@ async def test_class_order_summary_groups_products_and_payment(
         class_id=sc.id,
         status=OrderStatus.PENDING,
         total_price=200,
-        is_paid=True,
+        is_class_collected=True,
     )
     unpaid_order = Order(
         serial_number="ORD-CLASS-SUMMARY-2",
@@ -661,3 +661,42 @@ async def test_class_order_summary_groups_products_and_payment(
     ]
     assert filtered.order_count == 1
     assert filtered.total_amount == 200
+
+
+async def test_filtered_shop_statistics_use_discounted_amount(db_session: AsyncSession) -> None:
+    school_class = await _make_class(db_session)
+    product_a = await _make_product(db_session, price=100)
+    product_b = await _make_product(db_session, price=200)
+    buyer = await _make_user(db_session)
+    order = Order(
+        serial_number="ORD-FILTER-DISCOUNT",
+        user_id=buyer.id,
+        class_id=school_class.id,
+        status=OrderStatus.PENDING,
+        subtotal_price=300,
+        discount_amount=30,
+        total_price=270,
+        is_paid=True,
+        is_class_collected=True,
+    )
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            OrderItem(order_id=order.id, product_id=product_a.id, quantity=1, unit_price=100),
+            OrderItem(order_id=order.id, product_id=product_b.id, quantity=1, unit_price=200),
+        ]
+    )
+    await db_session.flush()
+
+    class_summary = await shop_svc.class_order_summary(
+        db_session, class_ids=[school_class.id], product_id=product_a.id
+    )
+    council_summary = await shop_svc.order_summary(
+        db_session, group_by="class", product_id=product_a.id
+    )
+
+    assert class_summary.total_amount == 90
+    assert class_summary.paid_amount == 90
+    assert council_summary.total_amount == 90
+    assert council_summary.paid_amount == 90

@@ -310,6 +310,8 @@ class OrderOut(BaseModel):
     assistance_scope: str = "self"
     assisted_by_id: uuid.UUID | None = None
     is_paid: bool = False
+    is_class_collected: bool = False
+    class_collected_at: datetime | None = None
     paid_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -333,6 +335,7 @@ class OrderListItem(BaseModel):
     assistance_scope: str = "self"
     assisted_by_id: uuid.UUID | None = None
     is_paid: bool = False
+    is_class_collected: bool = False
     created_at: datetime
 
 
@@ -348,6 +351,20 @@ class OrderCancelRequest(BaseModel):
 
 class OrderPaymentUpdate(BaseModel):
     is_paid: bool = Field(..., description="是否已繳費")
+
+
+class ClassCollectionUpdate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    is_class_collected: bool = Field(..., description="班代是否已向此學生收款（僅供班級紀錄）")
+
+
+class ClassPaymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    class_id: uuid.UUID
+    updated_orders: int
+    is_paid: bool
 
 
 class ShopPromotionCreate(BaseModel):
@@ -501,6 +518,8 @@ __all__ = [
     "OrderListItem",
     "OrderOut",
     "OrderPaymentUpdate",
+    "ClassCollectionUpdate",
+    "ClassPaymentOut",
     "OrderSummaryOut",
     "OrderSummaryRow",
     "ProductCategoryCreate",
