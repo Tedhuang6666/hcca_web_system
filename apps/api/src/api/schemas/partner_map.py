@@ -247,12 +247,6 @@ class PartnerBusinessListItem(BaseModel):
     line_id: str | None = None
     other_contact: str | None = None
     sort_order: int
-    view_count: int = 0
-    click_count: int = 0
-    checkin_count: int = 0
-    rating_avg: float | None = None
-    rating_count: int = 0
-    popularity_score: float = 0
     tags: list[PartnerTagOut] = []
     location_count: int = 0
     active_offer_count: int = 0
@@ -285,14 +279,6 @@ class PartnerBusinessOut(BaseModel):
     other_contact: str | None
     status: str
     sort_order: int
-    view_count: int = 0
-    click_count: int = 0
-    checkin_count: int = 0
-    rating_avg: float | None = None
-    rating_count: int = 0
-    my_rating: int | None = None
-    has_checked_in: bool = False
-    popularity_score: float = 0
     internal_note: str | None
     created_by: uuid.UUID | None
     created_at: datetime
@@ -382,32 +368,6 @@ class PartnerMapItem(BaseModel):
     has_active_offer: bool
     has_discount_offer: bool = False
     active_offer_titles: list[str]
-    rating_avg: float | None = None
-    rating_count: int = 0
-    popularity_score: float = 0
-    view_count: int = 0
-    checkin_count: int = 0
-
-
-class PartnerRatingCreate(BaseModel):
-    rating: int = Field(..., ge=1, le=5)
-    comment: str | None = Field(None, max_length=1000)
-    visit_count: int = Field(1, ge=0, le=999)
-    is_public: bool = True
-
-
-class PartnerRatingOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    business_id: uuid.UUID
-    user_id: uuid.UUID
-    rating: int
-    comment: str | None
-    visit_count: int
-    is_public: bool
-    created_at: datetime
-    updated_at: datetime
 
 
 class PartnerSubmissionCreate(BaseModel):
@@ -449,19 +409,6 @@ class PartnerSubmissionOut(BaseModel):
     business_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
-
-
-class PartnerRankingItem(BaseModel):
-    business_id: uuid.UUID
-    name: str
-    summary: str | None
-    category: str | None
-    logo_url: str | None
-    rating_avg: float | None
-    rating_count: int
-    checkin_count: int
-    view_count: int
-    popularity_score: float
 
 
 class PartnerMapBounds(BaseModel):

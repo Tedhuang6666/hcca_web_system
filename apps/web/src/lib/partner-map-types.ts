@@ -16,7 +16,17 @@ export type BusinessHoursInterval = {
 
 export type BusinessHours = Partial<Record<BusinessHourDay, BusinessHoursInterval[]>>;
 
-export type UnifiedMapItem = PartnerMapItem & {
+export type PartnerEngagementFields =
+  | "rating_avg"
+  | "rating_count"
+  | "popularity_score"
+  | "view_count"
+  | "checkin_count"
+  | "click_count"
+  | "my_rating"
+  | "has_checked_in";
+
+export type UnifiedMapItem = Omit<PartnerMapItem, PartnerEngagementFields> & {
   source?: "partner" | "recommended";
   business_hours?: BusinessHours;
   has_discount_offer?: boolean;
@@ -30,7 +40,7 @@ export type RecommendedVendorOutWithHours = RecommendedVendorOut & {
   business_hours?: BusinessHours;
 };
 
-export type PartnerBusinessOutWithHours = PartnerBusinessOut & {
+export type PartnerBusinessOutWithHours = Omit<PartnerBusinessOut, PartnerEngagementFields> & {
   business_hours?: BusinessHours;
 };
 

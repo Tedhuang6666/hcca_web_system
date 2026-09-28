@@ -134,11 +134,6 @@ class PartnerBusiness(Base, TimestampMixin):
         String(20), nullable=False, default=PartnerBusinessStatus.DRAFT.value, index=True
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    click_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    checkin_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
     internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -165,12 +160,6 @@ class PartnerBusiness(Base, TimestampMixin):
         back_populates="business",
         cascade="all, delete-orphan",
         order_by="PartnerBusinessImage.sort_order",
-    )
-    ratings: Mapped[list[PartnerRating]] = relationship(
-        "PartnerRating", back_populates="business", cascade="all, delete-orphan"
-    )
-    checkins: Mapped[list[PartnerCheckin]] = relationship(
-        "PartnerCheckin", back_populates="business", cascade="all, delete-orphan"
     )
     accounts: Mapped[list[PartnerBusinessAccount]] = relationship(
         "PartnerBusinessAccount",
@@ -296,54 +285,6 @@ class PartnerOffer(Base, TimestampMixin):
     business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="offers")
 
 
-class PartnerRating(Base, TimestampMixin):
-    """學生對特約店家的評價。"""
-
-    __tablename__ = "partner_ratings"
-    __table_args__ = (UniqueConstraint("business_id", "user_id", name="uq_partner_rating_user"),)
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    rating: Mapped[int] = mapped_column(Integer, nullable=False)
-    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    visit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    is_public: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="true", index=True
-    )
-
-    business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="ratings")
-    user: Mapped[User | None] = relationship("User")
-
-
-class PartnerCheckin(Base, TimestampMixin):
-    """學生對特約店家的唯一常去紀錄。"""
-
-    __tablename__ = "partner_checkins"
-    __table_args__ = (UniqueConstraint("business_id", "user_id", name="uq_partner_checkin_user"),)
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="checkins")
-    user: Mapped[User] = relationship("User")
-
-
 class PartnerSubmission(Base, TimestampMixin):
     """學生投稿的新特約店家候選。"""
 
@@ -385,10 +326,8 @@ __all__ = [
     "PartnerBusinessImage",
     "PartnerBusinessListingType",
     "PartnerBusinessStatus",
-    "PartnerCheckin",
     "PartnerLocation",
     "PartnerOffer",
-    "PartnerRating",
     "PartnerTag",
     "PartnerSubmission",
     "PartnerSubmissionStatus",

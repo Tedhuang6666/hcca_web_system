@@ -8,8 +8,7 @@ from datetime import UTC, datetime
 from urllib.parse import parse_qs, unquote, urljoin, urlparse, urlunsplit
 
 import httpx
-from sqlalchemy import Select, and_, desc, exists, func, or_, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import Select, and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,10 +18,8 @@ from api.models.partner_map import (
     PartnerBusinessAccount,
     PartnerBusinessListingType,
     PartnerBusinessStatus,
-    PartnerCheckin,
     PartnerLocation,
     PartnerOffer,
-    PartnerRating,
     PartnerSubmission,
     PartnerTag,
     partner_business_tags,
@@ -36,7 +33,6 @@ from api.schemas.partner_map import (
     PartnerLocationUpdate,
     PartnerOfferCreate,
     PartnerOfferUpdate,
-    PartnerRatingCreate,
     PartnerSubmissionCreate,
     PartnerSubmissionReview,
     PartnerTagCreate,
@@ -203,27 +199,6 @@ def _business_options():
         selectinload(PartnerBusiness.locations),
         selectinload(PartnerBusiness.offers),
         selectinload(PartnerBusiness.promo_images),
-        selectinload(PartnerBusiness.ratings),
-        selectinload(PartnerBusiness.checkins),
-    )
-
-
-def rating_stats(business: PartnerBusiness) -> tuple[float | None, int]:
-    ratings = [rating.rating for rating in business.ratings if rating.is_public]
-    if not ratings:
-        return None, 0
-    return round(sum(ratings) / len(ratings), 1), len(ratings)
-
-
-def popularity_score(business: PartnerBusiness) -> float:
-    avg, count = rating_stats(business)
-    rating_score = (avg or 0) * 12 + min(count, 30) * 2
-    return round(
-        business.view_count * 0.2
-        + business.click_count * 0.7
-        + business.checkin_count * 3
-        + rating_score,
-        1,
     )
 
 
@@ -280,25 +255,7 @@ async def create_business(
     business.offers = [PartnerOffer(**offer.model_dump()) for offer in data.initial_offers]
     db.add(business)
     await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "promo_images", "ratings"])
-    return business
-
-
-async def record_business_checkin(
-    db: AsyncSession, business: PartnerBusiness, user_id: uuid.UUID
-) -> PartnerBusiness:
-    statement = (
-        pg_insert(PartnerCheckin)
-        .values(business_id=business.id, user_id=user_id)
-        .on_conflict_do_nothing(index_elements=["business_id", "user_id"])
-    )
-    result = await db.execute(statement)
-    if result.rowcount:
-        business.checkin_count += 1
-        await db.flush()
-    await db.refresh(
-        business, ["tags", "locations", "offers", "promo_images", "ratings", "checkins"]
-    )
+    await db.refresh(business, ["tags", "locations", "offers", "promo_images"])
     return business
 
 
@@ -314,7 +271,7 @@ async def update_business(
     if tag_ids is not None:
         business.tags = await _resolve_tags(db, tag_ids)
     await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "promo_images", "ratings"])
+    await db.refresh(business, ["tags", "locations", "offers", "promo_images"])
     return business
 
 
@@ -555,7 +512,6 @@ async def list_map_locations(
         .options(
             selectinload(PartnerLocation.business).selectinload(PartnerBusiness.tags),
             selectinload(PartnerLocation.business).selectinload(PartnerBusiness.offers),
-            selectinload(PartnerLocation.business).selectinload(PartnerBusiness.ratings),
         )
     )
     if tag_ids:
@@ -592,22 +548,6 @@ async def list_map_locations(
     )
     result = await db.execute(q)
     return list(result.scalars().unique().all())
-
-
-async def increment_business_metric(
-    db: AsyncSession, business: PartnerBusiness, metric: str
-) -> PartnerBusiness:
-    if metric == "view":
-        business.view_count += 1
-    elif metric == "click":
-        business.click_count += 1
-    elif metric == "checkin":
-        business.checkin_count += 1
-    else:
-        raise ValueError("不支援的統計類型")
-    await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "promo_images", "ratings"])
-    return business
 
 
 async def create_location(
@@ -678,44 +618,6 @@ async def count_active_offers(db: AsyncSession, business_id: uuid.UUID) -> int:
     return int(value or 0)
 
 
-async def upsert_rating(
-    db: AsyncSession,
-    business: PartnerBusiness,
-    data: PartnerRatingCreate,
-    user_id: uuid.UUID,
-) -> PartnerRating:
-    result = await db.execute(
-        select(PartnerRating).where(
-            PartnerRating.business_id == business.id,
-            PartnerRating.user_id == user_id,
-        )
-    )
-    rating = result.scalar_one_or_none()
-    if rating is None:
-        rating = PartnerRating(business_id=business.id, user_id=user_id)
-        db.add(rating)
-    rating.rating = data.rating
-    rating.comment = data.comment
-    rating.visit_count = data.visit_count
-    rating.is_public = data.is_public
-    await db.flush()
-    await db.refresh(rating)
-    return rating
-
-
-async def list_ratings(
-    db: AsyncSession, business_id: uuid.UUID, *, limit: int = 20, offset: int = 0
-) -> list[PartnerRating]:
-    result = await db.execute(
-        select(PartnerRating)
-        .where(PartnerRating.business_id == business_id, PartnerRating.is_public == True)  # noqa: E712
-        .order_by(PartnerRating.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    return list(result.scalars().all())
-
-
 async def create_submission(
     db: AsyncSession, data: PartnerSubmissionCreate, submitted_by: uuid.UUID | None
 ) -> PartnerSubmission:
@@ -759,21 +661,3 @@ async def review_submission(
     await db.flush()
     await db.refresh(submission)
     return submission
-
-
-async def ranking(db: AsyncSession, *, limit: int = 10) -> list[PartnerBusiness]:
-    result = await db.execute(
-        select(PartnerBusiness)
-        .where(
-            PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
-            PartnerBusiness.listing_type == PartnerBusinessListingType.PHYSICAL.value,
-        )
-        .options(*_business_options())
-        .order_by(desc(PartnerBusiness.checkin_count), desc(PartnerBusiness.view_count))
-        .limit(limit)
-    )
-    return sorted(
-        list(result.scalars().unique().all()),
-        key=lambda business: popularity_score(business),
-        reverse=True,
-    )

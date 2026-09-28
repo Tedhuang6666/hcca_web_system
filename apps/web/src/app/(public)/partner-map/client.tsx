@@ -4,15 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
-import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Share2, Star, Tag, Trophy } from "lucide-react";
+import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Share2, Tag } from "lucide-react";
 import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
-import type {
-  PartnerRankingItem,
-  PartnerSubmissionCreate,
-  PartnerTagOut,
-} from "@/lib/types";
+import type { PartnerSubmissionCreate, PartnerTagOut } from "@/lib/types";
 import type { RecommendedVendorOutWithHours, UnifiedMapItem } from "@/lib/partner-map-types";
 import { formatBusinessHours } from "@/lib/business-hours";
 import { markerColor, markerLabel, type PartnerMapBoundsState } from "@/app/(protected)/partner-map/partner-map-utils";
@@ -121,16 +117,12 @@ function attachCategoryTag<T extends { category: string | null; tags: PartnerTag
 function DetailPanel({
   business,
   loading,
-  onRate,
-  onCheckIn,
   onShare,
   onCopyLink,
   onClose,
 }: {
   business: PartnerBusinessDetail | null;
   loading: boolean;
-  onRate: (score: number) => void;
-  onCheckIn: () => void;
   onShare: () => void;
   onCopyLink: () => void;
   onClose: () => void;
@@ -245,25 +237,6 @@ function DetailPanel({
               </div>
             </section>
           )}
-          {business.listing_type === "physical" && <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg border-2 p-2 text-center" style={{ borderColor: "var(--primary)", background: "var(--bg-elevated)" }}>
-              <p className="text-2xl font-bold" style={{ color: "var(--primary-text)" }}>{business.rating_avg ?? "-"}</p>
-              <p className="text-[11px] font-medium" style={{ color: "var(--text-primary)" }}>整體評價（{business.rating_count} 則）</p>
-              {business.my_rating && (
-                <p className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
-                  <Star size={11} fill="currentColor" aria-hidden="true" /> 我的評分 {business.my_rating}/5
-                </p>
-              )}
-            </div>
-            <div className="rounded-lg border p-2 text-center" style={{ borderColor: "var(--border)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.checkin_count}</p>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>常去</p>
-            </div>
-            <div className="rounded-lg border p-2 text-center" style={{ borderColor: "var(--border)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.popularity_score}</p>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>熱度</p>
-            </div>
-          </div>}
           <div className="flex flex-wrap gap-2">
             {business.tags.map((tag) => (
               <span
@@ -305,32 +278,6 @@ function DetailPanel({
               </div>
             )}
           </section>
-
-          {business.listing_type === "physical" && business.can_view_private_details && <section>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>學生互動</h3>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可評價一次，之後再次選擇分數即可修改。</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {[1, 2, 3, 4, 5].map((score) => (
-                <button
-                  key={score}
-                  className="btn px-2"
-                  onClick={() => onRate(score)}
-                  aria-pressed={business.my_rating === score}
-                  style={business.my_rating === score
-                    ? { background: "var(--primary)", color: "var(--primary-fg)", border: "2px solid var(--primary)" }
-                    : undefined}>
-                  <Star size={14} fill={business.my_rating === score ? "currentColor" : "none"} aria-hidden="true" /> {score}
-                </button>
-              ))}
-              <button
-                className="btn"
-                onClick={onCheckIn}
-                disabled={business.has_checked_in}
-                style={{ background: business.has_checked_in ? "var(--bg-elevated)" : "var(--primary)", color: business.has_checked_in ? "var(--text-muted)" : "var(--primary-fg)", border: "none" }}>
-                <Trophy size={14} aria-hidden="true" /> {business.has_checked_in ? "已加入常去" : "我常去"}
-              </button>
-            </div>
-          </section>}
 
           {business.listing_type === "physical" && <section>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>點位</h3>
@@ -431,7 +378,6 @@ export type PartnerMapPageProps = {
   initialItems?: UnifiedMapItem[];
   initialContactBusinesses?: PartnerBusinessDirectoryItem[];
   initialTags?: PartnerTagOut[];
-  initialRankings?: PartnerRankingItem[];
 };
 
 export default function PartnerMapClient({
@@ -439,7 +385,6 @@ export default function PartnerMapClient({
   initialItems,
   initialContactBusinesses,
   initialTags,
-  initialRankings,
 }: PartnerMapPageProps = {}) {
   const [items, setItems] = useState<UnifiedMapItem[]>(initialItems ?? []);
   const [contactBusinesses, setContactBusinesses] = useState<PartnerBusinessDirectoryItem[]>(
@@ -454,7 +399,6 @@ export default function PartnerMapClient({
   const [detailLoading, setDetailLoading] = useState(false);
   const [viewportOnly, setViewportOnly] = useState(false);
   const [mapBounds, setMapBounds] = useState<PartnerMapBoundsState | null>(null);
-  const [rankings, setRankings] = useState<PartnerRankingItem[]>(initialRankings ?? []);
   const [myBusinesses, setMyBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
@@ -529,11 +473,6 @@ export default function PartnerMapClient({
               has_active_offer: false,
               has_discount_offer: false,
               active_offer_titles: [],
-              rating_avg: null,
-              rating_count: 0,
-              popularity_score: 0,
-              view_count: 0,
-              checkin_count: 0,
             }))
         : [];
       if (recommendedResult.status === "rejected") {
@@ -551,7 +490,6 @@ export default function PartnerMapClient({
       .then(setContactBusinesses)
       .catch(() => {})
       .finally(() => setContactDirectoryReady(true));
-    partnerMapApi.rankings(5).then(setRankings).catch(() => {});
     if (window.localStorage.getItem("user_id")) {
       partnerMapApi.myBusinesses().then(setMyBusinesses).catch(() => {});
     }
@@ -604,7 +542,6 @@ export default function PartnerMapClient({
       return;
     }
     setDetailLoading(true);
-    partnerMapApi.recordClick(businessId).catch(() => {});
     partnerMapApi
       .getBusiness(businessId)
       .then((business) => {
@@ -697,29 +634,6 @@ export default function PartnerMapClient({
     }
   };
 
-  const rateSelected = async (score: number) => {
-    if (!selectedBusiness) return;
-    try {
-      await partnerMapApi.rateBusiness(selectedBusiness.id, { rating: score, visit_count: 1, is_public: true });
-      showSuccessToast("謝謝你的評價");
-      partnerMapApi.getBusiness(selectedBusiness.id).then(setSelectedBusiness);
-    } catch (error) {
-      showErrorToast(error instanceof ApiError ? error.message : "評價失敗");
-    }
-  };
-
-  const checkInSelected = async () => {
-    if (!selectedBusiness) return;
-    try {
-      const updated = await partnerMapApi.checkIn(selectedBusiness.id);
-      setSelectedBusiness(updated);
-      partnerMapApi.rankings(5).then(setRankings).catch(() => {});
-      showSuccessToast("已加入常去統計");
-    } catch (error) {
-      showErrorToast(error instanceof ApiError ? error.message : "更新失敗");
-    }
-  };
-
   const toggleTag = (id: string) => {
     setSelectedTagIds((current) => {
       const next = new Set(current);
@@ -731,7 +645,7 @@ export default function PartnerMapClient({
 
   const center: [number, number] = DEFAULT_CENTER;
   const filteredItems = useMemo(
-    () => items.map((item) => attachCategoryTag(item, tags)).sort((a, b) => b.popularity_score - a.popularity_score),
+    () => items.map((item) => attachCategoryTag(item, tags)),
     [items, tags],
   );
 
@@ -801,24 +715,10 @@ export default function PartnerMapClient({
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-            <div className="mb-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>學生常去排行</p>
-                <button className="min-h-11 px-2 text-xs" style={{ color: "var(--primary-text)" }} onClick={() => setSubmissionOpen(true)}>
-                  投稿新店
-                </button>
-              </div>
-              <div className="mt-2 space-y-1">
-                {rankings.length === 0 ? (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>還沒有排行資料</p>
-                ) : rankings.map((item, index) => (
-                  <button key={item.business_id} onClick={() => openBusiness(item.business_id)} className="flex min-h-11 w-full items-center gap-2 px-1 text-left">
-                    <span className="w-5 text-xs font-semibold" style={{ color: "var(--primary-text)" }}>{index + 1}</span>
-                    <span className="min-w-0 flex-1 truncate text-xs" style={{ color: "var(--text-secondary)" }}>{item.name}</span>
-                    <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{item.checkin_count} 次</span>
-                  </button>
-                ))}
-              </div>
+            <div className="mb-3 flex justify-end">
+              <button className="btn btn-secondary min-h-11 px-3 text-xs" onClick={() => setSubmissionOpen(true)}>
+                投稿新店
+              </button>
             </div>
             {contactBusinesses.length > 0 && (
               <div className="mb-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
@@ -865,9 +765,6 @@ export default function PartnerMapClient({
                         <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
                           <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                           {markerLabel(item)}
-                        </p>
-                        <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                          <Star size={11} aria-hidden="true" /> {item.rating_avg ?? "-"} · 熱度 {item.popularity_score}
                         </p>
                         {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
                           <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
@@ -1020,11 +917,6 @@ export default function PartnerMapClient({
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
-                    <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                      <Star size={11} aria-hidden="true" /> {item.rating_avg ?? "-"}
-                      <span>·</span>
-                      <Trophy size={11} aria-hidden="true" /> {item.checkin_count}
-                    </p>
                     {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
                       <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
                         <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
@@ -1055,8 +947,6 @@ export default function PartnerMapClient({
           <DetailPanel
             business={selectedBusiness ? attachCategoryTag(selectedBusiness, tags) : null}
             loading={detailLoading}
-            onRate={rateSelected}
-            onCheckIn={checkInSelected}
             onShare={shareSelected}
             onCopyLink={copySelectedLink}
             onClose={closeDetails}

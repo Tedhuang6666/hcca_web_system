@@ -223,7 +223,7 @@ export default function PartnerLeafletMap({
         <TileLayer
           key={theme}
           attribution={MAP_TILE_ATTRIBUTION}
-          url={mapTileUrl(theme)}
+          url={mapTileUrl()}
           maxZoom={MAP_MAX_ZOOM}
           detectRetina={false}
           keepBuffer={0}
