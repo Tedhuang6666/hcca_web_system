@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 
 export default function PublicRouteNotFound() {
   return (
-    <main className="mx-auto flex min-h-[52vh] w-full max-w-6xl items-center px-4 sm:px-6">
+    <main className="mx-auto flex min-h-[52vh] w-full max-w-6xl items-center justify-center px-4 sm:px-6">
       <EmptyState
         icon={<Compass size={40} aria-hidden />}
         title="找不到這個頁面"
