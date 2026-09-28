@@ -549,6 +549,11 @@ async def test_list_orders_admin_view_sees_all_orders(
     assert resp.status_code == 200
     assert len(resp.json()) == 2
 
+    mine = await ac.get("/shop/orders")
+    assert mine.status_code == 200
+    assert len(mine.json()) == 1
+    assert mine.json()[0]["user_id"] == str(member_user.id)
+
 
 async def test_get_order_hidden_for_unrelated_user_returns_404(
     db_session, authed_client_factory
@@ -645,7 +650,7 @@ async def test_update_order_payment_by_unrelated_user_returns_403(
     assert resp.status_code == 403
 
 
-async def test_update_order_payment_by_class_cadre_succeeds(
+async def test_class_cadre_collection_does_not_confirm_council_payment(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session)
@@ -655,9 +660,34 @@ async def test_update_order_payment_by_class_cadre_succeeds(
     order = await _seed_order(db_session, owner, class_id=sc.id)
 
     ac = authed_client_factory(cadre)
-    resp = await ac.patch(f"/shop/orders/{order.id}/payment", json={"is_paid": True})
+    resp = await ac.patch(f"/shop/orders/{order.id}/collection", json={"is_class_collected": True})
     assert resp.status_code == 200
-    assert resp.json()["is_paid"] is True
+    assert resp.json()["is_class_collected"] is True
+    assert resp.json()["is_paid"] is False
+
+    official = await ac.patch(f"/shop/orders/{order.id}/payment", json={"is_paid": True})
+    assert official.status_code == 403
+    class_payment = await ac.patch(f"/shop/orders/classes/{sc.id}/payment", json={"is_paid": True})
+    assert class_payment.status_code == 403
+
+
+async def test_council_can_confirm_whole_class_without_changing_cadre_notes(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session)
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    first = await _seed_order(db_session, buyer, class_id=sc.id, total_price=100)
+    second = await _seed_order(db_session, buyer, class_id=sc.id, total_price=200)
+    await shop_svc.set_class_collected(db_session, first, collected=True, actor_id=buyer.id)
+
+    ac = authed_client_factory(manager)
+    response = await ac.patch(f"/shop/orders/classes/{sc.id}/payment", json={"is_paid": True})
+    assert response.status_code == 200
+    assert response.json()["updated_orders"] == 2
+    assert first.is_paid is True and second.is_paid is True
+    assert first.is_class_collected is True and second.is_class_collected is False
 
 
 # ── 班級幹部檢視 ──────────────────────────────────────────────────────────────
@@ -687,7 +717,8 @@ async def test_class_order_summary_for_cadre(db_session, authed_client_factory) 
     cadre = await _bare_user(db_session, student_id="11501")
     await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
     buyer = await _bare_user(db_session)
-    await _seed_order(db_session, buyer, class_id=sc.id, total_price=200, is_paid=True)
+    order = await _seed_order(db_session, buyer, class_id=sc.id, total_price=200)
+    order.is_class_collected = True
 
     ac = authed_client_factory(cadre)
     resp = await ac.get("/shop/orders/class/summary")

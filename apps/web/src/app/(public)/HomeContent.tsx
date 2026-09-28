@@ -6,14 +6,17 @@ import {
   FileText,
   Megaphone,
   MessageCircle,
+  ShoppingBag,
   UsersRound,
 } from "lucide-react";
 
 import LiveElectionCard from "@/components/site/LiveElectionCard";
+import { uploadUrl } from "@/lib/config";
 import { publicPageHref } from "@/lib/publicNav";
 import type {
   AnnouncementListItem,
   AnnouncementOut,
+  CatalogCategoryOut,
   PublicSiteBundleOut,
   SurveyListItem,
 } from "@/lib/types";
@@ -30,11 +33,13 @@ export default function HomeContent({
   announcements,
   urgentAnnouncement,
   openSurveys,
+  catalog,
 }: {
   bundle: PublicSiteBundleOut | null;
   announcements: AnnouncementListItem[];
   urgentAnnouncement: AnnouncementOut | null;
   openSurveys: SurveyListItem[];
+  catalog: CatalogCategoryOut[] | null;
 }) {
   const settings = bundle?.settings;
   const openSurvey = openSurveys[0] ?? null;
@@ -85,6 +90,12 @@ export default function HomeContent({
     ...recentItems,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
   const hasActivityContent = activityItems.length > 0;
+  const featuredProducts = (catalog ?? [])
+    .flatMap((category) => category.series.flatMap((series) =>
+      series.products.map((product) => ({ ...product, categoryName: category.name })),
+    ))
+    .filter((product) => product.status === "active")
+    .slice(0, 3);
 
   return (
     <>
@@ -145,6 +156,46 @@ export default function HomeContent({
           <Link href="/public" className="public-text-link">查詢公開資料</Link>
         </section>
       )}
+
+      <section className="public-home-shop" aria-labelledby="public-shop-title">
+        <div className="public-home-shop-heading">
+          <div>
+            <span className="public-home-shop-eyebrow"><ShoppingBag size={16} aria-hidden /> 校園選購</span>
+            <h2 id="public-shop-title">校商、傳情卡片與舞會票券</h2>
+            <p>從公開商品頁挑選，加入購物車後再確認訂單。</p>
+          </div>
+          <Link href="/shop" className="public-home-shop-all">
+            瀏覽所有商品 <ArrowRight size={18} aria-hidden />
+          </Link>
+        </div>
+        {featuredProducts.length > 0 && (
+          <div className="public-home-shop-grid">
+            {featuredProducts.map((product) => {
+              const imageUrl = uploadUrl(product.image_url);
+              return (
+                <Link key={product.id} href={`/shop?product=${product.id}`} className="public-home-shop-card">
+                  <span className="public-home-shop-image">
+                    {imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={imageUrl} alt="" loading="lazy" />
+                    ) : (
+                      <ShoppingBag size={32} aria-hidden />
+                    )}
+                  </span>
+                  <span className="public-home-shop-card-body">
+                    <span className="public-home-shop-category">{product.categoryName}</span>
+                    <span className="public-home-shop-name">{product.name}</span>
+                    <span className="public-home-shop-card-footer">
+                      <strong>NT$ {product.price.toLocaleString("zh-TW")}</strong>
+                      <span>查看商品 <ArrowRight size={16} aria-hidden /></span>
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="public-home-entry-section" aria-labelledby="public-entry-title">
         <div className="public-home-entry-heading">

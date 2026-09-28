@@ -1,5 +1,5 @@
-import { fetchAnnouncements } from "@/lib/serverFetch";
-import type { AnnouncementOut, PublicSiteBundleOut, SurveyListItem } from "@/lib/types";
+import { fetchAnnouncements, fetchPublicJson } from "@/lib/serverFetch";
+import type { AnnouncementOut, CatalogCategoryOut, PublicSiteBundleOut, SurveyListItem } from "@/lib/types";
 import HomeContent from "./HomeContent";
 
 export default async function DeferredHomeContent({
@@ -11,7 +11,10 @@ export default async function DeferredHomeContent({
   urgentAnnouncement: AnnouncementOut | null;
   openSurveys: SurveyListItem[];
 }) {
-  const announcements = await fetchAnnouncements(6);
+  const [announcements, catalog] = await Promise.all([
+    fetchAnnouncements(6),
+    fetchPublicJson<CatalogCategoryOut[]>("/shop/catalog", { revalidate: 15 }),
+  ]);
 
   return (
     <HomeContent
@@ -19,6 +22,7 @@ export default async function DeferredHomeContent({
       announcements={announcements}
       urgentAnnouncement={urgentAnnouncement}
       openSurveys={openSurveys}
+      catalog={catalog}
     />
   );
 }

@@ -81,13 +81,40 @@ export default function OrderDetailPage() {
           <div className="flex items-center gap-2 mt-1">
             <OrderStatusBadge status={order.status} />
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              {order.is_paid ? "已繳費" : "未繳費"}｜NT${order.total_price.toLocaleString()}
+              訂單金額 NT${order.total_price.toLocaleString()}
             </span>
           </div>
         </div>
         <div className="ml-auto">
         </div>
       </div>
+
+      <section className="card p-4 space-y-3" aria-label="繳款進度">
+        <h2 className="text-sm font-semibold">繳款進度</h2>
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div>
+            <dt style={{ color: "var(--text-muted)" }}>訂單金額</dt>
+            <dd className="mt-1 font-semibold">NT${order.total_price.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt style={{ color: "var(--text-muted)" }}>目前尚待繳交</dt>
+            <dd className="mt-1 font-semibold">
+              NT${(order.status === "cancelled" || order.status === "refunded" || order.is_paid || order.is_class_collected ? 0 : order.total_price).toLocaleString()}
+            </dd>
+          </div>
+          {order.class_id && <div>
+            <dt style={{ color: "var(--text-muted)" }}>班代收款紀錄</dt>
+            <dd className="mt-1 font-medium">{order.is_class_collected ? "已登記收款" : "尚未登記收款"}</dd>
+          </div>}
+          <div>
+            <dt style={{ color: "var(--text-muted)" }}>正式繳費狀態</dt>
+            <dd className="mt-1 font-medium">{order.is_paid ? "班聯會已確認" : "尚未確認"}</dd>
+          </div>
+        </dl>
+        {order.class_id && <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          班代的登記僅供班級收款紀錄；班聯會會另行確認整班繳款。
+        </p>}
+      </section>
 
       {/* 品項 */}
       <div className="card p-4 space-y-2">

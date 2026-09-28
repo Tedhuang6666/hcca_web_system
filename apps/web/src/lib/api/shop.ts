@@ -1,5 +1,5 @@
 import type {
-  CartOut, CatalogCategoryOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionUpdate,
+  CartOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
@@ -44,7 +44,7 @@ export const shopApi = {
     return get<OrderListItem[]>(`/shop/orders${qs}`);
   },
   listClassOrders: (params?: {
-    is_paid?: string;
+    is_class_collected?: string;
     assisted_only?: string;
     product_id?: string;
     member_user_id?: string;
@@ -55,7 +55,7 @@ export const shopApi = {
     return get<OrderListItem[]>(`/shop/orders/class${qs}`);
   },
   classSummary: (params?: {
-    is_paid?: string;
+    is_class_collected?: string;
     assisted_only?: string;
     product_id?: string;
   }) => {
@@ -67,6 +67,7 @@ export const shopApi = {
     group_by: "class" | "grade" | "user";
     activity_id?: string;
     product_id?: string;
+    category_id?: string;
     grade?: string;
     class_id?: string;
     user_id?: string;
@@ -96,6 +97,12 @@ export const shopApi = {
     post<OrderOut>(`/shop/orders/${id}/cancel`, { reason }),
   setOrderPaid: (id: string, isPaid: boolean) =>
     patch<OrderOut>(`/shop/orders/${id}/payment`, { is_paid: isPaid }),
+  setClassCollected: (id: string, collected: boolean) =>
+    patch<OrderOut>(`/shop/orders/${id}/collection`, { is_class_collected: collected }),
+  setClassPaid: (classId: string, isPaid: boolean) =>
+    patch<ClassPaymentOut>(
+      `/shop/orders/classes/${classId}/payment`, { is_paid: isPaid },
+    ),
   downloadReport: (format: "xlsx" | "csv", params?: { activity_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.activity_id) q.set("activity_id", params.activity_id);
@@ -166,6 +173,8 @@ export const shopApi = {
     product_id?: string;
     is_paid?: string;
     status?: string;
+    date_from?: string;
+    date_to?: string;
   }) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<OrderQuantityRow[]>(`/shop/orders/quantities${qs}`);

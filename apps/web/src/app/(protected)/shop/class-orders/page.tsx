@@ -88,14 +88,14 @@ export default function ClassOrdersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = { limit: "500" };
-    if (paidFilter !== "all") params.is_paid = paidFilter === "paid" ? "true" : "false";
+    if (paidFilter !== "all") params.is_class_collected = paidFilter === "paid" ? "true" : "false";
     if (assistedFilter === "assisted") params.assisted_only = "true";
     if (productFilter) params.product_id = productFilter;
     if (memberFilter) params.member_user_id = memberFilter;
     try {
       const [orderItems, summaryData] = await Promise.all([
         shopApi.listClassOrders(params),
-        shopApi.classSummary({ is_paid: params.is_paid, assisted_only: params.assisted_only, product_id: params.product_id }),
+        shopApi.classSummary({ is_class_collected: params.is_class_collected, assisted_only: params.assisted_only, product_id: params.product_id }),
       ]);
       setOrders(orderItems);
       setSummary(summaryData);
@@ -201,8 +201,8 @@ export default function ClassOrdersPage() {
   const togglePaid = async (order: OrderListItem) => {
     setBusy(order.id);
     try {
-      await shopApi.setOrderPaid(order.id, !order.is_paid);
-      toast.success(order.is_paid ? "已取消繳費標示" : "已標示為已繳費");
+      await shopApi.setClassCollected(order.id, !order.is_class_collected);
+      toast.success(order.is_class_collected ? "已取消個人收款紀錄" : "已記錄向這位同學收款");
       await load();
     } catch (e) {
       toast.error(apiErrorMessage(e, "更新失敗"));
@@ -212,11 +212,11 @@ export default function ClassOrdersPage() {
   };
 
   const batchSetPaid = async (isPaid: boolean) => {
-    const targets = selectedOrders.filter((o) => o.is_paid !== isPaid);
+    const targets = selectedOrders.filter((o) => o.is_class_collected !== isPaid);
     if (!targets.length) { toast.info(isPaid ? "選取訂單都已繳費" : "選取訂單都是未繳費"); return; }
     setBatchBusy(true);
     try {
-      await Promise.all(targets.map((o) => shopApi.setOrderPaid(o.id, isPaid)));
+      await Promise.all(targets.map((o) => shopApi.setClassCollected(o.id, isPaid)));
       setSelectedIds([]);
       toast.success(isPaid ? `已標示 ${targets.length} 筆為已繳費` : `已取消 ${targets.length} 筆繳費標示`);
       await load();
@@ -359,7 +359,7 @@ export default function ClassOrdersPage() {
         <ol className="mt-3 grid gap-3 text-sm md:grid-cols-3" style={{ color: "var(--text-secondary)" }}>
           <li><span className="font-semibold" style={{ color: "var(--primary)" }}>同學自行下單</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>從商品訂購送單，訂單會自動歸到本班。</span></li>
           <li><span className="font-semibold" style={{ color: "var(--primary)" }}>需要時由幹部代訂</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>協助不熟悉系統的同學完成同一套訂單。</span></li>
-          <li><span className="font-semibold" style={{ color: "var(--primary)" }}>收到款項即確認</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>勾選已收款，學生的「我的訂單」會同步顯示結果。</span></li>
+          <li><span className="font-semibold" style={{ color: "var(--primary)" }}>收到款項就做紀錄</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>這是班代自己的收款備忘；整班繳款由班聯會另行確認。</span></li>
         </ol>
       </section>
 
@@ -379,7 +379,7 @@ export default function ClassOrdersPage() {
                 ))}
               </select>
               <select className="input" value={paidFilter} onChange={(e) => setPaidFilter(e.target.value as PaidFilter)}>
-                <option value="all">全部繳費</option>
+                <option value="all">全部收款紀錄</option>
                 <option value="unpaid">待收款</option>
                 <option value="paid">已收款</option>
               </select>
@@ -442,10 +442,10 @@ export default function ClassOrdersPage() {
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-                        style={order.is_paid
+                        style={order.is_class_collected
                           ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
                           : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                        {order.is_paid ? "已收款" : "待收款"}
+                        {order.is_class_collected ? "已收款" : "待收款"}
                       </span>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-3">
@@ -455,8 +455,8 @@ export default function ClassOrdersPage() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
                         className="min-h-11 rounded-md px-3 text-xs font-medium disabled:opacity-50"
-                        style={{ border: "1px solid var(--border)", color: order.is_paid ? "var(--text-secondary)" : "#16a34a" }}>
-                        {order.is_paid ? "撤銷收款" : "確認收款"}
+                        style={{ border: "1px solid var(--border)", color: order.is_class_collected ? "var(--text-secondary)" : "#16a34a" }}>
+                        {order.is_class_collected ? "撤銷收款" : "確認收款"}
                       </button>
                       <button type="button" onClick={() => setSelectedIds((current) => current.includes(order.id) ? current.filter((id) => id !== order.id) : [...current, order.id])}
                         className="min-h-11 rounded-md px-3 text-xs" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
@@ -478,7 +478,7 @@ export default function ClassOrdersPage() {
                 <table className="w-full min-w-[820px] text-sm" role="table">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["", "訂單編號", "訂購人", "班級", "來源", "狀態", "金額", "繳費", "操作"].map((h, i) => (
+                      {["", "訂單編號", "訂購人", "班級", "來源", "狀態", "金額", "個人收款", "操作"].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold"
                           style={{ color: "var(--text-muted)" }} scope="col">{h}</th>
                       ))}
@@ -507,10 +507,10 @@ export default function ClassOrdersPage() {
                         <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</td>
                         <td className="px-4 py-3">
                           <span className="rounded-full px-2 py-0.5 text-xs font-medium"
-                            style={order.is_paid
+                            style={order.is_class_collected
                               ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
                               : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                            {order.is_paid ? "已收款" : "待收款"}
+                            {order.is_class_collected ? "已收款" : "待收款"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -518,7 +518,7 @@ export default function ClassOrdersPage() {
                             <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
                               className="rounded-md px-2 py-1 text-xs disabled:opacity-50"
                               style={{ border: "1px solid var(--border)" }}>
-                              {order.is_paid ? "撤銷" : "確認收款"}
+                              {order.is_class_collected ? "撤銷" : "確認收款"}
                             </button>
                             {order.status !== "cancelled" && order.status !== "refunded" && (
                               <>

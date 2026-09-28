@@ -24,6 +24,7 @@ from api.models.shop import (
     ProductStatus,
     ShopOrderClose,
 )
+from api.models.user import User
 from api.schemas.shop import (
     CartItemCreate,
     CartItemOut,
@@ -446,8 +447,13 @@ async def list_orders(
     grade: int | None = None,
     assistance_scope: str | None = None,
     product_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
     status: OrderStatus | None = None,
     is_paid: bool | None = None,
+    is_class_collected: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    search: str | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> list[Order]:
@@ -485,10 +491,27 @@ async def list_orders(
         q = q.where(Order.assistance_scope == assistance_scope)
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
+    if category_id:
+        q = q.where(
+            Order.items.any(
+                OrderItem.product.has(Product.series.has(ProductSeries.category_id == category_id))
+            )
+        )
     if status:
         q = q.where(Order.status == status)
     if is_paid is not None:
         q = q.where(Order.is_paid.is_(is_paid))
+    if is_class_collected is not None:
+        q = q.where(Order.is_class_collected.is_(is_class_collected))
+    if date_from:
+        q = q.where(Order.created_at >= date_from)
+    if date_to:
+        q = q.where(Order.created_at <= date_to)
+    if search:
+        needle = f"%{search.strip()}%"
+        q = q.where(
+            or_(Order.serial_number.ilike(needle), Order.user.has(User.display_name.ilike(needle)))
+        )
     q = q.limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().unique().all())
@@ -499,7 +522,7 @@ async def class_order_summary(
     *,
     class_ids: list[uuid.UUID],
     product_id: uuid.UUID | None = None,
-    is_paid: bool | None = None,
+    is_class_collected: bool | None = None,
     assistance_scope: str | None = None,
 ) -> ShopClassSummaryOut:
     orders = await list_orders(
@@ -507,20 +530,30 @@ async def class_order_summary(
         class_ids=class_ids,
         assistance_scope=assistance_scope,
         product_id=product_id,
-        is_paid=is_paid,
+        is_class_collected=is_class_collected,
         limit=500,
     )
-    active_orders = [order for order in orders if order.status != OrderStatus.CANCELLED]
+    active_orders = [
+        order
+        for order in orders
+        if order.status not in (OrderStatus.CANCELLED, OrderStatus.REFUNDED)
+    ]
     product_totals: dict[uuid.UUID, ShopClassProductSummaryRow] = {}
     item_count = 0
     amount_by_order_id: dict[uuid.UUID, int] = {}
     for order in active_orders:
         order_amount = 0
+        subtotal = order.subtotal_price or sum(
+            item.quantity * item.unit_price for item in order.items
+        )
         for item in order.items:
             if product_id and item.product_id != product_id:
                 continue
             quantity = item.quantity
-            amount = item.quantity * item.unit_price
+            gross = item.quantity * item.unit_price
+            amount = (
+                max(0, gross - round(order.discount_amount * gross / subtotal)) if subtotal else 0
+            )
             item_count += quantity
             order_amount += amount
             row = product_totals.get(item.product_id)
@@ -535,8 +568,8 @@ async def class_order_summary(
             row.quantity += quantity
             row.total_amount += amount
         amount_by_order_id[order.id] = order_amount if product_id else order.total_price
-    paid_orders = [order for order in active_orders if order.is_paid]
-    unpaid_orders = [order for order in active_orders if not order.is_paid]
+    paid_orders = [order for order in active_orders if order.is_class_collected]
+    unpaid_orders = [order for order in active_orders if not order.is_class_collected]
     return ShopClassSummaryOut(
         class_count=len(set(class_ids)),
         order_count=len(active_orders),
@@ -585,6 +618,8 @@ def serialize_order(order: Order) -> OrderOut:
         assistance_scope=order.assistance_scope,
         assisted_by_id=order.assisted_by_id,
         is_paid=order.is_paid,
+        is_class_collected=order.is_class_collected,
+        class_collected_at=order.class_collected_at,
         paid_at=order.paid_at,
         created_at=order.created_at,
         updated_at=order.updated_at,
@@ -610,6 +645,7 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         assistance_scope=order.assistance_scope,
         assisted_by_id=order.assisted_by_id,
         is_paid=order.is_paid,
+        is_class_collected=order.is_class_collected,
         created_at=order.created_at,
     )
 
@@ -704,11 +740,46 @@ async def set_order_paid(
     return order
 
 
+async def set_class_collected(
+    session: AsyncSession, order: Order, *, collected: bool, actor_id: uuid.UUID
+) -> Order:
+    order.is_class_collected = collected
+    order.class_collected_at = datetime.now(UTC) if collected else None
+    order.class_collected_by_id = actor_id if collected else None
+    await session.flush()
+    return order
+
+
+async def set_class_paid(
+    session: AsyncSession, class_id: uuid.UUID, *, is_paid: bool, actor_id: uuid.UUID
+) -> list[Order]:
+    orders = list(
+        (
+            await session.execute(
+                select(Order)
+                .where(
+                    Order.class_id == class_id,
+                    Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
+                )
+                .order_by(Order.id)
+                .with_for_update()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for order in orders:
+        if order.is_paid != is_paid:
+            await set_order_paid(session, order, is_paid=is_paid, actor_id=actor_id)
+    return orders
+
+
 async def order_summary(
     session: AsyncSession,
     *,
     group_by: str,
     product_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
     grade: int | None = None,
     class_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
@@ -721,16 +792,22 @@ async def order_summary(
         raise ValueError("group_by 必須為 class / grade / user")
 
     q = select(Order).options(
-        selectinload(Order.items),
+        selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.series),
         selectinload(Order.school_class),
         selectinload(Order.user),
     )
     if status is not None:
         q = q.where(Order.status == status)
     else:
-        q = q.where(Order.status != OrderStatus.CANCELLED)
+        q = q.where(Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]))
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
+    if category_id:
+        q = q.where(
+            Order.items.any(
+                OrderItem.product.has(Product.series.has(ProductSeries.category_id == category_id))
+            )
+        )
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
     if class_id:
@@ -771,17 +848,24 @@ async def order_summary(
             )
             groups[key] = row
         matched_items = [
-            item for item in order.items if product_id is None or item.product_id == product_id
+            item
+            for item in order.items
+            if (product_id is None or item.product_id == product_id)
+            and (category_id is None or item.product.series.category_id == category_id)
         ]
-        if not matched_items:
-            if product_id is None:
-                amount = order.total_price
-                item_count = 0
-            else:
-                continue
+        if not matched_items and (product_id is not None or category_id is not None):
+            continue
+        item_count = sum(item.quantity for item in matched_items)
+        if product_id is None and category_id is None:
+            amount = order.total_price
         else:
-            amount = sum(item.quantity * item.unit_price for item in matched_items)
-            item_count = sum(it.quantity for it in matched_items)
+            gross = sum(item.quantity * item.unit_price for item in matched_items)
+            subtotal = order.subtotal_price or sum(
+                item.quantity * item.unit_price for item in order.items
+            )
+            amount = (
+                max(0, gross - round(order.discount_amount * gross / subtotal)) if subtotal else 0
+            )
         row.order_count += 1
         row.item_count += item_count
         row.total_amount += amount
@@ -916,6 +1000,8 @@ async def order_quantities(
     product_id: uuid.UUID | None = None,
     is_paid: bool | None = None,
     status: OrderStatus | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> list[OrderQuantityRow]:
     """回傳各商品規格組合的訂購數量（用於採購彙總）。"""
 
@@ -928,7 +1014,11 @@ async def order_quantities(
             .selectinload(ProductSeries.category),
             selectinload(Order.school_class),
         )
-        .where(Order.status != OrderStatus.CANCELLED if status is None else Order.status == status)
+        .where(
+            Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED])
+            if status is None
+            else Order.status == status
+        )
     )
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
@@ -936,6 +1026,10 @@ async def order_quantities(
         q = q.where(Order.class_id == class_id)
     if is_paid is not None:
         q = q.where(Order.is_paid.is_(is_paid))
+    if date_from:
+        q = q.where(Order.created_at >= date_from)
+    if date_to:
+        q = q.where(Order.created_at <= date_to)
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if category_id:

@@ -129,6 +129,8 @@ export type {
   CartItemOut,
   CartItemUpdate,
   CartOut,
+  ClassCollectionUpdate,
+  ClassPaymentOut,
   CatalogCategoryOut,
   CatalogProductOut,
   CatalogSeriesOut,

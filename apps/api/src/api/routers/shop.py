@@ -17,6 +17,7 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_any, require_permission
+from api.models.school_class import SchoolClass
 from api.models.shop import (
     Order,
     OrderStatus,
@@ -36,7 +37,9 @@ from api.schemas.shop import (
     CartOut,
     CatalogCategoryOut,
     CheckoutRequest,
+    ClassCollectionUpdate,
     ClassOrderUpsert,
+    ClassPaymentOut,
     CloseStatusOut,
     ImageUploadOut,
     OrderCancelRequest,
@@ -85,9 +88,15 @@ OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.SHOP_MANAGE))]
 
 _ADMIN_VIEW_CODES = {
+    PermissionCode.SHOP_MANAGE,
     PermissionCode.SHOP_MANAGE_ORDERS,
     PermissionCode.SHOP_VIEW_ALL,
     PermissionCode.FINANCE_VIEW,
+    PermissionCode.ADMIN_ALL,
+}
+_PAYMENT_WRITE_CODES = {
+    PermissionCode.SHOP_MANAGE,
+    PermissionCode.SHOP_MANAGE_ORDERS,
     PermissionCode.ADMIN_ALL,
 }
 
@@ -723,20 +732,26 @@ async def list_orders(
     my_only: bool = Query(True, description="僅顯示我的訂單"),
     grade: int | None = Query(None, description="按年級篩選（需 SHOP_VIEW_ALL 權限）"),
     class_id: uuid.UUID | None = Query(None, description="按班級篩選（需 SHOP_VIEW_ALL 權限）"),
-    limit: int = Query(20, ge=1, le=100),
+    product_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    is_paid: bool | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    search: str | None = Query(None, max_length=100),
+    limit: int = Query(20, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[OrderListItem]:
     is_admin = current_user.is_superuser
     if not is_admin:
         codes = await get_user_permission_codes(session, current_user.id)
         is_admin = bool(_ADMIN_VIEW_CODES & set(codes))
-    if is_admin or (
-        activity_id
-        and await activity_svc.can_manage_activity_resource(session, current_user, activity_id)
-    ):
-        my_only = False
-    elif not my_only:
-        my_only = True
+    if not my_only and not is_admin:
+        can_view_activity = bool(
+            activity_id
+            and await activity_svc.can_manage_activity_resource(session, current_user, activity_id)
+        )
+        if not can_view_activity:
+            my_only = True
 
     # grade/class_id 篩選只對管理員有效
     filter_grade = grade if is_admin else None
@@ -749,6 +764,12 @@ async def list_orders(
         status=status_filter,
         class_ids=filter_class_ids,
         grade=filter_grade,
+        product_id=product_id if is_admin else None,
+        category_id=category_id if is_admin else None,
+        is_paid=is_paid if is_admin else None,
+        date_from=date_from if is_admin else None,
+        date_to=date_to if is_admin else None,
+        search=search if is_admin else None,
         limit=limit,
         offset=offset,
     )
@@ -763,7 +784,7 @@ async def list_orders(
 async def list_class_orders(
     session: DbDep,
     current_user: CurrentUser,
-    is_paid: bool | None = Query(None, description="篩選繳費狀態"),
+    is_class_collected: bool | None = Query(None, description="篩選班代個人收款紀錄"),
     assisted_only: bool = Query(False, description="僅顯示班級幹部協助建立的訂單"),
     product_id: uuid.UUID | None = Query(None, description="篩選商品"),
     member_user_id: uuid.UUID | None = Query(None, description="篩選特定學生"),
@@ -777,7 +798,7 @@ async def list_class_orders(
         user_id=member_user_id,
         assistance_scope="class_assisted" if assisted_only else None,
         product_id=product_id,
-        is_paid=is_paid,
+        is_class_collected=is_class_collected,
         limit=limit,
         offset=offset,
     )
@@ -792,7 +813,7 @@ async def list_class_orders(
 async def class_order_summary(
     session: DbDep,
     current_user: CurrentUser,
-    is_paid: bool | None = Query(None, description="篩選繳費狀態"),
+    is_class_collected: bool | None = Query(None, description="篩選班代個人收款紀錄"),
     assisted_only: bool = Query(False, description="僅顯示班級幹部協助建立的訂單"),
     product_id: uuid.UUID | None = Query(None, description="篩選商品"),
 ) -> ShopClassSummaryOut:
@@ -802,7 +823,7 @@ async def class_order_summary(
         class_ids=class_ids,
         assistance_scope="class_assisted" if assisted_only else None,
         product_id=product_id,
-        is_paid=is_paid,
+        is_class_collected=is_class_collected,
     )
 
 
@@ -865,6 +886,7 @@ async def order_summary(
     _: CurrentUser,
     group_by: str = Query("class", pattern="^(class|grade|user)$"),
     product_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
     class_id: uuid.UUID | None = Query(None),
     user_id: uuid.UUID | None = Query(None),
@@ -877,6 +899,7 @@ async def order_summary(
         session,
         group_by=group_by,
         product_id=product_id,
+        category_id=category_id,
         grade=grade,
         class_id=class_id,
         user_id=user_id,
@@ -917,6 +940,8 @@ async def order_quantities(
     product_id: uuid.UUID | None = Query(None),
     is_paid: bool | None = Query(None),
     status_filter: OrderStatus | None = Query(None, alias="status"),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
 ) -> list[OrderQuantityRow]:
     return await shop_svc.order_quantities(
         session,
@@ -926,6 +951,8 @@ async def order_quantities(
         product_id=product_id,
         is_paid=is_paid,
         status=status_filter,
+        date_from=date_from,
+        date_to=date_to,
     )
 
 
@@ -1014,7 +1041,83 @@ async def update_order_items(
     return shop_svc.serialize_order(updated)
 
 
-@router.patch("/orders/{order_id}/payment", response_model=OrderOut, summary="標示訂單是否已繳費")
+@router.patch(
+    "/orders/{order_id}/collection", response_model=OrderOut, summary="班代紀錄本班學生收款"
+)
+async def update_class_collection(
+    order_id: uuid.UUID,
+    payload: ClassCollectionUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> OrderOut:
+    order = await _get_order_or_404(order_id, session)
+    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if not current_user.is_superuser and (
+        order.class_id is None or order.class_id not in cadre_ids
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="僅該班班代可紀錄收款")
+    order = await shop_svc.set_class_collected(
+        session, order, collected=payload.is_class_collected, actor_id=current_user.id
+    )
+    await audit_svc.record(
+        session,
+        entity_type="order",
+        entity_id=str(order.id),
+        action="shop.class_collection",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"is_class_collected": payload.is_class_collected},
+        summary=f"班代紀錄訂單「{order.serial_number}」收款狀態",
+    )
+    full = await shop_svc.get_order(session, order.id)
+    updated = full or order
+    await _broadcast_shop_order(updated)
+    return shop_svc.serialize_order(updated)
+
+
+@router.patch(
+    "/orders/classes/{class_id}/payment",
+    response_model=ClassPaymentOut,
+    summary="班聯會確認整班繳款",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def update_class_payment(
+    class_id: uuid.UUID,
+    payload: OrderPaymentUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> ClassPaymentOut:
+    if await session.get(SchoolClass, class_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
+    orders = await shop_svc.set_class_paid(
+        session, class_id, is_paid=payload.is_paid, actor_id=current_user.id
+    )
+    await audit_svc.record(
+        session,
+        entity_type="school_class",
+        entity_id=str(class_id),
+        action="shop.class_payment",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"is_paid": payload.is_paid, "order_count": len(orders)},
+        summary=f"班聯會標示整班{'已繳費' if payload.is_paid else '未繳費'}",
+    )
+    for order in orders:
+        await _broadcast_shop_order(order)
+    return ClassPaymentOut(class_id=class_id, updated_orders=len(orders), is_paid=payload.is_paid)
+
+
+@router.patch(
+    "/orders/{order_id}/payment", response_model=OrderOut, summary="管理員標示單筆訂單是否已繳費"
+)
 async def update_order_payment(
     order_id: uuid.UUID,
     payload: OrderPaymentUpdate,
@@ -1024,14 +1127,12 @@ async def update_order_payment(
     order = await _get_order_or_404(order_id, session)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes(session, current_user.id)
-        cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-        is_cadre = order.class_id is not None and order.class_id in cadre_ids
         is_activity_manager = await activity_svc.can_manage_activity_resource(
             session, current_user, shop_svc._order_activity_id(order)
         )
-        if not (_ADMIN_VIEW_CODES & set(codes)) and not is_cadre and not is_activity_manager:
+        if not (_PAYMENT_WRITE_CODES & set(codes)) and not is_activity_manager:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="僅該班幹部或管理員可標示繳費"
+                status_code=status.HTTP_403_FORBIDDEN, detail="僅班聯會管理員可標示正式繳費"
             )
     order = await shop_svc.set_order_paid(
         session, order, is_paid=payload.is_paid, actor_id=current_user.id

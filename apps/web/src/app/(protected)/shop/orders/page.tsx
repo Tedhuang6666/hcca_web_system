@@ -11,6 +11,18 @@ import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { useWS } from "@/hooks/useWS";
 
+function CollectionStatus({ order }: { order: OrderListItem }) {
+  if (!order.class_id) {
+    return <span>{order.is_paid ? "已繳費" : "尚未繳費"}</span>;
+  }
+  return (
+    <span className="grid gap-0.5">
+      <span>班代登記：{order.is_class_collected ? "已收款" : "待收款"}</span>
+      <span style={{ color: "var(--text-muted)" }}>班聯確認：{order.is_paid ? "已繳費" : "尚未確認"}</span>
+    </span>
+  );
+}
+
 export default function OrdersPage() {
   const { can } = usePermissions();
   const isAdmin = can("shop:manage");
@@ -30,7 +42,7 @@ export default function OrdersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = { limit: "500" };
       if (tab === "all") params.my_only = "false";
       const data = await shopApi.listOrders(params);
       setOrders(data);
@@ -59,10 +71,12 @@ export default function OrdersPage() {
   }, [load]), isAdmin);
 
   const confirmedOrders = orders.filter(o => o.status === "confirmed");
-  const totalAmount = confirmedOrders.reduce((s, o) => s + o.total_price, 0);
-  const activeOrders = orders.filter(o => o.status !== "cancelled");
+  const activeOrders = orders.filter(o => o.status !== "cancelled" && o.status !== "refunded");
   const paidOrders = activeOrders.filter(o => o.is_paid);
   const unpaidOrders = activeOrders.filter(o => !o.is_paid);
+  const collectionDue = activeOrders.filter(o => !o.is_paid && (!o.class_id || !o.is_class_collected));
+  const dueAmount = collectionDue.reduce((sum, order) => sum + order.total_price, 0);
+  const classCollectedCount = activeOrders.filter(o => o.class_id && o.is_class_collected).length;
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -83,7 +97,7 @@ export default function OrdersPage() {
           </Link>
           <div>
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              {canManageOrders ? "校商營運工作台" : "訂單記錄"}
+              {canManageOrders ? "校商營運工作台" : "我的訂單與繳款"}
             </h1>
           </div>
         </div>
@@ -154,9 +168,10 @@ export default function OrdersPage() {
             { label: "未繳訂單", value: unpaidOrders.length },
             { label: "未繳金額", value: `NT$${(summary?.unpaid_amount ?? unpaidOrders.reduce((s, o) => s + o.total_price, 0)).toLocaleString()}` },
           ] : [
-            { label: "總訂單數", value: orders.length },
-            { label: "已確認", value: confirmedOrders.length },
-            { label: "確認金額", value: `NT$${totalAmount.toLocaleString()}` },
+            { label: "有效訂單", value: activeOrders.length },
+            { label: "尚待繳交", value: `NT$${dueAmount.toLocaleString()}` },
+            { label: "班代已登記", value: `${classCollectedCount} 筆` },
+            { label: "班聯已確認", value: `${paidOrders.length} 筆` },
           ]).map(({ label, value }) => (
             <div key={label} className="card p-4 text-center">
               <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
@@ -164,6 +179,12 @@ export default function OrdersPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {!canManageOrders && activeOrders.some((order) => order.class_id) && (
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          「尚待繳交」依班代的個人收款紀錄計算；班聯會確認整班繳款後，才會顯示正式已繳費。
+        </p>
       )}
 
       {canManageOrders && summary && summary.rows.length > 0 && (
@@ -229,9 +250,9 @@ export default function OrdersPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt style={{ color: "var(--text-muted)" }}>繳費</dt>
-                    <dd className="mt-0.5 font-medium" style={{ color: order.is_paid ? "#16a34a" : "var(--text-muted)" }}>
-                      {order.is_paid ? "已繳費" : "未繳費"}
+                    <dt style={{ color: "var(--text-muted)" }}>繳款進度</dt>
+                    <dd className="mt-0.5 font-medium" style={{ color: "var(--text-primary)" }}>
+                      <CollectionStatus order={order} />
                     </dd>
                   </div>
                   <div>
@@ -251,7 +272,7 @@ export default function OrdersPage() {
           <table className="w-full min-w-[700px] text-sm" role="table" aria-label="訂單列表">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["訂單編號", tab === "all" ? "用戶" : null, "班級", "狀態", "繳費", "金額", "下單時間"]
+                {["訂單編號", tab === "all" ? "用戶" : null, "班級", "狀態", "繳款進度", "金額", "下單時間"]
                   .filter(Boolean)
                   .map(h => (
                     <th key={h!} className="px-5 py-3.5 text-left text-xs font-semibold"
@@ -282,12 +303,7 @@ export default function OrdersPage() {
                   </td>
                   <td className="px-5 py-4"><OrderStatusBadge status={order.status} /></td>
                   <td className="px-5 py-4">
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full"
-                      style={order.is_paid
-                        ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
-                        : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                      {order.is_paid ? "已繳費" : "未繳費"}
-                    </span>
+                    <span className="text-xs font-medium"><CollectionStatus order={order} /></span>
                   </td>
                   <td className="px-5 py-4 text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                     NT${order.total_price.toLocaleString()}

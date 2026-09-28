@@ -12,12 +12,14 @@ import {
   MessageSquareText,
   Radio,
   Scale,
+  ShoppingBag,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
   news: Megaphone,
+  shop: ShoppingBag,
   articles: BookOpenText,
   about: Landmark,
   "system-info": Info,

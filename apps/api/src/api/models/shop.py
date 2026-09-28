@@ -324,6 +324,16 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     assisted_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # 班代個人收款備忘；正式入帳仍由班聯會設定 is_paid。
+    is_class_collected: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )
+    class_collected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    class_collected_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, name="orderstatus"),
         nullable=False,
