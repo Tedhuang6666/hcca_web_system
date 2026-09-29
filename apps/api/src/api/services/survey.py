@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import io
 import json
@@ -1060,10 +1061,29 @@ def _spreadsheet_safe_text(value: str) -> str:
     return value
 
 
-async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
-    """匯出問卷回應為 Excel（.xlsx），含「回應明細」與「統計摘要」兩個工作表。"""
+def _render_survey_export(
+    detail_rows: list[dict[str, object]],
+    detail_columns: list[str],
+    summary_rows: list[dict[str, object]],
+) -> bytes:
     import pandas as pd  # 延遲匯入，避免未安裝時影響啟動
 
+    detail_df = pd.DataFrame(detail_rows, columns=detail_columns)
+    summary_df = pd.DataFrame(summary_rows, columns=["題目", "項目", "次數", "百分比"])
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        detail_df.to_excel(writer, index=False, sheet_name="回應明細")
+        summary_df.to_excel(writer, index=False, sheet_name="統計摘要")
+        for sheet_name in ("回應明細", "統計摘要"):
+            ws = writer.sheets[sheet_name]
+            for col in ws.columns:
+                max_len = max((len(str(cell.value or "")) for cell in col), default=10)
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+    return buf.getvalue()
+
+
+async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
+    """匯出問卷回應為 Excel（.xlsx），含「回應明細」與「統計摘要」兩個工作表。"""
     # 可填答題目（排除純顯示區塊），依顯示順序
     q_result = await session.execute(
         select(SurveyQuestion)
@@ -1098,7 +1118,7 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
         for q in questions:
             row[col_labels[q.id]] = _answer_display(answers_by_q.get(q.id))
         detail_rows.append(row)
-    detail_df = pd.DataFrame(detail_rows, columns=["#", "提交時間", *col_labels.values()])
+    detail_columns = ["#", "提交時間", *col_labels.values()]
 
     # 工作表 2：統計摘要
     stats = await get_survey_stats(session, survey)
@@ -1141,18 +1161,7 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
                     "百分比": "",
                 }
             )
-    summary_df = pd.DataFrame(summary_rows, columns=["題目", "項目", "次數", "百分比"])
-
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        detail_df.to_excel(writer, index=False, sheet_name="回應明細")
-        summary_df.to_excel(writer, index=False, sheet_name="統計摘要")
-        for sheet_name in ("回應明細", "統計摘要"):
-            ws = writer.sheets[sheet_name]
-            for col in ws.columns:
-                max_len = max((len(str(cell.value or "")) for cell in col), default=10)
-                ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
-    return buf.getvalue()
+    return await asyncio.to_thread(_render_survey_export, detail_rows, detail_columns, summary_rows)
 
 
 # ── 後台檢視 / 回答副本 ───────────────────────────────────────────────────────
