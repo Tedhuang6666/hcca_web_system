@@ -32,14 +32,6 @@ export default async function PublicBudgetsPage() {
         </span>
       </header>
 
-      <aside className="public-budget-index__notice">
-        <ShieldCheck size={19} aria-hidden="true" />
-        <p>
-          <strong>公開範圍已經過資料隔離。</strong>
-          本頁只呈現編列明細與審核資訊，不包含報帳人、憑證或其他個人資料；議員審理草案會明確標示尚未核定。
-        </p>
-      </aside>
-
       {budgets.length === 0 ? (
         <section className="public-budget-index__empty">
           <Landmark size={24} aria-hidden="true" />
