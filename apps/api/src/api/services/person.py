@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,6 +34,7 @@ from api.schemas.person import (
     PersonAffiliationUpdate,
     PersonCreate,
     PersonDetailOut,
+    PersonDirectoryStats,
     PersonListItem,
     PersonRosterImport,
     PersonRosterImportResult,
@@ -189,6 +190,67 @@ async def list_people(
             )
         )
     return rows
+
+
+async def get_directory_stats(
+    db: AsyncSession,
+    *,
+    keyword: str | None = None,
+    class_id: uuid.UUID | None = None,
+    status: PersonStatus | None = None,
+) -> PersonDirectoryStats:
+    account_count = await db.scalar(select(func.count(User.id))) or 0
+    people_count = await db.scalar(select(func.count(Person.id))) or 0
+    linked_count = (
+        await db.scalar(select(func.count(Person.id)).where(Person.user_id.is_not(None))) or 0
+    )
+    classed_count = (
+        await db.scalar(
+            select(func.count(func.distinct(PersonAffiliation.person_id))).where(
+                PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+                PersonAffiliation.status.in_(
+                    [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
+                ),
+            )
+        )
+        or 0
+    )
+    pending_link_count = (
+        await db.scalar(
+            select(func.count(func.distinct(PersonAffiliation.person_id))).where(
+                PersonAffiliation.status == PersonAffiliationStatus.PENDING_USER
+            )
+        )
+        or 0
+    )
+
+    matched_query = select(func.count(func.distinct(Person.id))).select_from(Person)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        matched_query = matched_query.where(
+            or_(
+                Person.display_name.ilike(pattern),
+                Person.legal_name.ilike(pattern),
+                Person.email.ilike(pattern),
+                Person.student_id.ilike(pattern),
+            )
+        )
+    if status is not None:
+        matched_query = matched_query.where(Person.status == status)
+    if class_id:
+        matched_query = matched_query.join(PersonAffiliation).where(
+            PersonAffiliation.class_id == class_id
+        )
+    matched_people_count = await db.scalar(matched_query) or 0
+
+    return PersonDirectoryStats(
+        account_count=account_count,
+        people_count=people_count,
+        linked_count=linked_count,
+        classed_count=classed_count,
+        pending_link_count=pending_link_count,
+        matched_people_count=matched_people_count,
+    )
 
 
 async def create_person(db: AsyncSession, *, data: PersonCreate) -> Person:
