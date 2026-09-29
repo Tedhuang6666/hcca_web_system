@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 
 import pytest
+from openpyxl import load_workbook
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -365,10 +367,19 @@ async def test_response_copy_email_includes_questions_options_and_images(
 
 async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> None:
     survey = await _make_draft_survey(db_session)
-    question = await survey_svc.add_question(
+    text_question = await survey_svc.add_question(
         db_session,
         survey,
-        data=SurveyQuestionCreate(question_text="意見", question_type=QuestionType.TEXT),
+        data=SurveyQuestionCreate(question_text="=1+1", question_type=QuestionType.TEXT),
+    )
+    choice_question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(
+            question_text="選項測試",
+            question_type=QuestionType.MULTIPLE,
+            options=["=2+2", "安全選項"],
+        ),
     )
     survey.status = SurveyStatus.OPEN
     response = SurveyResponse(
@@ -378,8 +389,19 @@ async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> Non
     )
     db_session.add(response)
     await db_session.flush()
-    db_session.add(
-        SurveyAnswer(response_id=response.id, question_id=question.id, answer_text="很好")
+    db_session.add_all(
+        [
+            SurveyAnswer(
+                response_id=response.id,
+                question_id=text_question.id,
+                answer_text="=1+1",
+            ),
+            SurveyAnswer(
+                response_id=response.id,
+                question_id=choice_question.id,
+                answer_json=json.dumps(["=2+2"]),
+            ),
+        ]
     )
     await db_session.flush()
 
@@ -387,3 +409,12 @@ async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> Non
     # .xlsx 為 zip 容器，檔頭為 PK
     assert data[:2] == b"PK"
     assert len(data) > 0
+    workbook = load_workbook(BytesIO(data), data_only=False)
+    detail_sheet = workbook["回應明細"]
+    summary_sheet = workbook["統計摘要"]
+    for cell in (detail_sheet["C2"], detail_sheet["D2"], summary_sheet["A2"], summary_sheet["B3"]):
+        assert cell.data_type == "s"
+    assert detail_sheet["C2"].value == "'=1+1"
+    assert detail_sheet["D2"].value == "'=2+2"
+    assert summary_sheet["A2"].value == "'=1+1"
+    assert summary_sheet["B3"].value == "'=2+2"
