@@ -495,21 +495,22 @@ async def submit_response(
         ) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    await audit_svc.record(
-        session,
-        entity_type="survey_response",
-        entity_id=str(response.id),
-        action="survey.response_submit",
-        actor_id=str(user.id) if user else None,
-        actor_email=user.email if user else None,
-        meta={
-            "survey_id": str(survey.id),
-            "survey_title": survey.title,
-            "is_anonymous": survey.is_anonymous,
-            "answer_count": len(payload.answers),
-        },
-        summary=f"提交問卷「{survey.title}」填答",
-    )
+    if not survey.is_anonymous:
+        await audit_svc.record(
+            session,
+            entity_type="survey_response",
+            entity_id=str(response.id),
+            action="survey.response_submit",
+            actor_id=str(user.id) if user else None,
+            actor_email=user.email if user else None,
+            meta={
+                "survey_id": str(survey.id),
+                "survey_title": survey.title,
+                "is_anonymous": False,
+                "answer_count": len(payload.answers),
+            },
+            summary=f"提交問卷「{survey.title}」填答",
+        )
     await _invalidate_response_caches(user)
 
     reloaded = await _response_with_answers(session, response.id)
@@ -523,7 +524,7 @@ async def submit_response(
             send_branded_email([user.email], subject, "generic", copy_context)
 
     _ph = get_posthog_client()
-    if _ph:
+    if _ph and not survey.is_anonymous:
         _distinct_id = str(user.id) if user else "anonymous"
         _ph.capture(
             distinct_id=_distinct_id,
@@ -604,21 +605,22 @@ async def update_response(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    await audit_svc.record(
-        session,
-        entity_type="survey_response",
-        entity_id=str(response.id),
-        action="survey.response_update",
-        actor_id=str(user.id) if user else None,
-        actor_email=user.email if user else None,
-        meta={
-            "survey_id": str(survey.id),
-            "survey_title": survey.title,
-            "is_anonymous": survey.is_anonymous,
-            "answer_count": len(payload.answers),
-        },
-        summary=f"更新問卷「{survey.title}」填答",
-    )
+    if not survey.is_anonymous:
+        await audit_svc.record(
+            session,
+            entity_type="survey_response",
+            entity_id=str(response.id),
+            action="survey.response_update",
+            actor_id=str(user.id) if user else None,
+            actor_email=user.email if user else None,
+            meta={
+                "survey_id": str(survey.id),
+                "survey_title": survey.title,
+                "is_anonymous": False,
+                "answer_count": len(payload.answers),
+            },
+            summary=f"更新問卷「{survey.title}」填答",
+        )
     await _invalidate_response_caches(user)
     reloaded = await _response_with_answers(session, response.id)
 
@@ -630,7 +632,7 @@ async def update_response(
             send_branded_email([user.email], subject, "generic", copy_context)
 
     _ph = get_posthog_client()
-    if _ph:
+    if _ph and not survey.is_anonymous:
         _ph.capture(
             distinct_id=str(user.id) if user else "anonymous",
             event="survey_response_updated",

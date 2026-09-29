@@ -12,9 +12,11 @@ from datetime import UTC, datetime
 from urllib.parse import quote
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.announcement import Announcement
+from api.models.audit_log import AuditLog
 from api.models.org import Org
 from api.models.user import User
 from api.models.user_identity import UserIdentity
@@ -505,6 +507,36 @@ async def test_submit_response_public_survey_allows_anonymous(
         json={"answers": [{"question_id": question_id, "answer_text": "匿名回答"}]},
     )
     assert response.status_code == 201
+
+
+async def test_anonymous_response_submit_does_not_write_linkable_audit(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    survey_id, question_id = await _make_open_survey_with_question(
+        admin_ac,
+        org.id,
+        is_public=True,
+        is_anonymous=True,
+    )
+
+    response = await authed_client_factory(member_user).post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_text": "匿名回答"}]},
+    )
+    assert response.status_code == 201
+
+    audit = await db_session.scalar(
+        select(AuditLog.id).where(
+            AuditLog.action == "survey.response_submit",
+            AuditLog.entity_id == response.json()["id"],
+        )
+    )
+    assert audit is None
 
 
 # ── 公開端點 ──────────────────────────────────────────────────────────────────
