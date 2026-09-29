@@ -1047,10 +1047,17 @@ def _answer_display(answer: SurveyAnswer | None) -> str:
                 text = "、".join(str(o) for o in opts)
                 if answer.other_text:
                     text += f"（其他：{answer.other_text}）"
-                return text
+                return _spreadsheet_safe_text(text)
         except json.JSONDecodeError:
             pass
-    return answer.answer_text or ""
+    return _spreadsheet_safe_text(answer.answer_text or "")
+
+
+def _spreadsheet_safe_text(value: str) -> str:
+    """確保使用者提供的文字匯出後不會被試算表當成公式。"""
+    if value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
 
 
 async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
@@ -1066,7 +1073,10 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
     questions = [
         q for q in q_result.scalars().all() if q.question_type not in DISPLAY_QUESTION_TYPES
     ]
-    col_labels = {q.id: f"Q{i}. {q.question_text}" for i, q in enumerate(questions, start=1)}
+    col_labels = {
+        q.id: _spreadsheet_safe_text(f"Q{i}. {q.question_text}")
+        for i, q in enumerate(questions, start=1)
+    }
 
     # 回應（含答案）
     r_result = await session.execute(
@@ -1097,12 +1107,17 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
         for opt, count in qs.option_counts.items():
             pct = round(count / qs.total_responses * 100, 1) if qs.total_responses else 0
             summary_rows.append(
-                {"題目": qs.question_text, "項目": opt, "次數": count, "百分比": f"{pct}%"}
+                {
+                    "題目": _spreadsheet_safe_text(qs.question_text),
+                    "項目": _spreadsheet_safe_text(opt),
+                    "次數": count,
+                    "百分比": f"{pct}%",
+                }
             )
         if qs.average_rating is not None:
             summary_rows.append(
                 {
-                    "題目": qs.question_text,
+                    "題目": _spreadsheet_safe_text(qs.question_text),
                     "項目": "平均分",
                     "次數": round(qs.average_rating, 2),
                     "百分比": "",
@@ -1111,7 +1126,7 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
         if qs.text_answers:
             summary_rows.append(
                 {
-                    "題目": qs.question_text,
+                    "題目": _spreadsheet_safe_text(qs.question_text),
                     "項目": "文字回答則數",
                     "次數": len(qs.text_answers),
                     "百分比": "",
@@ -1120,7 +1135,7 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
         if not qs.option_counts and qs.average_rating is None and not qs.text_answers:
             summary_rows.append(
                 {
-                    "題目": qs.question_text,
+                    "題目": _spreadsheet_safe_text(qs.question_text),
                     "項目": "回答數",
                     "次數": qs.total_responses,
                     "百分比": "",
