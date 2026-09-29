@@ -63,18 +63,34 @@ function ProductModal({
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null);
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [productLoading, setProductLoading] = useState(true);
+  const [productLoadError, setProductLoadError] = useState(false);
   const [mounted, setMounted] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    shopApi
-      .getProduct(productId)
-      .then(setProduct)
-      .catch((e) => toast.error(apiErrorMessage(e, "載入商品失敗")));
+  const loadProduct = useCallback(async () => {
+    setProduct(null);
+    setPicked({});
+    setSelectedMediaIndex(null);
+    setQty(1);
+    setProductLoading(true);
+    setProductLoadError(false);
+    try {
+      setProduct(await shopApi.getProduct(productId));
+    } catch {
+      setProductLoadError(true);
+    } finally {
+      setProductLoading(false);
+    }
   }, [productId]);
+
+  useEffect(() => {
+    void loadProduct();
+  }, [loadProduct]);
 
   useEffect(() => {
     setMounted(true);
@@ -112,23 +128,45 @@ function ProductModal({
     };
   }, [onClose]);
 
-  if (!product || !mounted) return null;
+  if (!mounted) return null;
 
-  const delta = product.variant_groups.reduce((sum, g) => {
-    const opt = g.options.find((o) => o.id === picked[g.id]);
+  const variantGroups = product?.variant_groups ?? [];
+  const media = product
+    ? [
+        ...(product.image_url ? [{ image_url: product.image_url, kind: "cover" as const }] : []),
+        ...(product.media ?? []).map((item) => ({
+          image_url: item.image_url,
+          kind: item.kind,
+        })),
+      ]
+    : [];
+  const delta = variantGroups.reduce((sum, g) => {
+    const opt = (g.options ?? []).find((o) => o.id === picked[g.id]);
     return sum + (opt?.price_delta ?? 0);
   }, 0);
-  const unitPrice = product.price + delta;
-  const allPicked = product.variant_groups.every((g) => picked[g.id]);
+  const unitPrice = (product?.price ?? 0) + delta;
+  const allPicked = variantGroups.every((g) => picked[g.id]);
   const available =
-    product.status === "active" && (product.is_unlimited || product.stock_quantity > 0);
+    Boolean(product && product.status === "active" && (product.is_unlimited || product.stock_quantity > 0));
   const canAddToCart = available && !classClosed;
-  const displayImage = product.variant_groups.reduce((current, group) => {
-    const option = group.options.find((o) => o.id === picked[group.id]);
+  const variantImage = variantGroups.reduce((current, group) => {
+    const option = (group.options ?? []).find((o) => o.id === picked[group.id]);
     return option?.image_url || current;
-  }, product.image_url);
+  }, product?.image_url ?? null);
+  const selectedMedia = selectedMediaIndex === null ? null : media[selectedMediaIndex] ?? null;
+  const displayMedia = selectedMedia ?? (variantImage
+    ? { image_url: variantImage, kind: "option" as const }
+    : media[0] ?? null);
+  const displayLabel = displayMedia?.kind === "model"
+    ? "模特兒宣傳照"
+    : displayMedia?.kind === "option"
+      ? "所選規格"
+      : displayMedia?.kind === "cover"
+        ? "商品主圖"
+        : "商品照片";
 
   const submit = async () => {
+    if (!product) return;
     if (classClosed) {
       toast.error("本班已結單，請聯繫班級幹部確認訂購安排");
       return;
@@ -170,12 +208,44 @@ function ProductModal({
         tabIndex={-1}
         className="shop-product-dialog animate-scale-in">
         <div className="shop-product-dialog-media">
-          {displayImage ? (
+          {product && displayMedia ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={uploadUrl(displayImage)} alt={product.name} />
+            <img
+              src={uploadUrl(displayMedia.image_url)}
+              alt={`${product.name}・${displayLabel}`}
+            />
           ) : (
             <div className="shop-product-dialog-placeholder">
               <Package size={48} strokeWidth={1.2} aria-hidden="true" />
+            </div>
+          )}
+          {product && displayMedia && (
+            <p className="shop-product-dialog-image-caption">{displayLabel}</p>
+          )}
+          {product && media.length > 1 && (
+            <div className="shop-product-dialog-gallery" role="group" aria-label="商品圖片">
+              {media.map((item, index) => {
+                const label = item.kind === "model"
+                  ? "模特兒宣傳照"
+                  : item.kind === "cover"
+                    ? "商品主圖"
+                    : "商品照片";
+                const selected = selectedMediaIndex === index || (
+                  selectedMediaIndex === null && index === 0 && !variantImage
+                );
+                return (
+                  <button
+                    key={`${item.image_url}-${index}`}
+                    type="button"
+                    onClick={() => setSelectedMediaIndex(index)}
+                    aria-label={`顯示${label} ${index + 1}`}
+                    aria-pressed={selected}
+                    className="shop-product-dialog-gallery-item">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={uploadUrl(item.image_url)} alt="" />
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -186,70 +256,93 @@ function ProductModal({
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-          <div className="shop-product-dialog-heading">
-            <h3 id="product-modal-title">{product.name}</h3>
-            {product.description && <p>{product.description}</p>}
-            <p className="shop-product-dialog-stock">
-              {product.is_unlimited ? "供應中" : `剩餘 ${product.stock_quantity} 件`}
-            </p>
-          </div>
-
-          {product.variant_groups.map((g) => (
-            <div key={g.id} className="shop-product-dialog-section">
-              <label>{g.name}</label>
-              <div className="shop-product-options">
-                {g.options
-                  .filter((o) => o.is_active)
-                  .map((o) => {
-                    const sel = picked[g.id] === o.id;
-                    return (
-                      <button
-                        key={o.id}
-                        onClick={() => setPicked((p) => ({ ...p, [g.id]: o.id }))}
-                        className="shop-product-option"
-                        aria-pressed={sel}>
-                        {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
-                        <span>{o.value}</span>
-                        {o.price_delta !== 0 && (
-                          <span className="shop-product-option-price">
-                            {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+          {productLoading && (
+            <div className="shop-product-dialog-state" role="status" aria-live="polite">
+              <h3 id="product-modal-title">載入商品詳情</h3>
+              <p>正在取得商品與圖片資料…</p>
+            </div>
+          )}
+          {productLoadError && (
+            <div className="shop-product-dialog-state" role="alert">
+              <CircleAlert size={22} aria-hidden="true" />
+              <h3 id="product-modal-title">商品詳情載入失敗</h3>
+              <p>商品資料暫時無法取得，請重新載入。</p>
+              <button type="button" onClick={() => void loadProduct()} className="shop-product-retry">
+                重新載入
+              </button>
+            </div>
+          )}
+          {product && !productLoading && !productLoadError && (
+            <>
+              <div className="shop-product-dialog-heading">
+                <h3 id="product-modal-title">{product.name}</h3>
+                {product.description && <p>{product.description}</p>}
+                <p className="shop-product-dialog-stock">
+                  {product.is_unlimited ? "供應中" : `剩餘 ${product.stock_quantity} 件`}
+                </p>
               </div>
-            </div>
-          ))}
 
-          <div className="shop-product-dialog-section">
-            <label>數量</label>
-            <div className="shop-product-quantity">
-              <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="減少數量">−</button>
-              <span>{qty}</span>
-              <button
-                onClick={() => setQty((q) =>
-                  product.is_unlimited ? q + 1 : Math.min(product.stock_quantity, q + 1))}
-                aria-label="增加數量">＋</button>
-            </div>
-          </div>
+              {variantGroups.map((g) => (
+                <div key={g.id} className="shop-product-dialog-section">
+                  <label>{g.name}</label>
+                  <div className="shop-product-options">
+                    {(g.options ?? [])
+                      .filter((o) => o.is_active)
+                      .map((o) => {
+                        const sel = picked[g.id] === o.id;
+                        return (
+                          <button
+                            key={o.id}
+                            onClick={() => {
+                              setSelectedMediaIndex(null);
+                              setPicked((p) => ({ ...p, [g.id]: o.id }));
+                            }}
+                            className="shop-product-option"
+                            aria-pressed={sel}>
+                            {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
+                            <span>{o.value}</span>
+                            {o.price_delta !== 0 && (
+                              <span className="shop-product-option-price">
+                                {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              ))}
 
-          <div className="shop-product-dialog-actions">
-            <button
-              onClick={submit}
-              disabled={loading || !canAddToCart}
-              className="shop-product-submit"
-              aria-busy={loading}>
-              {!available
-                ? "目前無法訂購"
-                : classClosed
-                  ? "本班已結單"
-                  : loading
-                    ? "處理中…"
-                    : `加入購物車 · NT$${(unitPrice * qty).toLocaleString()}`}
-            </button>
-            <button onClick={onClose} className="shop-product-cancel">取消</button>
-          </div>
+              <div className="shop-product-dialog-section">
+                <label>數量</label>
+                <div className="shop-product-quantity">
+                  <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="減少數量">−</button>
+                  <span>{qty}</span>
+                  <button
+                    onClick={() => setQty((q) =>
+                      product.is_unlimited ? q + 1 : Math.min(product.stock_quantity, q + 1))}
+                    aria-label="增加數量">＋</button>
+                </div>
+              </div>
+
+              <div className="shop-product-dialog-actions">
+                <button
+                  onClick={submit}
+                  disabled={loading || !canAddToCart}
+                  className="shop-product-submit"
+                  aria-busy={loading}>
+                  {!available
+                    ? "目前無法訂購"
+                    : classClosed
+                      ? "本班已結單"
+                      : loading
+                        ? "處理中…"
+                        : `加入購物車 · NT$${(unitPrice * qty).toLocaleString()}`}
+                </button>
+                <button onClick={onClose} className="shop-product-cancel">取消</button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>,
@@ -337,6 +430,7 @@ export default function ShopPage() {
   const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+  const closeProduct = useCallback(() => setOpenProduct(null), []);
 
   const loadCatalog = useCallback(() => {
     if (!cacheHas(catalogCacheKey)) setLoading(true);
@@ -533,7 +627,7 @@ export default function ShopPage() {
               {visibleSeries.map((series) => (
                 <section key={series.id} className="shop-public-series">
                   <div className="shop-public-series-heading">
-                    <Thumb url={series.image_url ?? null} alt="" size={42} />
+                    {series.image_url && <Thumb url={series.image_url} alt="" size={42} />}
                     <div>
                       <h3>{series.name}</h3>
                       <p>{series.products.length} 件商品</p>
@@ -566,7 +660,7 @@ export default function ShopPage() {
           productId={openProduct}
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           isLoggedIn={isLoggedIn}
-          onClose={() => setOpenProduct(null)}
+          onClose={closeProduct}
           onAdded={() => {
             setOpenProduct(null);
             loadCart();

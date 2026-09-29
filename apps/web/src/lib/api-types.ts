@@ -26748,6 +26748,8 @@ export interface components {
              * @default false
              */
             is_unlimited: boolean;
+            /** Media */
+            media?: components["schemas"]["ProductMediaCreate"][];
             /**
              * Name
              * @description 商品名稱
@@ -26794,6 +26796,42 @@ export interface components {
             /** Variant Groups */
             variant_groups?: components["schemas"]["ProductVariantGroupCreate"][];
         };
+        /** ProductMediaCreate */
+        ProductMediaCreate: {
+            /**
+             * Image Url
+             * @description 圖片路徑
+             */
+            image_url: string;
+            /**
+             * Kind
+             * @default product
+             * @enum {string}
+             */
+            kind: "product" | "model";
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
+        /** ProductMediaOut */
+        ProductMediaOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Image Url */
+            image_url: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "product" | "model";
+            /** Sort Order */
+            sort_order: number;
+        };
         /** ProductOut */
         ProductOut: {
             /**
@@ -26817,6 +26855,11 @@ export interface components {
             image_url: string | null;
             /** Is Unlimited */
             is_unlimited: boolean;
+            /**
+             * Media
+             * @default []
+             */
+            media: components["schemas"]["ProductMediaOut"][];
             /** Name */
             name: string;
             /** Price */
@@ -26937,6 +26980,8 @@ export interface components {
             image_url?: string | null;
             /** Is Unlimited */
             is_unlimited?: boolean | null;
+            /** Media */
+            media?: components["schemas"]["ProductMediaCreate"][] | null;
             /** Name */
             name?: string | null;
             /** Price */

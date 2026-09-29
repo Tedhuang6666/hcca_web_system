@@ -361,6 +361,7 @@ from api.models.shop import (  # noqa: F401
     OrderStatus,
     Product,
     ProductCategory,
+    ProductMedia,
     ProductSeries,
     ProductStatus,
     ProductVariantGroup,

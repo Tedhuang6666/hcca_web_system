@@ -14,6 +14,7 @@ from api.models.shop import (
     Order,
     Product,
     ProductCategory,
+    ProductMedia,
     ProductSeries,
     ProductStatus,
     ProductVariantGroup,
@@ -172,6 +173,7 @@ async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product |
         .options(
             selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
             selectinload(Product.series).selectinload(ProductSeries.category),
+            selectinload(Product.media),
         )
         .where(Product.id == product_id)
     )
@@ -208,6 +210,7 @@ async def list_products(
             Product.updated_at,
         ),
         selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
+        selectinload(Product.media),
     )
     if activity_id:
         q = q.join(ProductSeries, Product.series_id == ProductSeries.id).join(
@@ -251,6 +254,11 @@ async def create_product(
     session.add(product)
     await session.flush()
 
+    product.media = [
+        ProductMedia(image_url=item.image_url, kind=item.kind, sort_order=item.sort_order or index)
+        for index, item in enumerate(data.media)
+    ]
+
     for gi, group_data in enumerate(data.variant_groups):
         group = ProductVariantGroup(
             product_id=product.id,
@@ -284,10 +292,13 @@ async def update_product(
         series = await get_series(session, payload["series_id"])
         if series is None:
             raise ValueError("找不到目標系列")
+    media_data = payload.pop("media", None)
     for field, value in payload.items():
         setattr(product, field, value)
+    if media_data is not None:
+        product.media = [ProductMedia(**item) for item in media_data]
     await session.flush()
-    return product
+    return await get_product(session, product.id) or product
 
 
 async def activate_product(session: AsyncSession, product: Product) -> Product:
