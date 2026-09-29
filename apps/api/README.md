@@ -7,8 +7,8 @@ Redis 與 Celery。完整架構請先看 [PROJECT_CONTEXT.md](../../PROJECT_CONT
 
 ```bash
 docker compose up db redis -d
-uv sync
-uv run --project apps/api alembic upgrade head
+uv sync --locked --project apps/api
+uv run --locked --directory apps/api alembic upgrade head
 uv run --project apps/api uvicorn api.main:app --reload --port 8000
 ```
 
@@ -18,18 +18,19 @@ API 文件位於 `http://localhost:8000/docs`。應用程式入口固定為
 
 ## 常用指令
 
+從 repo 根目錄執行；完整說明見 [AI_WORKFLOW.md](../../docs/AI_WORKFLOW.md)。
+
 ```bash
-uv run --project apps/api pytest apps/api/tests -v --asyncio-mode=auto
-uv run --project apps/api ruff check apps/api/src libs/shared/src
-uv run --project apps/api ruff format --check apps/api/src libs/shared/src apps/api/tests
-uv run --project apps/api mypy
+bash scripts/check.sh api
+# 先設定 TEST_DATABASE_URL，指定本機 PostgreSQL *_test DB
+bash scripts/check.sh api-test
 ```
 
 修改 ORM model 後：
 
 ```bash
-uv run --project apps/api alembic revision --autogenerate -m "描述"
-uv run --project apps/api alembic upgrade head
+uv run --locked --directory apps/api alembic revision --autogenerate -m "描述"
+uv run --locked --directory apps/api alembic upgrade head
 ```
 
 ## 分層規則

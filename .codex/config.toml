@@ -1,0 +1,13 @@
+# 本機專案設定：不指定模型、不覆寫個人權限／服務等級。
+# GitNexus runner 由 --index-only 更新；所有查詢仍須綁定實際 repo/worktree。
+[mcp_servers.gitnexus]
+command = "node"
+args = ["/home/ted98/projects/main/.gitnexus/run.cjs", "mcp"]
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp@4.1.1"]
+startup_timeout_sec = 60
+tool_timeout_sec = 120
