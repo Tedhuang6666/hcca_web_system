@@ -142,6 +142,15 @@ class PersonRosterImportResult(BaseModel):
     skipped: int
 
 
+class PersonDirectoryStats(BaseModel):
+    account_count: int
+    people_count: int
+    linked_count: int
+    classed_count: int
+    pending_link_count: int
+    matched_people_count: int
+
+
 __all__ = [
     "PersonAffiliationCreate",
     "PersonAffiliationOut",

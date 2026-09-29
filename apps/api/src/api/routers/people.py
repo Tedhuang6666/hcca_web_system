@@ -20,6 +20,7 @@ from api.schemas.person import (
     PersonAffiliationUpdate,
     PersonCreate,
     PersonDetailOut,
+    PersonDirectoryStats,
     PersonListItem,
     PersonOut,
     PersonRosterImport,
@@ -79,6 +80,22 @@ async def list_people(
         status=status_filter,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/stats", response_model=PersonDirectoryStats, summary="取得全站帳號與人員統計")
+async def get_people_stats(
+    db: DbDep,
+    _: PeopleManager,
+    keyword: str | None = Query(None, description="姓名、學號、Email"),
+    class_id: uuid.UUID | None = Query(None, description="班級 ID"),
+    status_filter: PersonStatus | None = Query(None, alias="status"),
+) -> PersonDirectoryStats:
+    return await person_svc.get_directory_stats(
+        db,
+        keyword=keyword,
+        class_id=class_id,
+        status=status_filter,
     )
 
 

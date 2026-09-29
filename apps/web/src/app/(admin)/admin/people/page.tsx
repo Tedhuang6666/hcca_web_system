@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
 import { PeopleManagementEmbedProvider } from "@/components/admin/PeopleManagementEmbedContext";
@@ -10,6 +10,8 @@ import {
   BookUser,
   BriefcaseBusiness,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   CircleSlash,
   GraduationCap,
   Link2,
@@ -28,6 +30,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, classApi, orgsApi, peopleApi, withFallback } from "@/lib/api";
+import { getPeopleDirectoryStats } from "@/lib/api/people";
 import { today } from "@/lib/dateUtils";
 import type {
   AdminUserDetail,
@@ -36,6 +39,7 @@ import type {
   PersonAffiliationKind,
   PersonAffiliationOut,
   PersonDetailOut,
+  PersonDirectoryStats,
   PersonListItem,
   PersonStatus,
   PositionSummary,
@@ -67,6 +71,7 @@ const CLASS_ROLE_OPTIONS = [
 ];
 
 type PeopleManagementSection = "people" | "accounts" | "lifecycle" | "organization" | "classes" | "import";
+const PEOPLE_PAGE_SIZE = 200;
 
 const AccountManagementPanel = dynamic(
   () => import("../users/page"),
@@ -214,7 +219,9 @@ export default function PeopleAdminPage() {
 function PersonDirectoryPanel() {
   const { can, isAdmin } = usePermissions();
   const allowed = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
+  const canAssignClass = isAdmin || can("admin:all") || can("class:manage");
   const [people, setPeople] = useState<PersonListItem[]>([]);
+  const [stats, setStats] = useState<PersonDirectoryStats | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 手機版 master-detail：選取後切到詳情、未選顯示列表（桌機 xl 以上恆並排）。
   // 不能直接用 selectedId，因為列表載入會自動選第一筆，會害手機一進來就停在詳情。
@@ -227,6 +234,7 @@ function PersonDirectoryPanel() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<PersonStatus | "">("");
   const [classId, setClassId] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -255,16 +263,26 @@ function PersonDirectoryPanel() {
         keyword: query.trim() || undefined,
         status: status || undefined,
         class_id: classId || undefined,
-        limit: 200,
+        limit: PEOPLE_PAGE_SIZE,
+        offset: pageIndex * PEOPLE_PAGE_SIZE,
       });
       setPeople(rows);
       setSelectedId((current) => current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null);
+      try {
+        setStats(await getPeopleDirectoryStats({
+          keyword: query.trim() || undefined,
+          status: status || undefined,
+          class_id: classId || undefined,
+        }));
+      } catch (error) {
+        toast.error(errorMessage(error, "載入全站人員統計失敗"));
+      }
     } catch (error) {
       toast.error(errorMessage(error, "載入人員清單失敗"));
     } finally {
       setLoading(false);
     }
-  }, [allowed, classId, query, status]);
+  }, [allowed, classId, pageIndex, query, status]);
 
   const loadDetail = useCallback(async (id: string | null) => {
     if (!id) {
@@ -298,21 +316,15 @@ function PersonDirectoryPanel() {
     void loadDetail(selectedId);
   }, [loadDetail, selectedId]);
 
-  const stats = useMemo(() => {
-    const linked = people.filter((person) => person.user_id).length;
-    const pending = people.reduce((sum, person) => sum + (person.role_titles.length > 0 && !person.user_id ? 1 : 0), 0);
-    return {
-      total: people.length,
-      linked,
-      pending,
-      classed: people.filter((person) => person.class_labels.length > 0).length,
-    };
-  }, [people]);
-
   const refreshAll = async () => {
     await Promise.all([loadReference(), loadPeople()]);
     await loadDetail(selectedId);
   };
+
+  const matchedCount = stats?.matched_people_count ?? null;
+  const pageCount = Math.max(1, Math.ceil((matchedCount ?? 0) / PEOPLE_PAGE_SIZE));
+  const rangeStart = matchedCount ? pageIndex * PEOPLE_PAGE_SIZE + 1 : 0;
+  const rangeEnd = pageIndex * PEOPLE_PAGE_SIZE + people.length;
 
   if (!allowed) {
     return (
@@ -330,7 +342,7 @@ function PersonDirectoryPanel() {
             人員與身分
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            從同一份人員主檔查看班級、組織職位與帳號連結。
+            平台帳號含停用帳號；人員統計涵蓋完整主檔，清單每頁最多顯示 200 筆。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -346,11 +358,12 @@ function PersonDirectoryPanel() {
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat icon={<UsersRound size={15} />} label="目前清單" value={stats.total} />
-        <Stat icon={<Link2 size={15} />} label="已連帳號" value={stats.linked} />
-        <Stat icon={<BookUser size={15} />} label="有分班" value={stats.classed} />
-        <Stat icon={<CircleSlash size={15} />} label="待連帳號" value={stats.pending} />
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+        <Stat icon={<UsersRound size={15} />} label="平台帳號" value={stats?.account_count ?? null} />
+        <Stat icon={<UserRound size={15} />} label="人員主檔" value={stats?.people_count ?? null} />
+        <Stat icon={<Link2 size={15} />} label="已連帳號" value={stats?.linked_count ?? null} />
+        <Stat icon={<BookUser size={15} />} label="有分班" value={stats?.classed_count ?? null} />
+        <Stat icon={<CircleSlash size={15} />} label="待連帳號" value={stats?.pending_link_count ?? null} />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[24rem_1fr]">
@@ -361,7 +374,10 @@ function PersonDirectoryPanel() {
                 <Search size={15} style={{ color: "var(--text-muted)" }} />
                 <input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setPageIndex(0);
+                    setQuery(event.target.value);
+                  }}
                   className="w-full bg-transparent text-sm outline-none"
                   placeholder="搜尋姓名、學號、Email"
                   style={{ color: "var(--text-primary)" }}
@@ -383,13 +399,19 @@ function PersonDirectoryPanel() {
               </button>
             </div>
             <div className={`grid grid-cols-2 gap-2 ${filterOpen ? "" : "hidden md:grid"}`}>
-              <SelectInput value={status} onChange={(event) => setStatus(event.target.value as PersonStatus | "")}>
+              <SelectInput value={status} onChange={(event) => {
+                setPageIndex(0);
+                setStatus(event.target.value as PersonStatus | "");
+              }}>
                 <option value="">全部狀態</option>
                 {Object.entries(STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </SelectInput>
-              <SelectInput value={classId} onChange={(event) => setClassId(event.target.value)}>
+              <SelectInput value={classId} onChange={(event) => {
+                setPageIndex(0);
+                setClassId(event.target.value);
+              }}>
                 <option value="">全部班級</option>
                 {classes.map((item) => (
                   <option key={item.id} value={item.id}>{classLabel(item)}</option>
@@ -441,6 +463,36 @@ function PersonDirectoryPanel() {
               ))
             )}
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2" style={{ borderTop: "1px solid var(--border)" }}>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }} aria-live="polite">
+              {loading
+                ? "更新名單中…"
+                : matchedCount === null
+                  ? "總筆數暫時無法載入"
+                  : `顯示 ${rangeStart}–${rangeEnd} 筆，共 ${matchedCount} 筆`}
+            </p>
+            <div className="flex items-center gap-1">
+              <IconButton
+                onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                disabled={loading || pageIndex === 0}
+                title="上一頁"
+              >
+                <ChevronLeft size={14} />
+                <span className="sr-only">上一頁</span>
+              </IconButton>
+              <span className="min-w-12 text-center text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                {pageIndex + 1} / {pageCount}
+              </span>
+              <IconButton
+                onClick={() => setPageIndex((current) => current + 1)}
+                disabled={loading || matchedCount === null || (pageIndex + 1) * PEOPLE_PAGE_SIZE >= matchedCount}
+                title="下一頁"
+              >
+                <ChevronRight size={14} />
+                <span className="sr-only">下一頁</span>
+              </IconButton>
+            </div>
+          </div>
         </Panel>
 
         <Panel className={`min-h-0 flex-col overflow-hidden ${mobileDetailOpen ? "flex" : "hidden xl:flex"}`}>
@@ -452,7 +504,9 @@ function PersonDirectoryPanel() {
           ) : detail ? (
             <PersonDetailPanel
               person={detail}
+              classes={classes}
               users={users}
+              canAssignClass={canAssignClass}
               onChanged={refreshAll}
               onAssign={() => setShowAffiliation(true)}
             />
@@ -510,29 +564,37 @@ function WorkspaceLoading() {
   );
 }
 
-function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | null }) {
   return (
     <Panel className="p-3">
       <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
         {icon}
         {label}
       </div>
-      <p className="mt-1 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>{value}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+        {value === null ? "—" : value.toLocaleString("zh-TW")}
+      </p>
     </Panel>
   );
 }
 
 function PersonDetailPanel({
   person,
+  classes,
   users,
+  canAssignClass,
   onChanged,
   onAssign,
 }: {
   person: PersonDetailOut;
+  classes: SchoolClassListItem[];
   users: AdminUserDetail[];
+  canAssignClass: boolean;
   onChanged: () => Promise<void>;
   onAssign: () => void;
 }) {
+  const [quickClassId, setQuickClassId] = useState("");
+  const [classSaving, setClassSaving] = useState(false);
   const [edit, setEdit] = useState({
     display_name: person.display_name,
     student_id: person.student_id ?? "",
@@ -580,6 +642,33 @@ function PersonDetailPanel({
     }
   };
 
+  const assignClass = async (classId: string) => {
+    const schoolClass = classes.find((item) => item.id === classId);
+    if (!schoolClass || classSaving) return;
+    setQuickClassId(classId);
+    setClassSaving(true);
+    try {
+      if (person.user_id) {
+        await classApi.addMembership(schoolClass.id, { user_id: person.user_id });
+      } else {
+        await peopleApi.createAffiliation({
+          person_id: person.id,
+          kind: "class_member",
+          class_id: schoolClass.id,
+          academic_year: schoolClass.academic_year,
+          source: "manual",
+        });
+      }
+      toast.success(`已將 ${person.display_name} 設定至 ${classLabel(schoolClass)}`);
+      await onChanged();
+    } catch (error) {
+      toast.error(errorMessage(error, "設定班級失敗"));
+    } finally {
+      setQuickClassId("");
+      setClassSaving(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex-shrink-0 p-5" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -596,6 +685,21 @@ function PersonDetailPanel({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {canAssignClass && (
+              <SelectInput
+                aria-label={`快速設定 ${person.display_name} 的班級`}
+                className="min-h-11 min-w-40 max-w-56"
+                value={classSaving ? quickClassId : ""}
+                onChange={(event) => void assignClass(event.target.value)}
+                disabled={classSaving || classes.length === 0}
+                style={{ width: "auto" }}
+              >
+                <option value="">{classSaving ? "設定中…" : "快速設定班級"}</option>
+                {classes.map((item) => (
+                  <option key={item.id} value={item.id}>{classLabel(item)}</option>
+                ))}
+              </SelectInput>
+            )}
             <IconButton onClick={syncPending} disabled={!person.user_id}>
               <BadgeCheck size={14} /> 同步待生效
             </IconButton>

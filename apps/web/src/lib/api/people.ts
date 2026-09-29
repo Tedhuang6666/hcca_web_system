@@ -1,5 +1,5 @@
 import type {
-  PersonAffiliationCreate, PersonAffiliationOut, PersonAffiliationUpdate, PersonCreate, PersonDetailOut, PersonListItem, PersonOut, PersonRosterImportResult, PersonUpdate,
+  PersonAffiliationCreate, PersonAffiliationOut, PersonAffiliationUpdate, PersonCreate, PersonDetailOut, PersonDirectoryStats, PersonListItem, PersonOut, PersonRosterImportResult, PersonUpdate,
 } from "../types";
 import { get, post, patch, del } from "./core";
 
@@ -41,3 +41,17 @@ export const peopleApi = {
   endAffiliation: (id: string) => del<PersonAffiliationOut>(`/people/affiliations/${id}`),
   syncPending: (id: string) => post<{ synced: number }>(`/people/${id}/sync-pending`, {}),
 };
+
+export function getPeopleDirectoryStats(params?: {
+  keyword?: string;
+  class_id?: string;
+  status?: string;
+}) {
+  const qs = params ? `?${new URLSearchParams(
+    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
+      if (value !== undefined && value !== null && value !== "") acc[key] = String(value);
+      return acc;
+    }, {}),
+  ).toString()}` : "";
+  return get<PersonDirectoryStats>(`/people/stats${qs}`);
+}

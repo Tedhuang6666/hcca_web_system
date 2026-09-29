@@ -1236,6 +1236,14 @@ export interface CadreDirectoryImportOut {
 
 // ── 人員與身分總表 ────────────────────────────────────────────────────────────
 
+export interface PersonDirectoryStats {
+  account_count: number;
+  people_count: number;
+  linked_count: number;
+  classed_count: number;
+  pending_link_count: number;
+  matched_people_count: number;
+}
 
 // ── 法規系統型別 ──────────────────────────────────────────────────────────────
 
