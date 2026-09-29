@@ -114,6 +114,15 @@ function filterReducer(state: FilterState, action: FilterAction): FilterState {
 }
 
 const URGENCY_ORDER: Record<string, number> = { express: 2, priority: 1, normal: 0 };
+const TAIPEI_DATE_FORMATTER = new Intl.DateTimeFormat("zh-TW", {
+  timeZone: "Asia/Taipei",
+});
+
+function formatTaipeiDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : TAIPEI_DATE_FORMATTER.format(date);
+}
 
 function dueDateUrgency(
   dateStr: string | null,
@@ -1270,14 +1279,14 @@ export default function DocumentListClient({
                         <DocumentStatusBadge status={doc.status} />
                       </td>
                       <td className="px-5 py-4 text-xs whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
-                        {new Date(doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}
+                        {formatTaipeiDate(doc.submitted_at ?? doc.created_at)}
                       </td>
                       <td className="px-5 py-4 text-xs whitespace-nowrap">
                         {(() => {
                           const urg = dueDateUrgency(doc.due_date, now);
                           if (!urg || urg === "ok") return (
                             <span style={{ color: "var(--text-muted)" }}>
-                              {doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"}
+                              {formatTaipeiDate(doc.due_date)}
                             </span>
                           );
                           const isOverdue = urg === "overdue";
@@ -1285,7 +1294,7 @@ export default function DocumentListClient({
                             <span className="flex items-center gap-1.5 font-medium"
                               style={{ color: isOverdue ? "var(--danger)" : "#fb923c" }}>
                               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOverdue ? "bg-red-500" : "bg-orange-400 animate-pulse"}`} />
-                              {new Date(doc.due_date!).toLocaleDateString("zh-TW")}
+                              {formatTaipeiDate(doc.due_date)}
                             </span>
                           );
                         })()}
@@ -1361,7 +1370,7 @@ export default function DocumentListClient({
                             {doc.summary || doc.subject || doc.title}
                           </p>
                           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                            發文 {new Date(doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}
+                            發文 {formatTaipeiDate(doc.submitted_at ?? doc.created_at)}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -1383,13 +1392,13 @@ export default function DocumentListClient({
                           {doc.serial_number}
                         </p>
                         <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                          發文 {new Date(doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}
+                          發文 {formatTaipeiDate(doc.submitted_at ?? doc.created_at)}
                         </p>
                         {doc.due_date && (isOverdue || isSoon) && (
                           <p className="flex items-center gap-1 text-xs mt-0.5 font-medium"
                             style={{ color: isOverdue ? "var(--danger)" : "#fb923c" }}>
                             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOverdue ? "bg-red-500" : "bg-orange-400 animate-pulse"}`} />
-                            限辦 {new Date(doc.due_date).toLocaleDateString("zh-TW")}
+                            限辦 {formatTaipeiDate(doc.due_date)}
                             {isOverdue && " · 已逾期"}
                           </p>
                         )}
