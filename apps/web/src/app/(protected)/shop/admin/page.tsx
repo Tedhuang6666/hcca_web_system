@@ -244,9 +244,13 @@ function ProductFormModal({
   onSaved: () => void;
 }) {
   const editing = initial !== null;
+  type ProductMediaDraft = { id: string; image_url: string | null; kind: "product" | "model" };
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
+  const [media, setMedia] = useState<ProductMediaDraft[]>(
+    () => (initial?.media ?? []).map(({ id, image_url, kind }) => ({ id, image_url, kind })),
+  );
   const [price, setPrice] = useState(String(initial?.price ?? 0));
   const [stock, setStock] = useState(String(initial?.stock_quantity ?? 0));
   const [unlimited, setUnlimited] = useState(initial?.is_unlimited ?? false);
@@ -254,6 +258,7 @@ function ProductFormModal({
   const [requiresSeating, setRequiresSeating] = useState(initial?.requires_seating ?? false);
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
+  const [mediaUploadsInProgress, setMediaUploadsInProgress] = useState(0);
 
   return (
     <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={onClose} size="md">
@@ -284,6 +289,63 @@ function ProductFormModal({
         <Field label="商品圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
+        <section className="space-y-2 rounded-lg p-3"
+          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>更多圖片</h3>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              這些照片會出現在商品詳情，並自動連結到「{name.trim() || "此商品"}」。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={media.length >= 20}
+              onClick={() => setMedia((current) => [...current, { id: crypto.randomUUID(), image_url: null, kind: "product" }])}
+              className="btn btn-ghost min-h-11 text-xs">新增商品照片</button>
+            <button type="button" disabled={media.length >= 20}
+              onClick={() => setMedia((current) => [...current, { id: crypto.randomUUID(), image_url: null, kind: "model" }])}
+              className="btn btn-ghost min-h-11 text-xs">新增模特兒宣傳照</button>
+          </div>
+          {media.map((item, index) => (
+            <div key={item.id} className="flex min-w-0 items-start gap-3 rounded-lg p-2"
+              style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+              <Thumb url={item.image_url} size={56} />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Field label="照片用途">
+                  <select value={item.kind}
+                    onChange={(event) => setMedia((current) => current.map((entry) =>
+                      entry.id === item.id
+                        ? { ...entry, kind: event.target.value as "product" | "model" }
+                        : entry))}
+                    className="input w-full">
+                    <option value="product">商品照片</option>
+                    <option value="model">模特兒宣傳照</option>
+                  </select>
+                </Field>
+                <AnimatedFileUpload
+                  accept="image/*"
+                  label={item.image_url ? "更換照片" : "上傳照片"}
+                  hint="點擊選取或貼上圖片"
+                  onUpload={async (file, reportProgress) => {
+                    setMediaUploadsInProgress((count) => count + 1);
+                    try {
+                      return await shopApi.uploadImage(file, reportProgress);
+                    } finally {
+                      setMediaUploadsInProgress((count) => Math.max(0, count - 1));
+                    }
+                  }}
+                  onUploaded={(result) => setMedia((current) => current.map((entry) =>
+                    entry.id === item.id ? { ...entry, image_url: result.url } : entry))}
+                />
+              </div>
+              <button type="button" aria-label={`移除第 ${index + 1} 張照片`}
+                onClick={() => setMedia((current) => current.filter((entry) => entry.id !== item.id))}
+                className="btn btn-ghost min-h-11 px-3 text-xs">移除</button>
+            </div>
+          ))}
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            最多 20 張；商品主圖仍會顯示在商品卡片上。
+          </p>
+        </section>
         <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
           <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
             <input type="checkbox" checked={requiresSeating} onChange={(e) => setRequiresSeating(e.target.checked)} />
@@ -313,7 +375,7 @@ function ProductFormModal({
           {editing ? "尺寸 / 顏色等變體於商品詳情頁管理。" : "建立後可於商品詳情頁新增尺寸 / 顏色等變體。"}
         </p>
         <div className="flex gap-3 pt-1">
-          <button disabled={busy} onClick={async () => {
+          <button disabled={busy || mediaUploadsInProgress > 0} onClick={async () => {
             if (!name.trim()) { toast.error("請輸入商品名稱"); return; }
             setBusy(true);
             try {
@@ -321,6 +383,8 @@ function ProductFormModal({
                 name: name.trim(),
                 description: description.trim() || null,
                 image_url: imageUrl,
+                media: media.flatMap(({ image_url, kind }, sort_order) =>
+                  image_url ? [{ image_url, kind, sort_order }] : []),
                 price: Number(price) || 0,
                 stock_quantity: Number(stock) || 0,
                 is_unlimited: unlimited,
@@ -337,7 +401,7 @@ function ProductFormModal({
             } finally { setBusy(false); }
           }} className="btn flex-1"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-            {busy ? "儲存中…" : "儲存"}
+            {mediaUploadsInProgress > 0 ? "照片上傳中…" : busy ? "儲存中…" : "儲存"}
           </button>
           <button onClick={onClose} className="btn btn-ghost px-5">取消</button>
         </div>

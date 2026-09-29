@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -129,6 +130,21 @@ class ProductSeriesOut(BaseModel):
 # ── 商品 ─────────────────────────────────────────────────────────────────────
 
 
+class ProductMediaCreate(BaseModel):
+    image_url: str = Field(min_length=1, description="圖片路徑")
+    kind: Literal["product", "model"] = "product"
+    sort_order: int = Field(0, ge=0)
+
+
+class ProductMediaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    image_url: str
+    kind: Literal["product", "model"]
+    sort_order: int
+
+
 class ProductCreate(BaseModel):
     series_id: uuid.UUID = Field(..., description="所屬系列 ID")
     name: str = Field(..., min_length=1, max_length=200, description="商品名稱")
@@ -144,6 +160,7 @@ class ProductCreate(BaseModel):
         None, description="劃位時機：at_purchase / scheduled / admin_assign"
     )
     variant_groups: list[ProductVariantGroupCreate] = Field(default_factory=list)
+    media: list[ProductMediaCreate] = Field(default_factory=list, max_length=20)
 
 
 class ProductUpdate(BaseModel):
@@ -158,6 +175,7 @@ class ProductUpdate(BaseModel):
     sale_end: datetime | None = None
     requires_seating: bool | None = None
     seating_mode: str | None = None
+    media: list[ProductMediaCreate] | None = Field(None, max_length=20)
 
 
 class ProductOut(BaseModel):
@@ -181,6 +199,7 @@ class ProductOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     variant_groups: list[ProductVariantGroupOut] = []
+    media: list[ProductMediaOut] = []
 
 
 # ── 購買頁瀏覽樹（主題 → 系列 → 商品）────────────────────────────────────────
@@ -526,6 +545,8 @@ __all__ = [
     "ProductCategoryOut",
     "ProductCategoryUpdate",
     "ProductCreate",
+    "ProductMediaCreate",
+    "ProductMediaOut",
     "ProductOut",
     "ProductSeriesCreate",
     "ProductSeriesOut",

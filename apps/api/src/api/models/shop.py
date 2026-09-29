@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -183,6 +184,12 @@ class Product(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="ProductVariantGroup.sort_order",
     )
+    media: Mapped[list[ProductMedia]] = relationship(
+        "ProductMedia",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="(ProductMedia.sort_order, ProductMedia.id)",
+    )
     order_items: Mapped[list[OrderItem]] = relationship("OrderItem", back_populates="product")
     seating_zones: Mapped[list[Any]] = relationship(
         "SeatingZone",
@@ -190,6 +197,28 @@ class Product(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="SeatingZone.sort_order",
     )
+
+
+class ProductMedia(Base):
+    """商品詳情圖片，包含一般商品照與模特兒宣傳照。"""
+
+    __tablename__ = "product_media"
+    __table_args__ = (
+        CheckConstraint("kind IN ('product', 'model')", name="ck_product_media_kind"),
+        Index("ix_product_media_product_sort", "product_id", "sort_order"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    image_url: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="product")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    product: Mapped[Product] = relationship("Product", back_populates="media")
 
 
 # ── 變體：群組（尺寸 / 顏色）→ 選項（中 / 黑）──────────────────────────────────
@@ -490,6 +519,7 @@ __all__ = [
     "ShopDiscountType",
     "Product",
     "ProductCategory",
+    "ProductMedia",
     "ProductSeries",
     "ProductStatus",
     "ProductVariantGroup",
