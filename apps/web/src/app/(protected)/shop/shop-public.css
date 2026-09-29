@@ -369,6 +369,113 @@
   font-weight: 750;
 }
 
+.shop-class-correction {
+  margin-top: 0.65rem;
+}
+
+.shop-class-correction-toggle {
+  min-height: 44px;
+  padding: 0.4rem 0;
+  color: var(--primary);
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.shop-class-correction-status,
+.shop-class-correction-help,
+.shop-class-correction-error {
+  margin: 0.25rem 0 0;
+  color: var(--public-secondary);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.shop-class-correction-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--danger);
+}
+
+.shop-class-correction-error button {
+  min-height: 44px;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.shop-class-correction-form {
+  display: grid;
+  width: min(100%, 34rem);
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--public-border);
+}
+
+.shop-class-correction-form label {
+  color: var(--public-text);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.shop-class-correction-form select,
+.shop-class-correction-form textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--public-border);
+  border-radius: 0.45rem;
+  background: var(--public-bg);
+  color: var(--public-text);
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+.shop-class-correction-form textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.shop-class-correction-form select:focus-visible,
+.shop-class-correction-form textarea:focus-visible,
+.shop-class-correction-toggle:focus-visible,
+.shop-class-correction-actions button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.shop-class-correction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.shop-class-correction-actions button {
+  min-height: 44px;
+  padding: 0.55rem 0.8rem;
+  color: var(--public-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.shop-class-correction-actions .shop-class-correction-submit {
+  border-radius: 0.45rem;
+  background: var(--primary);
+  color: var(--primary-foreground, #fff);
+}
+
+.shop-class-correction-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .shop-public-alert {
   color: var(--danger);
 }

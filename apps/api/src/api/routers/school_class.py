@@ -13,12 +13,15 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
-from api.models.school_class import SchoolClass
+from api.models.school_class import ClassCorrectionRequest, SchoolClass
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.school_class import (
     ClassCadreCreate,
     ClassCadreOut,
+    ClassCorrectionRequestCreate,
+    ClassCorrectionRequestOut,
+    ClassCorrectionRequestReview,
     ClassManualMemberCreate,
     ClassManualMemberOut,
     ClassMemberOut,
@@ -34,6 +37,7 @@ from api.schemas.school_class import (
     ClassRosterPdfImportOut,
     ClassStudentRangeCreate,
     ClassStudentRangeOut,
+    MySchoolClassOut,
     SchoolClassBulkAction,
     SchoolClassBulkActionOut,
     SchoolClassBulkCreate,
@@ -44,6 +48,7 @@ from api.schemas.school_class import (
     SchoolClassUpdate,
 )
 from api.services import school_class as class_svc
+from api.services import class_correction as correction_svc
 from api.services import school_class_import as class_import_svc
 
 router = APIRouter(prefix="/classes", tags=["班級系統"])
@@ -169,9 +174,126 @@ async def bulk_action_classes(
         ) from e
 
 
-@router.get("/me", response_model=SchoolClassListItem | None, summary="查詢我目前的班級")
+def _correction_request_out(item: ClassCorrectionRequest) -> ClassCorrectionRequestOut:
+    return ClassCorrectionRequestOut(
+        id=item.id,
+        user_id=item.user_id,
+        user_display_name=item.user.display_name,
+        user_email=item.user.email,
+        user_student_id=item.user.student_id,
+        reported_class_id=item.reported_class_id,
+        reported_class_label=class_svc.class_display_label(item.reported_class),
+        requested_class_id=item.requested_class_id,
+        requested_class_label=class_svc.class_display_label(item.requested_class) or "",
+        resolved_class_id=item.resolved_class_id,
+        resolved_class_label=class_svc.class_display_label(item.resolved_class),
+        message=item.message,
+        status=item.status,
+        created_at=item.created_at,
+        reviewed_by_id=item.reviewed_by_id,
+        reviewed_at=item.reviewed_at,
+        review_note=item.review_note,
+    )
+
+
+@router.post(
+    "/correction-requests",
+    response_model=ClassCorrectionRequestOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="提交班級歸戶更正申請",
+)
+async def create_correction_request(
+    payload: ClassCorrectionRequestCreate, session: DbDep, user: CurrentUser
+) -> ClassCorrectionRequestOut:
+    school_class = await class_svc.resolve_user_class(session, user)
+    if school_class is None:
+        raise HTTPException(status_code=422, detail="目前沒有可確認的班級歸戶")
+    try:
+        request = await correction_svc.create_request(
+            session,
+            user=user,
+            reported_class=school_class,
+            requested_class_id=payload.requested_class_id,
+            message=payload.message,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(status_code=409, detail="你已有一筆待審核的班級更正申請") from e
+    return _correction_request_out(request)
+
+
+@router.get(
+    "/correction-requests/mine",
+    response_model=list[ClassCorrectionRequestOut],
+    summary="查詢我的班級更正申請",
+)
+async def list_my_correction_requests(
+    session: DbDep, user: CurrentUser
+) -> list[ClassCorrectionRequestOut]:
+    items = await correction_svc.list_user_requests(session, user.id)
+    return [_correction_request_out(item) for item in items]
+
+
+@router.get(
+    "/correction-requests",
+    response_model=list[ClassCorrectionRequestOut],
+    summary="列出待審核班級更正申請",
+)
+async def list_correction_requests(
+    session: DbDep, _: ManagerUser
+) -> list[ClassCorrectionRequestOut]:
+    items = await correction_svc.list_pending_requests(session)
+    return [_correction_request_out(item) for item in items]
+
+
+@router.post(
+    "/correction-requests/{request_id}/review",
+    response_model=ClassCorrectionRequestOut,
+    summary="審核班級更正申請",
+)
+async def review_correction_request(
+    request_id: uuid.UUID,
+    payload: ClassCorrectionRequestReview,
+    session: DbDep,
+    reviewer: ManagerUser,
+) -> ClassCorrectionRequestOut:
+    request = await correction_svc.get_request(session, request_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail="找不到此申請")
+    resolved_class_id = None
+    if payload.status == "approved":
+        target_class_id = payload.class_id or request.requested_class_id
+        target_class = await class_svc.get_class(session, target_class_id)
+        if target_class is None or not target_class.is_active:
+            raise HTTPException(status_code=422, detail="請選擇目前有效的班級")
+        try:
+            await class_svc.reassign_user_class(session, request.user_id, target_class)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        resolved_class_id = target_class.id
+    try:
+        resolved = await correction_svc.resolve_request(
+            session,
+            request,
+            status=payload.status,
+            resolved_class_id=resolved_class_id,
+            reviewer_id=reviewer.id,
+            review_note=payload.review_note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    return _correction_request_out(resolved)
+
+
+@router.get("/me", response_model=MySchoolClassOut | None, summary="查詢我目前的班級")
 async def get_my_class(session: DbDep, user: CurrentUser) -> SchoolClass | None:
-    return await class_svc.resolve_user_class(session, user)
+    school_class = await class_svc.resolve_user_class(session, user)
+    if school_class is not None:
+        school_class.seat_number = await class_svc.get_user_class_seat_number(
+            session, school_class, user
+        )
+    return school_class
 
 
 @router.get("/{class_id}", response_model=SchoolClassOut, summary="取得班級詳情")

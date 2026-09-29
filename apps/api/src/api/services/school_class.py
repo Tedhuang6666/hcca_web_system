@@ -1082,6 +1082,102 @@ async def resolve_user_class(session: AsyncSession, user: User) -> SchoolClass |
     return None
 
 
+async def get_user_class_seat_number(
+    session: AsyncSession, school_class: SchoolClass, user: User
+) -> int | None:
+    """從指定班級名冊取得使用者座號。"""
+    seat_number = await session.scalar(
+        select(ClassRosterEntry.seat_number).where(
+            ClassRosterEntry.class_id == school_class.id,
+            ClassRosterEntry.user_id == user.id,
+        )
+    )
+    if seat_number is not None or not user.student_id:
+        return seat_number
+    return await session.scalar(
+        select(ClassRosterEntry.seat_number).where(
+            ClassRosterEntry.class_id == school_class.id,
+            ClassRosterEntry.student_id == user.student_id,
+        )
+    )
+
+
+async def reassign_user_class(
+    session: AsyncSession, user_id: uuid.UUID, school_class: SchoolClass
+) -> None:
+    """以手動歸戶更正帳號班級，並結束同學年度的舊名冊快照。"""
+    if not school_class.is_active:
+        raise ValueError("請選擇目前有效的班級")
+    user = await session.get(User, user_id)
+    if user is None:
+        raise ValueError("找不到此使用者")
+
+    today = local_today()
+    memberships = await session.scalars(
+        select(ClassMembership).where(
+            ClassMembership.user_id == user_id,
+            ClassMembership.academic_year == school_class.academic_year,
+            ClassMembership.status == ClassMembershipStatus.ACTIVE,
+        )
+    )
+    for membership in memberships:
+        membership.status = ClassMembershipStatus.ENDED
+        membership.end_date = today
+
+    affiliations = await session.scalars(
+        select(PersonAffiliation)
+        .join(Person, Person.id == PersonAffiliation.person_id)
+        .where(
+            Person.user_id == user_id,
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+            PersonAffiliation.academic_year == school_class.academic_year,
+            PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
+        )
+    )
+    for affiliation in affiliations:
+        affiliation.status = PersonAffiliationStatus.ENDED
+        affiliation.end_date = today
+
+    manual_members = await session.scalars(
+        select(ClassManualMember)
+        .join(SchoolClass, SchoolClass.id == ClassManualMember.class_id)
+        .where(
+            ClassManualMember.user_id == user_id,
+            SchoolClass.academic_year == school_class.academic_year,
+            SchoolClass.is_active.is_(True),
+        )
+    )
+    has_target_manual_member = False
+    for member in manual_members:
+        if member.class_id == school_class.id:
+            has_target_manual_member = True
+        else:
+            await session.delete(member)
+    if not has_target_manual_member:
+        session.add(ClassManualMember(class_id=school_class.id, user_id=user_id))
+
+    roster_entries = await session.scalars(
+        select(ClassRosterEntry)
+        .join(SchoolClass, SchoolClass.id == ClassRosterEntry.class_id)
+        .where(
+            ClassRosterEntry.user_id == user_id,
+            SchoolClass.academic_year == school_class.academic_year,
+            SchoolClass.is_active.is_(True),
+            ClassRosterEntry.class_id != school_class.id,
+        )
+    )
+    for entry in roster_entries:
+        entry.user_id = None
+
+    await session.flush()
+    await add_membership(
+        session,
+        school_class,
+        data=ClassMembershipCreate(user_id=user_id, source="transfer", start_date=today),
+    )
+    await session.flush()
+
+
 async def get_cadre_class_ids(session: AsyncSession, user_id: uuid.UUID) -> set[uuid.UUID]:
     """回傳該使用者可代表處理班級事項的所有班級 ID。"""
     result = await session.execute(select(ClassCadre.class_id).where(ClassCadre.user_id == user_id))
@@ -1172,6 +1268,19 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             is_cadre=u.id in cadre_ids,
             source="range",
         )
+
+    manual_overrides = await session.scalars(
+        select(ClassManualMember.user_id)
+        .join(SchoolClass, SchoolClass.id == ClassManualMember.class_id)
+        .where(
+            SchoolClass.is_active.is_(True),
+            SchoolClass.academic_year == sc.academic_year,
+            ClassManualMember.class_id != sc.id,
+        )
+    )
+    for user_id in manual_overrides:
+        members_by_id.pop(user_id, None)
+
     members = list(members_by_id.values())
     members.sort(key=lambda m: (m.seat_number is None, m.seat_number or 0, m.student_id or ""))
     return members

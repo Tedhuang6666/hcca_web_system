@@ -11,12 +11,13 @@ import type {
   CatalogProductOut,
   CloseStatusItem,
   ProductOut,
-  SchoolClassListItem,
+  MyClassContext,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { addGuestCartItem, guestCartCount } from "@/lib/shop-guest-cart";
+import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -427,7 +428,7 @@ export default function ShopPage() {
   const [cartCount, setCartCount] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
-  const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
+  const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
   const closeProduct = useCallback(() => setOpenProduct(null), []);
@@ -529,7 +530,7 @@ export default function ShopPage() {
       {myClass && (
         <section
           className="shop-public-context"
-          role="status"
+          aria-label="班級歸戶資訊"
           data-closed={Object.values(closeStatus).some((status) => status.is_closed) || undefined}>
           {Object.values(closeStatus).some((status) => status.is_closed)
             ? <CircleAlert size={18} style={{ color: "var(--danger)" }} aria-hidden />
@@ -537,12 +538,14 @@ export default function ShopPage() {
           <div>
             <p>
               <strong>
-                以 {myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`} 的身分訂購
+                你的帳號已被歸戶至「{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}」
               </strong>
             </p>
+            <p>{myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}</p>
             <p>
               送單後請向班級幹部繳費；幹部確認收款後，會在「我的訂單」更新為已繳費。
             </p>
+            {isLoggedIn && <ClassCorrectionRequest currentClass={myClass} />}
           </div>
         </section>
       )}

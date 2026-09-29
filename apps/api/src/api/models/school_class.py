@@ -7,7 +7,19 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -209,6 +221,62 @@ class ClassManualMember(Base, TimestampMixin):
     user: Mapped[User] = relationship("User")
 
 
+class ClassCorrectionRequest(Base, TimestampMixin):
+    """使用者回報班級歸戶錯誤，由班級管理員審核。"""
+
+    __tablename__ = "class_correction_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="ck_class_correction_requests_status",
+        ),
+        Index("ix_class_correction_requests_status_created", "status", "created_at"),
+        Index("ix_class_correction_requests_user_status", "user_id", "status"),
+        Index(
+            "uq_class_correction_pending_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reported_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="SET NULL"), nullable=True
+    )
+    requested_class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="RESTRICT"), nullable=False
+    )
+    resolved_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="SET NULL"), nullable=True
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    reported_class: Mapped[SchoolClass | None] = relationship(
+        "SchoolClass", foreign_keys=[reported_class_id]
+    )
+    requested_class: Mapped[SchoolClass] = relationship(
+        "SchoolClass", foreign_keys=[requested_class_id]
+    )
+    resolved_class: Mapped[SchoolClass | None] = relationship(
+        "SchoolClass", foreign_keys=[resolved_class_id]
+    )
+    reviewer: Mapped[User | None] = relationship("User", foreign_keys=[reviewed_by_id])
+
+
 class ClassCadre(Base, TimestampMixin):
     """班級幹部（負責結單與收費，可檢視本班訂購情形並標示繳費）。一班可多位。"""
 
@@ -259,6 +327,7 @@ class ClassConsolidationMixin:
 
 __all__ = [
     "ClassCadre",
+    "ClassCorrectionRequest",
     "ClassConsolidationMixin",
     "ClassManualMember",
     "ClassMembership",
