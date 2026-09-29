@@ -1,7 +1,7 @@
 """SQL query counter for detecting N+1 patterns per request.
 
 啟用後會在每個 request 開頭重置 counter，結束時若 query 數量超過閾值或
-慢查詢過多，會寫 WARN log 與 X-DB-Queries 響應 header（方便開發時觀察）。
+慢查詢過多會寫 WARN log；DEBUG 模式才送出 X-DB-Queries 響應 header，方便開發時觀察。
 
 慢查詢樣本（去除參數的 statement template）會用 in-memory ring buffer 保留，
 供 admin/system slow-queries 端點查詢。不寫入磁碟以避免敏感資訊外洩。
