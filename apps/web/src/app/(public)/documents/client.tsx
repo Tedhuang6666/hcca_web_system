@@ -1366,7 +1366,7 @@ export default function DocumentListClient({
                         className="flex items-start justify-between gap-3 flex-1 min-w-0"
                         style={{ textDecoration: "none" }}>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-sm font-medium whitespace-normal break-words" style={{ color: "var(--text-muted)" }}>
                             {doc.summary || doc.subject || doc.title}
                           </p>
                           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
@@ -1385,7 +1385,7 @@ export default function DocumentListClient({
                       className="flex items-start justify-between gap-3 flex-1 min-w-0"
                       style={{ textDecoration: "none" }}>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
+                        <p className="text-sm font-medium whitespace-normal break-words" style={{ color: "var(--text-primary)" }}>
                           {doc.summary || doc.subject || doc.title}
                         </p>
                         <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary)" }}>
