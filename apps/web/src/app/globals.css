@@ -3327,8 +3327,20 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 1px solid var(--border);
   color: var(--text-primary);
 }
+.public-cms-content .prose td > p:has(+ ul) {
+  margin-inline-start: 0.75rem;
+}
 .prose ul, .prose ol { padding-left: 1.5rem; margin-bottom: 1em; }
 .prose li { color: var(--text-secondary); line-height: 1.8; }
+
+@media (max-width: 767px) {
+  /* Single-column tables read as content on phones; wider tables keep their grid. */
+  .public-cms-content .prose table:has(> tbody > tr > :only-child):not(:has(> tbody > tr > :nth-child(2))):not(:has(> thead > tr > :nth-child(2))) :is(th, td) {
+    border: 0;
+    padding: 0.35rem 0;
+    background: transparent;
+  }
+}
 
 /* ── 閱讀器字級 ─────────────────────────────────────────────────────────── */
 /*

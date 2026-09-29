@@ -64,7 +64,7 @@ export default async function CmsPage({
               className="max-h-[360px] w-full rounded-lg object-cover"
             />
           )}
-          <div className="card p-5 md:p-7">
+          <div className="card public-cms-content p-5 md:p-7">
             <MarkdownBlock markdown={page.body_md} />
           </div>
         </article>
