@@ -38,7 +38,7 @@ export const PUBLIC_NAV_GROUP_META: Record<
 /** 顯示順序＝陣列順序（同組內）。後台 order 覆寫只調整同組相對位置。 */
 export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", iconKey: "news", group: "primary", moduleId: "announcements" },
-  { key: "shop", href: "/shop", label: "校商選購", description: "校商、傳情卡片與舞會票券", iconKey: "shop", group: "primary", guestUsable: true, moduleId: "shop" },
+  { key: "shop", href: "/shop", label: "商品訂購", description: "瀏覽公開商品並完成訂購", iconKey: "shop", group: "primary", guestUsable: true, moduleId: "shop" },
   { key: "articles", href: "/articles", label: "文章專欄", description: "校園生活指南與實用文章", iconKey: "articles", group: "primary", guestUsable: true },
   { key: "about", href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", iconKey: "about", group: "primary" },
   { key: "system-info", href: "/system-info", label: "關於本系統", description: "協助、回報與公開說明", iconKey: "system-info", group: "primary" },

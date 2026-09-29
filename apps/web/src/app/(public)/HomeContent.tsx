@@ -160,8 +160,8 @@ export default function HomeContent({
       <section className="public-home-shop" aria-labelledby="public-shop-title">
         <div className="public-home-shop-heading">
           <div>
-            <span className="public-home-shop-eyebrow"><ShoppingBag size={16} aria-hidden /> 校園選購</span>
-            <h2 id="public-shop-title">校商、傳情卡片與舞會票券</h2>
+            <span className="public-home-shop-eyebrow"><ShoppingBag size={16} aria-hidden /> 商品訂購</span>
+            <h2 id="public-shop-title">挑選你需要的商品</h2>
             <p>從公開商品頁挑選，加入購物車後再確認訂單。</p>
           </div>
           <Link href="/shop" className="public-home-shop-all">

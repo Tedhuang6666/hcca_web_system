@@ -14,7 +14,6 @@ import type {
   SchoolClassListItem,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
-import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { addGuestCartItem, guestCartCount } from "@/lib/shop-guest-cart";
@@ -169,101 +168,88 @@ function ProductModal({
         aria-modal="true"
         aria-labelledby="product-modal-title"
         tabIndex={-1}
-        className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto card p-6 space-y-4 animate-scale-in"
-        style={{ boxShadow: "var(--shadow-xl)" }}>
-        <div className="flex items-start gap-4">
-          <Thumb url={displayImage} alt={product.name} size={88} />
-          <div className="flex-1 min-w-0">
-            <h3 id="product-modal-title" className="font-semibold" style={{ color: "var(--text-primary)" }}>
-              {product.name}
-            </h3>
-            {product.description && (
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                {product.description}
-              </p>
-            )}
-            <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>
-              {product.is_unlimited ? "無限量" : `庫存 ${product.stock_quantity} 件`}
-            </p>
-          </div>
-          <button ref={closeButtonRef} onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
+        className="shop-product-dialog animate-scale-in">
+        <div className="shop-product-dialog-media">
+          {displayImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={uploadUrl(displayImage)} alt={product.name} />
+          ) : (
+            <div className="shop-product-dialog-placeholder">
+              <Package size={48} strokeWidth={1.2} aria-hidden="true" />
+            </div>
+          )}
+        </div>
+        <div className="shop-product-dialog-content">
+          <button ref={closeButtonRef} onClick={onClose} className="shop-product-dialog-close topbar-icon-btn" aria-label="關閉">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-        </div>
+          <div className="shop-product-dialog-heading">
+            <h3 id="product-modal-title">{product.name}</h3>
+            {product.description && <p>{product.description}</p>}
+            <p className="shop-product-dialog-stock">
+              {product.is_unlimited ? "供應中" : `剩餘 ${product.stock_quantity} 件`}
+            </p>
+          </div>
 
-        {/* 變體選擇 */}
-        {product.variant_groups.map((g) => (
-          <div key={g.id}>
-            <label className="text-xs font-medium block mb-2" style={{ color: "var(--text-secondary)" }}>
-              {g.name}
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {g.options
-                .filter((o) => o.is_active)
-                .map((o) => {
-                  const sel = picked[g.id] === o.id;
-                  return (
-                    <button
-                      key={o.id}
-                      onClick={() => setPicked((p) => ({ ...p, [g.id]: o.id }))}
-                      className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm"
-                      aria-pressed={sel}
-                      style={{
-                        border: sel ? "1.5px solid var(--primary)" : "1px solid var(--border)",
-                        background: sel ? "var(--primary-soft, var(--bg-elevated))" : "var(--bg)",
-                        color: "var(--text-primary)",
-                      }}>
-                      {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
-                      <span>{o.value}</span>
-                      {o.price_delta !== 0 && (
-                        <span style={{ color: "var(--primary)" }}>
-                          {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+          {product.variant_groups.map((g) => (
+            <div key={g.id} className="shop-product-dialog-section">
+              <label>{g.name}</label>
+              <div className="shop-product-options">
+                {g.options
+                  .filter((o) => o.is_active)
+                  .map((o) => {
+                    const sel = picked[g.id] === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        onClick={() => setPicked((p) => ({ ...p, [g.id]: o.id }))}
+                        className="shop-product-option"
+                        aria-pressed={sel}>
+                        {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
+                        <span>{o.value}</span>
+                        {o.price_delta !== 0 && (
+                          <span className="shop-product-option-price">
+                            {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
+
+          <div className="shop-product-dialog-section">
+            <label>數量</label>
+            <div className="shop-product-quantity">
+              <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="減少數量">−</button>
+              <span>{qty}</span>
+              <button
+                onClick={() => setQty((q) =>
+                  product.is_unlimited ? q + 1 : Math.min(product.stock_quantity, q + 1))}
+                aria-label="增加數量">＋</button>
             </div>
           </div>
-        ))}
 
-        {/* 數量 */}
-        <div>
-          <label className="text-xs font-medium block mb-2" style={{ color: "var(--text-secondary)" }}>
-            數量
-          </label>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="btn btn-ghost h-11 w-11 p-0" aria-label="減少數量">−</button>
-            <span className="text-base font-semibold w-8 text-center" style={{ color: "var(--text-primary)" }}>
-              {qty}
-            </span>
+          <div className="shop-product-dialog-actions">
             <button
-              onClick={() => setQty((q) =>
-                product.is_unlimited ? q + 1 : Math.min(product.stock_quantity, q + 1))}
-              className="btn btn-ghost h-11 w-11 p-0" aria-label="增加數量">＋</button>
+              onClick={submit}
+              disabled={loading || !canAddToCart}
+              className="shop-product-submit"
+              aria-busy={loading}>
+              {!available
+                ? "目前無法訂購"
+                : classClosed
+                  ? "本班已結單"
+                  : loading
+                    ? "處理中…"
+                    : `加入購物車 · NT$${(unitPrice * qty).toLocaleString()}`}
+            </button>
+            <button onClick={onClose} className="shop-product-cancel">取消</button>
           </div>
-        </div>
-
-        <div className="flex gap-3 pt-1">
-          <button
-            onClick={submit}
-            disabled={loading || !canAddToCart}
-            className="btn flex-1"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
-            aria-busy={loading}>
-            {!available
-              ? "無法購買"
-              : classClosed
-                ? "本班已結單"
-              : loading
-                ? "處理中…"
-                : `加入購物車 NT$${(unitPrice * qty).toLocaleString()}`}
-          </button>
-          <button onClick={onClose} className="btn btn-ghost px-5">取消</button>
         </div>
       </div>
     </div>,
@@ -287,49 +273,47 @@ function ProductCard({
     <button
       onClick={onClick}
       disabled={soldOut || classClosed}
-      className="group relative overflow-hidden rounded-xl border text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5"
+      className="shop-public-product-card group"
       style={{
         opacity: soldOut || classClosed ? 0.6 : 1,
-        background: "var(--bg-surface)",
-        borderColor: "var(--border)",
       }}
       aria-label={`查看商品：${product.name}`}>
-      <div className="relative aspect-[4/5] w-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
+      <div className="shop-public-product-media">
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={uploadUrl(product.image_url)}
             alt={product.name}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
+            className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center" style={{ color: "var(--text-disabled)" }}>
-            <Package size={34} strokeWidth={1.35} aria-hidden="true" />
+          <div className="flex h-full w-full items-center justify-center" style={{ color: "var(--public-muted)" }}>
+            <Package size={38} strokeWidth={1.2} aria-hidden="true" />
           </div>
         )}
         <span
-          className="absolute left-3 top-3 rounded-md px-2 py-1 text-xs font-medium"
-          style={{
-            background: soldOut ? "var(--bg-elevated)" : "var(--primary-dim)",
-            color: soldOut ? "var(--text-secondary)" : "var(--primary-text)",
-          }}>
+          className="shop-public-product-status"
+          data-sold-out={soldOut || undefined}>
           {classClosed ? "本班已結單" : soldOut ? "已售完" : product.is_unlimited ? "供應中" : `剩 ${product.stock_quantity}`}
         </span>
       </div>
-      <div className="space-y-2 px-3.5 py-3.5">
-        <h3 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+      <div className="shop-public-product-info">
+        <h4>
           {product.name}
-        </h3>
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-base font-bold tracking-tight" style={{ color: "var(--primary-text)" }}>
+        </h4>
+        <div className="shop-public-product-meta">
+          <span className="shop-public-product-price">
             NT${product.price.toLocaleString()}
             {product.has_variants && (
-              <span className="text-xs font-normal ml-1" style={{ color: "var(--text-muted)" }}>起</span>
+              <small> 起</small>
             )}
           </span>
+          {!product.is_unlimited && !soldOut && (
+            <span className="shop-public-product-deadline">剩 {product.stock_quantity}</span>
+          )}
         </div>
         {product.sale_end && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="shop-public-product-deadline">
             截止 {new Date(product.sale_end).toLocaleString("zh-TW")}
           </p>
         )}
@@ -429,41 +413,40 @@ export default function ShopPage() {
   ) ?? [];
 
   return (
-    <div className="mx-auto min-w-0 max-w-7xl space-y-7">
-      <div className="workspace-header flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+    <div className="shop-public-page">
+      <header className="shop-public-hero">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>校商選購</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            傳情卡片、舞會票券與校園商品，選好後到購物車確認。
+          <h1>商品訂購</h1>
+          <p className="shop-public-hero-copy">
+            挑選目前開放的商品，確認規格後加入購物車；登入只在送出訂單時需要。
           </p>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto">
-          <Link href="/shop/orders" className="btn btn-ghost flex-1 justify-center sm:flex-none">我的訂單</Link>
+        <div className="shop-public-hero-actions">
+          <Link href="/shop/orders" className="shop-public-order-link">我的訂單</Link>
           <Link
             href="/shop/cart"
-            className="btn inline-flex flex-1 items-center justify-center gap-2 sm:flex-none"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+            className="shop-public-cart-link">
             <ShoppingBag size={16} aria-hidden="true" />
             購物車{cartCount > 0 ? `（${cartCount}）` : ""}
           </Link>
         </div>
-      </div>
+      </header>
 
       {myClass && (
         <section
-          className="flex items-start gap-3 rounded-lg px-4 py-3"
+          className="shop-public-context"
           role="status"
-          style={Object.values(closeStatus).some((status) => status.is_closed)
-            ? { border: "1px solid var(--danger-border)", background: "var(--danger-dim)" }
-            : { border: "1px solid var(--success-border)", background: "var(--success-dim)" }}>
+          data-closed={Object.values(closeStatus).some((status) => status.is_closed) || undefined}>
           {Object.values(closeStatus).some((status) => status.is_closed)
-            ? <CircleAlert className="mt-0.5 shrink-0" size={18} style={{ color: "var(--danger)" }} aria-hidden />
-            : <CircleCheck className="mt-0.5 shrink-0" size={18} style={{ color: "var(--success)" }} aria-hidden />}
+            ? <CircleAlert size={18} style={{ color: "var(--danger)" }} aria-hidden />
+            : <CircleCheck size={18} style={{ color: "var(--success)" }} aria-hidden />}
           <div>
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-              以 {myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`} 的身分訂購
+            <p>
+              <strong>
+                以 {myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`} 的身分訂購
+              </strong>
             </p>
-            <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
+            <p>
               送單後請向班級幹部繳費；幹部確認收款後，會在「我的訂單」更新為已繳費。
             </p>
           </div>
@@ -471,9 +454,9 @@ export default function ShopPage() {
       )}
 
       {loadError && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3"
-          style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)" }}>
-          <p className="text-sm" style={{ color: "var(--text-primary)" }}>目前無法載入商品，請稍後重試。</p>
+        <div role="alert" className="shop-public-alert">
+          <CircleAlert size={18} aria-hidden="true" />
+          <p>目前無法載入商品，請稍後重試。</p>
           <button type="button" onClick={loadCatalog} className="btn btn-ghost min-h-11">重新載入</button>
         </div>
       )}
@@ -481,112 +464,86 @@ export default function ShopPage() {
       {loading ? (
         <ListPageSkeleton rows={4} showHeader={false} showFilters={false} />
       ) : loadError && catalog.length === 0 ? null : catalog.length === 0 ? (
-        <SmartEmptyState reason="none" subject="上架商品" message="店家還沒上架任何商品，請稍後再來看看" />
+        <div className="shop-public-empty">
+          <Package className="mx-auto" size={36} strokeWidth={1.2} aria-hidden="true" />
+          <p>目前沒有可訂購的商品，請稍後再來看看。</p>
+        </div>
       ) : selectedCategory && (
-        <div className="grid grid-cols-1 gap-7 lg:grid-cols-[15rem_minmax(0,1fr)]">
-          <aside className="min-w-0 lg:sticky lg:top-20 lg:self-start">
-            <p className="mb-3 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>選擇主題</p>
-            <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-1.5 lg:overflow-visible">
-              {catalog.map((category) => {
-                const isSelected = category.id === selectedCategory.id;
+        <div>
+          <nav className="shop-public-category-nav" aria-label="商品分類">
+            {catalog.map((category) => {
+              const isSelected = category.id === selectedCategory.id;
+              const productCount = category.series.reduce((sum, series) => sum + series.products.length, 0);
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => {
+                    setSelectedCategoryId(category.id);
+                    setSelectedSeriesId(null);
+                  }}
+                  aria-pressed={isSelected}
+                  className="shop-public-category-tab">
+                  {category.name}
+                  <span className="shop-public-category-count">{productCount}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <section className="shop-public-catalog">
+            <header className="shop-public-category-heading">
+              <div>
+                <h2>{selectedCategory.name}</h2>
+                <p>{selectedCategory.series.length} 個系列 · 選擇一件適合現在的商品</p>
+              </div>
+            </header>
+            <div className="shop-public-series-filter" aria-label="篩選商品系列">
+              <button
+                onClick={() => setSelectedSeriesId(null)}
+                aria-pressed={!selectedSeriesId}>
+                全部商品
+              </button>
+              {selectedCategory.series.map((series) => {
+                const isSelected = selectedSeriesId === series.id;
                 return (
                   <button
-                    key={category.id}
-                    onClick={() => {
-                      setSelectedCategoryId(category.id);
-                      setSelectedSeriesId(null);
-                    }}
-                    aria-pressed={isSelected}
-                    className="flex min-w-44 items-center gap-3 rounded-lg p-2.5 text-left lg:w-full lg:min-w-0"
-                    style={{
-                      background: isSelected ? "var(--primary-dim)" : "transparent",
-                      color: isSelected ? "var(--primary-text)" : "var(--text-secondary)",
-                    }}>
-                    <Thumb url={category.image_url ?? null} alt="" size={38} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{category.name}</span>
-                      <span className="block pt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                        {category.series.reduce((sum, series) => sum + series.products.length, 0)} 件商品
-                      </span>
-                    </span>
+                    key={series.id}
+                    onClick={() => setSelectedSeriesId(series.id)}
+                    aria-pressed={isSelected}>
+                    {series.name} <span>({series.products.length})</span>
                   </button>
                 );
               })}
             </div>
-          </aside>
-
-          <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {selectedCategory.name}
-                  </h2>
-                  <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                    從 {selectedCategory.series.length} 個系列中挑選商品
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-1" aria-label="篩選商品系列">
-                <button
-                  onClick={() => setSelectedSeriesId(null)}
-                  aria-pressed={!selectedSeriesId}
-                  className="shrink-0 rounded-md px-3 py-2 text-sm font-medium"
-                  style={{
-                    background: !selectedSeriesId ? "var(--primary)" : "var(--bg-surface)",
-                    border: !selectedSeriesId ? "1px solid var(--primary)" : "1px solid var(--border)",
-                    color: !selectedSeriesId ? "var(--primary-fg)" : "var(--text-secondary)",
-                  }}>
-                  全部商品
-                </button>
-                {selectedCategory.series.map((series) => {
-                  const isSelected = selectedSeriesId === series.id;
-                  return (
-                    <button
-                      key={series.id}
-                      onClick={() => setSelectedSeriesId(series.id)}
-                      aria-pressed={isSelected}
-                      className="shrink-0 rounded-md px-3 py-2 text-sm font-medium"
-                      style={{
-                        background: isSelected ? "var(--primary-dim)" : "var(--bg-surface)",
-                        border: `1px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
-                        color: isSelected ? "var(--primary-text)" : "var(--text-secondary)",
-                      }}>
-                      {series.name} <span style={{ color: "var(--text-muted)" }}>({series.products.length})</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-              {closeStatus[selectedCategory.id]?.is_closed && (
-              <div className="rounded-lg px-4 py-3 text-sm" style={{
-                border: "1px solid var(--danger-border)",
-                background: "var(--danger-dim)",
-                color: "var(--danger)",
-              }}>
-                <strong>您的班級已結單</strong>
-                {closeStatus[selectedCategory.id].closed_at && (
-                  <span className="ml-1 text-xs">
-                    （{new Date(closeStatus[selectedCategory.id].closed_at!).toLocaleString("zh-TW")}）
-                  </span>
-                )}
-                ，如需更改請聯繫班級幹部。
+            {closeStatus[selectedCategory.id]?.is_closed && (
+              <div className="shop-public-alert mt-6">
+                <CircleAlert size={18} aria-hidden="true" />
+                <p>
+                  <strong>您的班級已結單</strong>
+                  {closeStatus[selectedCategory.id].closed_at && (
+                    <span className="ml-1 text-xs">
+                      （{new Date(closeStatus[selectedCategory.id].closed_at!).toLocaleString("zh-TW")}）
+                    </span>
+                  )}
+                  ，如需更改請聯繫班級幹部。
+                </p>
               </div>
             )}
-            <div className="space-y-8">
+            <div className="shop-public-series-list">
               {visibleSeries.map((series) => (
-                <section key={series.id} className="space-y-4">
-                  <div className="flex items-center gap-3">
+                <section key={series.id} className="shop-public-series">
+                  <div className="shop-public-series-heading">
                     <Thumb url={series.image_url ?? null} alt="" size={42} />
                     <div>
-                      <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{series.name}</h3>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{series.products.length} 件商品</p>
+                      <h3>{series.name}</h3>
+                      <p>{series.products.length} 件商品</p>
                     </div>
+                    <span className="shop-public-series-rule" aria-hidden="true" />
                   </div>
                   {series.products.length === 0 ? (
-                    <p className="py-4 text-sm" style={{ color: "var(--text-muted)" }}>這個系列暫時沒有商品</p>
+                    <p className="text-sm" style={{ color: "var(--public-secondary)" }}>這個系列暫時沒有商品</p>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                    <div className="shop-public-product-grid">
                       {series.products.map((product) => (
                         <ProductCard
                           key={product.id}
