@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 import bleach
 from itsdangerous import URLSafeTimedSerializer
 from jinja2 import (
+    ChainableUndefined,
     Environment,
     FileSystemLoader,
     StrictUndefined,
@@ -256,16 +257,20 @@ def validate_required_variables(
             raise ValueError(f"{recipient_label} 缺少必要佔位符：{key}")
 
 
-@lru_cache(maxsize=1)
-def _personalization_environment() -> SandboxedEnvironment:
-    env = SandboxedEnvironment(autoescape=False, undefined=StrictUndefined)
-    return env
+@lru_cache(maxsize=2)
+def _personalization_environment(allow_missing_variables: bool = False) -> SandboxedEnvironment:
+    undefined = ChainableUndefined if allow_missing_variables else StrictUndefined
+    return SandboxedEnvironment(autoescape=False, undefined=undefined)
 
 
-def render_personalized_text(raw: str, variables: dict[str, Any]) -> str:
-    """以受限 Jinja2 語法渲染文字欄位；變數不存在會明確失敗。"""
+def render_personalized_text(
+    raw: str, variables: dict[str, Any], *, allow_missing_variables: bool = False
+) -> str:
+    """以受限 Jinja2 語法渲染文字；預覽可選擇將未提供的變數視為空字串。"""
     try:
-        return _personalization_environment().from_string(raw or "").render(**variables)
+        return _personalization_environment(allow_missing_variables).from_string(
+            raw or ""
+        ).render(**variables)
     except TemplateError as exc:
         raise ValueError(f"佔位符渲染失敗：{exc}") from exc
 

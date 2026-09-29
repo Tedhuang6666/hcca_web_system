@@ -475,24 +475,29 @@ function ComposeInner() {
 
   // 信件預覽 HTML（debounce）
   useEffect(() => {
+    const controller = new AbortController();
     if (!subject.trim()) {
       setPreviewHtml("");
       setPreviewError("");
-      return;
+      return () => controller.abort();
     }
     const t = setTimeout(() => {
       emailApi
-        .preview(buildPayload())
+        .preview(buildPayload(), controller.signal)
         .then((r) => {
           setPreviewHtml(r.html);
           setPreviewError("");
         })
         .catch((error) => {
+          if (controller.signal.aborted) return;
           setPreviewHtml("");
           setPreviewError(error instanceof ApiError ? error.message : "預覽產生失敗");
         });
-    }, 600);
-    return () => clearTimeout(t);
+    }, 900);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [subject, heading, bannerImageUrl, bannerImageAlt, body, cardRows, buttons, blocks, buildPayload]);
 
   const addRow = () => setCardRows((rows) => [...rows, { label: "", value: "" }]);

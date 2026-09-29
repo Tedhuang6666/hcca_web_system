@@ -1,15 +1,31 @@
 import type {
   EmailAnalyticsOut, EmailAttachmentOut, EmailCampaignRecipientOut, EmailComposePayload, EmailMessageCreate, EmailMessageDetailOut, EmailMessageOut, EmailPosition, EmailPreflightOut, EmailRecipientListOut, EmailTemplateOut, RecipientPreviewOut, RecipientSelector, UploadedImageOut,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+import {
+  BASE,
+  get,
+  post,
+  patch,
+  del,
+  request,
+  csrfHeaders,
+  silentRefresh,
+  errorMessageFromResponse,
+  ApiError,
+  uploadWithProgress,
+} from "./core";
 
 // ── 電子郵件 ──────────────────────────────────────────────────────────────────
 
 export const emailApi = {
   previewRecipients: (sel: RecipientSelector) =>
     post<RecipientPreviewOut>("/email/preview-recipients", sel),
-  preview: (body: EmailComposePayload) =>
-    post<{ html: string }>("/email/preview", body),
+  preview: (body: EmailComposePayload, signal?: AbortSignal) =>
+    request<{ html: string }>("/email/preview", {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal,
+    }),
   test: (body: EmailComposePayload) =>
     post<{ status: string; sent_to: string }>("/email/test", body),
   testSample: (

@@ -33,6 +33,7 @@ DEFAULT_RATE_LIMIT_OVERRIDES: list[dict[str, int | str]] = [
     {"path_prefix": "/auth/google/callback", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/admin/", "requests": 90, "window_seconds": 60},
     {"path_prefix": "/notifications/email", "requests": 10, "window_seconds": 60},
+    {"path_prefix": "/email/preview", "requests": 120, "window_seconds": 60},
     {"path_prefix": "/email", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/documents/attachments", "requests": 15, "window_seconds": 60},
     {"path_prefix": "/surveys", "requests": 40, "window_seconds": 60},
