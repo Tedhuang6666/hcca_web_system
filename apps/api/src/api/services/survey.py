@@ -16,7 +16,6 @@ from sqlalchemy.orm import load_only, selectinload
 
 from api.email.renderer import absolutize_url, safe_link_url
 from api.models.announcement import Announcement, AnnouncementAudience
-from api.models.org import Position, UserPosition
 from api.models.survey import (
     QuestionType,
     Survey,
@@ -39,6 +38,7 @@ from api.schemas.survey import (
     SurveySubmit,
     SurveyUpdate,
 )
+from api.services.permission import get_user_org_ids
 
 # 可編輯題目／基本資料的問卷狀態：草稿與開放中皆可（已截止／封存則鎖定）
 _EDITABLE_STATUSES = {SurveyStatus.DRAFT, SurveyStatus.OPEN}
@@ -291,7 +291,14 @@ def _domain_access_message(domains: set[str]) -> str:
     )
 
 
-async def check_survey_access(session: AsyncSession, survey: Survey, user: User | None) -> None:
+async def check_survey_access(
+    session: AsyncSession,
+    survey: Survey,
+    user: User | None,
+    *,
+    active_org_ids: set[str] | None = None,
+    linked_emails: set[str] | None = None,
+) -> None:
     """驗證填答者是否在問卷開放對象內；不符時拋出 PermissionError。"""
     if survey.is_public:
         return
@@ -307,16 +314,13 @@ async def check_survey_access(session: AsyncSession, survey: Survey, user: User 
     if user_ids and str(user.id) in user_ids:
         return
     if domains:
-        emails = await _linked_emails(session, user)
+        emails = linked_emails if linked_emails is not None else await _linked_emails(session, user)
         if any(_email_domain(email) in domains for email in emails):
             return
     if org_ids:
-        result = await session.execute(
-            select(Position.org_id)
-            .join(UserPosition, UserPosition.position_id == Position.id)
-            .where(UserPosition.user_id == user.id)
-        )
-        if {str(o) for o in result.scalars().all()} & org_ids:
+        if active_org_ids is None:
+            active_org_ids = {str(org_id) for org_id in await get_user_org_ids(session, user.id)}
+        if active_org_ids & org_ids:
             return
     if domains:
         raise PermissionError(_domain_access_message(domains))
@@ -336,24 +340,49 @@ async def list_respondable_surveys(
     """列出目前使用者符合資格的開放／已截止問卷。"""
     if status not in (None, SurveyStatus.OPEN, SurveyStatus.CLOSED):
         return []
-    candidates = await list_surveys(
-        session,
-        org_id=org_id,
-        activity_id=activity_id,
-        status=status,
-        limit=100,
-        offset=0,
-    )
-    visible: list[Survey] = []
-    for survey in candidates:
-        if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
-            continue
-        try:
-            await check_survey_access(session, survey, user)
-        except PermissionError:
-            continue
-        visible.append(survey)
-    return visible[offset : offset + limit]
+    if limit <= 0:
+        return []
+
+    active_org_ids = {str(org_id) for org_id in await get_user_org_ids(session, user.id)}
+    linked_emails = await _linked_emails(session, user)
+    page: list[Survey] = []
+    visible_count = 0
+    candidate_offset = 0
+    page_size = 100
+
+    while len(page) < limit:
+        candidates = await list_surveys(
+            session,
+            org_id=org_id,
+            activity_id=activity_id,
+            status=status,
+            limit=page_size,
+            offset=candidate_offset,
+        )
+        if not candidates:
+            break
+        candidate_offset += len(candidates)
+
+        for survey in candidates:
+            if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
+                continue
+            try:
+                await check_survey_access(
+                    session,
+                    survey,
+                    user,
+                    active_org_ids=active_org_ids,
+                    linked_emails=linked_emails,
+                )
+            except PermissionError:
+                continue
+            if visible_count >= offset:
+                page.append(survey)
+            visible_count += 1
+            if len(page) >= limit:
+                break
+
+    return page
 
 
 async def open_survey(session: AsyncSession, survey: Survey) -> Survey:
