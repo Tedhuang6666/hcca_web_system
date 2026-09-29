@@ -250,14 +250,15 @@ async def create_product(
         requires_seating=data.requires_seating,
         seating_mode=data.seating_mode,
         status=ProductStatus.DRAFT,
+        media=[
+            ProductMedia(
+                image_url=item.image_url, kind=item.kind, sort_order=item.sort_order or index
+            )
+            for index, item in enumerate(data.media)
+        ],
     )
     session.add(product)
     await session.flush()
-
-    product.media = [
-        ProductMedia(image_url=item.image_url, kind=item.kind, sort_order=item.sort_order or index)
-        for index, item in enumerate(data.media)
-    ]
 
     for gi, group_data in enumerate(data.variant_groups):
         group = ProductVariantGroup(
