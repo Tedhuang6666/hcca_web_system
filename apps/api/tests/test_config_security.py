@@ -63,6 +63,21 @@ def test_production_rejects_public_api_docs() -> None:
         _make(ENVIRONMENT="production", ENABLE_API_DOCS=True, COOKIE_SECURE=True)
 
 
+def test_disabled_api_docs_do_not_expose_openapi_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.core.config import settings
+    from api.main import create_app
+
+    monkeypatch.setattr(settings, "DEBUG", False)
+    monkeypatch.setattr(settings, "ENABLE_API_DOCS", False)
+    app = create_app()
+
+    assert app.openapi_url is None
+    assert not {"/docs", "/redoc", "/openapi.json"} & {
+        getattr(route, "path", None) for route in app.routes
+    }
+    assert app.openapi()["paths"]  # 離線型別產生仍需能輸出 schema
+
+
 def test_production_rejects_superuser_emails_autograms() -> None:
     with pytest.raises(ValidationError, match="SUPERUSER_EMAILS"):
         _make(
