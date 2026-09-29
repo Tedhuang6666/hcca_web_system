@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AUTH_CACHE_EVENT, getAuthItem } from "@/lib/auth-cache";
 
 const DRAFT_PREFIX = "hcca:draft:v1:";
 const FILE_DB_NAME = "hcca-draft-files";
 const FILE_DB_VERSION = 1;
 const FILE_STORE_NAME = "draftFiles";
+const ANONYMOUS_SCOPE_KEY = "hcca:draft:anonymous-scope";
 
 type StoredDraft<T> = {
   value: T;
@@ -41,6 +43,61 @@ type FileDraftAutosaveOptions = {
 
 const buildKey = (key: string) => `${DRAFT_PREFIX}${key}`;
 
+function getOwnerScope(): string | null {
+  if (typeof window === "undefined") return null;
+
+  // This ID only separates browser drafts between accounts; the server remains the
+  // authority for identity and access.
+  const userId = getAuthItem("user_id");
+  if (userId) return `user:${userId}`;
+
+  try {
+    let anonymousId = window.sessionStorage.getItem(ANONYMOUS_SCOPE_KEY);
+    if (!anonymousId) {
+      anonymousId = typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+      window.sessionStorage.setItem(ANONYMOUS_SCOPE_KEY, anonymousId);
+    }
+    return `anonymous:${anonymousId}`;
+  } catch {
+    return null;
+  }
+}
+
+function useDraftOwnerScope(): string | null {
+  const [scope, setScope] = useState<string | null>(null);
+
+  useEffect(() => {
+    const updateScope = () => setScope(getOwnerScope());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "user_id") updateScope();
+    };
+
+    updateScope();
+    window.addEventListener(AUTH_CACHE_EVENT, updateScope);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(AUTH_CACHE_EVENT, updateScope);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  return scope;
+}
+
+function scopeDraftKey(key: string, scope: string | null): string | null {
+  return scope ? `${scope}:${key}` : null;
+}
+
+function valueSignature(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? "undefined";
+  } catch {
+    return String(value);
+  }
+}
+
 function readStoredDraft<T>(key: string): StoredDraft<T> | null {
   if (typeof window === "undefined") return null;
 
@@ -58,7 +115,8 @@ function readStoredDraft<T>(key: string): StoredDraft<T> | null {
 
 export function clearStoredDraft(key: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(buildKey(key));
+  const scopedKey = scopeDraftKey(key, getOwnerScope());
+  if (scopedKey) window.localStorage.removeItem(buildKey(scopedKey));
 }
 
 export function useDraftAutosave<T>({
@@ -69,45 +127,67 @@ export function useDraftAutosave<T>({
   debounceMs = 700,
   isEmpty,
 }: DraftAutosaveOptions<T>) {
+  const ownerScope = useDraftOwnerScope();
+  const scopedKey = scopeDraftKey(key, ownerScope);
   const [ready, setReady] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const valueRef = useRef(value);
+  const loadedKeyRef = useRef<string | null>(null);
+  const previousKeyRef = useRef(scopedKey);
+  const blockedValueSignatureRef = useRef<string | null>(null);
 
   valueRef.current = value;
+  if (previousKeyRef.current !== scopedKey) {
+    previousKeyRef.current = scopedKey;
+    blockedValueSignatureRef.current = valueSignature(value);
+  }
 
   const saveNow = useCallback(() => {
-    if (!enabled || typeof window === "undefined") return;
+    if (
+      !enabled
+      || typeof window === "undefined"
+      || !scopedKey
+      || loadedKeyRef.current !== scopedKey
+      || scopeDraftKey(key, getOwnerScope()) !== scopedKey
+    ) return;
+    const currentSignature = valueSignature(valueRef.current);
+    if (blockedValueSignatureRef.current === currentSignature) return;
+    blockedValueSignatureRef.current = null;
     if (isEmpty?.(valueRef.current)) {
-      clearStoredDraft(key);
+      window.localStorage.removeItem(buildKey(scopedKey));
       setLastSavedAt(null);
       return;
     }
 
     const updatedAt = new Date().toISOString();
     const payload: StoredDraft<T> = { value: valueRef.current, updatedAt };
-    window.localStorage.setItem(buildKey(key), JSON.stringify(payload));
+    window.localStorage.setItem(buildKey(scopedKey), JSON.stringify(payload));
     setLastSavedAt(updatedAt);
-  }, [enabled, isEmpty, key]);
+  }, [enabled, isEmpty, key, scopedKey]);
 
   const clearDraft = useCallback(() => {
-    clearStoredDraft(key);
+    if (!scopedKey || scopeDraftKey(key, getOwnerScope()) !== scopedKey) return;
+    window.localStorage.removeItem(buildKey(scopedKey));
     setLastSavedAt(null);
-  }, [key]);
+  }, [key, scopedKey]);
 
   useEffect(() => {
-    if (!enabled) {
-      setReady(false);
+    loadedKeyRef.current = null;
+    setReady(false);
+    setLastSavedAt(null);
+    if (!enabled || !scopedKey) {
       return;
     }
 
-    const stored = readStoredDraft<T>(key);
+    const stored = readStoredDraft<T>(scopedKey);
     if (stored && !isEmpty?.(stored.value)) {
       onRestore(stored.value, { updatedAt: stored.updatedAt });
       setLastSavedAt(stored.updatedAt);
     }
+    loadedKeyRef.current = scopedKey;
     setReady(true);
-  }, [enabled, isEmpty, key, onRestore]);
+  }, [enabled, isEmpty, onRestore, scopedKey]);
 
   useEffect(() => {
     if (!enabled || !ready) return;
@@ -201,39 +281,60 @@ export function useFileDraftAutosave({
   enabled = true,
   debounceMs = 700,
 }: FileDraftAutosaveOptions) {
+  const ownerScope = useDraftOwnerScope();
+  const scopedKey = scopeDraftKey(key, ownerScope);
   const [ready, setReady] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filesRef = useRef(files);
+  const loadedKeyRef = useRef<string | null>(null);
+  const previousKeyRef = useRef(scopedKey);
+  const blockedFilesRef = useRef<File[] | null>(null);
 
   filesRef.current = files;
+  if (previousKeyRef.current !== scopedKey) {
+    previousKeyRef.current = scopedKey;
+    blockedFilesRef.current = files;
+  }
 
   const saveNow = useCallback(() => {
-    if (!enabled) return;
-    void writeFileDraft(key, filesRef.current);
-  }, [enabled, key]);
+    if (
+      !enabled
+      || !scopedKey
+      || loadedKeyRef.current !== scopedKey
+      || scopeDraftKey(key, getOwnerScope()) !== scopedKey
+    ) return;
+    if (blockedFilesRef.current === filesRef.current) return;
+    blockedFilesRef.current = null;
+    void writeFileDraft(scopedKey, filesRef.current);
+  }, [enabled, key, scopedKey]);
 
   const clearDraftFiles = useCallback(() => {
-    void clearStoredFileDraft(key);
-  }, [key]);
+    if (!scopedKey || scopeDraftKey(key, getOwnerScope()) !== scopedKey) return;
+    void clearStoredFileDraft(scopedKey);
+  }, [key, scopedKey]);
 
   useEffect(() => {
     let cancelled = false;
+    loadedKeyRef.current = null;
     setReady(false);
-    if (!enabled) return;
+    if (!enabled || !scopedKey) return;
 
-    readFileDraft(key)
+    readFileDraft(scopedKey)
       .then((stored) => {
         if (cancelled || !stored || stored.files.length === 0) return;
         onRestore(stored.files, { updatedAt: stored.updatedAt });
       })
       .finally(() => {
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          loadedKeyRef.current = scopedKey;
+          setReady(true);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [enabled, key, onRestore]);
+  }, [enabled, onRestore, scopedKey]);
 
   useEffect(() => {
     if (!enabled || !ready) return;
