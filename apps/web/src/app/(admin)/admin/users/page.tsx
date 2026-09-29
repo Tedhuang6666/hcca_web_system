@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
+import { usePeopleManagementEmbed } from "@/components/admin/PeopleManagementEmbedContext";
+import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirect";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import Modal from "@/components/ui/Modal";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -207,6 +208,11 @@ function ToggleRow({
 }
 
 export default function AdminUsersPage() {
+  const embedded = usePeopleManagementEmbed();
+  return embedded ? <AccountManagementPanel /> : <PeopleManagementRedirect section="accounts" />;
+}
+
+function AccountManagementPanel() {
   const { can, isAdmin } = usePermissions();
   const allowed = isAdmin || can("admin:all");
   const [users, setUsers] = useState<AdminUserDetail[]>([]);
@@ -285,14 +291,12 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col">
-      <AdminWorkbenchTabs />
+    <div className="flex h-full min-h-0 flex-col">
       <header className="flex flex-col gap-3 border-b px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--primary-text)" }}>Account operations</p>
-          <h1 className="mt-1 text-xl font-semibold" style={{ color: "var(--text-primary)" }}>帳號維護</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>帳號與安全</h1>
           <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-            集中處理帳號資料、登入身分、通知偏好與安全重置；高風險操作都會留下稽核紀錄。
+            處理帳號資料、登入身分、通知偏好與安全重置；帳號停權、校友歸檔與解凍請使用「帳號停權與學籍」。
           </p>
         </div>
         <Button onClick={refresh} disabled={loading}><RefreshCw size={16} />重新整理</Button>
@@ -619,7 +623,7 @@ function AccountDetail({
               <p>有效權限：{user.is_superuser ? "超管（全部權限）" : `${user.effective_permissions.length} 個`}</p>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">{user.positions.slice(0, 6).map((position) => <span key={position.user_position_id ?? position.id} className="rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{position.name}</span>)}</div>
-            <Link href="/admin/permissions" className="mt-4 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary)" }}>前往組織與職位管理<ChevronRight size={14} /></Link>
+            <Link href="/admin/people?section=organization" className="mt-4 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary)" }}>前往組織與職位管理<ChevronRight size={14} /></Link>
           </Section>
         </aside>
       </div>

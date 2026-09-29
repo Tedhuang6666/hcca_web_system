@@ -85,7 +85,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
-  { id: "orgs", href: "/orgs", iconKey: "org", label: "組織管理", perm: "org:*" },
+  { id: "orgs", href: "/orgs", iconKey: "org", label: "組織總覽", perm: "org:*" },
   {
     id: "raffleAdmin",
     href: "/admin/raffle",
@@ -133,8 +133,8 @@ export const NAV_ITEMS: NavItem[] = [
     id: "peopleAdmin",
     href: "/admin/people",
     iconKey: "people",
-    label: "人員管理",
-    perm: "admin:users",
+    label: "人員與組織",
+    perms: ["admin:users", "admin:all", "class:manage", "org:manage_members"],
   },
   {
     id: "systemOperations",
@@ -163,13 +163,6 @@ export const NAV_ITEMS: NavItem[] = [
     iconKey: "info",
     label: "公開網站設定",
     perm: "site:manage",
-  },
-  {
-    id: "classes",
-    href: "/admin/classes",
-    iconKey: "classes",
-    label: "班級管理",
-    perm: "class:manage",
   },
   {
     id: "moduleBackoffice",

@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   BookUser,
   ClipboardList,
-  FileUp,
   Puzzle,
   Settings,
   SlidersHorizontal,
@@ -99,11 +98,7 @@ type QuickAction = {
 };
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { href: "/admin/people",       icon: Users,      label: "人員管理",   desc: "新增、搜尋與管理人員身分" },
-  { href: "/admin/users",        icon: Users,      label: "帳號維護",   desc: "帳號狀態、連結 Email 與 MFA 管理", requiredPermission: "admin:users" },
-  { href: "/admin/permissions",  icon: BookUser,   label: "權限管理",   desc: "組織職位與使用者權限指派" },
-  { href: "/admin/cadre-import", icon: FileUp,     label: "幹部名冊匯入", desc: "依通訊錄建立班級、職位與權限" },
-  { href: "/admin/classes",      icon: Users,      label: "班級管理",   desc: "班級名冊、幹部與學年度設定" },
+  { href: "/admin/people",       icon: Users,      label: "人員與組織", desc: "人員、帳號、停權、組織職位、權限與班級名冊" },
   { href: "/admin/settings",     icon: Settings,   label: "系統設定",   desc: "全站設定與功能參數調整" },
   { href: "/admin/system",       icon: Activity,   label: "系統營運",   desc: "防護、診斷、效能觀測與模組維護", requiredPermission: "admin:all" },
   { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", desc: "管理角色視角與專屬導覽", requiredPermission: "admin:all" },
@@ -219,7 +214,7 @@ export default function AdminDashboardPage() {
           warn
         />
         <StatCard
-          href="/admin/permissions"
+          href="/admin/people?section=organization"
           icon={<BookUser size={13} />}
           label="組織職位"
           value={loading ? null : positionCount}

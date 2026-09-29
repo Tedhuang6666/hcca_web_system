@@ -128,7 +128,7 @@ export default function OrgDetailPage() {
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
           {isAdmin && (
-            <Link href="/admin/permissions"
+            <Link href="/admin/people?section=organization"
               className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0 transition-colors"
               style={{ color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
               管理權限

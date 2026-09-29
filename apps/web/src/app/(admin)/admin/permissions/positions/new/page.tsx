@@ -174,7 +174,7 @@ export default function NewPositionPage() {
       });
       clearDraft();
       toast.success(`「${name.trim()}」已建立`);
-      router.push("/admin/permissions");
+      router.push("/admin/people?section=organization");
     } catch (error) {
       flushDraft();
       toast.error(apiErrorMessage(error, "建立職位失敗"));
@@ -190,7 +190,7 @@ export default function NewPositionPage() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Link
-              href="/admin/permissions"
+              href="/admin/people?section=organization"
               className="inline-flex min-h-11 items-center gap-1 text-xs font-medium no-underline"
               style={{ color: "var(--text-muted)" }}
             >
@@ -319,7 +319,7 @@ export default function NewPositionPage() {
             </section>
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end lg:col-span-2">
-              <Link href="/admin/permissions" className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-medium no-underline" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>取消</Link>
+              <Link href="/admin/people?section=organization" className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-medium no-underline" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>取消</Link>
               <button type="submit" disabled={saving || !selectedOrg} className="inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" style={{ color: "var(--primary-contrast, white)", background: "var(--primary)" }}>
                 {saving ? "建立中..." : "建立職位"}
               </button>

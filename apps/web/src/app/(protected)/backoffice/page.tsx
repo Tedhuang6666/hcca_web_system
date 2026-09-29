@@ -6,7 +6,6 @@ import {
   FileText,
   GraduationCap,
   MessageSquare,
-  Network,
   Store,
   Ticket,
   Users,
@@ -16,18 +15,11 @@ import { usePermissions } from "@/hooks/usePermissions";
 
 const TOOLS = [
   {
-    href: "/admin/classes",
+    href: "/admin/people",
     icon: Users,
-    label: "班級管理",
-    desc: "班級名冊、幹部與學年度設定",
-    perms: ["class:manage"],
-  },
-  {
-    href: "/orgs",
-    icon: Network,
-    label: "組織管理",
-    desc: "組織樹、職位與任期資料",
-    prefixes: ["org:"],
+    label: "人員與組織",
+    desc: "人員、帳號、組織職位、權限與班級名冊",
+    perms: ["admin:users", "class:manage", "org:manage_members"],
   },
   {
     href: "/document-templates",

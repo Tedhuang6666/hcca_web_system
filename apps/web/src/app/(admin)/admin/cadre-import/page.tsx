@@ -5,6 +5,8 @@ import Link from "next/link";
 import { FileText, FileUp, ShieldCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 
+import { usePeopleManagementEmbed } from "@/components/admin/PeopleManagementEmbedContext";
+import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirect";
 import { adminApi } from "@/lib/api";
 import type { CadreDirectoryImportOut } from "@/lib/types";
 
@@ -19,8 +21,12 @@ function ResultMetric({ label, value }: { label: string; value: number }) {
     </div>
   );
 }
-
 export default function CadreImportPage() {
+  const embedded = usePeopleManagementEmbed();
+  return embedded ? <CadreImportPanel /> : <PeopleManagementRedirect section="import" />;
+}
+
+function CadreImportPanel() {
   const [file, setFile] = useState<File | null>(null);
   const [academicYear, setAcademicYear] = useState("115");
   const [termStart, setTermStart] = useState(DEFAULT_TERM_START);
@@ -56,15 +62,14 @@ export default function CadreImportPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium" style={{ color: "var(--primary)" }}>組織與職位</p>
-          <h1 className="mt-1 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班聯會幹部名冊匯入</h1>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班聯會幹部名冊匯入</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
             上傳 Google 表單匯出的通訊錄 PDF，一次完成重新分班後的班級與座號、帳號預建、部門職位、權限與任期設定。
           </p>
         </div>
-        <Link href="/admin/permissions" className="btn btn-ghost btn-sm">查看職位與權限</Link>
+        <Link href="/admin/people?section=organization" className="btn btn-ghost btn-sm">查看職位與權限</Link>
       </div>
 
       <section className="rounded-xl p-5" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
@@ -138,9 +143,9 @@ export default function CadreImportPage() {
         </section>
       )}
 
-      <section className="rounded-xl p-4 text-sm" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-        <div className="flex gap-2"><FileText className="mt-0.5 shrink-0" size={16} /><p>會議編輯時以「組織成員」匯入出列席名冊；確認議程後，系統會自動寄送電子通知並附上正式版開會通知單 PDF。</p></div>
-      </section>
+        <section className="rounded-xl p-4 text-sm" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+          <div className="flex gap-2"><FileText className="mt-0.5 shrink-0" size={16} /><p>會議編輯時以「組織成員」匯入出列席名冊；確認議程後，系統會自動寄送電子通知並附上正式版開會通知單 PDF。</p></div>
+        </section>
     </main>
   );
 }

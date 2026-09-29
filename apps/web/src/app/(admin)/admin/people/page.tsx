@@ -1,7 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
+import { PeopleManagementEmbedProvider } from "@/components/admin/PeopleManagementEmbedContext";
 import {
   BadgeCheck,
   BookUser,
@@ -62,6 +65,29 @@ const CLASS_ROLE_OPTIONS = [
   { key: "treasurer", label: "總務/收款" },
   { key: "general_affairs", label: "事務" },
 ];
+
+type PeopleManagementSection = "people" | "accounts" | "lifecycle" | "organization" | "classes" | "import";
+
+const AccountManagementPanel = dynamic(
+  () => import("../users/page"),
+  { loading: () => <WorkspaceLoading /> },
+);
+const AccountLifecyclePanel = dynamic(
+  () => import("../user-lifecycle/page"),
+  { loading: () => <WorkspaceLoading /> },
+);
+const OrganizationPermissionPanel = dynamic(
+  () => import("../permissions/page"),
+  { loading: () => <WorkspaceLoading /> },
+);
+const ClassManagementPanel = dynamic(
+  () => import("../classes/page"),
+  { loading: () => <WorkspaceLoading /> },
+);
+const CadreImportPanel = dynamic(
+  () => import("../cadre-import/page"),
+  { loading: () => <WorkspaceLoading /> },
+);
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
@@ -144,6 +170,48 @@ function IconButton({
 }
 
 export default function PeopleAdminPage() {
+  const { can, isAdmin } = usePermissions();
+  const searchParams = useSearchParams();
+  const requestedSection = searchParams.get("section");
+  const canManagePeople = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
+  const canOpen: Record<PeopleManagementSection, boolean> = {
+    people: canManagePeople,
+    accounts: isAdmin || can("admin:all"),
+    lifecycle: isAdmin,
+    organization: isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members"),
+    classes: isAdmin || can("admin:all") || can("class:manage"),
+    import: isAdmin || can("admin:all"),
+  };
+  const section = Object.hasOwn(canOpen, requestedSection ?? "") && canOpen[requestedSection as PeopleManagementSection]
+    ? requestedSection as PeopleManagementSection
+    : "people";
+
+  if (!canManagePeople) {
+    return (
+      <div className="py-24 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+        需要人員、班級或組織成員管理權限才能使用此工作台。
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col">
+      <AdminWorkbenchTabs />
+      <main className="min-h-0 flex-1 overflow-auto" aria-label="人員管理工作區">
+        <PeopleManagementEmbedProvider>
+          {section === "people" && <PersonDirectoryPanel />}
+          {section === "accounts" && <AccountManagementPanel />}
+          {section === "lifecycle" && <AccountLifecyclePanel />}
+          {section === "organization" && <OrganizationPermissionPanel />}
+          {section === "classes" && <ClassManagementPanel />}
+          {section === "import" && <CadreImportPanel />}
+        </PeopleManagementEmbedProvider>
+      </main>
+    </div>
+  );
+}
+
+function PersonDirectoryPanel() {
   const { can, isAdmin } = usePermissions();
   const allowed = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
   const [people, setPeople] = useState<PersonListItem[]>([]);
@@ -255,17 +323,15 @@ export default function PeopleAdminPage() {
   }
 
   return (
-    <>
-      <AdminWorkbenchTabs />
-      <div className="mx-auto flex h-[calc(100dvh-8rem)] min-h-0 max-w-7xl flex-col gap-4 p-4 md:p-5">
+    <div className="mx-auto flex h-full min-h-0 max-w-7xl flex-col gap-4 p-4 md:p-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase" style={{ color: "var(--primary)" }}>
-            People Registry
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            人員與身分工作台
+          <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            人員與身分
           </h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            從同一份人員主檔查看班級、組織職位與帳號連結。
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <IconButton onClick={refreshAll}>
@@ -433,7 +499,14 @@ export default function PeopleAdminPage() {
         />
       )}
     </div>
-    </>
+  );
+}
+
+function WorkspaceLoading() {
+  return (
+    <div className="p-6 text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+      載入管理工具…
+    </div>
   );
 }
 
