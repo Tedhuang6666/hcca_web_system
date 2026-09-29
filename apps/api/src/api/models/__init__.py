@@ -328,8 +328,8 @@ from api.models.saved_filter import SavedFilter  # noqa: F401
 # 班級系統（學號區間自動歸班、幹部結單）
 from api.models.school_class import (  # noqa: F401
     ClassCadre,
-    ClassCorrectionRequest,
     ClassConsolidationMixin,
+    ClassCorrectionRequest,
     ClassManualMember,
     ClassMembership,
     ClassMembershipSource,
