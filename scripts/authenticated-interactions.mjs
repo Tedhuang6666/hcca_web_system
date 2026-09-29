@@ -65,11 +65,43 @@ async function waitForActiveTopTab(page, selector) {
 
 async function measureAction(page, action, interactionResponses) {
   const startedAt = Date.now();
-  const startMark = await page.evaluate(() => performance.now());
+  await action.trigger.evaluate((element) => {
+    const timing = { clickAt: null, feedbackAt: null };
+    Object.defineProperty(element, "__performanceInteractionTiming", {
+      configurable: true,
+      value: timing,
+    });
+    element.addEventListener(
+      "click",
+      () => {
+        timing.clickAt = performance.now();
+        requestAnimationFrame(() => {
+          timing.feedbackAt = performance.now();
+        });
+      },
+      { capture: true, once: true },
+    );
+  });
   const requestStart = Date.now();
   await action.trigger.click({ timeout: 5_000 });
-  const feedbackAt = await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => resolve(performance.now()))),
+  const timing = await action.trigger.evaluate(
+    (element) =>
+      new Promise((resolve, reject) => {
+        const measurement = element.__performanceInteractionTiming;
+        const deadline = performance.now() + 5_000;
+        const read = () => {
+          if (measurement?.clickAt != null && measurement.feedbackAt != null) {
+            resolve(measurement);
+            return;
+          }
+          if (performance.now() >= deadline) {
+            reject(new Error("interaction feedback timing was not recorded"));
+            return;
+          }
+          setTimeout(read, 0);
+        };
+        read();
+      }),
   );
   await action.complete();
   const completedAt = await page.evaluate(() => performance.now());
@@ -78,8 +110,8 @@ async function measureAction(page, action, interactionResponses) {
     .map((response) => ({ path: response.path, status: response.status, duration_ms: response.durationMs }));
   return {
     name: action.name,
-    feedback_ms: Math.round(Math.max(0, feedbackAt - startMark) * 100) / 100,
-    completion_ms: Math.round(Math.max(0, completedAt - startMark) * 100) / 100,
+    feedback_ms: Math.round(Math.max(0, timing.feedbackAt - timing.clickAt) * 100) / 100,
+    completion_ms: Math.round(Math.max(0, completedAt - timing.clickAt) * 100) / 100,
     api,
     measured_at: new Date(startedAt).toISOString(),
   };
