@@ -13,7 +13,7 @@
 
 ## 快速啟動
 
-需求：WSL 2、Docker、Python 3.12+、`uv`、Node.js 20.9+、npm 10+。
+需求：WSL 2、Docker、Python 3.12+、`uv`、Node.js >=22.13.0（CI 依 .nvmrc；本機目前使用 Node 24）、npm 10+。
 
 ```bash
 bash dev.sh
@@ -30,8 +30,8 @@ bash dev.sh
 
 ```bash
 docker compose up db redis -d
-uv sync
-uv run --project apps/api alembic upgrade head
+uv sync --locked --project apps/api
+uv run --locked --directory apps/api alembic upgrade head
 uv run --project apps/api uvicorn api.main:app --reload --port 8000
 ```
 
@@ -48,17 +48,19 @@ npm run dev
 
 ## 開發驗證
 
-```bash
-uv run --project apps/api ruff check apps/api/src libs/shared/src
-uv run --project apps/api ruff format --check apps/api/src libs/shared/src apps/api/tests
-uv run --project apps/api pytest apps/api/tests -v --asyncio-mode=auto
+先讀 [AGENTS.md](AGENTS.md)，依 [驗證矩陣](docs/AI_WORKFLOW.md) 選對應檢查。
 
-cd apps/web
-npm run lint
-npm run type-check
-npm run build
-npm audit --audit-level=moderate --omit=dev
+```bash
+bash scripts/check.sh doctor
+bash scripts/check.sh docs
+bash scripts/check.sh api
+# 先設定明確的本機 PostgreSQL TEST_DATABASE_URL，再執行：
+bash scripts/check.sh api-test
+bash scripts/check.sh web
 ```
+
+本機服務與工具限制記錄在 [LOCAL_TOOLING.md](docs/LOCAL_TOOLING.md)。
+檢查腳本不啟動／部署服務，資料庫測試不默默退回 SQLite。
 
 ## 重要目錄
 
@@ -76,10 +78,8 @@ npm audit --audit-level=moderate --omit=dev
 - [AGENTS.md](AGENTS.md)：協作與程式規範。
 - [apps/api/README.md](apps/api/README.md)：API 開發方式。
 - [apps/web/README.md](apps/web/README.md)：前端開發方式。
+- [docs/README.md](docs/README.md)：現行文件與歷史報告索引。
 - [docs/HANDOFF_CHECKLIST.md](docs/HANDOFF_CHECKLIST.md)：交接驗證。
-- [docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md)：日常營運。
-- [docs/INCIDENT_RUNBOOK.md](docs/INCIDENT_RUNBOOK.md)：故障處理。
-- [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md)：正式上線檢查。
 
 `uploads/`、`.env` 與本機參考素材不進 Git。修改 ORM model 後必須建立
 Alembic migration；修改 API 契約後必須同步前端型別。

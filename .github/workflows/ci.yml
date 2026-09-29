@@ -27,19 +27,25 @@ jobs:
       - name: Set up Python 3.12
         run: uv python install 3.12
 
+      - name: Validate agent maintenance setup
+        run: |
+          uv run --no-project --python 3.12 python scripts/check-agent-setup.py
+          uv run --no-project --python 3.12 python -m unittest discover -s scripts/tests -p 'test_agent_setup.py'
+          bash -n scripts/check.sh scripts/update-openapi.sh scripts/refresh-code-index.sh
+
       - name: Install dependencies (dev)
-        run: uv sync --project apps/api
+        run: uv sync --locked --project apps/api
 
       - name: Run Ruff linter
-        run: uv run --project apps/api ruff check apps/api/src libs/shared/src
+        run: uv run --locked --project apps/api ruff check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py
 
       - name: Run Ruff formatter check
-        run: uv run --project apps/api ruff format --check apps/api/src libs/shared/src
+        run: uv run --locked --project apps/api ruff format --check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py
 
       # 型別檢查 gate（漸進式採用）：範圍由 pyproject [tool.mypy] files 控制，
       # 清乾淨一個模組就加進清單，逐步擴大覆蓋面。
       - name: Run Mypy (type-check gate)
-        run: uv run --project apps/api mypy
+        run: uv run --locked --project apps/api mypy
 
   test:
     name: PostgreSQL Pytest + Coverage
@@ -91,15 +97,15 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies (with dev)
-        run: uv sync --project apps/api
+        run: uv sync --locked --project apps/api
 
       - name: Apply all database migrations
-        run: uv run --directory apps/api alembic upgrade head
+        run: uv run --locked --directory apps/api alembic upgrade head
 
       # 覆蓋率門檻由 pyproject [tool.coverage.report] fail_under 控制（ratchet：補測試後逐步調高）。
       - name: Run Pytest with coverage
         run: |
-          uv run --project apps/api pytest apps/api/tests \
+          uv run --locked --project apps/api pytest apps/api/tests \
             --tb=short \
             --asyncio-mode=auto \
             --cov \
@@ -152,26 +158,13 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --project apps/api
+        run: uv sync --locked --project apps/api
 
       - name: Upgrade database to head
-        run: uv run --directory apps/api alembic upgrade head
+        run: uv run --locked --directory apps/api alembic upgrade head
 
       - name: Verify models match migration head
-        run: |
-          before="$(find apps/api/alembic/versions -maxdepth 1 -type f -name '*.py' | sort)"
-          uv run --directory apps/api alembic revision --autogenerate -m ci_schema_drift
-          after="$(find apps/api/alembic/versions -maxdepth 1 -type f -name '*.py' | sort)"
-          generated="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))"
-          if [ -z "$generated" ]; then
-            echo "::error::Alembic did not create a drift-check revision"
-            exit 1
-          fi
-          if ! grep -qE '^[[:space:]]+pass$' "$generated"; then
-            echo "::error::SQLAlchemy models and Alembic head differ"
-            sed -n '1,240p' "$generated"
-            exit 1
-          fi
+        run: uv run --locked --directory apps/api alembic check
 
   api-contract:
     name: OpenAPI Contract Drift
@@ -196,11 +189,11 @@ jobs:
         run: uv python install 3.12
       - name: Install dependencies
         run: |
-          uv sync --project apps/api
+          uv sync --locked --project apps/api
           npm ci --prefix apps/web
       - name: Regenerate OpenAPI types
         run: |
-          uv run --project apps/api python apps/api/scripts/export_openapi.py openapi.json
+          uv run --locked --project apps/api python apps/api/scripts/export_openapi.py openapi.json
           npm run --prefix apps/web generate:types
       - name: Verify generated contract is current
         run: git diff --exit-code -- apps/web/src/lib/api-types.ts
@@ -282,12 +275,12 @@ jobs:
       - name: Set up Python 3.12
         run: uv python install 3.12
       - name: Install API dependencies
-        run: uv sync --project apps/api
+        run: uv sync --locked --project apps/api
       - name: Prepare database
-        run: uv run --directory apps/api alembic upgrade head
+        run: uv run --locked --directory apps/api alembic upgrade head
       - name: Start API
         run: |
-          uv run --project apps/api uvicorn api.main:app --host 127.0.0.1 --port 8000 &
+          uv run --locked --project apps/api uvicorn api.main:app --host 127.0.0.1 --port 8000 &
           for _ in $(seq 1 30); do
             curl -sf http://127.0.0.1:8000/ready && exit 0
             sleep 2
@@ -320,7 +313,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node 22.13.0
+      - name: Set up Node from .nvmrc
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version-file: .nvmrc
@@ -399,7 +392,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node 22.13.0
+      - name: Set up Node from .nvmrc
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version-file: .nvmrc
