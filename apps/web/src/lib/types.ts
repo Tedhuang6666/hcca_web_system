@@ -1634,3 +1634,40 @@ export interface RaffleNextOut {
   session_token: string;
   event: RaffleEventOut;
 }
+
+export type MyClassContext = import("./api-types").components["schemas"]["SchoolClassListItem"] & {
+  seat_number: number | null;
+};
+
+export type ClassCorrectionStatus = "pending" | "approved" | "rejected";
+
+export interface ClassCorrectionRequestCreate {
+  requested_class_id: string;
+  message?: string | null;
+}
+
+export interface ClassCorrectionRequestReview {
+  status: "approved" | "rejected";
+  class_id?: string | null;
+  review_note?: string | null;
+}
+
+export interface ClassCorrectionRequestOut {
+  id: string;
+  user_id: string;
+  user_display_name: string;
+  user_email: string;
+  user_student_id: string | null;
+  reported_class_id: string | null;
+  reported_class_label: string | null;
+  requested_class_id: string;
+  requested_class_label: string;
+  resolved_class_id: string | null;
+  resolved_class_label: string | null;
+  message: string | null;
+  status: ClassCorrectionStatus;
+  created_at: string;
+  reviewed_by_id: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+}

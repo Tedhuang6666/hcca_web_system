@@ -24,6 +24,7 @@ import { usePeopleManagementEmbed } from "@/components/admin/PeopleManagementEmb
 import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirect";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import ClassCorrectionRequestsPanel from "@/components/admin/ClassCorrectionRequestsPanel";
 import type {
   ClassMemberOut,
   ClassMembershipOut,
@@ -1395,6 +1396,7 @@ function ClassManagementPanel() {
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showCorrectionRequests, setShowCorrectionRequests] = useState(false);
 
   const loadClasses = useCallback(() => {
     setLoading(true);
@@ -1463,8 +1465,22 @@ function ClassManagementPanel() {
           </span>
         </header>
 
-        <RepresentativeSetupPanel classes={classes} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCorrectionRequests((current) => !current)}
+            aria-pressed={showCorrectionRequests}
+            className={showCorrectionRequests ? "btn btn-primary min-h-11" : "btn btn-ghost min-h-11"}
+          >
+            {showCorrectionRequests ? "返回班級名冊" : "班級更正申請"}
+          </button>
+        </div>
 
+        {showCorrectionRequests ? (
+          <ClassCorrectionRequestsPanel />
+        ) : (
+        <>
+        <RepresentativeSetupPanel classes={classes} />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
           <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
             <RosterFileImportPanel onImported={loadClasses} />
@@ -1497,6 +1513,8 @@ function ClassManagementPanel() {
             )}
           </main>
         </div>
+        </>
+        )}
     </div>
   );
 }

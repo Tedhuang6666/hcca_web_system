@@ -1,5 +1,9 @@
 import type {
-  ClassCadreOut, ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassRosterBulkCreate, ClassRosterBulkOut, ClassRosterEntryOut, ClassRosterPdfImportOut, ClassStudentRangeOut, SchoolClassBulkActionKind, SchoolClassBulkActionOut, SchoolClassBulkCreate, SchoolClassBulkCreateOut, SchoolClassListItem, SchoolClassOut,
+  ClassCadreOut, ClassCorrectionRequestCreate, ClassCorrectionRequestOut, ClassCorrectionRequestReview,
+  ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassRosterBulkCreate,
+  ClassRosterBulkOut, ClassRosterEntryOut, ClassRosterPdfImportOut, ClassStudentRangeOut,
+  MyClassContext, SchoolClassBulkActionKind, SchoolClassBulkActionOut, SchoolClassBulkCreate,
+  SchoolClassBulkCreateOut, SchoolClassListItem, SchoolClassOut,
 } from "../types";
 import { ApiError } from "../api-helpers";
 import {
@@ -46,7 +50,13 @@ export const classApi = {
   },
   recipientOptions: () => get<SchoolClassListItem[]>('/classes/recipient-options'),
   get: (id: string) => get<SchoolClassOut>(`/classes/${id}`),
-  myClass: () => get<SchoolClassListItem | null>("/classes/me"),
+  myClass: () => get<MyClassContext | null>("/classes/me"),
+  myCorrectionRequests: () => get<ClassCorrectionRequestOut[]>("/classes/correction-requests/mine"),
+  correctionRequests: () => get<ClassCorrectionRequestOut[]>("/classes/correction-requests"),
+  createCorrectionRequest: (body: ClassCorrectionRequestCreate) =>
+    post<ClassCorrectionRequestOut>("/classes/correction-requests", body),
+  reviewCorrectionRequest: (id: string, body: ClassCorrectionRequestReview) =>
+    post<ClassCorrectionRequestOut>(`/classes/correction-requests/${id}/review`, body),
   create: (body: Record<string, unknown>) => post<SchoolClassOut>("/classes", body),
   bulkCreate: (body: SchoolClassBulkCreate) => post<SchoolClassBulkCreateOut>("/classes/bulk", body),
   bulkAction: (classIds: string[], action: SchoolClassBulkActionKind) =>

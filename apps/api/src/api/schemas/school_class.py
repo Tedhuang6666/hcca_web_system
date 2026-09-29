@@ -256,6 +256,41 @@ class SchoolClassListItem(BaseModel):
     is_active: bool
 
 
+class MySchoolClassOut(SchoolClassListItem):
+    seat_number: int | None = None
+
+
+class ClassCorrectionRequestCreate(BaseModel):
+    requested_class_id: uuid.UUID
+    message: str | None = Field(None, max_length=2000)
+
+
+class ClassCorrectionRequestReview(BaseModel):
+    status: str = Field(..., pattern="^(approved|rejected)$")
+    class_id: uuid.UUID | None = None
+    review_note: str | None = Field(None, max_length=2000)
+
+
+class ClassCorrectionRequestOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    user_display_name: str
+    user_email: str
+    user_student_id: str | None = None
+    reported_class_id: uuid.UUID | None = None
+    reported_class_label: str | None = None
+    requested_class_id: uuid.UUID
+    requested_class_label: str
+    resolved_class_id: uuid.UUID | None = None
+    resolved_class_label: str | None = None
+    message: str | None = None
+    status: str
+    created_at: datetime
+    reviewed_by_id: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    review_note: str | None = None
+
+
 class SchoolClassOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
