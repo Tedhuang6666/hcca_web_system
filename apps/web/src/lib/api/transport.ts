@@ -73,21 +73,80 @@ function requestTimeoutMs(init: HccaRequestInit): number {
 
 function createRequestTimeout(signal: AbortSignal | null | undefined, timeoutMs: number) {
   const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
   const timer = setTimeout(() => {
     controller.abort(new Error(`API request timed out after ${timeoutMs}ms`));
+    signal?.removeEventListener("abort", onAbort);
   }, timeoutMs);
-  const onAbort = () => controller.abort(signal?.reason);
+  const cleanup = () => {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  };
 
   if (signal?.aborted) onAbort();
   else signal?.addEventListener("abort", onAbort, { once: true });
 
   return {
     signal: controller.signal,
-    cleanup: () => {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", onAbort);
-    },
+    cleanup,
   };
+}
+
+function responseWithBodyTimeout(
+  response: Response,
+  timeoutSignal: AbortSignal,
+  requestSignal: AbortSignal | null | undefined,
+  path: string,
+  timeoutMs: number,
+  cleanup: () => void,
+): Response {
+  if (!response.body) {
+    cleanup();
+    return response;
+  }
+
+  const reader = response.body.getReader();
+  let cleaned = false;
+  const finish = () => {
+    if (cleaned) return;
+    cleaned = true;
+    cleanup();
+  };
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          finish();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        finish();
+        if (timeoutSignal.aborted && !requestSignal?.aborted) {
+          const message = `後端 API 回應逾時（${Math.round(timeoutMs / 1000)} 秒）：${path}`;
+          reportClientError({ scope: "api.timeout", message });
+          controller.error(new NetworkRequestError(message));
+        } else {
+          controller.error(error);
+        }
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        finish();
+      }
+    },
+  });
+
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
 }
 
 export function isRequestAborted(error: unknown, signal?: AbortSignal | null): boolean {
@@ -123,6 +182,7 @@ export async function fetchWithRetry(
 ): Promise<{ response: Response; attempts: number }> {
   const timeout = createRequestTimeout(init.signal, requestTimeoutMs(init));
   let attempts = 0;
+  let timeoutTransferredToBody = false;
   try {
     while (true) {
       try {
@@ -130,7 +190,16 @@ export async function fetchWithRetry(
           `${API_BASE}${path}`,
           requestInitWithTrace({ ...init, signal: timeout.signal }, trace),
         );
-        return { response, attempts };
+        const timedResponse = responseWithBodyTimeout(
+          response,
+          timeout.signal,
+          init.signal,
+          path,
+          requestTimeoutMs(init),
+          timeout.cleanup,
+        );
+        timeoutTransferredToBody = Boolean(response.body);
+        return { response: timedResponse, attempts };
       } catch (error) {
         // 元件卸載或路由切換造成的取消不是網路故障；不要重試、開熔斷或回報錯誤。
         if (init.signal?.aborted) throw error;
@@ -150,7 +219,7 @@ export async function fetchWithRetry(
       }
     }
   } finally {
-    timeout.cleanup();
+    if (!timeoutTransferredToBody) timeout.cleanup();
   }
 }
 
