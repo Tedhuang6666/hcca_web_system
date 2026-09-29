@@ -20,6 +20,8 @@ import {
 import { toast } from "sonner";
 import { ApiError, classApi, usersApi } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePeopleManagementEmbed } from "@/components/admin/PeopleManagementEmbedContext";
+import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirect";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type {
@@ -59,7 +61,6 @@ const roleHelp: Record<string, string> = {
 function roleColor(roleKey: string) {
   return roleAccent[roleKey] ?? "var(--primary)";
 }
-
 function classTitle(c: SchoolClassListItem | SchoolClassOut | null) {
   if (!c) return "未選擇班級";
   return `${c.academic_year} 學年度 ${c.class_code} 班`;
@@ -142,7 +143,6 @@ function UserPicker({
     </div>
   );
 }
-
 function RepresentativeSetupPanel({ classes }: { classes: SchoolClassListItem[] }) {
   const activeClasses = useMemo(
     () => classes.filter((item) => item.is_active),
@@ -1381,6 +1381,11 @@ function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
 }
 
 export default function ClassesAdminPage() {
+  const embedded = usePeopleManagementEmbed();
+  return embedded ? <ClassManagementPanel /> : <PeopleManagementRedirect section="classes" />;
+}
+
+function ClassManagementPanel() {
   const { can } = usePermissions();
   const allowed = can("class:manage");
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
@@ -1441,60 +1446,57 @@ export default function ClassesAdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
-      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase" style={{ color: "var(--primary)" }}>
-            Class Operations
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            班級系統工作台
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            管理班級 Org、年度名冊、正式職位身分組與學號區間。
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
-          style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-          <UsersRound size={16} />
-          {loading ? "載入中" : `${classes.length} 個班級`}
-        </span>
-      </header>
-
-      <RepresentativeSetupPanel classes={classes} />
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
-        <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
-          <RosterFileImportPanel onImported={loadClasses} />
-          <CreateClassPanel onCreated={loadClasses} />
-          <ClassList
-            classes={classes}
-            selectedId={selectedId}
-            selectedIds={selectedClassIds}
-            onSelect={(id) => { setSelectedId(id); setMobileDetailOpen(true); }}
-            onSelectionChange={setSelectedClassIds}
-            onBulkAction={runBulkAction}
-            bulkBusy={bulkBusy}
-          />
-        </aside>
-        <main className={mobileDetailOpen ? "" : "hidden xl:block"}>
-          <div className="xl:hidden mb-3">
-            <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回班級清單" />
+    <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-5">
+        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+              班級與名冊
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+              管理班級、年度名冊、班級幹部與學號區間；人員身分和職位會在同一管理工作台維護。
+            </p>
           </div>
-          {selectedId ? (
-            <ClassWorkspace
-              key={selectedId}
-              classId={selectedId}
-              onClassChanged={loadClasses}
+          <span className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+            style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+            <UsersRound size={16} />
+            {loading ? "載入中" : `${classes.length} 個班級`}
+          </span>
+        </header>
+
+        <RepresentativeSetupPanel classes={classes} />
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
+          <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
+            <RosterFileImportPanel onImported={loadClasses} />
+            <CreateClassPanel onCreated={loadClasses} />
+            <ClassList
+              classes={classes}
+              selectedId={selectedId}
+              selectedIds={selectedClassIds}
+              onSelect={(id) => { setSelectedId(id); setMobileDetailOpen(true); }}
+              onSelectionChange={setSelectedClassIds}
+              onBulkAction={runBulkAction}
+              bulkBusy={bulkBusy}
             />
-          ) : (
-            <section className="rounded-md p-10 text-center text-sm"
-              style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-              請先建立或選擇班級。
-            </section>
-          )}
-        </main>
-      </div>
+          </aside>
+          <main className={mobileDetailOpen ? "" : "hidden xl:block"}>
+            <div className="xl:hidden mb-3">
+              <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回班級清單" />
+            </div>
+            {selectedId ? (
+              <ClassWorkspace
+                key={selectedId}
+                classId={selectedId}
+                onClassChanged={loadClasses}
+              />
+            ) : (
+              <section className="rounded-md p-10 text-center text-sm"
+                style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+                請先建立或選擇班級。
+              </section>
+            )}
+          </main>
+        </div>
     </div>
   );
 }

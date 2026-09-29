@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
+import { usePeopleManagementEmbed } from "@/components/admin/PeopleManagementEmbedContext";
+import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirect";
 
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
 import { today } from "@/lib/dateUtils";
@@ -160,6 +161,11 @@ function Metric({ label, value, tone = "normal" }: { label: string; value: numbe
 }
 
 export default function PermissionsAdminPage() {
+  const embedded = usePeopleManagementEmbed();
+  return embedded ? <OrganizationPermissionPanel /> : <PeopleManagementRedirect section="organization" />;
+}
+
+function OrganizationPermissionPanel() {
   const [users, setUsers] = useState<AdminUserDetail[]>([]);
   const [positions, setPositions] = useState<PositionSummary[]>([]);
   const [permCodes, setPermCodes] = useState<PermissionCodeInfo[]>([]);
@@ -251,11 +257,10 @@ export default function PermissionsAdminPage() {
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col" style={{ maxHeight: "calc(100vh - 4rem)" }}>
-      <AdminWorkbenchTabs />
+    <div className="min-h-[calc(100dvh-7rem)] min-h-0 flex flex-col">
       <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>自治管理工作台</h1>
+          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>組織、職位與權限</h1>
           <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
             {loading ? "載入中..." : `${activeOrgs.length} 個有效組織 · ${orgs.length - activeOrgs.length} 個停用 · ${activePositions.length} 個可指派職位`}
           </p>
@@ -1558,6 +1563,7 @@ function OrgCreateModal({ orgs, onClose, onDone }: { orgs: OrgRead[]; onClose: (
     </Modal>
   );
 }
+
 
 function OnboardingWizard({
   users, positions, orgs, permCodes, onClose, onDone,

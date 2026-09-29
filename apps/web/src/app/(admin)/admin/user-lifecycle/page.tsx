@@ -5,6 +5,8 @@ import { AlertTriangle, GraduationCap, Lock, RefreshCcw, Search, ShieldOff, User
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePeopleManagementEmbed } from "@/components/admin/PeopleManagementEmbedContext";
+import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirect";
 import { usePrompt } from "@/components/ui/ConfirmDialog";
 import {
   userLifecycleApi,
@@ -19,6 +21,10 @@ const ACTION_LABEL: Record<ActionKind, string> = {
 };
 
 export default function UserLifecyclePage() {
+  const embedded = usePeopleManagementEmbed();
+  return embedded ? <AccountLifecyclePanel /> : <PeopleManagementRedirect section="lifecycle" />;
+}
+function AccountLifecyclePanel() {
   const { isAdmin } = usePermissions();
   const prompt = usePrompt();
   const [userId, setUserId] = useState("");
@@ -102,17 +108,12 @@ export default function UserLifecyclePage() {
 
   return (
     <main className="mx-auto max-w-5xl p-4 md:p-6">
-      <header className="mb-5">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-          <GraduationCap size={14} aria-hidden />
-          學籍 / 帳號生命週期
-        </div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">學籍異動</h1>
-        <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-          凍結 / 校友歸檔 / 解凍個別使用者帳號。所有操作會結束 active 任期但保留 audit
-          痕跡。需「假名化」請走 <code>/admin/privacy</code>。
-        </p>
-      </header>
+        <header className="mb-5">
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">帳號停權與學籍</h1>
+          <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
+            凍結、校友歸檔或解凍個別帳號。所有操作都會結束有效任期並保留稽核紀錄；需假名化請前往隱私管理。
+          </p>
+        </header>
 
       <section
         className="mb-4 rounded-lg border bg-[var(--bg-surface)] p-4"
