@@ -35,15 +35,35 @@ const monitorHeaders = {
 
 async function requestJson(path, init = {}, { retries = 5 } = {}) {
   for (let attempt = 0; attempt < retries; attempt += 1) {
-    const response = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      headers: {
-        ...monitorHeaders,
-        Origin: baseUrl,
-        Referer: `${baseUrl}/`,
-        ...(init.headers || {}),
-      },
-    });
+    let response;
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        ...init,
+        headers: {
+          ...monitorHeaders,
+          Origin: baseUrl,
+          Referer: `${baseUrl}/`,
+          ...(init.headers || {}),
+        },
+      });
+    } catch (error) {
+      const message = (error instanceof Error ? error.message : String(error))
+        .replace(/\s+/gu, " ")
+        .slice(0, 240);
+      if (attempt === retries - 1) {
+        throw new Error(
+          `${path} network request failed after ${retries} attempts: ${message}`,
+          { cause: error },
+        );
+      }
+      const backoffMs = Math.min(60_000, 2_000 * 2 ** attempt);
+      process.stdout.write(
+        `retry ${path} network_error=${message} attempt=${attempt + 1}/${retries} ` +
+          `wait_ms=${backoffMs}\n`,
+      );
+      await delay(backoffMs);
+      continue;
+    }
     if (response.ok) return response.json();
 
     const body = (await response.text()).replace(/\s+/gu, " ").slice(0, 240);
