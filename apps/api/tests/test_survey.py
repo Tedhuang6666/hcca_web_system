@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -9,7 +10,8 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.org import Org
+from api.core.clock import local_today
+from api.models.org import Org, Position, UserPosition
 from api.models.survey import (
     QuestionType,
     Survey,
@@ -124,6 +126,81 @@ async def test_list_surveys_includes_response_count(db_session: AsyncSession) ->
     surveys = await survey_svc.list_surveys(db_session)
     match = next(s for s in surveys if s.id == survey.id)
     assert match.response_count == 1
+
+
+async def test_list_respondable_surveys_scans_past_first_hundred_candidates(
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session)
+    org = Org(name=f"問卷組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+
+    now = datetime.now(UTC)
+    surveys = [
+        Survey(
+            title=f"限制問卷-{index}-{uuid.uuid4().hex[:6]}",
+            status=SurveyStatus.OPEN,
+            is_public=False,
+            allowed_user_ids_json=json.dumps(
+                [str(user.id)] if index == 100 else [str(uuid.uuid4())]
+            ),
+            org_id=org.id,
+            created_by=user.id,
+            created_at=now - timedelta(seconds=index),
+        )
+        for index in range(101)
+    ]
+    db_session.add_all(surveys)
+    await db_session.flush()
+
+    result = await survey_svc.list_respondable_surveys(db_session, user, limit=1)
+
+    assert [survey.id for survey in result] == [surveys[100].id]
+
+
+async def test_survey_org_access_uses_only_current_user_positions(
+    db_session: AsyncSession,
+) -> None:
+    org = Org(name=f"任期問卷組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="問卷填答成員")
+    db_session.add(position)
+    await db_session.flush()
+    expired_user = await _make_user(db_session)
+    current_user = await _make_user(db_session)
+    today = local_today()
+    db_session.add_all(
+        [
+            UserPosition(
+                user_id=expired_user.id,
+                position_id=position.id,
+                start_date=today - timedelta(days=30),
+                end_date=today - timedelta(days=1),
+            ),
+            UserPosition(
+                user_id=current_user.id,
+                position_id=position.id,
+                start_date=today - timedelta(days=1),
+                end_date=today,
+            ),
+        ]
+    )
+    survey = Survey(
+        title="依目前任期開放的問卷",
+        status=SurveyStatus.OPEN,
+        is_public=False,
+        allowed_org_ids_json=json.dumps([str(org.id)]),
+        org_id=org.id,
+        created_by=expired_user.id,
+    )
+    db_session.add(survey)
+    await db_session.flush()
+
+    with pytest.raises(PermissionError):
+        await survey_svc.check_survey_access(db_session, survey, expired_user)
+    await survey_svc.check_survey_access(db_session, survey, current_user)
 
 
 async def test_close_expired_surveys_changes_only_expired_open_surveys(
