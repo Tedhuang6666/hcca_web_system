@@ -61,9 +61,7 @@ def render_generic_message(
         }
         for row in context.get("card_rows", [])
     ]
-    rendered_cta_url = safe_link_url(
-        _text(str(context.get("cta_url") or ""))
-    )
+    rendered_cta_url = safe_link_url(_text(str(context.get("cta_url") or "")))
     rendered_cta_label = _text(str(context.get("cta_label") or ""))
     rendered_buttons = [
         {

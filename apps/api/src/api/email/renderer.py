@@ -268,9 +268,11 @@ def render_personalized_text(
 ) -> str:
     """以受限 Jinja2 語法渲染文字；預覽可選擇將未提供的變數視為空字串。"""
     try:
-        return _personalization_environment(allow_missing_variables).from_string(
-            raw or ""
-        ).render(**variables)
+        return (
+            _personalization_environment(allow_missing_variables)
+            .from_string(raw or "")
+            .render(**variables)
+        )
     except TemplateError as exc:
         raise ValueError(f"佔位符渲染失敗：{exc}") from exc
 

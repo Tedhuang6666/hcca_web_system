@@ -47,8 +47,8 @@ from api.schemas.school_class import (
     SchoolClassOut,
     SchoolClassUpdate,
 )
-from api.services import school_class as class_svc
 from api.services import class_correction as correction_svc
+from api.services import school_class as class_svc
 from api.services import school_class_import as class_import_svc
 
 router = APIRouter(prefix="/classes", tags=["班級系統"])
