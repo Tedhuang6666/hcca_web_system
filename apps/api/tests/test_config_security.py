@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
 from api.core.config import _FALLBACK_SIGNING_KEY as _DEFAULT_SECRET
@@ -76,6 +77,24 @@ def test_disabled_api_docs_do_not_expose_openapi_route(monkeypatch: pytest.Monke
         getattr(route, "path", None) for route in app.routes
     }
     assert app.openapi()["paths"]  # 離線型別產生仍需能輸出 schema
+
+
+async def test_query_timing_headers_only_appear_in_debug(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.core.config import settings
+    from api.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        monkeypatch.setattr(settings, "DEBUG", False)
+        production_response = await client.get("/health")
+        assert production_response.status_code == 200
+        for name in ("X-Process-Time-Ms", "X-DB-Queries", "X-DB-Time-Ms"):
+            assert name not in production_response.headers
+
+        monkeypatch.setattr(settings, "DEBUG", True)
+        debug_response = await client.get("/health")
+        assert debug_response.status_code == 200
+        for name in ("X-Process-Time-Ms", "X-DB-Queries", "X-DB-Time-Ms"):
+            assert name in debug_response.headers
 
 
 def test_production_rejects_superuser_emails_autograms() -> None:

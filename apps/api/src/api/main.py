@@ -330,10 +330,8 @@ def create_app() -> FastAPI:
             "X-Request-ID",
             "X-Error-ID",
             "X-Trace-ID",
-            "X-Process-Time-Ms",
-            "X-DB-Queries",
-            "X-DB-Time-Ms",
-        ],
+        ]
+        + (["X-Process-Time-Ms", "X-DB-Queries", "X-DB-Time-Ms"] if settings.DEBUG else []),
     )
     app.add_middleware(
         SessionMiddleware,
@@ -588,10 +586,11 @@ def create_app() -> FastAPI:
                     category="http",
                 )
             duration_ms = (time.perf_counter() - start) * 1000
-            response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
             query_count, slow_count, query_ms = get_request_counters()
-            response.headers["X-DB-Queries"] = str(query_count)
-            response.headers["X-DB-Time-Ms"] = f"{query_ms:.1f}"
+            if settings.DEBUG:
+                response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
+                response.headers["X-DB-Queries"] = str(query_count)
+                response.headers["X-DB-Time-Ms"] = f"{query_ms:.1f}"
             if duration_ms > settings.SLOW_REQUEST_THRESHOLD_MS:
                 logger.warning(
                     "Slow request path=%s method=%s status=%s duration_ms=%.1f "
