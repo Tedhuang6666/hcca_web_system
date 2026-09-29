@@ -2782,6 +2782,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/classes/correction-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出待審核班級更正申請 */
+        get: operations["list_correction_requests_classes_correction_requests_get"];
+        put?: never;
+        /** 提交班級歸戶更正申請 */
+        post: operations["create_correction_request_classes_correction_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/classes/correction-requests/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查詢我的班級更正申請 */
+        get: operations["list_my_correction_requests_classes_correction_requests_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/classes/correction-requests/{request_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 審核班級更正申請 */
+        post: operations["review_correction_request_classes_correction_requests__request_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/classes/me": {
         parameters: {
             query?: never;
@@ -8873,6 +8925,23 @@ export interface paths {
         put?: never;
         /** 匯入全體學生/分班名單 */
         post: operations["import_roster_people_import_roster_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得全站帳號與人員統計 */
+        get: operations["get_people_stats_people_stats_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -16038,6 +16107,74 @@ export interface components {
              * @description 班代是否已向此學生收款（僅供班級紀錄）
              */
             is_class_collected: boolean;
+        };
+        /** ClassCorrectionRequestCreate */
+        ClassCorrectionRequestCreate: {
+            /** Message */
+            message?: string | null;
+            /**
+             * Requested Class Id
+             * Format: uuid
+             */
+            requested_class_id: string;
+        };
+        /** ClassCorrectionRequestOut */
+        ClassCorrectionRequestOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message */
+            message?: string | null;
+            /** Reported Class Id */
+            reported_class_id?: string | null;
+            /** Reported Class Label */
+            reported_class_label?: string | null;
+            /**
+             * Requested Class Id
+             * Format: uuid
+             */
+            requested_class_id: string;
+            /** Requested Class Label */
+            requested_class_label: string;
+            /** Resolved Class Id */
+            resolved_class_id?: string | null;
+            /** Resolved Class Label */
+            resolved_class_label?: string | null;
+            /** Review Note */
+            review_note?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By Id */
+            reviewed_by_id?: string | null;
+            /** Status */
+            status: string;
+            /** User Display Name */
+            user_display_name: string;
+            /** User Email */
+            user_email: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** User Student Id */
+            user_student_id?: string | null;
+        };
+        /** ClassCorrectionRequestReview */
+        ClassCorrectionRequestReview: {
+            /** Class Id */
+            class_id?: string | null;
+            /** Review Note */
+            review_note?: string | null;
+            /** Status */
+            status: string;
         };
         /** ClassManualMemberCreate */
         ClassManualMemberCreate: {
@@ -23214,6 +23351,26 @@ export interface components {
             /** Muted Modules */
             muted_modules: string[];
         };
+        /** MySchoolClassOut */
+        MySchoolClassOut: {
+            /** Academic Year */
+            academic_year: number;
+            /** Class Code */
+            class_code: string;
+            /** Grade */
+            grade: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Label */
+            label: string | null;
+            /** Seat Number */
+            seat_number?: number | null;
+        };
         /** NavigationProfileCreate */
         NavigationProfileCreate: {
             /** Audience */
@@ -25252,6 +25409,21 @@ export interface components {
             updated_at: string;
             /** User Id */
             user_id?: string | null;
+        };
+        /** PersonDirectoryStats */
+        PersonDirectoryStats: {
+            /** Account Count */
+            account_count: number;
+            /** Classed Count */
+            classed_count: number;
+            /** Linked Count */
+            linked_count: number;
+            /** Matched People Count */
+            matched_people_count: number;
+            /** Pending Link Count */
+            pending_link_count: number;
+            /** People Count */
+            people_count: number;
         };
         /** PersonListItem */
         PersonListItem: {
@@ -38969,6 +39141,114 @@ export interface operations {
             };
         };
     };
+    list_correction_requests_classes_correction_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassCorrectionRequestOut"][];
+                };
+            };
+        };
+    };
+    create_correction_request_classes_correction_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassCorrectionRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassCorrectionRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_correction_requests_classes_correction_requests_mine_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassCorrectionRequestOut"][];
+                };
+            };
+        };
+    };
+    review_correction_request_classes_correction_requests__request_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassCorrectionRequestReview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassCorrectionRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_my_class_classes_me_get: {
         parameters: {
             query?: never;
@@ -38984,7 +39264,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SchoolClassListItem"] | null;
+                    "application/json": components["schemas"]["MySchoolClassOut"] | null;
                 };
             };
         };
@@ -52758,6 +53038,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonRosterImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_people_stats_people_stats_get: {
+        parameters: {
+            query?: {
+                /** @description 姓名、學號、Email */
+                keyword?: string | null;
+                /** @description 班級 ID */
+                class_id?: string | null;
+                status?: components["schemas"]["PersonStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonDirectoryStats"];
                 };
             };
             /** @description Validation Error */
