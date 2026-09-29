@@ -273,12 +273,14 @@ def create_app() -> FastAPI:
 
     init_metrics()
 
+    api_docs_enabled = settings.DEBUG or settings.ENABLE_API_DOCS
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
         description="新竹高中班聯會數位整合系統 RESTful API",
-        docs_url="/docs" if (settings.DEBUG or settings.ENABLE_API_DOCS) else None,
-        redoc_url="/redoc" if (settings.DEBUG or settings.ENABLE_API_DOCS) else None,
+        openapi_url="/openapi.json" if api_docs_enabled else None,
+        docs_url="/docs" if api_docs_enabled else None,
+        redoc_url="/redoc" if api_docs_enabled else None,
         lifespan=lifespan,
     )
     from api.core.observability import init_api_tracing
