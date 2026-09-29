@@ -23,9 +23,11 @@
 	@theme_asset path /theme.js
 	header @theme_asset Cache-Control "public, max-age=604800, stale-while-revalidate=604800"
 
-	# Prometheus 只透過 Docker 內網直接抓取 api:8000/metrics；不得從公開 /api 暴露。
-	@public_metrics path /api/metrics
-	respond @public_metrics 404
+	# 互斥 handle 依路徑明確度先於 /api/* handle_path 命中，並攔截 metrics 尾端變體。
+	# Prometheus 只透過 Docker 內網直接抓取 api:8000/metrics。
+	handle /api/metrics* {
+		respond 404
+	}
 
 	handle_path /api/* {
 		reverse_proxy api:8000 {
