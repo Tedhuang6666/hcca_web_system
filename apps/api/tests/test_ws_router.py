@@ -9,15 +9,18 @@ manager 本身（connect/broadcast/心跳）已由 test_ws_manager.py 涵蓋。
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.permission_codes import PermissionCode
 from api.core.security import add_to_blacklist, create_access_token, create_refresh_token
 from api.models.user import User
+from api.models.user_session import UserSession
 from api.routers.ws import _assert_room_access, _authenticate_ws, _ws_token_from_websocket
 
 
@@ -92,14 +95,42 @@ async def test_authenticate_ws_missing_token_closes_with_auth_error() -> None:
     assert ws.closed_with == (4001, "缺少認證 Token")
 
 
-async def test_authenticate_ws_valid_token_returns_subject(member_user: User) -> None:
+async def test_authenticate_ws_valid_token_returns_subject(
+    member_user: User, db_session: AsyncSession
+) -> None:
     token = create_access_token(str(member_user.id))
     ws = FakeWebSocket(header_token=token)
-    auth = await _authenticate_ws(ws)  # type: ignore[arg-type]
+    auth = await _authenticate_ws(ws, db_session)  # type: ignore[arg-type]
     assert auth is not None
     assert auth[0] == str(member_user.id)
     assert auth[2] is not None
     assert ws.closed_with is None
+
+
+async def test_authenticate_ws_rejects_revoked_database_session(
+    member_user: User, db_session: AsyncSession
+) -> None:
+    now = datetime.now(UTC)
+    user_session = UserSession(
+        user_id=member_user.id,
+        refresh_jti_hash=uuid.uuid4().hex,
+        auth_time=now,
+        last_seen_at=now,
+        rotated_at=now,
+        expires_at=now + timedelta(hours=1),
+        absolute_expires_at=now + timedelta(days=1),
+        revoked_at=now,
+        revoked_reason="test",
+    )
+    db_session.add(user_session)
+    await db_session.flush()
+
+    token = create_access_token(str(member_user.id), session_id=str(user_session.id))
+    ws = FakeWebSocket(header_token=token)
+    auth = await _authenticate_ws(ws, db_session)  # type: ignore[arg-type]
+
+    assert auth is None
+    assert ws.closed_with == (4001, "帳號或登入工作階段已停用")
 
 
 async def test_authenticate_ws_wrong_token_type_rejected(member_user: User) -> None:

@@ -2,18 +2,23 @@
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.auth_cookies import access_token_from_cookies
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.security import decode_token, is_blacklisted, is_session_revoked
 from api.core.ws_manager import WSCapacityError, manager
 from api.dependencies.permissions import require_permission
-from api.services.permission import get_user_permission_codes
+from api.models.user import User
+from api.models.user_session import UserSession
+from api.services.permission import active_tenure_filter, get_user_permission_codes
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +108,10 @@ def _client_ip(websocket: WebSocket) -> str:
     return websocket.client.host if websocket.client else "unknown"
 
 
-async def _authenticate_ws(websocket: WebSocket) -> tuple[str, str | None, int | None] | None:
+async def _authenticate_ws(
+    websocket: WebSocket,
+    db: AsyncSession | None = None,
+) -> tuple[str, str | None, int | None] | None:
     """
     驗證 WebSocket 連線的 JWT Token（優先使用 Authorization header，否則使用 HttpOnly cookie）。
     回傳 user_id 字串；若驗證失敗則關閉連線並回傳 None。
@@ -128,9 +136,32 @@ async def _authenticate_ws(websocket: WebSocket) -> tuple[str, str | None, int |
             await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token 使用者")
             return None
         session_id = payload.get("sid")
-        if session_id is not None and await is_session_revoked(str(session_id)):
+        try:
+            user_uuid = uuid.UUID(user_id)
+            session_uuid = uuid.UUID(str(session_id)) if session_id is not None else None
+        except (TypeError, ValueError):
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的工作階段識別")
+            return None
+        if session_uuid is not None and await is_session_revoked(str(session_uuid)):
             await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="工作階段已撤銷")
             return None
+
+        try:
+            if db is None:
+                async with AsyncSessionLocal() as session:
+                    identity_is_active = await _ws_identity_is_active(
+                        session, user_uuid, session_uuid
+                    )
+            else:
+                identity_is_active = await _ws_identity_is_active(db, user_uuid, session_uuid)
+        except Exception:
+            logger.exception("WebSocket database identity validation failed")
+            await websocket.close(code=1013, reason="目前無法驗證登入工作階段")
+            return None
+        if not identity_is_active:
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="帳號或登入工作階段已停用")
+            return None
+
         expires_at = payload.get("exp")
         return (
             user_id,
@@ -144,6 +175,32 @@ async def _authenticate_ws(websocket: WebSocket) -> tuple[str, str | None, int |
     except InvalidTokenError:
         await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token")
         return None
+
+
+async def _ws_identity_is_active(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID | None,
+) -> bool:
+    active_user = await db.scalar(
+        select(User.id).where(User.id == user_id, User.is_active.is_(True))
+    )
+    if active_user is None:
+        return False
+    if session_id is None:
+        return True
+
+    now = datetime.now(UTC)
+    active_session = await db.scalar(
+        select(UserSession.id).where(
+            UserSession.id == session_id,
+            UserSession.user_id == user_id,
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+            UserSession.absolute_expires_at > now,
+        )
+    )
+    return active_session is not None
 
 
 async def _assert_room_access(room: str, user_id: str) -> None:
@@ -182,7 +239,11 @@ async def _assert_room_access(room: str, user_id: str) -> None:
             is_member = await db.scalar(
                 select(UserPosition.id)
                 .join(Position, UserPosition.position_id == Position.id)
-                .where(UserPosition.user_id == user_uuid, Position.org_id == org_id)
+                .where(
+                    UserPosition.user_id == user_uuid,
+                    Position.org_id == org_id,
+                    *active_tenure_filter(local_today()),
+                )
                 .limit(1)
             )
             if not is_member:
