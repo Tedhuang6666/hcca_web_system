@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
@@ -418,3 +419,24 @@ async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> Non
     assert detail_sheet["D2"].value == "'=2+2"
     assert summary_sheet["A2"].value == "'=1+1"
     assert summary_sheet["B3"].value == "'=2+2"
+
+
+async def test_build_survey_export_renders_off_event_loop(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    survey = await _make_draft_survey(db_session)
+    event_loop_thread = threading.current_thread()
+    render_threads: list[threading.Thread] = []
+
+    def render_export(*_args: object) -> bytes:
+        render_threads.append(threading.current_thread())
+        return b"xlsx"
+
+    monkeypatch.setattr(survey_svc, "_render_survey_export", render_export)
+
+    data = await survey_svc.build_survey_export(db_session, survey)
+
+    assert data == b"xlsx"
+    assert len(render_threads) == 1
+    assert render_threads[0] is not event_loop_thread
