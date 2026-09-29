@@ -698,7 +698,7 @@ function getAdminActions(
     actions.push({ href: "/shop/admin", label: "商品後台", detail: "商品、訂單與結單", icon: ShoppingCart });
   }
   if (isAdmin || can("admin:all")) {
-    actions.push({ href: "/admin/modules", label: "模組維護", detail: "開關、維護與公告", icon: Wrench });
+    actions.push({ href: "/admin/system?tab=modules", label: "模組維護", detail: "開關、維護與公告", icon: Wrench });
   }
   return actions.slice(0, 6);
 }
