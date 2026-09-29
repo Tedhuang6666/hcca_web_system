@@ -293,21 +293,26 @@ async def persist_client_error_incident(
     """Persist browser failures beside API and Celery incidents for one operational timeline."""
     release = str(context.get("release") or "").strip() or None
     fingerprint_message = normalize_client_incident_message(message, scope)
+    sitewide_csp = scope == "securitypolicyviolation"
+    incident_path = "browser-csp" if sitewide_csp else path or "unknown"
     return await persist_error_incident(
         error_id=error_id,
         exception_type="ClientError",
         message=fingerprint_message,
-        path=path or "unknown",
+        path=incident_path,
         status_code=0,
         category="client",
         trace_id=trace_id,
         request_id=request_id,
         service="web",
         release_version=release,
-        title=f"web: {scope} at {path or 'unknown'}",
+        title="web: securitypolicyviolation (site-wide CSP)"
+        if sitewide_csp
+        else f"web: {scope} at {path or 'unknown'}",
         details={
             "scope": scope,
             "message": message,
+            "page_path": path or "unknown",
             "stack_head": stack,
             "client_context": context,
             "client_ip": client_ip,

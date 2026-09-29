@@ -10,6 +10,7 @@ const CHUNK_RELOAD_KEY = "hcca:chunk-reload-at";
 const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
 
 const IGNORED_RESOURCE_HOSTS = new Set([
+  "connect.facebook.net",
   "static.cloudflareinsights.com",
   "server.arcgisonline.com",
 ]);
@@ -196,6 +197,7 @@ function recoverFromChunkFailure(url: string | null): void {
 
 function isIgnoredWindowError(message: string): boolean {
   return message === "Script error."
+    || /window\.ethereum\.selectedAddress\s*=\s*undefined/i.test(message)
     || /Error invoking postMessage:\s*Java object is gone/i.test(message)
     || /window\.webkit\.messageHandlers/i.test(message);
 }
@@ -238,9 +240,11 @@ export function installGlobalClientErrorReporter(): () => void {
     reportClientError({ ...details, scope: "unhandledrejection" });
   };
   const onSecurityPolicyViolation = (event: SecurityPolicyViolationEvent) => {
+    if (event.disposition === "report") return;
     const blockedResource = normalizedTransientResourceUrl(event.blockedURI || null);
+    const state = event.disposition === "enforce" ? "blocked" : "violated";
     reportClientError({
-      message: `CSP blocked ${event.effectiveDirective || "resource"}: ${event.blockedURI || "unknown"}`,
+      message: `CSP ${state} ${event.effectiveDirective || "resource"}: ${event.blockedURI || "unknown"}`,
       scope: "securitypolicyviolation",
       dedupeKey: `${event.effectiveDirective}:${blockedResource}`,
     });

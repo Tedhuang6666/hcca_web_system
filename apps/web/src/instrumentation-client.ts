@@ -32,6 +32,24 @@ function loadSentry(): Promise<SentryClient> {
         environment: process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV,
         tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || "0.05"),
         sendDefaultPii: false,
+        beforeSend(event) {
+          const values = event.exception?.values ?? [];
+          const messages = [event.message, ...values.map((value) => value.value)]
+            .filter((message): message is string => Boolean(message));
+          if (messages.some((message) =>
+            message === "Script error."
+            || /window\.ethereum\.selectedAddress\s*=\s*undefined/i.test(message)
+          )) {
+            return null;
+          }
+
+          const frames = values.flatMap((value) => value.stacktrace?.frames ?? []);
+          const extensionFrame = /^(chrome|moz|safari-web|ms-browser)-extension:\/\//i;
+          if (frames.length > 0 && frames.every((frame) => extensionFrame.test(frame.filename ?? ""))) {
+            return null;
+          }
+          return event;
+        },
       });
       return Sentry;
     });

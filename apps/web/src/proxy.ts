@@ -3,6 +3,7 @@ import {
   isIndexablePublicPath,
   isMaintenanceExempt,
 } from "@/lib/route-access";
+import { BRANDING } from "@/lib/branding";
 
 const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -109,16 +110,23 @@ function webSocketSources(): string[] {
     sources.add("wss://localhost:8000");
   }
   const configuredWsUrl = process.env.NEXT_PUBLIC_WS_URL;
+  let configuredSourceAdded = false;
   if (configuredWsUrl) {
     try {
       const parsed = new URL(configuredWsUrl.replace(/^http/, "ws"));
-      if (process.env.NODE_ENV === "production" && ["localhost", "127.0.0.1"].includes(parsed.hostname)) {
-        return [...sources];
+      const isProductionLocalhost = process.env.NODE_ENV === "production"
+        && ["localhost", "127.0.0.1"].includes(parsed.hostname);
+      if (!isProductionLocalhost) {
+        sources.add(`${parsed.protocol}//${parsed.host}`);
+        configuredSourceAdded = true;
       }
-      sources.add(`${parsed.protocol}//${parsed.host}`);
     } catch {
       // 無效的公開 WebSocket URL 由前端設定檢查處理，不讓 CSP 建立失敗。
     }
+  }
+  if (process.env.NODE_ENV === "production" && !configuredSourceAdded) {
+    // wsBase() falls back to the public site origin when no public WS URL is set.
+    sources.add(`wss://${BRANDING.domain}`);
   }
   return [...sources];
 }
