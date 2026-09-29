@@ -142,6 +142,37 @@ describe("API helpers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps the request timeout active while the response body is still streaming", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockImplementation(
+      (input: string, init: RequestInit) => {
+        if (input === "/api/analytics/client-metrics/batch") {
+          return Promise.resolve(new Response(null, { status: 202 }));
+        }
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init.signal?.addEventListener("abort", () => {
+              controller.error(new DOMException("Aborted", "AbortError"));
+            }, { once: true });
+          },
+        });
+        return Promise.resolve(new Response(body, {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = request("/test/stalled-body");
+    const assertion = expect(pending).rejects.toThrow("後端 API 回應逾時（15 秒）");
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
   it("treats a 401 after refresh as an expired session", async () => {
     localStorage.setItem("user_id", "user-401-retry");
     const fetchMock = vi.fn()
