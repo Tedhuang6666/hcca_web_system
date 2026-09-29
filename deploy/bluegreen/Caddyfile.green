@@ -22,8 +22,10 @@
 	@theme_asset path /theme.js
 	header @theme_asset Cache-Control "public, max-age=604800, stale-while-revalidate=604800"
 
-	@public_metrics path /api/metrics
-	respond @public_metrics 404
+	# 與 /api/* handle_path 互斥，並攔截 metrics 尾端變體。
+	handle /api/metrics* {
+		respond 404
+	}
 
 	handle_path /api/* {
 		reverse_proxy api-green:8000 {

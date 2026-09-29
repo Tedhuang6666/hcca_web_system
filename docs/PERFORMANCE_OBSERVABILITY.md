@@ -11,7 +11,7 @@
 | 真實使用者（RUM） | `WebVitalsReporter`、`PerformanceMonitor`、`client-metrics` | LCP、INP、CLS、FCP、navigation TTFB/total、API/fetch、互動回饋、resource、long task、client error | 依 route、device、auth、release 找出使用者實際慢點 |
 | 公開 synthetic | Celery PSI/CrUX collector | Lighthouse/PageSpeed score、LCP、INP、CLS、FCP、TTFB、TBT、Speed Index | 可重現的 public mobile/desktop 基準 |
 | 登入 synthetic | `.github/workflows/authenticated-performance.yml` | 所有可發現 static page，加上設定與 RUM 發現的 protected route；mobile/desktop Lighthouse | 驗證登入後頁面與版本 regression |
-| API / infrastructure | `/api/metrics`、Sentry、query audit | endpoint histogram、HTTP error/timeout/slow request、DB query count/time、Redis/Celery health | 將 frontend 慢點定位到 API、DB、Redis 或第三方 |
+| API / infrastructure | Docker 內網的 Prometheus `/metrics`、Sentry、query audit | endpoint histogram、HTTP error/timeout/slow request、DB query count/time、Redis/Celery health | 將 frontend 慢點定位到 API、DB、Redis 或第三方 |
 
 ## 維度與統計規則
 
@@ -57,7 +57,7 @@ query time/count 或 Redis health；若只從某個 release 開始，優先做�
   template 與 release 建立 regression alert；不要只用全站平均值。
 
 告警處理時先確認 telemetry 自己沒有造成放大：檢查 client-metrics batch 數量、
-429/5xx backoff、Redis buffer 上限與 `/api/metrics` 的 request duration。
+429/5xx backoff、Redis buffer 上限與 Prometheus API `/metrics` 的 request duration。
 
 ## Release / deploy gate
 
@@ -66,7 +66,7 @@ query time/count 或 Redis health；若只從某個 release 開始，優先做�
 ```text
 完整測試 → git push → CI / Docker image → smart deploy
 → /api/ready（DB + Redis）→ public smoke → authenticated Lighthouse
-→ /api/metrics build_info / route metrics → dashboard release 對照
+→ Prometheus API `/metrics` build_info / route metrics → dashboard release 對照
 ```
 
 `hcca_build_info` 應優先顯示 `APP_RELEASE`／`BUILD_COMMIT`，缺少時至少回退到
@@ -89,7 +89,7 @@ npm run lint
 uv run --project apps/api pytest apps/api/tests/test_observability.py -q
 uv run --project apps/api ruff check apps/api/src libs/shared/src
 curl -fsS https://hcca.tw/api/ready
-curl -fsS https://hcca.tw/api/metrics
+# Confirm the Prometheus target api:8000/metrics is UP from its Docker network.
 ```
 
 若本機 Redis/PostgreSQL 或 Sentry ingest 不可用，需把它標為環境限制，不能把
