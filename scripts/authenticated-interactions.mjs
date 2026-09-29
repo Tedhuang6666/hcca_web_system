@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { launch: launchChrome } = require("chrome-launcher");
@@ -24,21 +25,55 @@ const monitorHeaders = {
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
 };
 
-async function requestJson(path, init = {}) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...monitorHeaders,
-      Origin: baseUrl,
-      Referer: `${baseUrl}/`,
-      ...(init.headers || {}),
-    },
-  });
-  if (!response.ok) {
+async function requestJson(path, init = {}, { retries = 5 } = {}) {
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    let response;
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        ...init,
+        headers: {
+          ...monitorHeaders,
+          Origin: baseUrl,
+          Referer: `${baseUrl}/`,
+          ...(init.headers || {}),
+        },
+      });
+    } catch (error) {
+      const message = (error instanceof Error ? error.message : String(error))
+        .replace(/\s+/gu, " ")
+        .slice(0, 240);
+      if (attempt === retries - 1) {
+        throw new Error(
+          `${path} network request failed after ${retries} attempts: ${message}`,
+          { cause: error },
+        );
+      }
+      const backoffMs = Math.min(60_000, 2_000 * 2 ** attempt);
+      process.stdout.write(
+        `retry ${path} network_error=${message} attempt=${attempt + 1}/${retries} ` +
+          `wait_ms=${backoffMs}\n`,
+      );
+      await delay(backoffMs);
+      continue;
+    }
+    if (response.ok) return response.json();
+
     const body = (await response.text()).replace(/\s+/gu, " ").slice(0, 240);
-    throw new Error(`${path} returned HTTP ${response.status}: ${body}`);
+    const retryable = response.status === 429 || response.status >= 500;
+    if (!retryable || attempt === retries - 1) {
+      throw new Error(`${path} returned HTTP ${response.status}: ${body}`);
+    }
+    const retryAfterSeconds = Number(response.headers.get("retry-after"));
+    const backoffMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? Math.min(60_000, retryAfterSeconds * 1_000)
+      : Math.min(60_000, 2_000 * 2 ** attempt);
+    process.stdout.write(
+      `retry ${path} status=${response.status} attempt=${attempt + 1}/${retries} ` +
+        `wait_ms=${backoffMs}\n`,
+    );
+    await delay(backoffMs);
   }
-  return response.json();
+  throw new Error(`${path} request retry loop exhausted`);
 }
 
 async function assertAuthenticated(url, cookieHeader) {
