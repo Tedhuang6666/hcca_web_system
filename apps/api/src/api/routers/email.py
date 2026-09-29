@@ -950,11 +950,14 @@ async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPrev
     definitions = _normalize_definitions(body.variable_definitions)
     conditional_rules = _normalize_conditional_rules(definitions, body.conditional_rules)
     preview_row = body.preview_recipient
+    preview_variables = dict(body.preview_variables)
+    if preview_row:
+        preview_variables.update(preview_row.variables)
     custom = apply_conditional_rules(
         _merged_custom_variables(
             definitions,
             body.default_variables,
-            preview_row.variables if preview_row else body.preview_variables,
+            preview_variables,
         ),
         conditional_rules,
     )
@@ -967,9 +970,19 @@ async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPrev
         student_id=user.student_id if not preview_row else None,
         custom_variables=custom,
     )
-    html = render_generic_message(
-        body.subject, body.body, _build_context(body, conditional_rules), personal
-    )
+    try:
+        html = render_generic_message(
+            body.subject,
+            body.body,
+            _build_context(body, conditional_rules),
+            personal,
+            allow_missing_variables=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"信件預覽內容格式有誤：{exc}",
+        ) from exc
     return EmailPreviewOut(html=html)
 
 

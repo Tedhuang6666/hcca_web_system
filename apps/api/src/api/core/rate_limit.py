@@ -91,6 +91,7 @@ class SimpleRateLimitMiddleware:
             ("/auth/mfa", 10, 60),
             ("/admin/", 90, 60),
             ("/notifications/email", 10, 60),
+            ("/email/preview", 120, 60),
             ("/email", 20, 60),
             ("/documents/attachments", 15, 60),
             ("/surveys", 40, 60),
@@ -103,6 +104,20 @@ class SimpleRateLimitMiddleware:
         req_limit = int(config.get("global_requests") or self.requests)
         win = int(config.get("global_window_seconds") or self.window_seconds)
         overrides = config.get("overrides")
+        # 即使 Redis 已保存舊的 /email 廣泛規則，也保留即時預覽專屬配額；
+        # 管理者設定同一路徑時仍以明確的精確規則為準。
+        if path == "/email/preview":
+            if isinstance(overrides, list):
+                for item in overrides:
+                    if isinstance(item, dict) and item.get("path_prefix") == path:
+                        return (
+                            enabled,
+                            int(item.get("requests") or req_limit),
+                            int(item.get("window_seconds") or win),
+                        )
+            for prefix, req, override_window in self._overrides:
+                if prefix == path:
+                    return enabled, req, override_window
         if isinstance(overrides, list):
             for item in overrides:
                 if not isinstance(item, dict):
@@ -114,14 +129,16 @@ class SimpleRateLimitMiddleware:
                         int(item.get("requests") or req_limit),
                         int(item.get("window_seconds") or win),
                     )
-        for prefix, req, win in self._overrides:
+        for prefix, req, override_window in self._overrides:
             if path.startswith(prefix):
-                return enabled, req, win
+                return enabled, req, override_window
         return enabled, req_limit, win
 
     @staticmethod
     def _route_template(path: str) -> str:
         """將高基數 URL 歸併成有限的路由模板，避免每個資源 ID 建立新 key。"""
+        if path == "/email/preview":
+            return path
         segments = [segment for segment in path.split("/") if segment]
         if not segments:
             return "/"

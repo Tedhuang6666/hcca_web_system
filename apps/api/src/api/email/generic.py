@@ -23,6 +23,7 @@ def render_generic_message(
     context: dict,
     variables: dict | None = None,
     body_format: str | None = None,
+    allow_missing_variables: bool = False,
 ) -> str:
     """組裝 generic 範本 context 並渲染為完整 HTML（寄信頁、預約寄送共用）。
 
@@ -36,17 +37,17 @@ def render_generic_message(
     personal = variables or {}
 
     def _text(value: str) -> str:
-        return render_personalized_text(value, personal) if personal else value
+        return (
+            render_personalized_text(
+                value, personal, allow_missing_variables=allow_missing_variables
+            )
+            if personal
+            else value
+        )
 
-    rendered_subject = render_personalized_text(subject, personal) if personal else subject
-    rendered_body = (
-        render_personalized_text(body_markdown or "", personal) if personal else body_markdown or ""
-    )
-    rendered_heading = (
-        render_personalized_text(str(context.get("heading") or ""), personal)
-        if personal
-        else context.get("heading", "")
-    )
+    rendered_subject = _text(subject)
+    rendered_body = _text(body_markdown or "")
+    rendered_heading = _text(str(context.get("heading") or ""))
     rendered_banner_image_url = (
         absolutize_url(_text(str(context.get("banner_image_url", ""))))
         if context.get("banner_image_url")
@@ -55,25 +56,15 @@ def render_generic_message(
     rendered_banner_image_alt = _text(str(context.get("banner_image_alt", "")))
     rendered_rows = [
         {
-            "label": render_personalized_text(str(row.get("label", "")), personal)
-            if personal
-            else row.get("label", ""),
-            "value": render_personalized_text(str(row.get("value", "")), personal)
-            if personal
-            else row.get("value", ""),
+            "label": _text(str(row.get("label", ""))),
+            "value": _text(str(row.get("value", ""))),
         }
         for row in context.get("card_rows", [])
     ]
     rendered_cta_url = safe_link_url(
-        render_personalized_text(str(context.get("cta_url") or ""), personal)
-        if personal
-        else str(context.get("cta_url", ""))
+        _text(str(context.get("cta_url") or ""))
     )
-    rendered_cta_label = (
-        render_personalized_text(str(context.get("cta_label") or ""), personal)
-        if personal
-        else context.get("cta_label", "")
-    )
+    rendered_cta_label = _text(str(context.get("cta_label") or ""))
     rendered_buttons = [
         {
             "label": _text(str(btn.get("label", ""))),
