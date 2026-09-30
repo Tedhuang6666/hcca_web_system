@@ -13,6 +13,7 @@
 - 部署：[SMART_DEPLOY.md](SMART_DEPLOY.md)，核對當次使用的 compose 與部署腳本。
 - 效能：[PERFORMANCE_OBSERVABILITY.md](PERFORMANCE_OBSERVABILITY.md)、[CACHE_POLICY.md](CACHE_POLICY.md)、[RENDERING_MATRIX.md](RENDERING_MATRIX.md)。
 - 基礎設施：[infra/README.md](../infra/README.md)、[observability/README.md](../observability/README.md)。
+- 安全：[持續安全測試與首輪證據](SECURITY_TESTING.md)。
 - 獨立 bot：[apps/discord-bot/README.md](../apps/discord-bot/README.md)。
 
 `audits/`、`BASELINE_METRICS.md`、`HOST_MIGRATION_PERFORMANCE_REPORT_20260818.md` 是特定時間的證據，

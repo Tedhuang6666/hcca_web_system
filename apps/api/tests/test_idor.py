@@ -12,7 +12,7 @@
 
 目前涵蓋模組：
   - 商品訂單 (GET /shop/orders/{order_id})
-  - 通知 (GET /notifications/{notification_id})
+  - 通知 (PATCH /notifications/inbox/{notification_id}/read)
   - 問卷填答記錄列表 (GET /surveys/{survey_id}/responses) — 需 survey:manage 或活動負責人
   - 陳情案件 (GET /petitions/{case_id}) — 以 id 直查時仍需 _assert_case_access 檢查
 """
@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -111,7 +111,11 @@ async def test_shop_order_idor_returns_404(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_shop_order_cancel_idor_returns_403(db_session: AsyncSession) -> None:
+async def test_shop_order_cancel_idor_returns_403(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    authed_client_factory: Callable[[User], AsyncClient],
+) -> None:
     """User B 無法取消 User A 的訂單，應得 403。
 
     保護邏輯位於 POST /orders/{order_id}/cancel：
@@ -129,16 +133,25 @@ async def test_shop_order_cancel_idor_returns_403(db_session: AsyncSession) -> N
     db_session.add(order)
     await db_session.flush()
 
-    async with _make_authed_client(db_session, user_b) as client_b:
-        resp = await client_b.post(
-            f"/shop/orders/{order.id}/cancel",
-            json={"reason": "test"},
-            headers={"X-CSRF-Token": "test"},
-        )
+    path = f"/shop/orders/{order.id}/cancel"
+    anonymous = await client.post(path, json={"reason": "test"})
+    assert anonymous.status_code == 401
 
-    assert resp.status_code in (403, 404), (
-        f"User B 不應能取消 User A 的訂單，期望 403/404，實際 {resp.status_code}"
+    client_b = authed_client_factory(user_b)
+    resp = await client_b.post(path, json={"reason": "test"})
+
+    assert resp.status_code == 403, (
+        f"User B 不應能取消 User A 的訂單，期望 403，實際 {resp.status_code}"
     )
+    assert resp.json()["detail"] == "無權取消此訂單"
+    await db_session.refresh(order)
+    assert order.status == OrderStatus.PENDING
+
+    client_a = authed_client_factory(user_a)
+    allowed = await client_a.post(path, json={"reason": "owner cancellation"})
+    assert allowed.status_code == 200
+    await db_session.refresh(order)
+    assert order.status == OrderStatus.CANCELLED
 
 
 @pytest.mark.asyncio
@@ -168,10 +181,14 @@ async def test_superuser_can_access_any_order(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_notification_idor(db_session: AsyncSession) -> None:
+async def test_notification_idor(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    authed_client_factory: Callable[[User], AsyncClient],
+) -> None:
     """User B 無法讀取 User A 的站內通知。
 
-    通知端點 GET /notifications/{notification_id} 應回傳 403 或 404。
+    標記已讀必須通過 CSRF 後才驗證歸屬；未授權寫入也不能改變資料。
     """
     from api.models.notification import Notification
 
@@ -187,16 +204,24 @@ async def test_notification_idor(db_session: AsyncSession) -> None:
     db_session.add(notif)
     await db_session.flush()
 
-    # PATCH /inbox/{id}/read 以 WHERE user_id=current_user 過濾 → user_b 拿到 404
-    async with _make_authed_client(db_session, user_b) as client_b:
-        resp = await client_b.patch(
-            f"/notifications/inbox/{notif.id}/read",
-            headers={"X-CSRF-Token": "test"},
-        )
+    path = f"/notifications/inbox/{notif.id}/read"
+    anonymous = await client.patch(path)
+    assert anonymous.status_code == 401
 
-    assert resp.status_code in (403, 404), (
-        f"User B 不應能標記 User A 的通知為已讀，期望 403/404，實際 {resp.status_code}"
+    client_b = authed_client_factory(user_b)
+    resp = await client_b.patch(path)
+
+    assert resp.status_code == 404, (
+        f"User B 不應能標記 User A 的通知為已讀，期望 404，實際 {resp.status_code}"
     )
+    await db_session.refresh(notif)
+    assert not notif.is_read
+
+    client_a = authed_client_factory(user_a)
+    allowed = await client_a.patch(path)
+    assert allowed.status_code == 200
+    await db_session.refresh(notif)
+    assert notif.is_read
 
 
 # ---------------------------------------------------------------------------

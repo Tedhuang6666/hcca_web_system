@@ -1,0 +1,19 @@
+id: hcca-public-auth-boundary
+info:
+  name: HCCA unauthenticated API success requires validation
+  author: hcca
+  severity: high
+  description: A 2xx response needs manual validation; no response body is extracted.
+  tags: hcca,auth
+  metadata:
+    max-request: 2
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/auth/me"
+      - "{{BaseURL}}/api/notifications/inbox"
+    redirects: false
+    matchers:
+      - type: dsl
+        dsl:
+          - "status_code >= 200 && status_code < 300"

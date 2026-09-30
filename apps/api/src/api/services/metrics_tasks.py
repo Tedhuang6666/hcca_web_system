@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import cast
 
 from redis import Redis
@@ -42,7 +43,18 @@ def collect_queue_depth(self) -> dict[str, int]:  # type: ignore[type-arg]
     max_retries=0,
 )
 def write_heartbeat(self) -> None:  # type: ignore[type-arg]
-    _HEARTBEAT_PATH.write_text(str(time.time()))
+    # 在同目錄建立私有暫存檔，再原子替換目錄項目；不跟隨既有 symlink／hardlink，
+    # healthcheck 也不會讀到 truncate 後尚未寫完的空檔。
+    with NamedTemporaryFile(
+        mode="w", dir=_HEARTBEAT_PATH.parent, prefix=".hcca-heartbeat-", delete=False
+    ) as temporary:
+        temporary_path = Path(temporary.name)
+        try:
+            temporary.write(str(time.time()))
+            temporary.flush()
+            temporary_path.replace(_HEARTBEAT_PATH)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
 
 __all__ = ["collect_queue_depth", "write_heartbeat"]
