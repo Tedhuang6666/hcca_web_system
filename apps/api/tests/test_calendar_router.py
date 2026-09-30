@@ -11,6 +11,12 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 
 from api.models.calendar import CalendarEvent, CalendarVisibility
+from api.models.document import (
+    Document,
+    DocumentClassification,
+    DocumentStatus,
+    DocumentVisibility,
+)
 from api.models.google_calendar import OrgGoogleCalendarConfig
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
@@ -47,6 +53,47 @@ async def _bare_user(db) -> User:
 
 def _iso(dt: datetime) -> str:
     return dt.isoformat()
+
+
+def _make_projection_document(
+    org: Org,
+    creator: User,
+    *,
+    title: str,
+    due_at: datetime,
+    visibility: DocumentVisibility = DocumentVisibility.ORG_ONLY,
+    classification: DocumentClassification = DocumentClassification.NORMAL,
+    status: DocumentStatus = DocumentStatus.APPROVED,
+    is_public: bool = False,
+) -> Document:
+    return Document(
+        serial_number=f"DOC-{uuid.uuid4().hex[:10]}",
+        title=title,
+        org_id=org.id,
+        created_by=creator.id,
+        status=status,
+        classification=classification,
+        subject=f"{title} 的內文主旨",
+        due_date=due_at,
+        visibility_level=visibility,
+        is_public=is_public,
+    )
+
+
+def _make_legacy_document_projection(doc: Document, creator: User) -> CalendarEvent:
+    assert doc.due_date is not None
+    return CalendarEvent(
+        org_id=doc.org_id,
+        title=doc.title,
+        description=doc.subject,
+        visibility=CalendarVisibility.PUBLIC,
+        starts_at=doc.due_date,
+        source_module="document",
+        source_id=doc.id,
+        source_key="due_date",
+        href=f"/documents/{doc.serial_number}",
+        created_by=creator.id,
+    )
 
 
 _NOW = datetime.now(UTC).replace(microsecond=0)
@@ -132,6 +179,119 @@ async def test_get_event_visible_to_logged_in_visibility(
     resp = await ac.get(f"/calendar/events/{event.id}")
     assert resp.status_code == 200
     assert resp.json()["id"] == str(event.id)
+
+
+async def test_list_events_preserves_document_visibility_and_hides_restricted_projections(
+    db_session, member_user, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    outsider = await _bare_user(db_session)
+    org = Org(name=f"文件投影-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+
+    position = Position(org_id=org.id, name="文件讀者")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(
+        UserPosition(user_id=member_user.id, position_id=position.id, start_date=date.today())
+    )
+
+    due_at = datetime.now(UTC).replace(microsecond=0) + timedelta(days=3)
+    org_doc = _make_projection_document(org, creator, title="機關內部公文", due_at=due_at)
+    login_doc = _make_projection_document(
+        org,
+        creator,
+        title="登入後可見公文",
+        due_at=due_at,
+        visibility=DocumentVisibility.PUBLIC,
+    )
+    public_doc = _make_projection_document(
+        org,
+        creator,
+        title="匿名可見公文",
+        due_at=due_at,
+        visibility=DocumentVisibility.PUBLICLY_OPEN,
+    )
+    legacy_public_doc = _make_projection_document(
+        org,
+        creator,
+        title="舊版公開旗標公文",
+        due_at=due_at,
+        visibility=DocumentVisibility.SUBJECT_ONLY,
+        is_public=True,
+    )
+    secret_doc = _make_projection_document(
+        org,
+        creator,
+        title="密等公文不得出現在日曆",
+        due_at=due_at,
+        visibility=DocumentVisibility.PUBLICLY_OPEN,
+        classification=DocumentClassification.SECRET,
+    )
+    subject_only_doc = _make_projection_document(
+        org,
+        creator,
+        title="限定對象公文不得出現在日曆",
+        due_at=due_at,
+        visibility=DocumentVisibility.SUBJECT_ONLY,
+    )
+    draft_doc = _make_projection_document(
+        org,
+        creator,
+        title="未核准公文不得出現在日曆",
+        due_at=due_at,
+        visibility=DocumentVisibility.PUBLICLY_OPEN,
+        status=DocumentStatus.DRAFT,
+    )
+    db_session.add_all(
+        [org_doc, login_doc, public_doc, legacy_public_doc, secret_doc, subject_only_doc, draft_doc]
+    )
+    await db_session.flush()
+
+    stale_events = [
+        _make_legacy_document_projection(doc, creator)
+        for doc in (secret_doc, subject_only_doc, draft_doc)
+    ]
+    previously_public_org_event = _make_legacy_document_projection(org_doc, creator)
+    db_session.add_all([*stale_events, previously_public_org_event])
+    await db_session.flush()
+
+    params = {
+        "start": _iso(due_at - timedelta(hours=1)),
+        "end": _iso(due_at + timedelta(hours=1)),
+    }
+    org_reader = authed_client_factory(member_user)
+    org_response = await org_reader.get("/calendar/events", params=params)
+    assert org_response.status_code == 200, org_response.text
+    org_events = {event["title"]: event for event in org_response.json()}
+
+    assert org_events["公文期限：機關內部公文"]["visibility"] == "org"
+    assert org_events["公文期限：登入後可見公文"]["visibility"] == "logged_in"
+    assert org_events["公文期限：匿名可見公文"]["visibility"] == "public"
+    assert org_events["公文期限：舊版公開旗標公文"]["visibility"] == "public"
+    for hidden_title in (
+        secret_doc.title,
+        subject_only_doc.title,
+        draft_doc.title,
+    ):
+        assert f"公文期限：{hidden_title}" not in org_events
+        assert hidden_title not in org_response.text
+
+    outside_reader = authed_client_factory(outsider)
+    outside_response = await outside_reader.get("/calendar/events", params=params)
+    assert outside_response.status_code == 200, outside_response.text
+    outside_titles = {event["title"] for event in outside_response.json()}
+    assert "公文期限：機關內部公文" not in outside_titles
+    assert "公文期限：登入後可見公文" in outside_titles
+    assert "公文期限：匿名可見公文" in outside_titles
+
+    for event in stale_events:
+        await db_session.refresh(event)
+        assert not event.is_active
+    await db_session.refresh(previously_public_org_event)
+    assert previously_public_org_event.is_active
+    assert previously_public_org_event.visibility == CalendarVisibility.ORG
 
 
 async def test_update_event_by_unrelated_user_returns_403(

@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,7 +21,12 @@ from api.models.calendar import (
     CalendarVisibility,
 )
 from api.models.discord_account import DiscordOrgChannelMapping
-from api.models.document import Document, DocumentStatus
+from api.models.document import (
+    Document,
+    DocumentClassification,
+    DocumentStatus,
+    DocumentVisibility,
+)
 from api.models.email_message import EmailMessage, EmailStatus
 from api.models.meeting import Meeting
 from api.models.partner_map import PartnerBusiness, PartnerOffer
@@ -213,17 +218,78 @@ async def _upsert_projection(
 async def _project_documents(
     session: AsyncSession, start: datetime | None, end: datetime | None
 ) -> int:
+    visible_document_filter = and_(
+        Document.status == DocumentStatus.APPROVED,
+        Document.classification == DocumentClassification.NORMAL,
+        or_(
+            Document.is_public.is_(True),
+            Document.visibility_level.in_(
+                [
+                    DocumentVisibility.ORG_ONLY,
+                    DocumentVisibility.PUBLIC,
+                    DocumentVisibility.PUBLICLY_OPEN,
+                ]
+            ),
+        ),
+    )
+    visibility_mismatch = or_(
+        and_(
+            Document.is_public.is_(True),
+            CalendarEvent.visibility != CalendarVisibility.PUBLIC,
+        ),
+        and_(
+            Document.is_public.is_(False),
+            Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
+            CalendarEvent.visibility != CalendarVisibility.PUBLIC,
+        ),
+        and_(
+            Document.is_public.is_(False),
+            Document.visibility_level == DocumentVisibility.PUBLIC,
+            CalendarEvent.visibility != CalendarVisibility.LOGGED_IN,
+        ),
+        and_(
+            Document.is_public.is_(False),
+            Document.visibility_level == DocumentVisibility.ORG_ONLY,
+            CalendarEvent.visibility != CalendarVisibility.ORG,
+        ),
+    )
+    # Revoke persisted copies before listing; source visibility can become stricter after projection.
+    stale_projection_ids = (
+        select(CalendarEvent.id)
+        .outerjoin(Document, Document.id == CalendarEvent.source_id)
+        .where(
+            CalendarEvent.source_module == "document",
+            CalendarEvent.source_key == "due_date",
+            CalendarEvent.is_active.is_(True),
+            *_overlaps(CalendarEvent.starts_at, start, end),
+            or_(
+                Document.id.is_(None),
+                Document.due_date.is_(None),
+                Document.due_date != CalendarEvent.starts_at,
+                ~visible_document_filter,
+                visibility_mismatch,
+            ),
+        )
+    )
+    await session.execute(
+        update(CalendarEvent)
+        .where(CalendarEvent.id.in_(stale_projection_ids))
+        .values(is_active=False)
+        .execution_options(synchronize_session="fetch")
+    )
+
     rows = (
         await session.execute(
             select(Document)
             .where(*_overlaps(Document.due_date, start, end))
-            .where(Document.status != DocumentStatus.ARCHIVED)
+            .where(visible_document_filter)
             .limit(500)
         )
     ).scalars()
     count = 0
     for doc in rows:
-        if not doc.due_date:
+        visibility = _document_calendar_visibility(doc)
+        if not doc.due_date or visibility is None:
             continue
         await _upsert_projection(
             session,
@@ -236,9 +302,25 @@ async def _project_documents(
             created_by=doc.created_by,
             href=f"/documents/{doc.serial_number}" if doc.serial_number else f"/documents/{doc.id}",
             description=doc.subject or doc.doc_description,
+            visibility=visibility,
         )
         count += 1
     return count
+
+
+def _document_calendar_visibility(doc: Document) -> CalendarVisibility | None:
+    """Mirror the approved document's effective audience in the calendar ACL."""
+    if doc.status != DocumentStatus.APPROVED:
+        return None
+    if doc.classification != DocumentClassification.NORMAL:
+        return None
+    if doc.is_public or doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN:
+        return CalendarVisibility.PUBLIC
+    if doc.visibility_level == DocumentVisibility.PUBLIC:
+        return CalendarVisibility.LOGGED_IN
+    if doc.visibility_level == DocumentVisibility.ORG_ONLY:
+        return CalendarVisibility.ORG
+    return None
 
 
 async def _project_meetings(
