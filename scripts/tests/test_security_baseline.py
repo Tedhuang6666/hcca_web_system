@@ -73,8 +73,15 @@ class BaselineTests(unittest.TestCase):
                 self.assertEqual(self.visited, ["/"])
 
     def test_private_success_is_a_finding(self):
-        self.statuses["/api/auth/me"] = 200
-        self.assertEqual(baseline.scan(self.target, interval=0)["result"], "findings")
+        private_paths = [path for path, kind in baseline.PROBES if kind == "private"]
+        self.assertGreaterEqual(len(private_paths), 1)
+        for path in private_paths:
+            with self.subTest(path=path):
+                self.visited.clear()
+                self.statuses.clear()
+                self.statuses[path] = 200
+                report = baseline.scan(self.target, interval=0)
+                self.assertEqual(report["result"], "findings")
 
     def test_outside_scope_rejected_before_network(self):
         for target in (
