@@ -65,6 +65,27 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 GitHub artifacts 保留 14 天；workflow 有錯誤會失敗，不以 `continue-on-error` 隱藏結果。
 現有 Bandit、Semgrep、CodeQL 與相依套件掃描仍沿用原 workflows。
 
+## Burp／Caido 跨帳號 IDOR 重放
+
+以專用測試帳號 A 建立可刪除的測試物件，先確認 A 本人能讀取，再在 Repeater 將同一請求的
+登入狀態替換成未授權帳號 B；只改身份，不改物件 ID、方法或參數。正式站只做已核准的唯讀
+GET，測試物件需為人工建立且不含真實個資；PATCH／POST 一律在隔離測試資料驗證，並使用有效
+CSRF cookie／header，避免 CSRF 擋在物件授權檢查之前。若 B 得到不應有的資料或成功寫入，立即
+停止，不再枚舉其他 ID；保留狀態碼與遮蔽後的最小證據，不匯出 Cookie、token 或私密本文。
+
+依目前 `apps/api/tests/test_idor.py` 的回歸案例，重放矩陣如下：
+
+| 入口（正式站 `/api` 前綴） | A／授權身份 | 未授權 B | 寫入驗證 |
+| --- | --- | --- | --- |
+| `GET /shop/orders/{order_id}` | 訂單本人 200；超管／允許的管理身份可讀 | 404 | 唯讀，不變更訂單 |
+| `GET /petitions/{case_id}` | 陳情人 200 | 403 | 唯讀，不讀取或保存陳情內容 |
+| `GET /surveys/{survey_id}/responses` | 需以有 `survey:manage` 或活動負責人身份作正向控制 | 403 | 唯讀 |
+| `PATCH /notifications/inbox/{notification_id}/read` | 本人 200 | 404，且仍未讀 | 僅隔離資料；確認 DB 前後狀態 |
+| `POST /shop/orders/{order_id}/cancel` | 本人 200，測試訂單變為已取消 | 403，訂單仍待處理 | 僅隔離資料；拒絕後確認 DB 狀態未改 |
+
+本機 ASGI 測試路徑省略部署 gateway 的 `/api` 前綴。正式站目前沒有專用 A／B 測試帳號，
+因此上表的跨帳號正式站步驟尚未執行；不要用一般使用者帳號或真實訂單替代。
+
 ## 2026-09-30 首輪結果（台北）
 
 - `hcxa.tw` 經兩個 DNS resolver 回報 NXDOMAIN，使用者更正為 `hcca.tw`。
