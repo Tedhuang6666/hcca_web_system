@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, BookOpenText, Clock3, List } from "lucide-react";
+import { ArrowLeft, Clock3, List } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -81,7 +81,6 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
 
           <header className={`public-article-detail-header${examScope ? " is-exam-scope-header" : ""}${coverImageUrl ? " has-cover" : ""}`}>
             <div className="public-article-detail-copy">
-              {!examScope && <p className="public-articles-mark"><BookOpenText size={16} aria-hidden /> 校園文章</p>}
               <h1>{page.title}</h1>
               {!examScope && page.summary && <p className="public-article-detail-summary">{page.summary}</p>}
               <div className="public-article-meta">
@@ -121,7 +120,11 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
                 </aside>
               )}
               <article className="public-article-body">
-                <ArticleMarkdown markdown={page.body_md} skipFirstTitle />
+                <ArticleMarkdown
+                  markdown={page.body_md}
+                  skipFirstTitle
+                  skipFirstSummary={page.summary}
+                />
               </article>
             </div>
           )}

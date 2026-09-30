@@ -3,9 +3,11 @@ import remarkGfm from "remark-gfm";
 import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 
 import { uploadUrl } from "@/lib/config";
+import { isArticleChartSpec } from "@/lib/article-charts";
 import type { PetitionMonthlyStatsOut } from "@/lib/types";
 import { extractArticleHeadings } from "@/lib/article-utils";
 import remarkBreaks from "@/lib/remarkBreaks";
+import ArticleChart from "./ArticleChart";
 import PetitionMonthlyChart from "./PetitionMonthlyChart";
 
 function resolveImageSrc(src: string | undefined): string {
@@ -67,29 +69,51 @@ function isPetitionMonthlyStats(value: unknown): value is PetitionMonthlyStatsOu
       && isCount(item.count));
 }
 
+function markdownText(value: ReactNode): string {
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(markdownText).join("");
+  if (isValidElement<{ children?: ReactNode }>(value)) return markdownText(value.props.children);
+  return "";
+}
+
 function ArticlePre({ children, ...props }: ComponentProps<"pre">) {
   const code = Children.toArray(children).find((child) =>
     isValidElement<{ className?: string; children?: ReactNode }>(child)
-      && child.props.className?.split(/\s+/u).includes("language-hcca-petition-chart"),
+      && child.props.className?.split(/\s+/u).some((name) =>
+        name === "language-hcca-chart" || name === "language-hcca-petition-chart",
+      ),
   );
   if (isValidElement<{ className?: string; children?: ReactNode }>(code)) {
     const source = String(code.props.children ?? "").replace(/\n$/u, "");
+    const language = code.props.className?.split(/\s+/u).find((name) => name.startsWith("language-"));
     let stats: unknown;
     try {
       stats = JSON.parse(source);
     } catch {
       // Keep malformed or manually edited chart data visible as a code block.
     }
+    if (language === "language-hcca-chart" && isArticleChartSpec(stats)) {
+      return <ArticleChart chart={stats} />;
+    }
     if (isPetitionMonthlyStats(stats)) return <PetitionMonthlyChart stats={stats} />;
   }
   return <pre {...props}>{children}</pre>;
 }
 
-export default function ArticleMarkdown({ markdown, skipFirstTitle = false }: { markdown: string; skipFirstTitle?: boolean }) {
+export default function ArticleMarkdown({
+  markdown,
+  skipFirstTitle = false,
+  skipFirstSummary,
+}: {
+  markdown: string;
+  skipFirstTitle?: boolean;
+  skipFirstSummary?: string | null;
+}) {
   const renderMarkdown = normalizeEscapedBold(markdown);
   const headings = extractArticleHeadings(renderMarkdown);
   let headingIndex = 0;
   let renderedTitle = false;
+  let checkedFirstParagraph = false;
 
   return (
     <div className="article-markdown">
@@ -113,6 +137,10 @@ export default function ArticleMarkdown({ markdown, skipFirstTitle = false }: { 
             return <h3 {...props} id={heading?.id}>{children}</h3>;
           },
           p: ({ children, ...props }) => {
+            if (skipFirstSummary && !checkedFirstParagraph) {
+              checkedFirstParagraph = true;
+              if (markdownText(Children.toArray(children)).trim() === skipFirstSummary.trim()) return null;
+            }
             const childNodes = Children.toArray(children);
             const isMediaParagraph = childNodes.some(
               (child) => isValidElement(child) && child.type === ArticleImage,
