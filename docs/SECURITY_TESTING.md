@@ -12,7 +12,7 @@ GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-r
 ## 可重跑入口
 
 ```bash
-# 固定 13 個子網域標籤的主動 DNS 發現；記錄解析候選的 CNAME，不連線至候選主機。
+# 固定 73 個子網域標籤的主動 DNS 發現；記錄解析候選的 CNAME，不連線至候選主機。
 python3 scripts/security-dns.py --output /tmp/hcca-dns.json
 # 核准搜尋入口的四個主動輸入探針；固定每 10 秒一個請求，不保存回應本文。
 python3 scripts/security-active.py --output /tmp/hcca-active.json
@@ -36,7 +36,7 @@ python3 -m unittest discover -s scripts/tests -p 'test_security_*.py'
 ```
 
 正式站 workflow 只做主動 DNS／HTTP 探測，不執行 subfinder／amass 等被動資產探索。每日查根網域、
-兩個隨機 wildcard 控制與 13 個固定子網域標籤；解析成功的候選另查 CNAME，只記錄供人工判讀，
+兩個隨機 wildcard 控制與 73 個固定子網域標籤；解析成功的候選另查 CNAME，只記錄供人工判讀，
 不連線至 CNAME 目標。每日再做四個搜尋輸入攻擊探針與兩個已審閱 Nuclei 認證邊界探針；
 前一支探針逾時或回報發現時，後續獨立探針仍會執行，workflow 最終仍會標為失敗並上傳報告。
 每週日 06:11 執行九個固定 GET 存取控制／安全標頭檢查，06:51 執行十二條固定 HEAD 路徑探針；
@@ -78,7 +78,7 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 
 | 階段 | 執行方式與證據 | 進入下一階段的條件 |
 | --- | --- | --- |
-| 資產探索 | `scripts/security-dns.py` 對 13 個固定標籤主動解析、檢查兩個隨機 wildcard，並以 DoH 記錄解析候選的 CNAME；不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域或 CNAME 目標；確認第一方歸屬後才加入 HTTP 範圍 |
+| 資產探索 | `scripts/security-dns.py` 對 73 個固定標籤主動解析、檢查兩個隨機 wildcard，並以 DoH 記錄解析候選的 CNAME；不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域或 CNAME 目標；確認第一方歸屬後才加入 HTTP 範圍 |
 | DNS／HTTP／連接埠 | 固定標籤 DNS 與 `hcca.tw` HTTP；獨立測試主機才用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描；第三方 CNAME 不掃 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
 | 主動探測 | 正式站每日固定 DNS、四個搜尋輸入、兩個 Nuclei 認證邊界請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；單一探針錯誤不能遮蔽其他獨立結果 |
@@ -321,3 +321,24 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   GitHub workflow 尚未推送，正式站新工作流程仍未在遠端啟用。
 - 未確認 SQLi／XSS／IDOR 漏洞，沒有跑 sqlmap 或 Metasploit；發現的 SQL boolean 延遲候選不宜在沒有
   專用 PostgreSQL 測試庫前擴大攻擊。正式站跨帳號測試仍缺 A／B 專用帳號；本機 `uv.lock` 修改保留。
+
+## 第六輪：擴大主動資產探索與排程器復驗（2026-10-01）
+
+- 發現排程器子程序曾少接一層 `scripts/` 路徑，三個每日掃描都在啟動前以找不到檔案退出；修正在
+  本機 commit `48a0a15c`。修正後手動每日組合完整執行，DNS、輸入探針與 Nuclei 都產生報告。
+- 主動 DNS 字典由 13 擴至 73 個固定標籤，每秒最多解析一個名稱；仍不連線到候選主機。兩個隨機
+  wildcard 控制為 NXDOMAIN，發現 `www.hcca.tw`、`posthug.hcca.tw`、`webmail.hcca.tw`。`www`
+  與根網域使用相同 Cloudflare 位址；`posthug` 指向 ProxyHog，`webmail` 指向 Gandi，未掃描第三方服務。
+- 根網域 NS 指向 Cloudflare、MX 指向 Gandi；DMARC TXT 存在。查無 CAA、MTA-STS 與 SMTP TLS
+  報告記錄，列為郵件／DNS 設定觀察，不直接判定為網站漏洞。
+- 修正後正式站搜尋輸入探針 control／單引號為 200，SQL 布林與 XSS 反射 payload 為 400，沒有唯一標記反射；
+  Nuclei 的兩個未登入認證邊界請求完成、0 命中。回應碼無法區分應用與 WAF，沒有確認 SQLi／XSS。
+- 固定路徑枚舉完成 12/12 HEAD：敏感檔案與 API 文件候選為 404，`/admin`、`/robots.txt`、
+  `/sitemap.xml` 為 200。HEAD 不讀內容；`/admin` 200 不等同授權繞過，404 也不能證明 origin 沒有檔案。
+- 匿名 HTTP 基線完成 9/9：首頁／登入頁 200，個人資料、通知與收款列表／摘要／CSV 匯出皆為 401，
+  API 文件路徑為 404；安全標頭檢查沒有發現缺項。這驗證匿名邊界，不等同跨帳號 IDOR 測試。
+- 目前 WSL user timers 已啟用並設定 linger；每日 05:41、週日 06:11 與 06:51（台北時間）。GitHub
+  workflow 仍未推送，正式站持續排程由本機 WSL 執行。正式站跨帳號 IDOR 仍需兩個專用測試帳號；
+  不對 Cloudflare 共用 IP 或第三方 CNAME 執行 nmap／HTTP 掃描。
+- 安全掃描器 36 tests、Ruff／format／py_compile 通過。`check.sh docs` 仍只因既有 `PROJECT_CONTEXT.md`
+  指向的三個缺失會議 router／test 檔連結失敗，本輪沒有碰觸這些無關檔案。
