@@ -1,10 +1,12 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Children, isValidElement } from "react";
+import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 
 import { uploadUrl } from "@/lib/config";
+import type { PetitionMonthlyStatsOut } from "@/lib/types";
 import { extractArticleHeadings } from "@/lib/article-utils";
 import remarkBreaks from "@/lib/remarkBreaks";
+import PetitionMonthlyChart from "./PetitionMonthlyChart";
 
 function resolveImageSrc(src: string | undefined): string {
   return uploadUrl(src);
@@ -35,8 +37,57 @@ function ArticleImage({ src, alt }: { src?: string | Blob; alt?: string }) {
   );
 }
 
+function normalizeEscapedBold(markdown: string): string {
+  let inFence = false;
+  return markdown.split("\n").map((line) => {
+    if (/^\s*```/u.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    return inFence ? line : line.replace(/\\\*\\\*([^*\n]+?)\\\*\\\*/gu, "**$1**");
+  }).join("\n");
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isPetitionMonthlyStats(value: unknown): value is PetitionMonthlyStatsOut {
+  if (!value || typeof value !== "object") return false;
+  const stats = value as Partial<PetitionMonthlyStatsOut>;
+  return typeof stats.month === "string"
+    && /^\d{4}-(0[1-9]|1[0-2])$/u.test(stats.month)
+    && isCount(stats.received_total)
+    && isCount(stats.completed_total)
+    && (stats.average_completion_hours === null
+      || (typeof stats.average_completion_hours === "number" && Number.isFinite(stats.average_completion_hours)))
+    && Array.isArray(stats.by_type)
+    && stats.by_type.every((item) => Boolean(item)
+      && typeof item.type_name === "string"
+      && isCount(item.count));
+}
+
+function ArticlePre({ children, ...props }: ComponentProps<"pre">) {
+  const code = Children.toArray(children).find((child) =>
+    isValidElement<{ className?: string; children?: ReactNode }>(child)
+      && child.props.className?.split(/\s+/u).includes("language-hcca-petition-chart"),
+  );
+  if (isValidElement<{ className?: string; children?: ReactNode }>(code)) {
+    const source = String(code.props.children ?? "").replace(/\n$/u, "");
+    let stats: unknown;
+    try {
+      stats = JSON.parse(source);
+    } catch {
+      // Keep malformed or manually edited chart data visible as a code block.
+    }
+    if (isPetitionMonthlyStats(stats)) return <PetitionMonthlyChart stats={stats} />;
+  }
+  return <pre {...props}>{children}</pre>;
+}
+
 export default function ArticleMarkdown({ markdown, skipFirstTitle = false }: { markdown: string; skipFirstTitle?: boolean }) {
-  const headings = extractArticleHeadings(markdown);
+  const renderMarkdown = normalizeEscapedBold(markdown);
+  const headings = extractArticleHeadings(renderMarkdown);
   let headingIndex = 0;
   let renderedTitle = false;
 
@@ -79,11 +130,12 @@ export default function ArticleMarkdown({ markdown, skipFirstTitle = false }: { 
             );
           },
           img: ArticleImage,
+          pre: ArticlePre,
           ul: ({ children, ...props }) => <ul {...props}>{children}</ul>,
           ol: ({ children, ...props }) => <ol {...props}>{children}</ol>,
         }}
       >
-        {markdown}
+        {renderMarkdown}
       </ReactMarkdown>
     </div>
   );

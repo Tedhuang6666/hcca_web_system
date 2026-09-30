@@ -7925,6 +7925,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/petitions/stats/monthly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 指定月份陳情案件統計 */
+        get: operations["get_monthly_stats_petitions_stats_monthly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/petitions/types": {
         parameters: {
             query?: never;
@@ -8842,7 +8859,7 @@ export interface paths {
         /** 列出應收款（需 finance:view） */
         get: operations["list_receivables_receivables_get"];
         put?: never;
-        /** 建立應收款（需 finance:view） */
+        /** 建立應收款（需 finance:record） */
         post: operations["create_receivable_receivables_post"];
         delete?: never;
         options?: never;
@@ -8897,7 +8914,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** 更新應收款（需 finance:view） */
+        /** 更新應收款（需 finance:record） */
         patch: operations["update_receivable_receivables__receivable_id__patch"];
         trace?: never;
     };
@@ -8910,7 +8927,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 標記收款完成（需 finance:view） */
+        /** 標記收款完成（需 finance:record） */
         post: operations["mark_paid_receivables__receivable_id__mark_paid_post"];
         delete?: never;
         options?: never;
@@ -8927,7 +8944,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 標記退款（需 finance:view） */
+        /** 標記退款（需 finance:record） */
         post: operations["refund_receivables__receivable_id__refund_post"];
         delete?: never;
         options?: never;
@@ -23170,6 +23187,26 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** PetitionMonthlyStatsOut */
+        PetitionMonthlyStatsOut: {
+            /** Average Completion Hours */
+            average_completion_hours: number | null;
+            /** By Type */
+            by_type: components["schemas"]["PetitionMonthlyTypeStatsItem"][];
+            /** Completed Total */
+            completed_total: number;
+            /** Month */
+            month: string;
+            /** Received Total */
+            received_total: number;
+        };
+        /** PetitionMonthlyTypeStatsItem */
+        PetitionMonthlyTypeStatsItem: {
+            /** Count */
+            count: number;
+            /** Type Name */
+            type_name: string;
         };
         /** PetitionNotificationRuleCreate */
         PetitionNotificationRuleCreate: {
@@ -47505,6 +47542,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PetitionStatsOut"];
+                };
+            };
+        };
+    };
+    get_monthly_stats_petitions_stats_monthly_get: {
+        parameters: {
+            query: {
+                month: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionMonthlyStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

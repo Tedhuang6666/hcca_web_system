@@ -36,6 +36,8 @@ from api.schemas.petition import (
     PetitionCreate,
     PetitionEventUpdate,
     PetitionInternalNoteCreate,
+    PetitionMonthlyStatsOut,
+    PetitionMonthlyTypeStatsItem,
     PetitionOrgStatsItem,
     PetitionPublicRequest,
     PetitionPublicResponse,
@@ -1014,6 +1016,73 @@ async def stats(
     if include_by_org:
         out.by_org = await org_stats(session, org_ids=org_ids)
     return out
+
+
+async def monthly_stats(
+    session: AsyncSession,
+    *,
+    month: str,
+    start_at: datetime,
+    end_at: datetime,
+    org_ids: list[uuid.UUID] | None,
+) -> PetitionMonthlyStatsOut:
+    if org_ids is not None and not org_ids:
+        return PetitionMonthlyStatsOut(
+            month=month,
+            received_total=0,
+            completed_total=0,
+            average_completion_hours=None,
+            by_type=[],
+        )
+
+    org_filter = [] if org_ids is None else [PetitionCase.current_org_id.in_(org_ids)]
+    received_filter = [
+        PetitionCase.submitted_at >= start_at,
+        PetitionCase.submitted_at < end_at,
+        *org_filter,
+    ]
+    received_total = int(
+        await session.scalar(select(func.count()).select_from(PetitionCase).where(*received_filter))
+        or 0
+    )
+
+    type_rows = (
+        await session.execute(
+            select(PetitionType.name, func.count(PetitionCase.id))
+            .join(PetitionCase, PetitionCase.type_id == PetitionType.id)
+            .where(*received_filter)
+            .group_by(PetitionType.name)
+            .order_by(func.count(PetitionCase.id).desc(), PetitionType.name)
+        )
+    ).all()
+
+    completion_row = (
+        await session.execute(
+            select(
+                func.count(PetitionCase.id),
+                func.avg(
+                    extract("epoch", PetitionCase.closed_at - PetitionCase.submitted_at) / 3600
+                ),
+            ).where(
+                PetitionCase.closed_at >= start_at,
+                PetitionCase.closed_at < end_at,
+                PetitionCase.closed_at.isnot(None),
+                *org_filter,
+            )
+        )
+    ).one()
+
+    return PetitionMonthlyStatsOut(
+        month=month,
+        received_total=received_total,
+        completed_total=int(completion_row[0] or 0),
+        average_completion_hours=(
+            float(completion_row[1]) if completion_row[1] is not None else None
+        ),
+        by_type=[
+            PetitionMonthlyTypeStatsItem(type_name=row[0], count=int(row[1])) for row in type_rows
+        ],
+    )
 
 
 async def org_stats(

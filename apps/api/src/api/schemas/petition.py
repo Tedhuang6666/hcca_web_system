@@ -342,3 +342,16 @@ class PetitionStatsOut(BaseModel):
     resolved: int
     closed_this_month: int
     by_org: list[PetitionOrgStatsItem] = []
+
+
+class PetitionMonthlyTypeStatsItem(BaseModel):
+    type_name: str
+    count: int
+
+
+class PetitionMonthlyStatsOut(BaseModel):
+    month: str
+    received_total: int
+    completed_total: int
+    average_completion_hours: float | None
+    by_type: list[PetitionMonthlyTypeStatsItem]

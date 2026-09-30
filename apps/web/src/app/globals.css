@@ -1,5 +1,208 @@
 @import "tailwindcss";
 
+.article-editor {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--bg-surface);
+}
+
+.article-editor-toolbar,
+.article-editor-format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-elevated);
+}
+
+.article-editor-toolbar {
+  border-bottom: 1px solid var(--border);
+}
+
+.article-editor-mode-switch,
+.article-editor-format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.article-editor-format-toolbar {
+  justify-content: flex-start;
+  border-bottom: 1px solid var(--border);
+}
+
+.article-editor-tool {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.article-editor-tool:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.article-editor-tool[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary-dim);
+  color: var(--primary-text);
+}
+
+.article-editor-tool:focus-visible,
+.article-editor-chart-tools button:focus-visible,
+.article-editor-chart-tools input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.article-editor-tool:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.article-editor-textarea {
+  display: block;
+  width: 100%;
+  min-height: 28rem;
+  resize: vertical;
+  border: 0;
+  border-radius: 0;
+  padding: 1rem 1.1rem;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.8;
+  outline: none;
+}
+
+.article-editor-textarea:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.article-editor-preview {
+  min-height: 28rem;
+  padding: 1.25rem clamp(1rem, 3vw, 2rem);
+  background: var(--bg-surface);
+}
+
+.article-editor-preview .article-markdown {
+  max-width: 74ch;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.8;
+}
+
+.article-editor-preview .article-markdown > * {
+  margin: 0;
+}
+
+.article-editor-preview .article-markdown > * + * {
+  margin-top: 1rem;
+}
+
+.article-editor-preview .article-markdown h1,
+.article-editor-preview .article-markdown h2,
+.article-editor-preview .article-markdown h3 {
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.article-editor-preview .article-markdown h1 { font-size: 1.6rem; }
+.article-editor-preview .article-markdown h2 { margin-top: 2rem; font-size: 1.35rem; }
+.article-editor-preview .article-markdown h3 { margin-top: 1.5rem; font-size: 1.1rem; }
+.article-editor-preview .article-markdown strong { color: var(--text-primary); font-weight: 750; }
+.article-editor-preview .article-markdown ul,
+.article-editor-preview .article-markdown ol { padding-left: 1.5rem; }
+.article-editor-preview .article-markdown ul { list-style: disc; }
+.article-editor-preview .article-markdown ol { list-style: decimal; }
+.article-editor-preview .article-markdown a { color: var(--primary-text); text-underline-offset: 0.2em; }
+
+.article-editor-images,
+.article-editor-chart-tools {
+  display: grid;
+  gap: 0.9rem;
+  border-bottom: 1px solid var(--border);
+  padding: 1rem;
+  background: var(--bg-surface);
+}
+
+.article-editor-images > p {
+  margin: 0;
+}
+
+.article-editor-chart-tools {
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 12rem) auto;
+  align-items: end;
+  background: var(--bg-elevated);
+}
+
+.article-editor-chart-tools h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.article-editor-chart-tools p {
+  max-width: 48rem;
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.article-editor-chart-tools label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.article-editor-chart-tools input {
+  min-height: 2.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+@media (max-width: 700px) {
+  .article-editor-chart-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .article-editor-chart-tools > div {
+    grid-row: auto;
+  }
+
+  .article-editor-chart-tools button {
+    width: 100%;
+  }
+}
+
 .partner-map-marker-shell {
   background: transparent;
   border: 0;

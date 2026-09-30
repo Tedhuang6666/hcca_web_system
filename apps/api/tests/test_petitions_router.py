@@ -679,6 +679,46 @@ async def test_get_stats_scoped_by_org(db_session, authed_client_factory) -> Non
     assert resp.json()["total"] == 1
 
 
+async def test_monthly_stats_filter_by_month_type_and_org_scope(
+    db_session, authed_client_factory, client
+) -> None:
+    from api.core.clock import TAIPEI
+
+    org, petition_type = await _make_org_and_type(db_session)
+    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj.submitted_at = datetime(2026, 9, 1, 9, tzinfo=TAIPEI)
+    case_obj.closed_at = datetime(2026, 9, 2, 9, tzinfo=TAIPEI)
+
+    _other_org, other_type = await _make_org_and_type(db_session, name="教務處")
+    other_case, _other_code = await _create_case(db_session, other_type)
+    other_case.submitted_at = datetime(2026, 9, 3, 9, tzinfo=TAIPEI)
+    other_case.closed_at = datetime(2026, 9, 4, 9, tzinfo=TAIPEI)
+    await db_session.flush()
+
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:view_org")
+
+    assert (await client.get("/petitions/stats/monthly?month=2026-09")).status_code == 401
+    response = await authed_client_factory(handler).get("/petitions/stats/monthly?month=2026-09")
+    assert response.status_code == 200
+    assert response.json() == {
+        "month": "2026-09",
+        "received_total": 1,
+        "completed_total": 1,
+        "average_completion_hours": 24.0,
+        "by_type": [{"type_name": petition_type.name, "count": 1}],
+    }
+
+    next_month = await authed_client_factory(handler).get("/petitions/stats/monthly?month=2026-10")
+    assert next_month.status_code == 200
+    assert next_month.json()["received_total"] == 0
+
+    forbidden = await authed_client_factory(await _bare_user(db_session)).get(
+        "/petitions/stats/monthly?month=2026-09"
+    )
+    assert forbidden.status_code == 403
+
+
 # ── 案件詳情存取控制 ──────────────────────────────────────────────────────────
 
 

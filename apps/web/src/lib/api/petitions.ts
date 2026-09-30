@@ -1,6 +1,6 @@
 import type {
   PetitionAdminCreate, PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
-  PetitionStatsOut, PetitionStatus, PetitionSubmitterUpdate, PetitionTypeOut,
+  PetitionMonthlyStatsOut, PetitionStatsOut, PetitionStatus, PetitionSubmitterUpdate, PetitionTypeOut,
   PetitionPublicListItem, PetitionPublicOut,
   PetitionNotificationRuleCreate, PetitionNotificationRuleOut, PetitionNotificationRuleUpdate,
   PetitionNotificationSettingsOut, PetitionNotificationSettingsUpdate,
@@ -86,6 +86,8 @@ export const petitionsApi = {
     return get<PetitionCaseListItem[]>(`/petitions/manage${qs}`);
   },
   stats: () => get<PetitionStatsOut>("/petitions/stats"),
+  monthlyStats: (month: string) =>
+    get<PetitionMonthlyStatsOut>(`/petitions/stats/monthly?${new URLSearchParams({ month })}`),
   get: (id: string) => get<PetitionCaseOut>(`/petitions/${id}`),
   printPdf: async (id: string): Promise<Blob> => {
     const res = await authFetch(`${BASE}/petitions/${id}/print`, { credentials: "include" });

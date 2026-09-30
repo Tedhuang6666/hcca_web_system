@@ -18,6 +18,7 @@ import type {
 import { usePermissions } from "@/hooks/usePermissions";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import PerformanceDashboard from "@/components/performance/PerformanceDashboard";
+import PetitionMonthlyStatsPanel from "@/components/performance/PetitionMonthlyStatsPanel";
 
 function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
   return result.status === "fulfilled" ? result.value : fallback;
@@ -172,6 +173,8 @@ export default function PerformanceManagementPanel() {
       </header>
 
       <PerformanceDashboard />
+
+      <PetitionMonthlyStatsPanel />
 
       <section className="card p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
