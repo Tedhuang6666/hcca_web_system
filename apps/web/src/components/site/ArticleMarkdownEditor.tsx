@@ -4,6 +4,7 @@ import { BarChart3, Bold, Eye, Heading2, ImagePlus, List, Pencil, Table2 } from 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
+import type { ArticleChartSpec } from "@/lib/article-charts";
 import { siteApi } from "@/lib/api/site";
 import { apiErrorMessage, petitionsApi } from "@/lib/api";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
@@ -160,6 +161,22 @@ export default function ArticleMarkdownEditor({
     replaceRange(start, end, `${prefix}${block}${suffix}`);
   };
 
+  const insertChartTemplate = (type: ArticleChartSpec["type"]) => {
+    const chart: ArticleChartSpec = {
+      type,
+      title: type === "pie" ? "圓餅圖標題" : "長條圖標題",
+      description: "請補充統計期間與數據口徑。",
+      unit: "件",
+      data: [
+        { label: "項目一", value: 0 },
+        { label: "項目二", value: 0 },
+      ],
+    };
+    const fence = String.fromCharCode(96).repeat(3);
+    insertBlock(fence + "hcca-chart\n" + JSON.stringify(chart, null, 2) + "\n" + fence);
+    toast.success(type === "pie" ? "已插入圓餅圖範本，請填入核實數據" : "已插入長條圖範本，請填入核實數據");
+  };
+
   const insertPetitionChart = async () => {
     setChartLoading(true);
     try {
@@ -186,12 +203,12 @@ export default function ArticleMarkdownEditor({
           </button>
         </div>
         <div className="article-editor-mode-switch">
-        <button type="button" className="article-editor-tool" onClick={() => setShowChartTools((current) => !current)} aria-expanded={showChartTools} disabled={preview} title={preview ? "請切回撰寫模式插入圖表" : undefined}>
-          <BarChart3 size={14} aria-hidden /> {showChartTools ? "收合月報圖表" : "加入月報圖表"}
-        </button>
-        <button type="button" className="article-editor-tool" onClick={() => setShowImageTools((current) => !current)} aria-expanded={showImageTools}>
-          <ImagePlus size={14} aria-hidden /> {showImageTools ? "收合圖片工具" : "加入照片"}
-        </button>
+          <button type="button" className="article-editor-tool" onClick={() => setShowChartTools((current) => !current)} aria-expanded={showChartTools} disabled={preview} title={preview ? "請切回撰寫模式插入圖表" : undefined}>
+            <BarChart3 size={14} aria-hidden /> {showChartTools ? "收合圖表工具" : "插入圖表"}
+          </button>
+          <button type="button" className="article-editor-tool" onClick={() => setShowImageTools((current) => !current)} aria-expanded={showImageTools}>
+            <ImagePlus size={14} aria-hidden /> {showImageTools ? "收合圖片工具" : "加入照片"}
+          </button>
         </div>
       </div>
 
@@ -215,15 +232,23 @@ export default function ArticleMarkdownEditor({
       {showChartTools && !preview && (
         <div className="article-editor-chart-tools">
           <div>
-            <h3>插入陳情月報圖表</h3>
-            <p>依所選月份載入受理量、結案時間與陳情類型，圖表資料會保存於本文快照中。</p>
+            <h3>新增文章圖表</h3>
+            <p>支援圓餅圖與長條圖；插入後編輯 JSON 的標題、項目與數值，並在預覽中確認。</p>
+            <div className="article-editor-chart-template-actions">
+              <button type="button" className="btn btn-secondary min-h-11" onClick={() => insertChartTemplate("pie")}>
+                插入圓餅圖範本
+              </button>
+              <button type="button" className="btn btn-secondary min-h-11" onClick={() => insertChartTemplate("bar")}>
+                插入長條圖範本
+              </button>
+            </div>
           </div>
           <label>
             統計月份
             <input type="month" value={chartMonth} onChange={(event) => setChartMonth(event.target.value)} />
           </label>
           <button type="button" className="btn btn-primary" onClick={() => void insertPetitionChart()} disabled={chartLoading || !chartMonth}>
-            <BarChart3 size={15} aria-hidden /> {chartLoading ? "載入統計中…" : "插入統計圖表"}
+            <BarChart3 size={15} aria-hidden /> {chartLoading ? "載入統計中…" : "插入陳情月統計"}
           </button>
         </div>
       )}
