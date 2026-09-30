@@ -4,13 +4,16 @@
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
 合併／推送到 default branch 後，每日台北時間 05:41 執行，也可手動觸發。
 使用者已確認應用部署完成。遠端 `main` 已包含第一版與後續修復；本機仍保留使用者的
-`uv.lock` 變更。最新指示要求主動測試，因此本機 workflow 已改成 HTTP 存取控制、固定 HEAD
-路徑枚舉、SQLi／XSS 輸入探針與已審閱 Nuclei 探針；不執行 subfinder／amass 被動資產探索。
+`uv.lock` 變更。最新指示要求主動測試，因此本機 workflow 已改成固定字典 DNS 發現、HTTP
+存取控制、固定 HEAD 路徑枚舉、SQLi／XSS 輸入探針與已審閱 Nuclei 探針；不執行
+subfinder／amass 被動資產探索。
 依使用者先前選擇，本機提交尚未推送；遠端排程仍是舊版，尚未啟用此主動排程。
 
 ## 可重跑入口
 
 ```bash
+# 固定 13 個子網域標籤的主動 DNS 發現；含隨機 wildcard 控制，不連線至候選主機。
+python3 scripts/security-dns.py --output /tmp/hcca-dns.json
 # 核准搜尋入口的四個主動輸入探針；固定每 10 秒一個請求，不保存回應本文。
 python3 scripts/security-active.py --output /tmp/hcca-active.json
 # 十二條固定路徑的主動 HEAD 枚舉；每秒一個請求，不下載回應本文。
@@ -25,10 +28,12 @@ uv run --locked --project apps/api python scripts/security-zap.py \
 python3 -m unittest discover -s scripts/tests -p 'test_security_*.py'
 ```
 
-正式站 workflow 只做主動 HTTP 請求，不執行 subfinder／amass 等被動資產探索。每回依序執行
-六個固定 GET 存取控制／安全標頭檢查、十二個固定 HEAD 路徑探針、四個搜尋輸入攻擊探針，
-以及兩個經審閱的 Nuclei 認證邊界探針。HEAD 路徑命中只標成待人工確認候選，不下載內容；
-所有工具固定在 `hcca.tw`，不追轉址、不帶登入資訊。403、429、5xx、Cloudflare challenge、
+正式站 workflow 只做主動 DNS／HTTP 探測，不執行 subfinder／amass 等被動資產探索。每回依序
+查根網域、兩個隨機 wildcard 控制與 13 個固定子網域標籤，再執行六個固定 GET 存取控制／
+安全標頭檢查、十二個固定 HEAD 路徑探針、四個搜尋輸入攻擊探針，以及兩個經審閱的 Nuclei
+認證邊界探針。DNS 候選不會自動連線；須先確認不是 wildcard 或第三方 CNAME。HEAD 路徑命中
+只標成待人工確認候選，不下載內容。HTTP 工具固定在 `hcca.tw`，不追轉址、不帶登入資訊。
+403、429、5xx、Cloudflare challenge、
 轉址或連線錯誤會停止該探針並回報 incomplete。搜尋探針每次最多四個請求、相隔 10 秒；
 400 只記錄為輸入遭拒，不能據此分辨應用或 WAF。報告不保存回應本文、Cookie 或 token。
 
@@ -49,10 +54,10 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 
 | 階段 | 執行方式與證據 | 進入下一階段的條件 |
 | --- | --- | --- |
-| 資產探索 | 初次核准範圍以程式路由與既有清單盤點；日常 workflow 不執行被動資產探索 | 新資產須確認用途與歸屬；不能將第三方 CNAME 當作自有主機 |
-| DNS／HTTP／連接埠 | DNS、httpx；獨立測試主機才能對明確連接埠使用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描 |
+| 資產探索 | `scripts/security-dns.py` 對 13 個固定標籤主動解析，並用兩個隨機名稱檢查 wildcard；不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域；確認第一方歸屬後才加入 HTTP 範圍 |
+| DNS／HTTP／連接埠 | 固定標籤 DNS 與 `hcca.tw` HTTP；獨立測試主機才用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描；第三方 CNAME 不掃 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
-| 主動探測 | 正式站固定 HTTP／HEAD／Nuclei 請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；只測核准的搜尋、身份邊界與 12 條固定路徑 |
+| 主動探測 | 正式站固定 DNS／HTTP／HEAD／Nuclei 請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；只測核准的搜尋、身份邊界與 12 條固定路徑 |
 | 路徑枚舉 | `scripts/security-paths.py` 使用 12 條審閱路徑、單執行緒、1 req/s、無遞迴、不追轉址 | 敏感路徑只檢查 HEAD 狀態，不下載秘密或備份內容；候選需人工確認 |
 | 人工分析 | 程式呼叫鏈＋HTTP 證據；需要互動登入時以 Burp／Caido 重放測試帳號請求 | 必須區分 CSRF、登入、角色、組織與物件權限 |
 | Auth／Authorization／IDOR | 未登入、無權限 B、合法 owner A／admin；寫入後檢查 DB | 拒絕案例必須通過 CSRF；本人成功案例證明業務端點確實可達 |
@@ -209,8 +214,8 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   本輪沒有確認 SQL injection 或 XSS。兩個輸入拒絕狀態不足以證明其他參數也安全。
 - 使用者要求不做被動掃描時，GitHub workflow run `36717316860` 的資產探索與公開基線工作
   已先完成，隔離回歸工作被取消；之後沒有再啟動被動探測。本機已將未來 scheduled／手動
-  workflow 改為主動 HTTP 探測，不執行 subfinder／amass；舊版曾經發出四個搜尋攻擊 GET，
-  後續本機變更再納入身份邊界 GET、HEAD 路徑枚舉與 Nuclei 主動探針。
+  workflow 改為主動 DNS／HTTP 探測，不執行 subfinder／amass；舊版曾經發出四個搜尋攻擊 GET，
+  後續本機變更再納入固定標籤 DNS 發現、身份邊界 GET、HEAD 路徑枚舉與 Nuclei 主動探針。
   這個 workflow 更新尚未推送；GitHub 仍會使用遠端舊排程工作。
 - 新探針只允許 `hcca.tw` 固定 HTTPS 路由、全域 IP、單一 GET 參數；每次間隔 10 秒，
   遇 403／429／5xx／轉址、網路錯誤、本文截斷或反射即停止。每回最多四次，摘要不保存本文、
@@ -219,12 +224,20 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
 - 本輪重測：固定 HTTP 邊界 6/6 通過；12 條 HEAD 路徑全數完成，敏感檔案／API 文件候選均為 404，
   `/admin`、`/robots.txt`、`/sitemap.xml` 為 200。HEAD 結果不讀 body，404 也可能由 CDN/WAF 產生；
   `/admin` 200 只代表路徑可達，沒有驗證登入後資料的授權邊界。
+- 主動 DNS 字典探測 13 個標籤與兩個隨機 wildcard 控制：只發現 `www.hcca.tw` 與
+  `posthug.hcca.tw`。wildcard 控制為 NXDOMAIN；`www` 與根網域解析至相同 Cloudflare 位址，
+  HEAD 回 301 至 `https://hcca.tw/`；`posthug` 的 CNAME 指向 `proxyhog.com`，未對它送 HTTP 請求。
 - 本輪再次送出四個搜尋輸入 probe：control／單引號為 200，SQL 布林與 XSS 反射值為 400，
   沒有標記反射；Nuclei 兩個身份邊界探針 2/2 完成、0 命中。這些結果不能證明整站無漏洞。
-- 本機 workflow 已把六個固定 HTTP controls、12 條 HEAD 路徑、四個 SQLi／XSS payload 與兩條
-  Nuclei active probes 納入每日排程；隔離 ZAP 計畫關閉所有 passive rules，只保留三條 active rules。
+- 本機 workflow 已把 13 個固定標籤 DNS 發現、六個固定 HTTP controls、12 條 HEAD 路徑、四個 SQLi／XSS
+  payload 與兩個 Nuclei active probes 納入每日排程；隔離 ZAP 計畫關閉所有 passive rules，只保留三條 active rules。
   遠端尚未更新，新增排程仍待推送。Burp／Caido 跨帳號人工測試仍缺專用正式站測試帳號。
 - 新增路徑探針邊界測試後，security scanner 共 21 tests 通過；新檔 Ruff／format 通過，
   workflow actionlint 以校驗碼驗證的 1.7.12 執行通過，未執行 shellcheck。
 - 文件檢查未通過：同一工作樹內其他工作移除會議 router／test 檔，造成 `PROJECT_CONTEXT.md`
   三個既有連結失效。本輪保留那些變更，未改寫或恢復相關檔案。
+- 主動 DNS 發現器於 14:01 UTC 重新解析根網域、兩個隨機 wildcard 名稱與 13 個固定標籤，
+  wildcard 控制為 NXDOMAIN，只發現 `www.hcca.tw` 與 `posthug.hcca.tw`。`www` 解析與根網域相同，
+  單一 HEAD 回 301 至根網域；`posthug` 的 CNAME 指向 `proxyhog.com`，未連線或掃描該第三方主機。
+- DNS 範圍／wildcard／第三方候選測試加入後，安全工具測試共 26 tests 通過；新 DNS 檔 Ruff／format、
+  workflow actionlint、YAML 與 ZAP JSON 解析通過。Nmap 仍未對 Cloudflare 共用 IP 執行掃描。
