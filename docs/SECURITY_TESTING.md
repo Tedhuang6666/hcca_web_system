@@ -341,6 +341,9 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   robots 禁止的登入頁面路由做無 Cookie GET，七個回 200、一個回 404；不讀本文。前端 route policy
   將受保護頁面標成需登入，相關 11 個 route-access tests 通過，私人 API 也都回 401；目前沒有敏感資料
   外洩證據，200 僅是待瀏覽器／API 交叉確認的頁面路徑候選。
+- 從 sitemap 取一筆公開公文與一筆已發布法規，未登入 GET 對應 API 都回 200 JSON，未讀取或保存本文。
+  程式只允許非敏感且公開的公文匿名讀取；法規匿名 detail 限已發布資料。現有 router tests 另覆蓋登入限定／
+  私有公文與草稿法規匿名 404，以及公開公文與已發布法規成功；這不是跨帳號 IDOR 驗證。
 - 目前 WSL user timers 已啟用並設定 linger；每日 05:41、週日 06:11 與 06:51（台北時間）。GitHub
   workflow 仍未推送，正式站持續排程由本機 WSL 執行。正式站跨帳號 IDOR 仍需兩個專用測試帳號；
   不對 Cloudflare 共用 IP 或第三方 CNAME 執行 nmap／HTTP 掃描。
