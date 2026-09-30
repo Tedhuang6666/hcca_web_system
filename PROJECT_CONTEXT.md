@@ -33,7 +33,7 @@ apps/api/src/api/
   core/                 config、database、security、celery_app、cache、module_registry
   dependencies/         auth 與 router 權限注入
   routers/              HTTP 路由與參數；查入口先來這裡
-  services/             業務邏輯；document/、meeting/、shop/ 已是套件，其他依實際模組檔案維護
+  services/             業務邏輯；document/、governance/、shop/ 已是套件，其他依實際模組檔案維護
   models/               SQLAlchemy 定義
   schemas/              請求與回應 Pydantic 型別
   email/                模板與 renderer；node_modules/、compiled/ 按需處理
@@ -67,7 +67,6 @@ scripts/               維護、驗證、部署入口
 | 登入／RBAC | [routers/auth.py](apps/api/src/api/routers/auth.py)、[dependencies/permissions.py](apps/api/src/api/dependencies/permissions.py)、[services/user_session.py](apps/api/src/api/services/user_session.py)、[services/permission.py](apps/api/src/api/services/permission.py) | [test_auth_flows.py](apps/api/tests/test_auth_flows.py)、[test_rbac.py](apps/api/tests/test_rbac.py)、[test_idor.py](apps/api/tests/test_idor.py) |
 | 公文 | [routers/documents.py](apps/api/src/api/routers/documents.py)、[routers/documents_approve.py](apps/api/src/api/routers/documents_approve.py)、[services/document/](apps/api/src/api/services/document/) | [test_documents_router.py](apps/api/tests/test_documents_router.py)、[test_documents_approve_router.py](apps/api/tests/test_documents_approve_router.py) |
 | 法規 | [routers/regulations.py](apps/api/src/api/routers/regulations.py)、[services/regulation.py](apps/api/src/api/services/regulation.py) | [test_regulations_router.py](apps/api/tests/test_regulations_router.py)、[test_regulation_service.py](apps/api/tests/test_regulation_service.py) |
-| 會議 | [routers/meetings.py](apps/api/src/api/routers/meetings.py)、[services/meeting/](apps/api/src/api/services/meeting/) | [test_meetings_router.py](apps/api/tests/test_meetings_router.py)、[test_meeting_policy.py](apps/api/tests/test_meeting_policy.py) |
 | 購票 | [routers/shop.py](apps/api/src/api/routers/shop.py)、[services/shop/](apps/api/src/api/services/shop/) | [test_shop_router.py](apps/api/tests/test_shop_router.py)、[test_shop_class.py](apps/api/tests/test_shop_class.py) |
 | 學餐（保留模型） | [models/meal.py](apps/api/src/api/models/meal.py)；目前無獨立 meal router，不憑舊藍圖新增端點 | 先確認實際使用場景與掛載，再決定修改範圍 |
 | 問卷 | [routers/survey.py](apps/api/src/api/routers/survey.py)、[services/survey.py](apps/api/src/api/services/survey.py) | [test_survey_router.py](apps/api/tests/test_survey_router.py)、[test_survey.py](apps/api/tests/test_survey.py) |
