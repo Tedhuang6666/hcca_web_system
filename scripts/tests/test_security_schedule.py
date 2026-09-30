@@ -22,6 +22,7 @@ class SecurityScheduleTests(unittest.TestCase):
 
         def fake_run(command, **kwargs):
             calls.append((command, kwargs))
+            self.assertTrue(Path(command[1]).is_file())
             Path(command[command.index("--output") + 1]).write_text('{"result": "pass"}\n')
             code = 2 if len(calls) == 2 else 0
             return subprocess.CompletedProcess(command, code, "PRIVATE BODY", "PRIVATE COOKIE")
@@ -41,6 +42,10 @@ class SecurityScheduleTests(unittest.TestCase):
                 ["dns", "active-inputs", "nuclei-auth"],
             )
             self.assertEqual(len(calls), 3)
+            self.assertEqual(
+                [Path(command[1]).name for command, _kwargs in calls],
+                ["security-dns.py", "security-active.py", "security-nuclei.py"],
+            )
             self.assertEqual(summary["scans"][1]["result"], "review")
             self.assertNotIn("PRIVATE", json.dumps(summary))
             directory_mode = report_dir.stat().st_mode
