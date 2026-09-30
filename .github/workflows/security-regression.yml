@@ -127,6 +127,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Fixed active DNS candidate discovery
+        run: python3 scripts/security-dns.py --output security-reports/dns.json
       - name: Six active HTTP access and header controls
         run: python3 scripts/security-baseline.py --output security-reports/http-controls.json
       - name: Twelve fixed HEAD path probes, one per second
