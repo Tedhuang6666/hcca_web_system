@@ -88,6 +88,8 @@ jobs:
             apps/api/tests/test_documents_attachments_router.py \
             apps/api/tests/test_regulations_router.py \
             apps/api/tests/test_regulation_service.py \
+            apps/api/tests/test_finance_router.py \
+            apps/api/tests/test_receivables_router.py \
             apps/api/tests/test_announcements.py \
             apps/api/tests/test_survey_router.py \
             apps/api/tests/test_shop_router.py \
