@@ -7,10 +7,19 @@ import argparse
 import ipaddress
 import json
 import socket
+import ssl
 import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlencode
+from urllib.request import (
+    HTTPRedirectHandler,
+    HTTPSHandler,
+    ProxyHandler,
+    Request,
+    build_opener,
+)
 
 HOST = "hcca.tw"
 LABELS = (
@@ -30,6 +39,50 @@ LABELS = (
 )
 CONTROL_PREFIX = "hcca-active-dns-control-"
 INTERVAL_SECONDS = 1
+DNS_OVER_HTTPS_URL = "https://cloudflare-dns.com/dns-query"
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+DNS_OPENER = build_opener(
+    ProxyHandler({}),
+    NoRedirect(),
+    HTTPSHandler(context=ssl.create_default_context()),
+)
+
+
+def resolve_cname(hostname: str) -> dict:
+    query = urlencode({"name": hostname, "type": "CNAME"})
+    request = Request(
+        f"{DNS_OVER_HTTPS_URL}?{query}",
+        headers={
+            "accept": "application/dns-json",
+            "user-agent": "HCCA-Authorized-DNS-Check/1.0",
+        },
+    )
+    try:
+        with DNS_OPENER.open(request, timeout=10) as response:
+            body = response.read(8193)
+            if len(body) > 8192:
+                return {"status": "incomplete", "error": "ResponseTooLarge"}
+            payload = json.loads(body)
+    except (OSError, ValueError) as error:
+        return {"status": "incomplete", "error": type(error).__name__}
+
+    if payload.get("Status") != 0:
+        return {"status": "incomplete", "error": "ResolverStatus"}
+
+    targets = sorted(
+        {
+            answer["data"].rstrip(".").lower()
+            for answer in payload.get("Answer", [])
+            if answer.get("type") == 5 and isinstance(answer.get("data"), str)
+        }
+    )
+    return {"status": "present", "targets": targets} if targets else {"status": "none"}
 
 
 def resolve_hostname(hostname: str) -> dict:
@@ -53,9 +106,10 @@ def resolve_hostname(hostname: str) -> dict:
 def scan() -> dict:
     report = {
         "target": HOST,
-        "method": "DNS A/AAAA resolution via system resolver",
+        "method": "system A/AAAA resolution plus Cloudflare DoH CNAME lookup",
         "scope": (
             "one root control, two random wildcard controls, 13 fixed labels; "
+            "CNAME checked only for DNS-resolving candidates; "
             "no HTTP or port connections to discovered hosts"
         ),
         "started_at": datetime.now(UTC).isoformat(),
@@ -90,6 +144,7 @@ def scan() -> dict:
     wildcard_addresses: set[str] = set()
     wildcard_uncomparable = False
     review_required = False
+    cname_incomplete = False
     controls = [f"{CONTROL_PREFIX}{uuid.uuid4().hex}.hcca.tw" for _ in range(2)]
     for hostname in controls:
         control = query(hostname)
@@ -121,17 +176,27 @@ def scan() -> dict:
             wildcard_match = wildcard_uncomparable or bool(
                 wildcard_addresses.intersection(addresses)
             )
-            report["candidates"].append(
-                {
-                    "hostname": hostname,
-                    "status": "wildcard-suspect" if wildcard_match else "dns-resolves",
-                    "addresses": addresses,
-                    "wildcard_address_overlap": wildcard_match,
-                }
-            )
+            candidate = {
+                "hostname": hostname,
+                "status": "wildcard-suspect" if wildcard_match else "dns-resolves",
+                "addresses": addresses,
+                "wildcard_address_overlap": wildcard_match,
+            }
+            cname = resolve_cname(hostname)
+            candidate["cname_status"] = cname["status"]
+            if cname["status"] == "present":
+                candidate["cname_targets"] = cname["targets"]
+            elif cname["status"] == "incomplete":
+                candidate["cname_error"] = cname["error"]
+                cname_incomplete = True
+            report["candidates"].append(candidate)
 
     report["result"] = (
-        "incomplete" if "error" in report else "review" if review_required else "complete"
+        "incomplete"
+        if "error" in report or cname_incomplete
+        else "review"
+        if review_required
+        else "complete"
     )
     return report
 

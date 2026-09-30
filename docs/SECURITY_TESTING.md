@@ -3,22 +3,22 @@
 授權目標為 `https://hcca.tw`。本流程將公開站的低頻探針與隔離環境的攻擊回歸分開執行。
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
 合併／推送到 default branch 後，每日台北時間 05:41 執行，也可手動觸發。
-使用者已確認應用部署完成。遠端 `main` 已包含第一版與後續修復；本機仍保留使用者的
-`uv.lock` 變更。最新指示要求主動測試，因此本機 workflow 已改成固定字典 DNS 發現、HTTP
-存取控制、固定 HEAD 路徑枚舉、SQLi／XSS 輸入探針與已審閱 Nuclei 探針；不執行
-subfinder／amass 被動資產探索。
-依使用者先前選擇，本機提交尚未推送；遠端排程仍是舊版，尚未啟用此主動排程。
+使用者已確認應用部署完成；這不代表後續本機安全修正已部署。2026-09-30 查得遠端
+`origin/main` 為 `798e3b281f52a6b4a5157c9bbcac1805885a65cb`；依使用者先前選擇，後續安全提交
+維持本機、不推送。遠端每日排程因此仍是舊版，尚未啟用本機的主動流程。本機仍保留使用者的
+`uv.lock` 變更。本機 workflow 使用固定字典 DNS 發現、HTTP 存取控制、固定 HEAD 路徑枚舉、
+SQLi／XSS 輸入探針與已審閱 Nuclei 探針；不執行 subfinder／amass 被動資產探索。
 
 ## 可重跑入口
 
 ```bash
-# 固定 13 個子網域標籤的主動 DNS 發現；含隨機 wildcard 控制，不連線至候選主機。
+# 固定 13 個子網域標籤的主動 DNS 發現；記錄解析候選的 CNAME，不連線至候選主機。
 python3 scripts/security-dns.py --output /tmp/hcca-dns.json
 # 核准搜尋入口的四個主動輸入探針；固定每 10 秒一個請求，不保存回應本文。
 python3 scripts/security-active.py --output /tmp/hcca-active.json
 # 十二條固定路徑的主動 HEAD 枚舉；每秒一個請求，不下載回應本文。
 python3 scripts/security-paths.py --output /tmp/hcca-paths.json
-# 六個固定 HTTP 存取控制／安全標頭 GET 探針。
+# 九個固定 HTTP 存取控制／安全標頭 GET 探針；不保存回應本文。
 python3 scripts/security-baseline.py --output /tmp/hcca-http.json
 # 專用 loopback 測試 DB／Redis + Java 17 + ZAP 2.17.0；自行 migration、啟停隔離 API。
 # TEST_DATABASE_URL 必須是 PostgreSQL *_test；REDIS_URL 必須指向專用測試 Redis DB。
@@ -29,7 +29,8 @@ python3 -m unittest discover -s scripts/tests -p 'test_security_*.py'
 ```
 
 正式站 workflow 只做主動 DNS／HTTP 探測，不執行 subfinder／amass 等被動資產探索。每回依序
-查根網域、兩個隨機 wildcard 控制與 13 個固定子網域標籤，再執行六個固定 GET 存取控制／
+查根網域、兩個隨機 wildcard 控制與 13 個固定子網域標籤；解析成功的候選另查 CNAME，記錄供
+人工判讀但不連線到 CNAME 目標。之後執行九個固定 GET 存取控制／
 安全標頭檢查、十二個固定 HEAD 路徑探針、四個搜尋輸入攻擊探針，以及兩個經審閱的 Nuclei
 認證邊界探針。DNS 候選不會自動連線；須先確認不是 wildcard 或第三方 CNAME。HEAD 路徑命中
 只標成待人工確認候選，不下載內容。HTTP 工具固定在 `hcca.tw`，不追轉址、不帶登入資訊。
@@ -54,7 +55,7 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 
 | 階段 | 執行方式與證據 | 進入下一階段的條件 |
 | --- | --- | --- |
-| 資產探索 | `scripts/security-dns.py` 對 13 個固定標籤主動解析，並用兩個隨機名稱檢查 wildcard；不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域；確認第一方歸屬後才加入 HTTP 範圍 |
+| 資產探索 | `scripts/security-dns.py` 對 13 個固定標籤主動解析、檢查兩個隨機 wildcard，並以 DoH 記錄解析候選的 CNAME；不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域或 CNAME 目標；確認第一方歸屬後才加入 HTTP 範圍 |
 | DNS／HTTP／連接埠 | 固定標籤 DNS 與 `hcca.tw` HTTP；獨立測試主機才用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描；第三方 CNAME 不掃 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
 | 主動探測 | 正式站固定 DNS／HTTP／HEAD／Nuclei 請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；只測核准的搜尋、身份邊界與 12 條固定路徑 |
@@ -87,6 +88,7 @@ CSRF cookie／header，避免 CSRF 擋在物件授權檢查之前。若 B 得到
 | `GET /surveys/{survey_id}/responses` | 需以有 `survey:manage` 或活動負責人身份作正向控制 | 403 | 唯讀 |
 | `PATCH /notifications/inbox/{notification_id}/read` | 本人 200 | 404，且仍未讀 | 僅隔離資料；確認 DB 前後狀態 |
 | `POST /shop/orders/{order_id}/cancel` | 本人 200，測試訂單變為已取消 | 403，訂單仍待處理 | 僅隔離資料；拒絕後確認 DB 狀態未改 |
+| `POST /receivables/{id}/mark-paid` | A 有 `finance:record`：200 | B 只有 `finance:view`：403 | 僅隔離資料；拒絕後狀態仍為 unpaid |
 
 本機 ASGI 測試路徑省略部署 gateway 的 `/api` 前綴。正式站目前沒有專用 A／B 測試帳號，
 因此上表的跨帳號正式站步驟尚未執行；不要用一般使用者帳號或真實訂單替代。
@@ -241,3 +243,26 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   單一 HEAD 回 301 至根網域；`posthug` 的 CNAME 指向 `proxyhog.com`，未連線或掃描該第三方主機。
 - DNS 範圍／wildcard／第三方候選測試加入後，安全工具測試共 26 tests 通過；新 DNS 檔 Ruff／format、
   workflow actionlint、YAML 與 ZAP JSON 解析通過。Nmap 仍未對 Cloudflare 共用 IP 執行掃描。
+
+## 第四輪：權限修復與更新後的正式站探測（2026-09-30）
+
+- 收款 API 曾把 `finance:view` 當成建立、更新、標記收款與退款的充分權限；權限定義將它描述為唯讀。
+  本機改為要求 `finance:record`，並新增查看者遭拒且資料未變的測試；建立／更新／收款／退款的
+  `finance:record` 成功案例保留。修正 commit 為 `c3117e26`，尚未推送或部署。
+- 財務與收款 router 的 24 個相關測試在隔離 aiosqlite 資料庫通過；這不等同 PostgreSQL 驗證。
+  本機缺少符合規範的 `TEST_DATABASE_URL`，且不能將未知的本機 PostgreSQL 連線當成測試庫。
+- 公開 HTTP 基線擴至 9 個固定 GET，新增 `/api/receivables?limit=1`、
+  `/api/receivables/summary`、`/api/receivables/export.csv`，只檢查狀態／標頭，不讀 response body。
+  scanner 邊界測試 29 tests 通過，Ruff／format 通過，workflow YAML 可解析。
+- 正式站這輪兩次基線嘗試分別於 14:38、14:46 UTC 在首頁 `/` 逾時，各只送出 1/9 個請求後停止；
+  因此新增的三個收款 GET 尚未在本輪正式站重新驗證。先前匿名收款列表／摘要為 401，對隨機不存在
+  UUID 的更新／收款／退款為 403；CSV 匯出狀態仍未確認。
+- 無登入 Playwright 實際載入 `/admin` 後導向 `/login?next=%2Fadmin`；HEAD 看到 `/admin` 200 是
+  前端頁面殼層，不能作為未授權存取證據。`robots.txt` 回 200 並列出登入後路由；單次 sitemap
+  請求逾時，未再重試。
+- 主動 DNS 再次發現 `www.hcca.tw` 與 `posthug.hcca.tw`；兩個 wildcard 控制為 NXDOMAIN。
+  新報告對已解析候選追加 Cloudflare DoH CNAME 查詢：`www` 無可見 CNAME，`posthug` 指向
+  `cc9892f216ee24b7cd0d.cf-prod-us-proxy.proxyhog.com`。未連到該第三方主機，也未對 Cloudflare
+  共用 IP 做 nmap；不能由現有 DNS 證據推論該服務可被接管。
+- 遠端 `origin/main` 仍為 `798e3b281f52a6b4a5157c9bbcac1805885a65cb`，因此新增的九項基線、CNAME
+  報告與收款權限修正都只在本機。遠端每日排程尚未執行這些新探針。

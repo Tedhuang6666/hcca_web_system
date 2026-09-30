@@ -131,7 +131,7 @@ jobs:
           persist-credentials: false
       - name: Fixed active DNS candidate discovery
         run: python3 scripts/security-dns.py --output security-reports/dns.json
-      - name: Six active HTTP access and header controls
+      - name: Nine active HTTP access and header controls
         run: python3 scripts/security-baseline.py --output security-reports/http-controls.json
       - name: Twelve fixed HEAD path probes, one per second
         run: python3 scripts/security-paths.py --output security-reports/paths.json

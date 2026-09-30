@@ -20,6 +20,9 @@ PROBES = (
     ("/login", "public"),
     ("/api/auth/me", "private"),
     ("/api/notifications/inbox", "private"),
+    ("/api/receivables?limit=1", "private"),
+    ("/api/receivables/summary", "private"),
+    ("/api/receivables/export.csv", "private"),
     ("/api/docs", "disabled"),
     ("/api/openapi.json", "disabled"),
 )
@@ -107,7 +110,7 @@ def scan(target: str, *, interval: float = 1.0) -> dict:
     report = {
         "target": target,
         "started_at": datetime.now(UTC).isoformat(),
-        "scope": "six fixed GET paths; no redirects, login, body capture or active payloads",
+        "scope": "nine fixed GET paths; no redirects, login, body capture or active payloads",
         "checks": [],
         "result": "incomplete",
     }
