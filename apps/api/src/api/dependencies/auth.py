@@ -88,7 +88,21 @@ async def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> "User | None":
-    """嘗試解析 Bearer Token，失敗或無 token 時回傳 None（不拋出 401）"""
+    """可選登入仍須通過完整身份檢查；封鎖或失效身份只享有匿名存取權。"""
+    try:
+        return await get_current_user(request, credentials, db)
+    except HTTPException as exc:
+        if exc.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
+            return None
+        raise
+
+
+async def get_identity_for_access_status(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> "User | None":
+    """僅供封鎖狀態查詢辨識有效身份；不可作為業務資料的授權依賴。"""
     token = _token_from_request(request, credentials)
     if token is None:
         return None

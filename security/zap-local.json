@@ -1,0 +1,37 @@
+{
+  "env": {
+    "contexts": [{
+      "name": "hcca-local-isolated",
+      "urls": ["${BASE_URL}/regulations/search", "${BASE_URL}/regulations", "${BASE_URL}/documents", "${BASE_URL}/announcements"]
+    }],
+    "parameters": {"failOnError": true, "failOnWarning": false, "progressToStdout": true}
+  },
+  "jobs": [
+    {"type": "requestor", "requests": [
+      {"url": "${BASE_URL}/regulations/search?keyword=security", "responseCode": 200},
+      {"url": "${BASE_URL}/regulations?keyword=security", "responseCode": 200},
+      {"url": "${BASE_URL}/documents?keyword=security", "responseCode": 200},
+      {"url": "${BASE_URL}/announcements?limit=10", "responseCode": 200},
+      {"url": "${BASE_URL}/regulations/search?keyword=security%00", "responseCode": 422},
+      {"url": "${BASE_URL}/documents?keyword=security%00", "responseCode": 422},
+      {"url": "${BASE_URL}/regulations?keyword=alpha%20%27%20beta", "responseCode": 200}
+    ]},
+    {"type": "activeScan", "parameters": {
+      "context": "hcca-local-isolated", "maxRuleDurationInMins": 1,
+      "maxScanDurationInMins": 3, "delayInMs": 250, "threadPerHost": 1,
+      "injectPluginIdInHeader": true
+    }, "policyDefinition": {
+      "defaultStrength": "Low", "defaultThreshold": "Off",
+      "rules": [
+        {"id": 40012, "threshold": "Medium", "strength": "Low"},
+        {"id": 40018, "threshold": "Medium", "strength": "Low"},
+        {"id": 40022, "threshold": "Medium", "strength": "Low"}
+      ]
+    }},
+    {"type": "passiveScan-wait", "parameters": {"maxDuration": 1}},
+    {"type": "report", "parameters": {
+      "template": "traditional-json", "reportDir": "${REPORT_DIR}", "reportFile": "report.json"
+    }},
+    {"type": "exitStatus", "parameters": {"errorLevel": "High", "warnLevel": "Medium"}}
+  ]
+}

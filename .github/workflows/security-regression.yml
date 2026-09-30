@@ -67,7 +67,7 @@ jobs:
 
   regressions:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
@@ -114,6 +114,9 @@ jobs:
           bash scripts/check.sh api-test \
             apps/api/tests/test_auth_flows.py \
             apps/api/tests/test_auth_policy.py \
+            apps/api/tests/test_optional_auth_blocks.py \
+            apps/api/tests/test_search_input_security.py \
+            apps/api/tests/test_admin_system_defense.py \
             apps/api/tests/test_security.py \
             apps/api/tests/test_security_hardening.py \
             apps/api/tests/test_waf.py \
@@ -125,7 +128,33 @@ jobs:
             apps/api/tests/test_mfa_router.py \
             apps/api/tests/test_mfa_service.py \
             apps/api/tests/test_metrics_tasks.py \
+            apps/api/tests/test_documents_router.py \
+            apps/api/tests/test_documents_attachments_router.py \
+            apps/api/tests/test_regulations_router.py \
+            apps/api/tests/test_regulation_service.py \
+            apps/api/tests/test_announcements.py \
+            apps/api/tests/test_survey_router.py \
+            apps/api/tests/test_shop_router.py \
             --junitxml=security-reports/regressions.xml
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install checksum-pinned ZAP
+        run: |
+          curl --fail --silent --show-error --location --max-time 180 \
+            https://github.com/zaproxy/zaproxy/releases/download/v2.17.0/ZAP_2.17.0_Crossplatform.zip \
+            --output "$RUNNER_TEMP/zap.zip"
+          echo "94c8f767b1c2e94f0db66b3ae56514d5e3f5a728ee1b6c798e0c8fe2d61fbff0  $RUNNER_TEMP/zap.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/zap.zip" -d "$RUNNER_TEMP/zap"
+          chmod +x "$RUNNER_TEMP/zap/ZAP_2.17.0/zap.sh"
+      - name: Isolated API migration and ZAP active regression
+        env:
+          REDIS_URL: redis://127.0.0.1:6379/10
+        run: |
+          uv run --locked --project apps/api python scripts/security-zap.py \
+            --zap "$RUNNER_TEMP/zap/ZAP_2.17.0/zap.sh" \
+            --output security-reports/zap.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

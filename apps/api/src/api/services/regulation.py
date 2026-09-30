@@ -371,22 +371,13 @@ async def list_regulations(
                 )
             )
         else:
-            # PostgreSQL 使用 tsvector 全文搜尋；對特殊字符 fallback 到 LIKE。
-            try:
-                tsquery_str = " & ".join(word.strip() for word in keyword.split() if word.strip())
-                if tsquery_str:
-                    q = q.where(
-                        Regulation.search_vector.op("@@")(func.to_tsquery("simple", tsquery_str))
-                    )
-                else:
-                    q = q.where(
-                        or_(
-                            Regulation.title.ilike(pattern),
-                            Regulation.content.ilike(pattern),
-                            Regulation.preface.ilike(pattern),
-                        )
-                    )
-            except (AttributeError, TypeError, ValueError):
+            # 一般輸入以 plainto_tsquery 解析，避免引號／括號變成 tsquery 語法。
+            # 保留多詞 AND 與原有空白查詢行為；SQL 仍使用綁定參數。
+            if keyword.strip():
+                q = q.where(
+                    Regulation.search_vector.op("@@")(func.plainto_tsquery("simple", keyword))
+                )
+            else:
                 q = q.where(
                     or_(
                         Regulation.title.ilike(pattern),

@@ -73,7 +73,7 @@ from api.core.modules import MODULES
 from api.core.query_audit import get_slow_queries
 from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
-from api.dependencies.auth import get_current_active_user, get_optional_user
+from api.dependencies.auth import get_current_active_user, get_identity_for_access_status
 from api.models.email_message import EmailMessage
 from api.models.system_incident import IncidentSeverity, IncidentStatus
 from api.models.user import User
@@ -304,7 +304,7 @@ async def public_module_status() -> list[ModuleStatusPublic]:
 async def public_access_status(
     request: Request,
     session: DbDep,
-    user: User | None = Depends(get_optional_user),
+    user: User | None = Depends(get_identity_for_access_status),
 ) -> AccessBlockStatus:
     ip = request.client.host if request.client else "unknown"
     ip_block = await get_ip_block(ip)
