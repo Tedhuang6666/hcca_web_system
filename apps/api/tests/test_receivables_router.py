@@ -45,7 +45,7 @@ async def test_list_receivables_without_permission_returns_403(
 async def test_create_receivable_without_payer_returns_422(
     db_session, member_user, authed_client_factory
 ) -> None:
-    await _grant(db_session, member_user, "finance:view")
+    await _grant(db_session, member_user, "finance:record")
     ac = authed_client_factory(member_user)
 
     resp = await ac.post("/receivables", json={"title": "無指定對象", "amount": 100})
@@ -53,10 +53,23 @@ async def test_create_receivable_without_payer_returns_422(
     assert resp.status_code == 422
 
 
+async def test_create_receivable_with_view_permission_only_returns_403(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:view")
+    payer = await make_user(email="view-only-receivable-payer@school.edu")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.post("/receivables", json=_payload(payer.id))
+
+    assert resp.status_code == 403
+
+
 async def test_create_and_list_receivable_succeeds(
     db_session, member_user, authed_client_factory, make_user
 ) -> None:
     await _grant(db_session, member_user, "finance:view")
+    await _grant(db_session, member_user, "finance:record")
     payer = await make_user(email="payer@school.edu")
     ac = authed_client_factory(member_user)
 
@@ -73,6 +86,7 @@ async def test_receivable_summary_returns_totals(
     db_session, member_user, authed_client_factory, make_user
 ) -> None:
     await _grant(db_session, member_user, "finance:view")
+    await _grant(db_session, member_user, "finance:record")
     payer = await make_user(email="summary-payer@school.edu")
     ac = authed_client_factory(member_user)
     await ac.post("/receivables", json=_payload(payer.id, amount=300))
@@ -86,15 +100,50 @@ async def test_receivable_summary_returns_totals(
 async def test_update_missing_receivable_returns_404(
     db_session, member_user, authed_client_factory
 ) -> None:
-    await _grant(db_session, member_user, "finance:view")
+    await _grant(db_session, member_user, "finance:record")
     ac = authed_client_factory(member_user)
 
     resp = await ac.patch(f"/receivables/{uuid.uuid4()}", json={"title": "x"})
     assert resp.status_code == 404
 
 
-async def test_mark_paid_flow(db_session, member_user, authed_client_factory, make_user) -> None:
+async def test_update_receivable_with_record_permission_succeeds(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:record")
+    payer = await make_user(email="update-record-payer@school.edu")
+    ac = authed_client_factory(member_user)
+    created = await ac.post("/receivables", json=_payload(payer.id))
+    receivable_id = created.json()["id"]
+
+    resp = await ac.patch(f"/receivables/{receivable_id}", json={"title": "已更新費用"})
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "已更新費用"
+
+
+async def test_view_only_user_cannot_update_receivable(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
     await _grant(db_session, member_user, "finance:view")
+    recorder = await make_user(email="receivable-recorder@school.edu")
+    await _grant(db_session, recorder, "finance:view")
+    await _grant(db_session, recorder, "finance:record")
+    payer = await make_user(email="update-view-only-payer@school.edu")
+    recorder_client = authed_client_factory(recorder)
+    viewer_client = authed_client_factory(member_user)
+    created = await recorder_client.post("/receivables", json=_payload(payer.id))
+    receivable_id = created.json()["id"]
+
+    resp = await viewer_client.patch(f"/receivables/{receivable_id}", json={"title": "越權修改"})
+
+    assert resp.status_code == 403
+    listed = await viewer_client.get("/receivables", params={"user_id": str(payer.id)})
+    assert next(row for row in listed.json() if row["id"] == receivable_id)["title"] == "活動費用"
+
+
+async def test_mark_paid_flow(db_session, member_user, authed_client_factory, make_user) -> None:
+    await _grant(db_session, member_user, "finance:record")
     payer = await make_user(email="mark-paid-payer@school.edu")
     ac = authed_client_factory(member_user)
     created = await ac.post("/receivables", json=_payload(payer.id, amount=500))
@@ -109,15 +158,37 @@ async def test_mark_paid_flow(db_session, member_user, authed_client_factory, ma
 async def test_mark_paid_missing_receivable_returns_404(
     db_session, member_user, authed_client_factory
 ) -> None:
-    await _grant(db_session, member_user, "finance:view")
+    await _grant(db_session, member_user, "finance:record")
     ac = authed_client_factory(member_user)
 
     resp = await ac.post(f"/receivables/{uuid.uuid4()}/mark-paid", json={"paid_amount": 100})
     assert resp.status_code == 404
 
 
-async def test_refund_flow(db_session, member_user, authed_client_factory, make_user) -> None:
+async def test_view_only_user_cannot_mark_receivable_paid(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
     await _grant(db_session, member_user, "finance:view")
+    recorder = await make_user(email="payment-recorder@school.edu")
+    await _grant(db_session, recorder, "finance:view")
+    await _grant(db_session, recorder, "finance:record")
+    payer = await make_user(email="mark-paid-view-only-payer@school.edu")
+    recorder_client = authed_client_factory(recorder)
+    viewer_client = authed_client_factory(member_user)
+    created = await recorder_client.post("/receivables", json=_payload(payer.id))
+    receivable_id = created.json()["id"]
+
+    resp = await viewer_client.post(
+        f"/receivables/{receivable_id}/mark-paid", json={"paid_amount": 500}
+    )
+
+    assert resp.status_code == 403
+    listed = await viewer_client.get("/receivables", params={"user_id": str(payer.id)})
+    assert next(row for row in listed.json() if row["id"] == receivable_id)["status"] == "unpaid"
+
+
+async def test_refund_flow(db_session, member_user, authed_client_factory, make_user) -> None:
+    await _grant(db_session, member_user, "finance:record")
     payer = await make_user(email="refund-payer@school.edu")
     ac = authed_client_factory(member_user)
     created = await ac.post("/receivables", json=_payload(payer.id, amount=500))
@@ -130,10 +201,37 @@ async def test_refund_flow(db_session, member_user, authed_client_factory, make_
     assert resp.json()["status"] == "refunded"
 
 
+async def test_view_only_user_cannot_refund_receivable(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:view")
+    recorder = await make_user(email="refund-recorder@school.edu")
+    await _grant(db_session, recorder, "finance:view")
+    await _grant(db_session, recorder, "finance:record")
+    payer = await make_user(email="refund-view-only-payer@school.edu")
+    recorder_client = authed_client_factory(recorder)
+    viewer_client = authed_client_factory(member_user)
+    created = await recorder_client.post("/receivables", json=_payload(payer.id))
+    receivable_id = created.json()["id"]
+    paid = await recorder_client.post(
+        f"/receivables/{receivable_id}/mark-paid", json={"paid_amount": 500}
+    )
+    assert paid.status_code == 200
+
+    resp = await viewer_client.post(
+        f"/receivables/{receivable_id}/refund", json={"refunded_amount": 500}
+    )
+
+    assert resp.status_code == 403
+    listed = await viewer_client.get("/receivables", params={"user_id": str(payer.id)})
+    assert next(row for row in listed.json() if row["id"] == receivable_id)["status"] == "paid"
+
+
 async def test_export_receivables_csv_returns_csv_content_type(
     db_session, member_user, authed_client_factory, make_user
 ) -> None:
     await _grant(db_session, member_user, "finance:view")
+    await _grant(db_session, member_user, "finance:record")
     payer = await make_user(email="csv-payer@school.edu")
     ac = authed_client_factory(member_user)
     await ac.post("/receivables", json=_payload(payer.id))
