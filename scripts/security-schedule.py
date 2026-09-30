@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIRECTORY = Path.home() / ".local" / "state" / "hcca-security"
 SCANS = {
     "daily": (
-        ("dns", "security-dns.py", (), 120),
+        ("dns", "security-dns.py", (), 240),
         ("active-inputs", "security-active.py", (), 120),
         ("nuclei-auth", "security-nuclei.py", (), 180),
     ),

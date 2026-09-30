@@ -42,6 +42,7 @@ class SecurityScheduleTests(unittest.TestCase):
                 ["dns", "active-inputs", "nuclei-auth"],
             )
             self.assertEqual(len(calls), 3)
+            self.assertEqual(calls[0][1]["timeout"], 240)
             self.assertEqual(
                 [Path(command[1]).name for command, _kwargs in calls],
                 ["security-dns.py", "security-active.py", "security-nuclei.py"],
