@@ -338,7 +338,8 @@ async def test_admin_can_update_user_settings(
     assert payload["is_verified"] is False
     assert payload["show_email"] is False
     assert payload["ui_theme"] == "dark"
-    assert payload["notification_preferences"]["document_pending"]["email"] is True
+    # 模組靜音會關閉該模組所有通知管道，即使同一請求也設定了 email=True。
+    assert payload["notification_preferences"]["document_pending"]["email"] is False
     assert payload["notification_digest_frequency"] == "daily"
     assert payload["muted_notification_modules"] == ["document"]
 
