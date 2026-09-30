@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  FileUp,
   FileText,
   Globe2,
   Handshake,
@@ -28,13 +29,12 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, partnerApplicationApi, siteApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
-import ArticleImportPanel from "@/components/site/ArticleImportPanel";
 import ArticleMarkdownEditor from "@/components/site/ArticleMarkdownEditor";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
@@ -66,6 +66,11 @@ import {
   readSpecialAgreementContent,
 } from "@/lib/specialAgreement";
 import { LUNCH_GUIDE_MARKDOWN } from "@/lib/article-content";
+import {
+  articleSlugFromTitle,
+  articleSummaryFromMarkdown,
+  articleTitleFromMarkdown,
+} from "@/lib/article-utils";
 import { getExamScopeDefaultSection } from "@/lib/exam-scope";
 
 type Tab = "homepage" | "system" | "contact" | "special" | "nav" | "pages" | "links" | "officers" | "advanced";
@@ -84,6 +89,9 @@ const EMPTY_PAGE_DRAFT = {
   cover_image_url: "",
   cover_image_alt: "",
   layout_config: {} as Record<string, unknown>,
+  content_blocks: {} as Record<string, unknown>,
+  seo_title: "",
+  seo_description: "",
   exam_scope_default_section: "",
 };
 
@@ -451,6 +459,7 @@ export default function PublicSiteAdminPage() {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<PublicSiteSettingsOut>(emptySettings);
   const [pages, setPages] = useState<PublicSitePageOut[]>([]);
+  const [savingPage, setSavingPage] = useState(false);
   const [categories, setCategories] = useState<PublicLinkCategoryOut[]>([]);
   const [links, setLinks] = useState<PublicLinkOut[]>([]);
   const [candidates, setCandidates] = useState<PublicOfficerCandidateOut[]>([]);
@@ -471,6 +480,7 @@ export default function PublicSiteAdminPage() {
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
 
   const [pageDraft, setPageDraft] = useState(EMPTY_PAGE_DRAFT);
+  const markdownFileRef = useRef<HTMLInputElement>(null);
   const [categoryDraft, setCategoryDraft] = useState({
     slug: "",
     title: "",
@@ -796,8 +806,43 @@ export default function PublicSiteAdminPage() {
       cover_image_url: page.cover_image_url ?? "",
       cover_image_alt: page.cover_image_alt ?? "",
       layout_config: page.layout_config ?? {},
+      content_blocks: page.content_blocks ?? {},
+      seo_title: page.seo_title ?? "",
+      seo_description: page.seo_description ?? "",
       exam_scope_default_section: getExamScopeDefaultSection(page.layout_config) ?? "",
     });
+  };
+
+  const importPageMarkdown = async (file: File) => {
+    const filename = file.name.toLocaleLowerCase();
+    if (!filename.endsWith(".md") && !filename.endsWith(".txt")) {
+      toast.error("請選擇 Markdown（.md）或純文字（.txt）檔案");
+      return;
+    }
+
+    try {
+      const markdown = await file.text();
+      if (!markdown.trim()) {
+        toast.error("檔案沒有文章內容");
+        return;
+      }
+      const title = articleTitleFromMarkdown(markdown);
+      const summary = articleSummaryFromMarkdown(markdown);
+      setPageDraft((current) => ({
+        ...current,
+        slug: current.slug.trim() || (!editingPageId && title ? articleSlugFromTitle(title) : current.slug),
+        title: title || current.title,
+        summary: summary || current.summary,
+        body_md: markdown,
+        page_kind: "article",
+        is_published: editingPageId ? current.is_published : true,
+        seo_title: title || current.seo_title,
+        seo_description: summary || current.seo_description,
+      }));
+      toast.success(`已載入 ${file.name}，內容已填入文章編輯器`);
+    } catch {
+      toast.error("無法讀取文章檔案，請重新選擇");
+    }
   };
 
   const useLunchGuideExample = () => {
@@ -809,6 +854,9 @@ export default function PublicSiteAdminPage() {
       summary: "整理竹中校內學餐、校外業者、外送與外出用餐的午餐選擇。",
       body_md: LUNCH_GUIDE_MARKDOWN,
       page_kind: "article",
+      is_published: true,
+      seo_title: "🍱 竹中訂餐指南",
+      seo_description: "整理竹中校內學餐、校外業者、外送與外出用餐的午餐選擇。",
     });
   };
 
@@ -817,6 +865,11 @@ export default function PublicSiteAdminPage() {
       toast.error("請填寫 Slug、標題與文章內容");
       return;
     }
+    if (!/^[a-z0-9][a-z0-9-]*$/u.test(pageDraft.slug.trim())) {
+      toast.error("Slug 只能使用小寫英文字母、數字與連字號");
+      return;
+    }
+    setSavingPage(true);
     try {
       const { exam_scope_default_section, ...pageDraftData } = pageDraft;
       const layoutConfig = { ...pageDraft.layout_config };
@@ -832,23 +885,29 @@ export default function PublicSiteAdminPage() {
         summary: pageDraft.summary || null,
         nav_label: pageDraft.nav_label || null,
         layout_config: layoutConfig,
-        content_blocks: {},
+        content_blocks: pageDraft.content_blocks,
         cover_image_url: pageDraft.cover_image_url || null,
         cover_image_alt: pageDraft.cover_image_alt || null,
-        seo_title: null,
-        seo_description: null,
+        seo_title: pageDraft.seo_title || null,
+        seo_description: pageDraft.seo_description || null,
       };
       if (editingPageId) {
         await siteApi.updatePage(editingPageId, body);
-        toast.success("頁面已更新");
+        toast.success(pageDraft.page_kind === "article" ? "文章已更新" : "頁面已更新");
       } else {
         await siteApi.createPage(body);
-        toast.success("頁面已新增");
+        toast.success(
+          pageDraft.page_kind === "article" && pageDraft.is_published
+            ? "文章已新增並上線"
+            : "頁面已新增",
+        );
       }
       resetPageDraft();
       await load();
     } catch (error) {
       displayError(error, editingPageId ? "更新頁面失敗" : "新增頁面失敗");
+    } finally {
+      setSavingPage(false);
     }
   };
 
@@ -1622,20 +1681,28 @@ export default function PublicSiteAdminPage() {
 
       {tab === "pages" && (
         <section key="pages" className="tab-panel-transition space-y-4">
-          <ArticleImportPanel onImported={() => void load()} />
           <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="card space-y-4 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="font-semibold">{editingPageId ? "編輯公開頁面" : "新增公開頁面"}</h2>
+                <h2 className="font-semibold">
+                  {editingPageId
+                    ? pageDraft.page_kind === "article" ? "編輯文章" : "編輯公開頁面"
+                    : pageDraft.page_kind === "article" ? "新增文章" : "新增公開頁面"}
+                </h2>
                 <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                  文章類別會進入文章專欄；內文支援 Markdown、段落標題與圖片上傳。
+                  文章與一般頁面共用同一份編輯器；匯入 Markdown 後可直接調整內容與發布設定。
                 </p>
               </div>
               {editingPageId && <button type="button" className="btn btn-sm btn-ghost" onClick={resetPageDraft}>取消編輯</button>}
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Slug"><TextInput value={pageDraft.slug} onChange={(e) => setPageDraft({ ...pageDraft, slug: e.target.value })} placeholder="history" /></Field>
+              <Field
+                label="Slug"
+                hint={`${pageDraft.page_kind === "article" ? "/articles/" : "/"}${pageDraft.slug || "…"}`}
+              >
+                <TextInput value={pageDraft.slug} onChange={(e) => setPageDraft({ ...pageDraft, slug: e.target.value })} placeholder="history" spellCheck={false} />
+              </Field>
               <Field label="頁面類別">
                 <Select value={pageDraft.page_kind} onChange={(e) => setPageDraft({ ...pageDraft, page_kind: e.target.value })}>
                   <option value="standard">一般頁面</option>
@@ -1645,9 +1712,34 @@ export default function PublicSiteAdminPage() {
             </div>
             <Field label="標題"><TextInput value={pageDraft.title} onChange={(e) => setPageDraft({ ...pageDraft, title: e.target.value })} /></Field>
             <Field label="摘要"><TextArea value={pageDraft.summary} onChange={(e) => setPageDraft({ ...pageDraft, summary: e.target.value })} /></Field>
-            <Field label="內文 Markdown" hint="用 ## 建立可跳轉的主要段落；按「加入照片」即可上傳並插入圖片。">
+            <div>
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium text-[var(--text-secondary)]">內文 Markdown</span>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={markdownFileRef}
+                    type="file"
+                    accept=".md,.txt,text/markdown,text/plain"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void importPageMarkdown(file);
+                      event.target.value = "";
+                    }}
+                  />
+                  <button type="button" className="btn btn-secondary min-h-10" onClick={() => markdownFileRef.current?.click()}>
+                    <FileUp size={15} aria-hidden /> 匯入 .md 檔
+                  </button>
+                  {!editingPageId && (
+                    <button type="button" className="btn btn-secondary min-h-10" onClick={useLunchGuideExample}>
+                      <Sparkles size={15} aria-hidden /> 帶入訂餐指南
+                    </button>
+                  )}
+                </div>
+              </div>
               <ArticleMarkdownEditor value={pageDraft.body_md} onChange={(value) => setPageDraft({ ...pageDraft, body_md: value })} rows={18} />
-            </Field>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">用 ## 建立可跳轉的主要段落；按「加入照片」即可上傳並插入圖片。</p>
+            </div>
             {pageDraft.page_kind === "article" && (
               <Field
                 label="考試範圍預設段次"
@@ -1681,8 +1773,14 @@ export default function PublicSiteAdminPage() {
               <Toggle label="顯示在導覽" checked={pageDraft.show_in_nav} onChange={(value) => setPageDraft({ ...pageDraft, show_in_nav: value })} />
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={createPage} className="btn btn-primary"><Save size={16} aria-hidden /> {editingPageId ? "儲存頁面" : "新增頁面"}</button>
-              {!editingPageId && <button type="button" onClick={useLunchGuideExample} className="btn btn-secondary"><Sparkles size={15} aria-hidden /> 帶入訂餐指南</button>}
+              <button type="button" onClick={createPage} className="btn btn-primary" disabled={savingPage}>
+                <Save size={16} aria-hidden />
+                {savingPage ? "儲存中…" : editingPageId
+                  ? "儲存變更"
+                  : pageDraft.page_kind === "article"
+                    ? pageDraft.is_published ? "新增並上線" : "新增文章草稿"
+                    : "新增頁面"}
+              </button>
             </div>
           </div>
           <div className="space-y-3">
@@ -1699,6 +1797,16 @@ export default function PublicSiteAdminPage() {
                     <p className="mt-1 text-xs text-[var(--text-muted)]">/{page.slug} / {page.page_kind === "article" ? "文章" : "一般頁面"}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {page.page_kind === "article" && page.is_published && (
+                      <a
+                        href={`/articles/${encodeURIComponent(page.slug)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-sm btn-ghost"
+                      >
+                        <ArrowUpRight size={14} aria-hidden /> 查看文章
+                      </a>
+                    )}
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => startEditPage(page)}>
                       <Pencil size={14} aria-hidden /> 編輯
                     </button>
