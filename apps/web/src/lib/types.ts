@@ -487,6 +487,7 @@ export type {
   PetitionEventVisibility,
   PetitionInternalNoteCreate,
   PetitionLookupOut,
+  PetitionMonthlyStatsOut,
   PetitionNotificationRuleCreate,
   PetitionNotificationRuleOut,
   PetitionNotificationRuleUpdate,

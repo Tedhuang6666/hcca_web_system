@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.clock import local_today
+from api.core.clock import TAIPEI, local_today
 from api.core.database import get_db
 from api.core.login_lockout import is_locked, record_failure, record_success
 from api.core.permission_codes import PermissionCode
@@ -60,6 +60,7 @@ from api.schemas.petition import (
     PetitionEventUpdate,
     PetitionInternalNoteCreate,
     PetitionLookupOut,
+    PetitionMonthlyStatsOut,
     PetitionPublicListItem,
     PetitionPublicOut,
     PetitionPublicRequest,
@@ -1113,6 +1114,63 @@ async def get_stats(session: DbDep, user: CurrentUser) -> PetitionStatsOut:
         org_ids=org_ids,
         user_id=user.id,
         include_by_org=include_by_org,
+    )
+
+
+@router.get(
+    "/stats/monthly",
+    response_model=PetitionMonthlyStatsOut,
+    summary="指定月份陳情案件統計",
+)
+async def get_monthly_stats(
+    session: DbDep,
+    user: CurrentUser,
+    month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+) -> PetitionMonthlyStatsOut:
+    try:
+        local_start = datetime.strptime(month, "%Y-%m").replace(tzinfo=TAIPEI)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="月份格式錯誤"
+        ) from exc
+
+    if local_start.month == 12:
+        local_end = local_start.replace(year=local_start.year + 1, month=1)
+    else:
+        local_end = local_start.replace(month=local_start.month + 1)
+
+    codes = await get_user_permission_codes(session, user.id)
+    include_all = _has_all_scope(codes, user)
+    org_scope_permissions = {
+        str(PermissionCode.PETITION_ANALYTICS_ORG),
+        str(PermissionCode.PETITION_VIEW_ORG),
+        str(PermissionCode.PETITION_ASSIGN),
+        str(PermissionCode.PETITION_HANDLE),
+    }
+    if not include_all and not codes.intersection(org_scope_permissions):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權查看陳情統計",
+        )
+
+    org_ids = (
+        None
+        if include_all
+        else await _manageable_org_ids(
+            session,
+            user,
+            str(PermissionCode.PETITION_ANALYTICS_ORG),
+            str(PermissionCode.PETITION_VIEW_ORG),
+            str(PermissionCode.PETITION_ASSIGN),
+            str(PermissionCode.PETITION_HANDLE),
+        )
+    )
+    return await petition_svc.monthly_stats(
+        session,
+        month=month,
+        start_at=local_start.astimezone(UTC),
+        end_at=local_end.astimezone(UTC),
+        org_ids=org_ids,
     )
 
 
