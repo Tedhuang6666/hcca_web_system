@@ -65,7 +65,7 @@ def run_mode(
         output = report_dir / f"{run_id}-{name}.json"
         command = [
             sys.executable,
-            str(ROOT / filename),
+            str(ROOT / "scripts" / filename),
             *options,
             "--output",
             str(output),
