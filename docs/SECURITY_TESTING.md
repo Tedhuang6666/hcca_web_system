@@ -3,20 +3,15 @@
 授權目標為 `https://hcca.tw`。本流程將公開站的低頻探針與隔離環境的攻擊回歸分開執行。
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
 合併／推送到 default branch 後，每日台北時間 05:41 執行，也可手動觸發。
-本輪沒有執行 push 或部署。交付前只讀核對發現，遠端 main 已由其他操作納入第一版
-`de8e8132`；該 workflow 狀態為 active，但尚無執行紀錄。第二版隔離 ZAP 與認證修復
-`eac7264b` 依使用者決定維持本機提交，尚未進入遠端排程。
-排程另以 subfinder 做被動資產探索，與 [候選清單](../security/known-domains.txt) 比較。
-發現新網域時工作會失敗並保留候選報告，供確認歸屬／用途；不自動將新網域加入 active scan。
-被動來源未回傳候選時記為未完成，不將空清單當作資產消失或安全。
+使用者已確認應用部署完成。遠端 `main` 已包含第一版與後續修復；本機仍保留使用者的
+`uv.lock` 變更。最新指示要求專注主動測試，故本機 workflow 更新為排程固定搜尋參數探針；
+須將本次 workflow 版本納入部署，遠端排程才會停止原有的被動資產探索／公開基線工作。
 
 ## 可重跑入口
 
 ```bash
-# 六個固定 GET；最多每秒一個請求，不追轉址，不保存 response body、Cookie 或 token。
-python3 scripts/security-baseline.py --output /tmp/hcca-public-baseline.json
-# nuclei 3.8.0：只執行庫內已審閱的兩個認證探針。
-python3 scripts/security-nuclei.py --output /tmp/hcca-nuclei.json
+# 四個核准的唯讀主動查詢；固定每 10 秒一個請求，不保存回應本文。
+python3 scripts/security-active.py --output /tmp/hcca-active.json
 # 專用 loopback 測試 DB／Redis + Java 17 + ZAP 2.17.0；自行 migration、啟停隔離 API。
 # TEST_DATABASE_URL 必須是 PostgreSQL *_test；REDIS_URL 必須指向專用測試 Redis DB。
 uv run --locked --project apps/api python scripts/security-zap.py \
@@ -25,10 +20,10 @@ uv run --locked --project apps/api python scripts/security-zap.py \
 python3 -m unittest discover -s scripts/tests -p 'test_security_*.py'
 ```
 
-正式站兩支探針 exit `0` 代表所列檢查完成且沒有命中，`1` 代表待確認的發現，`2` 代表未完成。
-DNS／連線失敗、轉址、403、429、5xx 不會被寫成安全。遇到 403、429、5xx 或連線錯誤即停止
-後續基線請求；排程不在基線失敗後繼續 nuclei。nuclei 另核對兩個 URL 的實際請求紀錄與錯誤，
-空結果檔本身不能證明掃描成功。工具原始 request／response 不會進入保留的報告。
+正式站主動探針固定使用 `GET /api/regulations/search`，只傳控制字串、SQL 引號／布林條件、
+XSS 反射值；不登入、不寫入。每回最多四次、相隔 10 秒，不追轉址；403、429、5xx、
+轉址、連線錯誤、本文截斷或反射會停止後續請求。400 僅表示輸入遭拒，不能據此分辨
+應用或 WAF。報告不保留回應本文、Cookie 或 token。
 
 本機回歸先啟動專用 PostgreSQL／Redis，再設定 `TEST_DATABASE_URL`（loopback、`*_test`）、
 `REDIS_URL`、`REDIS_CACHE_URL`、`REDIS_REALTIME_URL`、Celery broker／backend 為測試用途；
@@ -46,10 +41,10 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 
 | 階段 | 執行方式與證據 | 進入下一階段的條件 |
 | --- | --- | --- |
-| 資產探索 | subfinder／憑證透明度紀錄，保留候選網域與來源 | 候選須確認用途與歸屬；不能將第三方 CNAME 當作自有主機 |
+| 資產探索 | 初次核准範圍以程式路由與既有清單盤點；日常 workflow 不執行被動資產探索 | 新資產須確認用途與歸屬；不能將第三方 CNAME 當作自有主機 |
 | DNS／HTTP／連接埠 | DNS、httpx；獨立測試主機才能對明確連接埠使用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
-| nuclei／ZAP | 正式站僅庫內兩個 GET nuclei 探針；ZAP active scan 使用自啟的 loopback API／測試 DB | 限定三條注入規則；其他 active rules 須個別評估測試資料與外部效果 |
+| 主動探測 | 正式站四個固定搜尋輸入；ZAP active scan 使用自啟的 loopback API／測試 DB | 只測核准 GET 搜尋入口；其他 active rules 須個別評估測試資料與外部效果 |
 | ffuf／feroxbuster | 小型已審閱路徑表，單執行緒、1 req/s、限時、不遞迴、不追轉址 | 敏感路徑只檢查 HEAD 狀態，不下載秘密或備份內容 |
 | 人工分析 | 程式呼叫鏈＋HTTP 證據；需要互動登入時以 Burp／Caido 重放測試帳號請求 | 必須區分 CSRF、登入、角色、組織與物件權限 |
 | Auth／Authorization／IDOR | 未登入、無權限 B、合法 owner A／admin；寫入後檢查 DB | 拒絕案例必須通過 CSRF；本人成功案例證明業務端點確實可達 |
@@ -163,12 +158,33 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   法規 service 的直接 caller 為法規清單 router（LOW）。索引的 flow sampling 仍有已知截斷，
   不將沒有圖譜流程誤解為沒有影響。
 
-## 尚待啟用與驗證
+## 較早的交付快照
 
-本機提交不會修復正式站。2026-09-30 交付前讀取 GitHub API：遠端 main 為 `dae40853`，
+本機提交不會修復正式站。較早讀取 GitHub API 時，遠端 main 為 `dae40853`，
 包含第一版 `de8e8132`；Security regression workflow（ID `371045084`）為 active，run list 為空。
 因此第一版每日資產探索／正式站探針／隔離回歸已具備排程設定，但首次執行仍未驗證；
-新增 ZAP、封鎖身份與查詢修復仍只有本機 `eac7264b`。本輪代理沒有執行推送、合併、
-workflow dispatch 或部署。使用者明確選擇「維持本機提交」，不再進行這些遠端變更。
-正式站登入測試仍缺少專用測試身份，origin 連接埠盤點也未取得獨立 origin 目標；
-這些與正式站修復效果均未宣稱完成。
+當時尚未納入 ZAP、封鎖身份與查詢修復。其後使用者確認修復已部署，詳見第三輪。
+正式站登入測試仍缺少專用測試身份，origin 連接埠盤點也未取得獨立 origin 目標。
+
+## 第三輪：部署後主動探測（2026-09-30）
+
+- 使用者確認修復已部署。遠端 `main` 為 `798e3b28`，其提交鏈包含 `eac7264b`；
+  Docker image build workflow 對該 SHA 成功。GitHub Deployments API 沒有部署紀錄，
+  故部署完成的依據是使用者確認與公開 HTTP 行為，不推斷特定正式容器 digest。
+- 部署後固定入口基線 6/6 通過：首頁／登入 200、需登入的 `/api/auth/me` 與
+  `/api/notifications/inbox` 為 401、API 文件為 404，公開頁安全標頭符合規則。
+  已審閱 nuclei 兩個認證探針完成 2/2、0 網路錯誤、0 命中。
+- 主動探針限定 `GET /api/regulations/search`，共四次，每次相隔 10 秒，沒有登入、
+  寫入、轉址或保存本文。一般查詢與單引號查詢為 200；布林 SQL 輸入與 XSS 反射輸入為 400；
+  沒有看到隨機標記反射。400 的來源（應用驗證或 WAF）沒有保留本文以供辨識，故未推斷來源；
+  本輪沒有確認 SQL injection 或 XSS。兩個輸入拒絕狀態不足以證明其他參數也安全。
+- 使用者要求不做被動掃描時，GitHub workflow run `36717316860` 的資產探索與公開基線工作
+  已先完成，隔離回歸工作被取消；之後沒有再啟動被動探測。本機已將未來 scheduled／手動
+  workflow 改為固定四個主動 GET，移除每日 subfinder 與六個公開基線請求。
+  這個 workflow 更新尚未部署；在部署新版本前，GitHub 仍會使用目前遠端的舊排程工作。
+- 新探針只允許 `hcca.tw` 固定 HTTPS 路由、全域 IP、單一 GET 參數；每次間隔 10 秒，
+  遇 403／429／5xx／轉址、網路錯誤、本文截斷或反射即停止。每回最多四次，摘要不保存本文、
+  Cookie 或 token；400 僅記錄為輸入遭拒，不宣稱是哪層攔截。
+- 主動探針範圍／輸出邊界 3 tests 通過；Ruff／format 與 actionlint 通過。
+- 文件檢查未通過：同一工作樹內其他工作移除會議 router／test 檔，造成 `PROJECT_CONTEXT.md`
+  三個既有連結失效。本輪保留那些變更，未改寫或恢復相關檔案。
