@@ -139,7 +139,7 @@ function SidebarNavSkeleton() {
 export default function Sidebar() {
   const pathname = usePathname();
   const { can, isAdmin, permissions } = usePermissions();
-  const { isModuleDown, isModuleClosed } = useModuleStatus();
+  const { isModuleDown, isModuleClosed, ready: moduleStatusReady } = useModuleStatus();
   const [userName, setUserName] = useState("使用者");
   const [userEmail, setUserEmail] = useState("");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
@@ -348,9 +348,9 @@ export default function Sidebar() {
     ],
   );
 
-  // 本機已保存的登入身分、權限與預設視角足以安全繪製導覽；個人化設定僅在
-  // 回應抵達後覆寫。不可讓一個非關鍵的設定請求阻塞整個側欄。
-  const navigationReady = hydrated;
+  // 模組狀態首輪回應前保持 skeleton，避免先顯示已關閉入口、回應抵達後再把側欄推回去。
+  // 訪客使用公開 fallback，沿用原本不等待登入後模組狀態的行為。
+  const navigationReady = hydrated && (!isLoggedIn || moduleStatusReady);
 
   const initials = userName.charAt(0).toUpperCase();
 

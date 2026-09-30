@@ -10,6 +10,7 @@ import { isFatalApiStatus } from "@/lib/polling";
 
 interface ModuleStatusValue {
   statuses: Record<string, ModuleStatusPublic>;
+  ready: boolean;
   isModuleDown: (id: ModuleId | null) => boolean;
   isModuleClosed: (id: ModuleId | null) => boolean;
   moduleInfo: (id: ModuleId | null) => ModuleStatusPublic | null;
@@ -18,6 +19,7 @@ interface ModuleStatusValue {
 
 const ModuleStatusContext = createContext<ModuleStatusValue>({
   statuses: {},
+  ready: false,
   isModuleDown: () => false,
   isModuleClosed: () => false,
   moduleInfo: () => null,
@@ -26,7 +28,6 @@ const ModuleStatusContext = createContext<ModuleStatusValue>({
 
 const DEFAULT_POLL_MS = 30_000;
 const LOW_DATA_POLL_MS = 300_000;
-const INITIAL_POLL_DELAY_MS = 2_000;
 const MODULE_STATUS_CACHE_KEY = "hcca:module-status-cache";
 const MODULE_STATUS_CACHE_TTL_MS = 20_000;
 
@@ -71,6 +72,7 @@ export function ModuleStatusProvider({
   pollEnabled?: boolean;
 }) {
   const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>({});
+  const [ready, setReady] = useState(false);
   const [wsRoom, setWsRoom] = useState<string | null>(null);
   const lowDataMode = useLowDataMode();
 
@@ -82,6 +84,7 @@ export function ModuleStatusProvider({
       const map: Record<string, ModuleStatusPublic> = {};
       for (const item of list) map[item.id] = item;
       setStatuses(map);
+      setReady(true);
       writeStatusCache(map);
       return "ok" as const;
     } catch (e) {
@@ -97,13 +100,16 @@ export function ModuleStatusProvider({
 
   useResilientPoll(poll, {
     enabled: pollEnabled,
-    initialDelayMs: INITIAL_POLL_DELAY_MS,
+    initialDelayMs: 0,
     intervalMs: lowDataMode ? LOW_DATA_POLL_MS : DEFAULT_POLL_MS,
   });
 
   useEffect(() => {
     const cached = readStatusCache();
-    if (Object.keys(cached).length > 0) setStatuses(cached);
+    if (Object.keys(cached).length > 0) {
+      setStatuses(cached);
+      setReady(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -172,7 +178,7 @@ export function ModuleStatusProvider({
 
   return (
     <ModuleStatusContext.Provider
-      value={{ statuses, isModuleDown, isModuleClosed, moduleInfo, refresh }}
+      value={{ statuses, ready, isModuleDown, isModuleClosed, moduleInfo, refresh }}
     >
       {children}
     </ModuleStatusContext.Provider>
