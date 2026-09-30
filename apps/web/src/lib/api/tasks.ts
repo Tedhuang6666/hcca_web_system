@@ -1,8 +1,8 @@
 import { get } from "./core";
 
 export type TaskModule =
-  | "document" | "meeting" | "regulation" | "petition"
-  | "shop" | "survey" | "announcement" | "calendar" | "work_item";
+  | "document" | "regulation" | "petition"
+  | "shop" | "survey" | "announcement" | "work_item";
 
 export type TaskAction =
   | "approve" | "attend" | "review" | "publish"

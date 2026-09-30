@@ -48,14 +48,12 @@ class MatterType(enum.StrEnum):
     POLICY = "policy"
     REGULATION = "regulation"
     PETITION = "petition"
-    MEETING = "meeting"
     ADMINISTRATION = "administration"
     PROJECT = "project"
     OTHER = "other"
 
 
 class MatterResourceType(enum.StrEnum):
-    GOOGLE_MEET = "google_meet"
     GOOGLE_DRIVE = "google_drive"
     DISCORD_TEXT = "discord_text"
     DISCORD_VOICE = "discord_voice"

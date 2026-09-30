@@ -5,7 +5,6 @@ import {
   CheckSquare,
   ChevronRight,
   FileText,
-  Landmark,
   ListChecks,
   Megaphone,
   MessageSquare,
@@ -24,7 +23,6 @@ function FallbackWidgetIcon(p: IconProps) {
 const WIDGET_ICONS: Record<string, React.ComponentType<IconProps>> = {
   doc_draft: (p) => <FileText {...p} />,
   doc_pending_my_approval: (p) => <ListChecks {...p} />,
-  meeting_upcoming: (p) => <Landmark {...p} />,
   regulation_review: (p) => <Scale {...p} />,
   regulation_publish: (p) => <Scale {...p} />,
   announcements_recent: (p) => <Megaphone {...p} />,

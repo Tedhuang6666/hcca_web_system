@@ -272,7 +272,7 @@ async def _current_user_for_line(db: AsyncSession, line_user_id: str) -> User | 
 def _help_text(bound: bool) -> str:
     lines = [
         "可用指令：",
-        "未讀通知 / 我的待辦 / 今日會議 / 公告",
+        "未讀通知 / 我的待辦 / 公告",
         "公文 / 法規 / 問卷 / 陳情 / 購票 - 開啟對應功能",
     ]
     if not bound:
@@ -324,8 +324,6 @@ async def _handle_text_command(*, line_user_id: str, user_text: str) -> str:
                 return f"開啟購票系統：\n{await create_open_url(user.id, '/shop')}"
             if text == "未讀通知":
                 return await _unread_notifications_text(db, user)
-            if text == "今日會議":
-                return await _today_meetings_text(db, user)
             if text == "公告":
                 return await _announcements_text(db, user)
             return _help_text(bound=True)
@@ -392,18 +390,6 @@ async def _unread_notifications_text(db: AsyncSession, user: User) -> str:
     lines = [f"未讀通知 {unread} 則："]
     for item in rows:
         lines.append(f"- {item.title}\n  {await create_open_url(user.id, item.link)}")
-    return "\n".join(lines)
-
-
-async def _today_meetings_text(db: AsyncSession, user: User) -> str:
-    inbox = await build_task_inbox(db, user)
-    meetings = [item for item in inbox.items if item.module == "meeting"][:5]
-    if not meetings:
-        return "接下來 72 小時沒有需要您出席的會議。"
-    lines = ["近期會議："]
-    for item in meetings:
-        due = item.due_at.astimezone().strftime("%m/%d %H:%M") if item.due_at else ""
-        lines.append(f"- {due} {item.title}\n  {await create_open_url(user.id, item.href)}")
     return "\n".join(lines)
 
 

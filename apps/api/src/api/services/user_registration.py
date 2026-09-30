@@ -67,10 +67,8 @@ _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
     {
         "activity_members",
         "announcement_audience_users",
-        "calendar_event_participants",
         "email_recipient_list_members",
         "meal_vendor_managers",
-        "meeting_agenda_recusals",
         # 同一政策版本的同意是冪等資料；合併帳戶時保留主要帳戶那筆即可。
         "policy_consents",
     }

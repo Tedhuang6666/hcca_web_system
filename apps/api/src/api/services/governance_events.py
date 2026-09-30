@@ -38,9 +38,6 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
     ("document", "batch.approve"): EventSpec("document.approved", "document", "公文核准"),
     ("document", "batch.reject"): EventSpec("document.rejected", "document", "公文退件"),
     ("document", "batch.archive"): EventSpec("document.archived", "document", "公文歸檔"),
-    # ── 會議 ───────────────────────────────────────────────
-    ("meeting", "meeting.create"): EventSpec("meeting.created", "meeting", "會議建立"),
-    ("meeting", "meeting.confirm"): EventSpec("meeting.confirmed", "meeting", "會議紀錄定案"),
     # ── 法規 ───────────────────────────────────────────────
     ("regulation", "regulation.create"): EventSpec("regulation.created", "regulation", "法規建立"),
     ("regulation", "regulation.publish"): EventSpec(
@@ -53,9 +50,6 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
         "regulation.archived", "regulation", "法規停用"
     ),
     ("regulation", "regulation.repeal"): EventSpec("regulation.repealed", "regulation", "法規廢止"),
-    ("regulation", "regulation.advance_via_meeting"): EventSpec(
-        "regulation.advanced", "regulation", "法規進度推進"
-    ),
     # ── 問卷 ───────────────────────────────────────────────
     ("survey", "survey.create"): EventSpec("survey.created", "survey", "問卷建立"),
     ("survey", "survey.open"): EventSpec("survey.opened", "survey", "問卷開放"),
@@ -72,9 +66,6 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
     # ── 議會提案 ───────────────────────────────────────────
     ("council_proposal", "council_proposal.create"): EventSpec(
         "proposal.created", "council_proposal", "提案提出"
-    ),
-    ("council_proposal", "council_proposal.schedule"): EventSpec(
-        "proposal.scheduled", "council_proposal", "提案排入議程"
     ),
     ("council_proposal", "council_proposal.status"): EventSpec(
         "proposal.status_changed", "council_proposal", "提案狀態變更"
@@ -100,12 +91,9 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
     ("meal_schedule", "meal.schedule_close"): EventSpec(
         "meal.schedule_closed", "meal_schedule", "學餐結單"
     ),
-    # ── 組織 / 發布 / 行事曆 / 試卷 / 收款 ──────────────────
+    # ── 組織 / 發布 / 試卷 / 收款 ───────────────────────────
     ("org", "org.create"): EventSpec("org.created", "org", "組織建立"),
     ("publication", "publication.send"): EventSpec("publication.sent", "publication", "發布送出"),
-    ("calendar_event", "calendar.create"): EventSpec(
-        "calendar.event_created", "calendar_event", "行事曆建立"
-    ),
     ("exam_paper", "exam_paper.create"): EventSpec("exam.paper_created", "exam_paper", "試卷上傳"),
     ("receivable", "receivable.mark_paid"): EventSpec("receivable.paid", "receivable", "收款入帳"),
 }
@@ -114,7 +102,6 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
 # 正規化 source_type → 模組詳情頁 href 產生器。list-only 模組連到列表頁。
 ENTITY_HREF: dict[str, Callable[[str], str]] = {
     "document": lambda i: f"/documents/{i}",
-    "meeting": lambda i: f"/meetings/{i}",
     "regulation": lambda i: f"/regulations/{i}",
     "survey": lambda i: f"/surveys/{i}",
     "petition": lambda i: f"/petitions/{i}",
@@ -127,11 +114,9 @@ ENTITY_HREF: dict[str, Callable[[str], str]] = {
     "meal_schedule": lambda i: "/meal",
     "org": lambda i: f"/orgs/{i}",
     "publication": lambda i: "/publications",
-    "calendar_event": lambda i: "/calendar",
     "exam_paper": lambda i: "/exam-papers",
     "receivable": lambda i: "/finance/receivables",
     "election": lambda i: f"/admin/elections/{i}/count",
-    "vote": lambda i: "/meetings",
     "ticket": lambda i: "/shop",
     "work_item": lambda i: "/tasks",
     "email_message": lambda i: "/email/logs",
@@ -152,7 +137,6 @@ ENTITY_HREF: dict[str, Callable[[str], str]] = {
 
 ENTITY_LABELS: dict[str, str] = {
     "document": "公文",
-    "meeting": "會議",
     "regulation": "法規",
     "survey": "問卷",
     "petition": "陳情",
@@ -165,7 +149,6 @@ ENTITY_LABELS: dict[str, str] = {
     "meal_schedule": "學餐排程",
     "org": "組織",
     "publication": "發布",
-    "calendar_event": "行事曆",
     "exam_paper": "試卷",
     "receivable": "收款",
     "election": "選舉",

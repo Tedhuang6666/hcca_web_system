@@ -31,8 +31,6 @@ MODULES: dict[str, ModuleSpec] = {
         ),
     ),
     "regulations": ModuleSpec("法規系統", ("/regulations",)),
-    "meetings": ModuleSpec("議事系統", ("/meetings",)),
-    "calendar": ModuleSpec("行事曆", ("/calendar",)),
     "councilProposals": ModuleSpec("議會提案", ("/council-proposals",)),
     "judicialPetitions": ModuleSpec("評議訴訟", ("/judicial-petitions",)),
     "announcements": ModuleSpec("校內公告", ("/announcements",)),

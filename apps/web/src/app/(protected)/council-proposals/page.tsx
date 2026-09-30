@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, councilProposalsApi, regulationsApi } from "@/lib/api";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import DraftStatus from "@/components/ui/DraftStatus";
 import type {
   CouncilProposalCaseType,
-  CouncilProposalEligibleMeeting,
   CouncilProposalKind,
   CouncilProposalListItem,
   CouncilProposalOut,
@@ -104,8 +102,6 @@ type CouncilProposalDraft = {
 };
 
 export default function CouncilProposalsPage() {
-  const { canAny } = usePermissions();
-  const isManager = canAny("council_proposal:manage", "meeting:manage");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [items, setItems] = useState<CouncilProposalListItem[]>([]);
   const [regulations, setRegulations] = useState<RegulationListItem[]>([]);
@@ -357,126 +353,6 @@ export default function CouncilProposalsPage() {
         </section>
       </div>
 
-      {isManager && <CommitteeSchedulingPanel caseTypeLabel={CASE_TYPE_LABEL} statusLabel={STATUS_LABEL} />}
     </div>
-  );
-}
-
-/**
- * 常務委員會審查面板：列出尚待排程的提案，審查通過後可直接排入大會議程。
- * 僅 council_proposal:manage / meeting:manage 角色可見。
- */
-function CommitteeSchedulingPanel({
-  caseTypeLabel,
-  statusLabel,
-}: {
-  caseTypeLabel: Record<CouncilProposalCaseType, string>;
-  statusLabel: Record<string, string>;
-}) {
-  const [items, setItems] = useState<CouncilProposalListItem[]>([]);
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [meetings, setMeetings] = useState<CouncilProposalEligibleMeeting[]>([]);
-  const [meetingId, setMeetingId] = useState("");
-  const [loadingMeetings, setLoadingMeetings] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  function reload() {
-    councilProposalsApi.list().then(setItems).catch(() => null);
-  }
-  useEffect(() => {
-    reload();
-  }, []);
-
-  // 尚待排入議程的提案（已送出 / 常委審查中）
-  const pending = items.filter((i) => i.status === "submitted" || i.status === "committee_review");
-
-  async function openScheduler(id: string) {
-    if (openId === id) {
-      setOpenId(null);
-      return;
-    }
-    setOpenId(id);
-    setMeetingId("");
-    setMeetings([]);
-    setLoadingMeetings(true);
-    try {
-      setMeetings(await councilProposalsApi.eligibleMeetings(id));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "讀取會議清單失敗");
-    } finally {
-      setLoadingMeetings(false);
-    }
-  }
-
-  async function confirmSchedule(id: string) {
-    if (!meetingId) {
-      toast.error("請先選擇要排入的會議");
-      return;
-    }
-    setBusy(true);
-    try {
-      await councilProposalsApi.schedule(id, { meeting_id: meetingId });
-      toast.success("已排入大會議程");
-      setOpenId(null);
-      reload();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "排入議程失敗");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="card p-5">
-      <h2 className="text-base font-semibold">常務委員會審查 · 排入大會議程</h2>
-      <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-        審查通過的提案可直接帶入指定會議的議程（議程仍可編輯的會議才會出現於清單，大會優先）。
-      </p>
-      <div className="mt-4 space-y-2">
-        {pending.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>目前沒有待排程的提案。</p>
-        ) : pending.map((item) => (
-          <div key={item.id} className="rounded-lg p-3" style={{ border: "1px solid var(--border)" }}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">{item.title}</p>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                  {item.serial_number} · {statusLabel[item.status]} · {caseTypeLabel[item.case_type]}
-                </p>
-              </div>
-              <button type="button" className="btn btn-secondary shrink-0" onClick={() => openScheduler(item.id)}>
-                {openId === item.id ? "收合" : "排入議程"}
-              </button>
-            </div>
-            {openId === item.id && (
-              <div className="mt-3 space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                {loadingMeetings ? (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>讀取會議中…</p>
-                ) : meetings.length === 0 ? (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    沒有可排入的會議；請先於議事系統建立一場議程尚可編輯的會議。
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select className="input" value={meetingId} onChange={(e) => setMeetingId(e.target.value)}>
-                      <option value="">— 選擇會議 —</option>
-                      {meetings.map((m) => (
-                        <option key={m.id} value={m.id} disabled={m.already_scheduled}>
-                          {m.bill_stage === "council" ? "［大會］" : m.bill_stage === "standing_committee" ? "［常委會］" : ""}
-                          {m.title}{m.already_scheduled ? "（已排入）" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="button" className="btn btn-primary" disabled={busy} onClick={() => confirmSchedule(item.id)}>
-                      {busy ? "排入中…" : "確認排入"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }

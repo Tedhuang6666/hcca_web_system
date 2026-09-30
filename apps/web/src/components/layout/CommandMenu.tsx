@@ -8,9 +8,7 @@ import { searchApi } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
 import {
   filterNavItems,
-  isMeetingsUnlocked,
   NAV_ITEMS,
-  type NavItem,
 } from "@/lib/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
@@ -20,37 +18,19 @@ import NavIcon from "./NavIcon";
 
 export const OPEN_COMMAND_MENU_EVENT = "hcca:open-command-menu";
 
-// 議事系統：與側邊欄一致，僅會議管理者/管理員或已掃描簽到連結解鎖者可見。
-const MEETINGS_ITEM: NavItem = { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" };
-
 const ACTION_GROUPS = [
-  { heading: "現在要處理", ids: ["dashboard", "tasks", "workItems", "calendar", "announcements"] },
+  { heading: "現在要處理", ids: ["dashboard", "tasks", "workItems", "announcements"] },
   {
     heading: "治理事務",
-    ids: ["documents", "regulations", "meetings", "councilProposals", "petitions", "judicialPetitions"],
+    ids: ["documents", "regulations", "councilProposals", "petitions", "judicialPetitions"],
   },
   { heading: "校園服務", ids: ["surveys", "shop", "partnerMap", "recommendedVendors", "examPapers"] },
 ] as const;
-
-function canSeeMeetings(): boolean {
-  if (typeof window === "undefined") return false;
-  if (isMeetingsUnlocked()) return true;
-  if (sessionStorage.getItem("is_superuser") === "true" || sessionStorage.getItem("is_owner") === "true") {
-    return true;
-  }
-  try {
-    const perms: string[] = JSON.parse(sessionStorage.getItem("permissions") || "[]");
-    return perms.includes("admin:all") || perms.some((p) => p.startsWith("meeting:"));
-  } catch {
-    return false;
-  }
-}
 
 function kindLabel(kind: string) {
   return {
     document: "公文",
     regulation: "法規",
-    meeting: "會議",
     announcement: "公告",
     survey: "問卷",
   }[kind] ?? kind;
@@ -64,12 +44,6 @@ export default function CommandMenu() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultOut[]>([]);
   const recents = useRecentItems(6);
-  const [meetingsVisible, setMeetingsVisible] = useState(false);
-
-  useEffect(() => {
-    setMeetingsVisible(canSeeMeetings());
-  }, [open]);
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -136,17 +110,13 @@ export default function CommandMenu() {
       || hasPrefix("org:")
     );
     const items = filterNavItems(NAV_ITEMS, can, hasPrefix)
-      .filter((item) => item.id !== "meetings")
       .filter((item) => item.id !== "tasks" || hasPrefix("document:") || hasPrefix("regulation:"))
       .filter((item) => item.id !== "operations" || hasOperationsAccess)
       .filter((item) => item.id !== "moduleBackoffice" || hasBackofficeAccess)
       .filter((item) => !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null));
 
-    if (meetingsVisible && !isModuleClosed(NAV_ID_TO_MODULE.meetings ?? null)) {
-      items.unshift(MEETINGS_ITEM);
-    }
     return items;
-  }, [can, hasPrefix, isAdmin, isModuleClosed, meetingsVisible, permissions]);
+  }, [can, hasPrefix, isAdmin, isModuleClosed, permissions]);
 
   const actionGroups = useMemo(() => {
     const groupedIds = new Set<string>(ACTION_GROUPS.flatMap((group) => group.ids));

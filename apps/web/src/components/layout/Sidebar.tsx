@@ -14,7 +14,6 @@ import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
 import {
   hasSavedNavPreferences,
-  isMeetingsUnlocked,
   isNavItemVisible,
   DEFAULT_NAV_PREFERENCES,
   isSection,
@@ -147,7 +146,6 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [desktopPrefs, setDesktopPrefs] = useState(() => DEFAULT_NAV_PREFERENCES);
   const [hasCustomNav, setHasCustomNav] = useState(false);
-  const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const [publicProfile, setPublicProfile] = useState<NavigationProfileConfig | null>(null);
@@ -222,7 +220,6 @@ export default function Sidebar() {
       setUserAvatar(localStorage.getItem("user_avatar"));
       setDesktopPrefs(readNavPreferences());
       setHasCustomNav(hasSavedNavPreferences());
-      setMeetingsUnlocked(isMeetingsUnlocked());
       setAuthVersion((version) => version + 1);
     };
     syncAuth();
@@ -234,7 +231,6 @@ export default function Sidebar() {
     const syncPrefs = () => {
       setDesktopPrefs(readNavPreferences());
       setHasCustomNav(hasSavedNavPreferences());
-      setMeetingsUnlocked(isMeetingsUnlocked());
     };
     window.addEventListener(NAV_PREF_EVENT, syncPrefs);
     window.addEventListener(AUTH_CACHE_EVENT, syncAuth);
@@ -306,7 +302,6 @@ export default function Sidebar() {
       hasPrefix,
       isAdmin,
       navigationProfile,
-      meetingsUnlocked,
       isModuleClosed: (current) => isModuleClosed(NAV_ID_TO_MODULE[current.id] ?? null),
     });
   };
@@ -342,7 +337,6 @@ export default function Sidebar() {
       isLoggedIn,
       isAdmin,
       permissions,
-      meetingsUnlocked,
       isModuleClosed,
       activeNavDef,
     ],

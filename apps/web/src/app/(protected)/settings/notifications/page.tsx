@@ -20,7 +20,6 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const OPTION_GROUPS = [
   { id: "governance", label: "公文與法規", desc: "簽核、起草與法規流程的提醒" },
-  { id: "schedule", label: "會議與行程", desc: "受邀會議、會議紀錄與行程異動" },
   { id: "campus", label: "校園服務", desc: "陳情、商品、問卷與公告" },
   { id: "personal", label: "工作與系統", desc: "個人工作與帳號、系統安全提醒" },
 ] as const;
@@ -87,36 +86,6 @@ const OPTIONS: NotificationOption[] = [
     label: "法規公布",
     desc: "法規發布、修正或廢止時提醒",
     group: "governance",
-  },
-  {
-    key: "meeting_invited",
-    label: "會議邀請",
-    desc: "被列入會議名冊或議程確認時提醒",
-    group: "schedule",
-  },
-  {
-    key: "meeting_today",
-    label: "今日會議",
-    desc: "會議即將開始、報到與場控提醒",
-    group: "schedule",
-  },
-  {
-    key: "meeting_minutes_ready",
-    label: "會議紀錄",
-    desc: "會議紀錄完成或轉成公文時提醒",
-    group: "schedule",
-  },
-  {
-    key: "calendar_event_invited",
-    label: "行事曆邀請",
-    desc: "活動、彩排、跨校會議與一般行程邀請",
-    group: "schedule",
-  },
-  {
-    key: "calendar_event_updated",
-    label: "行事曆異動",
-    desc: "行程時間、地點、參與者或準備事項變更",
-    group: "schedule",
   },
   {
     key: "petition_received",

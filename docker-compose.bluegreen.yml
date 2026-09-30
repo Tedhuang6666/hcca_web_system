@@ -300,7 +300,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery,gcal
+      --queues=celery,default,documents,email,meal,backup,recovery
       -n worker-blue@%h
     # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
     # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
@@ -314,7 +314,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery,gcal
+      --queues=celery,default,documents,email,meal,backup,recovery
       -n worker-green@%h
     # 同 worker-blue：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:

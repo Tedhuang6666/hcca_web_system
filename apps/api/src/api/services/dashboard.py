@@ -30,12 +30,6 @@ from api.models.document import (
     DocumentApprovalDelegation,
     DocumentStatus,
 )
-from api.models.meeting import (
-    AttendanceStatus,
-    Meeting,
-    MeetingAttendance,
-    MeetingStatus,
-)
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
@@ -285,73 +279,6 @@ async def _w_doc_pending_my_approval(
         summary=summary,
         count=count,
         href="/documents?status=pending&my_approval=true",
-        severity=severity,
-        items=items,
-    )
-
-
-async def _w_meeting_upcoming(db: AsyncSession, user: User) -> DashboardWidget | None:
-    now = datetime.now(UTC)
-    cutoff = now + timedelta(hours=72)
-    stmt = (
-        select(Meeting)
-        .options(load_only(Meeting.id, Meeting.title, Meeting.location, Meeting.starts_at))
-        .join(MeetingAttendance, MeetingAttendance.meeting_id == Meeting.id)
-        .where(MeetingAttendance.user_id == user.id)
-        .where(MeetingAttendance.status != AttendanceStatus.ABSENT)
-        .where(
-            Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.ACTIVE, MeetingStatus.PAUSED])
-        )
-        .where(Meeting.starts_at.is_not(None))
-        .where(Meeting.starts_at >= now)
-        .where(Meeting.starts_at <= cutoff)
-        .order_by(Meeting.starts_at)
-        .limit(5)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    if not rows:
-        return None
-
-    # 依最早一場會議的剩餘時間調整 severity 與標題。
-    soonest = min(m.starts_at for m in rows if m.starts_at is not None)
-    minutes_to_start = (soonest - now).total_seconds() / 60
-    if minutes_to_start <= 30:
-        severity = "critical"
-        title = "會議即將開始"
-        summary = f"{int(minutes_to_start)} 分鐘後開始"
-    elif minutes_to_start <= 120:
-        severity = "warning"
-        title = "會議即將開始"
-        summary = f"{int(minutes_to_start / 60)} 小時內開始"
-    elif minutes_to_start <= 24 * 60:
-        severity = "warning"
-        title = "今日出席的會議"
-        summary = f"{len(rows)} 場（24 小時內）"
-    else:
-        severity = "info"
-        title = "即將出席的會議"
-        summary = f"{len(rows)} 場（72 小時內）"
-
-    items = [
-        _decorate_item_priority(
-            DashboardWidgetItem(
-                title=m.title,
-                subtitle=m.location or None,
-                href=f"/meetings/{m.id}",
-                timestamp=m.starts_at,
-            ),
-            base_score=82 if minutes_to_start <= 120 else 48,
-            reason="會議時間接近",
-            action="確認議程、出席與會議資料",
-        )
-        for m in rows
-    ]
-    return DashboardWidget(
-        key="meeting_upcoming",
-        title=title,
-        summary=summary,
-        count=len(rows),
-        href="/meetings",
         severity=severity,
         items=items,
     )
@@ -659,7 +586,6 @@ async def _build_dashboard_uncached(
     hint = _layout_hint(perms, is_admin)
 
     widget_builders: list[Awaitable[DashboardWidget | None]] = [
-        _run_widget(db, "meeting_upcoming", lambda widget_db: _w_meeting_upcoming(widget_db, user)),
         _run_widget(
             db,
             "announcements_recent",
@@ -750,7 +676,7 @@ async def _build_dashboard_uncached(
     elif hint == "leader":
         preferred_keys = ("regulation_publish", "doc_pending_my_approval", "regulation_review")
     else:
-        preferred_keys = ("doc_pending_my_approval", "meeting_upcoming", "petition_assigned")
+        preferred_keys = ("doc_pending_my_approval", "petition_assigned")
     widgets = prioritize_dashboard_widgets(widgets, preferred_keys=preferred_keys)
 
     return DashboardResponse(widgets=widgets, layout_hint=hint)

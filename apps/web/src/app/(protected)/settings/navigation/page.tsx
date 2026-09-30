@@ -30,7 +30,6 @@ import {
   DEFAULT_NAV_PREFERENCES,
   constrainMobileHidden,
   hasSavedNavPreferences,
-  isMeetingsUnlocked,
   isNavItemVisible,
   MOBILE_NAV_MAX_ITEMS,
   MOBILE_NAV_MIN_ITEMS,
@@ -53,7 +52,6 @@ export default function NavigationSettingsPage() {
   const [prefs, setPrefs] = useState<NavPreferences>(() => readNavPreferences());
   const [surface, setSurface] = useState<Surface>("desktop");
   const [hasCustomPrefs, setHasCustomPrefs] = useState(false);
-  const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const { can, isAdmin, permissions } = usePermissions();
   const { isModuleClosed } = useModuleStatus();
@@ -62,7 +60,6 @@ export default function NavigationSettingsPage() {
     const syncPrefs = () => {
       setPrefs(readNavPreferences());
       setHasCustomPrefs(hasSavedNavPreferences());
-      setMeetingsUnlocked(isMeetingsUnlocked());
     };
     syncPrefs();
     window.addEventListener("hcca:navigation-preferences-changed", syncPrefs);
@@ -132,10 +129,9 @@ export default function NavigationSettingsPage() {
       hasPrefix,
       isAdmin,
       navigationProfile: activeProfile.id,
-      meetingsUnlocked,
       isModuleClosed: (item) => isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
     })),
-    [activeProfile.id, can, effectiveOrder, hasPrefix, isAdmin, isModuleClosed, meetingsUnlocked, profileNavItems],
+    [activeProfile.id, can, effectiveOrder, hasPrefix, isAdmin, isModuleClosed, profileNavItems],
   );
   const hidden = useMemo(() => {
     let baseHidden: string[];

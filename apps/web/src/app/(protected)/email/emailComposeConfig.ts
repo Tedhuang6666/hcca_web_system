@@ -33,17 +33,6 @@ export const PRESETS: {
     ctaLabel: "查看詳情",
   },
   {
-    key: "meeting",
-    label: "會議通知",
-    heading: "會議通知",
-    rows: [
-      { label: "時間", value: "例：2026/05/20 19:00" },
-      { label: "地點", value: "例：學生會辦公室" },
-      { label: "出席對象", value: "例：全體學生代表" },
-    ],
-    ctaLabel: "查看會議資料",
-  },
-  {
     key: "signin",
     label: "簽到開放",
     heading: "簽到開放通知",

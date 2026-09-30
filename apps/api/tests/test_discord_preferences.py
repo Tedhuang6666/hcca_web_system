@@ -83,8 +83,6 @@ def test_default_dm_categories_complete():
 
     expected = {
         "document_pending",
-        "meeting_invited",
-        "calendar_reminder",
         "survey_closing",
         "shop_ready",
         "tenure",

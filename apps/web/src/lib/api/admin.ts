@@ -1,5 +1,5 @@
 import type {
-  AccountMergePreview, AdminUserDetail, CadreDirectoryImportOut, MeetingBillStage, OrgRead, OrgWithPositions, PermissionCodeInfo, PositionCategory, PositionSummary, UserBatchPreRegisterResult,
+  AccountMergePreview, AdminUserDetail, CadreDirectoryImportOut, OrgRead, OrgWithPositions, PermissionCodeInfo, PositionCategory, PositionSummary, UserBatchPreRegisterResult,
 } from "../types";
 import { csrfHeaders, get, post, patch, del, request } from "./core";
 
@@ -147,7 +147,6 @@ export const adminApi = {
     description?: string;
     parent_id?: string | null;
     prefix?: string | null;
-    bill_stage?: MeetingBillStage | null;
     leader_user_id?: string | null;
     default_permission_codes?: string[];
   }) => post<OrgRead>("/orgs", body),
@@ -156,7 +155,6 @@ export const adminApi = {
     description?: string | null;
     parent_id?: string | null;
     prefix?: string | null;
-    bill_stage?: MeetingBillStage | null;
     leader_user_id?: string | null;
     default_permission_codes?: string[];
     note?: string | null;

@@ -85,7 +85,7 @@ async def test_governance_workspace_supports_existing_and_managed_modes(db_sessi
         db_session,
         workspace,
         {
-            "event_type": "meeting.*",
+            "event_type": "announcement.*",
             "channel_kind": "discussion",
             "channel_id": None,
             "create_thread": True,
@@ -96,7 +96,7 @@ async def test_governance_workspace_supports_existing_and_managed_modes(db_sessi
 
     assert workspace.mode == "existing"
     assert workspace.discussion_channel_id == "discussion"
-    assert route.event_type == "meeting.*"
+    assert route.event_type == "announcement.*"
 
     managed = await upsert_workspace(
         db_session,

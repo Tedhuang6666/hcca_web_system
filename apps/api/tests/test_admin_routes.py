@@ -327,7 +327,7 @@ async def test_admin_can_update_user_settings(
                 }
             },
             "notification_digest_frequency": "daily",
-            "muted_notification_modules": ["meeting"],
+            "muted_notification_modules": ["document"],
         },
     )
 
@@ -340,7 +340,7 @@ async def test_admin_can_update_user_settings(
     assert payload["ui_theme"] == "dark"
     assert payload["notification_preferences"]["document_pending"]["email"] is True
     assert payload["notification_digest_frequency"] == "daily"
-    assert payload["muted_notification_modules"] == ["meeting"]
+    assert payload["muted_notification_modules"] == ["document"]
 
     await db_session.refresh(member)
     assert member.student_id == "S2026001"

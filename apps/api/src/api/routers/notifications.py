@@ -104,9 +104,6 @@ class NotificationPreferencesOut(BaseModel):
     document_approved: ChannelPref
     document_rejected: ChannelPref
     document_recalled: ChannelPref
-    meeting_invited: ChannelPref
-    meeting_today: ChannelPref
-    meeting_minutes_ready: ChannelPref
     regulation_review_assigned: ChannelPref
     regulation_publish_ready: ChannelPref
     regulation_published: ChannelPref
@@ -120,8 +117,6 @@ class NotificationPreferencesOut(BaseModel):
     shop_order_paid: ChannelPref
     survey_invitation: ChannelPref
     announcement: ChannelPref
-    calendar_event_invited: ChannelPref
-    calendar_event_updated: ChannelPref
     work_item_assigned: ChannelPref
     work_item_due: ChannelPref
     system: ChannelPref
@@ -132,9 +127,6 @@ class NotificationPreferencesIn(BaseModel):
     document_approved: ChannelPref | None = None
     document_rejected: ChannelPref | None = None
     document_recalled: ChannelPref | None = None
-    meeting_invited: ChannelPref | None = None
-    meeting_today: ChannelPref | None = None
-    meeting_minutes_ready: ChannelPref | None = None
     regulation_review_assigned: ChannelPref | None = None
     regulation_publish_ready: ChannelPref | None = None
     regulation_published: ChannelPref | None = None
@@ -148,8 +140,6 @@ class NotificationPreferencesIn(BaseModel):
     shop_order_paid: ChannelPref | None = None
     survey_invitation: ChannelPref | None = None
     announcement: ChannelPref | None = None
-    calendar_event_invited: ChannelPref | None = None
-    calendar_event_updated: ChannelPref | None = None
     work_item_assigned: ChannelPref | None = None
     work_item_due: ChannelPref | None = None
     system: ChannelPref | None = None

@@ -100,7 +100,6 @@ celery_app.conf.update(
         Queue("backup"),
         Queue("documents"),
         Queue("recovery"),
-        Queue("gcal"),
     ),
     task_routes={
         "api.services.mail.*": {"queue": "email"},
@@ -109,18 +108,15 @@ celery_app.conf.update(
         "api.services.digest_tasks.*": {"queue": "email"},
         "api.services.backup_tasks.*": {"queue": "backup"},
         "api.services.recovery_tasks.*": {"queue": "recovery"},
-        "api.services.google_calendar_tasks.*": {"queue": "gcal"},
     },
 )
 
 # ── Celery Beat 定時任務排程 ──────────────────────────────────────────────────
 celery_app.conf.include = list(celery_app.conf.include or []) + [
-    "api.services.google_calendar_tasks",
     "api.services.outbox_tasks",
     "api.services.regulation_tasks",
     "api.services.email_tasks",
     "api.services.shop_tasks",
-    "api.services.meeting_tasks",
     "api.services.survey_tasks",
     "api.services.backup_tasks",
     "api.services.permission_tasks",
@@ -134,7 +130,6 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.document_reminder_tasks",
     "api.services.loan_tasks",
     "api.services.watchdog_tasks",
-    "api.services.discord_reminders",
     "api.services.discord_sync_tasks",
     "api.services.metrics_tasks",
     "api.services.incident_tasks",
@@ -153,12 +148,6 @@ celery_app.conf.beat_schedule = {
     "observability-crux-daily": {
         "task": "api.services.observability_tasks.collect_crux_daily",
         "schedule": crontab(hour=3, minute=20),
-    },
-    # 每 5 分鐘從 Google Calendar 增量拉取更新（雙向同步）
-    "pull-google-calendar-every-5min": {
-        "task": "api.services.google_calendar_tasks.pull_all_orgs",
-        "schedule": 300.0,
-        "options": {"soft_time_limit": 240, "time_limit": 300, "queue": "gcal"},
     },
     # 每 30 秒掃 outbox pending 事件並處理
     "process-outbox-events-every-30s": {
@@ -188,11 +177,6 @@ celery_app.conf.beat_schedule = {
     # 每 60 秒關閉已超過截止時間的問卷
     "close-expired-surveys-every-60s": {
         "task": "api.services.survey_tasks.close_expired_surveys",
-        "schedule": 60.0,
-    },
-    # 每 60 秒檢查即將開始的會議並推播開會提醒
-    "send-meeting-start-reminders-every-60s": {
-        "task": "api.services.meeting_tasks.send_meeting_start_reminders",
         "schedule": 60.0,
     },
     # 每日凌晨 3:00 進行資料庫備份（需 DB_BACKUP_ENABLED=true）
@@ -272,21 +256,6 @@ celery_app.conf.beat_schedule = {
     "celery-heartbeat-every-60s": {
         "task": "api.services.metrics_tasks.write_heartbeat",
         "schedule": 60.0,
-    },
-    # Discord 個人摘要 DM（每日 08:00 / 週日 20:00 台北）
-    # 注意：celery timezone 已設為 Asia/Taipei，crontab 的 hour 直接是台北時間，勿再手動偏移 UTC。
-    "discord-daily-digest-at-8am-taipei": {
-        "task": "api.services.discord_reminders.send_daily_digest",
-        "schedule": crontab(hour="8", minute="0"),  # 台北 08:00
-    },
-    "discord-weekly-digest-sunday-8pm-taipei": {
-        "task": "api.services.discord_reminders.send_weekly_digest",
-        "schedule": crontab(hour="20", minute="0", day_of_week="0"),  # 台北週日 20:00
-    },
-    # Discord 行事曆 T-1h / T-24h 個人提醒掃描
-    "discord-reminder-sweep-every-15min": {
-        "task": "api.services.discord_reminders.reminder_sweep",
-        "schedule": 900.0,
     },
     "discord-member-reconcile-every-15min": {
         "task": "api.services.discord_sync_tasks.reconcile_members",

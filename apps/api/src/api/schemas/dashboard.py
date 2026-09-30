@@ -13,7 +13,6 @@ from api.schemas.task import TaskInboxResponse
 WidgetKey = Literal[
     "doc_draft",
     "doc_pending_my_approval",
-    "meeting_upcoming",
     "regulation_review",
     "regulation_publish",
     "petition_assigned",

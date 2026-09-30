@@ -208,12 +208,11 @@ async def _assert_room_access(room: str, user_id: str) -> None:
     房間授權規則（預設拒絕 default-deny）：
     - user:{uuid}：只能加入自己的房間；admin:all 例外
     - org:{uuid}：必須是該 org 成員；admin:all 例外
-    - meeting:{uuid}：必須在該會議的出席名冊中
     - 其餘房間（election/document/petition/survey/...）：僅 admin:all
 
     安全：先前為「其他房間任何已登入者可加入」的 default-allow，導致任何已登入者
-    （含外部 Google 帳號）可加入 election:/meeting:/petition: 等伺服器推播房間，
-    讀取未公開選舉的即時票數、會議即時內容等敏感資料。公開開票請改用唯讀的
+    （含外部 Google 帳號）可加入 election:/petition: 等伺服器推播房間，
+    讀取未公開選舉的即時票數等敏感資料。公開開票請改用唯讀的
     /ws/public/elections/{id}（僅限 is_public 選舉）。
     """
     try:
@@ -248,22 +247,6 @@ async def _assert_room_access(room: str, user_id: str) -> None:
             )
             if not is_member:
                 raise PermissionError("無權加入此組織房間")
-            return
-
-        if room.startswith("meeting:"):
-            from api.models.meeting import MeetingAttendance
-
-            meeting_id = uuid.UUID(room.split(":", 1)[1])
-            is_attendee = await db.scalar(
-                select(MeetingAttendance.id)
-                .where(
-                    MeetingAttendance.meeting_id == meeting_id,
-                    MeetingAttendance.user_id == user_uuid,
-                )
-                .limit(1)
-            )
-            if not is_attendee:
-                raise PermissionError("無權加入此會議房間")
             return
 
         if room.startswith("seat-zone:"):

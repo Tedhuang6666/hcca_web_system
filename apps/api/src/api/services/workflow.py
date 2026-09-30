@@ -397,8 +397,6 @@ async def _ensure_matter_for_instance(
 def _matter_type_for_workflow(instance: WorkflowInstance) -> str:
     if instance.source_type == "activity":
         return MatterType.ACTIVITY
-    if instance.source_type == "meeting":
-        return MatterType.MEETING
     if instance.source_type == "judicial_petition":
         return MatterType.PETITION
     if instance.source_type == "council_proposal":
@@ -409,7 +407,6 @@ def _matter_type_for_workflow(instance: WorkflowInstance) -> str:
 def _href_for_source(source_type: str, source_id: uuid.UUID) -> str | None:
     hrefs = {
         "activity": f"/activities/{source_id}",
-        "meeting": f"/meetings/{source_id}",
         "judicial_petition": f"/judicial-petitions/{source_id}",
         "council_proposal": f"/council-proposals/{source_id}",
     }
@@ -469,12 +466,10 @@ def _is_external_resource(link: WorkflowLink) -> bool:
     resource_types = {
         "external",
         "external_url",
-        "google_meet",
         "google_drive",
         "discord_text",
         "discord_voice",
         "drive",
-        "meet",
         "url",
     }
     return link.target_id is None or link.target_type in resource_types
@@ -520,8 +515,6 @@ async def _sync_workflow_resource(
 
 
 def _resource_type_for_link(link: WorkflowLink) -> str:
-    if link.target_type in {"google_meet", "meet"}:
-        return MatterResourceType.GOOGLE_MEET
     if link.target_type in {"google_drive", "drive"}:
         return MatterResourceType.GOOGLE_DRIVE
     if link.target_type == "discord_voice":
@@ -594,11 +587,6 @@ async def _sync_source_status(
         proposal.status = status
         if note:
             proposal.committee_review_note = note
-        meeting_id = payload.get("scheduled_meeting_id")
-        if meeting_id:
-            proposal.scheduled_meeting_id = uuid.UUID(str(meeting_id))
-        if status == CouncilProposalStatus.SCHEDULED:
-            proposal.scheduled_at = proposal.scheduled_at or now
         if status in {CouncilProposalStatus.PASSED, CouncilProposalStatus.REJECTED, "published"}:
             proposal.decided_at = proposal.decided_at or now
 

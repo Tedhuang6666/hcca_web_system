@@ -29,7 +29,6 @@ export type NavVisibilityOptions = {
   hasPrefix: (prefix: string) => boolean;
   isAdmin: boolean;
   navigationProfile?: RuntimeNavigationProfile;
-  meetingsUnlocked?: boolean;
   isModuleClosed?: (item: NavItem) => boolean;
 };
 
@@ -70,9 +69,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "publicPetition", href: "/petitions/public", iconKey: "petition", label: "公開陳情" },
   { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
-  { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
-  { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" },
-  { id: "councilProposals", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
+  { id: "councilProposals", href: "/council-proposals", iconKey: "regulations", label: "議會提案" },
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
   { id: "shop", href: "/shop", iconKey: "shop", label: "商品訂購" },
   { id: "merchandiseSubmissions", href: "/merchandise-submissions", iconKey: "shop", label: "校商投稿" },
@@ -279,7 +276,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "work",
     heading: "工作入口",
-    items: byIds(["dashboard", "tasks", "calendar"]),
+    items: byIds(["dashboard", "tasks"]),
   },
   {
     id: "governance",
@@ -287,7 +284,6 @@ export const NAV_DEF: NavEntry[] = [
     items: byIds([
       "documents",
       "regulations",
-      "meetings",
       "councilProposals",
       "judicialPetitions",
       "petitions",
@@ -348,7 +344,7 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   {
     id: "teacher-main",
     heading: "教職員工作台",
-    items: byIds(["dashboard", "tasks", "announcements", "calendar"]),
+    items: byIds(["dashboard", "tasks", "announcements"]),
   },
   {
     id: "teacher-services",
@@ -387,13 +383,11 @@ export const DEFAULT_DESKTOP_ORDER = NAV_ITEMS.map((item) => item.id);
 export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
   "tasks",
-  "calendar",
   "announcements",
   "publications",
   "councilProposals",
   "documents",
   "regulations",
-  "meetings",
   "receivables",
   "shop",
   "merchandiseSubmissions",
@@ -456,26 +450,6 @@ export const PROFILE_MOBILE_ORDER: Record<NavigationProfile, string[]> = Object.
 
 export const NAV_PREF_EVENT = "hcca:navigation-preferences-changed";
 
-/**
- * 議事系統解鎖旗標：一般使用者預設看不到「議事系統」入口，
- * 只有掃描會議現場的簽到連結（/meetings/join/[token]）後才會在本機解鎖；
- * 會議管理者（meeting:* 權限）與管理員則一律可見，不需解鎖。
- */
-export const MEETINGS_UNLOCK_KEY = "hcca:meetings:unlocked";
-
-export function isMeetingsUnlocked(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(MEETINGS_UNLOCK_KEY) === "1";
-}
-
-export function unlockMeetings() {
-  if (typeof window === "undefined") return;
-  if (window.localStorage.getItem(MEETINGS_UNLOCK_KEY) === "1") return;
-  window.localStorage.setItem(MEETINGS_UNLOCK_KEY, "1");
-  // 沿用 NAV_PREF_EVENT 讓側邊欄即時重算可見項目。
-  window.dispatchEvent(new Event(NAV_PREF_EVENT));
-}
-
 function byIds(ids: string[]) {
   return ids.map((id) => NAV_ITEMS_BY_ID[id]).filter(Boolean);
 }
@@ -528,9 +502,6 @@ export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): 
       || options.hasPrefix("analytics:")
       || options.hasPrefix("finance:")
     );
-  }
-  if (item.id === "meetings") {
-    return Boolean(options.meetingsUnlocked || options.hasPrefix("meeting:"));
   }
   return filterNavItems([item], options.can, options.hasPrefix).length > 0;
 }

@@ -2155,25 +2155,10 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   transition: border-color var(--transition), color var(--transition), transform var(--transition);
 }
 
-.calendar-page,
-.calendar-page > *,
-.calendar-heading > *,
-.calendar-toolbar > *,
-.calendar-filters > *,
 .shop-class-orders-page,
 .shop-class-orders-page > * {
   min-width: 0;
   box-sizing: border-box;
-}
-
-.calendar-actions > *,
-.calendar-filters select,
-.calendar-mine-filter {
-  max-width: 100%;
-}
-
-.calendar-period-label {
-  white-space: nowrap;
 }
 
 @media (max-width: 1023px) {
@@ -2220,43 +2205,6 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
     padding-inline: 0.75rem !important;
   }
 
-  .calendar-actions {
-    width: 100%;
-  }
-
-  .calendar-actions > * {
-    flex: 1 1 0;
-    justify-content: center;
-  }
-
-  .calendar-toolbar {
-    align-items: stretch;
-  }
-
-  .calendar-period-controls {
-    display: grid;
-    width: 100%;
-    grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem auto;
-  }
-
-  .calendar-period-controls > button,
-  .calendar-period-label {
-    min-width: 0;
-  }
-
-  .calendar-view-switcher {
-    display: flex;
-    width: 100%;
-  }
-
-  .calendar-view-switcher > button {
-    min-width: 0;
-    flex: 1 1 0;
-  }
-
-  .calendar-mine-filter {
-    width: 100%;
-  }
 }
 
 @media (max-width: 639px) {

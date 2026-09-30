@@ -305,7 +305,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=2
-      --queues=meal,backup,recovery,gcal
+      --queues=meal,backup,recovery
       -n util@%h
     environment:
       ENVIRONMENT: development

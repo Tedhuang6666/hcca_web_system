@@ -1,5 +1,5 @@
 import type {
-  CouncilProposalCaseType, CouncilProposalCreate, CouncilProposalEligibleMeeting, CouncilProposalListItem, CouncilProposalOut, CouncilProposalStatus,
+  CouncilProposalCaseType, CouncilProposalCreate, CouncilProposalListItem, CouncilProposalOut, CouncilProposalStatus,
 } from "../types";
 import { get, post, patch } from "./core";
 
@@ -32,11 +32,6 @@ export const councilProposalsApi = {
     body: {
       status: CouncilProposalStatus;
       committee_review_note?: string | null;
-      scheduled_meeting_id?: string | null;
     },
   ) => patch<CouncilProposalOut>(`/council-proposals/${id}/status`, body),
-  eligibleMeetings: (id: string) =>
-    get<CouncilProposalEligibleMeeting[]>(`/council-proposals/${id}/eligible-meetings`),
-  schedule: (id: string, body: { meeting_id: string; note?: string | null }) =>
-    post<CouncilProposalOut>(`/council-proposals/${id}/schedule`, body),
 };

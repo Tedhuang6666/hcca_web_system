@@ -56,7 +56,6 @@ def test_medium_confidence_hits(query: str) -> None:
         ("/announcements", "page=1&size=20"),
         ("/documents/search", "q=會議紀錄&status=approved"),
         ("/orgs/123/members", "role=member"),
-        ("/meetings", "from=2026-06-01&to=2026-06-30"),
         ("/users/me", ""),
         # 含 select/or 等英文字但非注入語法的正常查詢
         ("/search", "q=please select an option or two"),

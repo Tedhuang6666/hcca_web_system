@@ -8,7 +8,6 @@ test.skip(
 const workflows = [
   { name: "MFA", path: "/auth/mfa" },
   { name: "公文建立", path: "/documents/new" },
-  { name: "會議", path: "/meetings" },
   { name: "購票", path: "/shop" },
   { name: "學餐", path: "/meal" },
   { name: "問卷", path: "/surveys" },

@@ -64,7 +64,6 @@ def page_label(path: str) -> str:
         "/announcements": "公告",
         "/documents": "公文",
         "/regulations": "法規",
-        "/meetings": "會議",
         "/petitions": "陳情",
         "/shop": "購票",
         "/surveys": "問卷",

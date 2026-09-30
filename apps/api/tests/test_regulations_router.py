@@ -1,4 +1,4 @@
-"""法規系統 Router 測試 — CRUD／條文管理／審議流程（含會議綁定）／全文搜尋。"""
+"""法規系統 Router 測試 — CRUD／條文管理／審議流程／全文搜尋。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
 from api.models.document import Document, DocumentCategory, DocumentStatus, DocumentVisibility
-from api.models.meeting import Meeting, MeetingAgendaItem
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.regulation import (
     ArticleType,
@@ -74,30 +73,6 @@ async def _make_regulation(
     db.add(reg)
     await db.flush()
     return reg
-
-
-async def _make_meeting_with_agenda(
-    db: AsyncSession, org: Org, creator: User, reg: Regulation
-) -> Meeting:
-    """建立一場已將 reg 排入議程的會議（審議流程動作須綁定此類會議）。"""
-    meeting = Meeting(
-        org_id=org.id,
-        title=f"測試會議-{uuid.uuid4().hex[:6]}",
-        created_by=creator.id,
-        screen_token=uuid.uuid4().hex,
-        checkin_token=uuid.uuid4().hex,
-    )
-    db.add(meeting)
-    await db.flush()
-    agenda_item = MeetingAgendaItem(
-        meeting_id=meeting.id,
-        title=reg.title,
-        item_type="regulation",
-        regulation_id=reg.id,
-    )
-    db.add(agenda_item)
-    await db.flush()
-    return meeting
 
 
 # ── CRUD ───────────────────────────────────────────────────────────────────
@@ -897,88 +872,6 @@ async def test_parliamentary_regulations_cannot_be_published_directly(
     assert reg.workflow_status == RegulationWorkflowStatus.DRAFT
 
 
-async def test_schedule_without_meeting_id_returns_422(
-    db_session: AsyncSession, authed_client_factory, make_user
-) -> None:
-    """業務鐵律：排入議程必須綁會議，不可直接按鈕轉移。"""
-    org = await _make_org(db_session)
-    creator = await make_user(email="schedule-no-meeting-owner@school.edu")
-    await _grant_permission(db_session, creator, org, "regulation:schedule")
-    reg = await _make_regulation(
-        db_session, org, creator, workflow_status=RegulationWorkflowStatus.UNDER_REVIEW
-    )
-
-    ac = authed_client_factory(creator)
-    resp = await ac.post(f"/regulations/{reg.id}/schedule", json={})
-
-    assert resp.status_code == 422
-    assert reg.workflow_status == RegulationWorkflowStatus.UNDER_REVIEW
-
-
-async def test_schedule_with_meeting_missing_agenda_item_returns_422(
-    db_session: AsyncSession, authed_client_factory, make_user
-) -> None:
-    """會議存在但法案尚未排入該會議議程時，仍不可推進流程。"""
-    org = await _make_org(db_session)
-    creator = await make_user(email="schedule-no-agenda-owner@school.edu")
-    await _grant_permission(db_session, creator, org, "regulation:schedule")
-    reg = await _make_regulation(
-        db_session, org, creator, workflow_status=RegulationWorkflowStatus.UNDER_REVIEW
-    )
-    meeting = Meeting(
-        org_id=org.id,
-        title="無議程會議",
-        created_by=creator.id,
-        screen_token=uuid.uuid4().hex,
-        checkin_token=uuid.uuid4().hex,
-    )
-    db_session.add(meeting)
-    await db_session.flush()
-
-    ac = authed_client_factory(creator)
-    resp = await ac.post(f"/regulations/{reg.id}/schedule", json={"meeting_id": str(meeting.id)})
-
-    assert resp.status_code == 422
-
-
-async def test_schedule_with_valid_agenda_item_succeeds(
-    db_session: AsyncSession, authed_client_factory, make_user
-) -> None:
-    org = await _make_org(db_session)
-    creator = await make_user(email="schedule-owner@school.edu")
-    await _grant_permission(db_session, creator, org, "regulation:schedule")
-    reg = await _make_regulation(
-        db_session, org, creator, workflow_status=RegulationWorkflowStatus.UNDER_REVIEW
-    )
-    meeting = await _make_meeting_with_agenda(db_session, org, creator, reg)
-
-    ac = authed_client_factory(creator)
-    resp = await ac.post(f"/regulations/{reg.id}/schedule", json={"meeting_id": str(meeting.id)})
-
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["workflow_status"] == "scheduled"
-
-
-async def test_council_approve_with_valid_agenda_item_succeeds(
-    db_session: AsyncSession, authed_client_factory, make_user
-) -> None:
-    org = await _make_org(db_session)
-    creator = await make_user(email="council-approve-owner@school.edu")
-    await _grant_permission(db_session, creator, org, "regulation:council_approve")
-    reg = await _make_regulation(
-        db_session, org, creator, workflow_status=RegulationWorkflowStatus.SCHEDULED
-    )
-    meeting = await _make_meeting_with_agenda(db_session, org, creator, reg)
-
-    ac = authed_client_factory(creator)
-    resp = await ac.post(
-        f"/regulations/{reg.id}/council_approve", json={"meeting_id": str(meeting.id)}
-    )
-
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["workflow_status"] == "council_approved"
-
-
 async def test_president_publish_with_manual_serial_succeeds(
     db_session: AsyncSession, authed_client_factory, make_user
 ) -> None:
@@ -1092,22 +985,6 @@ async def test_get_workflow_logs_anonymous_returns_404(
     resp = await client.get(f"/regulations/{reg.id}/workflow_logs")
 
     assert resp.status_code == 404
-
-
-async def test_list_eligible_meetings_returns_meeting_with_agenda_item(
-    db_session: AsyncSession, authed_client_factory, make_user
-) -> None:
-    org = await _make_org(db_session)
-    creator = await make_user(email="eligible-meetings-owner@school.edu")
-    reg = await _make_regulation(db_session, org, creator)
-    meeting = await _make_meeting_with_agenda(db_session, org, creator, reg)
-
-    ac = authed_client_factory(creator)
-    resp = await ac.get(f"/regulations/{reg.id}/eligible-meetings")
-
-    assert resp.status_code == 200, resp.text
-    ids = {row["id"] for row in resp.json()}
-    assert str(meeting.id) in ids
 
 
 # ── 修正對照／參照檢查／Time Machine／Diff ─────────────────────────────────

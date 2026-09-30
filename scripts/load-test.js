@@ -122,8 +122,6 @@ export function authenticatedReads() {
       "authenticated documents",
     );
     expectSuccess(
-      http.get(`${baseUrl}/meetings?limit=20`, authParams("authenticated_read", "meetings")),
-      "meetings",
     );
     expectSuccess(
       http.get(`${baseUrl}/shop/orders?limit=20`, authParams("authenticated_read", "orders")),
@@ -161,7 +159,6 @@ function postConfigured(urlEnv, bodyEnv, name) {
 export function isolatedWrites() {
   // Paths and JSON bodies point at disposable records in an isolated test database.
   postConfigured("APPROVAL_PATH", "APPROVAL_BODY", "document_approval");
-  postConfigured("MEETING_PATH", "MEETING_BODY", "meeting_decision");
   postConfigured("ORDER_PATH", "ORDER_BODY", "order_write");
   postConfigured("SURVEY_PATH", "SURVEY_BODY", "survey_submission");
   sleep(1);

@@ -129,20 +129,8 @@ class PermissionCode(StrEnum):
     EXAM_MANAGE = "exam:manage"
     EXAM_DOWNLOAD = "exam:download"
 
-    MEETING_CREATE = "meeting:create"
-    MEETING_MANAGE = "meeting:manage"
-    MEETING_CHAIR = "meeting:chair"
-    MEETING_VOTE = "meeting:vote"
-    MEETING_VIEW_ALL = "meeting:view_all"
-    MEETING_EXPORT = "meeting:export"
-
     COUNCIL_PROPOSAL_MANAGE = "council_proposal:manage"
     JUDICIAL_PETITION_MANAGE = "judicial_petition:manage"
-
-    CALENDAR_CREATE = "calendar:create"
-    CALENDAR_MANAGE = "calendar:manage"
-    CALENDAR_VIEW_ALL = "calendar:view_all"
-    CALENDAR_ADMIN = "calendar:admin"
 
     PARTNER_MAP_MANAGE = "partner_map:manage"
     PARTNER_MAP_BUSINESS_MANAGE = "partner_map:business_manage"
@@ -813,75 +801,15 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     },
     {
         "group": "議事系統",
-        "code": PermissionCode.MEETING_CREATE,
-        "label": "建立會議",
-        "desc": "建立議會會議與基本門檻設定",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_MANAGE,
-        "label": "管理議程與出席",
-        "desc": "管理議程、出列席、投影大屏與現場名冊",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_CHAIR,
-        "label": "主席場控",
-        "desc": "開始/暫停/結束會議，開啟與關閉現場表決",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_VOTE,
-        "label": "議員表決",
-        "desc": "列入預設表決權名冊並可在現場投票",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_VIEW_ALL,
-        "label": "查看所有會議",
-        "desc": "跨組織查看會議資料",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_EXPORT,
-        "label": "匯出會議紀錄",
-        "desc": "查看會後紀錄、匯出或轉成公文草稿",
-    },
-    {
-        "group": "議事系統",
         "code": PermissionCode.COUNCIL_PROPOSAL_MANAGE,
         "label": "管理議會提案",
-        "desc": "審查議會提案、記錄常委審查與排入議程狀態",
+        "desc": "審查與更新議會提案狀態",
     },
     {
         "group": "評議委員會",
         "code": PermissionCode.JUDICIAL_PETITION_MANAGE,
         "label": "管理評議聲請",
         "desc": "收案、審查與更新評議委員會訴訟或法規範審查聲請",
-    },
-    {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_CREATE,
-        "label": "建立行程",
-        "desc": "建立活動、準備、彩排、他校會議與截止日",
-    },
-    {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_MANAGE,
-        "label": "管理行程",
-        "desc": "管理本平台行事曆事件、參與者、準備清單與關聯連結",
-    },
-    {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_VIEW_ALL,
-        "label": "查看組織行程",
-        "desc": "跨組織查看組織可見的行事曆事件",
-    },
-    {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_ADMIN,
-        "label": "行事曆管理員",
-        "desc": "跨組織查看與管理所有行事曆事件",
     },
     {
         "group": "特約地圖",

@@ -7,7 +7,6 @@ export type RecentKind =
   | "document"
   | "regulation"
   | "survey"
-  | "meeting"
   | "announcement";
 
 export type RecentItem = {

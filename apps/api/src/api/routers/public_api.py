@@ -10,7 +10,6 @@
 scope 規範：
 - read:announcements
 - read:regulations
-- read:calendar
 """
 
 from __future__ import annotations

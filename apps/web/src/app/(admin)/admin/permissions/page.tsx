@@ -16,7 +16,6 @@ import type { OrgRead } from "@/lib/api";
 import type {
   AccountMergeConflict,
   AdminUserDetail,
-  MeetingBillStage,
   PermissionCodeInfo,
   PositionCategory,
   PositionSummary,
@@ -28,12 +27,6 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 type Mode = "orgs" | "members" | "audit";
 type OrgWithPermissionDefaults = OrgRead & { default_permission_codes: string[] };
 
-// 組織在議事流程的角色：影響此組織所辦會議的議程是否自動偵測待審法案
-const BILL_STAGE_OPTIONS: { value: "" | MeetingBillStage; label: string }[] = [
-  { value: "", label: "一般組織（不審議法案）" },
-  { value: "standing_committee", label: "常務委員會（審議新提案）" },
-  { value: "council", label: "議會（審議常委會通過案）" },
-];
 type Detail = { type: "org"; id: string } | { type: "position"; id: string } | { type: "user"; id: string };
 type ConfirmState = { title: string; body: string; action: () => Promise<unknown> } | null;
 
@@ -690,7 +683,6 @@ function OrgPanel({
   const [name, setName] = useState(org.name);
   const [description, setDescription] = useState(org.description ?? "");
   const [prefix, setPrefix] = useState(org.prefix ?? "");
-  const [billStage, setBillStage] = useState<"" | MeetingBillStage>(org.bill_stage ?? "");
   const [parentId, setParentId] = useState(org.parent_id ?? "");
   const [leaderUserId, setLeaderUserId] = useState(org.leader_user_id ?? "");
   const [defaultCodes, setDefaultCodes] = useState<string[]>(org.default_permission_codes ?? []);
@@ -723,7 +715,6 @@ function OrgPanel({
     setName(org.name);
     setDescription(org.description ?? "");
     setPrefix(org.prefix ?? "");
-    setBillStage(org.bill_stage ?? "");
     setParentId(org.parent_id ?? "");
     setLeaderUserId(org.leader_user_id ?? "");
     setDefaultCodes(org.default_permission_codes ?? []);
@@ -736,7 +727,6 @@ function OrgPanel({
         name: name.trim(),
         description: description.trim() || null,
         prefix: prefix.trim() || null,
-        bill_stage: billStage || null,
         parent_id: parentId || null,
         leader_user_id: leaderUserId || null,
       });
@@ -896,7 +886,6 @@ function OrgPanel({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>字號前綴<TextInput value={prefix} onChange={(e) => setPrefix(e.target.value)} className="mt-1" placeholder="例：嶺代" /></label>
-          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>議事角色（法案審議階段）<SelectInput value={billStage} onChange={(e) => setBillStage(e.target.value as "" | MeetingBillStage)} className="mt-1">{BILL_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</SelectInput><span className="block mt-1 text-[10px]" style={{ color: "var(--text-disabled)" }}>設定後，此組織所辦會議的議程會自動偵測對應階段的待審法案。</span></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.is_active && o.id !== org.id && !descendantIds.has(o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>
@@ -1532,7 +1521,6 @@ function OrgCreateModal({ orgs, onClose, onDone }: { orgs: OrgRead[]; onClose: (
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [prefix, setPrefix] = useState("");
-  const [billStage, setBillStage] = useState<"" | MeetingBillStage>("");
   const [parentId, setParentId] = useState("");
   const submit = async () => {
     if (!name.trim()) {
@@ -1540,7 +1528,7 @@ function OrgCreateModal({ orgs, onClose, onDone }: { orgs: OrgRead[]; onClose: (
       return;
     }
     try {
-      await adminApi.createOrg({ name: name.trim(), description: description.trim() || undefined, prefix: prefix.trim() || null, bill_stage: billStage || null, parent_id: parentId || null });
+      await adminApi.createOrg({ name: name.trim(), description: description.trim() || undefined, prefix: prefix.trim() || null, parent_id: parentId || null });
       toast.success("組織已建立");
       onDone();
     } catch (e) {
@@ -1553,7 +1541,6 @@ function OrgCreateModal({ orgs, onClose, onDone }: { orgs: OrgRead[]; onClose: (
         <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="組織名稱" />
         <TextInput value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="字號前綴（選填）" />
         <TextInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="描述（選填）" />
-        <SelectInput value={billStage} onChange={(e) => setBillStage(e.target.value as "" | MeetingBillStage)}>{BILL_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</SelectInput>
         <SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">無上層組織</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput>
       </div>
       <div className="flex justify-end gap-2">

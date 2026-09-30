@@ -542,7 +542,7 @@ class AutomationRuleOut(BaseModel):
 class MatterSpawnIn(BaseModel):
     """從事情主動建立並連動模組artifact（指揮中心）。"""
 
-    kind: str = Field(..., pattern="^(task|announcement|survey|meeting|document|regulation)$")
+    kind: str = Field(..., pattern="^(task|announcement|survey|document|regulation)$")
     title: str = Field(..., min_length=1, max_length=200)
     org_id: uuid.UUID | None = None
 

@@ -3,18 +3,17 @@ import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search as SearchIcon, FileText, Scale, Calendar, Megaphone } from "lucide-react";
+import { Search as SearchIcon, FileText, Scale, Megaphone } from "lucide-react";
 import { searchApi, apiErrorMessage } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
-type Kind = "all" | "document" | "regulation" | "meeting" | "announcement";
+type Kind = "all" | "document" | "regulation" | "announcement";
 
 const KIND_META: Record<Exclude<Kind, "all">, { label: string; Icon: React.ComponentType<{ size: number; "aria-hidden"?: boolean }>; color: string }> = {
   document:     { label: "公文", Icon: FileText,  color: "var(--primary)" },
   regulation:   { label: "法規", Icon: Scale,     color: "var(--warning)" },
-  meeting:      { label: "會議", Icon: Calendar,  color: "var(--success)" },
   announcement: { label: "公告", Icon: Megaphone, color: "var(--info, var(--primary))" },
 };
 
@@ -22,7 +21,6 @@ const TABS: { key: Kind; label: string }[] = [
   { key: "all",          label: "全部" },
   { key: "document",     label: "公文" },
   { key: "regulation",   label: "法規" },
-  { key: "meeting",      label: "會議" },
   { key: "announcement", label: "公告" },
 ];
 
@@ -81,7 +79,7 @@ function SearchInner() {
           全域搜尋
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          一次搜尋公文、法規、會議與公告
+          一次搜尋公文、法規與公告
         </p>
       </div>
 

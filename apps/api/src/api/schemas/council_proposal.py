@@ -70,7 +70,6 @@ class CouncilProposalListItem(BaseModel):
     title: str
     summary: str
     status: CouncilProposalStatus
-    scheduled_at: datetime | None
     decided_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -85,28 +84,8 @@ class CouncilProposalOut(CouncilProposalListItem):
     rationale: str
     expected_effect: str | None
     committee_review_note: str | None
-    scheduled_meeting_id: uuid.UUID | None
 
 
 class CouncilProposalStatusUpdate(BaseModel):
     status: CouncilProposalStatus
     committee_review_note: str | None = Field(None, max_length=5000)
-    scheduled_meeting_id: uuid.UUID | None = None
-
-
-class CouncilProposalSchedule(BaseModel):
-    """常委會審查通過後，把提案排入指定會議（大會）議程。"""
-
-    meeting_id: uuid.UUID
-    note: str | None = Field(None, max_length=5000)
-
-
-class EligibleMeetingBrief(BaseModel):
-    """可排入提案的會議摘要。"""
-
-    id: uuid.UUID
-    title: str
-    status: str
-    bill_stage: str | None
-    starts_at: datetime | None
-    already_scheduled: bool

@@ -5,8 +5,6 @@
 export const MODULE_MANIFEST = {
   documents: { label: "公文系統", routePrefixes: ["/documents", "/document-templates", "/serial-templates"], navIds: ["documents", "documentTemplates", "serialTemplates"], navigationGroup: "治理事務" },
   regulations: { label: "法規系統", routePrefixes: ["/regulations"], navIds: ["regulations"], navigationGroup: "治理事務" },
-  meetings: { label: "議事系統", routePrefixes: ["/meetings"], navIds: ["meetings"], navigationGroup: "治理事務" },
-  calendar: { label: "行事曆", routePrefixes: ["/calendar"], navIds: ["calendar"], navigationGroup: "我的工作" },
   councilProposals: { label: "議會提案", routePrefixes: ["/council-proposals"], navIds: ["councilProposals"], navigationGroup: "治理事務" },
   judicialPetitions: { label: "評議訴訟", routePrefixes: ["/judicial-petitions"], navIds: ["judicialPetitions"], navigationGroup: "治理事務" },
   announcements: { label: "校內公告", routePrefixes: ["/announcements"], navIds: ["announcements"], navigationGroup: "發布與營運" },
@@ -35,7 +33,6 @@ export const PUBLIC_ROUTE_MANIFEST = {
   patterns: [
     /^\/announcements\/(?!new$)[^/]+$/,
     /^\/documents\/(?!new$|delegations$)[^/]+$/,
-    /^\/meetings\/(?:join|screen)\/[^/]+$/,
     /^\/partner-map\/(?!admin(?:\/|$)|my-businesses(?:\/|$))[^/]+$/,
     /^\/regulations\/(?!new(?:\/|$)|pending(?:\/|$)|archived(?:\/|$))[^/]+(?:\/(?!edit(?:\/|$)|amendment(?:\/|$)).*)?$/,
     /^\/surveys\/(?!new$)[^/]+$/,
@@ -44,8 +41,8 @@ export const PUBLIC_ROUTE_MANIFEST = {
 } as const;
 
 export const ROUTE_MANIFEST = [
-  { group: "我的工作", routePrefixes: ["/dashboard", "/tasks", "/work-items", "/calendar"], public: false, shell: true },
-  { group: "治理事務", routePrefixes: ["/documents", "/regulations", "/meetings", "/council-proposals", "/judicial-petitions", "/petitions"], public: false, shell: true },
+  { group: "我的工作", routePrefixes: ["/dashboard", "/tasks", "/work-items"], public: false, shell: true },
+  { group: "治理事務", routePrefixes: ["/documents", "/regulations", "/council-proposals", "/judicial-petitions", "/petitions"], public: false, shell: true },
   { group: "校園服務", routePrefixes: ["/shop", "/surveys", "/partner-map", "/recommended-vendors", "/exam-papers", "/credential"], public: false, shell: true },
   { group: "發布與營運", routePrefixes: ["/announcements", "/publications", "/email", "/finance", "/operations"], public: false, shell: true },
   { group: "系統管理", routePrefixes: ["/admin", "/orgs", "/settings", "/audit-logs"], public: false, shell: true },
