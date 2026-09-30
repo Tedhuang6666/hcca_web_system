@@ -175,6 +175,13 @@ try {
     },
   ]);
   const page = await context.newPage();
+  // SessionGate uses localStorage only as a hint before it can verify the
+  // HTTP-only cookie through /auth/me. Seed that hint so a transient server-
+  // side session prefetch failure does not redirect this synthetic browser to
+  // /login before the browser-side retry can complete.
+  await page.addInitScript(() => {
+    window.localStorage.setItem("user_id", "synthetic-performance");
+  });
   const interactionResponses = [];
   const requestStarted = new Map();
   page.on("request", (request) => {
