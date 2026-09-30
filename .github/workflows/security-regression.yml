@@ -1,0 +1,162 @@
+name: Security regression and public baseline
+
+on:
+  schedule:
+    - cron: "41 21 * * *" # 每日台北 05:41
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "libs/shared/**"
+      - "scripts/security-*.py"
+      - "scripts/tests/test_security_*.py"
+      - "security/**"
+      - ".github/workflows/security-regression.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-regression-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  asset-discovery:
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install checksum-pinned subfinder
+        run: |
+          curl --fail --silent --show-error --location --max-time 120 \
+            https://github.com/projectdiscovery/subfinder/releases/download/v2.16.0/subfinder_2.16.0_linux_amd64.zip \
+            --output "$RUNNER_TEMP/subfinder.zip"
+          echo "1b7f9c608e9a5bd59e609a5e09710d63c5485e92d3d49dc2c16eb4fdbe10cb60  $RUNNER_TEMP/subfinder.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/subfinder.zip" subfinder -d "$RUNNER_TEMP/subfinder-bin"
+          echo "$RUNNER_TEMP/subfinder-bin" >> "$GITHUB_PATH"
+      - name: Passive discovery only; review newly observed hosts
+        run: |
+          mkdir -p security-reports
+          subfinder -d hcca.tw -s crtsh,hackertarget -pc /dev/null \
+            -rl 1 -timeout 10 -max-time 1 -silent -o security-reports/discovered-domains.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          observed = {
+              name.strip().lower()
+              for name in Path('security-reports/discovered-domains.txt').read_text().splitlines()
+              if name.strip().lower().endswith('.hcca.tw')
+          }
+          if not observed:
+              raise SystemExit('Discovery incomplete: passive sources returned no candidates')
+          known = set(Path('security/known-domains.txt').read_text().splitlines())
+          new = sorted(observed - known)
+          if new:
+              print('New candidate hosts require ownership/scope review:', ', '.join(new))
+              raise SystemExit(1)
+          print('Passive discovery completed; no new candidate hosts')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: security-asset-candidates
+          path: security-reports/
+          retention-days: 14
+
+  regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: hcca_security_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:password@127.0.0.1:5432/hcca_security_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:password@127.0.0.1:5432/hcca_security_test
+      REDIS_URL: redis://127.0.0.1:6379/0
+      REDIS_CACHE_URL: redis://127.0.0.1:6379/1
+      REDIS_REALTIME_URL: redis://127.0.0.1:6379/2
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/3
+      CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/4
+      SECRET_KEY: ci-test-secret-key-32-characters-min
+      ENVIRONMENT: testing
+      SENTRY_DSN: ""
+      POSTHOG_API_KEY: ""
+      OTEL_ENABLED: "false"
+      WS_PUBSUB_BACKEND: memory
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - run: uv python install 3.12
+      - name: Verify scanner boundaries
+        run: python3 -m unittest discover -s scripts/tests -p 'test_security_*.py'
+      - name: Authentication, authorization and exploit regression tests
+        run: |
+          bash scripts/check.sh api-test \
+            apps/api/tests/test_auth_flows.py \
+            apps/api/tests/test_auth_policy.py \
+            apps/api/tests/test_security.py \
+            apps/api/tests/test_security_hardening.py \
+            apps/api/tests/test_waf.py \
+            apps/api/tests/test_config_security.py \
+            apps/api/tests/test_rbac.py \
+            apps/api/tests/test_idor.py \
+            apps/api/tests/test_permission_matrix.py \
+            apps/api/tests/test_api_keys.py \
+            apps/api/tests/test_mfa_router.py \
+            apps/api/tests/test_mfa_service.py \
+            apps/api/tests/test_metrics_tasks.py \
+            --junitxml=security-reports/regressions.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: security-regressions
+          path: security-reports/
+          retention-days: 14
+
+  public-baseline:
+    # PR 上只跑隔離回歸；正式站探針只使用 default branch 的排程／手動版本。
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Public baseline (six fixed GET requests, one per second)
+        run: python3 scripts/security-baseline.py --output security-reports/public.json
+      - name: Install checksum-pinned nuclei
+        run: |
+          curl --fail --silent --show-error --location --max-time 120 \
+            https://github.com/projectdiscovery/nuclei/releases/download/v3.8.0/nuclei_3.8.0_linux_amd64.zip \
+            --output "$RUNNER_TEMP/nuclei.zip"
+          echo "cd4ea43c88b50af8ab96eb6ad3fb4debd8e9d51efaff4d4c2d99106041578943  $RUNNER_TEMP/nuclei.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/nuclei.zip" nuclei -d "$RUNNER_TEMP/nuclei-bin"
+          echo "$RUNNER_TEMP/nuclei-bin" >> "$GITHUB_PATH"
+      - name: Reviewed nuclei authentication probes
+        run: python3 scripts/security-nuclei.py --output security-reports/nuclei.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: security-public-baseline
+          path: security-reports/
+          retention-days: 14
