@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
+from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.user import User
@@ -77,8 +78,8 @@ async def receivable_summary(
     "",
     response_model=ReceivableOut,
     status_code=status.HTTP_201_CREATED,
-    summary="建立應收款（需 finance:view）",
-    dependencies=[Depends(require_permission("finance:view"))],
+    summary="建立應收款（需 finance:record）",
+    dependencies=[Depends(require_permission(PermissionCode.FINANCE_RECORD))],
 )
 async def create_receivable(
     body: ReceivableCreate, db: DbDep, current_user: CurrentUser
@@ -100,8 +101,8 @@ async def create_receivable(
 @router.patch(
     "/{receivable_id}",
     response_model=ReceivableOut,
-    summary="更新應收款（需 finance:view）",
-    dependencies=[Depends(require_permission("finance:view"))],
+    summary="更新應收款（需 finance:record）",
+    dependencies=[Depends(require_permission(PermissionCode.FINANCE_RECORD))],
 )
 async def update_receivable(
     receivable_id: uuid.UUID,
@@ -129,8 +130,8 @@ async def update_receivable(
 @router.post(
     "/{receivable_id}/mark-paid",
     response_model=ReceivableOut,
-    summary="標記收款完成（需 finance:view）",
-    dependencies=[Depends(require_permission("finance:view"))],
+    summary="標記收款完成（需 finance:record）",
+    dependencies=[Depends(require_permission(PermissionCode.FINANCE_RECORD))],
 )
 async def mark_paid(
     receivable_id: uuid.UUID,
@@ -159,8 +160,8 @@ async def mark_paid(
 @router.post(
     "/{receivable_id}/refund",
     response_model=ReceivableOut,
-    summary="標記退款（需 finance:view）",
-    dependencies=[Depends(require_permission("finance:view"))],
+    summary="標記退款（需 finance:record）",
+    dependencies=[Depends(require_permission(PermissionCode.FINANCE_RECORD))],
 )
 async def refund(
     receivable_id: uuid.UUID,
