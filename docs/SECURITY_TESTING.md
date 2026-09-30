@@ -3,8 +3,8 @@
 授權目標為 `https://hcca.tw`。本流程將公開站的低頻探針與隔離環境的攻擊回歸分開執行。
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
 合併／推送到 default branch 後，每日台北時間 05:41 執行 DNS、SQLi／XSS 與認證邊界探針；
-週日 06:11 跑 HTTP 基線，06:51 跑固定路徑枚舉，也可手動選擇單一測試類型。本機 WSL 的路徑模式
-另外在 HEAD 枚舉後讀取 robots.txt／sitemap.xml，這項本機更新尚未推送到 GitHub workflow。
+週日 06:11 跑 HTTP 基線，06:51 跑固定路徑枚舉，也可手動選擇單一測試類型。本機 WSL 另在
+07:31 讀取 robots.txt／sitemap.xml，08:11 用 ffuf 對固定清單執行低頻 HEAD fuzz；這些更新尚未推送。
 使用者已確認應用部署完成；這不代表後續本機安全修正已部署。2026-09-30 查得遠端
 `origin/main` 為 `798e3b281f52a6b4a5157c9bbcac1805885a65cb`；依使用者先前選擇，後續安全提交
 維持本機、不推送；遠端每日排程仍是舊版。本機 WSL 可安裝下述 user timers 執行最新版探針，
@@ -22,12 +22,17 @@ python3 scripts/security-active.py --output /tmp/hcca-active.json
 python3 scripts/security-paths.py --interval 45 --output /tmp/hcca-paths.json
 # 主動讀取 robots.txt／sitemap.xml，只輸出同網域路徑與未連線的外站名稱。
 python3 scripts/security-metadata.py --interval 45 --output /tmp/hcca-metadata.json
+# 安裝官方校驗過的 ffuf 2.3.0 到 ~/.local/bin。
+bash scripts/install-ffuf.sh
+# 24 個固定候選路徑的 ffuf HEAD fuzz；分批限速並檢查 robots HEAD 控制。
+python3 scripts/security-fuzz.py --interval 45 --output /tmp/hcca-fuzz.json
 # 九個固定 HTTP 存取控制／安全標頭 GET 探針；每 45 秒一個請求，不保存回應本文。
 python3 scripts/security-baseline.py --interval 45 --output /tmp/hcca-http.json
 # WSL 本機分時排程：daily（DNS／輸入／認證）、每週基線或每週路徑／metadata 盤點。
 python3 scripts/security-schedule.py --mode daily
 python3 scripts/security-schedule.py --mode http-baseline
 python3 scripts/security-schedule.py --mode path-enumeration
+python3 scripts/security-schedule.py --mode path-fuzz
 # 安裝／檢查本機 systemd user timers；輸出留在 ~/.local/state/hcca-security。
 bash scripts/install-security-timers.sh
 systemctl --user list-timers --all --no-pager
@@ -58,13 +63,17 @@ HEAD 路徑命中只標成待人工確認候選，不下載內容。HTTP 工具�
 被停止或 Windows 關機，仍要等下次啟動才可能補跑每日探針。
 本機另於週日 07:31 執行 `public-metadata`，與 06:51 路徑探針分開 40 分鐘；它以 45 秒間隔
 主動 GET robots.txt／sitemap.xml，只保留同網域路徑，外站 URL 只記錄主機名稱、不連線。
-GitHub workflow 尚未包含 metadata 工作，遠端仍使用固定路徑探針。
+08:11 執行本機 `path-fuzz`：使用官方 ffuf 2.3.0、24 條固定候選路徑、HEAD、單執行緒、45 秒間隔、
+不追轉址／遞迴／下載本文，也不傳 Cookie 或 token。每批最多 6 個 fuzz 請求後送一個 robots HEAD 控制，
+下一批起點至少相隔 310 秒；每個五分鐘窗口最多 7 個請求。遇 403、429、5xx、轉址、網路錯誤或控制請求
+偵測到 Cloudflare challenge 即停止後續批次。候選只記錄路徑、狀態碼、回應長度及內容類型，不自動判定漏洞。
+GitHub workflow 尚未包含 metadata／ffuf 工作，遠端仍使用固定路徑探針。
 停用排程可執行：
 
 ```bash
 systemctl --user disable --now hcca-security-daily.timer \
   hcca-security-http-baseline.timer hcca-security-path-enumeration.timer \
-  hcca-security-public-metadata.timer
+  hcca-security-public-metadata.timer hcca-security-path-fuzz.timer
 # 若也要停止 user manager 在登出後常駐，且確認沒有其他 user timers 依賴它，再執行：
 loginctl disable-linger "$(id -un)"
 ```
@@ -91,6 +100,7 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
 | 主動探測 | 正式站每日固定 DNS、四個搜尋輸入、兩個 Nuclei 認證邊界請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；單一探針錯誤不能遮蔽其他獨立結果 |
 | 路徑與公開 metadata | `scripts/security-paths.py` 每 45 秒對 12 條審閱路徑送 HEAD；本機另以 `scripts/security-metadata.py` 對 robots／sitemap 送兩個 GET | 每週分開執行；不追轉址或掃外站，路徑探針不下載內容，命中只列待人工確認 |
+| 主動路徑 fuzz | 本機 ffuf 2.3.0 對 24 條固定候選路徑送 HEAD；6 個一批、每請求 45 秒間隔，每批後檢查 robots HEAD 控制 | 每週獨立執行；每個五分鐘窗口最多 7 個請求，遇 WAF／限流／伺服器錯誤即停止 |
 | 人工分析 | 程式呼叫鏈＋HTTP 證據；需要互動登入時以 Burp／Caido 重放測試帳號請求 | 必須區分 CSRF、登入、角色、組織與物件權限 |
 | Auth／Authorization／IDOR | 未登入、無權限 B、合法 owner A／admin；寫入後檢查 DB | 拒絕案例必須通過 CSRF；本人成功案例證明業務端點確實可達 |
 | 疑似漏洞驗證 | 先在隔離資料做可重現、最小影響 PoC，再寫失敗回歸 | 只有可重現的漏洞才記為 confirmed；列出前提與影響 |
@@ -387,3 +397,20 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   `check.sh docs` 仍因既有 `PROJECT_CONTEXT.md` 指向三個缺失會議 router／test 檔而失敗，本輪未改那些檔案；
   `LABELS` impact 為 UNKNOWN，已用文字搜尋確認測試／文件引用；detect-changes 為 LOW、5 個檔案、14 個符號、
   0 affected processes，未回報 partial／truncated。5 個本次檔案 staged，`git diff --cached --check` 通過。
+
+## 第九輪：ffuf 主動路徑 fuzz（2026-10-01）
+
+- 依 [ffuf v2.3.0 官方 release](https://github.com/ffuf/ffuf/releases/tag/v2.3.0) 固定版本安裝器；校驗檔與 Linux amd64
+  archive 的 SHA-256 均吻合 release checksum。使用官方 CLI 的 HEAD、delay、single-thread、ignore-body 與 JSONL 參數。
+- 新增 24 條審閱候選路徑，每次只送 HEAD、不登入、不追轉址、不遞迴、不下載本文。每批最多 6 個 fuzz 請求，後接
+  一個 robots HEAD 控制；批次起點至少隔 310 秒，讓任何五分鐘窗口最多 7 個請求，低於已知 8 hits／300s WAF 封鎖門檻。
+- loopback 假站的 ffuf 實際 smoke test 通過，200／404 JSONL 都解析正確且沒有 body。正式站 systemd 實跑完成前三批：
+  18 條路徑狀態為 405×8、404×10，robots 控制 200×3，未見 2xx 路徑候選或 WAF 控制訊號。
+- 第四批 ffuf 提早結束，原始版 wrapper 將部分輸出解析錯誤簡化成 `ValueError`，因此最終報告為 incomplete（18/24 路徑、
+  3 個控制請求）；raw stdout 未保存，無法回溯最後一批已取得的狀態。未重跑以避免短時間增加正式站流量。
+  wrapper 已修正為保留有效的部分結果並記錄安全的錯誤類別，下次排程再驗證完整性。
+- 本機新增週日 08:11 `path-fuzz` timer 並啟用；本次實跑約 20 分鐘，systemd 30 分鐘上限足夠。掃描器／排程回歸、
+  下次執行為 2026-10-04 08:11（台北時間）。全安全掃描器測試 49/49、Ruff／format、py_compile、bash -n、
+  systemd unit／calendar 驗證通過；`check.sh docs` 仍因既有三個缺失會議 router／test 連結失敗，shellcheck 不在環境中。
+  GitNexus detect-changes 回報 LOW、10 個檔案、6 個符號、0 affected processes，沒有 partial／truncated 標記；
+  已逐項審閱最終差異，`git diff --cached --check` 通過，只 stage 本輪 10 個檔案，原有 `uv.lock` 變更保留未提交。

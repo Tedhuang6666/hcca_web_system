@@ -13,4 +13,4 @@ PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=%h/.local/state/hcca-security
 ExecStart=/usr/bin/python3 %h/projects/main/scripts/security-schedule.py --mode %i
-TimeoutStartSec=15min
+TimeoutStartSec=30min

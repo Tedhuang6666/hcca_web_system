@@ -22,6 +22,7 @@ SCANS = {
     "http-baseline": (("http-baseline", "security-baseline.py", ("--interval", "45"), 660),),
     "path-enumeration": (("path-enumeration", "security-paths.py", ("--interval", "45"), 720),),
     "public-metadata": (("public-metadata", "security-metadata.py", ("--interval", "45"), 120),),
+    "path-fuzz": (("path-fuzz", "security-fuzz.py", ("--interval", "45"), 1500),),
 }
 
 
