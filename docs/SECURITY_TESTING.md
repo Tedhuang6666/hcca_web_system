@@ -4,14 +4,19 @@
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
 合併／推送到 default branch 後，每日台北時間 05:41 執行，也可手動觸發。
 使用者已確認應用部署完成。遠端 `main` 已包含第一版與後續修復；本機仍保留使用者的
-`uv.lock` 變更。最新指示要求專注主動測試，故本機 workflow 更新為排程固定搜尋參數探針；
-須將本次 workflow 版本納入部署，遠端排程才會停止原有的被動資產探索／公開基線工作。
+`uv.lock` 變更。最新指示要求主動測試，因此本機 workflow 已改成 HTTP 存取控制、固定 HEAD
+路徑枚舉、SQLi／XSS 輸入探針與已審閱 Nuclei 探針；不執行 subfinder／amass 被動資產探索。
+依使用者先前選擇，本機提交尚未推送；遠端排程仍是舊版，尚未啟用此主動排程。
 
 ## 可重跑入口
 
 ```bash
-# 四個核准的唯讀主動查詢；固定每 10 秒一個請求，不保存回應本文。
+# 核准搜尋入口的四個主動輸入探針；固定每 10 秒一個請求，不保存回應本文。
 python3 scripts/security-active.py --output /tmp/hcca-active.json
+# 十二條固定路徑的主動 HEAD 枚舉；每秒一個請求，不下載回應本文。
+python3 scripts/security-paths.py --output /tmp/hcca-paths.json
+# 六個固定 HTTP 存取控制／安全標頭 GET 探針。
+python3 scripts/security-baseline.py --output /tmp/hcca-http.json
 # 專用 loopback 測試 DB／Redis + Java 17 + ZAP 2.17.0；自行 migration、啟停隔離 API。
 # TEST_DATABASE_URL 必須是 PostgreSQL *_test；REDIS_URL 必須指向專用測試 Redis DB。
 uv run --locked --project apps/api python scripts/security-zap.py \
@@ -20,17 +25,20 @@ uv run --locked --project apps/api python scripts/security-zap.py \
 python3 -m unittest discover -s scripts/tests -p 'test_security_*.py'
 ```
 
-正式站主動探針固定使用 `GET /api/regulations/search`，只傳控制字串、SQL 引號／布林條件、
-XSS 反射值；不登入、不寫入。每回最多四次、相隔 10 秒，不追轉址；403、429、5xx、
-轉址、連線錯誤、本文截斷或反射會停止後續請求。400 僅表示輸入遭拒，不能據此分辨
-應用或 WAF。報告不保留回應本文、Cookie 或 token。
+正式站 workflow 只做主動 HTTP 請求，不執行 subfinder／amass 等被動資產探索。每回依序執行
+六個固定 GET 存取控制／安全標頭檢查、十二個固定 HEAD 路徑探針、四個搜尋輸入攻擊探針，
+以及兩個經審閱的 Nuclei 認證邊界探針。HEAD 路徑命中只標成待人工確認候選，不下載內容；
+所有工具固定在 `hcca.tw`，不追轉址、不帶登入資訊。403、429、5xx、Cloudflare challenge、
+轉址或連線錯誤會停止該探針並回報 incomplete。搜尋探針每次最多四個請求、相隔 10 秒；
+400 只記錄為輸入遭拒，不能據此分辨應用或 WAF。報告不保存回應本文、Cookie 或 token。
 
 本機回歸先啟動專用 PostgreSQL／Redis，再設定 `TEST_DATABASE_URL`（loopback、`*_test`）、
 `REDIS_URL`、`REDIS_CACHE_URL`、`REDIS_REALTIME_URL`、Celery broker／backend 為測試用途；
 不使用開發或正式資料。測試清單見 workflow，包含認證、RBAC、跨組織權限、IDOR、MFA、
 API key、設定保護與 heartbeat 漏洞回歸。以 `bash scripts/check.sh api-test <測試檔>` 執行。
 CI 的服務是每次工作新建的 PostgreSQL 16／Redis 7；PR 只執行隔離回歸，不觸發正式站探針。
-回歸後執行隔離 ZAP：固定四個公開 GET 入口與三條 active rules，不啟動 spider 或瀏覽器；
+回歸後執行隔離 ZAP：固定四個公開 GET 入口與三條 active rules，不啟動 spider 或瀏覽器，
+並明確停用所有 passive rules；
 程序先占有 loopback socket，再交給自己啟動的 API，不能掃到該 port 上的其他服務。
 子程序在私有暫存目錄執行，不載入 repository `.env`，也不繼承應用整合 secrets。
 ZAP 摘要只保留規則 ID、風險等級、請求／警示數量，原始 cookie／body 隨暫存目錄刪除。
@@ -44,8 +52,8 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 | 資產探索 | 初次核准範圍以程式路由與既有清單盤點；日常 workflow 不執行被動資產探索 | 新資產須確認用途與歸屬；不能將第三方 CNAME 當作自有主機 |
 | DNS／HTTP／連接埠 | DNS、httpx；獨立測試主機才能對明確連接埠使用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
-| 主動探測 | 正式站四個固定搜尋輸入；ZAP active scan 使用自啟的 loopback API／測試 DB | 只測核准 GET 搜尋入口；其他 active rules 須個別評估測試資料與外部效果 |
-| ffuf／feroxbuster | 小型已審閱路徑表，單執行緒、1 req/s、限時、不遞迴、不追轉址 | 敏感路徑只檢查 HEAD 狀態，不下載秘密或備份內容 |
+| 主動探測 | 正式站固定 HTTP／HEAD／Nuclei 請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；只測核准的搜尋、身份邊界與 12 條固定路徑 |
+| 路徑枚舉 | `scripts/security-paths.py` 使用 12 條審閱路徑、單執行緒、1 req/s、無遞迴、不追轉址 | 敏感路徑只檢查 HEAD 狀態，不下載秘密或備份內容；候選需人工確認 |
 | 人工分析 | 程式呼叫鏈＋HTTP 證據；需要互動登入時以 Burp／Caido 重放測試帳號請求 | 必須區分 CSRF、登入、角色、組織與物件權限 |
 | Auth／Authorization／IDOR | 未登入、無權限 B、合法 owner A／admin；寫入後檢查 DB | 拒絕案例必須通過 CSRF；本人成功案例證明業務端點確實可達 |
 | 疑似漏洞驗證 | 先在隔離資料做可重現、最小影響 PoC，再寫失敗回歸 | 只有可重現的漏洞才記為 confirmed；列出前提與影響 |
@@ -180,11 +188,22 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   本輪沒有確認 SQL injection 或 XSS。兩個輸入拒絕狀態不足以證明其他參數也安全。
 - 使用者要求不做被動掃描時，GitHub workflow run `36717316860` 的資產探索與公開基線工作
   已先完成，隔離回歸工作被取消；之後沒有再啟動被動探測。本機已將未來 scheduled／手動
-  workflow 改為固定四個主動 GET，移除每日 subfinder 與六個公開基線請求。
-  這個 workflow 更新尚未部署；在部署新版本前，GitHub 仍會使用目前遠端的舊排程工作。
+  workflow 改為主動 HTTP 探測，不執行 subfinder／amass；舊版曾經發出四個搜尋攻擊 GET，
+  後續本機變更再納入身份邊界 GET、HEAD 路徑枚舉與 Nuclei 主動探針。
+  這個 workflow 更新尚未推送；GitHub 仍會使用遠端舊排程工作。
 - 新探針只允許 `hcca.tw` 固定 HTTPS 路由、全域 IP、單一 GET 參數；每次間隔 10 秒，
   遇 403／429／5xx／轉址、網路錯誤、本文截斷或反射即停止。每回最多四次，摘要不保存本文、
   Cookie 或 token；400 僅記錄為輸入遭拒，不宣稱是哪層攔截。
 - 主動探針範圍／輸出邊界 3 tests 通過；Ruff／format 與 actionlint 通過。
+- 本輪重測：固定 HTTP 邊界 6/6 通過；12 條 HEAD 路徑全數完成，敏感檔案／API 文件候選均為 404，
+  `/admin`、`/robots.txt`、`/sitemap.xml` 為 200。HEAD 結果不讀 body，404 也可能由 CDN/WAF 產生；
+  `/admin` 200 只代表路徑可達，沒有驗證登入後資料的授權邊界。
+- 本輪再次送出四個搜尋輸入 probe：control／單引號為 200，SQL 布林與 XSS 反射值為 400，
+  沒有標記反射；Nuclei 兩個身份邊界探針 2/2 完成、0 命中。這些結果不能證明整站無漏洞。
+- 本機 workflow 已把六個固定 HTTP controls、12 條 HEAD 路徑、四個 SQLi／XSS payload 與兩條
+  Nuclei active probes 納入每日排程；隔離 ZAP 計畫關閉所有 passive rules，只保留三條 active rules。
+  遠端尚未更新，新增排程仍待推送。Burp／Caido 跨帳號人工測試仍缺專用正式站測試帳號。
+- 新增路徑探針邊界測試後，security scanner 共 21 tests 通過；新檔 Ruff／format 通過，
+  workflow actionlint 以校驗碼驗證的 1.7.12 執行通過，未執行 shellcheck。
 - 文件檢查未通過：同一工作樹內其他工作移除會議 router／test 檔，造成 `PROJECT_CONTEXT.md`
   三個既有連結失效。本輪保留那些變更，未改寫或恢復相關檔案。
