@@ -365,7 +365,7 @@ export default function PetitionManagePage() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
+    <div className="petition-manage-page min-w-0 max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情工作台</h1>
@@ -479,8 +479,8 @@ export default function PetitionManagePage() {
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-[0.9fr_1.25fr] gap-5">
-        <section className="card p-5 space-y-4">
+      <div className="grid min-w-0 lg:grid-cols-[0.9fr_1.25fr] gap-5">
+        <section className="card min-w-0 p-5 space-y-4">
           <div className="grid sm:grid-cols-[1fr_auto] gap-2">
             <input
               className="input w-full"
@@ -532,7 +532,7 @@ export default function PetitionManagePage() {
           </div>
         </section>
 
-        <section className="card p-5 space-y-5">
+        <section className="card min-w-0 p-5 space-y-5">
           {!selected ? (
             <div className="text-sm" style={{ color: "var(--text-muted)" }}>
               請從左側選擇案件。建議先處理「待分案」與「我承辦」，再看跨機關轉派或補件中的案件。
@@ -541,15 +541,15 @@ export default function PetitionManagePage() {
             <PetitionConfidentialBlocked item={selected} />
           ) : (
             <>
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-sm" style={{ color: "var(--text-muted)" }}>#{selected.case_number} · {selected.type_name}</p>
-                  <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{selected.title}</h2>
+                  <h2 className="break-words text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{selected.title}</h2>
                   <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
                     {selected.current_org_name} · {selected.assigned_to_name || "尚未分派承辦人"} · 更新 {fmt(selected.updated_at)}
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
                   <AnimatedDownloadButton
                     request={() => petitionsApi.printPdf(selected.id)}
                     filename={`陳情案件_${selected.case_number}_案件詳情.pdf`}
@@ -606,13 +606,13 @@ export default function PetitionManagePage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 {FLOW.map((step, index) => {
                   const currentIndex = FLOW.indexOf(selected.status);
                   const active = selected.status === step;
                   const done = currentIndex > index;
                   return (
-                    <div key={step} className="rounded-lg px-2 py-2 text-center text-xs" style={{
+                    <div key={step} className="min-w-0 rounded-lg px-2 py-2 text-center text-xs" style={{
                       background: active ? "var(--primary-dim)" : done ? "var(--success-dim)" : "var(--bg-hover)",
                       border: `1px solid ${active ? "var(--primary)" : done ? "var(--success-border)" : "var(--border)"}`,
                       color: "var(--text-primary)",
@@ -625,12 +625,12 @@ export default function PetitionManagePage() {
 
               <div className="rounded-lg p-4 space-y-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
                 <p className="text-sm font-medium">案件內容</p>
-                <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-muted)" }}>{selected.content}</p>
+                <p className="break-words whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-muted)" }}>{selected.content}</p>
               </div>
 
               <div className="rounded-lg p-3 text-sm space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <p className="font-medium" style={{ color: "var(--text-primary)" }}>
                       {selected.submitter_id ? "平台帳號陳情人" : "外部陳情人"}
                     </p>
@@ -839,8 +839,8 @@ export default function PetitionManagePage() {
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium">{event.title}{event.updated_at !== event.created_at ? "（已編輯）" : ""}</p>
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <p className="min-w-0 break-words font-medium">{event.title}{event.updated_at !== event.created_at ? "（已編輯）" : ""}</p>
                           {event.can_edit && <button className="text-xs" style={{ color: "var(--primary)" }} onClick={() => startEventEdit(event)}>編輯</button>}
                         </div>
                         {event.content && <p className="whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
