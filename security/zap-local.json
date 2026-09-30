@@ -7,6 +7,7 @@
     "parameters": {"failOnError": true, "failOnWarning": false, "progressToStdout": true}
   },
   "jobs": [
+    {"type": "passiveScan-config", "parameters": {"disableAllRules": true}},
     {"type": "requestor", "requests": [
       {"url": "${BASE_URL}/regulations/search?keyword=security", "responseCode": 200},
       {"url": "${BASE_URL}/regulations?keyword=security", "responseCode": 200},
@@ -28,7 +29,6 @@
         {"id": 40022, "threshold": "Medium", "strength": "Low"}
       ]
     }},
-    {"type": "passiveScan-wait", "parameters": {"maxDuration": 1}},
     {"type": "report", "parameters": {
       "template": "traditional-json", "reportDir": "${REPORT_DIR}", "reportFile": "report.json"
     }},

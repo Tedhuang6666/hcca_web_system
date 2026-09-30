@@ -13,6 +13,16 @@ spec.loader.exec_module(scanner)
 
 
 class ZapTests(unittest.TestCase):
+    def test_zap_plan_runs_only_explicit_active_rules(self):
+        plan = json.loads((scanner.ROOT / "security/zap-local.json").read_text())
+        jobs = plan["jobs"]
+        self.assertEqual(jobs[0]["type"], "passiveScan-config")
+        self.assertTrue(jobs[0]["parameters"]["disableAllRules"])
+        self.assertNotIn("passiveScan-wait", {job["type"] for job in jobs})
+        active = next(job for job in jobs if job["type"] == "activeScan")
+        rules = {rule["id"] for rule in active["policyDefinition"]["rules"]}
+        self.assertEqual(rules, {int(rule_id) for rule_id in scanner.RULES})
+
     def test_only_dedicated_loopback_test_dependencies(self):
         env = {
             "TEST_DATABASE_URL": "postgresql+asyncpg://user@127.0.0.1/app_test",

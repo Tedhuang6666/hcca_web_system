@@ -119,16 +119,30 @@ jobs:
           retention-days: 14
 
   production-active-probes:
-    # PR 上只跑隔離回歸；主動探針只觸及核准的正式站搜尋入口。
+    # PR 上只跑隔離回歸；正式站只執行固定、低頻的主動 HTTP 探針。
     if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Four rate-limited, read-only active probes
+      - name: Six active HTTP access and header controls
+        run: python3 scripts/security-baseline.py --output security-reports/http-controls.json
+      - name: Twelve fixed HEAD path probes, one per second
+        run: python3 scripts/security-paths.py --output security-reports/paths.json
+      - name: Four rate-limited SQL injection and XSS probes
         run: python3 scripts/security-active.py --output security-reports/active.json
+      - name: Install checksum-pinned nuclei
+        run: |
+          curl --fail --silent --show-error --location --max-time 120 \
+            https://github.com/projectdiscovery/nuclei/releases/download/v3.8.0/nuclei_3.8.0_linux_amd64.zip \
+            --output "$RUNNER_TEMP/nuclei.zip"
+          echo "cd4ea43c88b50af8ab96eb6ad3fb4debd8e9d51efaff4d4c2d99106041578943  $RUNNER_TEMP/nuclei.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/nuclei.zip" nuclei -d "$RUNNER_TEMP/nuclei-bin"
+          echo "$RUNNER_TEMP/nuclei-bin" >> "$GITHUB_PATH"
+      - name: Two reviewed active authentication-boundary probes
+        run: python3 scripts/security-nuclei.py --output security-reports/nuclei.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
