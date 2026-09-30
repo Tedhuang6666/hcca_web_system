@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily HCCA active injection and authentication probes
+
+[Timer]
+OnCalendar=*-*-* 05:41:00
+Persistent=true
+AccuracySec=1min
+Unit=hcca-security@daily.service
+
+[Install]
+WantedBy=timers.target

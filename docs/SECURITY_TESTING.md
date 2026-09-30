@@ -2,12 +2,12 @@
 
 授權目標為 `https://hcca.tw`。本流程將公開站的低頻探針與隔離環境的攻擊回歸分開執行。
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
-合併／推送到 default branch 後，每日台北時間 05:41 執行，也可手動觸發。
+合併／推送到 default branch 後，每日台北時間 05:41 執行 DNS、SQLi／XSS 與認證邊界探針；
+週日 06:11 跑 HTTP 基線，06:51 跑固定路徑枚舉，也可手動選擇單一測試類型。
 使用者已確認應用部署完成；這不代表後續本機安全修正已部署。2026-09-30 查得遠端
 `origin/main` 為 `798e3b281f52a6b4a5157c9bbcac1805885a65cb`；依使用者先前選擇，後續安全提交
-維持本機、不推送。遠端每日排程因此仍是舊版，尚未啟用本機的主動流程。本機仍保留使用者的
-`uv.lock` 變更。本機 workflow 使用固定字典 DNS 發現、HTTP 存取控制、固定 HEAD 路徑枚舉、
-SQLi／XSS 輸入探針與已審閱 Nuclei 探針；不執行 subfinder／amass 被動資產探索。
+維持本機、不推送；遠端每日排程仍是舊版。本機 WSL 可安裝下述 user timers 執行最新版探針，
+不必推送到遠端。本機仍保留使用者的 `uv.lock` 變更。不執行 subfinder／amass 被動資產探索。
 
 ## 可重跑入口
 
@@ -16,10 +16,17 @@ SQLi／XSS 輸入探針與已審閱 Nuclei 探針；不執行 subfinder／amass 
 python3 scripts/security-dns.py --output /tmp/hcca-dns.json
 # 核准搜尋入口的四個主動輸入探針；固定每 10 秒一個請求，不保存回應本文。
 python3 scripts/security-active.py --output /tmp/hcca-active.json
-# 十二條固定路徑的主動 HEAD 枚舉；每秒一個請求，不下載回應本文。
-python3 scripts/security-paths.py --output /tmp/hcca-paths.json
-# 九個固定 HTTP 存取控制／安全標頭 GET 探針；不保存回應本文。
-python3 scripts/security-baseline.py --output /tmp/hcca-http.json
+# 十二條固定路徑的主動 HEAD 枚舉；每 45 秒一個請求，不下載回應本文。
+python3 scripts/security-paths.py --interval 45 --output /tmp/hcca-paths.json
+# 九個固定 HTTP 存取控制／安全標頭 GET 探針；每 45 秒一個請求，不保存回應本文。
+python3 scripts/security-baseline.py --interval 45 --output /tmp/hcca-http.json
+# WSL 本機分時排程：daily（DNS／輸入／認證）、每週基線或每週路徑枚舉。
+python3 scripts/security-schedule.py --mode daily
+python3 scripts/security-schedule.py --mode http-baseline
+python3 scripts/security-schedule.py --mode path-enumeration
+# 安裝／檢查本機 systemd user timers；輸出留在 ~/.local/state/hcca-security。
+bash scripts/install-security-timers.sh
+systemctl --user list-timers --all --no-pager
 # 專用 loopback 測試 DB／Redis + Java 17 + ZAP 2.17.0；自行 migration、啟停隔離 API。
 # TEST_DATABASE_URL 必須是 PostgreSQL *_test；REDIS_URL 必須指向專用測試 Redis DB。
 uv run --locked --project apps/api python scripts/security-zap.py \
@@ -28,15 +35,31 @@ uv run --locked --project apps/api python scripts/security-zap.py \
 python3 -m unittest discover -s scripts/tests -p 'test_security_*.py'
 ```
 
-正式站 workflow 只做主動 DNS／HTTP 探測，不執行 subfinder／amass 等被動資產探索。每回依序
-查根網域、兩個隨機 wildcard 控制與 13 個固定子網域標籤；解析成功的候選另查 CNAME，記錄供
-人工判讀但不連線到 CNAME 目標。之後執行九個固定 GET 存取控制／
-安全標頭檢查、十二個固定 HEAD 路徑探針、四個搜尋輸入攻擊探針，以及兩個經審閱的 Nuclei
-認證邊界探針。DNS 候選不會自動連線；須先確認不是 wildcard 或第三方 CNAME。HEAD 路徑命中
-只標成待人工確認候選，不下載內容。HTTP 工具固定在 `hcca.tw`，不追轉址、不帶登入資訊。
-403、429、5xx、Cloudflare challenge、
-轉址或連線錯誤會停止該探針並回報 incomplete。搜尋探針每次最多四個請求、相隔 10 秒；
-400 只記錄為輸入遭拒，不能據此分辨應用或 WAF。報告不保存回應本文、Cookie 或 token。
+正式站 workflow 只做主動 DNS／HTTP 探測，不執行 subfinder／amass 等被動資產探索。每日查根網域、
+兩個隨機 wildcard 控制與 13 個固定子網域標籤；解析成功的候選另查 CNAME，只記錄供人工判讀，
+不連線至 CNAME 目標。每日再做四個搜尋輸入攻擊探針與兩個已審閱 Nuclei 認證邊界探針；
+前一支探針逾時或回報發現時，後續獨立探針仍會執行，workflow 最終仍會標為失敗並上傳報告。
+每週日 06:11 執行九個固定 GET 存取控制／安全標頭檢查，06:51 執行十二條固定 HEAD 路徑探針；
+兩組每次請求間隔 45 秒，將每個五分鐘窗口的請求數控制在已知 WAF 自動封鎖門檻以下。
+HEAD 路徑命中只標成待人工確認候選，不下載內容。HTTP 工具固定在 `hcca.tw`，不追轉址、不帶登入資訊。
+403、429、5xx、Cloudflare challenge、轉址或連線錯誤會停止該掃描並回報 incomplete。
+搜尋探針每次最多四個請求、相隔 10 秒；400 只記錄為輸入遭拒，不能據此分辨應用或 WAF。
+報告不保存回應本文、Cookie 或 token。
+
+本機 user timers 與 GitHub workflow 使用相同時刻及分組。timer 設為 `Persistent=true` 的每日探針，
+若錯過會在 user manager 下次啟動時補跑；週基線與路徑枚舉不補跑，避免離線後同時送出多組探針。
+排程器只傳遞 PATH、HOME、locale 與時區，不繼承 `.env`、資料庫 URL、應用 secrets 或代理環境；
+報告目錄權限為 0700，報告檔為 0600。user manager 必須運作才能觸發 timers；WSL 關閉期間不會即時執行。
+安裝器會啟用 `loginctl` user linger，讓 WSL user manager 在登出後仍保留 timer；若整個 WSL distribution
+被停止或 Windows 關機，仍要等下次啟動才可能補跑每日探針。
+停用排程可執行：
+
+```bash
+systemctl --user disable --now hcca-security-daily.timer \
+  hcca-security-http-baseline.timer hcca-security-path-enumeration.timer
+# 若也要停止 user manager 在登出後常駐，且確認沒有其他 user timers 依賴它，再執行：
+loginctl disable-linger "$(id -un)"
+```
 
 本機回歸先啟動專用 PostgreSQL／Redis，再設定 `TEST_DATABASE_URL`（loopback、`*_test`）、
 `REDIS_URL`、`REDIS_CACHE_URL`、`REDIS_REALTIME_URL`、Celery broker／backend 為測試用途；
@@ -58,8 +81,8 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 | 資產探索 | `scripts/security-dns.py` 對 13 個固定標籤主動解析、檢查兩個隨機 wildcard，並以 DoH 記錄解析候選的 CNAME；不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域或 CNAME 目標；確認第一方歸屬後才加入 HTTP 範圍 |
 | DNS／HTTP／連接埠 | 固定標籤 DNS 與 `hcca.tw` HTTP；獨立測試主機才用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描；第三方 CNAME 不掃 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
-| 主動探測 | 正式站固定 DNS／HTTP／HEAD／Nuclei 請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；只測核准的搜尋、身份邊界與 12 條固定路徑 |
-| 路徑枚舉 | `scripts/security-paths.py` 使用 12 條審閱路徑、單執行緒、1 req/s、無遞迴、不追轉址 | 敏感路徑只檢查 HEAD 狀態，不下載秘密或備份內容；候選需人工確認 |
+| 主動探測 | 正式站每日固定 DNS、四個搜尋輸入、兩個 Nuclei 認證邊界請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；單一探針錯誤不能遮蔽其他獨立結果 |
+| 路徑枚舉 | `scripts/security-paths.py` 使用 12 條審閱路徑、單執行緒、每 45 秒一個 HEAD、無遞迴、不追轉址 | 每週單獨執行；敏感路徑不下載內容，命中只列待人工確認 |
 | 人工分析 | 程式呼叫鏈＋HTTP 證據；需要互動登入時以 Burp／Caido 重放測試帳號請求 | 必須區分 CSRF、登入、角色、組織與物件權限 |
 | Auth／Authorization／IDOR | 未登入、無權限 B、合法 owner A／admin；寫入後檢查 DB | 拒絕案例必須通過 CSRF；本人成功案例證明業務端點確實可達 |
 | 疑似漏洞驗證 | 先在隔離資料做可重現、最小影響 PoC，再寫失敗回歸 | 只有可重現的漏洞才記為 confirmed；列出前提與影響 |
@@ -266,3 +289,35 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   共用 IP 做 nmap；不能由現有 DNS 證據推論該服務可被接管。
 - 遠端 `origin/main` 仍為 `798e3b281f52a6b4a5157c9bbcac1805885a65cb`，因此新增的九項基線、CNAME
   報告與收款權限修正都只在本機。遠端每日排程尚未執行這些新探針。
+
+## 第五輪：主動輸入驗證與分時持續排程（2026-09-30）
+
+- 最新主動 DNS 完成：根網域解析正常，兩個隨機 wildcard 控制為 NXDOMAIN；只發現
+  `www.hcca.tw` 與 `posthug.hcca.tw`。`posthug` CNAME 仍指向第三方 ProxyHog，未連線或掃描該主機。
+- 單次唯讀 `GET /api/auth/me` 回 401；首頁 HEAD 等待 15 秒逾時。搜尋探針 control 200（9.8 秒）、
+  單引號 200（1.3 秒，無 marker 反射），SQL boolean 探針等候 15 秒逾時後停止，未送出 XSS 探針。
+  兩個 Nuclei 認證邊界請求均收到 headers deadline exceeded，0 個 finding；整輪結果是 incomplete。
+  這些時間觀察可能來自 WAF／網路或應用查詢延遲，沒有證據確認 SQLi，也不宣稱通過。
+- `search_regulations` 使用 SQLAlchemy 綁定參數，router 將 `keyword` 限制 100 字；另加隔離回歸案例，
+  確認 boolean／UNION 文字不會變成 SQL 語法。新增的兩個案例在隔離 aiosqlite 通過；這不等同 PostgreSQL。
+  同一測試檔全跑時 9 passed、3 failed，失敗的是既有含標點全文搜尋案例在 SQLite 的差異，不是新增案例。
+  `check.sh api-test` 仍因 `TEST_DATABASE_URL` 未設定而拒絕執行；本機 PostgreSQL socket 雖接受連線但用途
+  未確認，Docker daemon 不可用，因此未連到未知資料庫，也沒有 PostgreSQL／效能驗證。第一次直接測試
+  在結尾記錄 OTLP exporter 401；之後按隔離測試設定 `OTEL_ENABLED=false` 重跑新增案例，2 個通過且沒有 exporter 輸出。
+- 工作流程改為每日 05:41 台北時間做主動 DNS、四個輸入探針與兩個認證探針；週日 06:11 執行九個
+  HTTP 基線 GET，06:51 執行十二個 HEAD 路徑探針。基線與路徑枚舉各間隔 45 秒，分開 40 分鐘，
+  降低重現 WAF 8 hits／300 seconds 自動封鎖的風險。單一每日步驟失敗後，獨立認證探針仍執行，
+  但整個 job 仍會失敗並上傳報告。workflow_dispatch 提供三種互斥測試模式。
+- 新增 WSL systemd user timers 與排程器；每天執行 DNS／主動搜尋／Nuclei，每週分開做基線與路徑測試。
+  排程器不繼承資料庫／應用 secrets 或代理環境，失敗不會跳過同一模式的其餘探針，報告設為目錄 0700、
+  檔案 0600。安裝入口為 `bash scripts/install-security-timers.sh`；使用者管理器停止時不即時執行，
+  每日 timer 下次啟動補跑，週探針則等下一個週日。
+- 本機 user timers 已啟用，user linger 也已啟用；下一次每日探針為 10/01 05:41，週基線與路徑枚舉為
+  10/04 06:11、06:51（台北時間）。首輪排程尚未執行；若 WSL distribution 整體停止，仍不會即時掃描。
+- 本機安全掃描器與排程器回歸 36 tests 通過；新增 SQL boolean／UNION 測試 2 個在 aiosqlite 通過。
+  API 靜態檢查、Ruff、格式與 systemd unit/calendar 驗證通過。
+  Workflow YAML 與排程結構可解析；actionlint 未安裝，遠端 Actions 尚未執行。`check.sh api-test` 因
+  缺少安全的 `TEST_DATABASE_URL` 在測試前停止；`check.sh docs` 因既有三個會議 router/test 連結失效而失敗。
+  GitHub workflow 尚未推送，正式站新工作流程仍未在遠端啟用。
+- 未確認 SQLi／XSS／IDOR 漏洞，沒有跑 sqlmap 或 Metasploit；發現的 SQL boolean 延遲候選不宜在沒有
+  專用 PostgreSQL 測試庫前擴大攻擊。正式站跨帳號測試仍缺 A／B 專用帳號；本機 `uv.lock` 修改保留。

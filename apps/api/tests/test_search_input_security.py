@@ -1,10 +1,16 @@
 """資料庫文字查詢應拒絕 PostgreSQL 無法儲存的空字元。"""
 
+from datetime import UTC, datetime
+
 import pytest
 
 from api.core.config import settings
 from api.models.org import Org
-from api.models.regulation import Regulation, RegulationCategory
+from api.models.regulation import (
+    Regulation,
+    RegulationCategory,
+    RegulationWorkflowStatus,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -54,3 +60,35 @@ async def test_plain_text_search_keeps_all_terms(
     response = await authed_client_factory(owner).get("/regulations", params={"keyword": keyword})
     assert response.status_code == 200
     assert [item["id"] for item in response.json()] == [str(rows[0].id)]
+
+
+@pytest.mark.parametrize(
+    "keyword",
+    ["missing' OR '1'='1'--", "missing' UNION SELECT NULL--"],
+)
+async def test_regulations_search_treats_sql_payload_as_plain_text(
+    db_session, client, make_user, keyword
+):
+    owner = await make_user()
+    org = Org(name="SQL injection search isolation")
+    db_session.add(org)
+    await db_session.flush()
+    regulation = Regulation(
+        title="search-isolation-sentinel",
+        category=RegulationCategory.ORDINANCE,
+        org_id=org.id,
+        created_by=owner.id,
+        content="search-isolation-sentinel",
+        workflow_status=RegulationWorkflowStatus.PUBLISHED,
+        published_at=datetime.now(UTC),
+    )
+    db_session.add(regulation)
+    await db_session.flush()
+
+    control = await client.get("/regulations/search", params={"keyword": regulation.title})
+    assert control.status_code == 200, control.text
+    assert [row["id"] for row in control.json()] == [str(regulation.id)]
+
+    response = await client.get("/regulations/search", params={"keyword": keyword})
+    assert response.status_code == 200, response.text
+    assert response.json() == []

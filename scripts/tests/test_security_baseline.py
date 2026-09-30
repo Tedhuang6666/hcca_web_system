@@ -51,6 +51,10 @@ class BaselineTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join()
 
+    def test_default_public_request_interval_stays_below_waf_threshold(self):
+        self.assertEqual(baseline.DEFAULT_INTERVAL_SECONDS, 45)
+        self.assertEqual(baseline.MIN_PUBLIC_INTERVAL_SECONDS, 45)
+
     def test_expected_protection_and_no_response_data_in_report(self):
         report = baseline.scan(self.target, interval=0)
         self.assertEqual(report["result"], "pass")
