@@ -13,11 +13,13 @@ install -m 0644 "${repo_root}/scripts/systemd/user/hcca-security@.service" "${us
 install -m 0644 "${repo_root}/scripts/systemd/user/hcca-security-daily.timer" "${user_unit_dir}/hcca-security-daily.timer"
 install -m 0644 "${repo_root}/scripts/systemd/user/hcca-security-http-baseline.timer" "${user_unit_dir}/hcca-security-http-baseline.timer"
 install -m 0644 "${repo_root}/scripts/systemd/user/hcca-security-path-enumeration.timer" "${user_unit_dir}/hcca-security-path-enumeration.timer"
+install -m 0644 "${repo_root}/scripts/systemd/user/hcca-security-public-metadata.timer" "${user_unit_dir}/hcca-security-public-metadata.timer"
 
 systemctl --user daemon-reload
 loginctl enable-linger "${user_name}"
 systemctl --user enable --now \
   hcca-security-daily.timer \
   hcca-security-http-baseline.timer \
-  hcca-security-path-enumeration.timer
+  hcca-security-path-enumeration.timer \
+  hcca-security-public-metadata.timer
 systemctl --user list-timers --all --no-pager

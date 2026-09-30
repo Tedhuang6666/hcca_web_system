@@ -3,7 +3,8 @@
 授權目標為 `https://hcca.tw`。本流程將公開站的低頻探針與隔離環境的攻擊回歸分開執行。
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
 合併／推送到 default branch 後，每日台北時間 05:41 執行 DNS、SQLi／XSS 與認證邊界探針；
-週日 06:11 跑 HTTP 基線，06:51 跑固定路徑枚舉，也可手動選擇單一測試類型。
+週日 06:11 跑 HTTP 基線，06:51 跑固定路徑枚舉，也可手動選擇單一測試類型。本機 WSL 的路徑模式
+另外在 HEAD 枚舉後讀取 robots.txt／sitemap.xml，這項本機更新尚未推送到 GitHub workflow。
 使用者已確認應用部署完成；這不代表後續本機安全修正已部署。2026-09-30 查得遠端
 `origin/main` 為 `798e3b281f52a6b4a5157c9bbcac1805885a65cb`；依使用者先前選擇，後續安全提交
 維持本機、不推送；遠端每日排程仍是舊版。本機 WSL 可安裝下述 user timers 執行最新版探針，
@@ -18,9 +19,11 @@ python3 scripts/security-dns.py --output /tmp/hcca-dns.json
 python3 scripts/security-active.py --output /tmp/hcca-active.json
 # 十二條固定路徑的主動 HEAD 枚舉；每 45 秒一個請求，不下載回應本文。
 python3 scripts/security-paths.py --interval 45 --output /tmp/hcca-paths.json
+# 主動讀取 robots.txt／sitemap.xml，只輸出同網域路徑與未連線的外站名稱。
+python3 scripts/security-metadata.py --interval 45 --output /tmp/hcca-metadata.json
 # 九個固定 HTTP 存取控制／安全標頭 GET 探針；每 45 秒一個請求，不保存回應本文。
 python3 scripts/security-baseline.py --interval 45 --output /tmp/hcca-http.json
-# WSL 本機分時排程：daily（DNS／輸入／認證）、每週基線或每週路徑枚舉。
+# WSL 本機分時排程：daily（DNS／輸入／認證）、每週基線或每週路徑／metadata 盤點。
 python3 scripts/security-schedule.py --mode daily
 python3 scripts/security-schedule.py --mode http-baseline
 python3 scripts/security-schedule.py --mode path-enumeration
@@ -52,11 +55,15 @@ HEAD 路徑命中只標成待人工確認候選，不下載內容。HTTP 工具�
 報告目錄權限為 0700，報告檔為 0600。user manager 必須運作才能觸發 timers；WSL 關閉期間不會即時執行。
 安裝器會啟用 `loginctl` user linger，讓 WSL user manager 在登出後仍保留 timer；若整個 WSL distribution
 被停止或 Windows 關機，仍要等下次啟動才可能補跑每日探針。
+本機另於週日 07:31 執行 `public-metadata`，與 06:51 路徑探針分開 40 分鐘；它以 45 秒間隔
+主動 GET robots.txt／sitemap.xml，只保留同網域路徑，外站 URL 只記錄主機名稱、不連線。
+GitHub workflow 尚未包含 metadata 工作，遠端仍使用固定路徑探針。
 停用排程可執行：
 
 ```bash
 systemctl --user disable --now hcca-security-daily.timer \
-  hcca-security-http-baseline.timer hcca-security-path-enumeration.timer
+  hcca-security-http-baseline.timer hcca-security-path-enumeration.timer \
+  hcca-security-public-metadata.timer
 # 若也要停止 user manager 在登出後常駐，且確認沒有其他 user timers 依賴它，再執行：
 loginctl disable-linger "$(id -un)"
 ```
@@ -82,7 +89,7 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 | DNS／HTTP／連接埠 | 固定標籤 DNS 與 `hcca.tw` HTTP；獨立測試主機才用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描；第三方 CNAME 不掃 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
 | 主動探測 | 正式站每日固定 DNS、四個搜尋輸入、兩個 Nuclei 認證邊界請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；單一探針錯誤不能遮蔽其他獨立結果 |
-| 路徑枚舉 | `scripts/security-paths.py` 使用 12 條審閱路徑、單執行緒、每 45 秒一個 HEAD、無遞迴、不追轉址 | 每週單獨執行；敏感路徑不下載內容，命中只列待人工確認 |
+| 路徑與公開 metadata | `scripts/security-paths.py` 每 45 秒對 12 條審閱路徑送 HEAD；本機另以 `scripts/security-metadata.py` 對 robots／sitemap 送兩個 GET | 每週分開執行；不追轉址或掃外站，路徑探針不下載內容，命中只列待人工確認 |
 | 人工分析 | 程式呼叫鏈＋HTTP 證據；需要互動登入時以 Burp／Caido 重放測試帳號請求 | 必須區分 CSRF、登入、角色、組織與物件權限 |
 | Auth／Authorization／IDOR | 未登入、無權限 B、合法 owner A／admin；寫入後檢查 DB | 拒絕案例必須通過 CSRF；本人成功案例證明業務端點確實可達 |
 | 疑似漏洞驗證 | 先在隔離資料做可重現、最小影響 PoC，再寫失敗回歸 | 只有可重現的漏洞才記為 confirmed；列出前提與影響 |
@@ -349,3 +356,20 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   不對 Cloudflare 共用 IP 或第三方 CNAME 執行 nmap／HTTP 掃描。
 - 安全掃描器 36 tests、Ruff／format／py_compile 通過。`check.sh docs` 仍只因既有 `PROJECT_CONTEXT.md`
   指向的三個缺失會議 router／test 檔連結失敗，本輪沒有碰觸這些無關檔案。
+
+## 第七輪：公開 metadata 主動盤點排程（2026-10-01）
+
+- 已將 robots.txt／sitemap.xml 盤點拆為獨立低頻掃描：每個公開 GET 至少相隔 45 秒，只連線至核准的
+  `hcca.tw`，不追轉址，遇 WAF／限流／伺服器錯誤即停止；不保存本文，只記錄同站路徑與未連線的外站主機名稱。
+- 本機新增週日 07:31 user timer，與 06:51 路徑 HEAD 探針錯開 40 分鐘，避免同一掃描遭 WAF 停止後繼續送請求。
+  GitHub workflow 尚未推送此更新；本機 timer 才會跑這個新增模式。
+- 主動 GET 實跑完成：robots.txt 200、43 條 allow／disallow 指令；sitemap.xml 200、49 條同站路徑，
+  無外站 URL；報告存於本機權限受限的安全狀態目錄，不含回應本文。
+- 全部安全掃描器測試 42/42 通過，Ruff、format、py_compile、systemd unit 與 07:31 calendar 驗證通過；
+  新 timer 已安裝啟用，user linger 為 yes，下次觸發時間是 2026-10-04 07:31（台北時間）。
+- `check.sh docs` 仍因既有 `PROJECT_CONTEXT.md` 的三個缺失會議 router／test 連結失敗；本次沒有改動那些檔案。
+  GitNexus detect-changes 回報 LOW、4 個追蹤檔案、6 個符號、0 affected processes，沒有 partial／truncated 標記；
+  新增文件、timer 與 scanner 檔不在符號圖譜中，已逐一檢查排程器、安裝器、timer、可重跑指令與停用指令的引用。
+- 提交前 `git diff --cached --check` 通過；只 stage 本次七個相關檔案，原有 `uv.lock` 變更保留未提交。
+- 仍未取得正式站兩個不同權限的專用測試帳號，也沒有獨立 origin 主機，因此跨帳號 IDOR 與 nmap 尚未執行；
+  沒有確認 SQLi／XSS，未對正式站使用 sqlmap／Metasploit。
