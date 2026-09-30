@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import secrets
 import signal
 import socket
 import subprocess
@@ -52,7 +53,7 @@ def test_environment(source: dict[str, str], scratch: Path) -> dict[str, str]:
         REDIS_REALTIME_URL=redis,
         CELERY_BROKER_URL=redis,
         CELERY_RESULT_BACKEND=redis,
-        SECRET_KEY="ci-test-secret-key-32-characters-min",
+        SECRET_KEY=f"ci-zap-{secrets.token_urlsafe(48)}",
         ENVIRONMENT="testing",
         SENTRY_DSN="",
         POSTHOG_API_KEY="",
