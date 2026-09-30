@@ -228,7 +228,9 @@ async def _assert_regulation_publish_permission(
 async def search_regulations(
     session: DbDep,
     user: OptionalUser,
-    keyword: str = Query(..., min_length=1, max_length=100, description="搜尋關鍵字"),
+    keyword: str = Query(
+        ..., min_length=1, max_length=100, pattern=r"^[^\x00]*$", description="搜尋關鍵字"
+    ),
     org_id: uuid.UUID | None = Query(None, description="限定組織"),
     active_only: bool = Query(True, description="僅搜尋已發布有效法規"),
     limit: int = Query(20, ge=1, le=50),
@@ -261,7 +263,9 @@ async def list_regulations(
     workflow_status: RegulationWorkflowStatus | None = Query(
         None, description="過濾審議狀態（如 under_review 用於議長集中待審清單）"
     ),
-    keyword: str | None = Query(None, max_length=100, description="關鍵字搜尋（標題/內容）"),
+    keyword: str | None = Query(
+        None, max_length=100, pattern=r"^[^\x00]*$", description="關鍵字搜尋（標題/內容）"
+    ),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[Regulation]:

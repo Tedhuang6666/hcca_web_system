@@ -20,7 +20,7 @@ from api.core.ip_blocklist import clear_cache as clear_ip_block_cache
 from api.core.ip_blocklist import unblock as unblock_ip
 from api.core.rate_limit import _memory_buckets
 from api.core.security import create_access_token
-from api.dependencies.auth import get_current_active_user, get_optional_user
+from api.dependencies.auth import get_current_active_user, get_identity_for_access_status
 from api.main import app
 from api.models.audit_log import AuditLog
 from api.models.defense import DefenseRule
@@ -281,7 +281,7 @@ async def test_access_status_still_checks_linked_identity_email_block(
     async def override_optional_user() -> User:
         return member
 
-    app.dependency_overrides[get_optional_user] = override_optional_user
+    app.dependency_overrides[get_identity_for_access_status] = override_optional_user
     await publish_rules(
         [
             {

@@ -275,13 +275,20 @@ async def list_documents(
     roc_year: int | None = Query(
         None, ge=1, le=999, description="民國年（以發文日期為準，如 115）"
     ),
-    serial_prefix: str | None = Query(None, max_length=30, description="字號前綴（prefix match）"),
-    handler_keyword: str | None = Query(
-        None, max_length=100, description="承辦人/單位/聯絡資訊關鍵字"
+    serial_prefix: str | None = Query(
+        None, max_length=30, pattern=r"^[^\x00]*$", description="字號前綴（prefix match）"
     ),
-    recipient_keyword: str | None = Query(None, max_length=100, description="受文者關鍵字"),
+    handler_keyword: str | None = Query(
+        None, max_length=100, pattern=r"^[^\x00]*$", description="承辦人/單位/聯絡資訊關鍵字"
+    ),
+    recipient_keyword: str | None = Query(
+        None, max_length=100, pattern=r"^[^\x00]*$", description="受文者關鍵字"
+    ),
     keyword: str | None = Query(
-        None, max_length=100, description="關鍵字（搜尋字號、標題、主旨、說明）"
+        None,
+        max_length=100,
+        pattern=r"^[^\x00]*$",
+        description="關鍵字（搜尋字號、標題、主旨、說明）",
     ),
     my_only: bool = Query(False, description="僅顯示我建立的公文"),
     limit: int = Query(20, ge=1, le=100),
