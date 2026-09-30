@@ -3,7 +3,9 @@
 授權目標為 `https://hcca.tw`。本流程將公開站的低頻探針與隔離環境的攻擊回歸分開執行。
 GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-regression.yml)：
 合併／推送到 default branch 後，每日台北時間 05:41 執行，也可手動觸發。
-本次只提交本機變更，沒有 push、部署或啟用遠端排程；排程尚未在 GitHub 實跑。
+本輪沒有執行 push 或部署。交付前只讀核對發現，遠端 main 已由其他操作納入第一版
+`de8e8132`；該 workflow 狀態為 active，但尚無執行紀錄。第二版隔離 ZAP 與認證修復
+`eac7264b` 依使用者決定維持本機提交，尚未進入遠端排程。
 排程另以 subfinder 做被動資產探索，與 [候選清單](../security/known-domains.txt) 比較。
 發現新網域時工作會失敗並保留候選報告，供確認歸屬／用途；不自動將新網域加入 active scan。
 被動來源未回傳候選時記為未完成，不將空清單當作資產消失或安全。
@@ -163,7 +165,10 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
 
 ## 尚待啟用與驗證
 
-本機提交不會修復正式站。每日資產探索／正式站探針／隔離回歸及 ZAP workflow
-必須進入 GitHub default branch 才有排程，且仍需觀察首次 Actions 結果。
-依根目錄規範，目前未 push、合併或部署；正式站登入測試仍缺少專用測試身份，
-origin 連接埠盤點也未取得獨立 origin 目標。這些均未宣稱完成。
+本機提交不會修復正式站。2026-09-30 交付前讀取 GitHub API：遠端 main 為 `dae40853`，
+包含第一版 `de8e8132`；Security regression workflow（ID `371045084`）為 active，run list 為空。
+因此第一版每日資產探索／正式站探針／隔離回歸已具備排程設定，但首次執行仍未驗證；
+新增 ZAP、封鎖身份與查詢修復仍只有本機 `eac7264b`。本輪代理沒有執行推送、合併、
+workflow dispatch 或部署。使用者明確選擇「維持本機提交」，不再進行這些遠端變更。
+正式站登入測試仍缺少專用測試身份，origin 連接埠盤點也未取得獨立 origin 目標；
+這些與正式站修復效果均未宣稱完成。
