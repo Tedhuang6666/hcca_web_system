@@ -155,14 +155,10 @@ export const regulationsApi = {
   listWorkflowLogs: (id: string) => get<RegulationWorkflowLogOut[]>(`${regulationPath(id)}/workflow_logs`),
   submitReview: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/submit`, { note }),
   forkDraft: (id: string) => post<RegulationOut>(`${regulationPath(id)}/fork_draft`, {}),
-  scheduleAgenda: (id: string, note?: string, meetingId?: string) =>
-    post<RegulationOut>(`${regulationPath(id)}/schedule`, { note, meeting_id: meetingId }),
-  councilApprove: (id: string, note?: string, meetingId?: string) =>
-    post<RegulationOut>(`${regulationPath(id)}/council_approve`, { note, meeting_id: meetingId }),
-  eligibleMeetings: (id: string) =>
-    get<{ id: string; title: string; status: string; bill_stage: string | null; starts_at: string | null }[]>(
-      `${regulationPath(id)}/eligible-meetings`,
-    ),
+  scheduleAgenda: (id: string, note?: string) =>
+    post<RegulationOut>(`${regulationPath(id)}/schedule`, { note }),
+  councilApprove: (id: string, note?: string) =>
+    post<RegulationOut>(`${regulationPath(id)}/council_approve`, { note }),
   presidentPublish: (
     id: string,
     note?: string,

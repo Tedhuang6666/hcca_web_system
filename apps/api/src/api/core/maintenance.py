@@ -32,7 +32,6 @@ FEATURE_FLAGS_DEFAULT: dict[str, str] = {
     "feature:document_export_pdf": "公文 PDF 匯出",
     "feature:document_export_excel": "公文 Excel 匯出",
     "feature:survey_submit": "送出問卷答覆",
-    "feature:meeting_vote": "議事投票",
 }
 
 _LOCAL_CACHE_TTL = 5.0

@@ -38,10 +38,6 @@ class Org(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 字號前綴：用於組合字號模板的 org_prefix（如「嶺代」「嶺學」），選填
     prefix: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    # 法案審議階段：標記此組織在議事流程的角色（值對應 MeetingBillStage：
-    # standing_committee=常務委員會 / council=議會）。此組織所辦會議的議程會依此
-    # 自動偵測待審法案；None 表一般組織。
-    bill_stage: Mapped[str | None] = mapped_column(String(30), nullable=True)
     # 建立職位時預先帶入的權限碼；職位仍可在此基礎上增加或移除權限。
     default_permission_codes: Mapped[list[str]] = mapped_column(
         JSONList, nullable=False, default=list, server_default="[]"

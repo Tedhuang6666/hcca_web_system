@@ -68,8 +68,6 @@ class ActivityWorkspaceOut(BaseModel):
     pending_items: list[dict]
     checklist: list[ActivityChecklistItem]
     tasks: list[dict] = Field(default_factory=list)
-    meetings: list[dict] = Field(default_factory=list)
-    calendar_events: list[dict] = Field(default_factory=list)
     notifications: list[dict] = Field(default_factory=list)
     people: list[dict] = Field(default_factory=list)
     finance: dict = Field(default_factory=dict)
@@ -88,7 +86,7 @@ class ActivityClosingReportOut(BaseModel):
 
 
 class ActivitySpawnCreate(BaseModel):
-    kind: str = Field(..., pattern="^(task|meeting|calendar_event|announcement|document|survey)$")
+    kind: str = Field(..., pattern="^(task|announcement|document|survey)$")
     title: str = Field(..., min_length=1, max_length=240)
     description: str | None = Field(None, max_length=5000)
     starts_at: datetime | None = None

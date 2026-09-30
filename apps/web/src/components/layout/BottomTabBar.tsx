@@ -14,7 +14,6 @@ import {
   constrainMobileHidden,
   DEFAULT_NAV_PREFERENCES,
   hasSavedNavPreferences,
-  isMeetingsUnlocked,
   isNavItemVisible,
   NAV_PREF_EVENT,
   navItemsFromEntries,
@@ -133,7 +132,6 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [navPrefs, setNavPrefs] = useState(() => DEFAULT_NAV_PREFERENCES);
   const [hasCustomNav, setHasCustomNav] = useState(false);
-  const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const [authVersion, setAuthVersion] = useState(0);
   const { isModuleClosed } = useModuleStatus();
@@ -220,7 +218,6 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       || perms.includes("admin:all")
       || perms.some((p) => CADRE_PREFIXES.some((pre) => p.startsWith(pre)));
     setRole(isCadre ? "cadre" : "student");
-    setMeetingsUnlocked(isMeetingsUnlocked());
     setRoleResolved(true);
   }, [authVersion]);
 
@@ -235,7 +232,6 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     const syncPrefs = () => {
       setNavPrefs(readNavPreferences());
       setHasCustomNav(hasSavedNavPreferences());
-      setMeetingsUnlocked(isMeetingsUnlocked());
     };
     syncPrefs();
     window.addEventListener(NAV_PREF_EVENT, syncPrefs);
@@ -334,7 +330,6 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       hasPrefix,
       isAdmin,
       navigationProfile: activeProfile.id,
-      meetingsUnlocked,
       isModuleClosed: (item) => isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
     });
     const visibleProfileItems = available.filter(isVisible);
@@ -349,7 +344,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       .slice(0, 5)
       .map(navItemToTab);
     return [...topTabs, { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick }];
-  }, [hasCustomNav, isModuleClosed, meetingsUnlocked, navPrefs, onMoreClick, role, serverProfile]);
+  }, [hasCustomNav, isModuleClosed, navPrefs, onMoreClick, role, serverProfile]);
 
   const activeIndex = useMemo(() => {
     const matchingIndex = tabs.findIndex((tab) => tab.match?.(pathname) ?? false);

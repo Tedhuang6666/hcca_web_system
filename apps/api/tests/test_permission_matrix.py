@@ -53,14 +53,12 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     # 模組健康探測（每個 router 一條 __module_health__ 端點）
     ("/announcements/__module_health__", "GET"),
     ("/documents/__module_health__", "GET"),
-    ("/calendar/__module_health__", "GET"),
     ("/council-proposals/__module_health__", "GET"),
     ("/discord/__module_health__", "GET"),
     ("/elections/__module_health__", "GET"),
     ("/exam-papers/__module_health__", "GET"),
     ("/judicial-petitions/__module_health__", "GET"),
     ("/line/__module_health__", "GET"),
-    ("/meetings/__module_health__", "GET"),
     ("/merchandise-submissions/__module_health__", "GET"),
     ("/partner-map/__module_health__", "GET"),
     ("/partner-map/discover", "GET"),
@@ -165,8 +163,6 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/partner-map/applications", "POST"),
     # 校商投稿圖片（URL 具簽名 token 與期限）
     ("/merchandise-submissions/discord-images/{file_id}", "GET"),
-    # 公開會議看板
-    ("/public/meetings/screen/{token}", "GET"),
     # 政策同意（公開版本瀏覽）
     ("/policies/public/{kind}", "GET"),
     ("/policies/public/{kind}/versions", "GET"),
@@ -199,8 +195,6 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/system/module-status", "GET"),
     # Google Tasks OAuth callback（需 state token，安全性由 OAuth flow 保證）
     ("/user/google-tasks/callback", "GET"),
-    # Google Calendar callback
-    ("/calendar/google/callback", "GET"),
 }
 
 

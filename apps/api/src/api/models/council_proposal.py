@@ -97,18 +97,6 @@ class CouncilProposal(Base, TimestampMixin):
         index=True,
     )
     committee_review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    scheduled_meeting_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        # use_alter：打破 council_proposals → meetings → meeting_agenda_items → council_proposals 循環。
-        ForeignKey(
-            "meetings.id",
-            ondelete="SET NULL",
-            name="council_proposals_scheduled_meeting_id_fkey",
-            use_alter=True,
-        ),
-        nullable=True,
-    )
-    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     submitter: Mapped[User | None] = relationship("User")

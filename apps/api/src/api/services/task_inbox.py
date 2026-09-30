@@ -21,19 +21,12 @@ from sqlalchemy.orm import load_only
 from api.core.cache import cache_get, cache_set
 from api.core.database import AsyncSessionLocal
 from api.models.announcement import Announcement
-from api.models.calendar import CalendarEvent, CalendarEventChecklistItem, CalendarEventParticipant
 from api.models.document import (
     ApprovalStepStatus,
     DelegateSource,
     Document,
     DocumentApproval,
     DocumentApprovalDelegation,
-)
-from api.models.meeting import (
-    AttendanceStatus,
-    Meeting,
-    MeetingAttendance,
-    MeetingStatus,
 )
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
@@ -138,40 +131,6 @@ async def _docs_pending_my_approval(
             )
         )
     return items
-
-
-async def _meetings_upcoming(db: AsyncSession, user: User) -> list[TaskItem]:
-    now = datetime.now(UTC)
-    cutoff = now + timedelta(hours=72)
-    stmt = (
-        select(Meeting)
-        .join(MeetingAttendance, MeetingAttendance.meeting_id == Meeting.id)
-        .where(MeetingAttendance.user_id == user.id)
-        .where(MeetingAttendance.status != AttendanceStatus.ABSENT)
-        .where(
-            Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.ACTIVE, MeetingStatus.PAUSED])
-        )
-        .where(Meeting.starts_at.is_not(None))
-        .where(Meeting.starts_at >= now)
-        .where(Meeting.starts_at <= cutoff)
-        .order_by(Meeting.starts_at)
-        .limit(20)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    return [
-        TaskItem(
-            id=f"meeting:{m.id}:attend",
-            module="meeting",
-            action="attend",
-            title=f"出席：{m.title}",
-            subtitle=m.location or None,
-            href=f"/meetings/{m.id}",
-            due_at=m.starts_at,
-            severity=_severity_by_due(m.starts_at),
-            created_at=m.created_at,
-        )
-        for m in rows
-    ]
 
 
 async def _regulations_to_publish(
@@ -349,73 +308,6 @@ async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
     ]
 
 
-async def _calendar_checklist_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
-    rows = (
-        await db.execute(
-            select(CalendarEventChecklistItem, CalendarEvent)
-            .join(CalendarEvent, CalendarEvent.id == CalendarEventChecklistItem.event_id)
-            .where(CalendarEventChecklistItem.assignee_id == user.id)
-            .where(CalendarEventChecklistItem.is_done.is_(False))
-            .where(CalendarEvent.is_active.is_(True))
-            .order_by(
-                CalendarEventChecklistItem.due_at.asc().nulls_last(),
-                desc(CalendarEventChecklistItem.created_at),
-            )
-            .limit(30)
-        )
-    ).all()
-    return [
-        TaskItem(
-            id=f"calendar:{item.id}:prepare",
-            module="calendar",
-            action="prepare",
-            title=f"準備：{item.title}",
-            subtitle=event.title,
-            href=f"/calendar?event={event.id}",
-            due_at=item.due_at,
-            severity=_severity_by_due(item.due_at),
-            created_at=item.created_at,
-        )
-        for item, event in rows
-    ]
-
-
-async def _calendar_events_to_attend(db: AsyncSession, user: User) -> list[TaskItem]:
-    now = datetime.now(UTC)
-    cutoff = now + timedelta(hours=72)
-    rows = (
-        (
-            await db.execute(
-                select(CalendarEvent)
-                .join(
-                    CalendarEventParticipant, CalendarEventParticipant.event_id == CalendarEvent.id
-                )
-                .where(CalendarEventParticipant.user_id == user.id)
-                .where(CalendarEvent.starts_at >= now, CalendarEvent.starts_at <= cutoff)
-                .where(CalendarEvent.is_active.is_(True))
-                .order_by(CalendarEvent.starts_at.asc())
-                .limit(30)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [
-        TaskItem(
-            id=f"calendar:{event.id}:attend",
-            module="calendar",
-            action="attend",
-            title=f"行程：{event.title}",
-            subtitle=event.location,
-            href=event.href or f"/calendar?event={event.id}",
-            due_at=event.starts_at,
-            severity=_severity_by_due(event.starts_at),
-            created_at=event.created_at,
-        )
-        for event in rows
-    ]
-
-
 async def _announcements_to_publish(
     db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
 ) -> list[TaskItem]:
@@ -550,18 +442,7 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
     is_admin = bool(getattr(user, "is_superuser", False))
 
     source_calls = [
-        _run_source(db, "meetings_upcoming", lambda source_db: _meetings_upcoming(source_db, user)),
         _run_source(db, "surveys_fill", lambda source_db: _surveys_to_fill(source_db, user)),
-        _run_source(
-            db,
-            "calendar_prepare",
-            lambda source_db: _calendar_checklist_assigned(source_db, user),
-        ),
-        _run_source(
-            db,
-            "calendar_attend",
-            lambda source_db: _calendar_events_to_attend(source_db, user),
-        ),
         _run_source(
             db,
             "work_items_assigned",
@@ -652,7 +533,6 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
     perms = await get_user_permission_codes(db, user.id)
     is_admin = bool(getattr(user, "is_superuser", False))
     now = datetime.now(UTC)
-    cutoff_72h = now + timedelta(hours=72)
     cutoff_48h = now + timedelta(hours=48)
     count_queries: list[tuple[str, object]] = []
     completed_response = (
@@ -702,21 +582,6 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
     count_queries.extend(
         [
             (
-                "meeting",
-                select(func.count(Meeting.id), literal(0))
-                .select_from(Meeting)
-                .join(MeetingAttendance, MeetingAttendance.meeting_id == Meeting.id)
-                .where(MeetingAttendance.user_id == user.id)
-                .where(MeetingAttendance.status != AttendanceStatus.ABSENT)
-                .where(
-                    Meeting.status.in_(
-                        [MeetingStatus.DRAFT, MeetingStatus.ACTIVE, MeetingStatus.PAUSED]
-                    )
-                )
-                .where(Meeting.starts_at.is_not(None))
-                .where(Meeting.starts_at >= now, Meeting.starts_at <= cutoff_72h),
-            ),
-            (
                 "survey",
                 select(func.count(Survey.id), literal(0))
                 .select_from(Survey)
@@ -728,29 +593,6 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
                         ~completed_response,
                     )
                 ),
-            ),
-            (
-                "calendar",
-                select(
-                    func.count(CalendarEventChecklistItem.id),
-                    func.count(case((CalendarEventChecklistItem.due_at < now, 1))),
-                )
-                .select_from(CalendarEventChecklistItem)
-                .join(CalendarEvent, CalendarEvent.id == CalendarEventChecklistItem.event_id)
-                .where(CalendarEventChecklistItem.assignee_id == user.id)
-                .where(CalendarEventChecklistItem.is_done.is_(False))
-                .where(CalendarEvent.is_active.is_(True)),
-            ),
-            (
-                "calendar",
-                select(func.count(CalendarEvent.id), literal(0))
-                .select_from(CalendarEvent)
-                .join(
-                    CalendarEventParticipant, CalendarEventParticipant.event_id == CalendarEvent.id
-                )
-                .where(CalendarEventParticipant.user_id == user.id)
-                .where(CalendarEvent.starts_at >= now, CalendarEvent.starts_at <= cutoff_72h)
-                .where(CalendarEvent.is_active.is_(True)),
             ),
             (
                 "work_item",

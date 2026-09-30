@@ -89,10 +89,6 @@ const nextConfig: NextConfig = {
         source: "/ws/:path*",
         destination: `${apiInternalUrl}/ws/:path*`,
       },
-      {
-        source: "/public/meetings/:path*",
-        destination: `${apiInternalUrl}/public/meetings/:path*`,
-      },
     ];
   },
 };

@@ -69,7 +69,6 @@ function timeAgo(iso: string): string {
 
 const ENTITY_LABELS: Record<string, string> = {
   document: "公文",
-  meeting: "會議",
   user: "使用者",
   person: "人員",
   regulation: "法規",

@@ -1,16 +1,9 @@
 /** Generated from api-bridge.ts. */
 export type {
   AccessBlockStatus,
-  AcclamationRequest,
   AddSinglePosition,
   AdminAssignRequest,
   AdminDashboardStats,
-  AgendaAttachmentLinkCreate,
-  AgendaAttachmentOut,
-  AgendaItemCreate,
-  AgendaItemOut,
-  AgendaItemType,
-  AgendaItemUpdate,
   AmendmentComparisonExportRequest,
   AmendmentComparisonExportRowIn,
   AmendmentComparisonRow,
@@ -46,23 +39,9 @@ export type {
   ArticleReorderItem,
   ArticleReorderRequest,
   ArticleType,
-  ArtifactLinkCreate,
-  ArtifactLinkOut,
-  ArtifactLinkType,
-  ArtifactLinkUpdate,
   AttachmentLinkCreate,
   AttachmentOut,
   AttachmentRenameRequest,
-  AttendanceCreate,
-  AttendanceOut,
-  AttendanceRole,
-  AttendanceSourceCreate,
-  AttendanceSourceOut,
-  AttendanceSourcePreviewOut,
-  AttendanceSourceResolveRequest,
-  AttendanceSourceType,
-  AttendanceStatus,
-  AttendanceUpdate,
   AuditLogOut,
   AuthenticatedAuditIn,
   AuthenticatedRunIn,
@@ -73,9 +52,6 @@ export type {
   BallotBoxStatus,
   BallotBoxStatusUpdate,
   BallotBoxTally,
-  BallotChoice,
-  BallotCreate,
-  BallotOut,
   BatchApproveRequest,
   BatchArchiveRequest,
   BatchDelegateRequest,
@@ -100,25 +76,6 @@ export type {
   BudgetSubmissionOut,
   BusinessHours,
   BusinessHoursInterval,
-  CalendarChecklistCreate,
-  CalendarChecklistOut,
-  CalendarChecklistUpdate,
-  CalendarEventCreate,
-  CalendarEventListItem,
-  CalendarEventOut,
-  CalendarEventStatus,
-  CalendarEventType,
-  CalendarEventUpdate,
-  CalendarLinkCreate,
-  CalendarLinkOut,
-  CalendarLinkType,
-  CalendarParticipantCreate,
-  CalendarParticipantOut,
-  CalendarParticipantResponse,
-  CalendarParticipantRole,
-  CalendarParticipantUpdate,
-  CalendarUserBrief,
-  CalendarVisibility,
   CandidateCreate,
   CandidateMemberCreate,
   CandidateMemberOut,
@@ -175,7 +132,6 @@ export type {
   CouncilProposalKind,
   CouncilProposalListItem,
   CouncilProposalOut,
-  CouncilProposalSchedule,
   CouncilProposalStatus,
   CouncilProposalStatusUpdate,
   DailyArticleViewItem,
@@ -187,9 +143,6 @@ export type {
   DeadLetterItem,
   DeadLetterReplayBody,
   DeadLetterResponse,
-  DecisionCreate,
-  DecisionOut,
-  DecisionUpdate,
   DeclassificationCondition,
   DefenseRule,
   DefenseRuleCreate,
@@ -276,7 +229,6 @@ export type {
   ElectronicCredentialAuthorizationOut,
   ElectronicCredentialAuthorizationUpdate,
   ElectronicCredentialOut,
-  EligibleMeetingBrief,
   EmailAnalyticsOut,
   EmailAttachmentOut,
   EmailBlock,
@@ -334,11 +286,7 @@ export type {
   FundAccountOut,
   FundStorageType,
   GitHubVersionView,
-  GoogleCalendarItem,
-  GoogleCalendarStatusOut,
-  GoogleConfigUpdate,
   GoogleOneTapRequest,
-  GoogleSheetsExportIn,
   GoogleTasksStatusOut,
   HTTPValidationError,
   HoldOut,
@@ -398,55 +346,6 @@ export type {
   MaintenanceBody,
   MaintenanceView,
   ManualJournalUpdate,
-  ManualTallyRequest,
-  MeetingAgendaAttachmentOut,
-  MeetingAgendaItemOut,
-  MeetingArtifactLinkOut,
-  MeetingArtifactType,
-  MeetingAttendanceOut,
-  MeetingAttendanceSourceOut,
-  MeetingAttendanceSourcePreviewOut,
-  MeetingBallotOut,
-  MeetingBillStage,
-  MeetingBriefingCardOut,
-  MeetingClassBrief,
-  MeetingConfirmCreate,
-  MeetingCreate,
-  MeetingDecisionStatus,
-  MeetingDocumentDraftOut,
-  MeetingEventOut,
-  MeetingJoinOut,
-  MeetingListItem,
-  MeetingMinutesOut,
-  MeetingMode,
-  MeetingMotionOut,
-  MeetingMotionStatus,
-  MeetingMotionType,
-  MeetingOut,
-  MeetingRecusalOut,
-  MeetingRegulationBrief,
-  MeetingRequestCreate,
-  MeetingRequestOut,
-  MeetingRequestStatus,
-  MeetingRequestType,
-  MeetingRequestUpdate,
-  MeetingScreenOut,
-  MeetingScreenReadingMode,
-  MeetingScreenStateOut,
-  MeetingSpeechQueueItemOut,
-  MeetingSpeechQueueStatus,
-  MeetingStatus,
-  MeetingTimerStateOut,
-  MeetingTimerStatus,
-  MeetingUpdate,
-  MeetingUserBrief,
-  MeetingVoteOption,
-  MeetingVoteOut,
-  MeetingVoteRecordMethod,
-  MeetingVoteRosterClassOut,
-  MeetingVoteRosterOut,
-  MeetingVoteTallyOut,
-  MeetingWorkspaceOut,
   MerchandiseSubmissionAIEvidenceOut,
   MerchandiseSubmissionAIMetadataOut,
   MerchandiseSubmissionAdminFileOut,
@@ -476,9 +375,6 @@ export type {
   ModuleStatusPublic,
   ModuleTripHistory,
   ModuleTripHistoryItem,
-  MotionCreate,
-  MotionOut,
-  MotionUpdate,
   MutedModulesIn,
   MutedModulesOut,
   NavigationProfileCreate,
@@ -724,17 +620,13 @@ export type {
   RecommendedVendorProductUpdate,
   RecommendedVendorStatus,
   RecommendedVendorUpdate,
-  RecorderBallotCreate,
   RecoveryActionBody,
-  RecusalCreate,
-  RecusalOut,
   RedisView,
   ReferenceWarningOut,
   RegulationAmendmentType,
   RegulationArticleCreate,
   RegulationArticleOut,
   RegulationArticleUpdate,
-  RegulationBrief,
   RegulationCategory,
   RegulationCreate,
   RegulationImportItemOut,
@@ -770,7 +662,6 @@ export type {
   SavedFilterCreate,
   SavedFilterOut,
   SavedFilterUpdate,
-  SchoolClassBrief,
   SchoolClassBulkAction,
   SchoolClassBulkActionOut,
   SchoolClassBulkActionResult,
@@ -782,9 +673,6 @@ export type {
   SchoolClassListItem,
   SchoolClassOut,
   SchoolClassUpdate,
-  ScreenReadingMode,
-  ScreenStateOut,
-  ScreenStateUpdate,
   SearchIndexOut,
   SearchResultOut,
   SeatAssignmentStatus,
@@ -812,12 +700,6 @@ export type {
   ShopPromotionCreate,
   ShopPromotionOut,
   ShopPromotionUpdate,
-  SpeechQueueCreate,
-  SpeechQueueExtend,
-  SpeechQueueItemOut,
-  SpeechQueueReorder,
-  SpeechQueueStatus,
-  SpeechQueueUpdate,
   StatusOut,
   StructureContentRequest,
   SubmissionCustomField,
@@ -846,8 +728,6 @@ export type {
   TemplateImage,
   TerminationOut,
   TestSendOut,
-  TimerStateOut,
-  TimerStatus,
   TransferCreate,
   TrashEntryOut,
   UnsubscribeRequest,
@@ -860,7 +740,6 @@ export type {
   UserBlockBody,
   UserBlockPreview,
   UserBlockResult,
-  UserBrief,
   UserDetail,
   UserPositionCreate,
   UserPositionRead,
@@ -873,20 +752,9 @@ export type {
   ValidationError,
   ValidationRule,
   VersionStatusView,
-  VoteCreate,
   VoteEventCreate,
   VoteEventKind,
   VoteEventOut,
-  VoteOption,
-  VoteOut,
-  VoteRecordMethod,
-  VoteRosterClassOut,
-  VoteRosterOut,
-  VoteStatus,
-  VoteTallyOut,
-  VoteThresholdType,
-  VoteUpdate,
-  VoteVisibility,
   WaveInput,
   WaveOut,
   WavesReplace,
@@ -1260,25 +1128,6 @@ export interface PersonDirectoryStats {
 /** 全文搜尋結果：RegulationListItem 加上命中的條文 */
 
 
-// ── 議事系統型別 ──────────────────────────────────────────────────────────────
-
-/** 會議的法案審議階段（決定議程自動帶入哪一階段的法案） */
-
-
-/** 議程項目關聯法規（修正案）的精簡資訊 */
-
-
-export type MeetingVoteRosterStatus =
-  | "approve"
-  | "reject"
-  | "abstain"
-  | "not_voted"
-  | "mixed";
-
-
-// ── 行事曆型別 ────────────────────────────────────────────────────────────────
-
-
 // ── 活動系統 ──────────────────────────────────────────────────────────────────
 
 
@@ -1441,18 +1290,6 @@ export interface PetitionSubmitterUpdate {
 }
 
 
-// ── 議會提案 ───────────────────────────────────────────────────────────────
-
-
-export interface CouncilProposalEligibleMeeting {
-  id: string;
-  title: string;
-  status: string;
-  bill_stage: string | null;
-  starts_at: string | null;
-  already_scheduled: boolean;
-}
-
 // ── 評議委員會訴訟 ───────────────────────────────────────────────────────
 
 
@@ -1577,8 +1414,6 @@ export interface DiscordNotificationEventOut {
   module: string;
   label: string;
 }
-
-// ── Google Calendar 同步 ──────────────────────────────────────────────────────
 
 export type RaffleStatus = "draft" | "open" | "paused" | "closed";
 

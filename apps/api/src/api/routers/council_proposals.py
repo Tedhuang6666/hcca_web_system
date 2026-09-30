@@ -23,9 +23,7 @@ from api.schemas.council_proposal import (
     CouncilProposalCreate,
     CouncilProposalListItem,
     CouncilProposalOut,
-    CouncilProposalSchedule,
     CouncilProposalStatusUpdate,
-    EligibleMeetingBrief,
 )
 from api.services import audit as audit_svc
 from api.services import council_proposal as proposal_svc
@@ -99,7 +97,6 @@ async def list_my_proposals(
         Depends(
             require_any(
                 PermissionCode.COUNCIL_PROPOSAL_MANAGE,
-                PermissionCode.MEETING_MANAGE,
                 PermissionCode.ADMIN_ALL,
             )
         )
@@ -132,74 +129,10 @@ async def get_proposal(
     codes = await get_user_permission_codes(session, user.id)
     if codes & {
         str(PermissionCode.COUNCIL_PROPOSAL_MANAGE),
-        str(PermissionCode.MEETING_MANAGE),
         str(PermissionCode.ADMIN_ALL),
     }:
         return proposal
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此議會提案")
-
-
-@router.get(
-    "/{proposal_id}/eligible-meetings",
-    response_model=list[EligibleMeetingBrief],
-    summary="列出可排入此提案的會議（議程仍可編輯者）",
-    dependencies=[
-        Depends(
-            require_any(
-                PermissionCode.COUNCIL_PROPOSAL_MANAGE,
-                PermissionCode.MEETING_MANAGE,
-                PermissionCode.ADMIN_ALL,
-            )
-        )
-    ],
-)
-async def list_eligible_meetings(
-    proposal_id: uuid.UUID, session: DbDep, _: CurrentUser
-) -> list[dict]:
-    proposal = await _proposal_or_404(session, proposal_id)
-    return await proposal_svc.list_eligible_meetings(session, proposal)
-
-
-@router.post(
-    "/{proposal_id}/schedule",
-    response_model=CouncilProposalOut,
-    summary="把提案排入大會議程（常委會審查通過後）",
-    dependencies=[
-        Depends(
-            require_any(
-                PermissionCode.COUNCIL_PROPOSAL_MANAGE,
-                PermissionCode.MEETING_MANAGE,
-                PermissionCode.ADMIN_ALL,
-            )
-        )
-    ],
-)
-async def schedule_proposal(
-    proposal_id: uuid.UUID,
-    payload: CouncilProposalSchedule,
-    session: DbDep,
-    user: CurrentUser,
-) -> CouncilProposal:
-    proposal = await _proposal_or_404(session, proposal_id)
-    try:
-        proposal = await proposal_svc.schedule_into_meeting(
-            session, proposal, meeting_id=payload.meeting_id, note=payload.note, actor=user
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    await audit_svc.record(
-        session,
-        entity_type="council_proposal",
-        entity_id=str(proposal.id),
-        action="council_proposal.schedule",
-        actor_id=str(user.id),
-        actor_email=user.email,
-        meta={"meeting_id": str(payload.meeting_id)},
-        summary=f"議會提案 {proposal.serial_number} 排入會議議程",
-    )
-    return proposal
 
 
 @router.patch(
@@ -210,7 +143,6 @@ async def schedule_proposal(
         Depends(
             require_any(
                 PermissionCode.COUNCIL_PROPOSAL_MANAGE,
-                PermissionCode.MEETING_MANAGE,
                 PermissionCode.ADMIN_ALL,
             )
         )

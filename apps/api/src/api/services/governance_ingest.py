@@ -2,11 +2,11 @@
 
 設計原則（與 memory 對齊）：
 
-* **同事務同步匯流**：模組（會議/陳情/公告/活動…）發生事件時，於 *同一個* DB
+* **同事務同步匯流**：模組（陳情/公告/活動…）發生事件時，於 *同一個* DB
   事務內把資料「長進」對應的 Matter，使治理中樞成為真實狀態的鏡子，而非要人手動
   再抄一遍的平行副本。即時、原子，不依賴常駐 celery（4GB VPS celery 非常駐）。
-* **失敗隔離（fail-soft）**：治理匯流是「附帶效果」，絕不可拖垮宿主動作（建立會議
-  決議不能因為治理出錯而失敗）。呼叫端一律用 :func:`safe_ingest`，內部以 savepoint
+* **失敗隔離（fail-soft）**：治理匯流是「附帶效果」，絕不可拖垮宿主動作。呼叫端
+  一律用 :func:`safe_ingest`，內部以 savepoint
   包住，治理錯誤只回滾治理部分並記 log。
 * **通知走 outbox**：重量級/外部通知（email/discord/inbox fan-out）emit 到既有
   outbox，由 celery beat 非同步派送，治理引擎本身只做便宜的 DB 寫入。
@@ -37,7 +37,6 @@ from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.services import governance as governance_svc
 from api.services import governance_events
-from api.services import work_item as work_item_svc
 from api.services.outbox import emit
 
 logger = logging.getLogger(__name__)
@@ -47,8 +46,6 @@ ENTITY_LABEL: dict[str, str] = {
     "matter": "事情",
     "case": "案件",
     "document": "公文",
-    "meeting": "會議",
-    "meeting_decision": "會議決議",
     "announcement": "公告",
     "survey": "問卷",
     "activity": "活動",
@@ -61,7 +58,6 @@ ENTITY_LABEL: dict[str, str] = {
     "meal_schedule": "學餐結單",
     "org": "組織",
     "publication": "發布",
-    "calendar_event": "行事曆",
     "exam_paper": "試卷",
     "receivable": "收款",
     "vote": "投票",
@@ -87,7 +83,6 @@ ENTITY_LABEL: dict[str, str] = {
 TRIGGER_TYPES: dict[str, str] = {
     "manual": "手動",
     "petition.created": "陳情建立",
-    "meeting.decision_created": "會議產生決議",
     "announcement.published": "公告發布",
     "activity.created": "活動建立",
     "activity.completed": "活動結束",
@@ -103,9 +98,7 @@ ACTION_TYPES: dict[str, str] = {
     "create_decision": "建立決議",
     "create_timeline_event": "新增時間軸紀錄",
     "create_relation": "建立跨模組關聯",
-    "create_calendar_event": "建立行事曆事件",
     "create_document_draft": "建立公文草稿",
-    "create_meeting": "建立會議",
     "create_announcement": "建立公告草稿",
     "create_survey": "建立問卷",
     "set_matter_status": "變更事情狀態",
@@ -188,102 +181,6 @@ async def _linked_matter_ids(
     return seen
 
 
-async def _has_decision_for_source(
-    db: AsyncSession, matter_id: uuid.UUID, source_type: str, source_id: uuid.UUID
-) -> bool:
-    existing = await db.scalar(
-        select(Decision.id).where(
-            Decision.matter_id == matter_id,
-            Decision.source_type == source_type,
-            Decision.source_id == source_id,
-        )
-    )
-    return existing is not None
-
-
-async def create_meeting_decision_outputs(
-    db: AsyncSession,
-    *,
-    meeting,
-    decision,
-    actor,
-    create_follow_up: bool,
-    follow_up_assignee_id: uuid.UUID | None,
-    follow_up_due_at: datetime | None,
-    create_document_draft: bool,
-) -> uuid.UUID | None:
-    """把正式會議決議轉成待辦、行事曆期限與可選的公文草稿。"""
-    if create_follow_up:
-        existing = await db.scalar(
-            select(WorkItem.id).where(
-                WorkItem.source_type == "meeting_decision",
-                WorkItem.source_id == decision.id,
-                WorkItem.is_active.is_(True),
-            )
-        )
-        if existing is None:
-            from api.schemas.work_item import WorkItemCreate
-
-            await work_item_svc.create_work_item(
-                db,
-                data=WorkItemCreate(
-                    title=f"執行決議：{decision.title}",
-                    description=decision.content,
-                    assigned_to_id=follow_up_assignee_id or actor.id,
-                    source_type="meeting_decision",
-                    source_id=decision.id,
-                    due_at=follow_up_due_at,
-                ),
-                created_by_id=actor.id,
-            )
-
-    if not create_document_draft:
-        return None
-
-    from api.models.document import DocumentCategory
-    from api.schemas.document import DocumentCreate
-    from api.services import document as document_svc
-
-    document = await document_svc.create_document(
-        db,
-        data=DocumentCreate(
-            title=f"{decision.title}執行公文",
-            org_id=meeting.org_id,
-            category=DocumentCategory.LETTER,
-            subject=f"檢送「{decision.title}」決議事項，請依決議內容辦理。",
-            doc_description=(
-                f"本案依「{meeting.title}」正式決議辦理。\n\n決議內容：{decision.content}"
-            ),
-            action_required="請承辦人確認受文者、完成公文內容並送交簽核。",
-            content=f"## 決議依據\n\n{decision.content}",
-            handler_name=actor.display_name,
-            handler_email=actor.email,
-            due_date=follow_up_due_at,
-        ),
-        created_by=actor.id,
-    )
-
-    matter_ids = await _linked_matter_ids(db, "meeting", meeting.id)
-    for matter_id in matter_ids:
-        db.add(
-            EntityRelation(
-                matter_id=matter_id,
-                source_type="meeting_decision",
-                source_id=decision.id,
-                target_type="document",
-                target_id=document.id,
-                relation="produces",
-                title=document.title,
-                href=f"/documents/{document.id}",
-                note="由會議決議自動建立的公文草稿",
-                created_by_id=actor.id,
-                meta={"origin": "meeting_decision"},
-            )
-        )
-    await db.flush()
-    return document.id
-
-
 async def _materialize_for_matter(
     db: AsyncSession,
     *,
@@ -308,25 +205,6 @@ async def _materialize_for_matter(
         body=summary,
         payload=payload,
     )
-
-    # 2) 會議決議 → 自動在事情的「決議追蹤」長出一筆（避免重複）。
-    if event_type == "meeting.decision_created":
-        source_id = payload.get("decision_id")
-        if source_id:
-            source_uuid = uuid.UUID(str(source_id))
-            if not await _has_decision_for_source(db, matter_id, "meeting_decision", source_uuid):
-                decision = Decision(
-                    matter_id=matter_id,
-                    source_type="meeting_decision",
-                    source_id=source_uuid,
-                    title=payload.get("title") or title,
-                    content=summary or payload.get("content") or title,
-                    status=DecisionStatus.PENDING,
-                    created_by_id=actor_id,
-                    meta={"meeting_id": payload.get("meeting_id"), "origin": "ingest"},
-                )
-                db.add(decision)
-                await db.flush()
 
 
 def _conditions_match(conditions: dict, payload: dict, matter: Matter | None) -> bool:
@@ -493,51 +371,8 @@ async def _exec_action(
             )
             await db.flush()
 
-    elif action_type == "create_calendar_event" and actor_id is not None:
-        from api.models.calendar import (
-            CalendarEvent,
-            CalendarEventStatus,
-            CalendarEventType,
-            CalendarVisibility,
-        )
-
-        starts_at = _as_datetime(
-            _render(action.get("starts_at"), context)
-            or context.get("due_at")
-            or context.get("starts_at")
-        )
-        if starts_at is not None:
-            event = CalendarEvent(
-                org_id=matter.org_id,
-                title=_render(action.get("title"), context) or context.get("title") or "治理行程",
-                description=_render(action.get("description"), context),
-                event_type=CalendarEventType(
-                    str(action.get("event_type") or CalendarEventType.DEADLINE)
-                ),
-                status=CalendarEventStatus.CONFIRMED,
-                visibility=CalendarVisibility.ORG,
-                starts_at=starts_at,
-                ends_at=_as_datetime(_render(action.get("ends_at"), context)),
-                href=f"/governance/{matter.id}",
-                created_by=actor_id,
-                updated_by=actor_id,
-            )
-            db.add(event)
-            await db.flush()
-            await _link_created_artifact(
-                db,
-                matter=matter,
-                actor_id=actor_id,
-                target_type="calendar_event",
-                target_id=event.id,
-                title=event.title,
-                href="/calendar",
-                context=context,
-            )
-
     elif action_type in {
         "create_document_draft",
-        "create_meeting",
         "create_announcement",
         "create_survey",
     }:
@@ -574,22 +409,6 @@ async def _exec_action(
                 created_by=actor.id,
             )
             target_type, href = "document", f"/documents/{artifact.id}"
-        elif action_type == "create_meeting":
-            from api.schemas.meeting import MeetingCreate
-            from api.services import meeting as meeting_svc
-
-            artifact = await meeting_svc.create_meeting(
-                db,
-                data=MeetingCreate(
-                    title=artifact_title,
-                    org_id=matter.org_id,
-                    starts_at=_as_datetime(
-                        _render(action.get("starts_at"), context) or context.get("starts_at")
-                    ),
-                ),
-                created_by=actor.id,
-            )
-            target_type, href = "meeting", f"/meetings/{artifact.id}"
         elif action_type == "create_announcement":
             from api.schemas.announcement import AnnouncementCreate
             from api.services import announcement as announcement_svc

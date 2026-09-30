@@ -57,7 +57,7 @@ def test_build_embed_basic_shape():
 
 def test_build_embed_does_not_double_prefix_emoji():
     embed = build_embed(
-        Domain.MEETING,
+        Domain.ANNOUNCEMENT,
         Severity.INFO,
         title="🤝 已包含 emoji 的標題",
     )

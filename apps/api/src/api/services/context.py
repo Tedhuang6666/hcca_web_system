@@ -13,59 +13,14 @@ from api.models.activity_link import ActivityLink
 from api.models.announcement import Announcement
 from api.models.document import Document, DocumentApproval
 from api.models.governance import EntityRelation, Matter
-from api.models.meeting import Meeting, MeetingAgendaItem, MeetingAttendance
 from api.models.petition import PetitionCase
 from api.models.regulation import Regulation
-from api.models.user import User
 from api.schemas.context import (
     ContextLink,
     DocumentApprovalContextOut,
-    MeetingBriefingCardOut,
     PetitionResolutionContextOut,
     RegulationUsageContextOut,
 )
-
-
-async def meeting_briefing_card(
-    db: AsyncSession, meeting_id: uuid.UUID, user: User
-) -> MeetingBriefingCardOut:
-    meeting = await db.get(Meeting, meeting_id)
-    if meeting is None:
-        raise ValueError("會議不存在")
-    attendance = await db.scalar(
-        select(MeetingAttendance).where(
-            MeetingAttendance.meeting_id == meeting_id,
-            MeetingAttendance.user_id == user.id,
-        )
-    )
-    agenda = (
-        await db.execute(
-            select(MeetingAgendaItem)
-            .where(MeetingAgendaItem.meeting_id == meeting_id)
-            .order_by(MeetingAgendaItem.order_index.asc())
-            .limit(10)
-        )
-    ).scalars()
-    related = await _links_for(db, "meeting", meeting_id)
-    actions = ["確認議程資料與出席狀態"]
-    if attendance is None:
-        actions.append("確認是否需要加入會議出席名冊")
-    return MeetingBriefingCardOut(
-        meeting_id=meeting_id,
-        my_role=getattr(attendance, "role", None),
-        attendance_status=getattr(attendance, "status", None),
-        agenda_items=[
-            ContextLink(
-                title=item.title,
-                href=f"/meetings/{meeting_id}",
-                kind="agenda_item",
-                timestamp=item.created_at,
-            )
-            for item in agenda
-        ],
-        related_items=related,
-        recommended_actions=actions,
-    )
 
 
 async def document_approval_context(
@@ -161,9 +116,6 @@ async def regulation_usage_context(
     docs = (
         await db.execute(select(Document).where(Document.title.ilike(keyword)).limit(8))
     ).scalars()
-    meetings = (
-        await db.execute(select(Meeting).where(Meeting.title.ilike(keyword)).limit(8))
-    ).scalars()
     petitions = (
         await db.execute(select(PetitionCase).where(PetitionCase.title.ilike(keyword)).limit(8))
     ).scalars()
@@ -179,9 +131,6 @@ async def regulation_usage_context(
                 kind="document",
             )
             for d in docs
-        ],
-        related_meetings=[
-            ContextLink(title=m.title, href=f"/meetings/{m.id}", kind="meeting") for m in meetings
         ],
         related_petitions=[
             ContextLink(title=p.title, href=f"/petitions/{p.case_number}", kind="petition")

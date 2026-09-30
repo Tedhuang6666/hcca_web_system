@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import {
-  CalendarDays,
   CheckCircle,
   ExternalLink,
   Link2,
@@ -12,7 +10,6 @@ import {
   Loader2,
   MessageCircle,
   RefreshCw,
-  Table2,
 } from "lucide-react";
 import { discordApi, googleTasksApi, lineApi, type GoogleTasksStatus } from "@/lib/api";
 import type { DiscordBindingOut, LineBindingOut, LineLinkCodeOut } from "@/lib/types";
@@ -412,34 +409,6 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl p-5 space-y-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "#e8f0fe", color: "#4285f4" }} aria-hidden="true"><CalendarDays size={20} /></div>
-            <div>
-              <p className="font-medium" style={{ color: "var(--text-primary)" }}>Google 日曆</p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>組織行事曆雙向同步</p>
-            </div>
-          </div>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>由具日曆管理權限的成員為組織連結及選擇同步日曆。</p>
-          <Link href="/admin/calendar/google" className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: "var(--primary)" }}>
-            管理 Google 日曆 <ExternalLink size={13} aria-hidden={true} />
-          </Link>
-        </div>
-        <div className="rounded-xl p-5 space-y-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "#e6f4ea", color: "#188038" }} aria-hidden="true"><Table2 size={20} /></div>
-            <div>
-              <p className="font-medium" style={{ color: "var(--text-primary)" }}>Google 試算表</p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>財務總帳匯出與同步</p>
-            </div>
-          </div>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>與組織 Google 授權共用；完成日曆授權後即可在財務總帳輸出資料。</p>
-          <Link href="/admin/calendar/google" className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: "var(--primary)" }}>
-            前往組織 Google 授權 <ExternalLink size={13} aria-hidden={true} />
-          </Link>
-        </div>
-      </div>
     </div>
   );
 }

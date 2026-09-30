@@ -205,42 +205,6 @@ class AccountBrowseMealCog(commands.Cog):
             embed=_embed("近期公告", items, "目前沒有公告。"), ephemeral=True
         )
 
-    @app_commands.command(name="meetings_upcoming", description="兩週內會議")
-    async def meetings_upcoming(self, interaction: discord.Interaction) -> None:
-        data = await _command(interaction, "browse_meetings")
-        if data is not None:
-            items = [
-                {
-                    "name": row["title"],
-                    "value": (
-                        f"{row['starts_at'] or '時間未定'}｜{row['location'] or '—'}\n"
-                        f"[打開]({row['url']})"
-                    ),
-                }
-                for row in data["items"]
-            ]
-            await interaction.response.send_message(
-                embed=_embed("兩週內會議", items, "兩週內沒有會議。"), ephemeral=True
-            )
-
-    @app_commands.command(name="events_today", description="今日行事曆事件")
-    async def events_today(self, interaction: discord.Interaction) -> None:
-        data = await _command(interaction, "browse_events")
-        if data is not None:
-            items = [
-                {
-                    "name": row["title"],
-                    "value": (
-                        f"{row['starts_at']}｜{row['location'] or '—'}\n[打開]({row['url']})"
-                    ),
-                }
-                for row in data["items"]
-            ]
-            await interaction.response.send_message(
-                embed=_embed("今日行事曆", items, "今天沒有行事曆事件。"),
-                ephemeral=True,
-            )
-
     @app_commands.command(name="surveys_open", description="目前開放的問卷")
     async def surveys_open(self, interaction: discord.Interaction) -> None:
         data = await _command(interaction, "browse_surveys")

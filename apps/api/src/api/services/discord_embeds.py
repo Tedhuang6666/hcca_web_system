@@ -43,8 +43,6 @@ class Domain(StrEnum):
     DOCUMENT = "document"
     ANNOUNCEMENT = "announcement"
     PETITION = "petition"
-    MEETING = "meeting"
-    CALENDAR = "calendar"
     SURVEY = "survey"
     SHOP = "shop"
     REGULATION = "regulation"
@@ -68,8 +66,6 @@ _DOMAIN_EMOJI: dict[Domain, str] = {
     Domain.DOCUMENT: "📄",
     Domain.ANNOUNCEMENT: "📢",
     Domain.PETITION: "🗳️",
-    Domain.MEETING: "🤝",
-    Domain.CALENDAR: "📅",
     Domain.SURVEY: "📝",
     Domain.SHOP: "🛒",
     Domain.REGULATION: "⚖️",
@@ -84,8 +80,6 @@ _DOMAIN_LABEL: dict[Domain, str] = {
     Domain.DOCUMENT: "公文",
     Domain.ANNOUNCEMENT: "公告",
     Domain.PETITION: "陳情",
-    Domain.MEETING: "會議",
-    Domain.CALENDAR: "行事曆",
     Domain.SURVEY: "問卷",
     Domain.SHOP: "福利社",
     Domain.REGULATION: "法規",

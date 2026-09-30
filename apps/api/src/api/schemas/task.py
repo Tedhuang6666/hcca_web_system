@@ -9,13 +9,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 TaskModule = Literal[
     "document",
-    "meeting",
     "regulation",
     "petition",
     "shop",
     "survey",
     "announcement",
-    "calendar",
     "work_item",
 ]
 

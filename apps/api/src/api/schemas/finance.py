@@ -524,7 +524,3 @@ class FinanceDashboardOut(BaseModel):
     net_income: int
     unreconciled_count: int
     funds: list[FundAccountOut]
-
-
-class GoogleSheetsExportIn(BaseModel):
-    spreadsheet_id: str = Field(min_length=10, max_length=200)

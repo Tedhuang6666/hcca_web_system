@@ -21,8 +21,6 @@ from hcca_discord_bot.api_client import (
 
 _CATEGORY_LABEL = {
     "document_pending": "公文待核",
-    "meeting_invited": "會議通知",
-    "calendar_reminder": "行事曆提醒",
     "meal_closing": "學餐結單提醒",
     "survey_closing": "問卷截止提醒",
     "shop_ready": "福利社可取貨",
@@ -383,11 +381,6 @@ class QuickCreateModal(discord.ui.Modal):
         max_length=200,
         required=False,
     )
-    location_input = discord.ui.TextInput(
-        label="地點（會議 / 行事曆使用）",
-        max_length=200,
-        required=False,
-    )
 
     def __init__(self, operation: str, title: str) -> None:
         super().__init__(title=title)
@@ -397,24 +390,12 @@ class QuickCreateModal(discord.ui.Modal):
         title = str(self.title_input.value)
         detail = str(self.detail_input.value) or None
         extra = str(self.extra_input.value) or None
-        location = str(self.location_input.value) or None
         arguments: dict[str, Any] = {"title": title}
         if self.operation == "announcement_create":
             arguments.update(
                 body=detail or "",
                 is_urgent=(extra or "").lower() in {"yes", "y", "1", "緊急"},
             )
-        elif self.operation == "meeting_create":
-            parsed = _parse_datetime(extra)
-            arguments.update(location=location, starts_at=parsed)
-        elif self.operation == "calendar_create":
-            parsed = _parse_datetime(extra)
-            if parsed is None:
-                await interaction.response.send_message(
-                    "開始時間格式無法解析，請用 ISO。", ephemeral=True
-                )
-                return
-            arguments.update(description=detail, location=location, starts_at=parsed)
         else:
             arguments.update(
                 description=detail,
@@ -443,7 +424,7 @@ class PlatformCog(commands.Cog):
             "個人：/me /tasks /dashboard /sync_me /notify\n"
             "工作：/assign_task /complete_task\n"
             "公文陳情：/documents_pending /petition /petitions_pending /petition_note /petition_channel\n"
-            "建立：/announce /meeting_create /calendar_add /survey_quick\n"
+            "建立：/announce /survey_quick\n"
             "系統與社群：admin:all 可用健康與 moderation 指令",
             ephemeral=True,
         )
@@ -484,8 +465,6 @@ class PlatformCog(commands.Cog):
         )
         embed.add_field(name="待辦", value=str(len(data["tasks"])), inline=True)
         embed.add_field(name="陳情", value=str(len(data["petitions"])), inline=True)
-        embed.add_field(name="兩週內會議", value=str(len(data["meetings"])), inline=True)
-        embed.add_field(name="兩週內行事曆", value=str(len(data["calendar"])), inline=True)
         embed.add_field(
             name="現任職位",
             value="、".join(data["positions"]) or "—",
@@ -502,23 +481,6 @@ class PlatformCog(commands.Cog):
                 name="陳情待辦",
                 value="\n".join(
                     f"• {item['case_number']}｜{item['title']}" for item in data["petitions"][:5]
-                ),
-                inline=False,
-            )
-        if data["meetings"]:
-            embed.add_field(
-                name="近期會議",
-                value="\n".join(
-                    f"• {item['title']}｜{item['starts_at'] or '時間未定'}"
-                    for item in data["meetings"][:5]
-                ),
-                inline=False,
-            )
-        if data["calendar"]:
-            embed.add_field(
-                name="近期行事曆",
-                value="\n".join(
-                    f"• {item['title']}｜{item['starts_at']}" for item in data["calendar"][:5]
                 ),
                 inline=False,
             )
@@ -669,14 +631,6 @@ class PlatformCog(commands.Cog):
     @app_commands.command(name="announce", description="開啟公告建立表單")
     async def announce(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(QuickCreateModal("announcement_create", "建立公告"))
-
-    @app_commands.command(name="meeting_create", description="開啟會議建立表單")
-    async def meeting_create(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(QuickCreateModal("meeting_create", "建立會議"))
-
-    @app_commands.command(name="calendar_add", description="開啟行事曆建立表單")
-    async def calendar_add(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(QuickCreateModal("calendar_create", "建立行事曆事件"))
 
     @app_commands.command(name="survey_quick", description="開啟問卷建立表單")
     async def survey_quick(self, interaction: discord.Interaction) -> None:

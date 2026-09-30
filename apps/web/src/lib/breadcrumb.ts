@@ -14,7 +14,6 @@ export interface Crumb {
 const SEGMENT_LABELS: Record<string, string> = {
   documents: "公文系統",
   "document-templates": "公文範本",
-  meetings: "議事系統",
   regulations: "法規查詢",
   announcements: "校內公告",
   shop: "商品訂購",
@@ -41,7 +40,6 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/documents/delegations":       "簽核代理",
   "/regulations/new":             "新增法規",
   "/regulations/pending":         "待議法規",
-  "/meetings/calendar":           "會議行事曆",
   "/announcements/new":           "新增公告",
   "/shop/admin":                  "商品後台",
   "/shop/orders":                 "我的訂單",
@@ -69,8 +67,6 @@ const PATH_OVERRIDES: Record<string, string> = {
  */
 const LABEL_ONLY_PATHS: Set<string> = new Set([
   "/settings",
-  "/meetings/join",
-  "/meetings/screen",
   "/petitions/admin",
   "/auth",
 ]);
@@ -82,12 +78,6 @@ const DYNAMIC_PATTERNS: Array<{ re: RegExp; label: string }> = [
   { re: /^\/regulations\/[^/]+\/edit(\/.*)?$/,    label: "編輯法規" },
   { re: /^\/regulations\/[^/]+\/amendment(\/.*)?$/, label: "法規修正案" },
   { re: /^\/regulations\/[^/]+$/,                 label: "法規詳情" },
-  { re: /^\/meetings\/[^/]+\/edit$/,              label: "編輯會議" },
-  { re: /^\/meetings\/[^/]+\/control$/,           label: "議事控制台" },
-  { re: /^\/meetings\/[^/]+\/vote$/,              label: "表決" },
-  { re: /^\/meetings\/[^/]+$/,                    label: "會議詳情" },
-  { re: /^\/meetings\/join\/[^/]+$/,              label: "加入會議" },
-  { re: /^\/meetings\/screen\/[^/]+$/,            label: "會議螢幕" },
   { re: /^\/announcements\/[^/]+\/edit$/,         label: "編輯公告" },
   { re: /^\/announcements\/[^/]+$/,               label: "公告詳情" },
   { re: /^\/surveys\/[^/]+\/edit$/,               label: "編輯問卷" },

@@ -1,10 +1,9 @@
 import type {
-  DocumentApprovalContextOut, MeetingBriefingCardOut, PetitionResolutionContextOut, RegulationUsageContextOut,
+  DocumentApprovalContextOut, PetitionResolutionContextOut, RegulationUsageContextOut,
 } from "../types";
 import { get } from "./core";
 
 export const contextApi = {
-  meetingBriefing: (id: string) => get<MeetingBriefingCardOut>(`/meetings/${id}/briefing-card`),
   documentApproval: (id: string) =>
     get<DocumentApprovalContextOut>(`/documents/${id}/approval-context`),
   petitionResolution: (id: string) =>

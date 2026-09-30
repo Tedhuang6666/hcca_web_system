@@ -67,9 +67,6 @@ _ROLE_PERMISSION_CODES: dict[tuple[str, str], tuple[str, ...]] = {
         "document:draft",
         "document:edit",
         "document:submit",
-        "meeting:create",
-        "meeting:manage",
-        "meeting:chair",
         "email:send",
         "email:send_bulk",
     ),
@@ -77,7 +74,6 @@ _ROLE_PERMISSION_CODES: dict[tuple[str, str], tuple[str, ...]] = {
         "org:view_members",
         "document:draft",
         "document:edit",
-        "meeting:manage",
         "email:send",
     ),
     ("學權部", "學權長"): (
@@ -92,8 +88,6 @@ _ROLE_PERMISSION_CODES: dict[tuple[str, str], tuple[str, ...]] = {
     ),
     ("活動部", "活動長"): (
         "org:view_members",
-        "meeting:create",
-        "meeting:manage",
         "announcement:create",
         "announcement:publish",
         "email:send",

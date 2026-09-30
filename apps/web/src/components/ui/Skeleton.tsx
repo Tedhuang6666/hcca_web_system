@@ -41,7 +41,7 @@ export function Skeleton({
 
 /**
  * 列表頁通用骨架 — N 行卡片，每行有標題＋兩段描述。
- * 套用於 documents、announcements、meetings、petitions 等列表。
+ * 套用於 documents、announcements、petitions 等列表。
  */
 export function ListPageSkeleton({
   rows = 6,

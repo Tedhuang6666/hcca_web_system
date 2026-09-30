@@ -88,7 +88,6 @@ class WorkflowActionRequest(BaseModel):
     """審議流程動作請求（送審/排程/核定/退回）"""
 
     note: str | None = Field(None, max_length=500, description="備註或退回原因")
-    meeting_id: uuid.UUID | None = Field(None, description="排入議程時，同步加入指定議事會議的議程")
     serial_template_id: uuid.UUID | None = Field(
         None, description="主席公布產生公文時指定使用的字號模板"
     )

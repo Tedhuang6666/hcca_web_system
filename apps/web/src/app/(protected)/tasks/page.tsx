@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  FileText, Landmark, Scale, MessageSquare, CheckSquare, ShoppingCart,
+  FileText, Scale, MessageSquare, CheckSquare, ShoppingCart,
   Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
-  CalendarDays, Gauge,
+  Gauge,
 } from "lucide-react";
 import {
   documentsApi,
@@ -28,25 +28,21 @@ function FallbackModuleIcon(p: IconProps) { return <FileText {...p} />; }
 
 const MODULE_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
   document: (p) => <FileText {...p} />,
-  meeting: (p) => <Landmark {...p} />,
   regulation: (p) => <Scale {...p} />,
   petition: (p) => <MessageSquare {...p} />,
   survey: (p) => <CheckSquare {...p} />,
   shop: (p) => <ShoppingCart {...p} />,
   announcement: (p) => <Megaphone {...p} />,
-  calendar: (p) => <CalendarDays {...p} />,
   work_item: (p) => <CheckSquare {...p} />,
 };
 
 const MODULE_LABEL: Record<TaskModule, string> = {
   document: "公文",
-  meeting: "議事",
   regulation: "法規",
   petition: "陳情",
   survey: "問卷",
   shop: "商品",
   announcement: "公告",
-  calendar: "行事曆",
   work_item: "工作",
 };
 
@@ -289,7 +285,6 @@ export default function TasksPage() {
       <section className="grid gap-2 sm:grid-cols-3" aria-label="常用治理入口">
         {canSeeDocumentDrafts && <QuickAction href="/documents/new" label="建立公文" detail="套範本、選字號、保存草稿" />}
         {can("regulation:create") && <QuickAction href="/regulations/new" label="起草法規" detail="建立條文、送審與會議連動" />}
-        {canAny("meeting:create", "meeting:manage") && <QuickAction href="/meetings" label="議事與通知單" detail="確認議程後產生開會通知單" />}
       </section>
 
       <section

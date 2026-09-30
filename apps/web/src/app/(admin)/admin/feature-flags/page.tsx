@@ -102,7 +102,7 @@ export default function FeatureFlagsPage() {
         <div className="flex flex-wrap gap-2">
           <input
             type="text"
-            placeholder="key（小寫英數底線；例：new_meeting_ui）"
+            placeholder="key（小寫英數底線；例：new_feature_ui）"
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             className="input min-w-[14rem] flex-1 font-mono text-xs"

@@ -557,131 +557,6 @@ async def _emit_org_channels(
     return len(channel_ids)
 
 
-# ── 會議 ──────────────────────────────────────────────────────────────────────
-
-
-async def emit_meeting_invited(db: AsyncSession, meeting: Any) -> None:
-    """新會議建立/發布；推 org channel + 與會者 DM（在 dispatcher 端套 preference）。"""
-    fields: list[EmbedField] = []
-    if dt := _fmt_dt(getattr(meeting, "starts_at", None)):
-        fields.append({"name": "開會時間", "value": dt, "inline": True})
-    if loc := getattr(meeting, "location", None):
-        fields.append({"name": "地點", "value": str(loc), "inline": True})
-    if chair := getattr(meeting, "chair_name", None):
-        fields.append({"name": "主席", "value": str(chair), "inline": True})
-    link = f"/meetings/{meeting.id}"
-    embed = build_embed(
-        Domain.MEETING,
-        Severity.INFO,
-        title=f"開會通知：{meeting.title}",
-        body=getattr(meeting, "description", None),
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEETING)
-    components_list = [components] if components else None
-    await _emit_org_channels(
-        db,
-        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
-        embed=embed,
-        components=components_list,
-        thread_name=f"會議：{meeting.title[:80]}",
-    )
-
-
-async def emit_meeting_agenda_changed(db: AsyncSession, meeting: Any) -> None:
-    link = f"/meetings/{meeting.id}"
-    embed = build_embed(
-        Domain.MEETING,
-        Severity.WARNING,
-        title=f"議程變更：{meeting.title}",
-        body="議程或會議資訊已更新，請至平台檢視最新版本。",
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEETING)
-    await _emit_org_channels(
-        db,
-        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
-async def emit_meeting_minutes_published(db: AsyncSession, meeting: Any) -> None:
-    link = f"/meetings/{meeting.id}"
-    embed = build_embed(
-        Domain.MEETING,
-        Severity.SUCCESS,
-        title=f"會議紀錄發布：{meeting.title}",
-        body="會議紀錄已發布，可上平台檢視全文與決議。",
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEETING)
-    await _emit_org_channels(
-        db,
-        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
-        embed=embed,
-        components=[components] if components else None,
-        thread_name=f"討論：{meeting.title[:80]}",
-    )
-
-
-# ── 行事曆 ────────────────────────────────────────────────────────────────────
-
-
-async def emit_calendar_event_published(db: AsyncSession, event: Any) -> None:
-    fields: list[EmbedField] = []
-    if dt := _fmt_dt(getattr(event, "starts_at", None)):
-        fields.append({"name": "開始時間", "value": dt, "inline": True})
-    if dt := _fmt_dt(getattr(event, "ends_at", None)):
-        fields.append({"name": "結束時間", "value": dt, "inline": True})
-    if loc := getattr(event, "location", None):
-        fields.append({"name": "地點", "value": str(loc), "inline": True})
-    link = getattr(event, "href", None) or f"/calendar/events/{event.id}"
-    embed = build_embed(
-        Domain.CALENDAR,
-        Severity.INFO,
-        title=f"新行事曆：{event.title}",
-        body=getattr(event, "description", None),
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.CALENDAR)
-    await _emit_org_channels(
-        db,
-        org_ids={event.org_id} if getattr(event, "org_id", None) else set(),
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
-async def emit_calendar_event_reminder(
-    db: AsyncSession, event: Any, user_id: uuid.UUID, lead: str = "即將開始"
-) -> None:
-    """提醒個別參與者；dispatcher 套 preference + quiet hours。"""
-    fields: list[EmbedField] = []
-    if dt := _fmt_dt(getattr(event, "starts_at", None)):
-        fields.append({"name": "開始時間", "value": dt, "inline": True})
-    if loc := getattr(event, "location", None):
-        fields.append({"name": "地點", "value": str(loc), "inline": True})
-    link = getattr(event, "href", None) or f"/calendar/events/{event.id}"
-    embed = build_embed(
-        Domain.CALENDAR,
-        Severity.WARNING,
-        title=f"行事曆提醒（{lead}）：{event.title}",
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.CALENDAR)
-    await emit_user_dm(
-        db,
-        user_id=user_id,
-        embed=embed,
-        components=[components] if components else None,
-        category="calendar_reminder",
-    )
-
-
 # ── 問卷 ──────────────────────────────────────────────────────────────────────
 
 
@@ -1045,12 +920,7 @@ __all__ = [
     "consume_open_token",
     "create_open_url",
     "emit_announcement_notice",
-    "emit_calendar_event_published",
-    "emit_calendar_event_reminder",
     "emit_document_pending_to_approver",
-    "emit_meeting_agenda_changed",
-    "emit_meeting_invited",
-    "emit_meeting_minutes_published",
     "emit_moderation_log",
     "emit_public_document_notice",
     "emit_regulation_published",

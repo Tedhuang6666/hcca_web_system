@@ -16,7 +16,6 @@ from api.core.clock import local_today
 from api.core.config import settings
 from api.models.announcement import Announcement
 from api.models.document import Document
-from api.models.meeting import Meeting
 from api.models.org import Position, UserPosition
 from api.models.regulation import Regulation
 from api.models.user import User
@@ -26,7 +25,7 @@ from api.services.school_class import get_user_active_class_ids
 
 logger = logging.getLogger(__name__)
 
-SearchKind = Literal["document", "regulation", "meeting", "announcement"]
+SearchKind = Literal["document", "regulation", "announcement"]
 _REBUILD_BATCH_SIZE = 500
 _FILTERABLE_ATTRIBUTES = [
     "kind",
@@ -124,7 +123,6 @@ def _meili_visibility_filter(
         [
             f"({document_filter})",
             '(kind = "regulation" AND is_published = true)',
-            '(kind = "meeting" AND status != "draft")',
             '(kind = "announcement" AND is_published = true AND audience_type = "all")',
         ]
     )
@@ -154,7 +152,6 @@ async def search(
                         '(kind = "document" AND (visibility_level = "publicly_open" OR is_public = true)) '
                         'OR (kind = "regulation" AND is_published = true) '
                         'OR (kind = "announcement" AND is_published = true AND audience_type = "all") '
-                        'OR (kind = "meeting" AND status != "draft")'
                     )
                 else:
                     org_ids, subject_org_ids, class_ids, email = await _viewer_visibility(
@@ -254,21 +251,6 @@ async def _sql_fallback(
             "href": f"/regulations/{reg.id}",
         }
         for reg in regs
-    )
-
-    meeting_q = select(Meeting).where(
-        Meeting.title.ilike(pattern, escape="\\"), Meeting.status != "draft"
-    )
-    meetings = (await db.execute(meeting_q.limit(limit))).scalars()
-    results.extend(
-        {
-            "id": str(meeting.id),
-            "kind": "meeting",
-            "title": meeting.title,
-            "summary": meeting.description or "",
-            "href": f"/meetings/{meeting.id}",
-        }
-        for meeting in meetings
     )
 
     ann_q = select(Announcement).where(Announcement.title.ilike(pattern, escape="\\"))
@@ -379,18 +361,6 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
             "is_published": reg.published_at is not None,
         }
 
-    def meeting_payload(meeting: Meeting) -> dict[str, Any]:
-        return {
-            "id": f"meeting-{meeting.id}",
-            "kind": "meeting",
-            "title": meeting.title,
-            "summary": meeting.description or "",
-            "href": f"/meetings/{meeting.id}",
-            "content": meeting.description or "",
-            "updated_at": meeting.updated_at.isoformat() if meeting.updated_at else None,
-            "status": getattr(meeting.status, "value", str(meeting.status)),
-        }
-
     def announcement_payload(ann: Announcement) -> dict[str, Any]:
         return {
             "id": f"announcement-{ann.id}",
@@ -411,7 +381,6 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
             (selectinload(Document.approvals), selectinload(Document.recipients)),
         ),
         (Regulation, regulation_payload, ()),
-        (Meeting, meeting_payload, ()),
         (Announcement, announcement_payload, ()),
     )
     for model, builder, options in sources:

@@ -14,10 +14,6 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
     "document_approved",
     "document_rejected",
     "document_recalled",
-    # 議事
-    "meeting_invited",
-    "meeting_today",
-    "meeting_minutes_ready",
     # 法規
     "regulation_review_assigned",
     "regulation_publish_ready",
@@ -35,9 +31,7 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
     # 問卷 / 公告
     "survey_invitation",
     "announcement",
-    # 行事曆 / 工作
-    "calendar_event_invited",
-    "calendar_event_updated",
+    # 工作
     "work_item_assigned",
     "work_item_due",
     # 系統
@@ -51,7 +45,6 @@ _EMAIL_DEFAULT_ON: frozenset[str] = frozenset(
         "document_approved",
         "document_rejected",
         "document_recalled",
-        "meeting_invited",
         "regulation_publish_ready",
         "petition_received",
         "petition_updated",
@@ -69,9 +62,6 @@ TYPE_LABELS: dict[str, str] = {
     "document_approved": "公文核准",
     "document_rejected": "公文退回",
     "document_recalled": "公文撤回",
-    "meeting_invited": "會議邀請",
-    "meeting_today": "今日會議提醒",
-    "meeting_minutes_ready": "會議紀錄發布",
     "regulation_review_assigned": "法規排入議程",
     "regulation_publish_ready": "法規待公布",
     "regulation_published": "法規已公布",
@@ -85,8 +75,6 @@ TYPE_LABELS: dict[str, str] = {
     "shop_order_paid": "商品訂單付款",
     "survey_invitation": "問卷邀請",
     "announcement": "公告通知",
-    "calendar_event_invited": "行事曆邀請",
-    "calendar_event_updated": "行事曆異動",
     "work_item_assigned": "工作指派",
     "work_item_due": "工作期限",
     "system": "系統通知",
@@ -167,9 +155,6 @@ TYPE_MODULE_MAP: dict[str, str] = {
     "document_approved": "document",
     "document_rejected": "document",
     "document_recalled": "document",
-    "meeting_invited": "meeting",
-    "meeting_today": "meeting",
-    "meeting_minutes_ready": "meeting",
     "regulation_review_assigned": "regulation",
     "regulation_publish_ready": "regulation",
     "regulation_published": "regulation",
@@ -183,8 +168,6 @@ TYPE_MODULE_MAP: dict[str, str] = {
     "shop_order_paid": "shop",
     "survey_invitation": "survey",
     "announcement": "announcement",
-    "calendar_event_invited": "calendar",
-    "calendar_event_updated": "calendar",
     "work_item_assigned": "work",
     "work_item_due": "work",
     "system": "system",
@@ -192,13 +175,11 @@ TYPE_MODULE_MAP: dict[str, str] = {
 
 MODULE_LABELS: dict[str, str] = {
     "document": "公文",
-    "meeting": "會議",
     "regulation": "法規",
     "petition": "陳情",
     "shop": "購票",
     "survey": "問卷",
     "announcement": "公告",
-    "calendar": "行事曆",
     "work": "工作",
     "system": "系統",
 }

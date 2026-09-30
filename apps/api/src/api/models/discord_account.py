@@ -17,8 +17,6 @@ from api.models.types import JSONDict, JSONList
 
 DEFAULT_DM_CATEGORIES: dict[str, bool] = {
     "document_pending": True,
-    "meeting_invited": True,
-    "calendar_reminder": True,
     "survey_closing": True,
     "shop_ready": True,
     "tenure": True,

@@ -32,9 +32,6 @@ const NOTIFICATION_LABELS: Record<string, string> = {
   document_approved: "公文核准",
   document_rejected: "公文退回",
   document_recalled: "公文撤回",
-  meeting_invited: "會議邀請",
-  meeting_today: "今日會議提醒",
-  meeting_minutes_ready: "會議紀錄發布",
   regulation_review_assigned: "法規排程",
   regulation_publish_ready: "法規待公布",
   regulation_published: "法規已公布",
@@ -48,8 +45,6 @@ const NOTIFICATION_LABELS: Record<string, string> = {
   shop_order_paid: "購票付款",
   survey_invitation: "問卷邀請",
   announcement: "公告通知",
-  calendar_event_invited: "行事曆邀請",
-  calendar_event_updated: "行事曆異動",
   work_item_assigned: "工作指派",
   work_item_due: "工作期限",
   system: "系統通知",
@@ -57,13 +52,11 @@ const NOTIFICATION_LABELS: Record<string, string> = {
 
 const MODULE_LABELS: Record<string, string> = {
   document: "公文",
-  meeting: "會議",
   regulation: "法規",
   petition: "陳情",
   shop: "購票",
   survey: "問卷",
   announcement: "公告",
-  calendar: "行事曆",
   work: "工作",
   system: "系統",
 };

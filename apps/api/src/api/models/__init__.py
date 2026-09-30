@@ -19,18 +19,6 @@ from api.models.api_key import ApiKey  # noqa: F401
 from api.models.audit_anchor import AuditLogAnchor  # noqa: F401
 from api.models.audit_log import AuditLog  # noqa: F401
 from api.models.backup_record import BackupKind, BackupRecord, BackupStatus  # noqa: F401
-from api.models.calendar import (  # noqa: F401
-    CalendarEvent,
-    CalendarEventChecklistItem,
-    CalendarEventLink,
-    CalendarEventParticipant,
-    CalendarEventStatus,
-    CalendarEventType,
-    CalendarLinkType,
-    CalendarParticipantResponse,
-    CalendarParticipantRole,
-    CalendarVisibility,
-)
 from api.models.council_proposal import (  # noqa: F401
     CouncilProposal,
     CouncilProposalCaseType,
@@ -125,7 +113,6 @@ from api.models.finance import (  # noqa: F401
     JournalLine,
     JournalStatus,
 )
-from api.models.google_calendar import OrgGoogleCalendarConfig  # noqa: F401
 from api.models.governance import (  # noqa: F401
     AutomationRule,
     AutomationRuleStatus,
@@ -182,40 +169,6 @@ from api.models.meal import (  # noqa: F401
     MealVendorStatus,
     MenuItem,
     MenuSchedule,
-)
-from api.models.meeting import (  # noqa: F401
-    AgendaItemType,
-    ArtifactLinkType,
-    AttendanceRole,
-    AttendanceSourceType,
-    AttendanceStatus,
-    BallotChoice,
-    Meeting,
-    MeetingAgendaAttachment,
-    MeetingAgendaItem,
-    MeetingAgendaRecusal,
-    MeetingArtifactLink,
-    MeetingAttendance,
-    MeetingAttendanceSource,
-    MeetingBallot,
-    MeetingBillStage,
-    MeetingDecision,
-    MeetingDecisionStatus,
-    MeetingEvent,
-    MeetingMode,
-    MeetingMotion,
-    MeetingMotionStatus,
-    MeetingMotionType,
-    MeetingRequest,
-    MeetingRequestStatus,
-    MeetingRequestType,
-    MeetingScreenState,
-    MeetingStatus,
-    MeetingVote,
-    ScreenReadingMode,
-    VoteRecordMethod,
-    VoteStatus,
-    VoteVisibility,
 )
 from api.models.merchandise_submission import (  # noqa: F401
     MerchandiseSubmission,

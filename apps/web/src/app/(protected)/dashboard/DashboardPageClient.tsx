@@ -3,9 +3,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
+  FileText, ListChecks, Scale, Megaphone, MessageSquare,
   CheckSquare, ChevronRight, Plus, Loader2, Clock, ArrowUpRight,
-  ShoppingCart, CalendarDays, ShieldCheck,
+  ShoppingCart, ShieldCheck,
   Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
 } from "lucide-react";
 import { announcementsApi } from "@/lib/api/announcements";
@@ -55,25 +55,21 @@ const HINT_LABEL: Record<string, string> = {
 
 const MODULE_LABEL: Record<TaskModule, string> = {
   document: "公文",
-  meeting: "議事",
   regulation: "法規",
   petition: "陳情",
   survey: "問卷",
   shop: "商品",
   announcement: "公告",
-  calendar: "行事曆",
   work_item: "工作",
 };
 
 const TASK_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
   document: (p) => <FileText {...p} />,
-  meeting: (p) => <Landmark {...p} />,
   regulation: (p) => <Scale {...p} />,
   petition: (p) => <MessageSquare {...p} />,
   survey: (p) => <CheckSquare {...p} />,
   shop: (p) => <ShoppingCart {...p} />,
   announcement: (p) => <Megaphone {...p} />,
-  calendar: (p) => <CalendarDays {...p} />,
   work_item: (p) => <ListChecks {...p} />,
 };
 
@@ -622,9 +618,6 @@ function getQuickActions(
   if (isOperator || can("document:draft")) {
     actions.unshift({ href: "/documents/new", label: "建立公文", detail: "套範本、送簽核", icon: FileText, tone: "primary" });
   }
-  if (canAny("meeting:manage", "meeting:create")) {
-    actions.splice(1, 0, { href: "/meetings", label: "議事管理", detail: "議程、出席、決議", icon: Landmark });
-  }
   return actions.slice(0, 6);
 }
 
@@ -647,7 +640,6 @@ function getServiceActions(
       { href: "/announcements", label: "看校內公告", detail: "掌握近期校務與活動", icon: Bell },
       { href: "/surveys", label: "問卷與回覆", detail: "查看需協助的問卷事項", icon: PenLine },
       { href: "/exam-papers", label: "段考題庫", detail: "查找與管理教學資料", icon: FileText },
-      { href: "/calendar", label: "查看行事曆", detail: "會議、活動與重要日期", icon: CalendarDays },
     ];
     if (can("class:shop_collect")) {
       teacherActions.splice(1, 0, {
@@ -675,9 +667,6 @@ function getServiceActions(
     { href: "/announcements", label: "發布與公告", detail: "公告、電子郵件與通知", icon: Megaphone },
     { href: "/search", label: "全站搜尋", detail: "找公文、法規、會議與公告", icon: Search },
   ];
-  if (canAny("meeting:manage", "meeting:create")) {
-    actions.splice(2, 0, { href: "/meetings", label: "議事管理", detail: "議程、出席、決議", icon: Landmark });
-  }
   return actions.slice(0, 6);
 }
 

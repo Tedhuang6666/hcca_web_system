@@ -61,7 +61,6 @@ from api.routers import (
     api_keys,
     audit,
     auth,
-    calendar,
     council_proposals,
     dashboard,
     data_lifecycle,
@@ -80,7 +79,6 @@ from api.routers import (
     judicial_petitions,
     line_webhook,
     loans,
-    meetings,
     merchandise_submissions,
     metrics_endpoint,
     mfa,
@@ -368,8 +366,6 @@ def create_app() -> FastAPI:
     # GET /{prefix}/__module_health__ 給斷路器的 half-open 探測使用。
     attach_module_health(documents.router, module_id="documents")
     attach_module_health(regulations.router, module_id="regulations")
-    attach_module_health(meetings.router, module_id="meetings")
-    attach_module_health(calendar.router, module_id="calendar")
     attach_module_health(council_proposals.router, module_id="councilProposals")
     attach_module_health(judicial_petitions.router, module_id="judicialPetitions")
     attach_module_health(announcements.router, module_id="announcements")
@@ -397,8 +393,6 @@ def create_app() -> FastAPI:
     for _mid in (
         "documents",
         "regulations",
-        "meetings",
-        "calendar",
         "councilProposals",
         "judicialPetitions",
         "announcements",
@@ -465,9 +459,6 @@ def create_app() -> FastAPI:
     app.include_router(merchandise_submissions.router)
     app.include_router(seating.router)
     app.include_router(school_class.router)
-    app.include_router(meetings.router)
-    app.include_router(meetings.public_router)
-    app.include_router(calendar.router)
     app.include_router(survey.router)
     app.include_router(notifications.router)
     app.include_router(email.router)

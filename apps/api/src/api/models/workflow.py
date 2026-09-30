@@ -25,7 +25,6 @@ class WorkflowSourceType(enum.StrEnum):
     COUNCIL_PROPOSAL = "council_proposal"
     JUDICIAL_PETITION = "judicial_petition"
     ACTIVITY = "activity"
-    MEETING = "meeting"
 
 
 class WorkflowEventType(enum.StrEnum):

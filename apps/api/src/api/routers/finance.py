@@ -64,7 +64,6 @@ from api.schemas.finance import (
     FinanceSettlementOut,
     FundAccountCreate,
     FundAccountOut,
-    GoogleSheetsExportIn,
     JournalCreate,
     JournalOut,
     LedgerCreate,
@@ -1419,16 +1418,3 @@ async def download_item_evidence(evidence_id: uuid.UUID, db: DbDep, user: Curren
         ),
         headers={"Cache-Control": "private, no-store"},
     )
-
-
-@router.post(
-    "/ledgers/{ledger_id}/google-sheets/export",
-    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
-)
-async def export_google_sheets(
-    ledger_id: uuid.UUID, body: GoogleSheetsExportIn, db: DbDep, _: CurrentUser
-) -> dict[str, str]:
-    ledger = await service.get_ledger(db, ledger_id)
-    await service.export_google_sheets(db, ledger, body.spreadsheet_id)
-    await db.commit()
-    return {"status": "synced", "spreadsheet_id": body.spreadsheet_id}

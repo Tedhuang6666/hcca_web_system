@@ -19,10 +19,8 @@ from api.core.load_signals import snapshot as load_snapshot
 from api.core.maintenance import get_load_shed_force_mode, get_maintenance_state
 from api.core.metrics import get_celery_stats, get_db_pool_stats, get_redis_stats
 from api.models.announcement import Announcement
-from api.models.calendar import CalendarEvent, CalendarEventParticipant
 from api.models.discord_account import DEFAULT_DM_CATEGORIES, DiscordNotificationPreference
 from api.models.document import Document, DocumentStatus
-from api.models.meeting import Meeting, MeetingStatus
 from api.models.org import Position, UserPosition
 from api.models.petition import PetitionStatus
 from api.models.regulation import Regulation, RegulationArticle
@@ -30,18 +28,14 @@ from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.announcement import AnnouncementAudience, AnnouncementCreate
-from api.schemas.calendar import CalendarEventCreate
 from api.schemas.document import RejectMode
-from api.schemas.meeting import MeetingCreate
 from api.schemas.petition import PetitionCreate, PetitionInternalNoteCreate, PetitionStatusUpdate
 from api.schemas.survey import SurveyCreate
 from api.schemas.work_item import WorkItemCreate
 from api.services import announcement as announcement_svc
 from api.services import audit as audit_svc
-from api.services import calendar as calendar_svc
 from api.services import defense as defense_svc
 from api.services import document as document_svc
-from api.services import meeting as meeting_svc
 from api.services import petition as petition_svc
 from api.services import survey as survey_svc
 from api.services import work_item as work_item_svc
@@ -228,8 +222,6 @@ async def execute(
 
     if operation == "dashboard":
         inbox = await build_task_inbox(db, user)
-        now = datetime.now(UTC)
-        horizon = now + timedelta(days=14)
         positions = (
             await db.execute(
                 select(Position.name)
@@ -240,38 +232,6 @@ async def execute(
             )
         ).scalars()
         cases = await petition_svc.list_cases(db, assigned_to_id=user.id, limit=25)
-        meetings = (
-            await db.execute(
-                select(Meeting)
-                .where(
-                    Meeting.starts_at.is_not(None),
-                    Meeting.starts_at >= now,
-                    Meeting.starts_at <= horizon,
-                    Meeting.status.in_(
-                        [MeetingStatus.DRAFT, MeetingStatus.CONFIRMED, MeetingStatus.ACTIVE]
-                    ),
-                )
-                .order_by(Meeting.starts_at)
-                .limit(25)
-            )
-        ).scalars()
-        calendar = (
-            await db.execute(
-                select(CalendarEvent)
-                .join(
-                    CalendarEventParticipant,
-                    CalendarEventParticipant.event_id == CalendarEvent.id,
-                )
-                .where(
-                    CalendarEventParticipant.user_id == user.id,
-                    CalendarEvent.starts_at >= now,
-                    CalendarEvent.starts_at <= horizon,
-                    CalendarEvent.is_active.is_(True),
-                )
-                .order_by(CalendarEvent.starts_at)
-                .limit(25)
-            )
-        ).scalars()
         return {
             "display_name": user.display_name,
             "positions": list(positions),
@@ -284,24 +244,6 @@ async def execute(
                     "status": str(item.status),
                 }
                 for item in cases
-            ],
-            "meetings": [
-                {
-                    "id": str(item.id),
-                    "title": item.title,
-                    "starts_at": item.starts_at.isoformat() if item.starts_at else None,
-                    "location": item.location,
-                }
-                for item in meetings
-            ],
-            "calendar": [
-                {
-                    "id": str(item.id),
-                    "title": item.title,
-                    "starts_at": item.starts_at.isoformat(),
-                    "location": item.location,
-                }
-                for item in calendar
             ],
             "open_url": await create_open_url(user.id, "/dashboard"),
         }
@@ -636,71 +578,6 @@ async def execute(
             ]
         }
 
-    if operation == "browse_meetings":
-        now = datetime.now(UTC)
-        rows = (
-            await db.execute(
-                select(Meeting)
-                .where(
-                    Meeting.starts_at.is_not(None),
-                    Meeting.starts_at >= now,
-                    Meeting.starts_at <= now + timedelta(days=14),
-                    Meeting.status.in_(
-                        [
-                            MeetingStatus.DRAFT,
-                            MeetingStatus.CONFIRMED,
-                            MeetingStatus.CHECKIN,
-                            MeetingStatus.ACTIVE,
-                            MeetingStatus.BREAK,
-                            MeetingStatus.PAUSED,
-                        ]
-                    ),
-                )
-                .order_by(Meeting.starts_at)
-                .limit(10)
-            )
-        ).scalars()
-        return {
-            "items": [
-                {
-                    "title": row.title,
-                    "starts_at": row.starts_at.isoformat() if row.starts_at else None,
-                    "location": row.location,
-                    "status": str(row.status),
-                    "url": await create_open_url(user.id, f"/meetings/{row.id}"),
-                }
-                for row in rows
-            ]
-        }
-
-    if operation == "browse_events":
-        now = datetime.now(UTC)
-        day_start = datetime.combine(now.date(), time.min, tzinfo=UTC)
-        rows = (
-            await db.execute(
-                select(CalendarEvent)
-                .where(
-                    CalendarEvent.starts_at >= day_start,
-                    CalendarEvent.starts_at < day_start + timedelta(days=1),
-                    CalendarEvent.is_active.is_(True),
-                )
-                .order_by(CalendarEvent.starts_at)
-                .limit(10)
-            )
-        ).scalars()
-        return {
-            "items": [
-                {
-                    "title": row.title,
-                    "starts_at": row.starts_at.isoformat(),
-                    "ends_at": row.ends_at.isoformat() if row.ends_at else None,
-                    "location": row.location,
-                    "url": await create_open_url(user.id, row.href or f"/calendar/events/{row.id}"),
-                }
-                for row in rows
-            ]
-        }
-
     if operation in {"browse_surveys", "survey_choices"}:
         rows = (
             await db.execute(
@@ -868,11 +745,9 @@ async def execute(
             raise DiscordCommandError("path 必須以 / 開頭。")
         return {"url": await create_open_url(user.id, path)}
 
-    if operation in {"announcement_create", "meeting_create", "calendar_create", "survey_create"}:
+    if operation in {"announcement_create", "survey_create"}:
         permission = {
             "announcement_create": "announcement:create",
-            "meeting_create": "meeting:create",
-            "calendar_create": "calendar:create",
             "survey_create": "survey:create",
         }[operation]
         if not _has_permission(user, codes, permission):
@@ -895,33 +770,6 @@ async def execute(
                     is_urgent=bool(arguments.get("is_urgent")),
                     org_id=org_id,
                     audience_type=AnnouncementAudience.ALL,
-                ),
-                created_by=user.id,
-            )
-        elif operation == "meeting_create":
-            created = await meeting_svc.create_meeting(
-                db,
-                data=MeetingCreate(
-                    title=str(arguments["title"]),
-                    org_id=org_id,
-                    location=arguments.get("location"),
-                    starts_at=(
-                        datetime.fromisoformat(arguments["starts_at"])
-                        if arguments.get("starts_at")
-                        else None
-                    ),
-                ),
-                created_by=user.id,
-            )
-        elif operation == "calendar_create":
-            created = await calendar_svc.create_event(
-                db,
-                data=CalendarEventCreate(
-                    org_id=org_id,
-                    title=str(arguments["title"]),
-                    description=arguments.get("description"),
-                    location=arguments.get("location"),
-                    starts_at=datetime.fromisoformat(str(arguments["starts_at"])),
                 ),
                 created_by=user.id,
             )

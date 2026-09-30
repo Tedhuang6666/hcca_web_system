@@ -74,8 +74,6 @@ CLASS_ROLE_DEFINITIONS: dict[str, tuple[str, list[str], int]] = {
         [
             "class:view_members",
             "class:shop_collect",
-            "meeting:vote",
-            "meeting:view_all",
             "regulation:create",
             "regulation:submit",
             "document:create",
@@ -930,8 +928,6 @@ async def get_or_create_council_representative_position(
     )
     codes = set(existing_codes.scalars().all())
     for code in [
-        "meeting:vote",
-        "meeting:view_all",
         "regulation:create",
         "regulation:submit",
         "document:create",

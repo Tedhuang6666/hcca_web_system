@@ -9,7 +9,7 @@
 
 事件型別命名規範（建議）：
 - `<domain>.<action>` 例如 `document.approved`、`announcement.published`
-- `<domain>.<entity>.<action>` 例如 `meeting.attendance.updated`
+- `<domain>.<entity>.<action>` 例如 `announcement.published`
 """
 
 from __future__ import annotations

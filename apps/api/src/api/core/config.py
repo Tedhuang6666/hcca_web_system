@@ -84,10 +84,8 @@ class Settings(BaseSettings):
         "/dashboard",
         "/tasks",
         "/work-items",
-        "/calendar",
         "/documents",
         "/regulations",
-        "/meetings",
         "/council-proposals",
         "/judicial-petitions",
         "/petitions",
@@ -292,7 +290,6 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = Field(default="")
     GOOGLE_CLIENT_SECRET: str = Field(default="")
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
-    GOOGLE_CALENDAR_REDIRECT_URI: str = "http://localhost:8000/calendar/google/callback"
     GOOGLE_TASKS_REDIRECT_URI: str = "http://localhost:8000/user/google-tasks/callback"
     LOGIN_ALLOWED_EMAIL_DOMAINS: list[str] = Field(
         default_factory=lambda: ["hchs.hc.edu.tw"],
@@ -629,8 +626,6 @@ class Settings(BaseSettings):
 
         if _is_local_url(self.GOOGLE_REDIRECT_URI):
             self.GOOGLE_REDIRECT_URI = f"{origin}/auth/google/callback"
-        if _is_local_url(self.GOOGLE_CALENDAR_REDIRECT_URI):
-            self.GOOGLE_CALENDAR_REDIRECT_URI = f"{origin}/calendar/google/callback"
         if _is_local_url(self.GOOGLE_TASKS_REDIRECT_URI):
             self.GOOGLE_TASKS_REDIRECT_URI = f"{origin}/user/google-tasks/callback"
         if _is_local_url(self.DISCORD_REDIRECT_URI):

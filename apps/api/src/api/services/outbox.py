@@ -105,8 +105,6 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
     elif etype == "module.recovered":
         # 模組恢復事件（INFO 等級），與 admin.notification 同邏輯
         await _fan_out_admin_notification(db, payload)
-    elif etype == "meeting.minutes_ready":
-        await _handle_meeting_minutes_ready(db, payload)
     elif etype == "regulation.published":
         await _handle_regulation_published(db, payload)
     elif etype == "shop.order_confirmed":
@@ -135,95 +133,6 @@ async def _fan_out_admin_notification(db: AsyncSession, payload: dict) -> None:
                 title=str(payload.get("title", "系統通知"))[:200],
                 body=str(payload.get("body", "")),
                 link=payload.get("link"),
-            )
-        )
-
-
-async def _handle_meeting_minutes_ready(db: AsyncSession, payload: dict) -> None:
-    """結束會議後建立「會議紀錄準備中」通知信草稿供主席確認後發送。"""
-    import uuid as _uuid
-
-    from sqlalchemy import select
-
-    from api.core.config import settings
-    from api.models.email_message import EmailCampaignRecipient, EmailMessage, EmailStatus
-    from api.models.user import User
-
-    meeting_id = payload.get("meeting_id")
-    meeting_title = payload.get("meeting_title", "會議")
-    attendee_ids = payload.get("attendee_ids", [])
-    actor_id = payload.get("actor_id")
-    org_id = payload.get("org_id")
-    if not meeting_id or not attendee_ids:
-        return
-
-    idem_key = f"meeting-minutes-ready-{meeting_id}"
-    base = settings.FRONTEND_BASE_URL.rstrip("/")
-    existing = await db.scalar(select(EmailMessage).where(EmailMessage.idempotency_key == idem_key))
-    if existing:
-        return
-    ids = [_uuid.UUID(uid) for uid in attendee_ids]
-    users = (await db.execute(select(User).where(User.id.in_(ids)))).scalars().all()
-    external_emails = [u.email for u in users if u.email]
-    rv = [
-        {
-            "user_id": str(u.id),
-            "email": u.email,
-            "name": u.display_name or u.email,
-            "variables": {"姓名": u.display_name or u.email},
-        }
-        for u in users
-        if u.email
-    ]
-    context = {
-        "blocks": [],
-        "buttons": [
-            {"url": f"{base}/meetings/{meeting_id}", "label": "查看會議", "style": "primary"}
-        ],
-        "cta_url": "",
-        "heading": f"「{meeting_title}」已圓滿結束",
-        "card_rows": [{"label": "會議", "value": meeting_title}],
-        "cta_label": "",
-        "footer_text": "",
-        "accent_color": "#111827",
-        "preview_text": f"{meeting_title} 會議紀錄整理中",
-        "background_color": "#eef2f7",
-        "banner_image_alt": "",
-        "banner_image_url": "",
-        "body_line_height": 1.6,
-        "paragraph_spacing": 18,
-        "show_system_footer": True,
-        "content_background_color": "#ffffff",
-    }
-    msg = EmailMessage(
-        sender_id=_uuid.UUID(actor_id) if actor_id else None,
-        org_id=_uuid.UUID(org_id) if org_id else None,
-        subject=f"【會議紀錄準備中】{meeting_title}",
-        body=f"### {{{{ 姓名 }}}}您好，\n\n「{meeting_title}」已圓滿結束，會議紀錄正在整理中，完成後將另行公告。",
-        template="generic",
-        context=context,
-        recipient_spec={"external_emails": external_emails},
-        variable_definitions=[
-            {"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}
-        ],
-        default_variables={"姓名": "您"},
-        recipient_variables=rv,
-        resolved_emails=external_emails,
-        recipient_count=len(external_emails),
-        status=EmailStatus.DRAFT,
-        idempotency_key=idem_key,
-    )
-    db.add(msg)
-    await db.flush()
-    for recipient in rv:
-        db.add(
-            EmailCampaignRecipient(
-                message_id=msg.id,
-                user_id=_uuid.UUID(recipient["user_id"]),
-                email=recipient["email"],
-                name=recipient["name"],
-                variables=recipient["variables"],
-                status="queued",
             )
         )
 

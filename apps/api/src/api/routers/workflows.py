@@ -33,7 +33,6 @@ WorkflowManagerDep = Depends(
     require_any(
         PermissionCode.COUNCIL_PROPOSAL_MANAGE,
         PermissionCode.JUDICIAL_PETITION_MANAGE,
-        PermissionCode.MEETING_MANAGE,
         PermissionCode.ADMIN_ALL,
     )
 )
