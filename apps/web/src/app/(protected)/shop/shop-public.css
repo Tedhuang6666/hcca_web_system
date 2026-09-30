@@ -500,7 +500,7 @@
   position: relative;
   display: grid;
   width: min(100%, 58rem);
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1fr);
   overflow: auto;
   border: 1px solid var(--public-border);
@@ -582,6 +582,7 @@
 .shop-product-dialog-content {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   gap: 1.5rem;
   padding: clamp(1.25rem, 4vw, 2.5rem);
@@ -771,15 +772,20 @@
 @media (max-width: 759px) {
   .shop-product-dialog {
     grid-template-columns: 1fr;
+    max-height: calc(100dvh - 1rem);
   }
 
   .shop-product-dialog-media > img,
   .shop-product-dialog-placeholder {
-    min-height: min(62vw, 24rem);
+    min-height: min(50vw, 20rem);
   }
 
   .shop-product-dialog-media > img {
-    max-height: 24rem;
+    max-height: min(50vw, 20rem);
+  }
+
+  .shop-product-dialog-content {
+    overflow-y: auto;
   }
 }
 

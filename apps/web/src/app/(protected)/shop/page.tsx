@@ -150,10 +150,10 @@ function ProductModal({
   const available =
     Boolean(product && product.status === "active" && (product.is_unlimited || product.stock_quantity > 0));
   const canAddToCart = available && !classClosed;
-  const variantImage = variantGroups.reduce((current, group) => {
+  const variantImage = variantGroups.reduce<string | null>((current, group) => {
     const option = (group.options ?? []).find((o) => o.id === picked[group.id]);
     return option?.image_url || current;
-  }, product?.image_url ?? null);
+  }, null);
   const selectedMedia = selectedMediaIndex === null ? null : media[selectedMediaIndex] ?? null;
   const displayMedia = selectedMedia ?? (variantImage
     ? { image_url: variantImage, kind: "option" as const }
@@ -207,7 +207,7 @@ function ProductModal({
         aria-modal="true"
         aria-labelledby="product-modal-title"
         tabIndex={-1}
-        className="shop-product-dialog animate-scale-in">
+        className="shop-product-dialog min-w-0 animate-scale-in">
         <div className="shop-product-dialog-media">
           {product && displayMedia ? (
             // eslint-disable-next-line @next/next/no-img-element
