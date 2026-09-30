@@ -26,6 +26,8 @@ PROBES = (
     ("/api/docs", "disabled"),
     ("/api/openapi.json", "disabled"),
 )
+DEFAULT_INTERVAL_SECONDS = 45.0
+MIN_PUBLIC_INTERVAL_SECONDS = 45.0
 ALLOWED_HOSTS = {"hcca.tw", "127.0.0.1", "localhost", "::1"}
 
 
@@ -105,12 +107,15 @@ def classify(path: str, kind: str, status: int, headers, *, https: bool) -> dict
     return result
 
 
-def scan(target: str, *, interval: float = 1.0) -> dict:
+def scan(target: str, *, interval: float = DEFAULT_INTERVAL_SECONDS) -> dict:
     target = validate_target(target)
     report = {
         "target": target,
         "started_at": datetime.now(UTC).isoformat(),
-        "scope": "nine fixed GET paths; no redirects, login, body capture or active payloads",
+        "scope": (
+            "nine fixed GET paths; no redirects, login, body capture or active payloads; "
+            f"interval={interval:g}s"
+        ),
         "checks": [],
         "result": "incomplete",
     }
@@ -160,9 +165,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", default="https://hcca.tw")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=DEFAULT_INTERVAL_SECONDS,
+        help="seconds between public requests (minimum 45; default: 45)",
+    )
     args = parser.parse_args()
+    if not MIN_PUBLIC_INTERVAL_SECONDS <= args.interval <= 300:
+        parser.error("--interval must be between 45 and 300 seconds")
     try:
-        report = scan(args.target)
+        report = scan(args.target, interval=args.interval)
     except ValueError as error:
         parser.error(str(error))
     args.output.parent.mkdir(parents=True, exist_ok=True)

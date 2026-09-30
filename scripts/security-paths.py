@@ -14,7 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 HOST = "hcca.tw"
-INTERVAL_SECONDS = 1
+INTERVAL_SECONDS = 45.0
+MIN_PUBLIC_INTERVAL_SECONDS = 45.0
 TIMEOUT_SECONDS = 10
 PROBES = (
     ("/.env", "sensitive"),
@@ -59,11 +60,14 @@ def classify(kind: str, status: int, headers) -> str:
     return "observed"
 
 
-def scan() -> dict:
+def scan(*, interval: float = INTERVAL_SECONDS) -> dict:
     report = {
         "target": f"https://{HOST}",
         "method": "HEAD",
-        "scope": "12 fixed paths; one request per second; no redirects, auth or response bodies",
+        "scope": (
+            f"12 fixed paths; one request every {interval:g} seconds; "
+            "no redirects, auth or response bodies"
+        ),
         "started_at": datetime.now(UTC).isoformat(),
         "checks": [],
         "result": "incomplete",
@@ -80,7 +84,7 @@ def scan() -> dict:
     )
     for index, (path, kind) in enumerate(PROBES):
         if index:
-            time.sleep(INTERVAL_SECONDS)
+            time.sleep(max(0, interval))
         request = urllib.request.Request(
             f"https://{HOST}{path}",
             headers={"User-Agent": "HCCA-Authorized-Active-Path-Check/1.0"},
@@ -118,8 +122,16 @@ def scan() -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=INTERVAL_SECONDS,
+        help="seconds between public requests (minimum 45; default: 45)",
+    )
     args = parser.parse_args()
-    report = scan()
+    if not MIN_PUBLIC_INTERVAL_SECONDS <= args.interval <= 300:
+        parser.error("--interval must be between 45 and 300 seconds")
+    report = scan(interval=args.interval)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(f"Active path probes: {report['result']} ({len(report['checks'])}/12 HEAD requests)")

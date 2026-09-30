@@ -1,0 +1,16 @@
+[Unit]
+Description=HCCA authorized active security probes (%i)
+ConditionPathExists=%h/projects/main/scripts/security-schedule.py
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/main
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Asia/Taipei
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/.local/state/hcca-security
+ExecStart=/usr/bin/python3 %h/projects/main/scripts/security-schedule.py --mode %i
+TimeoutStartSec=15min

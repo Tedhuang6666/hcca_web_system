@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly HCCA fixed HEAD path enumeration
+
+[Timer]
+OnCalendar=Sun *-*-* 06:51:00
+AccuracySec=1min
+Unit=hcca-security@path-enumeration.service
+
+[Install]
+WantedBy=timers.target

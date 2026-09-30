@@ -2,8 +2,20 @@ name: Security regression and active public probes
 
 on:
   schedule:
-    - cron: "41 21 * * *" # 每日台北 05:41
+    - cron: "41 21 * * *" # 每日台北 05:41：DNS、輸入與認證邊界
+    - cron: "11 22 * * 0" # 每週日台北 06:11：HTTP 存取控制基線
+    - cron: "51 22 * * 0" # 每週日台北 06:51：固定路徑枚舉
   workflow_dispatch:
+    inputs:
+      scan_mode:
+        description: 公開站主動測試類型
+        type: choice
+        options:
+          - daily
+          - http-baseline
+          - path-enumeration
+        default: daily
+        required: true
   pull_request:
     paths:
       - "apps/api/**"
@@ -11,6 +23,9 @@ on:
       - "scripts/security-*.py"
       - "scripts/tests/test_security_*.py"
       - "security/**"
+      - "scripts/systemd/user/**"
+      - "scripts/install-security-timers.sh"
+      - "docs/SECURITY_TESTING.md"
       - ".github/workflows/security-regression.yml"
 
 permissions:
@@ -22,6 +37,7 @@ concurrency:
 
 jobs:
   regressions:
+    if: github.event_name != 'schedule' || github.event.schedule == '41 21 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -121,8 +137,8 @@ jobs:
           retention-days: 14
 
   production-active-probes:
-    # PR 上只跑隔離回歸；正式站只執行固定、低頻的主動 HTTP 探針。
-    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    # 每日只送 4 個輸入探針與 2 個認證邊界探針，避免集中觸發 WAF 門檻。
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && ((github.event_name == 'schedule' && github.event.schedule == '41 21 * * *') || (github.event_name == 'workflow_dispatch' && inputs.scan_mode == 'daily'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -130,14 +146,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Fixed active DNS candidate discovery
+        if: always()
         run: python3 scripts/security-dns.py --output security-reports/dns.json
-      - name: Nine active HTTP access and header controls
-        run: python3 scripts/security-baseline.py --output security-reports/http-controls.json
-      - name: Twelve fixed HEAD path probes, one per second
-        run: python3 scripts/security-paths.py --output security-reports/paths.json
       - name: Four rate-limited SQL injection and XSS probes
+        if: always()
         run: python3 scripts/security-active.py --output security-reports/active.json
       - name: Install checksum-pinned nuclei
+        id: install_nuclei
+        if: always()
         run: |
           curl --fail --silent --show-error --location --max-time 120 \
             https://github.com/projectdiscovery/nuclei/releases/download/v3.8.0/nuclei_3.8.0_linux_amd64.zip \
@@ -146,10 +162,45 @@ jobs:
           unzip -q "$RUNNER_TEMP/nuclei.zip" nuclei -d "$RUNNER_TEMP/nuclei-bin"
           echo "$RUNNER_TEMP/nuclei-bin" >> "$GITHUB_PATH"
       - name: Two reviewed active authentication-boundary probes
+        if: always() && steps.install_nuclei.outcome == 'success'
         run: python3 scripts/security-nuclei.py --output security-reports/nuclei.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: security-active-probes
+          name: security-daily-active-probes
+          path: security-reports/
+          retention-days: 14
+
+  production-http-baseline:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && ((github.event_name == 'schedule' && github.event.schedule == '11 22 * * 0') || (github.event_name == 'workflow_dispatch' && inputs.scan_mode == 'http-baseline'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Nine fixed HTTP access and header controls, one request per 45 seconds
+        run: python3 scripts/security-baseline.py --interval 45 --output security-reports/http-controls.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: security-weekly-http-baseline
+          path: security-reports/
+          retention-days: 14
+
+  production-path-enumeration:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && ((github.event_name == 'schedule' && github.event.schedule == '51 22 * * 0') || (github.event_name == 'workflow_dispatch' && inputs.scan_mode == 'path-enumeration'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Twelve fixed HEAD path probes, one request per 45 seconds
+        run: python3 scripts/security-paths.py --interval 45 --output security-reports/paths.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: security-weekly-path-enumeration
           path: security-reports/
           retention-days: 14

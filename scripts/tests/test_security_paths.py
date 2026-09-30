@@ -40,21 +40,22 @@ class FakeOpener:
 
 
 class ActivePathTests(unittest.TestCase):
-    def run_scan(self, statuses):
+    def run_scan(self, statuses, *, interval=scanner.INTERVAL_SECONDS, sleep=None):
         opener = FakeOpener(statuses)
         row = (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 443))
+        sleep = sleep or mock.Mock()
         with (
             mock.patch.object(scanner.socket, "getaddrinfo", return_value=[row]),
             mock.patch.object(scanner.urllib.request, "build_opener", return_value=opener),
-            mock.patch.object(scanner.time, "sleep"),
+            mock.patch.object(scanner.time, "sleep", sleep),
         ):
-            report = scanner.scan()
+            report = scanner.scan(interval=interval)
         return report, opener
 
     def test_scope_request_count_and_rate_are_fixed(self):
         self.assertEqual(scanner.HOST, "hcca.tw")
         self.assertEqual(len(scanner.PROBES), 12)
-        self.assertEqual(scanner.INTERVAL_SECONDS, 1)
+        self.assertEqual(scanner.INTERVAL_SECONDS, 45)
         self.assertEqual(scanner.TIMEOUT_SECONDS, 10)
 
     def test_head_probes_never_read_bodies_or_send_credentials(self):
@@ -70,6 +71,11 @@ class ActivePathTests(unittest.TestCase):
             )
         )
         self.assertNotIn("1.1.1.1", json.dumps(report))
+
+    def test_configured_interval_is_applied_between_all_requests(self):
+        sleep = mock.Mock()
+        self.run_scan([404] * len(scanner.PROBES), interval=45, sleep=sleep)
+        self.assertEqual(sleep.call_args_list, [mock.call(45)] * (len(scanner.PROBES) - 1))
 
     def test_sensitive_path_is_only_a_review_candidate(self):
         report, _ = self.run_scan([200, *([404] * (len(scanner.PROBES) - 1))])
