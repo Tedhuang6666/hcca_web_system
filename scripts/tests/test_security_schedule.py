@@ -72,11 +72,30 @@ class SecurityScheduleTests(unittest.TestCase):
         for mode, scanner_name in (
             ("http-baseline", "security-baseline.py"),
             ("path-enumeration", "security-paths.py"),
+            ("public-metadata", "security-metadata.py"),
         ):
             with self.subTest(mode=mode):
                 options = schedule.SCANS[mode][0]
                 self.assertEqual(options[1], scanner_name)
                 self.assertEqual(options[2], ("--interval", "45"))
+
+    def test_public_metadata_mode_runs_its_scanner(self):
+        calls = []
+
+        def fake_run(command, **_kwargs):
+            calls.append(command)
+            Path(command[command.index("--output") + 1]).write_text('{"result": "complete"}\n')
+            return subprocess.CompletedProcess(command, 0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            summary, exit_code = schedule.run_mode(
+                "public-metadata", report_dir=Path(temp_dir), runner=fake_run
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([Path(command[1]).name for command in calls], ["security-metadata.py"])
+        self.assertTrue(Path(calls[0][1]).is_file())
+        self.assertEqual(summary["scans"][0]["result"], "complete")
 
     def test_zero_exit_without_valid_report_is_review(self):
         def fake_run(command, **_kwargs):
