@@ -337,6 +337,10 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
   `/sitemap.xml` 為 200。HEAD 不讀內容；`/admin` 200 不等同授權繞過，404 也不能證明 origin 沒有檔案。
 - 匿名 HTTP 基線完成 9/9：首頁／登入頁 200，個人資料、通知與收款列表／摘要／CSV 匯出皆為 401，
   API 文件路徑為 404；安全標頭檢查沒有發現缺項。這驗證匿名邊界，不等同跨帳號 IDOR 測試。
+- 公開 metadata GET 均為 200：robots.txt 列 45 條規則，sitemap 含 49 條站內頁面路徑。另對八個
+  robots 禁止的登入頁面路由做無 Cookie GET，七個回 200、一個回 404；不讀本文。前端 route policy
+  將受保護頁面標成需登入，相關 11 個 route-access tests 通過，私人 API 也都回 401；目前沒有敏感資料
+  外洩證據，200 僅是待瀏覽器／API 交叉確認的頁面路徑候選。
 - 目前 WSL user timers 已啟用並設定 linger；每日 05:41、週日 06:11 與 06:51（台北時間）。GitHub
   workflow 仍未推送，正式站持續排程由本機 WSL 執行。正式站跨帳號 IDOR 仍需兩個專用測試帳號；
   不對 Cloudflare 共用 IP 或第三方 CNAME 執行 nmap／HTTP 掃描。
