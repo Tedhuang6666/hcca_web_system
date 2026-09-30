@@ -32,11 +32,13 @@ class ActiveDnsTests(unittest.TestCase):
 
     def test_scope_and_rate_are_fixed(self):
         self.assertEqual(scanner.HOST, "hcca.tw")
-        self.assertEqual(len(scanner.LABELS), 73)
+        self.assertEqual(len(scanner.LABELS), 123)
         self.assertEqual(len(set(scanner.LABELS)), len(scanner.LABELS))
         self.assertIn("posthug", scanner.LABELS)
         self.assertIn("api-v1", scanner.LABELS)
         self.assertIn("websocket", scanner.LABELS)
+        self.assertIn("student", scanner.LABELS)
+        self.assertIn("meilisearch", scanner.LABELS)
         self.assertEqual(scanner.INTERVAL_SECONDS, 1)
         self.assertTrue(scanner.DNS_OVER_HTTPS_URL.startswith("https://"))
         self.assertTrue(

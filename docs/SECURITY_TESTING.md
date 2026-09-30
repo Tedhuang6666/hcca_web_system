@@ -9,11 +9,12 @@ GitHub workflow 位於 [security-regression.yml](../.github/workflows/security-r
 `origin/main` 為 `798e3b281f52a6b4a5157c9bbcac1805885a65cb`；依使用者先前選擇，後續安全提交
 維持本機、不推送；遠端每日排程仍是舊版。本機 WSL 可安裝下述 user timers 執行最新版探針，
 不必推送到遠端。本機仍保留使用者的 `uv.lock` 變更。不執行 subfinder／amass 被動資產探索。
+本機 WSL DNS 詞表已由 73 擴至 123 個標籤；遠端 GitHub workflow 仍是 73 個，因安全變更維持本機提交。
 
 ## 可重跑入口
 
 ```bash
-# 固定 73 個子網域標籤的主動 DNS 發現；記錄解析候選的 CNAME，不連線至候選主機。
+# 本機固定 123 個子網域標籤的主動 DNS 發現；記錄候選 CNAME，不連線至候選主機。
 python3 scripts/security-dns.py --output /tmp/hcca-dns.json
 # 核准搜尋入口的四個主動輸入探針；固定每 10 秒一個請求，不保存回應本文。
 python3 scripts/security-active.py --output /tmp/hcca-active.json
@@ -85,7 +86,7 @@ exit `0` 表示限定規則完成且沒有中高風險警示，低風險與資�
 
 | 階段 | 執行方式與證據 | 進入下一階段的條件 |
 | --- | --- | --- |
-| 資產探索 | `scripts/security-dns.py` 對 73 個固定標籤主動解析、檢查兩個隨機 wildcard，並以 DoH 記錄解析候選的 CNAME；不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域或 CNAME 目標；確認第一方歸屬後才加入 HTTP 範圍 |
+| 資產探索 | 本機 `scripts/security-dns.py` 對 123 個固定標籤主動解析；遠端 workflow 尚為 73 個。兩邊均檢查隨機 wildcard、以 DoH 記錄候選 CNAME，不跑被動列舉 | 只記錄 DNS 候選，不連到未知子網域或 CNAME 目標；確認第一方歸屬後才加入 HTTP 範圍 |
 | DNS／HTTP／連接埠 | 固定標籤 DNS 與 `hcca.tw` HTTP；獨立測試主機才用 nmap | `hcca.tw` 指向 Cloudflare，共用 CDN IP 不做主機連接埠掃描；第三方 CNAME 不掃 |
 | 攻擊面盤點 | 公開入口與程式路由、身份需求、物件歸屬交叉核對 | 200 的登入頁或 SPA fallback 不是越權證據 |
 | 主動探測 | 正式站每日固定 DNS、四個搜尋輸入、兩個 Nuclei 認證邊界請求；ZAP active scan 使用自啟的 loopback API／測試 DB | 不對正式站跑廣泛 ZAP fuzz；單一探針錯誤不能遮蔽其他獨立結果 |
@@ -373,3 +374,16 @@ ZAP 計畫依 [Automation Framework 官方文件](https://www.zaproxy.org/docs/a
 - 提交前 `git diff --cached --check` 通過；只 stage 本次七個相關檔案，原有 `uv.lock` 變更保留未提交。
 - 仍未取得正式站兩個不同權限的專用測試帳號，也沒有獨立 origin 主機，因此跨帳號 IDOR 與 nmap 尚未執行；
   沒有確認 SQLi／XSS，未對正式站使用 sqlmap／Metasploit。
+
+## 第八輪：每日 service 實跑與 DNS 詞表擴充（2026-10-01）
+
+- 透過已安裝的 systemd `hcca-security@daily.service` 實際執行每日組合，service exit 0：DNS、四個固定輸入探針與
+  兩個 Nuclei 認證邊界請求都完成；輸入探針 4/4、Nuclei 2/2，0 finding。這次 service 執行時仍使用 73 個 DNS 標籤。
+- 為增加主動資產發現覆蓋，本機詞表新增 50 個校園平台、API、管理、郵件與維運相關標籤，總數 123；每秒最多查一個名稱，
+  DNS 子工作 timeout 從 120 增至 240 秒。所有解析結果仍只是候選，不會連線到候選主機；遠端 GitHub workflow 保持 73 個標籤。
+- 123 標籤實際主動解析完成，兩個隨機 wildcard 控制為 NXDOMAIN，候選仍是 `www.hcca.tw`、`posthug.hcca.tw`、
+  `webmail.hcca.tw`，沒有新候選。`posthug` 的 CNAME 指向 ProxyHog、`webmail` 指向 Gandi；未對第三方或 Cloudflare IP 發 HTTP／nmap。
+- 全部安全掃描器回歸 42/42 通過，Ruff、格式、Python 編譯與 systemd unit 驗證通過。
+  `check.sh docs` 仍因既有 `PROJECT_CONTEXT.md` 指向三個缺失會議 router／test 檔而失敗，本輪未改那些檔案；
+  `LABELS` impact 為 UNKNOWN，已用文字搜尋確認測試／文件引用；detect-changes 為 LOW、5 個檔案、14 個符號、
+  0 affected processes，未回報 partial／truncated。5 個本次檔案 staged，`git diff --cached --check` 通過。
