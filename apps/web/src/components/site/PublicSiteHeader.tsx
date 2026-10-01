@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, ChevronDown, LogIn, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { ChevronDown, LogIn, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
@@ -188,6 +188,8 @@ function PublicSiteHeaderContent({
     label: page.nav_label || page.title,
     description: page.title,
   }));
+  const filteredArticlePages = filteredNavPages.filter((page) => page.page_kind === "article");
+  const filteredOtherPages = filteredNavPages.filter((page) => page.page_kind !== "article");
   const serviceResultCount = filteredTaskNav.length
     + filteredMenuGroups.reduce((count, group) => count + group.items.length, 0)
     + filteredNavPages.length;
@@ -267,7 +269,6 @@ function PublicSiteHeaderContent({
               className={`public-nav-link public-task-nav-link${item.key === "shop" ? " public-shop-nav-link" : ""}${item.key === "articles" ? " public-articles-nav-link" : ""}`}
               aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
             >
-              {item.key === "articles" && <PublicNavIcon iconKey={item.iconKey} size={17} />}
               {item.label}
               {item.guestUsable && <span className="public-nav-badge">免登入</span>}
             </Link>
@@ -366,11 +367,28 @@ function PublicSiteHeaderContent({
                     </div>
                   </section>
                 ))}
-                {filteredNavPages.length > 0 && (
+                {filteredArticlePages.length > 0 && (
+                  <section>
+                    <p className="public-nav-dropdown-label">文章專欄</p>
+                    <div className="grid gap-0.5">
+                      {filteredArticlePages.map((page) => (
+                        <Link
+                          key={page.id}
+                          href={publicPageHref(page)}
+                          className="public-nav-dropdown-link"
+                          aria-current={isCurrentPath(pathname, publicPageHref(page)) ? "page" : undefined}
+                        >
+                          <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {filteredOtherPages.length > 0 && (
                   <section>
                     <p className="public-nav-dropdown-label">其他公開頁面</p>
                     <div className="grid gap-0.5">
-                      {filteredNavPages.map((page) => (
+                      {filteredOtherPages.map((page) => (
                         <Link
                           key={page.id}
                           href={publicPageHref(page)}
@@ -452,17 +470,11 @@ function PublicSiteHeaderContent({
                 <Link
                   href={featuredArticle.href}
                   onClick={() => setOpen(false)}
-                  className="public-mobile-link public-mobile-article-link"
+                  className="public-mobile-link public-mobile-index-link"
                   aria-current={isCurrentPath(pathname, featuredArticle.href) ? "page" : undefined}
                 >
-                  <span className="public-mobile-article-icon" aria-hidden="true">
-                    <PublicNavIcon iconKey={featuredArticle.iconKey} size={23} />
-                  </span>
-                  <span className="public-mobile-article-copy">
-                    <span className="public-mobile-article-title">{featuredArticle.label}</span>
-                    <span className="public-mobile-article-description">{featuredArticle.description}</span>
-                  </span>
-                  <ArrowRight size={18} aria-hidden />
+                  {featuredArticle.label}
+                  {featuredArticle.guestUsable && <span className="public-nav-badge">免登入</span>}
                 </Link>
               )}
               {otherTaskNav.map((item) => (
@@ -520,14 +532,35 @@ function PublicSiteHeaderContent({
                   </div>
                 </details>
               ))}
-              {filteredNavPages.length > 0 && (
+              {filteredArticlePages.length > 0 && (
+                <details className="public-mobile-service-group" open={Boolean(normalizedQuery)}>
+                  <summary className="public-mobile-group-label">
+                    <span>文章專欄</span>
+                    <ChevronDown size={16} aria-hidden />
+                  </summary>
+                  <div className="grid gap-2 pt-2 sm:grid-cols-2">
+                    {filteredArticlePages.map((page) => (
+                      <Link
+                        key={page.id}
+                        href={publicPageHref(page)}
+                        onClick={() => setOpen(false)}
+                        className="public-mobile-service-link"
+                        aria-current={isCurrentPath(pathname, publicPageHref(page)) ? "page" : undefined}
+                      >
+                        <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </details>
+              )}
+              {filteredOtherPages.length > 0 && (
                 <details className="public-mobile-service-group" open={Boolean(normalizedQuery)}>
                   <summary className="public-mobile-group-label">
                     <span>其他公開頁面</span>
                     <ChevronDown size={16} aria-hidden />
                   </summary>
                   <div className="grid gap-2 pt-2 sm:grid-cols-2">
-                    {filteredNavPages.map((page) => (
+                    {filteredOtherPages.map((page) => (
                       <Link
                         key={page.id}
                         href={publicPageHref(page)}
