@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -80,15 +80,67 @@ async def test_get_public_site_returns_bundle(client) -> None:
     assert body["nav_pages"] == []
 
 
-async def test_list_public_links_only_shows_active(db_session, client) -> None:
-    resp = await client.get(
-        "/site/link-categories",
+async def test_public_links_respect_scheduled_visibility(db_session, client) -> None:
+    from api.models.site import PublicLink
+
+    now = datetime.now(UTC)
+    available = PublicLink(
+        title="目前公開",
+        url="https://example.com/current",
+        starts_at=now - timedelta(days=1),
+        ends_at=now + timedelta(days=1),
     )
-    assert resp.status_code == 200
+    scheduled = PublicLink(
+        title="尚未開始",
+        url="https://example.com/future",
+        starts_at=now + timedelta(days=1),
+    )
+    expired = PublicLink(
+        title="已結束",
+        url="https://example.com/expired",
+        ends_at=now - timedelta(days=1),
+    )
+    disabled = PublicLink(
+        title="手動停用",
+        url="https://example.com/disabled",
+        is_active=False,
+    )
+    db_session.add_all([available, scheduled, expired, disabled])
+    await db_session.flush()
 
     resp = await client.get("/site/links")
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert [link["id"] for link in resp.json()] == [str(available.id)]
+
+
+async def test_public_site_refreshes_links_when_bundle_is_cached(
+    db_session, client, monkeypatch
+) -> None:
+    from api.models.site import PublicLink
+
+    cached_bundle = None
+
+    async def cache_get(_key):
+        return cached_bundle
+
+    async def cache_set(_key, value, ttl=60):
+        nonlocal cached_bundle
+        cached_bundle = value
+
+    monkeypatch.setattr("api.routers.site.cache_get", cache_get)
+    monkeypatch.setattr("api.routers.site.cache_set", cache_set)
+
+    first = await client.get("/site/public")
+    assert first.status_code == 200
+    assert cached_bundle["links"] == []
+
+    link = PublicLink(title="排程連結", url="https://example.com/scheduled")
+    db_session.add(link)
+    await db_session.flush()
+
+    second = await client.get("/site/public")
+    assert second.status_code == 200
+    assert [item["id"] for item in second.json()["links"]] == [str(link.id)]
 
 
 async def test_get_public_page_unpublished_returns_404(db_session, client) -> None:
@@ -313,19 +365,70 @@ async def test_admin_link_crud_flow(db_session, member_user, authed_client_facto
     await _grant(db_session, member_user, "site:manage")
     ac = authed_client_factory(member_user)
 
-    created = await ac.post("/site/admin/links", json=_link_payload())
+    starts_at = datetime.now(UTC) - timedelta(days=1)
+    ends_at = datetime.now(UTC) + timedelta(days=3)
+    created = await ac.post(
+        "/site/admin/links",
+        json=_link_payload(starts_at=starts_at.isoformat(), ends_at=ends_at.isoformat()),
+    )
     assert created.status_code == 201
     link_id = created.json()["id"]
+    assert created.json()["starts_at"] is not None
+    assert created.json()["ends_at"] is not None
 
     updated = await ac.patch(f"/site/admin/links/{link_id}", json={"title": "IG（改）"})
     assert updated.status_code == 200
     assert updated.json()["title"] == "IG（改）"
+
+    invalid_schedule = await ac.patch(
+        f"/site/admin/links/{link_id}",
+        json={"starts_at": (ends_at + timedelta(days=1)).isoformat()},
+    )
+    assert invalid_schedule.status_code == 422
+
+    cleared = await ac.patch(f"/site/admin/links/{link_id}", json={"starts_at": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["starts_at"] is None
 
     listed = await ac.get("/site/admin/links")
     assert len(listed.json()) == 1
 
     deleted = await ac.delete(f"/site/admin/links/{link_id}")
     assert deleted.status_code == 204
+
+
+async def test_admin_reorder_links_requires_permission(member_user, authed_client_factory) -> None:
+    ac = authed_client_factory(member_user)
+    resp = await ac.patch("/site/admin/links/reorder", json={"link_ids": [str(uuid.uuid4())]})
+    assert resp.status_code == 403
+
+
+async def test_admin_reorder_links_persists_complete_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    first = await ac.post("/site/admin/links", json=_link_payload(title="第一筆"))
+    second = await ac.post("/site/admin/links", json=_link_payload(title="第二筆"))
+    assert first.status_code == second.status_code == 201
+
+    reordered = await ac.patch(
+        "/site/admin/links/reorder",
+        json={"link_ids": [second.json()["id"], first.json()["id"]]},
+    )
+    assert reordered.status_code == 200
+    assert [link["id"] for link in reordered.json()] == [
+        second.json()["id"],
+        first.json()["id"],
+    ]
+    assert [link["sort_order"] for link in reordered.json()] == [0, 1]
+
+    incomplete = await ac.patch(
+        "/site/admin/links/reorder",
+        json={"link_ids": [first.json()["id"]]},
+    )
+    assert incomplete.status_code == 422
 
 
 async def test_admin_update_missing_link_returns_404(

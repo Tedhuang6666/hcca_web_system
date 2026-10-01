@@ -10783,6 +10783,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/site/admin/links/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Reorder Links */
+        patch: operations["admin_reorder_links_site_admin_links_reorder_patch"];
+        trace?: never;
+    };
     "/site/admin/links/{link_id}": {
         parameters: {
             query?: never;
@@ -24553,6 +24570,8 @@ export interface components {
             category_id?: string | null;
             /** Description */
             description?: string | null;
+            /** Ends At */
+            ends_at?: string | null;
             /** Icon Key */
             icon_key?: string | null;
             /**
@@ -24565,6 +24584,8 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+            /** Starts At */
+            starts_at?: string | null;
             /** Title */
             title: string;
             /** Url */
@@ -24582,6 +24603,8 @@ export interface components {
             created_at: string;
             /** Description */
             description?: string | null;
+            /** Ends At */
+            ends_at?: string | null;
             /** Icon Key */
             icon_key?: string | null;
             /**
@@ -24599,6 +24622,8 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+            /** Starts At */
+            starts_at?: string | null;
             /** Title */
             title: string;
             /**
@@ -24609,18 +24634,27 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** PublicLinkReorder */
+        PublicLinkReorder: {
+            /** Link Ids */
+            link_ids: string[];
+        };
         /** PublicLinkUpdate */
         PublicLinkUpdate: {
             /** Category Id */
             category_id?: string | null;
             /** Description */
             description?: string | null;
+            /** Ends At */
+            ends_at?: string | null;
             /** Icon Key */
             icon_key?: string | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Sort Order */
             sort_order?: number | null;
+            /** Starts At */
+            starts_at?: string | null;
             /** Title */
             title?: string | null;
             /** Url */
@@ -54254,6 +54288,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_reorder_links_site_admin_links_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicLinkReorder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicLinkOut"][];
                 };
             };
             /** @description Validation Error */

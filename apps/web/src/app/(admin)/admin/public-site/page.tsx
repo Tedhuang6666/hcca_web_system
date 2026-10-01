@@ -2,6 +2,23 @@
 
 import Image from "next/image";
 import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   ArrowDown,
   ArrowUp,
   ArrowUpRight,
@@ -15,6 +32,7 @@ import {
   FileUp,
   FileText,
   Globe2,
+  GripVertical,
   Handshake,
   Home,
   Info,
@@ -459,8 +477,110 @@ function rosterMemberKey(tabId: string, title: string, name: string) {
   return `${tabId}::${title.trim()}::${name.trim()}`;
 }
 
+function toLocalDateTimeInput(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function toIsoDateTime(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function SortablePublicLinkRow({
+  link,
+  disabled,
+  onEdit,
+  onDelete,
+  onToggle,
+}: {
+  link: PublicLinkOut;
+  disabled: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggle: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: link.id,
+    disabled,
+  });
+  const isManuallyEnabled = link.is_active;
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex flex-col gap-3 rounded-lg px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+      style={{
+        background: "var(--bg-elevated)",
+        border: "1px solid var(--border)",
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.55 : 1,
+        zIndex: isDragging ? 1 : undefined,
+      }}
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost min-h-11 min-w-11 shrink-0 cursor-grab touch-none active:cursor-grabbing"
+          aria-label={`拖曳調整「${link.title}」順序`}
+          style={{ touchAction: "none" }}
+          disabled={disabled}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical size={17} aria-hidden />
+        </button>
+        <span className="min-w-0 pt-1 text-sm">
+          <span className="font-medium">{link.title}</span>
+          <span className="ml-2 text-[var(--text-muted)]">{link.category?.title ?? "未分類"}</span>
+          <span className="mt-1 block break-all text-xs text-[var(--text-muted)]">{link.url}</span>
+          <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-muted)]">
+            <span
+              className="rounded-full px-2 py-1"
+              style={{
+                background: isManuallyEnabled ? "var(--success-dim)" : "var(--bg-surface)",
+                color: isManuallyEnabled ? "var(--success)" : "var(--text-secondary)",
+              }}
+            >
+              {isManuallyEnabled ? "手動啟用" : "手動停用"}
+            </span>
+            {link.starts_at && (
+              <span>啟用：{new Date(link.starts_at).toLocaleString("zh-TW")}</span>
+            )}
+            {link.ends_at && (
+              <span>停用：{new Date(link.ends_at).toLocaleString("zh-TW")}</span>
+            )}
+          </span>
+        </span>
+      </div>
+      <div className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap sm:justify-end">
+        <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={onEdit} aria-label={`編輯${link.title}`}>
+          <Pencil size={14} aria-hidden /> 編輯
+        </button>
+        <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={onDelete} aria-label={`刪除${link.title}`}>
+          <Trash2 size={14} aria-hidden /> 刪除
+        </button>
+        <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={onToggle}>
+          {link.is_active ? "手動停用" : "手動啟用"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function PublicSiteAdminPage() {
   const confirm = useConfirm();
+  const linkSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const [reorderingLinks, setReorderingLinks] = useState(false);
   const [tab, setTab] = useState<Tab>("homepage");
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<PublicSiteSettingsOut>(emptySettings);
@@ -513,8 +633,9 @@ export default function PublicSiteAdminPage() {
     description: "",
     category_id: "",
     icon_key: "",
-    sort_order: 0,
     is_active: true,
+    starts_at: "",
+    ends_at: "",
   });
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [officerDraft, setOfficerDraft] = useState({
@@ -967,22 +1088,36 @@ export default function PublicSiteAdminPage() {
   };
 
   const createLink = async () => {
+    const startsAt = toIsoDateTime(linkDraft.starts_at);
+    const endsAt = toIsoDateTime(linkDraft.ends_at);
+    if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) {
+      toast.error("停用時間必須晚於啟用時間");
+      return;
+    }
+
     try {
       const body = {
-        ...linkDraft,
+        title: linkDraft.title,
+        url: linkDraft.url,
         description: linkDraft.description || null,
         category_id: linkDraft.category_id || null,
         icon_key: linkDraft.icon_key || null,
+        is_active: linkDraft.is_active,
+        starts_at: startsAt,
+        ends_at: endsAt,
       };
       if (editingLinkId) {
         await siteApi.updateLink(editingLinkId, body);
         toast.success("連結已更新");
       } else {
-        await siteApi.createLink(body);
+        await siteApi.createLink({
+          ...body,
+          sort_order: Math.max(0, ...links.map((link) => link.sort_order)) + 1,
+        });
         toast.success("連結已新增");
       }
       setEditingLinkId(null);
-      setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", sort_order: 0, is_active: true });
+      setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", is_active: true, starts_at: "", ends_at: "" });
       await load();
     } catch (error) {
       displayError(error, editingLinkId ? "更新連結失敗" : "新增連結失敗");
@@ -1126,14 +1261,37 @@ export default function PublicSiteAdminPage() {
       description: link.description ?? "",
       category_id: link.category_id ?? "",
       icon_key: link.icon_key ?? "",
-      sort_order: link.sort_order,
       is_active: link.is_active,
+      starts_at: toLocalDateTimeInput(link.starts_at),
+      ends_at: toLocalDateTimeInput(link.ends_at),
     });
   };
 
   const cancelEditLink = () => {
     setEditingLinkId(null);
-    setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", sort_order: 0, is_active: true });
+    setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", is_active: true, starts_at: "", ends_at: "" });
+  };
+
+  const reorderLinks = async ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id || reorderingLinks) return;
+    const oldIndex = links.findIndex((link) => link.id === active.id);
+    const newIndex = links.findIndex((link) => link.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const previousLinks = links;
+    const reordered = arrayMove(links, oldIndex, newIndex);
+    setLinks(reordered);
+    setReorderingLinks(true);
+    try {
+      const savedLinks = await siteApi.reorderLinks(reordered.map((link) => link.id));
+      setLinks(savedLinks);
+      toast.success("連結順序已儲存");
+    } catch (error) {
+      setLinks(previousLinks);
+      displayError(error, "調整連結順序失敗");
+    } finally {
+      setReorderingLinks(false);
+    }
   };
 
   const deleteLink = async (link: PublicLinkOut) => {
@@ -1893,17 +2051,25 @@ export default function PublicSiteAdminPage() {
             <h2 className="font-semibold">{editingLinkId ? "編輯 Linktree 連結" : "新增 Linktree 連結"}</h2>
             <Field label="標題"><TextInput value={linkDraft.title} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} /></Field>
             <Field label="URL"><TextInput value={linkDraft.url} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} /></Field>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="類別">
-                <Select value={linkDraft.category_id} onChange={(e) => setLinkDraft({ ...linkDraft, category_id: e.target.value })}>
-                  <option value="">不分類</option>
-                  {categories.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}
-                </Select>
-              </Field>
-              <Field label="排序"><TextInput type="number" value={linkDraft.sort_order} onChange={(e) => setLinkDraft({ ...linkDraft, sort_order: Number(e.target.value) })} /></Field>
-            </div>
+            <Field label="類別">
+              <Select value={linkDraft.category_id} onChange={(e) => setLinkDraft({ ...linkDraft, category_id: e.target.value })}>
+                <option value="">不分類</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}
+              </Select>
+            </Field>
             <Field label="說明"><TextInput value={linkDraft.description} onChange={(e) => setLinkDraft({ ...linkDraft, description: e.target.value })} /></Field>
-            <Toggle label="啟用" checked={linkDraft.is_active} onChange={(value) => setLinkDraft({ ...linkDraft, is_active: value })} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="啟用時間">
+                <TextInput type="datetime-local" value={linkDraft.starts_at} onChange={(e) => setLinkDraft({ ...linkDraft, starts_at: e.target.value })} />
+              </Field>
+              <Field label="停用時間">
+                <TextInput type="datetime-local" value={linkDraft.ends_at} onChange={(e) => setLinkDraft({ ...linkDraft, ends_at: e.target.value })} />
+              </Field>
+            </div>
+            <p className="-mt-2 text-xs leading-5 text-[var(--text-muted)]">
+              時間使用此裝置的本機時區；留空代表不設定該時間。連結須手動啟用，且在排程時間範圍內才會公開顯示。
+            </p>
+            <Toggle label="手動啟用" checked={linkDraft.is_active} onChange={(value) => setLinkDraft({ ...linkDraft, is_active: value })} />
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={createLink} className="btn btn-primary">
                 {editingLinkId ? <Save size={16} aria-hidden /> : <Plus size={16} aria-hidden />}
@@ -1911,28 +2077,38 @@ export default function PublicSiteAdminPage() {
               </button>
               {editingLinkId && <button type="button" onClick={cancelEditLink} className="btn btn-ghost">取消編輯</button>}
             </div>
-            <div className="space-y-2">
-              {links.map((link) => (
-                <div key={link.id} className="flex flex-col gap-3 rounded-lg px-3 py-3 sm:flex-row sm:items-center sm:justify-between" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                  <span className="min-w-0 text-sm">
-                    <span className="font-medium">{link.title}</span>
-                    <span className="ml-2 text-[var(--text-muted)]">{link.category?.title ?? "未分類"}</span>
-                    <span className="mt-1 block break-all text-xs text-[var(--text-muted)]">{link.url}</span>
-                  </span>
-                  <div className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap sm:justify-end">
-                    <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={() => startEditLink(link)} aria-label={`編輯${link.title}`}>
-                      <Pencil size={14} aria-hidden /> 編輯
-                    </button>
-                    <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={() => deleteLink(link)} aria-label={`刪除${link.title}`}>
-                      <Trash2 size={14} aria-hidden /> 刪除
-                    </button>
-                    <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={() => patchLink(link, { is_active: !link.is_active }).catch((e) => displayError(e, "更新連結失敗"))}>
-                      {link.is_active ? "停用" : "啟用"}
-                    </button>
-                  </div>
+            <p className="text-xs leading-5 text-[var(--text-muted)]">
+              拖曳左側把手調整順序；鍵盤可在把手上按 Space，再用方向鍵移動並按 Space 放置。
+            </p>
+            <DndContext
+              sensors={linkSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={reorderLinks}
+            >
+              <SortableContext
+                items={links.map((link) => link.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {links.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--text-muted)]">
+                      尚未新增連結。新增後可在此調整顯示順序。
+                    </p>
+                  ) : (
+                    links.map((link) => (
+                      <SortablePublicLinkRow
+                        key={link.id}
+                        link={link}
+                        disabled={reorderingLinks}
+                        onEdit={() => startEditLink(link)}
+                        onDelete={() => void deleteLink(link)}
+                        onToggle={() => patchLink(link, { is_active: !link.is_active }).catch((error) => displayError(error, "更新連結失敗"))}
+                      />
+                    ))
+                  )}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           </div>
         </section>
       )}

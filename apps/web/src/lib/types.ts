@@ -559,6 +559,7 @@ export type {
   PublicLinkCategoryUpdate,
   PublicLinkCreate,
   PublicLinkOut,
+  PublicLinkReorder,
   PublicLinkUpdate,
   PublicOfficerCandidateOut,
   PublicOfficerOut,
