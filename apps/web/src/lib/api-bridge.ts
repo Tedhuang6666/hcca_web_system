@@ -592,6 +592,7 @@ export type PublicLinkCategoryOut = components['schemas']['PublicLinkCategoryOut
 export type PublicLinkCategoryUpdate = components['schemas']['PublicLinkCategoryUpdate']
 export type PublicLinkCreate = components['schemas']['PublicLinkCreate']
 export type PublicLinkOut = components['schemas']['PublicLinkOut']
+export type PublicLinkReorder = components['schemas']['PublicLinkReorder']
 export type PublicLinkUpdate = components['schemas']['PublicLinkUpdate']
 export type PublicOfficerCandidateOut = components['schemas']['PublicOfficerCandidateOut']
 export type PublicOfficerOut = components['schemas']['PublicOfficerOut']

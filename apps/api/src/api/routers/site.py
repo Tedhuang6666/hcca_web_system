@@ -26,6 +26,7 @@ from api.schemas.site import (
     PublicLinkCategoryUpdate,
     PublicLinkCreate,
     PublicLinkOut,
+    PublicLinkReorder,
     PublicLinkUpdate,
     PublicOfficerCandidateOut,
     PublicOfficerOut,
@@ -56,9 +57,14 @@ async def get_public_site(db: DbDep) -> PublicSiteBundleOut:
     cached = await cache_get("site:public")
     if isinstance(cached, dict):
         try:
-            return PublicSiteBundleOut.model_validate(cached)
+            bundle = PublicSiteBundleOut.model_validate(cached)
         except Exception:
             pass
+        else:
+            bundle.links = [
+                PublicLinkOut.model_validate(item) for item in await site_svc.list_links(db, True)
+            ]
+            return bundle
 
     bundle = PublicSiteBundleOut(
         settings=PublicSiteSettingsOut.model_validate(await site_svc.get_settings(db)),
@@ -413,6 +419,33 @@ async def admin_create_link(
     return link
 
 
+@router.patch(
+    "/admin/links/reorder",
+    response_model=list[PublicLinkOut],
+    dependencies=[SiteAdminDep],
+)
+async def admin_reorder_links(
+    data: PublicLinkReorder,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> list[PublicLinkOut]:
+    try:
+        links = await site_svc.reorder_links(db, data.link_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await audit_svc.record(
+        db,
+        entity_type="public_link",
+        entity_id="bulk",
+        action="site.links.reorder",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=data.model_dump(mode="json"),
+        summary=f"調整公開連結排序（{len(links)} 筆）",
+    )
+    return links
+
+
 @router.patch("/admin/links/{link_id}", response_model=PublicLinkOut, dependencies=[SiteAdminDep])
 async def admin_update_link(
     link_id: uuid.UUID,
@@ -423,7 +456,10 @@ async def admin_update_link(
     link = await site_svc.get_link(db, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="連結不存在")
-    link = await site_svc.update_link(db, link, data)
+    try:
+        link = await site_svc.update_link(db, link, data)
+    except site_svc.InvalidPublicLinkSchedule as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await audit_svc.record(
         db,
         entity_type="public_link",

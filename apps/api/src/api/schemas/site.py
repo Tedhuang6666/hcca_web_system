@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class PublicSiteSettingsBase(BaseModel):
@@ -112,6 +119,18 @@ class PublicLinkBase(BaseModel):
     icon_key: str | None = Field(None, max_length=40)
     sort_order: int = 0
     is_active: bool = True
+    starts_at: AwareDatetime | None = None
+    ends_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_schedule(self) -> PublicLinkBase:
+        if (
+            self.starts_at is not None
+            and self.ends_at is not None
+            and self.ends_at <= self.starts_at
+        ):
+            raise ValueError("停用時間必須晚於啟用時間")
+        return self
 
 
 class PublicLinkCreate(PublicLinkBase):
@@ -126,6 +145,22 @@ class PublicLinkUpdate(BaseModel):
     icon_key: str | None = Field(None, max_length=40)
     sort_order: int | None = None
     is_active: bool | None = None
+    starts_at: AwareDatetime | None = None
+    ends_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_schedule(self) -> PublicLinkUpdate:
+        if (
+            self.starts_at is not None
+            and self.ends_at is not None
+            and self.ends_at <= self.starts_at
+        ):
+            raise ValueError("停用時間必須晚於啟用時間")
+        return self
+
+
+class PublicLinkReorder(BaseModel):
+    link_ids: list[uuid.UUID] = Field(min_length=1)
 
 
 class PublicLinkOut(PublicLinkBase):
@@ -133,8 +168,17 @@ class PublicLinkOut(PublicLinkBase):
 
     id: uuid.UUID
     category: PublicLinkCategoryOut | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("starts_at", "ends_at", mode="after")
+    @classmethod
+    def ensure_schedule_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 class PublicOfficerProfileBase(BaseModel):

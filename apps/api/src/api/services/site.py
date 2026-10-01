@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -72,6 +72,16 @@ DEFAULT_SETTINGS = {
 }
 
 
+class InvalidPublicLinkSchedule(ValueError):
+    """公開連結的啟用時間區間不合法。"""
+
+
+def _with_utc_timezone(value: datetime | None) -> datetime | None:
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
+
 async def get_settings(db: AsyncSession) -> PublicSiteSettings:
     result = await db.execute(select(PublicSiteSettings).order_by(PublicSiteSettings.created_at))
     settings = result.scalars().first()
@@ -125,7 +135,12 @@ async def list_links(db: AsyncSession, active_only: bool = False) -> list[Public
         .order_by(PublicLink.sort_order, PublicLink.title)
     )
     if active_only:
-        stmt = stmt.where(PublicLink.is_active.is_(True))
+        now = func.now()
+        stmt = stmt.where(
+            PublicLink.is_active.is_(True),
+            or_(PublicLink.starts_at.is_(None), PublicLink.starts_at <= now),
+            or_(PublicLink.ends_at.is_(None), PublicLink.ends_at > now),
+        )
     return list((await db.execute(stmt)).scalars().all())
 
 
@@ -146,9 +161,26 @@ async def create_link(db: AsyncSession, data: PublicLinkCreate) -> PublicLink:
 
 
 async def update_link(db: AsyncSession, link: PublicLink, data: PublicLinkUpdate) -> PublicLink:
+    updates = data.model_dump(exclude_unset=True)
+    starts_at = _with_utc_timezone(updates.get("starts_at", link.starts_at))
+    ends_at = _with_utc_timezone(updates.get("ends_at", link.ends_at))
+    if starts_at is not None and ends_at is not None and ends_at <= starts_at:
+        raise InvalidPublicLinkSchedule("停用時間必須晚於啟用時間")
     apply_updates(link, data)
     await db.flush()
     return await get_link(db, link.id) or link
+
+
+async def reorder_links(db: AsyncSession, link_ids: list[uuid.UUID]) -> list[PublicLink]:
+    links = await list_links(db)
+    by_id = {link.id: link for link in links}
+    if len(link_ids) != len(by_id) or set(link_ids) != set(by_id):
+        raise ValueError("排序清單必須包含所有連結且不可重複")
+
+    for sort_order, link_id in enumerate(link_ids):
+        by_id[link_id].sort_order = sort_order
+    await db.flush()
+    return await list_links(db)
 
 
 def _active_term_filter(stmt: Select[Any], on_date: date) -> Select[Any]:
