@@ -1,14 +1,28 @@
 "use client";
 
-import { BarChart3, Bold, Eye, Heading2, ImagePlus, List, Pencil, Table2 } from "lucide-react";
+import { BarChart3, Bold, Eye, Heading2, ImagePlus, List, Pencil, Table2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { ArticleChartSpec } from "@/lib/article-charts";
 import { siteApi } from "@/lib/api/site";
 import { apiErrorMessage, petitionsApi } from "@/lib/api";
+import { uploadUrl } from "@/lib/config";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import ArticleMarkdown from "./ArticleMarkdown";
+
+type GalleryDraftPhoto = {
+  url: string;
+  filename: string;
+  description: string;
+};
+
+type GalleryUploadProgress = {
+  fileIndex: number;
+  totalFiles: number;
+  filename: string;
+  progress: number;
+};
 
 function currentMonth() {
   const now = new Date();
@@ -35,12 +49,18 @@ export default function ArticleMarkdownEditor({
 }) {
   const [preview, setPreview] = useState(false);
   const [showImageTools, setShowImageTools] = useState(false);
+  const [showGalleryTools, setShowGalleryTools] = useState(false);
   const [showChartTools, setShowChartTools] = useState(false);
   const [chartMonth, setChartMonth] = useState(currentMonth);
   const [chartLoading, setChartLoading] = useState(false);
   const [imageAlt, setImageAlt] = useState("");
   const [imageWidth, setImageWidth] = useState("960");
+  const [galleryPhotos, setGalleryPhotos] = useState<GalleryDraftPhoto[]>([]);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [galleryUploadProgress, setGalleryUploadProgress] = useState<GalleryUploadProgress | null>(null);
+  const [galleryUploadErrors, setGalleryUploadErrors] = useState<string[]>([]);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const latestValueRef = useRef(value);
   const insertionPointRef = useRef<{ start: number; end: number } | null>(null);
   latestValueRef.current = value;
@@ -161,6 +181,52 @@ export default function ArticleMarkdownEditor({
     replaceRange(start, end, `${prefix}${block}${suffix}`);
   };
 
+  const uploadGalleryFiles = async (files: File[]) => {
+    if (!files.length || galleryUploading) return;
+    setGalleryUploading(true);
+    setGalleryUploadErrors([]);
+    const errors: string[] = [];
+
+    for (const [fileIndex, file] of files.entries()) {
+      setGalleryUploadProgress({ fileIndex, totalFiles: files.length, filename: file.name, progress: 0 });
+      try {
+        const uploaded = await siteApi.uploadImage(file, (progress) => {
+          setGalleryUploadProgress({ fileIndex, totalFiles: files.length, filename: file.name, progress });
+        });
+        setGalleryPhotos((current) => [...current, {
+          url: uploaded.url,
+          filename: file.name,
+          description: "",
+        }]);
+      } catch (error) {
+        errors.push(`${file.name}：${apiErrorMessage(error, "上傳失敗")}`);
+      }
+    }
+
+    setGalleryUploading(false);
+    setGalleryUploadProgress(null);
+    if (errors.length) {
+      setGalleryUploadErrors(errors);
+      toast.error(`有 ${errors.length} 張照片上傳失敗，其餘照片已保留`);
+    } else {
+      toast.success(`已上傳 ${files.length} 張照片`);
+    }
+  };
+
+  const insertGallery = () => {
+    if (galleryPhotos.length < 2 || galleryUploading) return;
+    const photos = galleryPhotos.map(({ url, description }) => ({
+      url,
+      description: description.trim(),
+    }));
+    const block = `\`\`\`hcca-gallery\n${JSON.stringify(photos, null, 2)}\n\`\`\``;
+    insertBlock(block);
+    setGalleryPhotos([]);
+    setGalleryUploadErrors([]);
+    setShowGalleryTools(false);
+    toast.success("圖片集已插入文章");
+  };
+
   const insertChartTemplate = (type: ArticleChartSpec["type"]) => {
     const chart: ArticleChartSpec = {
       type,
@@ -208,6 +274,9 @@ export default function ArticleMarkdownEditor({
           </button>
           <button type="button" className="article-editor-tool" onClick={() => setShowImageTools((current) => !current)} aria-expanded={showImageTools}>
             <ImagePlus size={14} aria-hidden /> {showImageTools ? "收合圖片工具" : "加入照片"}
+          </button>
+          <button type="button" className="article-editor-tool" onClick={() => setShowGalleryTools((current) => !current)} aria-expanded={showGalleryTools && !preview} disabled={preview} title={preview ? "請切回撰寫模式建立圖片集" : undefined}>
+            <ImagePlus size={14} aria-hidden /> {showGalleryTools ? "收合圖片集" : "建立圖片集"}
           </button>
         </div>
       </div>
@@ -274,6 +343,106 @@ export default function ArticleMarkdownEditor({
             onUploaded={(uploaded) => insertImage(uploaded.url, uploaded.filename)}
           />
           <p className="text-xs text-[var(--text-muted)]">也可以直接在 Markdown 使用 `![圖片說明](圖片網址)`。</p>
+        </div>
+      )}
+
+      {showGalleryTools && !preview && (
+        <div className="article-editor-images article-editor-gallery-tools">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">建立文章圖片集</h3>
+            <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+              可一次選取多張照片，也能分批追加。上傳順序就是輪播順序；每張照片都能加上簡短描述。
+            </p>
+          </div>
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            className="sr-only"
+            disabled={galleryUploading}
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? []);
+              event.currentTarget.value = "";
+              void uploadGalleryFiles(files);
+            }}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="btn btn-secondary min-h-11"
+              onClick={() => galleryInputRef.current?.click()}
+              disabled={galleryUploading}
+            >
+              <ImagePlus size={16} aria-hidden /> {galleryUploading ? "照片上傳中…" : "選擇多張照片"}
+            </button>
+            <span className="text-xs text-[var(--text-muted)]" aria-live="polite">
+              {galleryUploadProgress
+                ? `第 ${galleryUploadProgress.fileIndex + 1} / ${galleryUploadProgress.totalFiles} 張：${galleryUploadProgress.filename}（${Math.round(galleryUploadProgress.progress * 100)}%）`
+                : `已加入 ${galleryPhotos.length} 張照片`}
+            </span>
+          </div>
+          {galleryUploadProgress && (
+            <div
+              className="article-editor-gallery-progress"
+              role="progressbar"
+              aria-label="照片上傳進度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(((galleryUploadProgress.fileIndex + galleryUploadProgress.progress) / galleryUploadProgress.totalFiles) * 100)}
+            >
+              <span style={{ transform: `scaleX(${(galleryUploadProgress.fileIndex + galleryUploadProgress.progress) / galleryUploadProgress.totalFiles})` }} />
+            </div>
+          )}
+          {galleryUploadErrors.length > 0 && (
+            <div className="text-sm text-[var(--danger)]" role="alert">
+              <p>以下照片沒有上傳成功，請重新選取後再上傳：</p>
+              <ul className="mt-1 list-disc pl-5">
+                {galleryUploadErrors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}
+              </ul>
+            </div>
+          )}
+          {galleryPhotos.length > 0 && (
+            <ul className="article-editor-gallery-photos" aria-label="圖片集照片順序與描述">
+              {galleryPhotos.map((photo, index) => (
+                <li className="article-editor-gallery-photo" key={`${photo.url}-${index}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={uploadUrl(photo.url)} alt="" />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs text-[var(--text-muted)]" title={photo.filename}>{photo.filename}</p>
+                    <label className="mt-1 block text-xs text-[var(--text-secondary)]">
+                      第 {index + 1} 張照片描述（選填）
+                      <input
+                        className="input mt-1 w-full"
+                        maxLength={120}
+                        value={photo.description}
+                        disabled={galleryUploading}
+                        placeholder="例如：活動現場的報到情形"
+                        onChange={(event) => setGalleryPhotos((current) => current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, description: event.target.value } : item,
+                        ))}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className="article-editor-gallery-remove"
+                    aria-label={`移除第 ${index + 1} 張照片：${photo.filename}`}
+                    disabled={galleryUploading}
+                    onClick={() => setGalleryPhotos((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    <X size={16} aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" className="btn btn-primary min-h-11" onClick={insertGallery} disabled={galleryPhotos.length < 2 || galleryUploading}>
+              插入圖片集（{galleryPhotos.length} 張）
+            </button>
+            {galleryPhotos.length < 2 && <span className="text-xs text-[var(--text-muted)]">請至少上傳兩張照片</span>}
+          </div>
         </div>
       )}
 

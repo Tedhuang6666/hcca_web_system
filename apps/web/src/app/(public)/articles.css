@@ -512,6 +512,41 @@
   text-align: center;
 }
 
+.article-markdown-gallery {
+  border-color: var(--public-border);
+  background: var(--public-surface);
+}
+
+.article-markdown-gallery-viewport {
+  background: var(--public-soft);
+}
+
+.article-markdown-gallery-caption {
+  color: var(--public-secondary);
+}
+
+.article-markdown-gallery-controls {
+  color: var(--public-secondary);
+}
+
+.article-markdown-gallery-controls > button {
+  border-color: var(--public-border);
+  color: var(--public-secondary);
+}
+
+.article-markdown-gallery-controls > button:hover:not(:disabled) {
+  border-color: var(--public-accent);
+  color: var(--public-accent-text);
+}
+
+.article-markdown-gallery-dots > button > span {
+  background: var(--public-muted);
+}
+
+.article-markdown-gallery-dots > button[aria-pressed="true"] > span {
+  background: var(--public-accent);
+}
+
 .article-markdown code {
   border-radius: 0.25rem;
   padding: 0.12rem 0.3rem;
