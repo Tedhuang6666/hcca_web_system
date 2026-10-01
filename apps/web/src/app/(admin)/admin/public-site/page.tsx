@@ -39,6 +39,8 @@ import ArticleMarkdownEditor from "@/components/site/ArticleMarkdownEditor";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { clearStoredDraft, useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
@@ -94,6 +96,10 @@ const EMPTY_PAGE_DRAFT = {
   seo_description: "",
   exam_scope_default_section: "",
 };
+
+function isEmptyPageDraft(draft: typeof EMPTY_PAGE_DRAFT) {
+  return JSON.stringify(draft) === JSON.stringify(EMPTY_PAGE_DRAFT);
+}
 
 /** 後台導覽列分頁的群組顯示順序。 */
 const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
@@ -480,6 +486,19 @@ export default function PublicSiteAdminPage() {
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
 
   const [pageDraft, setPageDraft] = useState(EMPTY_PAGE_DRAFT);
+  const restorePageDraft = useCallback((draft: typeof EMPTY_PAGE_DRAFT) => {
+    setPageDraft(draft);
+    toast.info("已復原未送出的頁面草稿，可在「頁面」分頁繼續編輯");
+  }, []);
+  const {
+    clearDraft: clearPageDraft,
+    lastSavedAt: pageDraftLastSavedAt,
+  } = useDraftAutosave({
+    key: `public-site-page:${editingPageId ?? "new"}`,
+    value: pageDraft,
+    onRestore: restorePageDraft,
+    isEmpty: isEmptyPageDraft,
+  });
   const markdownFileRef = useRef<HTMLInputElement>(null);
   const [categoryDraft, setCategoryDraft] = useState({
     slug: "",
@@ -902,12 +921,34 @@ export default function PublicSiteAdminPage() {
             : "頁面已新增",
         );
       }
+      clearPageDraft();
       resetPageDraft();
       await load();
     } catch (error) {
       displayError(error, editingPageId ? "更新頁面失敗" : "新增頁面失敗");
     } finally {
       setSavingPage(false);
+    }
+  };
+
+  const deletePage = async (page: PublicSitePageOut) => {
+    if (!(await confirm({
+      title: `刪除「${page.title}」？`,
+      description: "刪除後無法在後台復原，且會立即從公開網站移除。",
+      confirmLabel: "刪除頁面",
+      danger: true,
+    }))) return;
+
+    try {
+      await siteApi.deletePage(page.id);
+      clearStoredDraft(`public-site-page:${page.id}`);
+      if (editingPageId === page.id) {
+        resetPageDraft();
+      }
+      toast.success("頁面已刪除");
+      await load();
+    } catch (error) {
+      displayError(error, "刪除頁面失敗");
     }
   };
 
@@ -1693,6 +1734,7 @@ export default function PublicSiteAdminPage() {
                 <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
                   文章與一般頁面共用同一份編輯器；匯入 Markdown 後可直接調整內容與發布設定。
                 </p>
+                <DraftStatus lastSavedAt={pageDraftLastSavedAt} className="mt-1" />
               </div>
               {editingPageId && <button type="button" className="btn btn-sm btn-ghost" onClick={resetPageDraft}>取消編輯</button>}
             </div>
@@ -1816,7 +1858,7 @@ export default function PublicSiteAdminPage() {
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchPage(page, { show_in_nav: !page.show_in_nav }).catch((e) => displayError(e, "更新導覽失敗"))}>
                       {page.show_in_nav ? "移出導覽" : "放入導覽"}
                     </button>
-                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deletePage(page.id).then(load).catch((e) => displayError(e, "刪除頁面失敗"))}>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => void deletePage(page)}>
                       <Trash2 size={14} aria-hidden /> 刪除
                     </button>
                   </div>
