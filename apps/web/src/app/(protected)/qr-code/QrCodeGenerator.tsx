@@ -21,7 +21,6 @@ import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 
 import { usePermissions } from "@/hooks/usePermissions";
-import { BRANDING } from "@/lib/branding";
 
 type ModuleStyle = "dot" | "soft" | "square";
 type ErrorCorrection = "L" | "M" | "Q" | "H";
@@ -49,7 +48,7 @@ type QrMatrix = {
 const PERMISSION = "qr_code:manage";
 const DEFAULT_CONTENT = "https://hcca.example.org/entry";
 const TRANSPARENT_BACKGROUND = "transparent";
-const DEFAULT_LOGO_PATH = BRANDING.publicEmblemUrl;
+const DEFAULT_LOGO_PATH = "/brand/hcca-40th-anniversary-emblem.png";
 const PRESET_COLORS = ["#A2873E", "#392360", "#004AAD"] as const;
 const DEFAULT_SETTINGS: QrSettings = {
   foreground: "#24163f",
@@ -432,7 +431,7 @@ export default function QrCodeGenerator() {
                 onFiles={handleLogoFiles}
                 onRemove={() => updateSetting("logoDataUrl", "")}
               />
-              <p className="qr-logo-note"><Check size={14} aria-hidden="true" />{isDefaultLogo ? "預設已套用班聯會徽，可上傳圖片替換。" : "目前使用自訂會徽，可隨時移除或替換。"}</p>
+              <p className="qr-logo-note"><Check size={14} aria-hidden="true" />{isDefaultLogo ? "預設已套用班聯會 40 週年會徽，可上傳圖片替換。" : "目前使用自訂會徽，可隨時移除或替換。"}</p>
               {settings.logoDataUrl && <button type="button" className="qr-remove-logo" onClick={() => updateSetting("logoDataUrl", "")}>移除中央會徽</button>}
             </div>
 
