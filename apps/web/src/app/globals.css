@@ -1590,7 +1590,8 @@
     display: none;
   }
 
-  .public-task-nav-link.public-shop-nav-link {
+  .public-task-nav-link.public-shop-nav-link,
+  .public-task-nav-link.public-articles-nav-link {
     display: inline-flex;
   }
 
@@ -1600,10 +1601,44 @@
 
 }
 
-@media (min-width: 900px) {
+@media (min-width: 900px) and (max-width: 1179.98px) {
+  .public-task-nav-link {
+    display: none;
+  }
+
+  .public-task-nav-link.public-shop-nav-link,
+  .public-task-nav-link.public-articles-nav-link {
+    display: inline-flex;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 899.98px) {
+  .public-task-nav-link.public-shop-nav-link {
+    display: none;
+  }
+}
+
+@media (min-width: 1180px) {
   .public-task-nav-link {
     display: inline-flex;
   }
+}
+
+.public-articles-nav-link {
+  min-height: 48px;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--public-accent) 28%, var(--public-border));
+  background: color-mix(in srgb, var(--public-accent) 12%, var(--public-surface));
+  color: var(--public-accent-text);
+  padding-inline: 0.9rem;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.public-articles-nav-link:hover,
+.public-articles-nav-link:focus-visible {
+  background: var(--public-accent-soft);
+  color: var(--public-accent-text);
 }
 
 [data-theme="dark"] .public-nav-dropdown-panel {
@@ -2172,6 +2207,46 @@
 .public-mobile-link:focus-visible {
   background: var(--public-accent-soft);
   color: var(--public-accent-text);
+}
+
+.public-mobile-article-link {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--public-accent) 32%, var(--public-border));
+  background: color-mix(in srgb, var(--public-accent) 10%, var(--public-surface));
+  padding: 0.7rem 0.85rem;
+}
+
+.public-mobile-article-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--public-accent);
+  color: var(--primary-fg);
+}
+
+.public-mobile-article-copy {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 0.15rem;
+}
+
+.public-mobile-article-title {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.public-mobile-article-description {
+  color: var(--public-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 .public-mobile-service-link {

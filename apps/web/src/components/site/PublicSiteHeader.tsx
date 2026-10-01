@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, LogIn, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { ArrowRight, ChevronDown, LogIn, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
@@ -17,6 +17,7 @@ import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { BRANDING } from "@/lib/branding";
 import {
   PUBLIC_NAV_GROUP_META,
+  type ResolvedNavItem,
   type PublicNavGroupId,
   groupResolvedNav,
   publicPageHref,
@@ -152,14 +153,18 @@ function PublicSiteHeaderContent({
   const publicDataSlot = itemByKey.has("shop")
     ? ["shop", "商品訂購"]
     : ["public-db", "公開資料"];
-  const taskNav = [
-    ["news", "最新公告"],
-    publicDataSlot,
-    ["surveys", "校園調查"],
-  ].flatMap(([key, label]) => {
-    const item = itemByKey.get(key);
-    return item ? [{ ...item, label }] : [];
-  });
+  const articleNavItem = itemByKey.get("articles");
+  const taskNav: ResolvedNavItem[] = [
+    ...(articleNavItem ? [articleNavItem] : []),
+    ...[
+      ["news", "最新公告"],
+      publicDataSlot,
+      ["surveys", "校園調查"],
+    ].flatMap(([key, label]) => {
+      const item = itemByKey.get(key);
+      return item ? [{ ...item, label }] : [];
+    }),
+  ];
   const taskNavKeys = new Set(taskNav.map((item) => item.key));
   const menuGroups = MENU_GROUP_ORDER
     .map((id) => ({
@@ -177,6 +182,8 @@ function PublicSiteHeaderContent({
     .map((group) => ({ ...group, items: group.items.filter(matchesServiceQuery) }))
     .filter((group) => group.items.length > 0);
   const filteredTaskNav = taskNav.filter(matchesServiceQuery);
+  const featuredArticle = filteredTaskNav.find((item) => item.key === "articles");
+  const otherTaskNav = filteredTaskNav.filter((item) => item.key !== "articles");
   const filteredNavPages = navPages.filter((page) => matchesServiceQuery({
     label: page.nav_label || page.title,
     description: page.title,
@@ -257,9 +264,10 @@ function PublicSiteHeaderContent({
             <Link
               key={item.key}
               href={item.href}
-              className={`public-nav-link public-task-nav-link${item.key === "shop" ? " public-shop-nav-link" : ""}`}
+              className={`public-nav-link public-task-nav-link${item.key === "shop" ? " public-shop-nav-link" : ""}${item.key === "articles" ? " public-articles-nav-link" : ""}`}
               aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
             >
+              {item.key === "articles" && <PublicNavIcon iconKey={item.iconKey} size={17} />}
               {item.label}
               {item.guestUsable && <span className="public-nav-badge">免登入</span>}
             </Link>
@@ -440,7 +448,24 @@ function PublicSiteHeaderContent({
           >
             <p className="public-mobile-nav-heading">你想先做什麼？</p>
             <div className="grid gap-2">
-              {filteredTaskNav.map((item) => (
+              {featuredArticle && (
+                <Link
+                  href={featuredArticle.href}
+                  onClick={() => setOpen(false)}
+                  className="public-mobile-link public-mobile-article-link"
+                  aria-current={isCurrentPath(pathname, featuredArticle.href) ? "page" : undefined}
+                >
+                  <span className="public-mobile-article-icon" aria-hidden="true">
+                    <PublicNavIcon iconKey={featuredArticle.iconKey} size={23} />
+                  </span>
+                  <span className="public-mobile-article-copy">
+                    <span className="public-mobile-article-title">{featuredArticle.label}</span>
+                    <span className="public-mobile-article-description">{featuredArticle.description}</span>
+                  </span>
+                  <ArrowRight size={18} aria-hidden />
+                </Link>
+              )}
+              {otherTaskNav.map((item) => (
                 <Link
                   key={item.key}
                   href={item.href}
