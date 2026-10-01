@@ -197,9 +197,7 @@ function ProductModal({
   };
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-50 grid min-h-dvh place-items-center overflow-y-auto p-4"
-      style={{ background: "var(--bg-overlay)" }}>
+    <div className="shop-product-dialog-overlay public-site" style={{ background: "var(--bg-overlay)" }}>
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={dialogRef}
@@ -278,9 +276,9 @@ function ProductModal({
               <div className="shop-product-dialog-heading">
                 <h3 id="product-modal-title">{product.name}</h3>
                 {product.description && <p>{product.description}</p>}
-                <p className="shop-product-dialog-stock">
-                  {product.is_unlimited ? "供應中" : `剩餘 ${product.stock_quantity} 件`}
-                </p>
+                {!product.is_unlimited && product.status === "active" && (
+                  <p className="shop-product-dialog-stock">剩餘 {product.stock_quantity} 件</p>
+                )}
               </div>
 
               {variantGroups.map((g) => (
@@ -363,6 +361,7 @@ function ProductCard({
   onClick: () => void;
 }) {
   const soldOut = product.status === "sold_out";
+  const statusLabel = classClosed ? "本班已結單" : soldOut ? "已售完" : null;
   return (
     <button
       onClick={onClick}
@@ -385,11 +384,13 @@ function ProductCard({
             <Package size={38} strokeWidth={1.2} aria-hidden="true" />
           </div>
         )}
-        <span
-          className="shop-public-product-status"
-          data-sold-out={soldOut || undefined}>
-          {classClosed ? "本班已結單" : soldOut ? "已售完" : product.is_unlimited ? "供應中" : `剩 ${product.stock_quantity}`}
-        </span>
+        {statusLabel && (
+          <span
+            className="shop-public-product-status"
+            data-sold-out={soldOut || undefined}>
+            {statusLabel}
+          </span>
+        )}
       </div>
       <div className="shop-public-product-info">
         <h4>
