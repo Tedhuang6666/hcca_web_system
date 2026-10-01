@@ -57,6 +57,7 @@ export function articleTitleFromMarkdown(markdown: string): string {
 
 export function articleSummaryFromMarkdown(markdown: string): string {
   const summary = markdown
+    .replace(/```hcca-gallery[ \t]*\r?\n[\s\S]*?^```[ \t]*$/gmu, " ")
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("#") && !line.startsWith("!") && !line.startsWith("- "))

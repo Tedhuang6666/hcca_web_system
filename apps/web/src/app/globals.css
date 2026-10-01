@@ -3480,6 +3480,193 @@ select.input-field {
   text-align: center;
 }
 
+.article-editor-gallery-tools > div:first-child h3,
+.article-editor-gallery-tools > div:first-child p {
+  margin-bottom: 0;
+}
+
+.article-editor-gallery-progress {
+  overflow: hidden;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+
+.article-editor-gallery-progress > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: var(--primary);
+  transition: transform 120ms linear;
+}
+
+.article-editor-gallery-photos {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.article-editor-gallery-photo {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) 2.75rem;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  padding: 0.55rem;
+  background: var(--bg-surface);
+}
+
+.article-editor-gallery-photo > img {
+  display: block;
+  width: 4.5rem;
+  height: 3.5rem;
+  border-radius: 0.35rem;
+  background: var(--bg-elevated);
+  object-fit: cover;
+}
+
+.article-editor-gallery-remove,
+.article-markdown-gallery-controls > button {
+  display: inline-grid;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.article-editor-gallery-remove:hover:not(:disabled),
+.article-markdown-gallery-controls > button:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary-text);
+}
+
+.article-editor-gallery-remove:focus-visible,
+.article-markdown-gallery button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.article-editor-gallery-remove:disabled,
+.article-markdown-gallery-controls > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.article-markdown-gallery {
+  overflow: hidden;
+  width: min(100%, 60rem);
+  margin: 1.5rem auto;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--bg-elevated);
+}
+
+.article-markdown-gallery-viewport {
+  display: grid;
+  min-height: 14rem;
+  grid-template-rows: minmax(14rem, 1fr) auto;
+  justify-items: center;
+  background: var(--bg-elevated);
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.article-markdown-gallery-image {
+  display: block;
+  width: 100%;
+  height: min(65vh, 38rem);
+  object-fit: contain;
+}
+
+.article-markdown-gallery-caption {
+  width: 100%;
+  margin: 0;
+  padding: 0.65rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  text-align: center;
+  user-select: text;
+}
+
+.article-markdown-gallery-controls {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr 2.75rem;
+  align-items: center;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.article-markdown-gallery-controls > button {
+  background: transparent;
+}
+
+.article-markdown-gallery-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0 0.5rem 0.45rem;
+}
+
+.article-markdown-gallery-dots > button {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.article-markdown-gallery-dots > button > span {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+
+.article-markdown-gallery-dots > button[aria-pressed="true"] > span {
+  width: 1.25rem;
+  border-radius: 0.35rem;
+  background: var(--primary);
+}
+
+@media (max-width: 640px) {
+  .article-editor-gallery-photo {
+    grid-template-columns: 3.5rem minmax(0, 1fr) 2.75rem;
+    gap: 0.55rem;
+  }
+
+  .article-editor-gallery-photo > img {
+    width: 3.5rem;
+    height: 3rem;
+  }
+
+  .article-markdown-gallery-image {
+    height: min(58vh, 30rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .article-editor-gallery-progress > span {
+    transition: none;
+  }
+}
+
 .article-editor-preview .article-markdown code {
   border-radius: var(--radius-sm);
   padding: 0.12rem 0.3rem;

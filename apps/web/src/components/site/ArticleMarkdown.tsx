@@ -8,6 +8,7 @@ import type { PetitionMonthlyStatsOut } from "@/lib/types";
 import { extractArticleHeadings } from "@/lib/article-utils";
 import remarkBreaks from "@/lib/remarkBreaks";
 import ArticleChart from "./ArticleChart";
+import ArticleGallery, { type ArticleGalleryPhoto } from "./ArticleGallery";
 import PetitionMonthlyChart from "./PetitionMonthlyChart";
 
 function resolveImageSrc(src: string | undefined): string {
@@ -69,6 +70,15 @@ function isPetitionMonthlyStats(value: unknown): value is PetitionMonthlyStatsOu
       && isCount(item.count));
 }
 
+function isArticleGallery(value: unknown): value is ArticleGalleryPhoto[] {
+  return Array.isArray(value)
+    && value.length >= 2
+    && value.every((photo) => Boolean(photo)
+      && typeof photo.url === "string"
+      && photo.url.trim().length > 0
+      && typeof photo.description === "string");
+}
+
 function markdownText(value: ReactNode): string {
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (Array.isArray(value)) return value.map(markdownText).join("");
@@ -80,7 +90,9 @@ function ArticlePre({ children, ...props }: ComponentProps<"pre">) {
   const code = Children.toArray(children).find((child) =>
     isValidElement<{ className?: string; children?: ReactNode }>(child)
       && child.props.className?.split(/\s+/u).some((name) =>
-        name === "language-hcca-chart" || name === "language-hcca-petition-chart",
+          name === "language-hcca-chart"
+            || name === "language-hcca-petition-chart"
+            || name === "language-hcca-gallery",
       ),
   );
   if (isValidElement<{ className?: string; children?: ReactNode }>(code)) {
@@ -94,6 +106,9 @@ function ArticlePre({ children, ...props }: ComponentProps<"pre">) {
     }
     if (language === "language-hcca-chart" && isArticleChartSpec(stats)) {
       return <ArticleChart chart={stats} />;
+    }
+    if (language === "language-hcca-gallery" && isArticleGallery(stats)) {
+      return <ArticleGallery photos={stats} />;
     }
     if (isPetitionMonthlyStats(stats)) return <PetitionMonthlyChart stats={stats} />;
   }
