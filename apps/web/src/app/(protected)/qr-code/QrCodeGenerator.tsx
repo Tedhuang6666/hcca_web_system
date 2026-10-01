@@ -50,13 +50,14 @@ const PERMISSION = "qr_code:manage";
 const DEFAULT_CONTENT = "https://hcca.example.org/entry";
 const TRANSPARENT_BACKGROUND = "transparent";
 const DEFAULT_LOGO_PATH = BRANDING.publicEmblemUrl;
+const PRESET_COLORS = ["#A2873E", "#392360", "#004AAD"] as const;
 const DEFAULT_SETTINGS: QrSettings = {
   foreground: "#24163f",
   background: "#fffdf9",
   moduleStyle: "dot",
   errorCorrection: "H",
   size: 640,
-  margin: 4,
+  margin: 1,
   showBadge: false,
   badgeText: "自治平台",
   logoDataUrl: DEFAULT_LOGO_PATH,
@@ -118,7 +119,7 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
   const backgroundPaint = background === TRANSPARENT_BACKGROUND ? "none" : background;
   const centerBackdrop = background === TRANSPARENT_BACKGROUND ? "#ffffff" : background;
   const moduleCount = matrix.modules.size;
-  const margin = Math.max(2, Math.round(settings.margin));
+  const margin = Math.max(1, Math.round(settings.margin));
   const total = moduleCount + margin * 2;
   const parts = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${settings.size}" height="${settings.size}" viewBox="0 0 ${total} ${total}"${includeRole ? ' role="img" aria-label="QR Code 預覽"' : ""}>`,
@@ -457,14 +458,36 @@ export default function QrCodeGenerator() {
             <div className="qr-setting-section">
               <div className="qr-field-label"><span><Palette size={15} aria-hidden="true" />色彩</span><small>保持深淺對比</small></div>
               <div className="qr-color-grid">
-                <label className="qr-color-control"><span>前景</span><div><input type="color" value={validHex(settings.foreground, DEFAULT_SETTINGS.foreground)} onChange={(event) => updateSetting("foreground", event.target.value)} /><input className="qr-color-text" value={settings.foreground} onChange={(event) => updateSetting("foreground", event.target.value)} aria-label="前景色 HEX 色碼" /></div></label>
+                <div className="qr-color-control">
+                  <span>前景</span>
+                  <div className="qr-color-inputs">
+                    <input type="color" value={validHex(settings.foreground, DEFAULT_SETTINGS.foreground)} onChange={(event) => updateSetting("foreground", event.target.value)} aria-label="前景色彩選擇器" />
+                    <input className="qr-color-text" value={settings.foreground} onChange={(event) => updateSetting("foreground", event.target.value)} aria-label="前景色 HEX 色碼" />
+                  </div>
+                  <div className="qr-color-presets" role="group" aria-label="前景色預設">
+                    {PRESET_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`qr-color-preset ${settings.foreground.toUpperCase() === color ? "is-selected" : ""}`}
+                        style={{ "--qr-preset-color": color } as React.CSSProperties}
+                        aria-label={`套用前景色 ${color}`}
+                        aria-pressed={settings.foreground.toUpperCase() === color}
+                        onClick={() => updateSetting("foreground", color)}
+                      >
+                        <span className="qr-color-preset-swatch" aria-hidden="true" />
+                        <span>{color}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <label className="qr-color-control"><span>背景</span><div><input type="color" value={validHex(settings.background, DEFAULT_SETTINGS.background)} onChange={(event) => updateSetting("background", event.target.value)} /><input className="qr-color-text" value={settings.background === TRANSPARENT_BACKGROUND ? "" : settings.background} placeholder={settings.background === TRANSPARENT_BACKGROUND ? "透明背景" : "#fffdf9"} onChange={(event) => updateSetting("background", event.target.value)} aria-label="背景色 HEX 色碼" /><button type="button" className={`qr-transparent-button ${settings.background === TRANSPARENT_BACKGROUND ? "is-selected" : ""}`} aria-pressed={settings.background === TRANSPARENT_BACKGROUND} onClick={() => updateSetting("background", TRANSPARENT_BACKGROUND)} title="PNG 與 SVG 不輸出背景色">透明</button></div></label>
               </div>
             </div>
 
             <div className="qr-setting-section qr-setting-split">
               <label className="qr-range-control" htmlFor="qr-size"><span><SlidersHorizontal size={15} aria-hidden="true" />輸出尺寸 <b>{settings.size} px</b></span><input id="qr-size" type="range" min="256" max="1024" step="32" value={settings.size} onChange={(event) => updateSetting("size", Number(event.target.value))} /></label>
-              <label className="qr-range-control" htmlFor="qr-margin"><span><ChevronDown size={15} aria-hidden="true" />外圍留白 <b>{settings.margin} 格</b></span><input id="qr-margin" type="range" min="2" max="8" step="1" value={settings.margin} onChange={(event) => updateSetting("margin", Number(event.target.value))} /></label>
+              <label className="qr-range-control" htmlFor="qr-margin"><span><ChevronDown size={15} aria-hidden="true" />外圍留白 <b>{settings.margin} 格</b></span><input id="qr-margin" type="range" min="1" max="8" step="1" value={settings.margin} onChange={(event) => updateSetting("margin", Number(event.target.value))} /></label>
             </div>
 
             <div className="qr-setting-section">
