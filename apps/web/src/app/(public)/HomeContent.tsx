@@ -135,7 +135,11 @@ export default function HomeContent({
                         <span className="public-home-activity-title">{item.title}</span>
                       </span>
                       <span className="public-home-activity-detail">{item.detail}</span>
-                      <ArrowRight size={18} aria-hidden="true" />
+                      <ArrowRight
+                        size={18}
+                        className="public-home-activity-arrow"
+                        aria-hidden="true"
+                      />
                     </Link>
                   );
                 })}
