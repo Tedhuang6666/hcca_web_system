@@ -602,9 +602,15 @@
   }
 
   .public-home-activity-detail {
-    grid-column: 2 / -1;
+    grid-column: 2;
     margin-top: -0.45rem;
     text-align: left;
+  }
+
+  .public-home-activity-arrow {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    justify-self: end;
   }
 
   .public-home-dynamics-layout:has(> a) {
