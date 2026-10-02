@@ -97,8 +97,10 @@ function ProductModal({
   const [productLoading, setProductLoading] = useState(true);
   const [productLoadError, setProductLoadError] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [registrationUpdateMessage, setRegistrationUpdateMessage] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const registrationUpdateInFlightRef = useRef(false);
   const registrationItemsRef = useRef(registration?.items ?? []);
   const loadedProductId = product?.id ?? null;
   const registrationId = registration?.id ?? null;
@@ -108,6 +110,7 @@ function ProductModal({
     setPicked({});
     setSelectedMediaIndex(null);
     setQty(1);
+    setRegistrationUpdateMessage("");
     setProductLoading(true);
     setProductLoadError(false);
     try {
@@ -245,6 +248,7 @@ function ProductModal({
 
   const setVariantQuantity = async (optionIds: string[], quantity: number) => {
     if (!product) return;
+    if (registrationUpdateInFlightRef.current) return;
     if (!canEdit) {
       toast.error(registrationLockMessage({
         registrationLocked,
@@ -253,7 +257,9 @@ function ProductModal({
       }));
       return;
     }
+    registrationUpdateInFlightRef.current = true;
     setLoading(true);
+    setRegistrationUpdateMessage("正在更新登記數量…");
     try {
       const currentVariants = new Map<string, { option_ids: string[]; quantity: number }>();
       for (const item of registeredItems) {
@@ -265,18 +271,33 @@ function ProductModal({
         });
       }
       const key = [...optionIds].sort().join(",");
+      const wasRegistered = (currentVariants.get(key)?.quantity ?? 0) > 0;
       currentVariants.delete(key);
       if (quantity > 0) currentVariants.set(key, { option_ids: [...optionIds].sort(), quantity });
       const updated = await shopApi.setCurrentRegistrationProduct(product.id, {
         variants: [...currentVariants.values()],
       });
       onRegistrationChange(updated?.status === "cancelled" ? null : updated);
-      toast.success(quantity > 0 ? "商品登記已更新" : "商品登記已移除");
+      if (key === selectedOptionIds.join(",")) setQty(quantity > 0 ? quantity : 1);
+      setRegistrationUpdateMessage(quantity > 0
+        ? wasRegistered ? `已立即更新為 ${quantity} 件。` : `已登記 ${quantity} 件。`
+        : "已從登記移除這個規格。");
     } catch (e) {
+      setRegistrationUpdateMessage("更新失敗，登記數量維持原值。");
       toast.error(apiErrorMessage(e, "商品登記更新失敗"));
     } finally {
+      registrationUpdateInFlightRef.current = false;
       setLoading(false);
     }
+  };
+
+  const changeSelectedQuantity = (quantity: number) => {
+    if (selectedRegistrationQuantity > 0) {
+      void setVariantQuantity(selectedOptionIds, quantity);
+      return;
+    }
+    setQty(quantity);
+    setRegistrationUpdateMessage("");
   };
 
   const submit = () => {
@@ -400,8 +421,9 @@ function ProductModal({
                                 .filter((item) => registrationVariantKey(item.selected_options) === nextKey)
                                 .reduce((total, item) => total + item.quantity, 0);
                               setQty(registered || 1);
+                              setRegistrationUpdateMessage("");
                             }}
-                            disabled={authLoading}
+                            disabled={authLoading || loading}
                             className="shop-product-option"
                             aria-pressed={sel}>
                             {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
@@ -432,14 +454,14 @@ function ProductModal({
                   <div className="shop-product-quantity">
                     <button
                       type="button"
-                      onClick={() => setQty((q) => Math.max(selectedRegistrationQuantity > 0 ? 0 : 1, q - 1))}
-                      disabled={qty <= (selectedRegistrationQuantity > 0 ? 0 : 1) || !canEdit}
+                      onClick={() => changeSelectedQuantity(Math.max(selectedRegistrationQuantity > 0 ? 0 : 1, qty - 1))}
+                      disabled={qty <= (selectedRegistrationQuantity > 0 ? 0 : 1) || !canEdit || loading}
                       aria-label="減少數量">−</button>
                     <span>{qty}</span>
                     <button
                       type="button"
-                      onClick={() => setQty((q) => Math.min(maxSelectedQuantity, q + 1))}
-                      disabled={qty >= maxSelectedQuantity || !canEdit}
+                      onClick={() => changeSelectedQuantity(Math.min(maxSelectedQuantity, qty + 1))}
+                      disabled={qty >= maxSelectedQuantity || !canEdit || loading}
                       aria-label="增加數量">＋</button>
                   </div>
                 )}
@@ -464,6 +486,8 @@ function ProductModal({
                                 item.selected_options.map((option) => [option.group_id, option.option_id]),
                               ));
                               setQty(item.quantity);
+                              setSelectedMediaIndex(null);
+                              setRegistrationUpdateMessage("");
                             }}>
                             {optionLabel}
                           </button>
@@ -473,19 +497,19 @@ function ProductModal({
                               onClick={() => void setVariantQuantity(optionIds, item.quantity - 1)}
                               disabled={!canEdit || loading}
                               aria-label={`減少${optionLabel}數量`}
-                              className="btn btn-ghost h-8 w-8 p-0">−</button>
+                              className="btn btn-ghost h-11 w-11 p-0">−</button>
                             <span className="w-5 text-center tabular-nums">{item.quantity}</span>
                             <button
                               type="button"
                               onClick={() => void setVariantQuantity(optionIds, item.quantity + 1)}
                               disabled={!canEdit || loading || registeredQuantity >= maxSelectableQuantity}
                               aria-label={`增加${optionLabel}數量`}
-                              className="btn btn-ghost h-8 w-8 p-0">＋</button>
+                              className="btn btn-ghost h-11 w-11 p-0">＋</button>
                             <button
                               type="button"
                               onClick={() => void setVariantQuantity(optionIds, 0)}
                               disabled={!canEdit || loading}
-                              className="text-xs"
+                              className="min-h-11 min-w-11 px-2 text-xs"
                               style={{ color: "var(--text-muted)" }}>移除</button>
                           </div>
                         </div>
@@ -494,6 +518,12 @@ function ProductModal({
                   </div>
                 </div>
               )}
+
+              {selectedRegistrationQuantity > 0 || registrationUpdateMessage ? (
+                <p className="shop-product-registration-status" role="status" aria-live="polite">
+                  {registrationUpdateMessage || `已登記 ${selectedRegistrationQuantity} 件，調整數量會立即更新。`}
+                </p>
+              ) : null}
 
               {!isLoggedIn ? (
                 <p className="shop-product-purchase-hint" role="status">
@@ -509,7 +539,12 @@ function ProductModal({
                 </p>
               ) : null}
               <div className="shop-product-dialog-actions">
-                {isLoggedIn ? (
+                {isLoggedIn && selectedRegistrationQuantity > 0 ? (
+                  <div className="shop-product-registration-summary">
+                    <strong>已登記 {selectedRegistrationQuantity} 件</strong>
+                    <span>NT${(unitPrice * selectedRegistrationQuantity).toLocaleString()}</span>
+                  </div>
+                ) : isLoggedIn ? (
                   <button
                     type="button"
                     onClick={submit}
@@ -517,12 +552,8 @@ function ProductModal({
                     className="shop-product-submit"
                     aria-busy={loading}>
                     {loading
-                      ? "儲存中…"
-                      : qty === 0
-                        ? "移除規格"
-                        : selectedRegistrationQuantity > 0
-                        ? `更新登記 · NT$${(unitPrice * qty).toLocaleString()}`
-                        : `登記購買 · NT$${(unitPrice * qty).toLocaleString()}`}
+                      ? "處理中…"
+                      : `登記購買 · NT$${(unitPrice * qty).toLocaleString()}`}
                   </button>
                 ) : (
                   <Link
@@ -531,7 +562,13 @@ function ProductModal({
                     登入後登記商品
                   </Link>
                 )}
-                <button type="button" onClick={onClose} className="shop-product-cancel">取消</button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={loading}
+                  className="shop-product-cancel">
+                  {selectedRegistrationQuantity > 0 ? "完成" : "取消"}
+                </button>
               </div>
             </>
           )}
