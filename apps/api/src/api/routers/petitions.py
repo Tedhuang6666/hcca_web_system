@@ -168,9 +168,7 @@ async def _manageable_org_ids(
     org_ids: set[uuid.UUID] = set()
     for permission in permissions:
         org_ids.update(
-            await petition_svc.get_user_case_org_ids_with_permission(
-                session, user.id, permission
-            )
+            await petition_svc.get_user_case_org_ids_with_permission(session, user.id, permission)
         )
     return list(org_ids)
 

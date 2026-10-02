@@ -118,13 +118,15 @@ async def get_user_case_org_ids_with_permission(
     session: AsyncSession, user_id: uuid.UUID, permission_code: str
 ) -> list[uuid.UUID]:
     """回傳具陳情權限的組織；分案／處理權限包含直屬下級機關案件。"""
-    org_ids = set(
-        await get_user_org_ids_with_permission(session, user_id, permission_code)
-    )
-    if permission_code not in {
-        str(PermissionCode.PETITION_ASSIGN),
-        str(PermissionCode.PETITION_HANDLE),
-    } or not org_ids:
+    org_ids = set(await get_user_org_ids_with_permission(session, user_id, permission_code))
+    if (
+        permission_code
+        not in {
+            str(PermissionCode.PETITION_ASSIGN),
+            str(PermissionCode.PETITION_HANDLE),
+        }
+        or not org_ids
+    ):
         return list(org_ids)
 
     result = await session.scalars(select(Org.id).where(Org.parent_id.in_(org_ids)))
@@ -580,9 +582,7 @@ async def case_assignable_org_ids(
     session: AsyncSession, *, current_org_id: uuid.UUID, actor_id: uuid.UUID
 ) -> list[uuid.UUID]:
     """回傳操作者可指派承辦人的組織：案件機關，以及具分案權的直接上級。"""
-    parent_org_id = await session.scalar(
-        select(Org.parent_id).where(Org.id == current_org_id)
-    )
+    parent_org_id = await session.scalar(select(Org.parent_id).where(Org.id == current_org_id))
     if parent_org_id is None:
         return [current_org_id]
 
