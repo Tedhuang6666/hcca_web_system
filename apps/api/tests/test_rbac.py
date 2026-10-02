@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
-from api.services.permission import get_user_permission_codes, user_has_permission
+from api.services.permission import (
+    get_user_permission_codes,
+    get_user_permission_codes_batch,
+    get_user_permission_codes_for_org,
+    user_has_permission,
+)
 
 
 async def _seed_data(
@@ -69,6 +74,70 @@ async def test_active_user_has_org_default_permission(db_session: AsyncSession) 
     codes = await get_user_permission_codes(db_session, user.id)
 
     assert "document:submit" in codes
+
+
+@pytest.mark.asyncio
+async def test_user_inherits_default_permissions_from_org_ancestors(
+    db_session: AsyncSession,
+) -> None:
+    """下級組織成員取得自身與所有上級組織的預設權限。"""
+    user, position = await _seed_data(db_session, start_offset=-10)
+    today = local_today()
+    root = Org(name="學生會", default_permission_codes=["finance:view"])
+    department = Org(
+        name="學權部",
+        default_permission_codes=["document:create"],
+        parent=root,
+    )
+    db_session.add_all([root, department])
+    await db_session.flush()
+
+    leaf = await db_session.get(Org, position.org_id)
+    assert leaf is not None
+    leaf.parent_id = department.id
+    leaf.default_permission_codes = ["document:submit"]
+
+    root_user = User(
+        email="root-member@school.edu",
+        display_name="學生會成員",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(root_user)
+    await db_session.flush()
+    root_position = Position(org_id=root.id, name="學生會職位")
+    db_session.add(root_position)
+    await db_session.flush()
+    db_session.add(
+        UserPosition(
+            user_id=root_user.id,
+            position_id=root_position.id,
+            start_date=today,
+        )
+    )
+    await db_session.flush()
+
+    effective_codes = await get_user_permission_codes(db_session, user.id, on_date=today)
+    scoped_codes = await get_user_permission_codes_for_org(
+        db_session, user.id, leaf.id, on_date=today
+    )
+    batch_codes = await get_user_permission_codes_batch(
+        db_session, [user.id, root_user.id], on_date=today
+    )
+    root_codes = await get_user_permission_codes(db_session, root_user.id, on_date=today)
+
+    inherited = {"finance:view", "document:create", "document:submit"}
+    assert inherited <= effective_codes
+    assert inherited <= scoped_codes
+    assert inherited <= batch_codes[user.id]
+    assert "document:create" not in root_codes
+    assert "document:submit" not in root_codes
+    assert "document:create" not in batch_codes[root_user.id]
+    assert "document:submit" not in batch_codes[root_user.id]
+    assert (
+        await get_user_permission_codes_for_org(db_session, user.id, root.id, on_date=today)
+        == frozenset()
+    )
 
 
 @pytest.mark.asyncio
