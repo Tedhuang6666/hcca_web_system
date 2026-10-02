@@ -603,22 +603,23 @@ export default function DocumentDetailPageClient({
 
         <div className="document-detail-actions">
           <div className="document-detail-action-buttons">
+          <div className="document-detail-reading-tools" role="group" aria-label="閱讀工具">
           {/* 縮放控制 */}
-          <div className="flex items-center gap-0.5 rounded-lg overflow-hidden"
-            style={{ border: "1px solid rgba(148,163,184,0.2)" }}>
+          <div className="document-detail-zoom-control rounded-lg overflow-hidden"
+            style={{ border: "1px solid var(--border)" }}>
             <button onClick={() => setZoom(z => Math.max(70, z - 10))}
               className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
-              style={{ color: "#64748b" }} title="縮小">
+              style={{ color: "var(--text-muted)" }} title="縮小" aria-label="縮小公文">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                 <line x1="8" y1="11" x2="14" y2="11" />
               </svg>
             </button>
-            <span className="text-xs px-1 select-none" style={{ color: "#64748b" }}>{zoom}%</span>
+            <span className="text-xs px-1 select-none" style={{ color: "var(--text-muted)" }}>{zoom}%</span>
             <button onClick={() => setZoom(z => Math.min(150, z + 10))}
               className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
-              style={{ color: "#64748b" }} title="放大">
+              style={{ color: "var(--text-muted)" }} title="放大" aria-label="放大公文">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -638,13 +639,16 @@ export default function DocumentDetailPageClient({
               }
             }}
             className="topbar-icon-btn"
-            title="複製連結">
+            title="複製連結"
+            aria-label="複製公文連結">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
             </svg>
           </button>
+          </div>
 
+          <div className="document-detail-document-actions" role="group" aria-label="公文操作">
           {/* 超過六小時的已發文公文仍可進入摘要編輯 */}
           {canEditDocument && (
             <Link href={`/documents/${id}/edit`} className="btn btn-ghost text-sm gap-1.5">
@@ -751,9 +755,12 @@ export default function DocumentDetailPageClient({
               解除封存
             </button>
           )}
+          </div>
           {/* 官式公文列印；製作者與管理員可選正本、副本或影本。 */}
           <div
-            className="flex min-h-9 items-stretch overflow-hidden rounded-lg max-sm:min-h-11"
+            className="document-detail-print-tools flex min-h-9 items-stretch overflow-hidden rounded-lg max-sm:min-h-11"
+            role="group"
+            aria-label="列印公文"
             style={{ border: "1px solid var(--border-strong)" }}
           >
           {canChoosePrintVariant && (
@@ -790,7 +797,7 @@ export default function DocumentDetailPageClient({
                 toast.error(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`);
               }
             }}
-            className="px-4 py-2 text-sm font-medium inline-flex flex-1 items-center justify-center gap-1.5 transition-colors hover:brightness-110"
+            className="px-4 py-2 text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-colors hover:brightness-110"
             style={{
               background: "var(--primary-dim)",
               color: "var(--primary)",
