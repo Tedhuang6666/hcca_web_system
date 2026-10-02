@@ -34,13 +34,13 @@
 }
 
 .public-articles-heading h1 {
-  max-width: 13ch;
   margin: 0;
   color: var(--public-text);
-  font-size: clamp(2.5rem, 7vw, 5rem);
+  font-size: clamp(2rem, 5vw, 4rem);
   font-weight: 780;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.03em;
   line-height: 1.08;
+  text-wrap: balance;
 }
 
 .public-articles-intro {
