@@ -282,6 +282,7 @@ function ProductFormModal({
         : [],
     );
     setMedia((current) => [...current, ...uploaded].slice(0, 20));
+    if (uploaded[0]) setImageUrl((current) => current ?? uploaded[0].image_url);
     const failedCount = results.length - uploaded.length;
     if (failedCount > 0) {
       toast.error(`${failedCount} 張照片上傳失敗，請重新選取後再試`);
@@ -334,33 +335,36 @@ function ProductFormModal({
           <input type="datetime-local" value={saleEnd} onChange={(e) => setSaleEnd(e.target.value)}
             className="input w-full" />
         </Field>
-        <Field label="商品圖片">
-          <ImageField value={imageUrl} onChange={setImageUrl} />
-        </Field>
         <section className="space-y-2 rounded-lg p-3"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>更多圖片</h3>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品照片</h3>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              這些照片會出現在商品詳情，並自動連結到「{name.trim() || "此商品"}」。
+              可一次選取多張；尚未設定主圖時，首張會自動設為主圖。最多 20 張。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <button type="button" disabled={media.length >= 20 || mediaUploadsInProgress > 0}
               onClick={() => mediaInputRef.current?.click()}
               className="btn btn-ghost min-h-11 text-xs">
-              {mediaUploadsInProgress > 0 ? `上傳中 ${mediaUploadsInProgress} 張…` : "一次選取多張商品照片"}
+              {mediaUploadsInProgress > 0 ? `上傳中 ${mediaUploadsInProgress} 張…` : "選取照片"}
             </button>
             <input ref={mediaInputRef} type="file" accept="image/*" multiple className="sr-only"
-              aria-label="一次選取多張商品照片"
+              aria-label="一次選取多張商品照片" disabled={media.length >= 20 || mediaUploadsInProgress > 0}
               onChange={(event) => {
                 const files = Array.from(event.currentTarget.files ?? []);
                 event.currentTarget.value = "";
                 void uploadProductImages(files);
               }} />
-            <button type="button" disabled={media.length >= 20 || mediaUploadsInProgress > 0}
-              onClick={() => setMedia((current) => [...current, { id: crypto.randomUUID(), image_url: null, kind: "model" }])}
-              className="btn btn-ghost min-h-11 text-xs">新增模特兒宣傳照</button>
+            <div className="flex min-w-0 items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              <Thumb url={imageUrl} size={40} />
+              <span>{imageUrl ? "目前商品主圖" : "尚未選擇主圖"}</span>
+              {imageUrl && (
+                <button type="button" onClick={() => setImageUrl(null)} className="underline underline-offset-2">
+                  取消主圖
+                </button>
+              )}
+            </div>
           </div>
           {media.map((item, index) => (
             <div key={item.id} className="flex min-w-0 items-start gap-3 rounded-lg p-2"
@@ -378,30 +382,22 @@ function ProductFormModal({
                     <option value="model">模特兒宣傳照</option>
                   </select>
                 </Field>
-                <AnimatedFileUpload
-                  accept="image/*"
-                  label={item.image_url ? "更換照片" : "上傳照片"}
-                  hint="點擊選取或貼上圖片"
-                  onUpload={async (file, reportProgress) => {
-                    setMediaUploadsInProgress((count) => count + 1);
-                    try {
-                      return await shopApi.uploadImage(file, reportProgress);
-                    } finally {
-                      setMediaUploadsInProgress((count) => Math.max(0, count - 1));
-                    }
-                  }}
-                  onUploaded={(result) => setMedia((current) => current.map((entry) =>
-                    entry.id === item.id ? { ...entry, image_url: result.url } : entry))}
-                />
+                <button type="button" disabled={!item.image_url}
+                  aria-pressed={imageUrl === item.image_url}
+                  onClick={() => setImageUrl(item.image_url)}
+                  className="btn btn-ghost min-h-11 text-xs">
+                  {imageUrl === item.image_url ? "目前主圖" : "設為主圖"}
+                </button>
               </div>
               <button type="button" aria-label={`移除第 ${index + 1} 張照片`}
-                onClick={() => setMedia((current) => current.filter((entry) => entry.id !== item.id))}
+                onClick={() => {
+                  if (imageUrl === item.image_url) setImageUrl(null);
+                  setMedia((current) => current.filter((entry) => entry.id !== item.id));
+                }}
                 className="btn btn-ghost min-h-11 px-3 text-xs">移除</button>
             </div>
           ))}
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            最多 20 張；可一次多選商品照片。商品主圖仍會顯示在商品卡片上。
-          </p>
+          {media.length === 0 && <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未新增商品照片。</p>}
         </section>
         <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
           <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -446,7 +442,7 @@ function ProductFormModal({
                 description: description.trim() || null,
                 image_url: imageUrl,
                 media: media.flatMap(({ image_url, kind }, sort_order) =>
-                  image_url ? [{ image_url, kind, sort_order }] : []),
+                  image_url && image_url !== imageUrl ? [{ image_url, kind, sort_order }] : []),
                 price: Number(price) || 0,
                 stock_quantity: Number(stock) || 0,
                 is_unlimited: unlimited,
@@ -1315,7 +1311,7 @@ export default function ShopAdminPage() {
   }
 
   const delCategory = async (c: ProductCategoryOut) => {
-    if (!confirm(`確定刪除主題「${c.name}」？`)) return;
+    if (!confirm(`確定刪除主題「${c.name}」？主題下必須沒有系列或商品才能刪除。`)) return;
     try {
       await shopApi.deleteCategory(c.id);
       loadCategories();
@@ -1325,11 +1321,28 @@ export default function ShopAdminPage() {
     }
   };
   const delSeries = async (s: ProductSeriesOut) => {
-    if (!confirm(`確定刪除系列「${s.name}」？`)) return;
+    if (!confirm(`確定刪除系列「${s.name}」？系列下必須沒有商品才能刪除。`)) return;
     try {
       await shopApi.deleteSeries(s.id);
       if (cat) loadSeries(cat.id);
       if (series?.id === s.id) selectSeries(null);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "刪除失敗"));
+    }
+  };
+  const delProduct = async (p: ProductOut) => {
+    if (!confirm(`確定刪除商品「${p.name}」？已有訂單紀錄的商品無法刪除。`)) return;
+    try {
+      await shopApi.deleteProduct(p.id);
+      toast.success("商品已刪除");
+      if (p.category_id && cat?.id === p.category_id) loadDirectProducts(p.category_id);
+      if (p.series_id && series?.id === p.series_id) loadProducts(p.series_id);
+      loadAllProducts();
+      if (productId === p.id) {
+        setProductId(null);
+        setProduct(null);
+        setMobileDetailOpen(false);
+      }
     } catch (e) {
       toast.error(apiErrorMessage(e, "刪除失敗"));
     }
@@ -1389,6 +1402,7 @@ export default function ShopAdminPage() {
         onClick={() => setProductModal({ initial: item })}>
         編輯
       </button>
+      <MiniBtn tone="danger" onClick={() => void delProduct(item)}>刪除</MiniBtn>
     </div>
   );
 
@@ -1440,7 +1454,6 @@ export default function ShopAdminPage() {
       </div>
       <div className="flex flex-wrap gap-2">
         <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯主題</MiniBtn>
-        <MiniBtn tone="danger" onClick={() => delCategory(cat)}>刪除主題</MiniBtn>
         <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增單一商品</MiniBtn>
       </div>
     </div>
@@ -1456,7 +1469,6 @@ export default function ShopAdminPage() {
       </div>
       <div className="flex flex-wrap gap-2">
         <MiniBtn tone="primary" onClick={() => setSeriesModal({ initial: series })}>編輯系列</MiniBtn>
-        <MiniBtn tone="danger" onClick={() => delSeries(series)}>刪除系列</MiniBtn>
         <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: series.id })}>新增商品</MiniBtn>
       </div>
     </div>
@@ -1504,19 +1516,22 @@ export default function ShopAdminPage() {
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {categories.map((c) => (
-                  <button key={c.id} onClick={() => selectCategory(c)}
-                    className="w-full flex items-center gap-2 p-2 rounded-lg text-left"
-                    style={cat?.id === c.id
-                      ? { background: "var(--primary-dim)", color: "var(--primary)" }
-                      : { color: "var(--text-secondary)", opacity: c.is_active ? 1 : 0.6 }}>
-                    <Thumb url={c.image_url} size={34} />
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-medium truncate">{c.name}</span>
-                      <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
-                        {c.description || "無描述"}
+                  <div key={c.id} className="flex items-center gap-1">
+                    <button type="button" onClick={() => selectCategory(c)}
+                      className="min-h-11 flex-1 min-w-0 flex items-center gap-2 p-2 rounded-lg text-left"
+                      style={cat?.id === c.id
+                        ? { background: "var(--primary-dim)", color: "var(--primary)" }
+                        : { color: "var(--text-secondary)", opacity: c.is_active ? 1 : 0.6 }}>
+                      <Thumb url={c.image_url} size={34} />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium truncate">{c.name}</span>
+                        <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
+                          {c.description || "無描述"}
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                    <MiniBtn tone="danger" onClick={() => void delCategory(c)}>刪除</MiniBtn>
+                  </div>
                 ))}
                 {categories.length === 0 && <p className="p-4 text-sm text-center" style={{ color: "var(--text-muted)" }}>尚無主題</p>}
               </div>
@@ -1568,6 +1583,7 @@ export default function ShopAdminPage() {
                           <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
                             onClick={() => { selectSeries(s); setMobileDetailOpen(true); }}>管理</button>
                           <MiniBtn onClick={() => setSeriesModal({ initial: s })}>編輯</MiniBtn>
+                          <MiniBtn tone="danger" onClick={() => void delSeries(s)}>刪除</MiniBtn>
                         </div>
                         {series?.id === s.id && (
                           <div className="px-3 pb-3 space-y-2">
