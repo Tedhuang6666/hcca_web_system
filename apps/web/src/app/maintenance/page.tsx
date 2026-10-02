@@ -86,7 +86,7 @@ function MaintenanceContent() {
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-between">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <BrandEmblem size={42} framed priority />
+            <BrandEmblem size={42} priority />
             <div>
               <div className="text-sm font-semibold text-[var(--text-primary)]">數位整合系統</div>
               <div className="text-xs text-[var(--text-muted)]">服務狀態</div>
