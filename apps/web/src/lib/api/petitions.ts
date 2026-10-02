@@ -1,5 +1,6 @@
 import type {
   PetitionAdminCreate, PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
+  PetitionReplyCreate,
   PetitionMonthlyStatsOut, PetitionStatsOut, PetitionStatus, PetitionSubmitterUpdate, PetitionTypeOut,
   PetitionPublicListItem, PetitionPublicOut,
   PetitionNotificationRuleCreate, PetitionNotificationRuleOut, PetitionNotificationRuleUpdate,
@@ -111,7 +112,7 @@ export const petitionsApi = {
     patch<PetitionCaseOut>(`/petitions/${id}/assign`, body),
   transfer: (id: string, body: { to_org_id: string; reason: string }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/transfer`, body),
-  reply: (id: string, body: { public_content: string; internal_note?: string | null; resolve?: boolean; close?: boolean }) =>
+  reply: (id: string, body: PetitionReplyCreate) =>
     post<PetitionCaseOut>(`/petitions/${id}/reply`, body),
   requestPublic: (id: string, body: { title?: string | null; content?: string | null }) =>
     post<PetitionCaseOut>(`/petitions/${id}/public-request`, body),
@@ -138,4 +139,6 @@ export const petitionsApi = {
     const qs = verificationCode ? `?${new URLSearchParams({ verification_code: verificationCode }).toString()}` : "";
     return `${BASE}/petitions/${id}/attachments/${attachmentId}/download${qs}`;
   },
+  attachmentPreviewUrl: (id: string, attachmentId: string) =>
+    `${BASE}/petitions/${id}/attachments/${attachmentId}/preview`,
 };

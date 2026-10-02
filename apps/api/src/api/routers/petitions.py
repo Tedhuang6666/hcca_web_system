@@ -252,8 +252,14 @@ async def _notify(
     external_email: str | None = None,
     external_name: str | None = None,
     email_allowed: bool = True,
+    attachments: list[PetitionAttachment] | None = None,
 ) -> None:
     notification_body = _petition_notification_body(case_obj, body)
+    attachment_ids = [attachment.id for attachment in attachments or []]
+    if attachments:
+        notification_body += "\n\n回覆附件：\n" + "\n".join(
+            attachment.display_name or attachment.filename for attachment in attachments
+        )
     if user_id is not None:
         try:
             from api.services.notification import create_notification
@@ -267,6 +273,7 @@ async def _notify(
                 link=link,
                 related_id=related_id,
                 email_allowed=email_allowed,
+                email_attachment_ids=attachment_ids or None,
             )
         except Exception:
             session.add(
@@ -291,6 +298,8 @@ async def _notify(
                     "contact_name": external_name or "",
                     "title": title,
                     "body": notification_body,
+                    "related_id": str(related_id),
+                    "attachment_ids": [str(attachment_id) for attachment_id in attachment_ids],
                 },
             )
         except Exception:
@@ -1532,12 +1541,47 @@ async def reply_case(
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
+    reply_attachments: list[PetitionAttachment] = []
+    if payload.attachment_ids:
+        attachment_ids = list(dict.fromkeys(payload.attachment_ids))
+        if len(attachment_ids) != len(payload.attachment_ids):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="回覆附件不可重複",
+            )
+        result = await session.execute(
+            select(PetitionAttachment).where(
+                PetitionAttachment.case_id == case_obj.id,
+                PetitionAttachment.id.in_(attachment_ids),
+            )
+        )
+        reply_attachments = list(result.scalars().all())
+        if len(reply_attachments) != len(attachment_ids):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到回覆附件")
+        if any(
+            attachment.uploaded_by != user.id
+            or attachment.visibility != PetitionAttachmentVisibility.INTERNAL
+            for attachment in reply_attachments
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只能將自己剛上傳的內部附件加入回覆",
+            )
+        if sum(attachment.file_size or 0 for attachment in reply_attachments) > 20 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="回覆附件總大小不可超過 20 MB",
+            )
+        for attachment in reply_attachments:
+            attachment.visibility = PetitionAttachmentVisibility.PUBLIC
+        await session.flush()
+
     case_obj = await petition_svc.reply_case(session, case_obj, data=payload, actor_id=user.id)
     await _notify(
         session,
         case_obj,
         user_id=case_obj.submitter_id,
-        email_allowed=payload.resolve or payload.close,
+        email_allowed=payload.resolve or payload.close or bool(reply_attachments),
         type=(
             "petition_status_updated"
             if case_obj.status == PetitionStatus.CLOSED
@@ -1549,6 +1593,7 @@ async def reply_case(
         related_id=case_obj.id,
         external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
         external_name=case_obj.contact_name,
+        attachments=reply_attachments,
     )
     await _notify_responsible(
         session,
@@ -1839,6 +1884,97 @@ async def download_attachment(
         )
     url = await storage.get_url(att.storage_key, disposition="attachment", download_name=filename)
     return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
+@router.get(
+    "/{case_id}/attachments/{attachment_id}/preview",
+    summary="預覽陳情附件",
+    response_class=Response,
+    response_model=None,
+    responses={
+        200: {
+            "description": "圖片與 PDF 原檔，或由 Office 文件轉換的 PDF。",
+            "content": {
+                media_type: {"schema": {"type": "string", "format": "binary"}}
+                for media_type in (
+                    "application/pdf",
+                    "image/jpeg",
+                    "image/png",
+                    "image/gif",
+                    "image/webp",
+                )
+            },
+        }
+    },
+)
+async def preview_attachment(
+    case_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    session: DbDep,
+    user: CurrentUser,
+) -> Response:
+    case_obj = await _case_or_404(session, case_id)
+    include_internal, _ = await _assert_case_access(session, case_obj, user)
+    result = await session.execute(
+        select(PetitionAttachment).where(
+            PetitionAttachment.id == attachment_id,
+            PetitionAttachment.case_id == case_obj.id,
+        )
+    )
+    attachment = result.scalar_one_or_none()
+    if attachment is None or (
+        attachment.visibility == PetitionAttachmentVisibility.INTERNAL and not include_internal
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此附件")
+
+    storage = get_storage()
+    filename = attachment.display_name or attachment.filename
+    media_type = attachment.content_type or "application/octet-stream"
+    from api.services.petition_preview import (
+        OFFICE_EXTENSIONS,
+        PetitionPreviewError,
+        PetitionPreviewUnavailable,
+        convert_office_attachment_to_pdf,
+    )
+
+    stored_filename = attachment.storage_key.rsplit("/", 1)[-1]
+    extension = f".{stored_filename.rsplit('.', 1)[-1].lower()}" if "." in stored_filename else ""
+    try:
+        file_bytes = await storage.read_bytes(attachment.storage_key)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在") from exc
+
+    if extension in OFFICE_EXTENSIONS:
+        try:
+            pdf_bytes = await convert_office_attachment_to_pdf(file_bytes, stored_filename)
+        except PetitionPreviewUnavailable as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            ) from exc
+        except PetitionPreviewError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+        pdf_filename = f"{filename.rsplit('.', 1)[0]}.pdf"
+        encoded_pdf_filename = quote(pdf_filename.encode("utf-8"))
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{encoded_pdf_filename}",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    encoded_filename = quote(filename.encode("utf-8"))
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post(

@@ -9,7 +9,7 @@ import type { PetitionCaseOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
 import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
-import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 
@@ -132,16 +132,8 @@ export default function PetitionDetailPage() {
 
         <aside className="space-y-5">
           <section className="card p-5 space-y-3">
-            <h2 className="font-semibold">附件</h2>
-            {item.attachments.length === 0 ? <p className="text-sm text-muted">尚無附件</p> : item.attachments.map((att) => (
-              <AnimatedDownloadButton
-                key={att.id}
-                className="block w-full rounded-lg p-3 text-left text-sm"
-                style={{ border: "1px solid var(--border)" }}
-                href={petitionsApi.attachmentDownloadUrl(item.id, att.id)}
-                filename={att.display_name || att.filename}
-                label={att.display_name || att.filename} />
-            ))}
+            <h2 className="font-semibold">附件（{item.attachments.length}）</h2>
+            <PetitionAttachmentList caseId={item.id} attachments={item.attachments} />
           </section>
 
           {item.can_supplement && (
@@ -151,7 +143,7 @@ export default function PetitionDetailPage() {
               <textarea className="input w-full min-h-28" value={supplement} onChange={(e) => setSupplement(e.target.value)} placeholder="請補充承辦機關要求的資料" />
               <input className="input w-full" placeholder="案件驗證碼（登入本人可留空）" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))} maxLength={5} />
               <AnimatedFileUpload
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
                 label="拖曳補件附件到這裡"
                 hint="檔案會和補充內容一起送出"
                 onFiles={(files) => setFile(files[0] ?? null)}

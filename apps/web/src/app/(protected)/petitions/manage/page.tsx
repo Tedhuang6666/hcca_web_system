@@ -9,6 +9,7 @@ import { cacheGet, cacheSet, cachePurge } from "@/lib/api-cache";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
@@ -83,6 +84,9 @@ export default function PetitionManagePage() {
   const [intakeContent, setIntakeContent] = useState("");
   const [intakeBusy, setIntakeBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [fileUploadKey, setFileUploadKey] = useState(0);
+  const [attachmentVisibility, setAttachmentVisibility] = useState<"public" | "internal">("internal");
+  const [pendingReplyAttachmentId, setPendingReplyAttachmentId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingConfidential, setConfirmingConfidential] = useState(false);
   const [confidentialReason, setConfidentialReason] = useState("");
@@ -125,6 +129,8 @@ export default function PetitionManagePage() {
     setInternalNote("");
     setTargetOrg("");
     setFile(null);
+    setFileUploadKey((key) => key + 1);
+    setPendingReplyAttachmentId(null);
     setEditingEventId(null);
     setEditingEventTitle("");
     setEditingEventContent("");
@@ -210,16 +216,51 @@ export default function PetitionManagePage() {
     }
   };
 
-  const refreshSelected = async (
-    updated: PetitionCaseOut,
-    attachmentVisibility: "public" | "internal" = "internal",
-  ) => {
-    if (file) {
-      await petitionsApi.uploadAttachment(updated.id, file, { visibility: attachmentVisibility });
-    }
-    setSelected(await petitionsApi.get(updated.id));
-    await load();
+  const refreshSelected = async (updated: PetitionCaseOut) => {
+    setSelected(updated);
     resetForm();
+    try {
+      setSelected(await petitionsApi.get(updated.id));
+      await load();
+    } catch {
+      toast.warning("案件已更新，但重新載入失敗；請重新整理確認最新內容");
+    }
+  };
+
+  const uploadStandaloneAttachment = async () => {
+    if (!selected || !file || busy) return;
+    setBusy(true);
+    try {
+      await petitionsApi.uploadAttachment(selected.id, file, { visibility: attachmentVisibility });
+      setFile(null);
+      setFileUploadKey((key) => key + 1);
+      try {
+        setSelected(await petitionsApi.get(selected.id));
+        await load();
+      } catch {
+        toast.error("附件已上傳，但案件重新載入失敗；請重新整理確認");
+        return;
+      }
+      toast.success(attachmentVisibility === "public" ? "附件已上傳，陳情人可查看" : "內部附件已上傳");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "附件上傳失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveInternalNote = async () => {
+    if (!selected || !internalNote.trim() || busy) return;
+    setBusy(true);
+    try {
+      const updated = await petitionsApi.addNote(selected.id, internalNote.trim());
+      await refreshSelected(updated);
+      toast.success("內部備註已儲存");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "儲存備註失敗");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const startEventEdit = (event: PetitionEventOut) => {
@@ -291,6 +332,13 @@ export default function PetitionManagePage() {
     setBusy(true);
     try {
       let updated: PetitionCaseOut;
+      let replyAttachmentIds: string[] = [];
+      let stagedReplyAttachmentId = pendingReplyAttachmentId;
+      if (file && activeAction === "handle" && !stagedReplyAttachmentId) {
+        const uploaded = await petitionsApi.uploadAttachment(selected.id, file, { visibility: "internal" });
+        stagedReplyAttachmentId = uploaded.id;
+        setPendingReplyAttachmentId(stagedReplyAttachmentId);
+      }
       if (action === "assign") {
         updated = await petitionsApi.assign(selected.id, {
           assigned_to_id: assignee,
@@ -309,9 +357,14 @@ export default function PetitionManagePage() {
           internal_note: internalNote || null,
         });
       } else if (action === "reply") {
+        if (file) {
+          if (!stagedReplyAttachmentId) throw new Error("附件尚未完成上傳，請重試");
+          replyAttachmentIds = [stagedReplyAttachmentId];
+        }
         updated = await petitionsApi.reply(selected.id, {
           public_content: publicText,
           internal_note: internalNote || null,
+          attachment_ids: replyAttachmentIds,
           resolve: true,
           close: true,
         });
@@ -340,10 +393,10 @@ export default function PetitionManagePage() {
       } else if (action === "confirm_public") {
         updated = await petitionsApi.confirmPublic(selected.id);
       } else {
-        updated = await petitionsApi.addNote(selected.id, internalNote || publicText);
+        updated = await petitionsApi.addNote(selected.id, internalNote);
       }
       cachePurge("petitions/manage");
-      await refreshSelected(updated, action === "reply" ? "public" : "internal");
+      await refreshSelected(updated);
       toast.success("案件已更新");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "操作失敗");
@@ -628,6 +681,11 @@ export default function PetitionManagePage() {
                 <p className="break-words whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-muted)" }}>{selected.content}</p>
               </div>
 
+              <section className="rounded-lg p-4 space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <h3 className="text-sm font-medium">案件附件（{selected.attachments.length}）</h3>
+                <PetitionAttachmentList caseId={selected.id} attachments={selected.attachments} showVisibility />
+              </section>
+
               <div className="rounded-lg p-3 text-sm space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -683,7 +741,12 @@ export default function PetitionManagePage() {
                     key={key}
                     type="button"
                     className={activeAction === key ? "btn btn-primary" : "btn btn-ghost"}
-                    onClick={() => setActiveAction(key as ActionKey)}>
+                    onClick={() => {
+                      setActiveAction(key as ActionKey);
+                      setFile(null);
+                      setPendingReplyAttachmentId(null);
+                      setFileUploadKey((value) => value + 1);
+                    }}>
                     {label}
                   </button>
                 ))}
@@ -713,11 +776,18 @@ export default function PetitionManagePage() {
                   <textarea className="input w-full min-h-32" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="公開說明、補件原因或正式回覆" />
                   <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="內部備註（選填）" />
                   <AnimatedFileUpload
-                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                    key={fileUploadKey}
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
                     label="拖曳回覆附件到這裡"
-                    hint="正式回覆時會提供給陳情人下載；其他處理動作則僅內部可見"
-                    onFiles={(files) => setFile(files[0] ?? null)}
-                    onRemove={() => setFile(null)}
+                    hint="正式回覆會把附件公開給陳情人，並一併附在回覆通知郵件"
+                    onFiles={(files) => {
+                      setFile(files[0] ?? null);
+                      setPendingReplyAttachmentId(null);
+                    }}
+                    onRemove={() => {
+                      setFile(null);
+                      setPendingReplyAttachmentId(null);
+                    }}
                   />
                   <div className="flex flex-wrap gap-2">
                     <button className="btn btn-ghost" disabled={busy} onClick={() => run("progress")}>標記處理中</button>
@@ -798,28 +868,34 @@ export default function PetitionManagePage() {
 
               {activeAction === "attachments" && (
                 <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
-                  <h3 className="font-medium">附件與內部備註</h3>
+                  <h3 className="font-medium">上傳附件或新增內部備註</h3>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">附件可見對象</span>
+                    <select
+                      className="input w-full"
+                      value={attachmentVisibility}
+                      onChange={(event) => setAttachmentVisibility(event.target.value as "public" | "internal")}
+                    >
+                      <option value="internal">僅內部承辦可見</option>
+                      <option value="public">陳情人也可查看</option>
+                    </select>
+                  </label>
                   <AnimatedFileUpload
-                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
-                    label="拖曳內部附件到這裡"
-                    hint="可點擊選檔，或直接貼上圖片"
+                    key={fileUploadKey}
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                    label="拖曳附件到這裡"
+                    hint="附件上傳和備註儲存是獨立操作，可分別完成"
                     onFiles={(files) => setFile(files[0] ?? null)}
                     onRemove={() => setFile(null)}
                   />
                   <textarea className="input w-full min-h-24" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="新增內部備註" />
-                  <button className="btn btn-primary" disabled={(!file && !internalNote.trim()) || busy} onClick={() => run("note")}>儲存附件/備註</button>
-                  <div className="space-y-2">
-                    {selected.attachments.length === 0 ? (
-                      <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無附件。</p>
-                    ) : selected.attachments.map((att) => (
-                      <AnimatedDownloadButton
-                        key={att.id}
-                        className="block w-full rounded-lg p-3 text-left text-sm"
-                        style={{ border: "1px solid var(--border)" }}
-                        href={petitionsApi.attachmentDownloadUrl(selected.id, att.id)}
-                        filename={att.display_name || att.filename}
-                        label={`${att.display_name || att.filename} · ${att.visibility === "internal" ? "內部" : "公開"}`} />
-                    ))}
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-primary" disabled={!file || busy} onClick={() => void uploadStandaloneAttachment()}>
+                      {busy ? "處理中…" : "上傳附件"}
+                    </button>
+                    <button className="btn btn-ghost" disabled={!internalNote.trim() || busy} onClick={() => void saveInternalNote()}>
+                      儲存內部備註
+                    </button>
                   </div>
                 </div>
               )}

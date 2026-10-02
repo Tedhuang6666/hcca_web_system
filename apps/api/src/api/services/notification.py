@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Iterable
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,6 +79,7 @@ async def create_notification(
     link: str | None = None,
     related_id: uuid.UUID | None = None,
     email_allowed: bool = True,
+    email_attachment_ids: list[uuid.UUID] | None = None,
 ) -> None:
     """依使用者偏好建立通知；email_allowed 可讓事件停用 Email 管道。"""
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
@@ -92,6 +94,7 @@ async def create_notification(
     # 在收件匣與未讀數顯示。
     email_enabled = channel["email"] and email_allowed
     should_queue = channel["inapp"] or email_enabled
+    notification: Notification | None = None
     if should_queue:
         notification = Notification(
             user_id=user_id,
@@ -135,14 +138,38 @@ async def create_notification(
                     "通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True
                 )
 
-    if email_enabled and user.email and not digest_enabled and should_queue:
-        try:
-            send_notification_email_batch.apply_async(
-                args=[str(user_id), type],
-                countdown=NOTIFICATION_EMAIL_BATCH_DELAY_SECONDS,
-            )
-        except Exception:
-            logger.warning("通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
+    if email_enabled and user.email and should_queue:
+        if email_attachment_ids and notification is not None:
+            try:
+                from api.services.outbox import emit
+
+                notification.email_queued_at = datetime.now(UTC)
+                await emit(
+                    db,
+                    event_type="notification.email_with_attachments",
+                    payload={
+                        "user_id": str(user_id),
+                        "type": type,
+                        "title": title,
+                        "body": body or "",
+                        "link": link,
+                        "related_id": str(related_id) if related_id else None,
+                        "attachment_ids": [str(item) for item in email_attachment_ids],
+                    },
+                )
+            except Exception:
+                logger.warning(
+                    "含附件通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True
+                )
+                raise
+        elif not digest_enabled:
+            try:
+                send_notification_email_batch.apply_async(
+                    args=[str(user_id), type],
+                    countdown=NOTIFICATION_EMAIL_BATCH_DELAY_SECONDS,
+                )
+            except Exception:
+                logger.warning("通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
 
     if channel.get("line"):
         try:

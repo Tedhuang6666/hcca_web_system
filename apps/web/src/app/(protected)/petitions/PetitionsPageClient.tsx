@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api-helpers";
 import { petitionsApi } from "@/lib/api/petitions";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionPublicListItem, PetitionStatsOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const PetitionPublicConsent = dynamic(() => import("@/components/petitions/PetitionPublicConsent"), { ssr: false });
@@ -164,6 +165,12 @@ export default function PetitionsPageClient({
                 <p className="text-sm" style={{ color: "var(--text-muted)" }}>{lookup.status_public_message}</p>
                 <Link href={`/petitions/${caseNumber}/${verificationCode}`} className="btn btn-ghost mt-2">查看進度分享頁</Link>
               </div>
+              {lookup.attachments.length > 0 && (
+                <section className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                  <h3 className="text-sm font-medium">案件附件（{lookup.attachments.length}）</h3>
+                  <PetitionAttachmentList caseId={lookup.id} attachments={lookup.attachments} />
+                </section>
+              )}
               {lookup.can_respond_public && <PetitionPublicConsent item={lookup} verificationCode={verificationCode} onUpdated={setLookup} />}
               {lookup.can_edit_content && (
                 <PetitionContentEditor item={lookup} verificationCode={verificationCode} onUpdated={setLookup} />
