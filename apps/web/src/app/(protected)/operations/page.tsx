@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, Mail, Megaphone, ReceiptText, Settings } from "lucide-react";
+import { Mail, Megaphone, ReceiptText, Settings, Store, Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const TOOLS = [
@@ -27,18 +27,30 @@ const TOOLS = [
     perms: ["site:manage"],
   },
   {
-    href: "/analytics",
-    icon: BarChart3,
-    label: "績效統計",
-    desc: "平台使用狀況與治理指標",
-    perms: ["analytics:view"],
-  },
-  {
     href: "/finance/receivables",
     icon: ReceiptText,
     label: "收款對帳",
     desc: "應收款、付款狀態與對帳資料",
     prefixes: ["finance:"],
+  },
+  {
+    href: "/finance",
+    icon: Wallet,
+    label: "財務總帳",
+    desc: "帳務總覽、收支紀錄與分類分析",
+    perms: ["finance:view"],
+  },
+  {
+    href: "/merchandise-submissions/admin",
+    icon: Store,
+    label: "校商投稿管理",
+    desc: "檢視與處理校商投稿內容",
+    perms: [
+      "merchandise_submission:view",
+      "merchandise_submission:manage",
+      "merchandise_submission:review",
+      "shop:manage",
+    ],
   },
 ];
 

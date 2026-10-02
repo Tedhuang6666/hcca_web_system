@@ -1,7 +1,5 @@
-"use client";
-
-import SystemOperationsWorkspace from "@/components/admin/system/SystemOperationsWorkspace";
+import { redirect } from "next/navigation";
 
 export default function AnalyticsPage() {
-  return <SystemOperationsWorkspace defaultTab="performance" />;
+  redirect("/admin/system?tab=performance");
 }

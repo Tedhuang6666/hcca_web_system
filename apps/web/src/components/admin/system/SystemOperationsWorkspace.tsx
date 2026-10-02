@@ -160,9 +160,7 @@ export default function SystemOperationsWorkspace({
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const active = tab.id === activeTab;
-            const href = tab.id === "performance" && !isAdmin
-              ? "/analytics"
-              : `/admin/system?tab=${tab.id}`;
+            const href = `/admin/system?tab=${tab.id}`;
             return (
               <Link
                 key={tab.id}

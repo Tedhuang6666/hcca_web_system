@@ -23,6 +23,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   notifications: "通知中心",
   tasks: "我的待辦",
   orgs: "組織",
+  operations: "營運中心",
   profile: "個人資料",
   admin: "管理",
   analytics: "績效統計",
@@ -36,6 +37,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 const PATH_OVERRIDES: Record<string, string> = {
   "/":                            "平台首頁",
   "/admin":                       "管理後台",
+  "/admin/system":                "系統營運中心",
   "/documents/new":               "新增公文",
   "/documents/delegations":       "簽核代理",
   "/regulations/new":             "新增法規",
