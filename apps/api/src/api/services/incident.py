@@ -32,7 +32,6 @@ _NUMBER_RE = re.compile(r"\b\d+\b")
 _WHITESPACE_RE = re.compile(r"\s+")
 _CLIENT_TRANSIENT_QUERY_RE = re.compile(r"[?#][^\s\]]*")
 _CLIENT_TRANSIENT_ASSET_RE = re.compile(r"\b[a-f0-9]{16,}\b", re.IGNORECASE)
-_CSP_MESSAGE_RE = re.compile(r"^CSP\s+(blocked|violated)\s+([^:]+):\s*(.*?)\s*$", re.IGNORECASE)
 _SENSITIVE_RE = re.compile(
     r"(?i)(bearer\s+|(?:password|passwd|secret|token|api[_-]?key|authorization|cookie)\s*[=:]\s*)[^\s,;]+"
 )
@@ -83,12 +82,15 @@ def normalize_error_message(message: str) -> str:
 def normalize_client_incident_message(message: str, scope: str) -> str:
     """Collapse browser resource and CSP noise without changing raw event details."""
     if scope == "securitypolicyviolation":
-        sanitized = sanitize_incident_text(message, 1000)
-        match = _CSP_MESSAGE_RE.match(sanitized)
-        if match:
-            state, directive, blocked_uri = match.groups()
-            source = _normalize_csp_source(blocked_uri)
-            return f"CSP {state.lower()} {directive.strip().lower()}: {source}"[:500]
+        sanitized = sanitize_incident_text(message[:1000], 1000)
+        if len(sanitized) > 3 and sanitized[:3].casefold() == "csp" and sanitized[3].isspace():
+            parts = sanitized[4:].split(None, 1)
+            if len(parts) == 2 and parts[0].casefold() in {"blocked", "violated"}:
+                directive, separator, blocked_uri = parts[1].partition(":")
+                if separator:
+                    state = parts[0]
+                    source = _normalize_csp_source(blocked_uri)
+                    return f"CSP {state.lower()} {directive.strip().lower()}: {source}"[:500]
 
     normalized = normalize_error_message(message)
     if scope.startswith("resource:"):
