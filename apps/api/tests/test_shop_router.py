@@ -85,7 +85,13 @@ async def _make_category(
 
 
 async def _make_active_product(
-    db: AsyncSession, creator: User, *, price: int = 100, stock: int = 50, category=None
+    db: AsyncSession,
+    creator: User,
+    *,
+    price: int = 100,
+    stock: int = 50,
+    category=None,
+    max_quantity_per_user: int | None = None,
 ):
     category = category or await _make_category(db, creator)
     series = await shop_svc.create_series(
@@ -93,7 +99,13 @@ async def _make_active_product(
     )
     product = await shop_svc.create_product(
         db,
-        data=ProductCreate(series_id=series.id, name="商品", price=price, stock_quantity=stock),
+        data=ProductCreate(
+            series_id=series.id,
+            name="商品",
+            price=price,
+            stock_quantity=stock,
+            max_quantity_per_user=max_quantity_per_user,
+        ),
         created_by=creator.id,
     )
     return await shop_svc.activate_product(db, product)
@@ -432,6 +444,85 @@ async def test_cart_add_update_remove_and_clear_flow(
     cleared = await ac.delete("/shop/cart")
     assert cleared.status_code == 200
     assert cleared.json()["items"] == []
+
+
+async def test_product_purchase_limit_applies_to_cart_and_existing_orders(
+    db_session, member_user, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    product = await _make_active_product(
+        db_session, creator, price=50, max_quantity_per_user=1
+    )
+    ac = authed_client_factory(member_user)
+
+    detail = await ac.get(f"/shop/products/{product.id}")
+    assert detail.status_code == 200
+    assert detail.json()["max_quantity_per_user"] == 1
+    assert detail.json()["remaining_quantity_for_user"] == 1
+
+    added = await ac.post(
+        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
+    )
+    assert added.status_code == 201
+    assert added.json()["items"][0]["quantity"] == 1
+
+    detail_with_cart_item = await ac.get(f"/shop/products/{product.id}")
+    assert detail_with_cart_item.json()["remaining_quantity_for_user"] == 0
+    duplicate = await ac.post(
+        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
+    )
+    assert duplicate.status_code == 422
+    assert "每人限購 1 件" in duplicate.json()["detail"]
+
+    checkout = await ac.post("/shop/cart/checkout", json={})
+    assert checkout.status_code == 201
+    assert checkout.json()[0]["items"][0]["quantity"] == 1
+
+    detail_after_order = await ac.get(f"/shop/products/{product.id}")
+    assert detail_after_order.json()["remaining_quantity_for_user"] == 0
+    repeat_purchase = await ac.post(
+        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
+    )
+    assert repeat_purchase.status_code == 422
+
+
+async def test_cart_update_cannot_exceed_purchase_limit(
+    db_session, member_user, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    product = await _make_active_product(
+        db_session, creator, price=50, max_quantity_per_user=2
+    )
+    ac = authed_client_factory(member_user)
+    added = await ac.post(
+        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
+    )
+    item_id = added.json()["items"][0]["id"]
+
+    updated = await ac.patch(f"/shop/cart/items/{item_id}", json={"quantity": 3})
+    assert updated.status_code == 422
+    assert "每人限購 2 件" in updated.json()["detail"]
+
+
+async def test_purchase_limit_allows_multiple_tickets_within_limit(
+    db_session, member_user, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    product = await _make_active_product(
+        db_session, creator, price=50, max_quantity_per_user=3
+    )
+    ac = authed_client_factory(member_user)
+
+    added = await ac.post(
+        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 2}
+    )
+    assert added.status_code == 201
+    checkout = await ac.post("/shop/cart/checkout", json={})
+    assert checkout.status_code == 201
+    assert checkout.json()[0]["items"][0]["quantity"] == 2
+
+    detail = await ac.get(f"/shop/products/{product.id}")
+    assert detail.json()["remaining_quantity_for_user"] == 1
 
 
 async def test_add_cart_item_unknown_product_returns_422(

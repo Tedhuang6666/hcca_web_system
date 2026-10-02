@@ -24,10 +24,14 @@ type CartProductGroup = {
 
 function CartVariantRow({
   item,
+  productQuantity,
+  maxQuantityPerUser,
   onChangeQty,
   onRemove,
 }: {
   item: CartItemOut;
+  productQuantity: number;
+  maxQuantityPerUser: number | null;
   onChangeQty: (qty: number) => void;
   onRemove: () => void;
 }) {
@@ -55,7 +59,9 @@ function CartVariantRow({
           <span className="text-sm font-semibold w-6 text-center" style={{ color: "var(--text-primary)" }}>
             {item.quantity}
           </span>
-          <button onClick={() => onChangeQty(item.quantity + 1)}
+          <button
+            onClick={() => onChangeQty(item.quantity + 1)}
+            disabled={maxQuantityPerUser !== null && productQuantity >= maxQuantityPerUser}
             className="btn btn-ghost w-7 h-7 p-0" aria-label="增加">＋</button>
           <button onClick={onRemove} className="text-xs ml-2" style={{ color: "var(--text-muted)" }}>
             移除
@@ -122,6 +128,8 @@ function CartProductCard({
         <CartVariantRow
           key={item.id}
           item={item}
+          productQuantity={group.items.reduce((sum, entry) => sum + entry.quantity, 0)}
+          maxQuantityPerUser={item.max_quantity_per_user ?? null}
           onChangeQty={(qty) => onChangeQty(item.id, qty)}
           onRemove={() => onRemove(item.id)}
         />
@@ -199,6 +207,16 @@ export default function CartPage() {
   useEffect(() => { load(); }, [load]);
 
   const changeQty = async (itemId: string, qty: number) => {
+    const target = cart?.items.find((item) => item.id === itemId);
+    if (target?.max_quantity_per_user != null && cart) {
+      const otherQuantity = cart.items
+        .filter((item) => item.product_id === target.product_id && item.id !== itemId)
+        .reduce((total, item) => total + item.quantity, 0);
+      if (otherQuantity + qty > target.max_quantity_per_user) {
+        toast.error(`此商品每人限購 ${target.max_quantity_per_user} 件`);
+        return;
+      }
+    }
     if (!isLoggedIn) {
       const nextItems = updateGuestCartItem(itemId, qty);
       setCart({

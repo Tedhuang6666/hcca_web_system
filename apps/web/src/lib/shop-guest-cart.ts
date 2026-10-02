@@ -71,6 +71,7 @@ export function addGuestCartItem(
       product_id: product.id,
       product_name: product.name,
       product_image_url: product.image_url,
+      max_quantity_per_user: product.max_quantity_per_user ?? null,
       quantity,
       unit_price: unitPrice,
       subtotal: unitPrice * quantity,

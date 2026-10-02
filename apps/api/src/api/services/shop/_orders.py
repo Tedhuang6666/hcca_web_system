@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -54,6 +54,10 @@ logger = logging.getLogger(__name__)
 _PAYMENT_METHODS = {"cash_on_pickup", "bank_transfer"}
 
 
+class PurchaseLimitError(ValueError):
+    """購買數量超過商品設定的每人上限。"""
+
+
 def _resolve_selected_options(product: Product, option_ids: list[uuid.UUID]) -> list[dict]:
     id_set = set(option_ids)
     valid_ids = {o.id for g in product.variant_groups for o in g.options}
@@ -87,6 +91,69 @@ def _options_delta(selected_options: list[dict]) -> int:
     return sum(int(o.get("price_delta", 0) or 0) for o in selected_options)
 
 
+async def _purchased_quantity(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    product_id: uuid.UUID,
+    *,
+    excluding_order_id: uuid.UUID | None = None,
+) -> int:
+    query = (
+        select(func.coalesce(func.sum(OrderItem.quantity), 0))
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(
+            Order.user_id == user_id,
+            Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+            OrderItem.product_id == product_id,
+        )
+    )
+    if excluding_order_id is not None:
+        query = query.where(Order.id != excluding_order_id)
+    result = await session.execute(query)
+    return int(result.scalar_one() or 0)
+
+
+async def _assert_purchase_limit(
+    session: AsyncSession,
+    product: Product,
+    user_id: uuid.UUID,
+    requested_quantity: int,
+    *,
+    excluding_order_id: uuid.UUID | None = None,
+) -> None:
+    limit = product.max_quantity_per_user
+    if limit is None:
+        return
+    purchased = await _purchased_quantity(
+        session, user_id, product.id, excluding_order_id=excluding_order_id
+    )
+    remaining = max(0, limit - purchased)
+    if requested_quantity > remaining:
+        raise PurchaseLimitError(
+            f"商品「{product.name}」每人限購 {limit} 件，已購買 {purchased} 件，"
+            f"最多可購買 {remaining} 件（含購物車），請調整數量"
+        )
+
+
+async def remaining_product_quantity(
+    session: AsyncSession, product: Product, user_id: uuid.UUID | None
+) -> int | None:
+    limit = product.max_quantity_per_user
+    if limit is None:
+        return None
+    if user_id is None:
+        return limit
+
+    purchased = await _purchased_quantity(session, user_id, product.id)
+    cart_result = await session.execute(
+        select(func.coalesce(func.sum(CartItem.quantity), 0))
+        .join(Cart, Cart.id == CartItem.cart_id)
+        .where(Cart.user_id == user_id, CartItem.product_id == product.id)
+    )
+    in_cart = int(cart_result.scalar_one() or 0)
+    return max(0, limit - purchased - in_cart)
+
+
 async def get_or_create_cart(session: AsyncSession, user_id: uuid.UUID) -> Cart:
     result = await session.execute(
         select(Cart)
@@ -109,6 +176,9 @@ async def add_cart_item(session: AsyncSession, user_id: uuid.UUID, *, data: Cart
         raise ValueError("找不到此商品")
     if product.status != ProductStatus.ACTIVE:
         raise ValueError(f"商品「{product.name}」不在上架狀態")
+
+    cart_quantity = sum(item.quantity for item in cart.items if item.product_id == product.id)
+    await _assert_purchase_limit(session, product, user_id, cart_quantity + data.quantity)
 
     selected = _resolve_selected_options(product, data.option_ids)
     signature = _options_signature(selected)
@@ -134,6 +204,11 @@ async def update_cart_item(
     target = next((i for i in cart.items if i.id == item_id), None)
     if target is None:
         raise ValueError("找不到購物車品項")
+    product = target.product
+    cart_quantity = sum(item.quantity for item in cart.items if item.product_id == product.id)
+    await _assert_purchase_limit(
+        session, product, user_id, cart_quantity - target.quantity + quantity
+    )
     target.quantity = quantity
     await session.flush()
     return cart
@@ -184,6 +259,7 @@ def serialize_cart(cart: Cart) -> CartOut:
                 product_id=product.id,
                 product_name=product.name,
                 product_image_url=product.image_url,
+                max_quantity_per_user=product.max_quantity_per_user,
                 quantity=item.quantity,
                 unit_price=unit_price,
                 subtotal=subtotal,
@@ -245,6 +321,16 @@ async def _create_order_from_items(
             .order_by(Product.id)
             .with_for_update()
         )
+
+    requested_quantities: dict[uuid.UUID, int] = {}
+    for cart_item in cart_items:
+        requested_quantities[cart_item.product_id] = (
+            requested_quantities.get(cart_item.product_id, 0) + cart_item.quantity
+        )
+    for product_id, quantity in requested_quantities.items():
+        product = await get_product(session, product_id)
+        if product is not None:
+            await _assert_purchase_limit(session, product, user_id, quantity)
 
     for cart_item in cart_items:
         product = await get_product(session, cart_item.product_id)

@@ -254,6 +254,9 @@ function ProductFormModal({
   const [price, setPrice] = useState(String(initial?.price ?? 0));
   const [stock, setStock] = useState(String(initial?.stock_quantity ?? 0));
   const [unlimited, setUnlimited] = useState(initial?.is_unlimited ?? false);
+  const [maxQuantityPerUser, setMaxQuantityPerUser] = useState(
+    initial?.max_quantity_per_user == null ? "" : String(initial.max_quantity_per_user),
+  );
   const [saleEnd, setSaleEnd] = useState(toLocalInput(initial?.sale_end ?? null));
   const [requiresSeating, setRequiresSeating] = useState(initial?.requires_seating ?? false);
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
@@ -282,6 +285,23 @@ function ProductFormModal({
           <input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} />
           無限量供應
         </label>
+        <div>
+          <Field label="每人限購數量（留空表示不限購）">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              value={maxQuantityPerUser}
+              onChange={(e) => setMaxQuantityPerUser(e.target.value)}
+              className="input w-full"
+              placeholder="例如：1"
+            />
+          </Field>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            同一帳號累計計算；取消或退款的訂單不計入。
+          </p>
+        </div>
         <Field label="截止時間（選填）">
           <input type="datetime-local" value={saleEnd} onChange={(e) => setSaleEnd(e.target.value)}
             className="input w-full" />
@@ -377,6 +397,11 @@ function ProductFormModal({
         <div className="flex gap-3 pt-1">
           <button disabled={busy || mediaUploadsInProgress > 0} onClick={async () => {
             if (!name.trim()) { toast.error("請輸入商品名稱"); return; }
+            const maxQuantity = maxQuantityPerUser.trim() ? Number(maxQuantityPerUser) : null;
+            if (maxQuantity !== null && (!Number.isInteger(maxQuantity) || maxQuantity < 1)) {
+              toast.error("每人限購數量須為大於 0 的整數");
+              return;
+            }
             setBusy(true);
             try {
               const body = {
@@ -388,6 +413,7 @@ function ProductFormModal({
                 price: Number(price) || 0,
                 stock_quantity: Number(stock) || 0,
                 is_unlimited: unlimited,
+                max_quantity_per_user: maxQuantity,
                 sale_end: saleEnd ? new Date(saleEnd).toISOString() : null,
                 requires_seating: requiresSeating,
                 seating_mode: requiresSeating ? seatingMode : null,
@@ -1164,6 +1190,17 @@ export default function ShopAdminPage() {
   const [allProducts, setAllProducts] = useState<ProductOut[]>([]);
   const [product, setProduct] = useState<ProductOut | null>(null);
 
+  const copyOrderLink = async (id: string) => {
+    const url = new URL("/shop", window.location.origin);
+    url.searchParams.set("product", id);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      toast.success("已複製商品訂購連結");
+    } catch {
+      toast.error("無法複製訂購連結，請確認瀏覽器剪貼簿權限");
+    }
+  };
+
   // Modal
   const [catModal, setCatModal] = useState<{ initial: ProductCategoryOut | null } | null>(null);
   const [seriesModal, setSeriesModal] = useState<{ initial: ProductSeriesOut | null } | null>(null);
@@ -1296,11 +1333,15 @@ export default function ShopAdminPage() {
           <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
             NT${product.price.toLocaleString()} · {product.is_unlimited ? "無限量" : `庫存 ${product.stock_quantity}`} · {STATUS_LABEL[product.status] ?? product.status}
             {product.sale_end && ` · 截止 ${new Date(product.sale_end).toLocaleString("zh-TW")}`}
+            {product.max_quantity_per_user != null && ` · 每人限購 ${product.max_quantity_per_user} 件`}
           </p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
         <MiniBtn tone="primary" onClick={() => setProductModal({ initial: product })}>編輯商品</MiniBtn>
+        <MiniBtn disabled={product.status !== "active"} onClick={() => void copyOrderLink(product.id)}>
+          複製訂購連結
+        </MiniBtn>
         <MiniBtn onClick={() => toggleProduct(product)}>{product.status === "active" || product.status === "sold_out" ? "下架" : "上架"}</MiniBtn>
       </div>
       <VariantManager
