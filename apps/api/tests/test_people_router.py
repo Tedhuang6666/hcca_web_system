@@ -17,6 +17,7 @@ from api.models.person import (
     PersonAffiliationSource,
     PersonAffiliationStatus,
 )
+from api.models.school_class import ClassRosterEntry, SchoolClass
 from api.models.user import User
 
 
@@ -115,6 +116,59 @@ async def test_get_person_returns_detail_with_affiliations(
     body = response.json()
     assert body["id"] == str(person.id)
     assert body["affiliations"] == []
+
+
+async def test_get_person_includes_class_roster_seat(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email="roster-student@example.com",
+        display_name="名冊學生",
+        student_id="SROSTER001",
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    person = await _make_person(
+        db_session,
+        student_id=user.student_id,
+        display_name=user.display_name,
+        user_id=user.id,
+    )
+    school_class = SchoolClass(
+        academic_year=115,
+        class_code="101",
+        label="115 高一 01 班",
+        created_by=admin_user.id,
+    )
+    db_session.add(school_class)
+    await db_session.flush()
+    db_session.add(
+        ClassRosterEntry(
+            class_id=school_class.id,
+            seat_number=12,
+            student_id=user.student_id,
+            user_id=user.id,
+        )
+    )
+    await db_session.flush()
+
+    response = await authed_client_factory(admin_user).get(f"/people/{person.id}")
+
+    assert response.status_code == 200
+    assert response.json()["class_roster"] == [
+        {
+            "class_id": str(school_class.id),
+            "academic_year": 115,
+            "class_code": "101",
+            "class_label": "115 高一 01 班",
+            "is_active": True,
+            "seat_number": 12,
+            "student_id": "SROSTER001",
+        }
+    ]
 
 
 async def test_update_person_changes_display_name(

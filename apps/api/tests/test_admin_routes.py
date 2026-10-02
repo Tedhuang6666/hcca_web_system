@@ -23,7 +23,7 @@ from api.models.person import (
     PersonAffiliationStatus,
 )
 from api.models.policy import PolicyConsent, PolicyDocument
-from api.models.school_class import ClassCadre, ClassMembership, SchoolClass
+from api.models.school_class import ClassCadre, ClassMembership, ClassRosterEntry, SchoolClass
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.models.web_push import WebPushSubscription
@@ -135,6 +135,48 @@ async def test_admin_can_update_user_position_dates(
     updated = response.json()["positions"][0]
     assert updated["user_position_id"] == str(assignment.id)
     invalidate.assert_awaited_once_with(str(member.id))
+
+
+@pytest.mark.asyncio
+async def test_admin_user_detail_includes_class_roster_seat(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, org, _, _ = await _seed_admin_data(db_session)
+    member.student_id = "SROSTER002"
+    school_class = SchoolClass(
+        academic_year=115,
+        class_code="202",
+        created_by=admin.id,
+        org_id=org.id,
+    )
+    db_session.add(school_class)
+    await db_session.flush()
+    db_session.add(
+        ClassRosterEntry(
+            class_id=school_class.id,
+            seat_number=7,
+            student_id=member.student_id,
+            user_id=member.id,
+        )
+    )
+    await db_session.flush()
+    _override_user(admin)
+
+    response = await client.get(f"/admin/users/{member.id}")
+
+    assert response.status_code == 200
+    assert response.json()["class_roster"] == [
+        {
+            "class_id": str(school_class.id),
+            "academic_year": 115,
+            "class_code": "202",
+            "class_label": "115 學年度 202 班",
+            "is_active": True,
+            "seat_number": 7,
+            "student_id": "SROSTER002",
+        }
+    ]
 
 
 @pytest.mark.asyncio

@@ -148,7 +148,13 @@ async def import_roster(
 @router.get("/{person_id}", response_model=PersonDetailOut, summary="取得人員詳情")
 async def get_person(person_id: uuid.UUID, db: DbDep, _: PeopleManager) -> PersonDetailOut:
     person = await _get_person_or_404(db, person_id)
-    return person_svc.person_to_detail(person)
+    detail = person_svc.person_to_detail(person)
+    detail.class_roster = await person_svc.class_roster_for_identity(
+        db,
+        user_id=person.user_id,
+        student_id=person.student_id,
+    )
+    return detail
 
 
 @router.patch("/{person_id}", response_model=PersonOut, summary="更新人員主檔")

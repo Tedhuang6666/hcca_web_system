@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
@@ -28,10 +29,11 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
-import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, classApi, orgsApi, peopleApi, withFallback } from "@/lib/api";
 import { getPeopleDirectoryStats } from "@/lib/api/people";
 import { today } from "@/lib/dateUtils";
+import { AccountDetailPanel } from "@/components/admin/AccountDetailPanel";
+import { AccountDirectoryPanel } from "@/components/admin/AccountDirectoryPanel";
 import type {
   AdminUserDetail,
   OrgRead,
@@ -70,13 +72,9 @@ const CLASS_ROLE_OPTIONS = [
   { key: "general_affairs", label: "事務" },
 ];
 
-type PeopleManagementSection = "people" | "accounts" | "lifecycle" | "organization" | "classes" | "import";
+type PeopleManagementSection = "people" | "lifecycle" | "organization" | "classes" | "import";
 const PEOPLE_PAGE_SIZE = 200;
 
-const AccountManagementPanel = dynamic(
-  () => import("../users/page"),
-  { loading: () => <WorkspaceLoading /> },
-);
 const AccountLifecyclePanel = dynamic(
   () => import("../user-lifecycle/page"),
   { loading: () => <WorkspaceLoading /> },
@@ -181,7 +179,6 @@ export default function PeopleAdminPage() {
   const canManagePeople = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
   const canOpen: Record<PeopleManagementSection, boolean> = {
     people: canManagePeople,
-    accounts: isAdmin || can("admin:all"),
     lifecycle: isAdmin,
     organization: isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members"),
     classes: isAdmin || can("admin:all") || can("class:manage"),
@@ -205,7 +202,6 @@ export default function PeopleAdminPage() {
       <main className="min-h-0 flex-1 overflow-auto" aria-label="人員管理工作區">
         <PeopleManagementEmbedProvider>
           {section === "people" && <PersonDirectoryPanel />}
-          {section === "accounts" && <AccountManagementPanel />}
           {section === "lifecycle" && <AccountLifecyclePanel />}
           {section === "organization" && <OrganizationPermissionPanel />}
           {section === "classes" && <ClassManagementPanel />}
@@ -220,12 +216,11 @@ function PersonDirectoryPanel() {
   const { can, isAdmin } = usePermissions();
   const allowed = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
   const canAssignClass = isAdmin || can("admin:all") || can("class:manage");
+  const canManageAccounts = isAdmin || can("admin:all");
+  const [directoryView, setDirectoryView] = useState<"people" | "accounts">("people");
   const [people, setPeople] = useState<PersonListItem[]>([]);
   const [stats, setStats] = useState<PersonDirectoryStats | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // 手機版 master-detail：選取後切到詳情、未選顯示列表（桌機 xl 以上恆並排）。
-  // 不能直接用 selectedId，因為列表載入會自動選第一筆，會害手機一進來就停在詳情。
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [detail, setDetail] = useState<PersonDetailOut | null>(null);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
@@ -236,6 +231,7 @@ function PersonDirectoryPanel() {
   const [classId, setClassId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -243,16 +239,21 @@ function PersonDirectoryPanel() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   const loadReference = useCallback(async () => {
-    const [classRows, orgRows, positionRows, userRows] = await Promise.all([
-      withFallback(classApi.list({ is_active: "true" }), []),
-      withFallback(orgsApi.list({ active_only: true }), []),
-      withFallback(adminApi.listPositions(), []),
-      withFallback(adminApi.listUsers({ limit: 200 }), []),
-    ]);
-    setClasses(classRows);
-    setOrgs(orgRows);
-    setPositions(positionRows);
-    setUsers(userRows);
+    setUsersLoading(true);
+    try {
+      const [classRows, orgRows, positionRows, userRows] = await Promise.all([
+        withFallback(classApi.list({ is_active: "true" }), []),
+        withFallback(orgsApi.list({ active_only: true }), []),
+        withFallback(adminApi.listPositions(), []),
+        withFallback(adminApi.listUsers({ limit: 200 }), []),
+      ]);
+      setClasses(classRows);
+      setOrgs(orgRows);
+      setPositions(positionRows);
+      setUsers(userRows);
+    } finally {
+      setUsersLoading(false);
+    }
   }, []);
 
   const loadPeople = useCallback(async () => {
@@ -342,22 +343,52 @@ function PersonDirectoryPanel() {
             人員與身分
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            平台帳號含停用帳號；人員統計涵蓋完整主檔，清單每頁最多顯示 200 筆。
+            人員主檔與平台帳號集中管理；選取人員可查看學號、班級座號、身分及帳號安全操作。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <IconButton onClick={refreshAll}>
             <RefreshCcw size={14} /> 重新整理
           </IconButton>
-          <IconButton onClick={() => setShowImport(true)} tone="primary">
-            <Upload size={14} /> 匯入名冊
-          </IconButton>
-          <IconButton onClick={() => setShowCreate(true)} tone="primary">
-            <Plus size={14} /> 新增人員
-          </IconButton>
+          {directoryView === "people" && (
+            <>
+              <IconButton onClick={() => setShowImport(true)} tone="primary">
+                <Upload size={14} /> 匯入名冊
+              </IconButton>
+              <IconButton onClick={() => setShowCreate(true)} tone="primary">
+                <Plus size={14} /> 新增人員
+              </IconButton>
+            </>
+          )}
         </div>
       </header>
 
+      {canManageAccounts && (
+        <div className="flex gap-2 overflow-x-auto" role="group" aria-label="人員與帳號檢視">
+          {([
+            ["people", "人員資料"],
+            ["accounts", "平台帳號"],
+          ] as const).map(([view, label]) => (
+            <button
+              key={view}
+              type="button"
+              aria-pressed={directoryView === view}
+              onClick={() => setDirectoryView(view)}
+              className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium"
+              style={{
+                color: directoryView === view ? "var(--primary)" : "var(--text-muted)",
+                background: directoryView === view ? "var(--primary-dim)" : "var(--bg-surface)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {directoryView === "people" ? (
+        <>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
         <Stat icon={<UsersRound size={15} />} label="平台帳號" value={stats?.account_count ?? null} />
         <Stat icon={<UserRound size={15} />} label="人員主檔" value={stats?.people_count ?? null} />
@@ -366,8 +397,8 @@ function PersonDirectoryPanel() {
         <Stat icon={<CircleSlash size={15} />} label="待連帳號" value={stats?.pending_link_count ?? null} />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[24rem_1fr]">
-        <Panel className={`min-h-0 flex-col overflow-hidden ${mobileDetailOpen ? "hidden xl:flex" : "flex"}`}>
+      <div className="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[24rem_1fr]">
+        <Panel className="flex min-h-0 max-h-[38dvh] flex-col overflow-hidden xl:max-h-none">
           <div className="space-y-2 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="flex items-center gap-2">
               <div className="flex flex-1 items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
@@ -431,7 +462,7 @@ function PersonDirectoryPanel() {
                 <button
                   key={person.id}
                   type="button"
-                  onClick={() => { setSelectedId(person.id); setMobileDetailOpen(true); }}
+                  onClick={() => setSelectedId(person.id)}
                   className="w-full cursor-pointer px-4 py-3 text-left transition-colors"
                   style={{
                     borderBottom: "1px solid var(--border)",
@@ -495,10 +526,7 @@ function PersonDirectoryPanel() {
           </div>
         </Panel>
 
-        <Panel className={`min-h-0 flex-col overflow-hidden ${mobileDetailOpen ? "flex" : "hidden xl:flex"}`}>
-          <div className="xl:hidden flex-shrink-0 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
-            <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回人員列表" />
-          </div>
+        <Panel className="flex min-h-[60dvh] flex-col overflow-hidden xl:min-h-0">
           {detailLoading ? (
             <div className="p-8 text-sm" style={{ color: "var(--text-muted)" }}>載入人員詳情...</div>
           ) : detail ? (
@@ -507,6 +535,7 @@ function PersonDirectoryPanel() {
               classes={classes}
               users={users}
               canAssignClass={canAssignClass}
+              canManageAccounts={canManageAccounts}
               onChanged={refreshAll}
               onAssign={() => setShowAffiliation(true)}
             />
@@ -552,6 +581,10 @@ function PersonDirectoryPanel() {
           }}
         />
       )}
+        </>
+      ) : (
+        <AccountDirectoryPanel users={users} loading={usersLoading} onRefresh={refreshAll} />
+      )}
     </div>
   );
 }
@@ -583,6 +616,7 @@ function PersonDetailPanel({
   classes,
   users,
   canAssignClass,
+  canManageAccounts,
   onChanged,
   onAssign,
 }: {
@@ -590,28 +624,63 @@ function PersonDetailPanel({
   classes: SchoolClassListItem[];
   users: AdminUserDetail[];
   canAssignClass: boolean;
+  canManageAccounts: boolean;
   onChanged: () => Promise<void>;
   onAssign: () => void;
 }) {
   const [quickClassId, setQuickClassId] = useState("");
   const [classSaving, setClassSaving] = useState(false);
+  const [linkedAccount, setLinkedAccount] = useState<AdminUserDetail | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountLoadError, setAccountLoadError] = useState(false);
   const [edit, setEdit] = useState({
     display_name: person.display_name,
+    legal_name: person.legal_name ?? "",
     student_id: person.student_id ?? "",
     email: person.email ?? "",
     status: person.status,
     user_id: person.user_id ?? "",
+    note: person.note ?? "",
   });
 
   useEffect(() => {
     setEdit({
       display_name: person.display_name,
+      legal_name: person.legal_name ?? "",
       student_id: person.student_id ?? "",
       email: person.email ?? "",
       status: person.status,
       user_id: person.user_id ?? "",
+      note: person.note ?? "",
     });
   }, [person]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!person.user_id || !canManageAccounts) {
+      setLinkedAccount(null);
+      setAccountLoading(false);
+      setAccountLoadError(false);
+      return;
+    }
+
+    setAccountLoading(true);
+    setAccountLoadError(false);
+    void adminApi.getUser(person.user_id)
+      .then((account) => {
+        if (!cancelled) setLinkedAccount(account);
+      })
+      .catch(() => {
+        if (!cancelled) setAccountLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setAccountLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [person, canManageAccounts]);
 
   const active = person.affiliations.filter((item) => item.status !== "ended");
   const ended = person.affiliations.filter((item) => item.status === "ended");
@@ -620,10 +689,12 @@ function PersonDetailPanel({
     try {
       await peopleApi.update(person.id, {
         display_name: edit.display_name,
+        legal_name: edit.legal_name || null,
         student_id: edit.student_id || null,
         email: edit.email || null,
         status: edit.status,
         user_id: edit.user_id || null,
+        note: edit.note || null,
       });
       toast.success("人員主檔已更新");
       await onChanged();
@@ -715,6 +786,10 @@ function PersonDetailPanel({
             <TextInput className="mt-1" value={edit.display_name} onChange={(event) => setEdit({ ...edit, display_name: event.target.value })} />
           </label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            法定姓名
+            <TextInput className="mt-1" value={edit.legal_name} onChange={(event) => setEdit({ ...edit, legal_name: event.target.value })} placeholder="選填" />
+          </label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
             學號
             <TextInput className="mt-1" value={edit.student_id} onChange={(event) => setEdit({ ...edit, student_id: event.target.value })} />
           </label>
@@ -746,6 +821,10 @@ function PersonDetailPanel({
               ))}
             </SelectInput>
           </label>
+          <label className="text-xs md:col-span-2 xl:col-span-5" style={{ color: "var(--text-muted)" }}>
+            管理備註
+            <textarea className="input mt-1 min-h-20 w-full resize-y" value={edit.note} onChange={(event) => setEdit({ ...edit, note: event.target.value })} placeholder="人員管理備註" />
+          </label>
         </div>
       </div>
 
@@ -766,6 +845,64 @@ function PersonDetailPanel({
             新身分表是資料來源；需要權限的身分會同步成 UserPosition，供既有 RBAC 使用。
           </div>
         </Panel>
+        <Panel className="h-fit p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級與座號</h3>
+            <Link href="/admin/people?section=classes" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary)" }}>
+              管理<ChevronRight size={14} />
+            </Link>
+          </div>
+          {(person.class_roster ?? []).length === 0 ? (
+            <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>尚無班級座號名冊資料。</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {(person.class_roster ?? []).map((entry) => (
+                <div key={`${entry.class_id}-${entry.student_id}-${entry.seat_number}`} className="rounded-md px-3 py-2.5" style={{ background: "var(--bg-elevated)" }}>
+                  <p className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+                    {entry.class_label ?? `${entry.academic_year} 學年度 ${entry.class_code} 班`}
+                  </p>
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {entry.is_active ? "目前班級" : "歷史班級"} · 座號 {entry.seat_number} · 學號 {entry.student_id}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+        {person.user_id && (
+          <div className="xl:col-span-2">
+            <details className="rounded-md" style={{ border: "1px solid var(--border)" }}>
+              <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                <span>平台帳號、安全設定與管理操作</span>
+                <span className="min-w-0 truncate text-xs font-normal" style={{ color: "var(--text-muted)" }}>
+                  {linkedAccount?.email ?? person.email ?? "已連結平台帳號"}
+                </span>
+              </summary>
+              {!canManageAccounts ? (
+                <p className="border-t p-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+                  帳號安全與登入維護需要帳號管理權限。
+                </p>
+              ) : accountLoading ? (
+                <p className="border-t p-4 text-sm" role="status" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+                  載入帳號資料…
+                </p>
+              ) : accountLoadError ? (
+                <p className="border-t p-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--danger)" }}>
+                  無法載入帳號詳情，請重新整理人員資料後再試。
+                </p>
+              ) : linkedAccount ? (
+                <div className="border-t" style={{ borderColor: "var(--border)" }}>
+                  <AccountDetailPanel
+                    key={linkedAccount.id}
+                    user={linkedAccount}
+                    users={users}
+                    onChanged={onChanged}
+                  />
+                </div>
+              ) : null}
+            </details>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 /** Generated from api-bridge.ts. */
+import type { ClassRosterSummary } from "./api-bridge";
+
 export type {
   AccessBlockStatus,
   AddSinglePosition,
@@ -115,6 +117,7 @@ export type {
   ClassRosterEntryCreate,
   ClassRosterEntryOut,
   ClassRosterEntryUpdate,
+  ClassRosterSummary,
   ClassStudentRangeCreate,
   ClassStudentRangeOut,
   ClassStudentRangeOverride,
@@ -1187,6 +1190,7 @@ export interface AdminUserDetail {
   created_at: string;
   positions: PositionSummary[];
   effective_permissions: string[];
+  class_roster: ClassRosterSummary[];
 }
 
 export interface AccountMergeConflictRecord {

@@ -13,6 +13,7 @@ from api.models.person import (
     PersonAffiliationStatus,
     PersonStatus,
 )
+from api.schemas.school_class import ClassRosterSummary
 
 
 class PersonBase(BaseModel):
@@ -119,6 +120,7 @@ class PersonAffiliationOut(BaseModel):
 
 class PersonDetailOut(PersonOut):
     affiliations: list[PersonAffiliationOut] = []
+    class_roster: list[ClassRosterSummary] = Field(default_factory=list)
 
 
 class PersonRosterImportRow(BaseModel):
