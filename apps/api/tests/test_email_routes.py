@@ -484,6 +484,22 @@ async def test_compose_preview_allows_incomplete_rows_and_applies_branding(
 
 
 @pytest.mark.asyncio
+async def test_compose_preview_rejects_malformed_placeholders_as_validation_error(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    sender = await _seed_user(db_session, "malformed-preview@school.edu", ["email:send"])
+    _override_user(sender)
+
+    response = await client.post(
+        "/email/preview",
+        json={"subject": "通知 }", "body": "內容"},
+    )
+
+    assert response.status_code == 422
+    assert "佔位符渲染失敗" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_update_message_edits_draft_succeeds(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

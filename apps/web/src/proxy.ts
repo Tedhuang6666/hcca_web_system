@@ -131,6 +131,11 @@ function webSocketSources(): string[] {
   return [...sources];
 }
 
+function firstPartyHostAliases(): string[] {
+  const domain = BRANDING.domain.trim().toLowerCase().replace(/^www\./, "");
+  return domain ? [...new Set([domain, `www.${domain}`])] : [];
+}
+
 function postHogSources(): string[] {
   const sources = new Set([
     "https://us.i.posthog.com",
@@ -154,23 +159,36 @@ function buildCsp(nonce: string): string {
   const styleNonce = process.env.NODE_ENV === "production" ? ` 'nonce-${nonce}'` : "";
   // Turbopack 在開發模式會以 <style> 注入 HMR CSS；正式環境仍只接受 nonce。
   const devStyle = process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'";
+  const httpsAliases = firstPartyHostAliases().map((host) => `https://${host}`);
+  const wssAliases = firstPartyHostAliases().map((host) => `wss://${host}`);
+  const httpsSources = httpsAliases.join(" ");
+  const connectSources = [...new Set([
+    "'self'",
+    ...httpsAliases,
+    ...webSocketSources(),
+    ...wssAliases,
+    "https://accounts.google.com",
+    ...postHogSources(),
+    "https://cdn.jsdelivr.net",
+    "https://fonts.googleapis.com",
+  ])].join(" ");
   return [
     "default-src 'self'",
     "base-uri 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com${devEval}`,
-    `script-src-elem 'self' 'nonce-${nonce}' https://accounts.google.com https://us-assets.i.posthog.com`,
-    `style-src 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
-    `style-src-elem 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${httpsSources} https://accounts.google.com https://us-assets.i.posthog.com${devEval}`,
+    `script-src-elem 'self' 'nonce-${nonce}' ${httpsSources} https://accounts.google.com https://us-assets.i.posthog.com`,
+    `style-src 'self'${styleNonce}${devStyle} ${httpsSources} https://fonts.googleapis.com https://accounts.google.com`,
+    `style-src-elem 'self'${styleNonce}${devStyle} ${httpsSources} https://fonts.googleapis.com https://accounts.google.com`,
     "style-src-attr 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https://server.arcgisonline.com https://*.tile.openstreetmap.org https://*.googleusercontent.com https://hcca.buckets.hct.works",
-    `connect-src 'self' ${webSocketSources().join(" ")} https://accounts.google.com ${postHogSources().join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com`,
-    "frame-src 'self' https://accounts.google.com",
-    "worker-src 'self' blob:",
-    "manifest-src 'self' https://hcca.tw https://www.hcca.tw",
+    `img-src 'self' ${httpsSources} data: blob: https://server.arcgisonline.com https://*.tile.openstreetmap.org https://*.googleusercontent.com https://hcca.buckets.hct.works`,
+    `connect-src ${connectSources}`,
+    `frame-src 'self' https://accounts.google.com blob: ${httpsSources}`,
+    `worker-src 'self' blob: ${httpsSources}`,
+    `manifest-src 'self' ${httpsSources}`,
   ].join("; ");
 }
 

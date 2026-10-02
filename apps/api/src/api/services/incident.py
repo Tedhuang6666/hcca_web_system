@@ -10,6 +10,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from celery import current_app
@@ -31,6 +32,7 @@ _NUMBER_RE = re.compile(r"\b\d+\b")
 _WHITESPACE_RE = re.compile(r"\s+")
 _CLIENT_TRANSIENT_QUERY_RE = re.compile(r"[?#][^\s\]]*")
 _CLIENT_TRANSIENT_ASSET_RE = re.compile(r"\b[a-f0-9]{16,}\b", re.IGNORECASE)
+_CSP_MESSAGE_RE = re.compile(r"^CSP\s+(blocked|violated)\s+([^:]+):\s*(.*?)\s*$", re.IGNORECASE)
 _SENSITIVE_RE = re.compile(
     r"(?i)(bearer\s+|(?:password|passwd|secret|token|api[_-]?key|authorization|cookie)\s*[=:]\s*)[^\s,;]+"
 )
@@ -79,12 +81,48 @@ def normalize_error_message(message: str) -> str:
 
 
 def normalize_client_incident_message(message: str, scope: str) -> str:
-    """Collapse cache-busted browser URLs without losing their raw event details."""
+    """Collapse browser resource and CSP noise without changing raw event details."""
+    if scope == "securitypolicyviolation":
+        sanitized = sanitize_incident_text(message, 1000)
+        match = _CSP_MESSAGE_RE.match(sanitized)
+        if match:
+            state, directive, blocked_uri = match.groups()
+            source = _normalize_csp_source(blocked_uri)
+            return f"CSP {state.lower()} {directive.strip().lower()}: {source}"[:500]
+
     normalized = normalize_error_message(message)
-    if scope == "securitypolicyviolation" or scope.startswith("resource:"):
+    if scope.startswith("resource:"):
         normalized = _CLIENT_TRANSIENT_QUERY_RE.sub("", normalized)
         normalized = _CLIENT_TRANSIENT_ASSET_RE.sub("{asset}", normalized)
     return normalized[:500]
+
+
+def _normalize_csp_source(blocked_uri: str) -> str:
+    value = blocked_uri.strip()
+    if not value:
+        return "unknown"
+    if value.lower() in {"inline", "eval", "blob", "data", "unknown"}:
+        return "blob:" if value.lower() == "blob" else value.lower()
+
+    parsed = urlsplit(value)
+    scheme = parsed.scheme.lower()
+    if scheme in {"http", "https", "ws", "wss"} and parsed.hostname:
+        host = parsed.hostname.lower()
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        default_port = {"http": 80, "https": 443, "ws": 80, "wss": 443}[scheme]
+        if port and port != default_port:
+            host = f"{host}:{port}"
+        return f"{scheme}://{host}"
+    if scheme:
+        return f"{scheme}:"
+    if value.startswith("/"):
+        return "same-origin"
+    return value.split("/", 1)[0].lower() or "unknown"
 
 
 def create_error_fingerprint(

@@ -59,7 +59,36 @@ describe("client error reporter", () => {
     const resourcePayload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
     const cspPayload = JSON.parse(String(fetchMock.mock.calls[1][1].body));
     expect(resourcePayload.message).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png");
-    expect(cspPayload.message).toContain("_rsc=first");
+    expect(cspPayload.message).toBe("CSP violated connect-src: https://hcca.tw");
+    uninstall();
+  });
+
+  it("filters browser extension, optional telemetry, and abort noise", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+
+    for (const blockedURI of [
+      "chrome-extension://extension-id/injected.js",
+      "https://hcca.tw/cdn-cgi/rum?version=1",
+      "https://static.cloudflareinsights.com/beacon.min.js",
+    ]) {
+      const event = new Event("securitypolicyviolation");
+      Object.defineProperties(event, {
+        disposition: { value: "enforce" },
+        effectiveDirective: { value: "connect-src" },
+        blockedURI: { value: blockedURI },
+      });
+      window.dispatchEvent(event);
+    }
+
+    const rejection = new Event("unhandledrejection");
+    Object.defineProperty(rejection, "reason", {
+      value: new DOMException("Request was cancelled", "AbortError"),
+    });
+    window.dispatchEvent(rejection);
+
+    expect(fetchMock).not.toHaveBeenCalled();
     uninstall();
   });
 

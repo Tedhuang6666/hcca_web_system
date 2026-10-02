@@ -129,8 +129,18 @@ def test_normalize_client_incident_message_groups_cache_busted_resources() -> No
     assert normalize_client_incident_message(first_resource, "resource:img") == (
         normalize_client_incident_message(second_resource, "resource:img")
     )
-    assert normalize_client_incident_message(
+    first_csp = normalize_client_incident_message(
         "CSP blocked connect-src: https://hcca.tw/surveys?_rsc=first", "securitypolicyviolation"
-    ) == normalize_client_incident_message(
-        "CSP blocked connect-src: https://hcca.tw/surveys?_rsc=second", "securitypolicyviolation"
     )
+    second_csp = normalize_client_incident_message(
+        "CSP blocked connect-src: https://hcca.tw/regulations/123?_rsc=second",
+        "securitypolicyviolation",
+    )
+    assert first_csp == "CSP blocked connect-src: https://hcca.tw"
+    assert first_csp == second_csp
+    assert normalize_client_incident_message(
+        "CSP blocked frame-src: blob", "securitypolicyviolation"
+    ) == "CSP blocked frame-src: blob:"
+    assert normalize_client_incident_message(
+        "CSP blocked connect-src: https://api.example.org/surveys", "securitypolicyviolation"
+    ) != first_csp

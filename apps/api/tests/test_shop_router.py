@@ -268,6 +268,16 @@ async def test_get_catalog_lists_active_products(
     assert payload[0]["series"][0]["products"][0]["status"] == "active"
 
 
+async def test_list_products_includes_purchase_limit(db_session, member_user, client) -> None:
+    product = await _make_active_product(db_session, member_user, max_quantity_per_user=2)
+
+    response = await client.get("/shop/products")
+
+    assert response.status_code == 200
+    listed = next(item for item in response.json() if item["id"] == str(product.id))
+    assert listed["max_quantity_per_user"] == 2
+
+
 # ── 商品 ──────────────────────────────────────────────────────────────────────
 
 

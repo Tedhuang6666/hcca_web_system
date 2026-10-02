@@ -204,6 +204,7 @@ async def list_products(
             Product.price,
             Product.stock_quantity,
             Product.is_unlimited,
+            Product.max_quantity_per_user,
             Product.status,
             Product.version,
             Product.category_id,
