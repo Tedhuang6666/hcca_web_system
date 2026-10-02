@@ -36,7 +36,6 @@ export default async function SpecialAgreementPage() {
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white">
             <CheckCircle2 size={18} className="shrink-0 text-[#e8c970]" aria-hidden />
-            <span>免登入即可閱讀</span>
           </div>
         </div>
       </header>
