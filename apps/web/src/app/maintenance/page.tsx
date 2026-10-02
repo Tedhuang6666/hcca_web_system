@@ -71,11 +71,11 @@ function MaintenanceContent() {
   const title = kind === "maintenance" ? "系統維護中" : "全站防護模式啟動";
   const subtitle =
     kind === "maintenance"
-      ? "管理員正在進行系統維護或緊急處置，一般請求暫時停止服務。"
+      ? "管理員正在進行系統維護"
       : "系統偵測到高流量或端點保護策略，已優先保留管理員與緊急處理通道。";
   const Icon = kind === "maintenance" ? Wrench : ShieldAlert;
   const statusRows = [
-    ["入口網站", kind === "maintenance" ? "暫停一般流量" : "防護策略生效"],
+    ["入口網站", kind === "maintenance" ? "暫時暫停瀏覽" : "防護策略生效"],
     ["管理通道", "保留"],
     ["預計恢復", liveUntil ? new Date(liveUntil * 1000).toLocaleString() : "待管理員確認"],
     ["自動重試", `${countdown}s`],
@@ -101,7 +101,7 @@ function MaintenanceContent() {
           <div className="max-w-2xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-[var(--warning-border)] bg-[var(--warning-dim)] px-3 py-1.5 text-sm font-medium text-[var(--warning)]">
               <Icon size={16} aria-hidden />
-              服務狀態更新
+              資訊部正在爆肝修改網站...
             </div>
             <h1 className="text-4xl font-semibold leading-tight text-[var(--text-primary)] md:text-5xl">
               {title}
@@ -134,7 +134,7 @@ function MaintenanceContent() {
               </button>
             </div>
             <Link href="/admin/system" className="btn btn-ghost mt-3 w-full sm:w-auto">
-              管理員控制台（需管理員權限）
+              控制台
             </Link>
           </div>
 
