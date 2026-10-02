@@ -89,7 +89,7 @@
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "npm:@typescript/typescript6@^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^5.0.2"
   },
   "overrides": {
     "browserslist": "^4.28.8",
