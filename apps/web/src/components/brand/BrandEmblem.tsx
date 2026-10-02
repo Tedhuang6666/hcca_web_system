@@ -17,22 +17,18 @@ type BrandEmblemProps = {
   className?: string;
   size?: number;
   priority?: boolean;
-  framed?: boolean;
 };
 
 export default function BrandEmblem({
   className = "",
   size = 40,
   priority = false,
-  framed = false,
 }: BrandEmblemProps) {
   const asset = size <= 64 ? STATIC_EMBLEM_ASSETS.small : STATIC_EMBLEM_ASSETS.default;
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center overflow-hidden ${
-        framed ? "rounded-xl bg-[#1f3a5f] p-1 shadow-sm" : ""
-      } ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden ${className}`}
       style={{ width: size, height: size }}
     >
       <picture>
