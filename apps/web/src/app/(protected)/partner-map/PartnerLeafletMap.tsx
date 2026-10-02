@@ -1,6 +1,7 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useEffect, useRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -26,12 +27,18 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { divIcon } from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
+import type { StyleSpecification } from "maplibre-gl";
+import { MapContainer, Marker, Popup, ZoomControl, useMap } from "react-leaflet";
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { UnifiedMapItem } from "@/lib/partner-map-types";
 import { businessOpenState } from "@/lib/business-hours";
-import { MAP_MAX_ZOOM, MAP_TILE_ATTRIBUTION, mapTileUrl } from "@/lib/map-tiles";
+import {
+  MAP_MAX_ZOOM,
+  PARTNER_MAP_STYLE_ATTRIBUTION,
+  partnerMapStyleUrl,
+} from "@/lib/map-tiles";
 import { defaultPartnerIconKey, getPartnerIcon, isPartnerIconKey } from "./partner-map-icons";
+import styles from "./PartnerLeafletMap.module.css";
 import {
   markerColor,
   markerKind,
@@ -90,14 +97,56 @@ function ThemeClassSync({ theme }: { theme: "light" | "dark" }) {
   return null;
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[character] ?? character);
+function MapStyleLayer({ theme }: { theme: "light" | "dark" }) {
+  const map = useMap();
+
+  useEffect(() => {
+    let disposed = false;
+    let removeLayer: (() => void) | undefined;
+
+    void Promise.all([
+      import("maplibre-gl"),
+      import("@maplibre/maplibre-gl-leaflet"),
+    ]).then(async ([maplibre, { maplibreGL }]) => {
+      if (disposed) return;
+
+      maplibre.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+      const response = await fetch(partnerMapStyleUrl(theme));
+      if (!response.ok) throw new Error(`地圖樣式回應 ${response.status}`);
+      const style = await response.json() as StyleSpecification;
+      const filteredStyle: StyleSpecification = {
+        ...style,
+        layers: style.layers.filter((styleLayer) => (
+          styleLayer.type !== "symbol" || !styleLayer.layout?.["icon-image"]
+        )),
+      };
+      if (disposed) return;
+
+      const layer = maplibreGL({
+        style: filteredStyle,
+        minZoom: 1,
+        maxZoom: MAP_MAX_ZOOM,
+        interactive: false,
+        attributionControl: false,
+      });
+
+      layer.addTo(map);
+      map.attributionControl?.addAttribution(PARTNER_MAP_STYLE_ATTRIBUTION);
+      removeLayer = () => {
+        layer.remove();
+        map.attributionControl?.removeAttribution(PARTNER_MAP_STYLE_ATTRIBUTION);
+      };
+    }).catch((error: unknown) => {
+      if (!disposed) console.error("載入特約地圖底圖失敗", error);
+    });
+
+    return () => {
+      disposed = true;
+      removeLayer?.();
+    };
+  }, [map, theme]);
+
+  return null;
 }
 
 const iconByKind: Record<Exclude<MarkerKind, "all">, LucideIcon> = {
@@ -150,7 +199,6 @@ function storeIcon(item: UnifiedMapItem) {
       <div class="partner-map-marker ${sourceClass} ${openState === false ? "is-closed" : ""}" style="--marker-color: ${markerColor(item)}">
         <div class="partner-map-marker-icon">${iconMarkup}</div>
         ${offerBadge}
-        <div class="partner-map-marker-label" title="${escapeHtml(markerLabel(item))}">${escapeHtml(markerLabel(item))}</div>
       </div>
     `,
   });
@@ -218,18 +266,9 @@ export default function PartnerLeafletMap({
         zoom={16}
         maxZoom={MAP_MAX_ZOOM}
         zoomControl={false}
-        className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}
+        className={`h-full w-full partner-map-leaflet partner-map-theme-${theme} ${styles.mapSurface}`}
         scrollWheelZoom>
-        <TileLayer
-          key={theme}
-          attribution={MAP_TILE_ATTRIBUTION}
-          url={mapTileUrl()}
-          maxZoom={MAP_MAX_ZOOM}
-          detectRetina={false}
-          keepBuffer={0}
-          updateWhenIdle
-          updateWhenZooming={false}
-        />
+        <MapStyleLayer theme={theme} />
         <ZoomControl position="bottomright" />
         <ThemeClassSync theme={theme} />
         <BoundsReporter onBoundsChange={onBoundsChange} />

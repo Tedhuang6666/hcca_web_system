@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
-import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Share2, Tag } from "lucide-react";
+import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Share2, Tag } from "lucide-react";
 import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
-import type { PartnerSubmissionCreate, PartnerTagOut } from "@/lib/types";
+import type { PartnerTagOut } from "@/lib/types";
 import type { RecommendedVendorOutWithHours, UnifiedMapItem } from "@/lib/partner-map-types";
 import { formatBusinessHours } from "@/lib/business-hours";
 import { markerColor, markerLabel, type PartnerMapBoundsState } from "@/app/(protected)/partner-map/partner-map-utils";
@@ -400,7 +400,6 @@ export default function PartnerMapClient({
   const [viewportOnly, setViewportOnly] = useState(false);
   const [mapBounds, setMapBounds] = useState<PartnerMapBoundsState | null>(null);
   const [myBusinesses, setMyBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
-  const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [mapComponent, setMapComponent] = useState<PartnerLeafletMapComponent | null>(null);
   const [contactDirectoryReady, setContactDirectoryReady] = useState(
@@ -409,15 +408,6 @@ export default function PartnerMapClient({
   const [initialBusinessId, setInitialBusinessId] = useState<string | null>(null);
   const [initialLinkHandled, setInitialLinkHandled] = useState(false);
   const initialBoundsReported = useRef(false);
-  const [submission, setSubmission] = useState<PartnerSubmissionCreate>({
-    name: "",
-    category: "",
-    address: "",
-    google_maps_url: "",
-    reason: "",
-    offer_hint: "",
-  });
-
   const activeMapBounds = viewportOnly ? mapBounds : null;
   const query = useMemo(
     () => ({
@@ -616,24 +606,6 @@ export default function PartnerMapClient({
     }
   }, [selectedBusiness]);
 
-  const submitNewBusiness = async () => {
-    if (!submission.name?.trim()) {
-      showErrorToast("請輸入店家名稱");
-      return;
-    }
-    try {
-      await partnerMapApi.submitBusiness({
-        ...submission,
-        name: submission.name.trim(),
-      });
-      showSuccessToast("已送出投稿，等待管理員審核");
-      setSubmissionOpen(false);
-      setSubmission({ name: "", category: "", address: "", google_maps_url: "", reason: "", offer_hint: "" });
-    } catch (error) {
-      showErrorToast(error instanceof ApiError ? error.message : "投稿失敗");
-    }
-  };
-
   const toggleTag = (id: string) => {
     setSelectedTagIds((current) => {
       const next = new Set(current);
@@ -715,11 +687,6 @@ export default function PartnerMapClient({
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-            <div className="mb-3 flex justify-end">
-              <button className="btn btn-secondary min-h-11 px-3 text-xs" onClick={() => setSubmissionOpen(true)}>
-                投稿新店
-              </button>
-            </div>
             {contactBusinesses.length > 0 && (
               <div className="mb-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
                 <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>合作夥伴聯絡資訊</p>
@@ -854,11 +821,6 @@ export default function PartnerMapClient({
                     );
                   })}
                 </div>
-                <div className="flex gap-2">
-                  <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={() => setSubmissionOpen(true)}>
-                    <Send size={14} aria-hidden="true" /> 投稿新店
-                  </button>
-                </div>
               </div>
             )}
             {contactBusinesses.length > 0 && (
@@ -958,92 +920,6 @@ export default function PartnerMapClient({
           <div className="pointer-events-none absolute left-4 top-4 hidden rounded-lg border px-3 py-2 text-xs shadow lg:block" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}>
             <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" /> {filteredItems.length} 個點位</span>
           </div>
-          {submissionOpen && typeof document !== "undefined" && createPortal(
-            <div className="partner-map-submit-dialog fixed inset-0 flex items-start justify-center overflow-y-auto p-4 sm:items-center" style={{ background: "var(--bg-overlay)" }}>
-              <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="partner-map-submit-title" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 id="partner-map-submit-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>投稿新店家</h2>
-                    <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>推薦你希望加入特約地圖的店家</p>
-                  </div>
-                  <button className="topbar-icon-btn" onClick={() => setSubmissionOpen(false)} aria-label="關閉投稿">×</button>
-                </div>
-                <div className="mt-4 grid gap-3">
-                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                    店家名稱
-                    <input
-                      className="input"
-                      name="business-name"
-                      autoComplete="organization"
-                      placeholder="例如：沃爾創意行銷"
-                      value={submission.name}
-                      onChange={(e) => setSubmission((s) => ({ ...s, name: e.target.value }))}
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                    類型
-                    <input
-                      className="input"
-                      name="business-category"
-                      placeholder="例如：飲料、早餐、文具、補習班"
-                      value={submission.category ?? ""}
-                      onChange={(e) => setSubmission((s) => ({ ...s, category: e.target.value }))}
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                    地址
-                    <input
-                      className="input"
-                      name="business-address"
-                      autoComplete="street-address"
-                      placeholder="例如：新竹市東區學府路 1 號"
-                      value={submission.address ?? ""}
-                      onChange={(e) => setSubmission((s) => ({ ...s, address: e.target.value }))}
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                    Google Maps 連結
-                    <input
-                      className="input"
-                      name="google-maps-url"
-                      type="url"
-                      inputMode="url"
-                      placeholder="可直接貼上地圖連結"
-                      value={submission.google_maps_url ?? ""}
-                      onChange={(e) => setSubmission((s) => ({ ...s, google_maps_url: e.target.value }))}
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                    推薦原因
-                    <textarea
-                      className="input min-h-20"
-                      name="submission-reason"
-                      placeholder="為什麼推薦這間店家？"
-                      value={submission.reason ?? ""}
-                      onChange={(e) => setSubmission((s) => ({ ...s, reason: e.target.value }))}
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                    可能的特約優惠
-                    <input
-                      className="input"
-                      name="offer-hint"
-                      placeholder="例如：學生證九折"
-                      value={submission.offer_hint ?? ""}
-                      onChange={(e) => setSubmission((s) => ({ ...s, offer_hint: e.target.value }))}
-                    />
-                  </label>
-                </div>
-                <div className="mt-4 flex justify-end gap-2">
-                  <button className="btn btn-ghost" onClick={() => setSubmissionOpen(false)}>取消</button>
-                  <button className="btn" onClick={submitNewBusiness} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-                    <Send size={15} aria-hidden="true" /> 送出投稿
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )}
         </main>
       </div>
     </div>

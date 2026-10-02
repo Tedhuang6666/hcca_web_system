@@ -1,0 +1,9 @@
+.mapSurface:global(.partner-map-theme-light) :global(.leaflet-tile-pane) {
+  filter: none;
+  opacity: 1;
+}
+
+.mapSurface:global(.partner-map-theme-dark) :global(.leaflet-tile-pane) {
+  filter: none;
+  opacity: 1;
+}

@@ -171,6 +171,7 @@ function buildCsp(nonce: string): string {
     ...postHogSources(),
     "https://cdn.jsdelivr.net",
     "https://fonts.googleapis.com",
+    "https://tiles.openfreemap.org",
   ])].join(" ");
   return [
     "default-src 'self'",
@@ -184,7 +185,7 @@ function buildCsp(nonce: string): string {
     `style-src-elem 'self'${styleNonce}${devStyle} ${httpsSources} https://fonts.googleapis.com https://accounts.google.com`,
     "style-src-attr 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com data:",
-    `img-src 'self' ${httpsSources} data: blob: https://server.arcgisonline.com https://*.tile.openstreetmap.org https://*.googleusercontent.com https://hcca.buckets.hct.works`,
+    `img-src 'self' ${httpsSources} data: blob: https://tiles.openfreemap.org https://server.arcgisonline.com https://*.tile.openstreetmap.org https://*.googleusercontent.com https://hcca.buckets.hct.works`,
     `connect-src ${connectSources}`,
     `frame-src 'self' https://accounts.google.com blob: ${httpsSources}`,
     `worker-src 'self' blob: ${httpsSources}`,
