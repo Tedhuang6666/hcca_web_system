@@ -658,7 +658,7 @@ async def test_coupon_preview_explains_account_eligibility(
             "name": "指定帳號優惠",
             "target_identifiers": [target.email],
             "code": "ONLYTARGET",
-            "discount_type": "amount",
+            "discount_type": "fixed",
             "discount_value": 20,
         },
     )
