@@ -1,7 +1,7 @@
 import type {
-  CartOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionUpdate,
+  CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionUpdate,
 } from "../types";
-import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
@@ -19,18 +19,12 @@ export const shopApi = {
   },
   getProduct: (id: string) => get<ProductOut>(`/shop/products/${id}`),
 
-  // 購物車
-  getCart: () => get<CartOut>("/shop/cart"),
-  previewPromotion: (body?: { code?: string | null }) =>
-    post<ShopPromotionPreviewOut>("/shop/cart/promotion-preview", body ?? {}),
-  addCartItem: (body: { product_id: string; quantity: number; option_ids: string[] }) =>
-    post<CartOut>("/shop/cart/items", body),
-  updateCartItem: (itemId: string, quantity: number) =>
-    patch<CartOut>(`/shop/cart/items/${itemId}`, { quantity }),
-  removeCartItem: (itemId: string) => del<CartOut>(`/shop/cart/items/${itemId}`),
-  clearCart: () => del<CartOut>("/shop/cart"),
-  checkout: (body?: { notes?: string; coupon_code?: string; payment_method?: string }) =>
-    post<OrderOut[]>("/shop/cart/checkout", body ?? {}),
+  // 商品登記
+  getCurrentRegistration: () => get<OrderOut | null>("/shop/registrations/current"),
+  setCurrentRegistrationProduct: (
+    productId: string,
+    body: { variants: { option_ids: string[]; quantity: number }[] },
+  ) => put<OrderOut | null>(`/shop/registrations/current/products/${productId}`, body),
 
   // 優惠管理（shop:manage）
   listPromotions: (includeInactive = true) =>

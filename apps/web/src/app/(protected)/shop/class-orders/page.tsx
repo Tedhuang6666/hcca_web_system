@@ -358,9 +358,9 @@ export default function ClassOrdersPage() {
       </section>
 
       <section className="rounded-lg px-4 py-3" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-        <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>訂購與收款流程</h2>
+        <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品登記與收款流程</h2>
         <ol className="mt-3 grid gap-3 text-sm md:grid-cols-3" style={{ color: "var(--text-secondary)" }}>
-          <li><span className="font-semibold" style={{ color: "var(--primary)" }}>同學自行下單</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>從商品訂購送單，訂單會自動歸到本班。</span></li>
+          <li><span className="font-semibold" style={{ color: "var(--primary)" }}>同學自行登記</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>從商品訂購選擇規格與數量，登記會立即歸到本班。</span></li>
           <li><span className="font-semibold" style={{ color: "var(--primary)" }}>需要時由幹部代訂</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>協助不熟悉系統的同學完成同一套訂單。</span></li>
           <li><span className="font-semibold" style={{ color: "var(--primary)" }}>收到款項就做紀錄</span><br /><span className="text-xs" style={{ color: "var(--text-muted)" }}>這是班代自己的收款備忘；整班繳款由班聯會另行確認。</span></li>
         </ol>

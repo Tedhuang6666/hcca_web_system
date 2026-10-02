@@ -9,7 +9,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
 import { usePermissions } from "@/hooks/usePermissions";
-import { BarChart2, ClipboardList, PackageSearch, ShoppingCart, Store } from "lucide-react";
+import { BarChart2, ClipboardList, PackageSearch, Store } from "lucide-react";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 
@@ -53,7 +53,7 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
             <nav className="public-footer-links" aria-label="頁尾導覽">
               <span className="public-footer-label">快速連結</span>
               <Link href="/shop">商品訂購</Link>
-              <Link href="/shop/orders">我的訂單</Link>
+              <Link href="/shop/orders">我的登記</Link>
               <Link href="/public">公開資料庫</Link>
             </nav>
             <nav className="public-footer-links" aria-label="法律與無障礙資訊">
@@ -77,8 +77,7 @@ function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
   const canViewAll = isAdmin || permissions.has("admin:all") || permissions.has("shop:view_all") || permissions.has("shop:manage_orders") || permissions.has("shop:manage");
   const tabs: ModuleTab[] = [
     { href: "/shop", label: "商品", icon: Store, end: true },
-    { href: "/shop/cart", label: "購物車", icon: ShoppingCart },
-    { href: "/shop/orders", label: "我的訂單", icon: ClipboardList },
+    { href: "/shop/orders", label: "我的登記", icon: ClipboardList },
     ...(canViewAll ? [{ href: "/shop/council-orders", label: "班聯管理", icon: BarChart2 }] : []),
     ...(canManage ? [{ href: "/shop/admin", label: "商品管理", icon: PackageSearch }] : []),
   ];

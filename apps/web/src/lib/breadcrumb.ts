@@ -42,7 +42,7 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/regulations/pending":         "待議法規",
   "/announcements/new":           "新增公告",
   "/shop/admin":                  "商品後台",
-  "/shop/orders":                 "我的訂單",
+  "/shop/orders":                 "我的登記",
   "/shop/class-orders":           "班級訂單",
   "/partner-map/admin":           "特約管理",
   "/surveys/new":                 "新增問卷",

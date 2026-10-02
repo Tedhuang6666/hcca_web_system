@@ -169,7 +169,7 @@ export default function HomeContent({
           <div>
             <span className="public-home-shop-eyebrow"><ShoppingBag size={16} aria-hidden /> 商品訂購</span>
             <h2 id="public-shop-title">挑選你需要的商品</h2>
-            <p>從公開商品頁挑選，加入購物車後再確認訂單。</p>
+            <p>選好商品規格與數量即完成登記，截止前可隨時調整。</p>
           </div>
           <Link href="/shop" className="public-home-shop-all">
             瀏覽所有商品 <ArrowRight size={18} aria-hidden />

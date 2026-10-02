@@ -10120,93 +10120,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/shop/cart": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 檢視購物車 */
-        get: operations["get_cart_shop_cart_get"];
-        put?: never;
-        post?: never;
-        /** 清空購物車 */
-        delete: operations["clear_cart_shop_cart_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/shop/cart/checkout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 購物車送單（依組織拆單，依班級歸戶） */
-        post: operations["checkout_shop_cart_checkout_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/shop/cart/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 加入購物車 */
-        post: operations["add_cart_item_shop_cart_items_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/shop/cart/items/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** 移除購物車品項 */
-        delete: operations["remove_cart_item_shop_cart_items__item_id__delete"];
-        options?: never;
-        head?: never;
-        /** 調整購物車品項數量 */
-        patch: operations["update_cart_item_shop_cart_items__item_id__patch"];
-        trace?: never;
-    };
-    "/shop/cart/promotion-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 檢查購物車優惠資格與折扣 */
-        post: operations["preview_cart_promotion_shop_cart_promotion_preview_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/shop/catalog": {
         parameters: {
             query?: never;
@@ -10605,6 +10518,40 @@ export interface paths {
         head?: never;
         /** 更新校商優惠 */
         patch: operations["update_promotion_shop_promotions__promotion_id__patch"];
+        trace?: never;
+    };
+    "/shop/registrations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得目前商品登記 */
+        get: operations["get_current_registration_shop_registrations_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/registrations/current/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 立即更新商品登記 */
+        put: operations["update_current_registration_product_shop_registrations_current_products__product_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/shop/reports/orders.csv": {
@@ -13686,84 +13633,6 @@ export interface components {
             /** Value */
             value: string;
         };
-        /** CartItemCreate */
-        CartItemCreate: {
-            /**
-             * Option Ids
-             * @description 所選變體選項 ID（每個變體群組需各選一個）
-             */
-            option_ids?: string[];
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
-            /**
-             * Quantity
-             * @default 1
-             */
-            quantity: number;
-        };
-        /** CartItemOut */
-        CartItemOut: {
-            /**
-             * Available
-             * @default true
-             */
-            available: boolean;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Max Quantity Per User */
-            max_quantity_per_user?: number | null;
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
-            /** Product Image Url */
-            product_image_url?: string | null;
-            /** Product Name */
-            product_name: string;
-            /** Quantity */
-            quantity: number;
-            /**
-             * Selected Options
-             * @default []
-             */
-            selected_options: components["schemas"]["SelectedOption"][];
-            /** Subtotal */
-            subtotal: number;
-            /** Unavailable Reason */
-            unavailable_reason?: string | null;
-            /** Unit Price */
-            unit_price: number;
-        };
-        /** CartItemUpdate */
-        CartItemUpdate: {
-            /** Quantity */
-            quantity: number;
-        };
-        /** CartOut */
-        CartOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Items
-             * @default []
-             */
-            items: components["schemas"]["CartItemOut"][];
-            /**
-             * Total Price
-             * @default 0
-             */
-            total_price: number;
-        };
         /** CatalogCategoryOut */
         CatalogCategoryOut: {
             /** Activity Id */
@@ -13939,24 +13808,6 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
-        };
-        /** CheckoutRequest */
-        CheckoutRequest: {
-            /**
-             * Coupon Code
-             * @description 優惠碼
-             */
-            coupon_code?: string | null;
-            /**
-             * Notes
-             * @description 備註
-             */
-            notes?: string | null;
-            /**
-             * Payment Method
-             * @description 付款方式
-             */
-            payment_method?: string | null;
         };
         /** ClassCadreCreate */
         ClassCadreCreate: {
@@ -14740,6 +14591,11 @@ export interface components {
             /** Committee Review Note */
             committee_review_note?: string | null;
             status: components["schemas"]["CouncilProposalStatus"];
+        };
+        /** CurrentRegistrationUpdate */
+        CurrentRegistrationUpdate: {
+            /** Variants */
+            variants?: components["schemas"]["RegistrationVariantCreate"][];
         };
         /** DailyArticleViewItem */
         DailyArticleViewItem: {
@@ -26486,6 +26342,13 @@ export interface components {
             /** Source Title */
             source_title: string;
         };
+        /** RegistrationVariantCreate */
+        RegistrationVariantCreate: {
+            /** Option Ids */
+            option_ids?: string[];
+            /** Quantity */
+            quantity: number;
+        };
         /**
          * RegulationAmendmentType
          * @enum {string}
@@ -28223,46 +28086,6 @@ export interface components {
             updated_at: string;
             /** Used Count */
             used_count: number;
-        };
-        /** ShopPromotionPreviewOut */
-        ShopPromotionPreviewOut: {
-            /** Discount Amount */
-            discount_amount: number;
-            discount_type?: components["schemas"]["ShopDiscountType"] | null;
-            /** Discount Value */
-            discount_value?: number | null;
-            /** Eligible */
-            eligible: boolean;
-            /** Min Order Price */
-            min_order_price?: number | null;
-            /** Promotion Code */
-            promotion_code?: string | null;
-            /** Promotion Name */
-            promotion_name?: string | null;
-            /** Reason */
-            reason?: string | null;
-            /**
-             * Reason Code
-             * @enum {string}
-             */
-            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "no_promotion";
-            /**
-             * Shortfall
-             * @default 0
-             */
-            shortfall: number;
-            /** Subtotal Price */
-            subtotal_price: number;
-            /** Total Price */
-            total_price: number;
-        };
-        /** ShopPromotionPreviewRequest */
-        ShopPromotionPreviewRequest: {
-            /**
-             * Code
-             * @description 優惠碼；留空時檢查帳號自動優惠
-             */
-            code?: string | null;
         };
         /** ShopPromotionTargetOut */
         ShopPromotionTargetOut: {
@@ -52658,211 +52481,6 @@ export interface operations {
             };
         };
     };
-    get_cart_shop_cart_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CartOut"];
-                };
-            };
-        };
-    };
-    clear_cart_shop_cart_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CartOut"];
-                };
-            };
-        };
-    };
-    checkout_shop_cart_checkout_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CheckoutRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_cart_item_shop_cart_items_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CartItemCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CartOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_cart_item_shop_cart_items__item_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CartOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_cart_item_shop_cart_items__item_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CartItemUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CartOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    preview_cart_promotion_shop_cart_promotion_preview_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShopPromotionPreviewOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_catalog_shop_catalog_get: {
         parameters: {
             query?: {
@@ -53945,6 +53563,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopPromotionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_registration_shop_registrations_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"] | null;
+                };
+            };
+        };
+    };
+    update_current_registration_product_shop_registrations_current_products__product_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurrentRegistrationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"] | null;
                 };
             };
             /** @description Validation Error */

@@ -3,8 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { CircleAlert, CircleCheck, Package, ShoppingBag } from "lucide-react";
+import { CircleAlert, CircleCheck, ClipboardList, Package } from "lucide-react";
 import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
@@ -13,11 +12,11 @@ import type {
   CloseStatusItem,
   ProductOut,
   MyClassContext,
+  OrderOut,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
-import { addGuestCartItem, getGuestCart, guestCartCount } from "@/lib/shop-guest-cart";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
@@ -48,22 +47,47 @@ function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?
   );
 }
 
+function registrationVariantKey(options: readonly { option_id: string }[]) {
+  return options.map((option) => option.option_id).sort().join(",");
+}
+
+function registrationLockMessage({
+  registrationLocked,
+  classClosed,
+  deadlinePassed,
+}: {
+  registrationLocked: boolean;
+  classClosed: boolean;
+  deadlinePassed: boolean;
+}) {
+  if (registrationLocked) return "班級幹部已登記收款，商品登記已鎖定";
+  if (classClosed) return "本班已結單，請聯繫班級幹部";
+  if (deadlinePassed) return "商品登記已截止";
+  return "登入後即可登記商品";
+}
+
 // ── 商品變體選購 Modal ────────────────────────────────────────────────────────
 
 function ProductModal({
   productId,
   classClosed,
   isLoggedIn,
-  directPurchaseOnly,
+  authLoading,
+  registrationLoadError,
+  registration,
+  registrationLocked,
   onClose,
-  onAdded,
+  onRegistrationChange,
 }: {
   productId: string;
   classClosed: boolean;
   isLoggedIn: boolean;
-  directPurchaseOnly: boolean;
+  authLoading: boolean;
+  registrationLoadError: boolean;
+  registration: OrderOut | null;
+  registrationLocked: boolean;
   onClose: () => void;
-  onAdded: (goToCart: boolean) => void;
+  onRegistrationChange: (order: OrderOut | null) => void;
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -75,6 +99,9 @@ function ProductModal({
   const [mounted, setMounted] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const registrationItemsRef = useRef(registration?.items ?? []);
+  const loadedProductId = product?.id ?? null;
+  const registrationId = registration?.id ?? null;
 
   const loadProduct = useCallback(async () => {
     setProduct(null);
@@ -95,6 +122,20 @@ function ProductModal({
   useEffect(() => {
     void loadProduct();
   }, [loadProduct]);
+
+  useEffect(() => {
+    registrationItemsRef.current = registration?.items ?? [];
+  }, [registration?.items]);
+
+  useEffect(() => {
+    if (!loadedProductId) return;
+    const first = registrationItemsRef.current.find((item) => item.product_id === loadedProductId);
+    const nextPicked = Object.fromEntries(
+      (first?.selected_options ?? []).map((option) => [option.group_id, option.option_id]),
+    );
+    setPicked(nextPicked);
+    setQty(first?.quantity ?? 1);
+  }, [loadedProductId, registrationId]);
 
   useEffect(() => {
     setMounted(true);
@@ -150,31 +191,42 @@ function ProductModal({
   }, 0);
   const unitPrice = (product?.price ?? 0) + delta;
   const allPicked = variantGroups.every((g) => picked[g.id]);
-  const available =
-    Boolean(product && product.status === "active" && (product.is_unlimited || product.stock_quantity > 0));
-  const guestCartQuantity = product && !isLoggedIn
-    ? getGuestCart()
-        .filter((item) => item.product_id === product.id)
-        .reduce((total, item) => total + item.quantity, 0)
-    : 0;
+  const registeredItems = registration?.items.filter((item) => item.product_id === product?.id) ?? [];
+  const registeredQuantity = registeredItems.reduce((total, item) => total + item.quantity, 0);
+  const selectedOptionIds = Object.values(picked).sort();
+  const selectedRegistrationQuantity = registeredItems
+    .filter((item) => registrationVariantKey(item.selected_options) === selectedOptionIds.join(","))
+    .reduce((total, item) => total + item.quantity, 0);
   const remainingForUser = product?.max_quantity_per_user == null
     ? null
-    : Math.max(
-        0,
-        (product.remaining_quantity_for_user ?? product.max_quantity_per_user) - guestCartQuantity,
-      );
+    : product.remaining_quantity_for_user ?? product.max_quantity_per_user;
   const maxSelectableQuantity = product
     ? Math.max(
         0,
         Math.min(
           100,
-          product.is_unlimited ? 100 : product.stock_quantity,
-          remainingForUser ?? 100,
+          product.is_unlimited ? 100 : product.stock_quantity + registeredQuantity,
+          remainingForUser == null ? 100 : remainingForUser + registeredQuantity,
         ),
       )
     : 0;
-  const purchaseLimitReached = remainingForUser === 0;
-  const canAddToCart = available && !classClosed && maxSelectableQuantity > 0;
+  const maxSelectedQuantity = Math.max(
+    0,
+    maxSelectableQuantity - (registeredQuantity - selectedRegistrationQuantity),
+  );
+  const deadlinePassed = Boolean(product?.sale_end && new Date(product.sale_end).getTime() <= Date.now());
+  const available = Boolean(
+    product
+      && (product.status === "active" || registeredQuantity > 0)
+      && (product.is_unlimited || product.stock_quantity > 0 || registeredQuantity > 0),
+  );
+  const canEdit = isLoggedIn
+    && !authLoading
+    && !registrationLoadError
+    && !registrationLocked
+    && !classClosed
+    && !deadlinePassed;
+  const canRegister = available && canEdit && maxSelectedQuantity > 0;
   const variantImage = variantGroups.reduce<string | null>((current, group) => {
     const option = (group.options ?? []).find((o) => o.id === picked[group.id]);
     return option?.image_url || current;
@@ -191,38 +243,53 @@ function ProductModal({
         ? "商品主圖"
         : "商品照片";
 
-  const submit = async (goToCart: boolean) => {
+  const setVariantQuantity = async (optionIds: string[], quantity: number) => {
     if (!product) return;
-    if (classClosed) {
-      toast.error("本班已結單，請聯繫班級幹部確認訂購安排");
-      return;
-    }
-    if (maxSelectableQuantity === 0 || qty > maxSelectableQuantity) {
-      toast.error(purchaseLimitReached ? "此帳號已達商品購買上限" : "可購買數量已更新，請重新選擇");
-      return;
-    }
-    if (!allPicked) {
-      toast.error("請選擇所有規格");
+    if (!canEdit) {
+      toast.error(registrationLockMessage({
+        registrationLocked,
+        classClosed,
+        deadlinePassed,
+      }));
       return;
     }
     setLoading(true);
     try {
-      if (isLoggedIn) {
-        await shopApi.addCartItem({
-          product_id: product.id,
-          quantity: qty,
-          option_ids: Object.values(picked),
+      const currentVariants = new Map<string, { option_ids: string[]; quantity: number }>();
+      for (const item of registeredItems) {
+        const option_ids = item.selected_options.map((option) => option.option_id).sort();
+        const key = option_ids.join(",");
+        currentVariants.set(key, {
+          option_ids,
+          quantity: (currentVariants.get(key)?.quantity ?? 0) + item.quantity,
         });
-      } else {
-        addGuestCartItem(product, qty, Object.values(picked));
       }
-      toast.success(goToCart ? "已加入購物車，前往購物車確認訂單" : "已加入購物車");
-      onAdded(goToCart);
+      const key = [...optionIds].sort().join(",");
+      currentVariants.delete(key);
+      if (quantity > 0) currentVariants.set(key, { option_ids: [...optionIds].sort(), quantity });
+      const updated = await shopApi.setCurrentRegistrationProduct(product.id, {
+        variants: [...currentVariants.values()],
+      });
+      onRegistrationChange(updated?.status === "cancelled" ? null : updated);
+      toast.success(quantity > 0 ? "商品登記已更新" : "商品登記已移除");
     } catch (e) {
-      toast.error(apiErrorMessage(e, "加入失敗"));
+      toast.error(apiErrorMessage(e, "商品登記更新失敗"));
     } finally {
       setLoading(false);
     }
+  };
+
+  const submit = () => {
+    if (!product) return;
+    if (!allPicked) {
+      toast.error("請選擇所有規格");
+      return;
+    }
+    if (!canRegister || qty > maxSelectedQuantity) {
+      toast.error("可登記數量已更新，請重新選擇");
+      return;
+    }
+    void setVariantQuantity(selectedOptionIds, qty);
   };
 
   return createPortal(
@@ -329,8 +396,15 @@ function ProductModal({
                             key={o.id}
                             onClick={() => {
                               setSelectedMediaIndex(null);
-                              setPicked((p) => ({ ...p, [g.id]: o.id }));
+                              const nextPicked = { ...picked, [g.id]: o.id };
+                              setPicked(nextPicked);
+                              const nextKey = Object.values(nextPicked).sort().join(",");
+                              const registered = registeredItems
+                                .filter((item) => registrationVariantKey(item.selected_options) === nextKey)
+                                .reduce((total, item) => total + item.quantity, 0);
+                              setQty(registered || 1);
                             }}
+                            disabled={authLoading}
                             className="shop-product-option"
                             aria-pressed={sel}>
                             {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
@@ -349,58 +423,119 @@ function ProductModal({
 
               <div className="shop-product-dialog-section">
                 <label>數量</label>
-                {maxSelectableQuantity === 0 ? (
+                {maxSelectedQuantity === 0 ? (
                   <p className="text-sm" style={{ color: "var(--public-secondary)" }}>
-                    {purchaseLimitReached ? "此帳號已達購買上限。" : "目前沒有可選數量。"}
+                    {registeredQuantity > 0 ? "目前已達可登記數量。" : "目前沒有可登記數量。"}
                   </p>
                 ) : product.max_quantity_per_user === 1 ? (
-                  <p className="text-sm" style={{ color: "var(--public-secondary)" }}>每人限購 1 件</p>
+                  <p className="text-sm" style={{ color: "var(--public-secondary)" }}>
+                    每人限購 1 件{selectedRegistrationQuantity > 0 ? " · 已登記" : ""}
+                  </p>
                 ) : (
                   <div className="shop-product-quantity">
                     <button
                       type="button"
-                      onClick={() => setQty((q) => Math.max(1, q - 1))}
-                      disabled={qty <= 1}
+                      onClick={() => setQty((q) => Math.max(selectedRegistrationQuantity > 0 ? 0 : 1, q - 1))}
+                      disabled={qty <= (selectedRegistrationQuantity > 0 ? 0 : 1) || !canEdit}
                       aria-label="減少數量">−</button>
                     <span>{qty}</span>
                     <button
                       type="button"
-                      onClick={() => setQty((q) => Math.min(maxSelectableQuantity, q + 1))}
-                      disabled={qty >= maxSelectableQuantity}
+                      onClick={() => setQty((q) => Math.min(maxSelectedQuantity, q + 1))}
+                      disabled={qty >= maxSelectedQuantity || !canEdit}
                       aria-label="增加數量">＋</button>
                   </div>
                 )}
               </div>
 
+              {registeredItems.length > 0 && (
+                <div className="shop-product-dialog-section">
+                  <label>已登記規格</label>
+                  <div className="space-y-2">
+                    {registeredItems.map((item) => {
+                      const optionIds = item.selected_options.map((option) => option.option_id).sort();
+                      const optionLabel = item.selected_options.length
+                        ? item.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")
+                        : "標準品項";
+                      return (
+                        <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 truncate text-left"
+                            onClick={() => {
+                              setPicked(Object.fromEntries(
+                                item.selected_options.map((option) => [option.group_id, option.option_id]),
+                              ));
+                              setQty(item.quantity);
+                            }}>
+                            {optionLabel}
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void setVariantQuantity(optionIds, item.quantity - 1)}
+                              disabled={!canEdit || loading}
+                              aria-label={`減少${optionLabel}數量`}
+                              className="btn btn-ghost h-8 w-8 p-0">−</button>
+                            <span className="w-5 text-center tabular-nums">{item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => void setVariantQuantity(optionIds, item.quantity + 1)}
+                              disabled={!canEdit || loading || registeredQuantity >= maxSelectableQuantity}
+                              aria-label={`增加${optionLabel}數量`}
+                              className="btn btn-ghost h-8 w-8 p-0">＋</button>
+                            <button
+                              type="button"
+                              onClick={() => void setVariantQuantity(optionIds, 0)}
+                              disabled={!canEdit || loading}
+                              className="text-xs"
+                              style={{ color: "var(--text-muted)" }}>移除</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <p className="shop-product-purchase-hint">
-                直接購買會前往購物車；加入購物車會留在此頁。
+                登記會立即保存；截止前可隨時調整數量或移除規格。
               </p>
-              <div className={`shop-product-dialog-actions${directPurchaseOnly ? "" : " shop-product-dialog-actions--split"}`}>
-                <button
-                  type="button"
-                  onClick={() => submit(true)}
-                  disabled={loading || !canAddToCart}
-                  className="shop-product-submit"
-                  aria-busy={loading}>
-                  {!available
-                    ? "目前無法訂購"
-                    : classClosed
-                      ? "本班已結單"
-                      : loading
-                        ? "處理中…"
-                        : purchaseLimitReached
-                          ? "已達購買上限"
-                          : `直接購買 · NT$${(unitPrice * qty).toLocaleString()}`}
-                </button>
-                {!directPurchaseOnly && (
+              {!isLoggedIn ? (
+                <p className="shop-product-purchase-hint" role="status">
+                  {authLoading ? "正在確認登入狀態…" : "登入後即可登記商品。"}
+                </p>
+              ) : registrationLoadError ? (
+                <p className="shop-product-purchase-hint" role="alert">
+                  目前無法讀取商品登記，請重新載入頁面後再修改。
+                </p>
+              ) : (registrationLocked || classClosed || deadlinePassed) ? (
+                <p className="shop-product-purchase-hint" role="status">
+                  {registrationLockMessage({ registrationLocked, classClosed, deadlinePassed })}
+                </p>
+              ) : null}
+              <div className="shop-product-dialog-actions">
+                {isLoggedIn ? (
                   <button
                     type="button"
-                    onClick={() => submit(false)}
-                    disabled={loading || !canAddToCart}
-                    className="shop-product-add-to-cart"
+                    onClick={submit}
+                    disabled={loading || !canRegister || qty > maxSelectedQuantity}
+                    className="shop-product-submit"
                     aria-busy={loading}>
-                    {loading ? "處理中…" : "加入購物車"}
+                    {loading
+                      ? "儲存中…"
+                      : qty === 0
+                        ? "移除規格"
+                        : selectedRegistrationQuantity > 0
+                        ? `更新登記 · NT$${(unitPrice * qty).toLocaleString()}`
+                        : `登記購買 · NT$${(unitPrice * qty).toLocaleString()}`}
                   </button>
+                ) : (
+                  <Link
+                    href={`/login?next=${encodeURIComponent(`/shop?product=${productId}`)}`}
+                    className="shop-product-submit">
+                    登入後登記商品
+                  </Link>
                 )}
                 <button type="button" onClick={onClose} className="shop-product-cancel">取消</button>
               </div>
@@ -418,21 +553,34 @@ function ProductModal({
 function ProductCard({
   product,
   classClosed,
+  registeredQuantity,
   onClick,
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
+  registeredQuantity: number;
   onClick: () => void;
 }) {
   const soldOut = product.status === "sold_out";
-  const statusLabel = classClosed ? "本班已結單" : soldOut ? "已售完" : null;
+  const deadlinePassed = Boolean(product.sale_end && new Date(product.sale_end).getTime() <= Date.now());
+  const locked = classClosed || deadlinePassed;
+  const disabled = (soldOut || locked) && registeredQuantity === 0;
+  const statusLabel = classClosed
+    ? "本班已結單"
+    : deadlinePassed
+      ? "登記已截止"
+      : registeredQuantity > 0
+        ? `已登記 ${registeredQuantity} 件`
+        : soldOut
+          ? "已售完"
+          : null;
   return (
     <button
       onClick={onClick}
-      disabled={soldOut || classClosed}
+      disabled={disabled}
       className="shop-public-product-card group"
       style={{
-        opacity: soldOut || classClosed ? 0.6 : 1,
+        opacity: disabled ? 0.6 : 1,
       }}
       aria-label={`查看商品：${product.name}`}>
       <div className="shop-public-product-media">
@@ -484,24 +632,22 @@ function ProductCard({
 // ── 購買頁 ────────────────────────────────────────────────────────────────────
 
 export default function ShopPage() {
-  const router = useRouter();
   const catalogCacheKey = "shop/catalog/all:v2";
 
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
   const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
-  const [directOrderProductId, setDirectOrderProductId] = useState<string | null>(null);
-  const [cartCount, setCartCount] = useState(0);
-  const [cartButtonBump, setCartButtonBump] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [registrationLoadError, setRegistrationLoadError] = useState(false);
+  const [registration, setRegistration] = useState<OrderOut | null>(null);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
   const closeProduct = useCallback(() => {
     setOpenProduct(null);
-    setDirectOrderProductId(null);
   }, []);
 
   const loadCatalog = useCallback(() => {
@@ -531,22 +677,23 @@ export default function ShopPage() {
       .finally(() => setLoading(false));
   }, [setSelectedCategoryId, catalogCacheKey]);
 
-  const loadCart = useCallback(() => {
-    if (!isLoggedIn) {
-      setCartCount(guestCartCount());
-      return;
-    }
-    shopApi
-      .getCart()
-      .then((c) => setCartCount(c.items.reduce((n, i) => n + i.quantity, 0)))
-      .catch(() => {});
-  }, [isLoggedIn]);
-
   useEffect(() => {
     loadCatalog();
     void authApi.me()
-      .then(() => setIsLoggedIn(true))
-      .catch(() => setIsLoggedIn(false));
+      .then(async () => {
+        setIsLoggedIn(true);
+        try {
+          setRegistration(await shopApi.getCurrentRegistration());
+        } catch (error) {
+          setRegistrationLoadError(true);
+          toast.error(apiErrorMessage(error, "無法載入商品登記"));
+        }
+      })
+      .catch(() => {
+        setIsLoggedIn(false);
+        setRegistration(null);
+      })
+      .finally(() => setAuthLoading(false));
   }, [loadCatalog]);
 
   useEffect(() => {
@@ -559,34 +706,23 @@ export default function ShopPage() {
     if (!category) return;
     setSelectedCategoryId(category.id);
     setSelectedSeriesId(null);
-    setDirectOrderProductId(productId);
     setOpenProduct(productId);
-  }, [catalog, setSelectedCategoryId, setDirectOrderProductId]);
-
-  useEffect(() => { loadCart(); }, [loadCart]);
-
-  useEffect(() => {
-    const refreshGuestCart = () => {
-      if (!isLoggedIn) setCartCount(guestCartCount());
-    };
-    window.addEventListener("hcca:guest-cart-updated", refreshGuestCart);
-    return () => window.removeEventListener("hcca:guest-cart-updated", refreshGuestCart);
-  }, [isLoggedIn]);
+  }, [catalog, setSelectedCategoryId]);
 
   const selectedCategory =
     catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
 
-  const selectedActivityProductCount = selectedCategory
-    ? catalog
-        .filter((category) => selectedCategory.activity_id
-          ? category.activity_id === selectedCategory.activity_id
-          : category.id === selectedCategory.id)
-        .reduce(
-          (count, category) => count + category.products.length
-            + category.series.reduce((seriesCount, series) => seriesCount + series.products.length, 0),
-          0,
-        )
-    : 0;
+  const registeredCount = registration?.items.reduce((count, item) => count + item.quantity, 0) ?? 0;
+  const registeredByProduct = new Map<string, number>();
+  for (const item of registration?.items ?? []) {
+    registeredByProduct.set(
+      item.product_id,
+      (registeredByProduct.get(item.product_id) ?? 0) + item.quantity,
+    );
+  }
+  const registrationLocked = Boolean(
+    registration && (registration.is_paid || registration.is_class_collected),
+  );
 
   const visibleSeries = selectedCategory?.series.filter(
     (series) => !selectedSeriesId || series.id === selectedSeriesId,
@@ -598,16 +734,15 @@ export default function ShopPage() {
         <div>
           <h1>商品訂購</h1>
           <p className="shop-public-hero-copy">
-            挑選目前開放的商品，確認規格後加入購物車；登入只在送出訂單時需要。
+            選好規格與數量就完成登記；截止前可隨時增減商品。
           </p>
         </div>
         <div className="shop-public-hero-actions">
-          <Link href="/shop/orders" className="shop-public-order-link">我的訂單</Link>
           <Link
-            href="/shop/cart"
-            className={`shop-public-cart-link${cartButtonBump ? " motion-safe:animate-bounce" : ""}`}>
-            <ShoppingBag size={16} aria-hidden="true" />
-            購物車{cartCount > 0 ? `（${cartCount}）` : ""}
+            href="/shop/orders"
+            className="shop-public-order-link">
+            <ClipboardList size={16} aria-hidden="true" />
+            我的登記{registeredCount > 0 ? `（${registeredCount} 件）` : ""}
           </Link>
         </div>
       </header>
@@ -628,7 +763,7 @@ export default function ShopPage() {
             </p>
             <p>{myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}</p>
             <p>
-              送單後請向班級幹部繳費；幹部確認收款後，會在「我的訂單」更新為已繳費。
+              登記後直接列入應繳項目；班代登記已收款後，商品數量就會鎖定。
             </p>
             {isLoggedIn && <ClassCorrectionRequest currentClass={myClass} />}
           </div>
@@ -728,10 +863,8 @@ export default function ShopPage() {
                         key={product.id}
                         product={product}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
-                        onClick={() => {
-                          setDirectOrderProductId(null);
-                          setOpenProduct(product.id);
-                        }}
+                        registeredQuantity={registeredByProduct.get(product.id) ?? 0}
+                        onClick={() => setOpenProduct(product.id)}
                       />
                     ))}
                   </div>
@@ -756,10 +889,8 @@ export default function ShopPage() {
                           key={product.id}
                           product={product}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
-                          onClick={() => {
-                            setDirectOrderProductId(null);
-                            setOpenProduct(product.id);
-                          }}
+                          registeredQuantity={registeredByProduct.get(product.id) ?? 0}
+                          onClick={() => setOpenProduct(product.id)}
                         />
                       ))}
                     </div>
@@ -776,19 +907,12 @@ export default function ShopPage() {
           productId={openProduct}
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           isLoggedIn={isLoggedIn}
-          directPurchaseOnly={directOrderProductId === openProduct || selectedActivityProductCount === 1}
+          authLoading={authLoading}
+          registrationLoadError={registrationLoadError}
+          registration={registration}
+          registrationLocked={registrationLocked}
           onClose={closeProduct}
-          onAdded={(goToCart) => {
-            setOpenProduct(null);
-            setDirectOrderProductId(null);
-            loadCart();
-            if (goToCart) {
-              router.push("/shop/cart");
-            } else {
-              setCartButtonBump(true);
-              window.setTimeout(() => setCartButtonBump(false), 700);
-            }
-          }}
+          onRegistrationChange={setRegistration}
         />
       )}
     </div>

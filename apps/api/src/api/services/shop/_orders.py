@@ -1,4 +1,4 @@
-"""購物車 / 訂單 CRUD / 序列化 / 統計"""
+"""商品登記與訂單 CRUD / 序列化 / 統計"""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from api.schemas.shop import (
     CartItemOut,
     CartOut,
     ClassOrderUpsert,
+    CurrentRegistrationUpdate,
     OrderItemCreate,
     OrderItemOut,
     OrderListItem,
@@ -145,7 +146,7 @@ async def _assert_purchase_limit(
     if requested_quantity > remaining:
         raise PurchaseLimitError(
             f"商品「{product.name}」每人限購 {limit} 件，已購買 {purchased} 件，"
-            f"最多可購買 {remaining} 件（含購物車），請調整數量"
+            f"最多可登記 {remaining} 件，請調整數量"
         )
 
 
@@ -159,13 +160,7 @@ async def remaining_product_quantity(
         return limit
 
     purchased = await _purchased_quantity(session, user_id, product.id)
-    cart_result = await session.execute(
-        select(func.coalesce(func.sum(CartItem.quantity), 0))
-        .join(Cart, Cart.id == CartItem.cart_id)
-        .where(Cart.user_id == user_id, CartItem.product_id == product.id)
-    )
-    in_cart = int(cart_result.scalar_one() or 0)
-    return max(0, limit - purchased - in_cart)
+    return max(0, limit - purchased)
 
 
 async def get_or_create_cart(session: AsyncSession, user_id: uuid.UUID) -> Cart:
@@ -529,6 +524,209 @@ def _is_school_email(user) -> bool:
     }
 
 
+async def get_current_registration(
+    session: AsyncSession, user_id: uuid.UUID, *, lock: bool = False
+) -> Order | None:
+    query = (
+        select(Order)
+        .where(
+            Order.user_id == user_id,
+            Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+        )
+        .order_by(Order.updated_at.desc(), Order.created_at.desc())
+        .limit(1)
+    )
+    if lock:
+        query = query.with_for_update().execution_options(populate_existing=True)
+    result = await session.execute(query)
+    order = result.scalars().first()
+    return await get_order(session, order.id) if order else None
+
+
+async def _assert_product_registration_open(
+    session: AsyncSession,
+    product: Product,
+    *,
+    class_id: uuid.UUID | None,
+    allow_sold_out: bool = False,
+) -> None:
+    if product.status != ProductStatus.ACTIVE and not (
+        allow_sold_out and product.status == ProductStatus.SOLD_OUT
+    ):
+        raise ValueError(f"商品「{product.name}」目前無法登記")
+
+    now = datetime.now(UTC)
+    sale_start = product.sale_start
+    sale_end = product.sale_end
+    if sale_start is not None and sale_start.tzinfo is None:
+        sale_start = sale_start.replace(tzinfo=UTC)
+    if sale_end is not None and sale_end.tzinfo is None:
+        sale_end = sale_end.replace(tzinfo=UTC)
+    if sale_start and now < sale_start:
+        raise ValueError(f"商品「{product.name}」尚未開放登記")
+    if sale_end and now >= sale_end:
+        raise ValueError(f"商品「{product.name}」已截止登記")
+    await _assert_activity_open(session, product)
+
+    category_id = product.category_id
+    if category_id is None and product.series is not None:
+        category_id = product.series.category_id
+    if category_id is not None:
+        closes = await get_close_status(session, [category_id], class_id)
+        if closes.get(category_id) is not None:
+            raise ValueError("您的班級已結單，無法修改商品登記，請聯繫班級幹部")
+
+
+async def set_current_registration_product(
+    session: AsyncSession,
+    user: User,
+    product_id: uuid.UUID,
+    *,
+    data: CurrentRegistrationUpdate,
+) -> Order | None:
+    """立即登記某商品的規格數量，並以目前有效訂單保存。"""
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    await session.execute(
+        select(Product)
+        .where(Product.id == product_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    product = await get_product(session, product_id)
+    if product is None:
+        raise ValueError("找不到此商品")
+
+    order = await get_current_registration(session, user.id, lock=True)
+    if order is not None:
+        if order.is_paid or order.is_class_collected:
+            raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+        if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
+            raise ValueError("目前登記狀態無法修改")
+
+    school_class = await class_svc.resolve_user_class(session, user)
+    class_id = school_class.id if school_class else None
+    if order is not None and order.class_id != class_id:
+        raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
+
+    existing_items = [
+        item for item in (order.items if order is not None else []) if item.product_id == product.id
+    ]
+    existing_quantity = sum(item.quantity for item in existing_items)
+    await _assert_product_registration_open(
+        session,
+        product,
+        class_id=class_id,
+        allow_sold_out=existing_quantity > 0,
+    )
+
+    variants: dict[str, tuple[int, list[dict]]] = {}
+    for variant in data.variants:
+        if len(set(variant.option_ids)) != len(variant.option_ids):
+            raise ValueError("同一規格不能重複選擇選項")
+        selected = _resolve_selected_options(product, variant.option_ids)
+        signature = _options_signature(selected)
+        if signature in variants:
+            raise ValueError("相同規格不能重複登記")
+        variants[signature] = (variant.quantity, selected)
+
+    requested_total = sum(quantity for quantity, _ in variants.values())
+    await _assert_purchase_limit(
+        session,
+        product,
+        user.id,
+        requested_total,
+        excluding_order_id=order.id if order is not None else None,
+    )
+
+    if order is None and requested_total == 0:
+        return None
+
+    if not product.is_unlimited:
+        quantity_delta = requested_total - existing_quantity
+        if quantity_delta > product.stock_quantity:
+            raise ValueError(f"商品「{product.name}」庫存不足（剩餘 {product.stock_quantity} 件）")
+        product.stock_quantity -= quantity_delta
+        if product.stock_quantity == 0:
+            product.status = ProductStatus.SOLD_OUT
+        elif product.status == ProductStatus.SOLD_OUT:
+            product.status = ProductStatus.ACTIVE
+
+    if order is None:
+        order = Order(
+            serial_number=await generate_order_serial(session),
+            user_id=user.id,
+            class_id=class_id,
+            status=OrderStatus.PENDING,
+            payment_method="school_collection" if _is_school_email(user) else "cash_on_pickup",
+            subtotal_price=0,
+            discount_amount=0,
+            total_price=0,
+        )
+        session.add(order)
+        await session.flush()
+
+    old_subtotal = order.subtotal_price
+    old_discount = order.discount_amount
+    existing_by_signature: dict[str, list[OrderItem]] = {}
+    for item in existing_items:
+        signature = _options_signature(item.selected_options or [])
+        existing_by_signature.setdefault(signature, []).append(item)
+
+    for signature, items in existing_by_signature.items():
+        replacement = variants.get(signature)
+        if replacement is None:
+            for item in items:
+                order.items.remove(item)
+                await session.delete(item)
+            continue
+
+        quantity, selected = replacement
+        keep, *duplicates = items
+        keep.quantity = quantity
+        keep.unit_price = product.price + _options_delta(selected)
+        keep.selected_options = selected
+        for item in duplicates:
+            order.items.remove(item)
+            await session.delete(item)
+
+    for signature, (quantity, selected) in variants.items():
+        if signature in existing_by_signature:
+            continue
+        order.items.append(
+            OrderItem(
+                product_id=product.id,
+                quantity=quantity,
+                unit_price=product.price + _options_delta(selected),
+                selected_options=selected,
+            )
+        )
+
+    await session.flush()
+    subtotal = sum(item.quantity * item.unit_price for item in order.items)
+    if not order.items:
+        order.status = OrderStatus.CANCELLED
+        order.subtotal_price = 0
+        order.discount_amount = 0
+        order.total_price = 0
+        await receivable_svc.cancel_for_source(session, "shop_order", order.id)
+    else:
+        order.subtotal_price = subtotal
+        # Existing discounts remain attached to the registration, capped by its new subtotal.
+        order.discount_amount = min(old_discount, subtotal)
+        order.total_price = max(0, subtotal - order.discount_amount)
+        await receivable_svc.sync_shop_order(session, order)
+
+    await session.flush()
+    logger.info(
+        "商品登記更新 serial=%s product=%s quantity=%d subtotal_before=%d",
+        order.serial_number,
+        product.id,
+        requested_total,
+        old_subtotal,
+    )
+    return order
+
+
 async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
     result = await session.execute(
         select(Order)
@@ -763,6 +961,17 @@ async def cancel_order(
         raise PermissionError("只有訂購人可取消訂單")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法取消")
+    if order.is_paid or order.is_class_collected:
+        raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+    for item in order.items:
+        product = await get_product(session, item.product_id)
+        if product is not None:
+            await _assert_product_registration_open(
+                session,
+                product,
+                class_id=order.class_id,
+                allow_sold_out=True,
+            )
 
     for item in order.items:
         product = await session.get(Product, item.product_id)
@@ -788,6 +997,28 @@ async def replace_order_items(
 ) -> Order:
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法修改")
+    if order.is_paid or order.is_class_collected:
+        raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+
+    for item in order.items:
+        product = await get_product(session, item.product_id)
+        if product is not None:
+            await _assert_product_registration_open(
+                session,
+                product,
+                class_id=order.class_id,
+                allow_sold_out=True,
+            )
+    for item in data.items:
+        product = await get_product(session, item.product_id)
+        if product is None:
+            raise ValueError("找不到此商品")
+        await _assert_product_registration_open(
+            session,
+            product,
+            class_id=order.class_id,
+            allow_sold_out=any(existing.product_id == product.id for existing in order.items),
+        )
 
     for item in list(order.items):
         product = await session.get(Product, item.product_id)

@@ -7,14 +7,12 @@ test_shop_class.py 已涵蓋服務層（班級歸戶／變體計價／結單）�
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.org import Org, Permission, Position, UserPosition
-from api.models.outbox import OutboxEvent
 from api.models.shop import Order, OrderItem, OrderStatus, ProductCategory
 from api.models.user import User
 from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
@@ -22,6 +20,8 @@ from api.schemas.shop import (
     ProductCategoryCreate,
     ProductCreate,
     ProductSeriesCreate,
+    ProductVariantGroupCreate,
+    ProductVariantOptionCreate,
 )
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
@@ -425,262 +425,161 @@ async def test_variant_group_and_option_crud_requires_manage_permission(
     assert deleted_group.status_code == 204
 
 
-# ── 購物車 ────────────────────────────────────────────────────────────────────
+# ── 商品登記 ──────────────────────────────────────────────────────────────────
 
 
-async def test_cart_add_update_remove_and_clear_flow(
-    db_session, member_user, authed_client_factory
-) -> None:
-    creator = await _bare_user(db_session)
-    product = await _make_active_product(db_session, creator, price=50)
-    ac = authed_client_factory(member_user)
-
-    empty = await ac.get("/shop/cart")
-    assert empty.status_code == 200
-    assert empty.json()["items"] == []
-
-    added = await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 2})
-    assert added.status_code == 201
-    item_id = added.json()["items"][0]["id"]
-    assert added.json()["total_price"] == 100
-
-    updated = await ac.patch(f"/shop/cart/items/{item_id}", json={"quantity": 3})
-    assert updated.status_code == 200
-    assert updated.json()["total_price"] == 150
-
-    removed = await ac.delete(f"/shop/cart/items/{item_id}")
-    assert removed.status_code == 200
-    assert removed.json()["items"] == []
-
-    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
-    cleared = await ac.delete("/shop/cart")
-    assert cleared.status_code == 200
-    assert cleared.json()["items"] == []
+async def test_cart_and_checkout_routes_are_removed(client) -> None:
+    assert (await client.get("/shop/cart")).status_code == 404
+    assert (await client.post("/shop/cart/checkout", json={})).status_code == 404
 
 
-async def test_product_purchase_limit_applies_to_cart_and_existing_orders(
-    db_session, member_user, authed_client_factory
-) -> None:
-    creator = await _bare_user(db_session)
-    product = await _make_active_product(db_session, creator, price=50, max_quantity_per_user=1)
-    ac = authed_client_factory(member_user)
-
-    detail = await ac.get(f"/shop/products/{product.id}")
-    assert detail.status_code == 200
-    assert detail.json()["max_quantity_per_user"] == 1
-    assert detail.json()["remaining_quantity_for_user"] == 1
-
-    added = await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
-    assert added.status_code == 201
-    assert added.json()["items"][0]["quantity"] == 1
-
-    detail_with_cart_item = await ac.get(f"/shop/products/{product.id}")
-    assert detail_with_cart_item.json()["remaining_quantity_for_user"] == 0
-    duplicate = await ac.post(
-        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
-    )
-    assert duplicate.status_code == 422
-    assert "每人限購 1 件" in duplicate.json()["detail"]
-
-    checkout = await ac.post("/shop/cart/checkout", json={})
-    assert checkout.status_code == 201
-    assert checkout.json()[0]["items"][0]["quantity"] == 1
-
-    detail_after_order = await ac.get(f"/shop/products/{product.id}")
-    assert detail_after_order.json()["remaining_quantity_for_user"] == 0
-    repeat_purchase = await ac.post(
-        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
-    )
-    assert repeat_purchase.status_code == 422
+async def test_current_registration_requires_login(client) -> None:
+    assert (await client.get("/shop/registrations/current")).status_code == 401
+    assert (
+        await client.put(
+            f"/shop/registrations/current/products/{uuid.uuid4()}",
+            json={"variants": []},
+        )
+    ).status_code == 401
 
 
-async def test_cart_update_cannot_exceed_purchase_limit(
-    db_session, member_user, authed_client_factory
-) -> None:
-    creator = await _bare_user(db_session)
-    product = await _make_active_product(db_session, creator, price=50, max_quantity_per_user=2)
-    ac = authed_client_factory(member_user)
-    added = await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
-    item_id = added.json()["items"][0]["id"]
-
-    updated = await ac.patch(f"/shop/cart/items/{item_id}", json={"quantity": 3})
-    assert updated.status_code == 422
-    assert "每人限購 2 件" in updated.json()["detail"]
-
-
-async def test_purchase_limit_allows_multiple_tickets_within_limit(
-    db_session, member_user, authed_client_factory
-) -> None:
-    creator = await _bare_user(db_session)
-    product = await _make_active_product(db_session, creator, price=50, max_quantity_per_user=3)
-    ac = authed_client_factory(member_user)
-
-    added = await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 2})
-    assert added.status_code == 201
-    checkout = await ac.post("/shop/cart/checkout", json={})
-    assert checkout.status_code == 201
-    assert checkout.json()[0]["items"][0]["quantity"] == 2
-
-    detail = await ac.get(f"/shop/products/{product.id}")
-    assert detail.json()["remaining_quantity_for_user"] == 1
-
-
-async def test_add_cart_item_unknown_product_returns_422(
-    member_user, authed_client_factory
-) -> None:
-    ac = authed_client_factory(member_user)
-    resp = await ac.post("/shop/cart/items", json={"product_id": str(uuid.uuid4()), "quantity": 1})
-    assert resp.status_code == 422
-
-
-# ── 結單流程（checkout）─────────────────────────────────────────────────────
-
-
-async def test_checkout_empty_cart_returns_422(member_user, authed_client_factory) -> None:
-    ac = authed_client_factory(member_user)
-    resp = await ac.post("/shop/cart/checkout", json={})
-    assert resp.status_code == 422
-
-
-async def test_checkout_happy_path_creates_order_and_clears_cart(
+async def test_current_registration_is_scoped_to_authenticated_user(
     db_session, authed_client_factory
 ) -> None:
-    sc = await _make_class(db_session, start="11501", end="11540")
-    buyer = await _bare_user(db_session, student_id="11510")
-    product = await _make_active_product(db_session, buyer, price=80, stock=5)
-    ac = authed_client_factory(buyer)
+    creator = await _bare_user(db_session)
+    owner = await _bare_user(db_session)
+    other_user = await _bare_user(db_session)
+    product = await _make_active_product(db_session, creator, price=50, stock=5)
+    owner_client = authed_client_factory(owner)
+    other_client = authed_client_factory(other_user)
 
-    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 2})
-    resp = await ac.post("/shop/cart/checkout", json={"notes": "測試訂單"})
-    assert resp.status_code == 201
-    orders = resp.json()
-    assert len(orders) == 1
-    assert orders[0]["total_price"] == 160
-    assert orders[0]["class_id"] == str(sc.id)
-
-    events = (
-        (
-            await db_session.execute(
-                select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_confirmed")
-            )
-        )
-        .scalars()
-        .all()
+    owner_saved = await owner_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
     )
-    confirmation = next(
-        event for event in events if event.payload["serial_number"] == orders[0]["serial_number"]
+    assert owner_saved.status_code == 200
+    assert (await other_client.get("/shop/registrations/current")).json() is None
+
+    other_saved = await other_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
     )
-    assert confirmation.payload["subtotal_price"] == 160
-    assert confirmation.payload["discount_amount"] == 0
-    assert confirmation.payload["items"] == [
-        {
-            "product_name": product.name,
-            "unit_price": 80,
-            "quantity": 2,
-            "subtotal": 160,
-            "selected_options": [],
-        }
-    ]
-
-    cart = await ac.get("/shop/cart")
-    assert cart.json()["items"] == []
+    assert other_saved.status_code == 200
+    assert other_saved.json()["id"] != owner_saved.json()["id"]
+    assert (await owner_client.get("/shop/registrations/current")).json()[
+        "id"
+    ] == owner_saved.json()["id"]
+    assert (await other_client.get("/shop/registrations/current")).json()[
+        "id"
+    ] == other_saved.json()["id"]
 
 
-async def test_checkout_applies_account_coupon_and_snapshots_discount(
+async def test_registration_is_saved_and_can_be_changed_or_removed(
     db_session, member_user, authed_client_factory
 ) -> None:
-    await _grant_permission(db_session, member_user, "shop:manage")
-    product = await _make_active_product(db_session, member_user, price=100, stock=5)
-    manager_client = authed_client_factory(member_user)
-    promotion = await manager_client.post(
-        "/shop/promotions",
-        json={
-            "name": "測試優惠",
-            "target_email": member_user.email,
-            "code": "SAVE20",
-            "discount_type": "percentage",
-            "discount_value": 20,
-        },
+    creator = await _bare_user(db_session)
+    product = await _make_active_product(db_session, creator, price=50, stock=5)
+    group = await shop_svc.add_variant_group(
+        db_session,
+        product,
+        data=ProductVariantGroupCreate(
+            name="尺寸",
+            options=[
+                ProductVariantOptionCreate(value="標準"),
+                ProductVariantOptionCreate(value="加大", price_delta=25),
+            ],
+        ),
     )
-    assert promotion.status_code == 201
-
-    await manager_client.post(
-        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 2}
-    )
-    response = await manager_client.post(
-        "/shop/cart/checkout", json={"coupon_code": "save20", "payment_method": "bank_transfer"}
-    )
-    assert response.status_code == 201
-    order = response.json()[0]
-    assert order["subtotal_price"] == 200
-    assert order["discount_amount"] == 40
-    assert order["total_price"] == 160
-    assert order["promotion_code"] == "SAVE20"
-
-
-async def test_coupon_preview_shows_minimum_and_applied_discount(
-    db_session, member_user, authed_client_factory
-) -> None:
-    await _grant_permission(db_session, member_user, "shop:manage")
-    product = await _make_active_product(db_session, member_user, price=100, stock=5)
+    standard_option, large_option = group.options
     ac = authed_client_factory(member_user)
-    promotion = await ac.post(
-        "/shop/promotions",
-        json={
-            "name": "滿額折扣",
-            "target_email": member_user.email,
-            "code": "MIN300",
-            "discount_type": "percentage",
-            "discount_value": 10,
-            "min_order_price": 300,
-        },
+
+    empty = await ac.get("/shop/registrations/current")
+    assert empty.status_code == 200
+    assert empty.json() is None
+
+    added = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [str(standard_option.id)], "quantity": 2}]},
     )
-    assert promotion.status_code == 201
-    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 2})
+    assert added.status_code == 200
+    order = added.json()
+    assert order["total_price"] == 100
+    assert order["items"][0]["quantity"] == 2
+    assert product.stock_quantity == 3
 
-    preview = await ac.post("/shop/cart/promotion-preview", json={"code": "min300"})
-    assert preview.status_code == 200
-    assert preview.json()["eligible"] is False
-    assert preview.json()["reason_code"] == "minimum_not_met"
-    assert preview.json()["subtotal_price"] == 200
-    assert preview.json()["shortfall"] == 100
-    assert "還差 NT$100" in preview.json()["reason"]
+    updated = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [str(large_option.id)], "quantity": 3}]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["total_price"] == 225
+    assert updated.json()["items"][0]["quantity"] == 3
+    assert updated.json()["items"][0]["selected_options"][0]["option_id"] == str(large_option.id)
+    assert product.stock_quantity == 2
 
-    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
-    preview = await ac.post("/shop/cart/promotion-preview", json={"code": "MIN300"})
-    assert preview.status_code == 200
-    assert preview.json()["eligible"] is True
-    assert preview.json()["discount_amount"] == 30
-    assert preview.json()["total_price"] == 270
+    removed = await ac.put(
+        f"/shop/registrations/current/products/{product.id}", json={"variants": []}
+    )
+    assert removed.status_code == 200
+    assert removed.json()["status"] == "cancelled"
+    assert removed.json()["items"] == []
+    assert product.stock_quantity == 5
+    assert (await ac.get("/shop/registrations/current")).json() is None
 
 
-async def test_coupon_preview_explains_account_eligibility(
+async def test_registration_enforces_purchase_limit_and_sale_deadline(
     db_session, member_user, authed_client_factory
 ) -> None:
-    await _grant_permission(db_session, member_user, "shop:manage")
-    target = await _bare_user(db_session)
-    buyer = await _bare_user(db_session)
-    product = await _make_active_product(db_session, member_user, price=100, stock=5)
-    manager = authed_client_factory(member_user)
-    promotion = await manager.post(
-        "/shop/promotions",
-        json={
-            "name": "指定帳號優惠",
-            "target_identifiers": [target.email],
-            "code": "ONLYTARGET",
-            "discount_type": "fixed",
-            "discount_value": 20,
-        },
+    creator = await _bare_user(db_session)
+    limited = await _make_active_product(
+        db_session, creator, price=50, stock=5, max_quantity_per_user=2
     )
-    assert promotion.status_code == 201
-    ac = authed_client_factory(buyer)
-    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
+    ac = authed_client_factory(member_user)
+    saved = await ac.put(
+        f"/shop/registrations/current/products/{limited.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert saved.status_code == 200
+    too_many = await ac.put(
+        f"/shop/registrations/current/products/{limited.id}",
+        json={"variants": [{"option_ids": [], "quantity": 3}]},
+    )
+    assert too_many.status_code == 422
+    assert "每人限購 2 件" in too_many.json()["detail"]
 
-    preview = await ac.post("/shop/cart/promotion-preview", json={"code": "ONLYTARGET"})
-    assert preview.status_code == 200
-    assert preview.json()["eligible"] is False
-    assert preview.json()["reason_code"] == "account_not_eligible"
-    assert "不符合資格" in preview.json()["reason"]
+    expired = await _make_active_product(db_session, creator)
+    expired.sale_end = datetime.now(UTC) - timedelta(minutes=1)
+    await db_session.flush()
+    closed = await ac.put(
+        f"/shop/registrations/current/products/{expired.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert closed.status_code == 409
+    assert "已截止登記" in closed.json()["detail"]
+
+
+async def test_class_collection_locks_user_registration(db_session, authed_client_factory) -> None:
+    school_class = await _make_class(db_session, start="11501", end="11540")
+    buyer = await _bare_user(db_session, student_id="11510")
+    creator = await _bare_user(db_session)
+    product = await _make_active_product(db_session, creator, price=50)
+    ac = authed_client_factory(buyer)
+    created = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert created.status_code == 200
+    order_id = uuid.UUID(created.json()["id"])
+    order = await shop_svc.get_order(db_session, order_id)
+    assert order is not None and order.class_id == school_class.id
+    await shop_svc.set_class_collected(db_session, order, collected=True, actor_id=buyer.id)
+
+    locked = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert locked.status_code == 409
+    assert "登記收款" in locked.json()["detail"]
 
 
 # ── 訂單 ──────────────────────────────────────────────────────────────────────

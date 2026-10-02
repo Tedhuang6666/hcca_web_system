@@ -97,7 +97,7 @@ export default function OrdersPage() {
           </Link>
           <div>
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              {canManageOrders ? "校商營運工作台" : "我的訂單與繳款"}
+              {canManageOrders ? "校商營運工作台" : "我的登記與繳款"}
             </h1>
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function OrdersPage() {
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
           role="tablist"
           aria-label="訂單範圍">
-          {([["mine", "我的訂單"], ["all", "全部訂單"]] as const).map(([key, label]) => {
+          {([["mine", "我的登記"], ["all", "全部訂單"]] as const).map(([key, label]) => {
             const active = tab === key;
             return (
               <button
@@ -168,7 +168,7 @@ export default function OrdersPage() {
             { label: "未繳訂單", value: unpaidOrders.length },
             { label: "未繳金額", value: `NT$${(summary?.unpaid_amount ?? unpaidOrders.reduce((s, o) => s + o.total_price, 0)).toLocaleString()}` },
           ] : [
-            { label: "有效訂單", value: activeOrders.length },
+            { label: "有效登記", value: activeOrders.length },
             { label: "尚待繳交", value: `NT$${dueAmount.toLocaleString()}` },
             { label: "班代已登記", value: `${classCollectedCount} 筆` },
             { label: "班聯已確認", value: `${paidOrders.length} 筆` },
@@ -215,13 +215,13 @@ export default function OrdersPage() {
         ) : orders.length === 0 ? (
           <SmartEmptyState
             reason="new"
-            subject="訂單"
+            subject="商品登記"
             createHref="/shop"
-            message="還沒下過任何訂單，先去選購喜歡的商品吧"
+            message="還沒登記商品，先到商品頁選擇規格與數量"
           />
         ) : (
           <>
-          <div className="divide-y md:hidden" role="list" aria-label="訂單列表">
+          <div className="divide-y md:hidden" role="list" aria-label="登記列表">
             {orders.map((order) => (
               <div key={order.id} className="space-y-3 px-4 py-4" role="listitem">
                 <div className="flex items-start justify-between gap-3">
@@ -269,10 +269,10 @@ export default function OrdersPage() {
             ))}
           </div>
           <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[700px] text-sm" role="table" aria-label="訂單列表">
+          <table className="w-full min-w-[700px] text-sm" role="table" aria-label="登記列表">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["訂單編號", tab === "all" ? "用戶" : null, "班級", "狀態", "繳款進度", "金額", "下單時間"]
+                {["登記編號", tab === "all" ? "用戶" : null, "班級", "狀態", "繳款進度", "金額", "登記時間"]
                   .filter(Boolean)
                   .map(h => (
                     <th key={h!} className="px-5 py-3.5 text-left text-xs font-semibold"
