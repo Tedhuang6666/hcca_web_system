@@ -335,6 +335,57 @@ async def test_update_org_succeeds(client: AsyncClient, db_session: AsyncSession
 
 
 @pytest.mark.asyncio
+async def test_org_inheritance_changes_invalidate_descendant_members(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.routers import orgs as org_routes
+
+    manager = await _seed_user_with_codes(
+        db_session, "org-inheritance-manager@school.edu", ["org:manage"]
+    )
+    parent = Org(name="學生會")
+    new_parent = Org(name="校務會議")
+    db_session.add_all([parent, new_parent])
+    await db_session.flush()
+    department = Org(name="學權部", parent_id=parent.id)
+    team = Org(name="權益小組", parent=department)
+    db_session.add_all([department, team])
+    await db_session.flush()
+
+    department_member = await _seed_user_with_codes(
+        db_session, "org-inheritance-department@school.edu", ["document:submit"], org=department
+    )
+    team_member = await _seed_user_with_codes(
+        db_session, "org-inheritance-team@school.edu", ["document:submit"], org=team
+    )
+    _override_user(manager)
+
+    invalidated_user_ids: list[str] = []
+
+    async def record_invalidation(user_id: str) -> None:
+        invalidated_user_ids.append(user_id)
+
+    monkeypatch.setattr(org_routes, "cache_invalidate_user_permissions", record_invalidation)
+
+    permission_update = await client.patch(
+        f"/orgs/{parent.id}",
+        json={"default_permission_codes": ["document:create"]},
+    )
+    assert permission_update.status_code == 200
+    assert set(invalidated_user_ids) == {str(department_member.id), str(team_member.id)}
+
+    invalidated_user_ids.clear()
+    parent_update = await client.patch(
+        f"/orgs/{department.id}",
+        json={"parent_id": str(new_parent.id)},
+    )
+    assert parent_update.status_code == 200
+    assert set(invalidated_user_ids) == {str(department_member.id), str(team_member.id)}
+
+
+@pytest.mark.asyncio
 async def test_deactivate_and_activate_org(client: AsyncClient, db_session: AsyncSession) -> None:
     user = await _seed_user_with_codes(db_session, "org-toggle@school.edu", ["org:manage"])
     org = Org(name="切換組織", is_active=True)

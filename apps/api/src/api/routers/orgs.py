@@ -273,13 +273,19 @@ async def update_org(
     await cache_invalidate("org:list:active_only=False")
     await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
-    if data.default_permission_codes is not None:
+    updated_parent_id = str(org.parent_id) if org.parent_id else None
+    updated_default_codes = sorted(org.default_permission_codes or [])
+    if (
+        before["parent_id"] != updated_parent_id
+        or before["default_permission_codes"] != updated_default_codes
+    ):
+        affected_org_ids = await org_svc.get_org_descendant_ids(db, org.id)
         current_session_id = _get_org_update_session_id(request)
         holder_ids = (
             await db.scalars(
                 select(UserPosition.user_id)
                 .join(Position, UserPosition.position_id == Position.id)
-                .where(Position.org_id == org.id)
+                .where(Position.org_id.in_(affected_org_ids))
                 .distinct()
             )
         ).all()

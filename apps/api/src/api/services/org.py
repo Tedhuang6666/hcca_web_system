@@ -7,7 +7,7 @@ from datetime import date
 
 from sqlalchemy import exists, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from api.core.clock import local_today
 from api.models.document import Document
@@ -50,6 +50,21 @@ async def get_org(db: AsyncSession, org_id: uuid.UUID) -> Org | None:
         select(Org).where(Org.id == org_id).options(selectinload(Org.children))
     )
     return result.scalar_one_or_none()
+
+
+async def get_org_descendant_ids(db: AsyncSession, org_id: uuid.UUID) -> list[uuid.UUID]:
+    """Return an organization and all descendants using one recursive query."""
+    descendants = (
+        select(Org.id.label("org_id"))
+        .where(Org.id == org_id)
+        .cte("org_descendants", recursive=True)
+    )
+    child_org = aliased(Org)
+    descendants = descendants.union_all(
+        select(child_org.id).join(descendants, child_org.parent_id == descendants.c.org_id)
+    )
+    result = await db.scalars(select(descendants.c.org_id))
+    return list(result.all())
 
 
 async def _org_exists(db: AsyncSession, org_id: uuid.UUID) -> bool:

@@ -8,6 +8,7 @@ from datetime import date
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, UserPosition
@@ -26,6 +27,42 @@ def active_tenure_filter(check_date: date) -> list:
     ]
 
 
+async def _get_org_default_permission_codes_by_org(
+    db: AsyncSession,
+    org_ids: set[uuid.UUID],
+) -> dict[uuid.UUID, set[str]]:
+    """取得指定組織及其所有上級組織的預設權限碼。"""
+    if not org_ids:
+        return {}
+
+    ancestor_paths = (
+        select(
+            Org.id.label("org_id"),
+            Org.id.label("ancestor_id"),
+            Org.parent_id.label("parent_id"),
+        )
+        .where(Org.id.in_(org_ids))
+        .cte("org_ancestor_paths", recursive=True)
+    )
+    parent_org = aliased(Org)
+    ancestor_paths = ancestor_paths.union_all(
+        select(
+            ancestor_paths.c.org_id,
+            parent_org.id.label("ancestor_id"),
+            parent_org.parent_id.label("parent_id"),
+        ).join(parent_org, parent_org.id == ancestor_paths.c.parent_id)
+    )
+    result = await db.execute(
+        select(ancestor_paths.c.org_id, Org.default_permission_codes).join(
+            Org, Org.id == ancestor_paths.c.ancestor_id
+        )
+    )
+    codes_by_org: dict[uuid.UUID, set[str]] = {}
+    for org_id, default_codes in result.all():
+        codes_by_org.setdefault(org_id, set()).update(default_codes or [])
+    return codes_by_org
+
+
 async def get_user_permission_codes(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -34,7 +71,7 @@ async def get_user_permission_codes(
     """
     查詢使用者在指定日期（預設今天）的所有有效權限碼（跨所有組織）。
 
-    使用單一 JOIN 查詢，效能最優。有 Redis 快取支援。
+    合併職位權限與所屬組織祖先鏈的預設權限。今天的查詢使用 Redis 快取。
     回傳 frozenset 方便快速 `in` 檢查。
     """
     check_date = on_date or local_today()
@@ -49,10 +86,9 @@ async def get_user_permission_codes(
             return frozenset(cached)
 
     result = await db.execute(
-        select(Permission.code, Org.default_permission_codes)
+        select(Permission.code, Position.org_id)
         .select_from(UserPosition)
         .join(Position, UserPosition.position_id == Position.id)
-        .join(Org, Org.id == Position.org_id)
         .outerjoin(Permission, Permission.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
@@ -60,10 +96,15 @@ async def get_user_permission_codes(
         )
     )
     codes: set[str] = set()
-    for position_code, default_codes in result.all():
+    org_ids: set[uuid.UUID] = set()
+    for position_code, org_id in result.all():
         if position_code:
             codes.add(position_code)
-        codes.update(default_codes or [])
+        org_ids.add(org_id)
+
+    default_codes_by_org = await _get_org_default_permission_codes_by_org(db, org_ids)
+    for default_codes in default_codes_by_org.values():
+        codes.update(default_codes)
 
     # 快取今天的權限結果（180 秒 TTL）
     if on_date is None:
@@ -79,17 +120,16 @@ async def get_user_permission_codes_batch(
     user_ids: list[uuid.UUID],
     on_date: date | None = None,
 ) -> dict[uuid.UUID, frozenset[str]]:
-    """一次查詢多位使用者的有效權限碼，供管理列表避免 N+1。"""
+    """批次查詢多位使用者的權限碼，並避免逐一查詢組織祖先。"""
     unique_ids = list(dict.fromkeys(user_ids))
     if not unique_ids:
         return {}
 
     check_date = on_date or local_today()
     result = await db.execute(
-        select(UserPosition.user_id, Permission.code, Org.default_permission_codes)
+        select(UserPosition.user_id, Permission.code, Position.org_id)
         .select_from(UserPosition)
         .join(Position, UserPosition.position_id == Position.id)
-        .join(Org, Org.id == Position.org_id)
         .outerjoin(Permission, Permission.position_id == Position.id)
         .where(
             UserPosition.user_id.in_(unique_ids),
@@ -97,10 +137,18 @@ async def get_user_permission_codes_batch(
         )
     )
     codes_by_user: dict[uuid.UUID, set[str]] = {user_id: set() for user_id in unique_ids}
-    for user_id, position_code, default_codes in result.all():
+    org_ids_by_user: dict[uuid.UUID, set[uuid.UUID]] = {user_id: set() for user_id in unique_ids}
+    all_org_ids: set[uuid.UUID] = set()
+    for user_id, position_code, org_id in result.all():
         if position_code:
             codes_by_user[user_id].add(position_code)
-        codes_by_user[user_id].update(default_codes or [])
+        org_ids_by_user[user_id].add(org_id)
+        all_org_ids.add(org_id)
+
+    default_codes_by_org = await _get_org_default_permission_codes_by_org(db, all_org_ids)
+    for user_id, org_ids in org_ids_by_user.items():
+        for org_id in org_ids:
+            codes_by_user[user_id].update(default_codes_by_org.get(org_id, set()))
     return {user_id: frozenset(codes) for user_id, codes in codes_by_user.items()}
 
 
@@ -113,15 +161,14 @@ async def get_user_permission_codes_for_org(
     """
     查詢使用者在指定組織下的有效權限碼（org-scoped）。
 
-    用於公文/法規/字號等需要「只能操作自己組織」的資源檢查。
+    合併該組織及其上級組織預設權限，用於受組織範圍限制的資源檢查。
     """
     check_date = on_date or local_today()
 
     result = await db.execute(
-        select(Permission.code, Org.default_permission_codes)
+        select(Permission.code)
         .select_from(UserPosition)
         .join(Position, UserPosition.position_id == Position.id)
-        .join(Org, Org.id == Position.org_id)
         .outerjoin(Permission, Permission.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
@@ -130,27 +177,32 @@ async def get_user_permission_codes_for_org(
         )
     )
     codes: set[str] = set()
-    for position_code, default_codes in result.all():
+    rows = result.all()
+    if not rows:
+        return frozenset()
+    for (position_code,) in rows:
         if position_code:
             codes.add(position_code)
-        codes.update(default_codes or [])
+    default_codes_by_org = await _get_org_default_permission_codes_by_org(db, {org_id})
+    codes.update(default_codes_by_org.get(org_id, set()))
     return frozenset(codes)
 
 
 async def get_org_permission_codes(db: AsyncSession, org_id: uuid.UUID) -> frozenset[str]:
-    """回傳組織內所有職位與組織預設權限碼聯集。"""
+    """回傳組織內職位權限與組織及其上級組織預設權限碼聯集。"""
     result = await db.execute(
-        select(Permission.code, Org.default_permission_codes)
+        select(Permission.code)
         .select_from(Org)
         .outerjoin(Position, Position.org_id == Org.id)
         .outerjoin(Permission, Permission.position_id == Position.id)
         .where(Org.id == org_id)
     )
     codes: set[str] = set()
-    for position_code, default_codes in result.all():
+    for (position_code,) in result.all():
         if position_code:
             codes.add(position_code)
-        codes.update(default_codes or [])
+    default_codes_by_org = await _get_org_default_permission_codes_by_org(db, {org_id})
+    codes.update(default_codes_by_org.get(org_id, set()))
     return frozenset(codes)
 
 
