@@ -552,6 +552,8 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
         },
     )
     assert income.status_code == 201
+    submitted_income = await creator.post(f"/finance/journals/{income.json()['id']}/submit")
+    assert submitted_income.status_code == 200
     assert (
         await reviewer_client.post(f"/finance/journals/{income.json()['id']}/post")
     ).status_code == 200
