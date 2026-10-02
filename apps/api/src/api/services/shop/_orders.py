@@ -661,6 +661,7 @@ async def set_current_registration_product(
             subtotal_price=0,
             discount_amount=0,
             total_price=0,
+            items=[],
         )
         session.add(order)
         await session.flush()
