@@ -18,11 +18,14 @@ type GalleryDraftPhoto = {
 };
 
 type GalleryUploadProgress = {
-  fileIndex: number;
   totalFiles: number;
-  filename: string;
-  progress: number;
+  completedFiles: number;
+  totalBytes: number;
+  completedBytes: number;
+  activeUploads: Array<{ filename: string; fileSize: number; progress: number }>;
 };
+
+const GALLERY_UPLOAD_CONCURRENCY = 3;
 
 function currentMonth() {
   const now = new Date();
@@ -186,22 +189,60 @@ export default function ArticleMarkdownEditor({
     setGalleryUploading(true);
     setGalleryUploadErrors([]);
     const errors: string[] = [];
+    const activeUploads = new Map<number, { filename: string; fileSize: number; progress: number }>();
+    const uploadedPhotos: Array<GalleryDraftPhoto | undefined> = new Array(files.length);
+    const totalBytes = files.reduce((total, file) => total + file.size, 0);
+    let completedFiles = 0;
+    let completedBytes = 0;
+    let nextFileIndex = 0;
 
-    for (const [fileIndex, file] of files.entries()) {
-      setGalleryUploadProgress({ fileIndex, totalFiles: files.length, filename: file.name, progress: 0 });
-      try {
-        const uploaded = await siteApi.uploadImage(file, (progress) => {
-          setGalleryUploadProgress({ fileIndex, totalFiles: files.length, filename: file.name, progress });
-        });
-        setGalleryPhotos((current) => [...current, {
-          url: uploaded.url,
-          filename: file.name,
-          description: "",
-        }]);
-      } catch (error) {
-        errors.push(`${file.name}：${apiErrorMessage(error, "上傳失敗")}`);
+    const reportProgress = () => {
+      setGalleryUploadProgress({
+        totalFiles: files.length,
+        completedFiles,
+        totalBytes,
+        completedBytes,
+        activeUploads: Array.from(activeUploads.values()),
+      });
+    };
+
+    const uploadNext = async () => {
+      while (nextFileIndex < files.length) {
+        const fileIndex = nextFileIndex;
+        nextFileIndex += 1;
+        const file = files[fileIndex];
+        activeUploads.set(fileIndex, { filename: file.name, fileSize: file.size, progress: 0 });
+        reportProgress();
+
+        try {
+          const uploaded = await siteApi.uploadImage(file, (progress) => {
+            activeUploads.set(fileIndex, { filename: file.name, fileSize: file.size, progress });
+            reportProgress();
+          });
+          uploadedPhotos[fileIndex] = {
+            url: uploaded.url,
+            filename: file.name,
+            description: "",
+          };
+        } catch (error) {
+          errors.push(`${file.name}：${apiErrorMessage(error, "上傳失敗")}`);
+        } finally {
+          activeUploads.delete(fileIndex);
+          completedFiles += 1;
+          completedBytes += file.size;
+          reportProgress();
+        }
       }
-    }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(GALLERY_UPLOAD_CONCURRENCY, files.length) }, () => uploadNext()),
+    );
+
+    setGalleryPhotos((current) => [
+      ...current,
+      ...uploadedPhotos.filter((photo): photo is GalleryDraftPhoto => photo !== undefined),
+    ]);
 
     setGalleryUploading(false);
     setGalleryUploadProgress(null);
@@ -256,6 +297,23 @@ export default function ArticleMarkdownEditor({
       setChartLoading(false);
     }
   };
+
+  const galleryUploadProgressValue = galleryUploadProgress
+    ? (() => {
+      const activeBytes = galleryUploadProgress.activeUploads.reduce(
+        (total, upload) => total + upload.fileSize * upload.progress,
+        0,
+      );
+      const total = galleryUploadProgress.totalBytes || galleryUploadProgress.totalFiles;
+      const completed = galleryUploadProgress.totalBytes
+        ? galleryUploadProgress.completedBytes
+        : galleryUploadProgress.completedFiles;
+      const active = galleryUploadProgress.totalBytes
+        ? activeBytes
+        : galleryUploadProgress.activeUploads.reduce((sum, upload) => sum + upload.progress, 0);
+      return Math.round(((completed + active) / total) * 100);
+    })()
+    : 0;
 
   return (
     <div className="article-editor">
@@ -374,11 +432,11 @@ export default function ArticleMarkdownEditor({
               onClick={() => galleryInputRef.current?.click()}
               disabled={galleryUploading}
             >
-              <ImagePlus size={16} aria-hidden /> {galleryUploading ? "照片上傳中…" : "選擇多張照片"}
+              <ImagePlus size={16} aria-hidden /> {galleryUploading ? `同時上傳 ${galleryUploadProgress?.activeUploads.length ?? 0} 張…` : "選擇多張照片"}
             </button>
             <span className="text-xs text-[var(--text-muted)]" aria-live="polite">
               {galleryUploadProgress
-                ? `第 ${galleryUploadProgress.fileIndex + 1} / ${galleryUploadProgress.totalFiles} 張：${galleryUploadProgress.filename}（${Math.round(galleryUploadProgress.progress * 100)}%）`
+                ? `已完成 ${galleryUploadProgress.completedFiles} / ${galleryUploadProgress.totalFiles} 張，${galleryUploadProgress.activeUploads.length} 張上傳中（${galleryUploadProgressValue}%）`
                 : `已加入 ${galleryPhotos.length} 張照片`}
             </span>
           </div>
@@ -389,9 +447,9 @@ export default function ArticleMarkdownEditor({
               aria-label="照片上傳進度"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={Math.round(((galleryUploadProgress.fileIndex + galleryUploadProgress.progress) / galleryUploadProgress.totalFiles) * 100)}
+              aria-valuenow={galleryUploadProgressValue}
             >
-              <span style={{ transform: `scaleX(${(galleryUploadProgress.fileIndex + galleryUploadProgress.progress) / galleryUploadProgress.totalFiles})` }} />
+              <span style={{ transform: `scaleX(${galleryUploadProgressValue / 100})` }} />
             </div>
           )}
           {galleryUploadErrors.length > 0 && (
