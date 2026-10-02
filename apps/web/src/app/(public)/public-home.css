@@ -443,6 +443,8 @@
 }
 
 .public-home-feature-card {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: 7.1rem;
@@ -456,6 +458,31 @@
   padding: 1.25rem 1rem;
   box-shadow: none;
   transition: background-color 180ms ease, color 180ms ease;
+}
+
+.public-home-feature-card::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: radial-gradient(
+    circle 17rem at var(--spotlight-x, 50%) var(--spotlight-y, 50%),
+    color-mix(in srgb, var(--public-accent) 14%, transparent),
+    transparent 72%
+  );
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.public-home-feature-card[data-spotlight-active="true"]::before,
+.public-home-feature-card:focus-visible::before {
+  opacity: 1;
+}
+
+.public-home-feature-card > :not(.public-home-card-wash) {
+  position: relative;
+  z-index: 1;
 }
 
 .public-home-feature-card:last-child {
@@ -690,6 +717,7 @@
 @media (prefers-reduced-motion: reduce) {
   .public-home-activity-row,
   .public-home-feature-card,
+  .public-home-feature-card::before,
   .public-home-shop-card,
   .public-feature-arrow {
     transition-duration: 0.01ms !important;
