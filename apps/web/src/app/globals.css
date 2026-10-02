@@ -2828,106 +2828,119 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .btn-danger-ghost:hover:not(:disabled) { background: var(--danger-dim); }
 
-/* 真實下載進度：圓環沿著同一條 path 攤平成發光水平 rail */
+/* 共用下載按鈕沿用平台按鈕語言，以細線回報真實下載進度。 */
 .animated-download-button,
 .animated-download-button.btn,
 .animated-download-button.btn-sm,
 .animated-download-button.btn-lg {
-  --download-accent: color-mix(in srgb, var(--primary) 48%, #2dd4bf);
-  --download-surface: color-mix(in srgb, var(--bg-elevated) 94%, var(--download-accent));
-  --download-ink: var(--text-primary);
+  --download-accent: var(--primary);
   position: relative;
   box-sizing: border-box;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.65rem;
-  width: auto;
-  min-width: 8.25rem;
+  min-width: 6.25rem;
   max-width: 100%;
   min-height: 2.75rem;
-  height: auto;
-  appearance: none;
-  padding: 0.35rem 0.85rem 0.35rem 0.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--download-accent) 34%, var(--border));
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--download-surface), color-mix(in srgb, var(--bg-surface) 94%, var(--download-accent)));
-  color: var(--download-ink);
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--download-accent) 14%, transparent), var(--shadow-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 0.8rem;
+  appearance: none;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  box-shadow: none;
   font: inherit;
   font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1;
+  font-weight: 500;
+  line-height: 1.2;
   letter-spacing: 0;
   white-space: nowrap;
   cursor: pointer;
-  transition:
-    width 520ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-height 520ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 180ms ease,
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.animated-download-button.btn-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.animated-download-button.btn-primary:hover:not(:disabled) {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
+}
+
+.animated-download-button.btn-secondary {
+  border-color: var(--primary);
+  background: transparent;
+  color: var(--primary);
+}
+
+.animated-download-button.btn-secondary:hover:not(:disabled) {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.animated-download-button.btn-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
 }
 
 .animated-download-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--download-accent) 72%, var(--border));
-  box-shadow: 0 5px 22px color-mix(in srgb, var(--download-accent) 20%, transparent), var(--shadow-sm);
-  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  box-shadow: none;
+  transform: none;
+}
+
+.animated-download-button.btn-primary:hover:not(:disabled),
+.animated-download-button.btn-danger:hover:not(:disabled) {
+  color: #fff;
+}
+
+.animated-download-button.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger);
+  filter: brightness(0.9);
+}
+
+.animated-download-button:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--primary));
+  outline-offset: 2px;
 }
 
 .animated-download-button.animated-download-button::after { content: none; }
 
-.animated-download-button:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
-}
-
+.animated-download-button:active:not(:disabled) { transform: none; }
 .animated-download-button:disabled { cursor: wait; }
 
-.animated-download-button.animated-download-button[data-download-state="starting"],
-.animated-download-button.animated-download-button[data-download-state="downloading"],
-.animated-download-button.animated-download-button[data-download-state="finishing"],
-.animated-download-button.animated-download-button[data-download-state="complete"],
-.animated-download-button.animated-download-button[data-download-state="error"] {
-  gap: 0.55rem;
-  width: min(15rem, 100%);
-  min-width: min(12rem, 100%);
+.animated-download-button.animated-download-button[data-download-state] {
+  width: auto;
+  min-width: 6.25rem;
   min-height: 2.75rem !important;
   height: auto !important;
-  padding: 0.35rem 0.85rem 0.35rem 0.5rem;
-  border-color: color-mix(in srgb, var(--download-accent) 68%, var(--border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-elevated) 92%, var(--download-accent));
-  box-shadow: var(--shadow-sm);
+  padding: 0 0.8rem;
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
 
-.animated-download-button[data-download-state="complete"] {
-  --download-accent: var(--success);
-  --download-surface: color-mix(in srgb, var(--bg-elevated) 90%, var(--success-dim));
+.animated-download__icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--text-muted);
 }
 
-.animated-download-button[data-download-state="error"] {
-  --download-accent: var(--danger);
-  --download-surface: color-mix(in srgb, var(--bg-elevated) 90%, var(--danger-dim));
+.animated-download-button[data-download-state="complete"] .animated-download__icon {
+  color: var(--success);
 }
 
-.animated-download-button--icon-only,
-.animated-download-button.animated-download-button--icon-only {
-  min-width: 2.75rem;
-  width: 2.75rem;
-  padding: 0.35rem;
-}
-
-.animated-download-button--icon-only[data-download-state="starting"],
-.animated-download-button--icon-only[data-download-state="downloading"],
-.animated-download-button--icon-only[data-download-state="finishing"],
-.animated-download-button--icon-only[data-download-state="complete"],
-.animated-download-button--icon-only[data-download-state="error"] {
-  width: min(18rem, 100%);
-  min-width: min(15rem, 100%);
-  padding: 1.05rem 1rem 0.8rem;
+.animated-download-button[data-download-state="error"] .animated-download__icon {
+  color: var(--danger);
 }
 
 .animated-download__copy {
@@ -2937,115 +2950,8 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   order: 2;
 }
 
-.animated-download__visual {
-  position: relative;
-  display: inline-grid;
-  width: 2.75rem;
-  height: 2.6rem;
-  flex: 0 0 2.75rem;
-  place-items: center;
-  order: 1;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--download-accent) 12%, transparent);
-  color: var(--download-accent);
-  transition:
-    width 520ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 520ms cubic-bezier(0.22, 1, 0.36, 1),
-    flex-basis 520ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 180ms ease;
-}
-
-.animated-download-button[data-download-state="starting"] .animated-download__visual,
-.animated-download-button[data-download-state="downloading"] .animated-download__visual,
-.animated-download-button[data-download-state="finishing"] .animated-download__visual,
-.animated-download-button[data-download-state="complete"] .animated-download__visual,
-.animated-download-button[data-download-state="error"] .animated-download__visual {
-  width: 2.75rem;
-  height: 2.6rem;
-  flex-basis: 2.75rem;
-}
-
-.animated-download-button[data-download-state="starting"] .animated-download__copy,
-.animated-download-button[data-download-state="downloading"] .animated-download__copy,
-.animated-download-button[data-download-state="finishing"] .animated-download__copy,
-.animated-download-button[data-download-state="complete"] .animated-download__copy,
-.animated-download-button[data-download-state="error"] .animated-download__copy {
-  color: var(--download-ink);
-  font-size: 0.8125rem;
-  letter-spacing: 0;
-}
-
+.animated-download__icon { order: 1; }
 .animated-download-button--icon-only .animated-download__copy { display: none; }
-
-.animated-download__svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.animated-download__rail,
-.animated-download__fill {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.animated-download__rail {
-  stroke: currentColor;
-  stroke-width: 2.65;
-  opacity: 0.28;
-}
-
-.animated-download__fill {
-  stroke: var(--download-accent);
-  stroke-width: 3.4;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--download-accent) 72%, transparent));
-  transition: stroke-dashoffset 120ms linear, opacity 180ms ease;
-}
-
-.animated-download__fill.is-indeterminate { animation: animated-download-indeterminate 900ms linear infinite; }
-
-.animated-download__arrow,
-.animated-download__check,
-.animated-download__retry {
-  position: absolute;
-  top: 32.5%;
-  left: 50%;
-  display: grid;
-  place-items: center;
-  transform: translate(-50%, -50%);
-  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.animated-download__check,
-.animated-download__retry {
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.65);
-}
-
-.animated-download-button[data-download-state="starting"] .animated-download__arrow,
-.animated-download-button[data-download-state="downloading"] .animated-download__arrow,
-.animated-download-button[data-download-state="finishing"] .animated-download__arrow {
-  opacity: 0;
-  transform: translate(-50%, calc(-50% - 5px)) scale(0.7);
-}
-
-.animated-download-button[data-download-state="complete"] .animated-download__arrow,
-.animated-download-button[data-download-state="error"] .animated-download__arrow {
-  opacity: 0;
-}
-
-.animated-download-button[data-download-state="complete"] .animated-download__check,
-.animated-download-button[data-download-state="error"] .animated-download__retry {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
-}
-
-.animated-download__check { color: var(--success); }
-.animated-download__retry { color: var(--danger); }
 
 .animated-download__label {
   min-width: 0;
@@ -3054,72 +2960,72 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   text-overflow: ellipsis;
 }
 
-.animated-download__percent {
+.animated-download__progress {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0;
+  left: 0.45rem;
   display: block;
-  order: 3;
-  width: 100%;
-  color: color-mix(in srgb, var(--download-accent) 76%, var(--text-secondary));
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
-  text-align: center;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--download-accent) 14%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.animated-download-button[data-download-state="starting"] .animated-download__progress,
+.animated-download-button[data-download-state="downloading"] .animated-download__progress,
+.animated-download-button[data-download-state="finishing"] .animated-download__progress {
+  opacity: 1;
+}
+
+.animated-download__progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--download-accent);
+  transition: width 120ms linear;
+}
+
+.animated-download__progress-fill.is-indeterminate {
+  animation: animated-download-progress-travel 900ms ease-in-out infinite;
+}
+
+.animated-download-button.animated-download-button--icon-only {
+  width: 2.75rem;
+  min-width: 2.75rem;
+  padding: 0 0.45rem;
+}
+
+.animated-download-button.animated-download-button--icon-only[data-download-state] {
+  width: 2.75rem;
+  min-width: 2.75rem;
+  padding: 0 0.45rem;
+}
+
+.animated-download-button--icon-only .animated-download__progress {
+  right: 0.3rem;
+  left: 0.3rem;
+}
+
+@keyframes animated-download-progress-travel {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(460%); }
 }
 
 @media (max-width: 640px) {
-  .animated-download-button,
-  .animated-download-button.btn,
-  .animated-download-button.btn-sm,
-  .animated-download-button.btn-lg {
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .animated-download-button.animated-download-button[data-download-state="starting"],
-  .animated-download-button.animated-download-button[data-download-state="downloading"],
-  .animated-download-button.animated-download-button[data-download-state="finishing"],
-  .animated-download-button.animated-download-button[data-download-state="complete"],
-  .animated-download-button.animated-download-button[data-download-state="error"] {
-    width: min(100%, 20rem);
-    min-width: 0;
-  }
-
   .animated-download__label { max-width: min(13rem, 48vw); }
-}
-
-@media (max-width: 380px) {
-  .animated-download-button {
-    gap: 0.45rem;
-    padding-right: 0.65rem;
-    font-size: 0.75rem;
-  }
-
-  .animated-download-button.animated-download-button[data-download-state="starting"],
-  .animated-download-button.animated-download-button[data-download-state="downloading"],
-  .animated-download-button.animated-download-button[data-download-state="finishing"],
-  .animated-download-button.animated-download-button[data-download-state="complete"],
-  .animated-download-button.animated-download-button[data-download-state="error"] {
-    min-height: 9.25rem;
-    padding-inline: 0.75rem;
-  }
-
-  .animated-download__label { max-width: 35vw; }
-}
-
-@keyframes animated-download-indeterminate {
-  from { stroke-dashoffset: 1.15; }
-  to { stroke-dashoffset: 0.15; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .animated-download-button,
   .animated-download-button *,
-  .animated-download__fill.is-indeterminate {
+  .animated-download__progress-fill.is-indeterminate {
     animation: none !important;
     transition: none !important;
   }
 }
-
 .btn-sm {
   position: relative;
   overflow: hidden;
@@ -4265,18 +4171,15 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   min-height: 1.875rem;
 }
 
-/* PDF 是文件操作，不應比閱讀與分享工具更醒目。 */
+/* 法規頁的 PDF 匯出維持與相鄰閱讀工具相同的安靜層級。 */
 .regulation-detail-page .regulation-detail-print-button {
-  --download-accent: var(--text-muted);
-  --download-surface: var(--bg-surface);
-  --download-ink: var(--text-secondary);
-  height: 1.875rem;
   min-width: 0;
-  min-height: 1.875rem;
+  min-height: 2.75rem;
   padding: 0 0.625rem;
   border-color: var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-surface);
+  color: var(--text-secondary);
   box-shadow: none;
   line-height: 1;
 }
@@ -4288,44 +4191,22 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   transform: none;
 }
 
-.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="starting"],
-.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="downloading"],
-.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="finishing"],
-.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="complete"],
-.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state="error"] {
-  gap: 0.35rem;
-  width: auto;
-  min-width: 0;
-  min-height: 1.875rem !important;
-  height: 1.875rem !important;
-  padding: 0 0.625rem;
-  border-color: var(--border-strong);
-  border-radius: 6px;
-  background: var(--bg-hover);
-  box-shadow: none;
+.regulation-detail-page .regulation-detail-print-button .animated-download__icon {
+  display: none;
 }
 
-.regulation-detail-page .regulation-detail-print-button .animated-download__visual,
-.regulation-detail-page .regulation-detail-print-button[data-download-state="starting"] .animated-download__visual,
-.regulation-detail-page .regulation-detail-print-button[data-download-state="downloading"] .animated-download__visual,
-.regulation-detail-page .regulation-detail-print-button[data-download-state="finishing"] .animated-download__visual,
-.regulation-detail-page .regulation-detail-print-button[data-download-state="complete"] .animated-download__visual,
-.regulation-detail-page .regulation-detail-print-button[data-download-state="error"] .animated-download__visual {
-  width: 1.75rem;
-  height: 1.75rem;
-  flex-basis: 1.75rem;
-  border-radius: 4px;
-  background: transparent;
-}
-
-.regulation-detail-page .regulation-detail-print-button .animated-download__copy,
-.regulation-detail-page .regulation-detail-print-button[data-download-state] .animated-download__copy {
+.regulation-detail-page .regulation-detail-print-button .animated-download__copy {
   color: var(--text-secondary);
   font-size: 0.75rem;
 }
 
-.regulation-detail-page .regulation-detail-print-button .animated-download__visual {
-  display: none;
+.regulation-detail-page .regulation-detail-print-button.animated-download-button[data-download-state] {
+  min-width: 0;
+}
+
+.regulation-detail-page .regulation-detail-print-button .animated-download__progress {
+  right: 0.35rem;
+  left: 0.35rem;
 }
 
 .regulation-detail-print-label {
@@ -4333,11 +4214,6 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   align-items: center;
   gap: 0.35rem;
 }
-
-.regulation-detail-page .regulation-detail-print-button .animated-download__fill {
-  filter: none;
-}
-
 @media (max-width: 640px) {
   .document-detail-page .card,
   .regulation-detail-page .card {

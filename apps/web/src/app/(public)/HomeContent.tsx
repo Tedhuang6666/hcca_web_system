@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import LiveElectionCard from "@/components/site/LiveElectionCard";
+import PublicSpotlightLink from "@/components/site/PublicSpotlightLink";
 import { uploadUrl } from "@/lib/config";
 import { publicPageHref } from "@/lib/publicNav";
 import type {
@@ -70,7 +71,7 @@ export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | nul
         ].map((item, index) => {
           const Icon = item.icon;
           return (
-            <Link
+            <PublicSpotlightLink
               key={item.href}
               href={item.href}
               className="public-feature-card public-home-feature-card"
@@ -88,7 +89,7 @@ export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | nul
                 {item.action}
                 <ArrowRight className="public-feature-arrow" size={17} />
               </span>
-            </Link>
+            </PublicSpotlightLink>
           );
         })}
       </nav>

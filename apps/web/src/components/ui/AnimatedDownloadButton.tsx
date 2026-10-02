@@ -34,27 +34,6 @@ type DownloadPayload = {
   filename: string;
 };
 
-const RING_POINTS = 72;
-
-function pointOnRing(index: number): [number, number] {
-  const angle = -Math.PI / 2 + (index / (RING_POINTS - 1)) * Math.PI * 2;
-  return [52 + Math.cos(angle) * 10, 13 + Math.sin(angle) * 10];
-}
-
-function pointOnRail(index: number): [number, number] {
-  return [13 + (index / (RING_POINTS - 1)) * 78, 29];
-}
-
-function morphPath(morph: number): string {
-  return Array.from({ length: RING_POINTS }, (_, index) => {
-    const [ringX, ringY] = pointOnRing(index);
-    const [railX, railY] = pointOnRail(index);
-    const x = ringX + (railX - ringX) * morph;
-    const y = ringY + (railY - ringY) * morph;
-    return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
-  }).join(" ");
-}
-
 function filenameFromDisposition(disposition: string | null): string | null {
   if (!disposition) return null;
   const encoded = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)?.[1];
@@ -152,8 +131,6 @@ export default function AnimatedDownloadButton({
 }: AnimatedDownloadButtonProps) {
   const [state, setState] = useState<DownloadState>("idle");
   const [progress, setProgress] = useState<number | null>(0);
-  const [morph, setMorph] = useState(0);
-  const morphRef = useRef(0);
   const resetTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -162,36 +139,13 @@ export default function AnimatedDownloadButton({
     };
   }, []);
 
-  useEffect(() => {
-    const target = state === "idle" ? 0 : 1;
-    const from = morphRef.current;
-    if (Math.abs(target - from) < 0.01) {
-      setMorph(target);
-      return;
-    }
-
-    let frame = 0;
-    const startedAt = performance.now();
-    const duration = target === 1 ? 520 : 260;
-    const animate = (now: number) => {
-      const elapsed = Math.min((now - startedAt) / duration, 1);
-      const eased = 1 - (1 - elapsed) ** 4;
-      const next = from + (target - from) * eased;
-      morphRef.current = next;
-      setMorph(next);
-      if (elapsed < 1) frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, [state]);
-
   const startDownload = async () => {
     if (state === "starting" || state === "downloading" || state === "finishing") return;
     if (!request && !href) return;
     if (resetTimer.current) window.clearTimeout(resetTimer.current);
 
     setState("starting");
-    setProgress(0);
+    setProgress(null);
 
     try {
       const source = request
@@ -229,19 +183,24 @@ export default function AnimatedDownloadButton({
       : state === "starting"
         ? "準備中"
         : state === "downloading"
-          ? progress === null ? "下載中" : `下載中 ${Math.round(progress * 100)}%`
+          ? "下載中"
           : label;
+  const announcement = state === "starting"
+    ? "正在準備下載"
+    : state === "downloading"
+      ? "正在下載檔案"
+      : state === "finishing"
+        ? "正在完成下載"
+        : state === "complete"
+          ? "檔案已下載"
+          : state === "error"
+            ? "下載失敗，可以重試"
+            : "";
   const ariaLabel = buttonProps["aria-label"]
     ?? (typeof label === "string" ? label : "下載檔案");
-  const path = morphPath(morph);
   const isIndeterminate = progress === null && state !== "error";
-  const progressOffset = progress === null ? undefined : 1 - progress;
-  const showProgressMeta = isBusy || state === "complete" || state === "error";
-  const progressLabel = state === "error"
-    ? "再試一次"
-    : progress === null
-      ? "讀取中"
-      : `${Math.round(progress * 100)}%`;
+  const StatusIcon = state === "complete" ? Check : state === "error" ? RotateCcw : Download;
+  const progressValue = progress === null ? undefined : Math.round(progress * 100);
 
   return (
     <button
@@ -251,27 +210,31 @@ export default function AnimatedDownloadButton({
       data-download-state={state}
       disabled={disabled || isBusy}
       aria-label={ariaLabel}
-      aria-busy={isBusy}
-      aria-live="polite"
+      aria-busy={isBusy || undefined}
       onClick={startDownload}>
+      <span className="animated-download__icon" aria-hidden="true">
+        <StatusIcon size={15} strokeWidth={2.1} />
+      </span>
       <span className="animated-download__copy">
         <span className="animated-download__label">{displayLabel}</span>
       </span>
-      <span className="animated-download__visual" aria-hidden="true">
-        <svg className="animated-download__svg" viewBox="0 0 104 40" focusable="false">
-          <path className="animated-download__rail" d={path} pathLength="1" />
-          <path
-            className={`animated-download__fill${isIndeterminate ? " is-indeterminate" : ""}`}
-            d={path}
-            pathLength="1"
-            strokeDasharray={isIndeterminate ? "0.22 0.78" : "1 1"}
-            style={progressOffset === undefined ? undefined : { strokeDashoffset: progressOffset }} />
-        </svg>
-        <span className="animated-download__arrow"><Download size={15} strokeWidth={2.15} /></span>
-        <span className="animated-download__check"><Check size={20} strokeWidth={2.8} /></span>
-        <span className="animated-download__retry"><RotateCcw size={16} strokeWidth={2.4} /></span>
-      </span>
-      {showProgressMeta && <span className="animated-download__percent">{progressLabel}</span>}
+      {isBusy && (
+        <span
+          className="animated-download__progress"
+          role="progressbar"
+          aria-label="下載進度"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progressValue}
+          aria-valuetext={progressValue === undefined ? "下載進度讀取中" : `${progressValue}%`}
+        >
+          <span
+            className={`animated-download__progress-fill${isIndeterminate ? " is-indeterminate" : ""}`}
+            style={{ width: progressValue === undefined ? "28%" : `${progressValue}%` }}
+          />
+        </span>
+      )}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</span>
     </button>
   );
 }
