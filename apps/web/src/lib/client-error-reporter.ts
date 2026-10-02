@@ -8,6 +8,7 @@ const MAX_PATH_LENGTH = 500;
 const STATIC_CACHE_NAME = "hcca-static-v5";
 const CHUNK_RELOAD_KEY = "hcca:chunk-reload-at";
 const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
+const MAX_RECENT_REPORTS = 1_000;
 
 const IGNORED_RESOURCE_HOSTS = new Set([
   "connect.facebook.net",
@@ -85,11 +86,18 @@ export function reportClientError(input: ClientErrorInput): Promise<ClientErrorR
   if (typeof window === "undefined") return Promise.resolve(null);
 
   const fingerprint = `${input.dedupeKey ?? input.message}|${input.pathname ?? window.location.pathname}`;
+  const now = Date.now();
   const lastReportedAt = recentReports.get(fingerprint) ?? 0;
-  if (Date.now() - lastReportedAt < 30_000) return Promise.resolve(null);
-  recentReports.set(fingerprint, Date.now());
+  if (now - lastReportedAt < 30_000) return Promise.resolve(null);
+  recentReports.delete(fingerprint);
+  recentReports.set(fingerprint, now);
   for (const [key, timestamp] of recentReports) {
-    if (Date.now() - timestamp >= 30_000) recentReports.delete(key);
+    if (now - timestamp >= 30_000) recentReports.delete(key);
+  }
+  while (recentReports.size > MAX_RECENT_REPORTS) {
+    const oldestKey = recentReports.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    recentReports.delete(oldestKey);
   }
 
   recordClientMetric({
@@ -158,6 +166,45 @@ function isIgnoredResource(url: string | null): boolean {
   } catch {
     return false;
   }
+}
+
+function isIgnoredCspViolation(blockedUri: string | null): boolean {
+  if (!blockedUri) return false;
+  if (/^(?:chrome-extension|edge-extension|moz-extension|ms-browser-extension|safari-web-extension):/i.test(blockedUri)) {
+    return true;
+  }
+  try {
+    const parsed = new URL(blockedUri, window.location.href);
+    return IGNORED_RESOURCE_HOSTS.has(parsed.hostname)
+      || parsed.pathname.toLowerCase().startsWith("/cdn-cgi/rum");
+  } catch {
+    return false;
+  }
+}
+
+function cspSourceIdentity(blockedUri: string | null): string {
+  const value = (blockedUri ?? "").trim();
+  if (!value) return "unknown";
+  if (["inline", "eval", "blob", "data"].includes(value.toLowerCase())) {
+    return value.toLowerCase() === "blob" ? "blob:" : value.toLowerCase();
+  }
+  try {
+    const parsed = new URL(value, window.location.href);
+    if (["http:", "https:", "ws:", "wss:"].includes(parsed.protocol)) {
+      return parsed.origin.toLowerCase();
+    }
+    if (parsed.protocol === "blob:") return "blob:";
+    return parsed.protocol || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function isExpectedAbortRejection(value: unknown): boolean {
+  return typeof value === "object"
+    && value !== null
+    && "name" in value
+    && value.name === "AbortError";
 }
 
 function isNextChunk(url: string | null): boolean {
@@ -236,17 +283,21 @@ export function installGlobalClientErrorReporter(): () => void {
     });
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+    if (isExpectedAbortRejection(event.reason)) return;
     const details = errorDetails(event.reason);
     reportClientError({ ...details, scope: "unhandledrejection" });
   };
   const onSecurityPolicyViolation = (event: SecurityPolicyViolationEvent) => {
     if (event.disposition === "report") return;
-    const blockedResource = normalizedTransientResourceUrl(event.blockedURI || null);
+    const blockedUri = event.blockedURI || null;
+    if (isIgnoredCspViolation(blockedUri)) return;
+    const directive = event.effectiveDirective || "resource";
+    const source = cspSourceIdentity(blockedUri);
     const state = event.disposition === "enforce" ? "blocked" : "violated";
     reportClientError({
-      message: `CSP ${state} ${event.effectiveDirective || "resource"}: ${event.blockedURI || "unknown"}`,
+      message: `CSP ${state} ${directive}: ${source}`,
       scope: "securitypolicyviolation",
-      dedupeKey: `${event.effectiveDirective}:${blockedResource}`,
+      dedupeKey: `${directive}:${source}`,
     });
   };
 

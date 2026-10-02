@@ -64,6 +64,7 @@ export class NetworkRequestError extends Error {}
 
 const GET_REQUEST_TIMEOUT_MS = 15_000;
 const MUTATION_REQUEST_TIMEOUT_MS = 30_000;
+const NULL_BODY_STATUS_CODES = new Set([204, 205, 304]);
 
 function requestTimeoutMs(init: HccaRequestInit): number {
   return (init.method ?? "GET").toUpperCase() === "GET"
@@ -100,7 +101,7 @@ function responseWithBodyTimeout(
   timeoutMs: number,
   cleanup: () => void,
 ): Response {
-  if (!response.body) {
+  if (NULL_BODY_STATUS_CODES.has(response.status) || !response.body) {
     cleanup();
     return response;
   }
@@ -265,7 +266,8 @@ export function uploadWithProgress(
         const separator = line.indexOf(":");
         if (separator > 0) responseHeaders.set(line.slice(0, separator), line.slice(separator + 1).trim());
       });
-      resolve(new Response(xhr.responseText, {
+      const responseBody = NULL_BODY_STATUS_CODES.has(xhr.status) ? null : xhr.responseText;
+      resolve(new Response(responseBody, {
         status: xhr.status,
         statusText: xhr.statusText,
         headers: responseHeaders,

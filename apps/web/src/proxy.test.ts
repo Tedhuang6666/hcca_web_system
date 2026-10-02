@@ -55,6 +55,21 @@ describe("proxy search metadata routes", () => {
     expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=31536000; includeSubDomains");
   });
 
+  it("allows the first-party host aliases and blob attachment previews in CSP", async () => {
+    const request = new NextRequest("https://hcca.tw/login", {
+      headers: { RSC: "1" },
+    });
+
+    const response = await proxy(request);
+    const csp = response.headers.get("Content-Security-Policy") ?? "";
+
+    expect(csp).toContain("https://hcca.tw https://www.hcca.tw");
+    expect(csp).toContain("wss://hcca.tw wss://www.hcca.tw");
+    expect(csp.match(/wss:\/\/hcca\.tw/g)).toHaveLength(1);
+    expect(csp).toContain("frame-src 'self' https://accounts.google.com blob:");
+    expect(csp).toContain("worker-src 'self' blob: https://hcca.tw https://www.hcca.tw");
+  });
+
   it("keeps security headers on cacheable public assets", async () => {
     const request = new NextRequest("https://hcca.tw/brand/hcca-emblem-192.png");
 

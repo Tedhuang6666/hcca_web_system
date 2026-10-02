@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError, apiErrorMessage, withFallback } from "./api-helpers";
 import { request } from "./api/core";
 import { apiErrorFromResponse } from "./api/errors";
+import { uploadWithProgress } from "./api/transport";
 import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "./permission-events";
 
 describe("API helpers", () => {
@@ -170,6 +171,44 @@ describe("API helpers", () => {
     await assertion;
 
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not wrap a no-content status with a response body", async () => {
+    const response = new Response("unexpected body", { status: 200 });
+    Object.defineProperty(response, "status", { value: 204 });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(request("/test/no-content")).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls.filter(([input]) => input === "/api/test/no-content")).toHaveLength(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("creates a bodyless response when an upload returns 204", async () => {
+    const handlers: { onload?: () => void } = {};
+    const xhr = {
+      open: vi.fn(),
+      setRequestHeader: vi.fn(),
+      send: vi.fn(() => handlers.onload?.()),
+      getAllResponseHeaders: vi.fn(() => ""),
+      upload: { addEventListener: vi.fn() },
+      status: 204,
+      statusText: "No Content",
+      responseText: "",
+    };
+    Object.defineProperty(xhr, "onload", {
+      set: (handler: (() => void) | null) => { handlers.onload = handler ?? undefined; },
+    });
+    const xhrConstructor = vi.fn(function MockXMLHttpRequest() { return xhr; });
+    vi.stubGlobal("XMLHttpRequest", xhrConstructor);
+
+    const pending = uploadWithProgress("/api/test/upload", { method: "POST" }, () => undefined);
+    const response = await pending;
+
+    expect(response.status).toBe(204);
+    expect(response.body).toBeNull();
     vi.unstubAllGlobals();
   });
 
