@@ -54,14 +54,14 @@ function ProductModal({
   productId,
   classClosed,
   isLoggedIn,
-  goToCartAfterAdd,
+  directPurchaseOnly,
   onClose,
   onAdded,
 }: {
   productId: string;
   classClosed: boolean;
   isLoggedIn: boolean;
-  goToCartAfterAdd: boolean;
+  directPurchaseOnly: boolean;
   onClose: () => void;
   onAdded: (goToCart: boolean) => void;
 }) {
@@ -191,7 +191,7 @@ function ProductModal({
         ? "商品主圖"
         : "商品照片";
 
-  const submit = async () => {
+  const submit = async (goToCart: boolean) => {
     if (!product) return;
     if (classClosed) {
       toast.error("本班已結單，請聯繫班級幹部確認訂購安排");
@@ -216,8 +216,8 @@ function ProductModal({
       } else {
         addGuestCartItem(product, qty, Object.values(picked));
       }
-      toast.success("已加入購物車");
-      onAdded(goToCartAfterAdd);
+      toast.success(goToCart ? "已加入購物車，前往購物車確認訂單" : "已加入購物車");
+      onAdded(goToCart);
     } catch (e) {
       toast.error(apiErrorMessage(e, "加入失敗"));
     } finally {
@@ -372,9 +372,13 @@ function ProductModal({
                 )}
               </div>
 
-              <div className="shop-product-dialog-actions">
+              <p className="shop-product-purchase-hint">
+                直接購買會前往購物車；加入購物車會留在此頁。
+              </p>
+              <div className={`shop-product-dialog-actions${directPurchaseOnly ? "" : " shop-product-dialog-actions--split"}`}>
                 <button
-                  onClick={submit}
+                  type="button"
+                  onClick={() => submit(true)}
                   disabled={loading || !canAddToCart}
                   className="shop-product-submit"
                   aria-busy={loading}>
@@ -386,11 +390,19 @@ function ProductModal({
                         ? "處理中…"
                         : purchaseLimitReached
                           ? "已達購買上限"
-                          : goToCartAfterAdd
-                          ? `加入並前往購物車 · NT$${(unitPrice * qty).toLocaleString()}`
-                          : `加入購物車 · NT$${(unitPrice * qty).toLocaleString()}`}
+                          : `直接購買 · NT$${(unitPrice * qty).toLocaleString()}`}
                 </button>
-                <button onClick={onClose} className="shop-product-cancel">取消</button>
+                {!directPurchaseOnly && (
+                  <button
+                    type="button"
+                    onClick={() => submit(false)}
+                    disabled={loading || !canAddToCart}
+                    className="shop-product-add-to-cart"
+                    aria-busy={loading}>
+                    {loading ? "處理中…" : "加入購物車"}
+                  </button>
+                )}
+                <button type="button" onClick={onClose} className="shop-product-cancel">取消</button>
               </div>
             </>
           )}
@@ -481,6 +493,7 @@ export default function ShopPage() {
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [directOrderProductId, setDirectOrderProductId] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
+  const [cartButtonBump, setCartButtonBump] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
@@ -563,6 +576,18 @@ export default function ShopPage() {
   const selectedCategory =
     catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
 
+  const selectedActivityProductCount = selectedCategory
+    ? catalog
+        .filter((category) => selectedCategory.activity_id
+          ? category.activity_id === selectedCategory.activity_id
+          : category.id === selectedCategory.id)
+        .reduce(
+          (count, category) => count + category.products.length
+            + category.series.reduce((seriesCount, series) => seriesCount + series.products.length, 0),
+          0,
+        )
+    : 0;
+
   const visibleSeries = selectedCategory?.series.filter(
     (series) => !selectedSeriesId || series.id === selectedSeriesId,
   ) ?? [];
@@ -580,7 +605,7 @@ export default function ShopPage() {
           <Link href="/shop/orders" className="shop-public-order-link">我的訂單</Link>
           <Link
             href="/shop/cart"
-            className="shop-public-cart-link">
+            className={`shop-public-cart-link${cartButtonBump ? " motion-safe:animate-bounce" : ""}`}>
             <ShoppingBag size={16} aria-hidden="true" />
             購物車{cartCount > 0 ? `（${cartCount}）` : ""}
           </Link>
@@ -751,13 +776,18 @@ export default function ShopPage() {
           productId={openProduct}
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           isLoggedIn={isLoggedIn}
-          goToCartAfterAdd={directOrderProductId === openProduct}
+          directPurchaseOnly={directOrderProductId === openProduct || selectedActivityProductCount === 1}
           onClose={closeProduct}
           onAdded={(goToCart) => {
             setOpenProduct(null);
             setDirectOrderProductId(null);
             loadCart();
-            if (goToCart) router.push("/shop/cart");
+            if (goToCart) {
+              router.push("/shop/cart");
+            } else {
+              setCartButtonBump(true);
+              window.setTimeout(() => setCartButtonBump(false), 700);
+            }
           }}
         />
       )}

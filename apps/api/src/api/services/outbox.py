@@ -6,6 +6,7 @@ import base64
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from html import escape as html_escape
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -176,15 +177,59 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
     buyer_email = payload.get("buyer_email", "")
     buyer_name = payload.get("buyer_name", "")
     serial = payload.get("serial_number", "")
-    total = payload.get("total_price", 0)
+    subtotal = int(payload.get("subtotal_price", payload.get("total_price", 0)) or 0)
+    discount = int(payload.get("discount_amount", 0) or 0)
+    total = int(payload.get("total_price", max(0, subtotal - discount)) or 0)
     if not buyer_email or not serial:
         return
     base = settings.FRONTEND_BASE_URL.rstrip("/")
     subject = f"【訂單確認】{serial}"
+    item_rows = []
+    for item in payload.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        name = html_escape(str(item.get("product_name") or "商品"))
+        unit_price = int(item.get("unit_price", 0) or 0)
+        quantity = int(item.get("quantity", 0) or 0)
+        item_subtotal = int(item.get("subtotal", unit_price * quantity) or 0)
+        options = [
+            html_escape(str(option.get("value", "")))
+            for option in item.get("selected_options", [])
+            if isinstance(option, dict) and option.get("value")
+        ]
+        option_details = (
+            f'<br><span style="color:#667085">規格：{"、".join(options)}</span>' if options else ""
+        )
+        item_rows.append(
+            "<tr>"
+            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0">{name}{option_details}</td>'
+            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0;text-align:right">NT$ {unit_price:,}</td>'
+            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0;text-align:center">{quantity}</td>'
+            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0;text-align:right">NT$ {item_subtotal:,}</td>'
+            "</tr>"
+        )
+    items_html = "".join(item_rows) or (
+        '<tr><td colspan="4" style="padding:10px 8px">訂單品項詳情請至「我的訂單」查看。</td></tr>'
+    )
+    promotion_code = html_escape(str(payload.get("promotion_code") or ""))
+    discount_label = "優惠折抵" + (f"（{promotion_code}）" if promotion_code else "")
+    buyer_greeting = html_escape(str(buyer_name or "同學"))
     html = (
-        f"<p>親愛的 {buyer_name or '同學'}，感謝您的訂購！</p>"
-        f"<p><strong>訂單編號</strong>：{serial}<br>"
-        f"<strong>金額</strong>：NT$ {total}</p>"
+        f"<p>親愛的 {buyer_greeting}，感謝您的訂購！</p>"
+        f"<p><strong>訂單編號</strong>：{html_escape(str(serial))}</p>"
+        '<table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0">'
+        '<thead><tr style="text-align:left;background:#f2f4f7">'
+        '<th style="padding:10px 8px">商品</th>'
+        '<th style="padding:10px 8px;text-align:right">單價</th>'
+        '<th style="padding:10px 8px;text-align:center">數量</th>'
+        '<th style="padding:10px 8px;text-align:right">小計</th>'
+        "</tr></thead>"
+        f"<tbody>{items_html}</tbody></table>"
+        '<table role="presentation" style="margin-left:auto;border-collapse:collapse">'
+        f'<tr><td style="padding:4px 8px">商品小計</td><td style="padding:4px 8px;text-align:right">NT$ {subtotal:,}</td></tr>'
+        f'<tr><td style="padding:4px 8px">{discount_label}</td><td style="padding:4px 8px;text-align:right">− NT$ {discount:,}</td></tr>'
+        f'<tr><td style="padding:6px 8px;font-weight:bold;border-top:1px solid #98a2b3">應付總額</td><td style="padding:6px 8px;text-align:right;font-weight:bold;border-top:1px solid #98a2b3">NT$ {total:,}</td></tr>'
+        "</table>"
         f'<p><a href="{base}/shop/orders">查看訂單</a></p>'
     )
     try:

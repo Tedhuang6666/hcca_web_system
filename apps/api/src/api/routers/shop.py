@@ -68,6 +68,8 @@ from api.schemas.shop import (
     ShopOrderCloseOut,
     ShopPromotionCreate,
     ShopPromotionOut,
+    ShopPromotionPreviewOut,
+    ShopPromotionPreviewRequest,
     ShopPromotionUpdate,
 )
 from api.services import activity as activity_svc
@@ -150,6 +152,41 @@ async def _broadcast_shop_order(order: Order) -> None:
         user_id=order.user_id,
         status=order.status.value,
         is_paid=order.is_paid,
+    )
+
+
+async def _queue_order_confirmation(session: AsyncSession, buyer: User, order: Order) -> None:
+    if not buyer.email:
+        return
+    order_data = shop_svc.serialize_order(order)
+    from api.services.outbox import emit as outbox_emit
+
+    await outbox_emit(
+        session,
+        event_type="shop.order_confirmed",
+        payload={
+            "order_id": str(order_data.id),
+            "serial_number": order_data.serial_number,
+            "buyer_id": str(buyer.id),
+            "buyer_email": buyer.email,
+            "buyer_name": buyer.display_name or "",
+            "subtotal_price": order_data.subtotal_price,
+            "discount_amount": order_data.discount_amount,
+            "promotion_code": order_data.promotion_code,
+            "total_price": order_data.total_price,
+            "items": [
+                {
+                    "product_name": item.product_name or "商品",
+                    "unit_price": item.unit_price,
+                    "quantity": item.quantity,
+                    "subtotal": item.subtotal,
+                    "selected_options": [
+                        option.model_dump(mode="json") for option in item.selected_options
+                    ],
+                }
+                for item in order_data.items
+            ],
+        },
     )
 
 
@@ -697,6 +734,41 @@ async def clear_cart(session: DbDep, current_user: CurrentUser) -> CartOut:
 
 
 @router.post(
+    "/cart/promotion-preview",
+    response_model=ShopPromotionPreviewOut,
+    summary="檢查購物車優惠資格與折扣",
+)
+async def preview_cart_promotion(
+    payload: ShopPromotionPreviewRequest,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> ShopPromotionPreviewOut:
+    cart = await shop_svc.get_or_create_cart(session, current_user.id)
+    subtotal = shop_svc.serialize_cart(cart).total_price
+    result = await shop_svc.preview_promotion(
+        session,
+        user_id=current_user.id,
+        subtotal=subtotal,
+        code=payload.code,
+    )
+    promotion = result.promotion
+    return ShopPromotionPreviewOut(
+        eligible=result.eligible,
+        promotion_name=promotion.name if promotion else None,
+        promotion_code=promotion.code if promotion else None,
+        reason_code=result.reason_code,
+        reason=result.reason,
+        subtotal_price=subtotal,
+        discount_amount=result.discount_amount,
+        total_price=max(0, subtotal - result.discount_amount),
+        min_order_price=promotion.min_order_price if promotion else None,
+        shortfall=result.shortfall,
+        discount_type=promotion.discount_type if promotion else None,
+        discount_value=promotion.discount_value if promotion else None,
+    )
+
+
+@router.post(
     "/cart/checkout",
     response_model=list[OrderOut],
     status_code=status.HTTP_201_CREATED,
@@ -736,23 +808,7 @@ async def checkout(
         if full is not None:
             result.append(shop_svc.serialize_order(full))
         await _broadcast_shop_order(full or order)
-        try:
-            from api.services.outbox import emit as outbox_emit
-
-            await outbox_emit(
-                session,
-                event_type="shop.order_confirmed",
-                payload={
-                    "order_id": str(order.id),
-                    "serial_number": order.serial_number,
-                    "buyer_id": str(current_user.id),
-                    "buyer_email": current_user.email or "",
-                    "buyer_name": current_user.display_name or "",
-                    "total_price": order.total_price,
-                },
-            )
-        except Exception:
-            logger.warning("emit shop.order_confirmed failed", exc_info=True)
+        await _queue_order_confirmation(session, current_user, full or order)
     return result
 
 
@@ -898,6 +954,7 @@ async def create_class_order(
         full = await shop_svc.get_order(session, order.id)
         result.append(shop_svc.serialize_order(full or order))
         await _broadcast_shop_order(full or order)
+        await _queue_order_confirmation(session, target, full or order)
     return result
 
 

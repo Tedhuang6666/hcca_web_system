@@ -10190,6 +10190,23 @@ export interface paths {
         patch: operations["update_cart_item_shop_cart_items__item_id__patch"];
         trace?: never;
     };
+    "/shop/cart/promotion-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 檢查購物車優惠資格與折扣 */
+        post: operations["preview_cart_promotion_shop_cart_promotion_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/catalog": {
         parameters: {
             query?: never;
@@ -28205,6 +28222,46 @@ export interface components {
             updated_at: string;
             /** Used Count */
             used_count: number;
+        };
+        /** ShopPromotionPreviewOut */
+        ShopPromotionPreviewOut: {
+            /** Discount Amount */
+            discount_amount: number;
+            discount_type?: components["schemas"]["ShopDiscountType"] | null;
+            /** Discount Value */
+            discount_value?: number | null;
+            /** Eligible */
+            eligible: boolean;
+            /** Min Order Price */
+            min_order_price?: number | null;
+            /** Promotion Code */
+            promotion_code?: string | null;
+            /** Promotion Name */
+            promotion_name?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Reason Code
+             * @enum {string}
+             */
+            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "no_promotion";
+            /**
+             * Shortfall
+             * @default 0
+             */
+            shortfall: number;
+            /** Subtotal Price */
+            subtotal_price: number;
+            /** Total Price */
+            total_price: number;
+        };
+        /** ShopPromotionPreviewRequest */
+        ShopPromotionPreviewRequest: {
+            /**
+             * Code
+             * @description 優惠碼；留空時檢查帳號自動優惠
+             */
+            code?: string | null;
         };
         /** ShopPromotionTargetOut */
         ShopPromotionTargetOut: {
@@ -52759,6 +52816,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_cart_promotion_shop_cart_promotion_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopPromotionPreviewOut"];
                 };
             };
             /** @description Validation Error */

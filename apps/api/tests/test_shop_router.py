@@ -9,10 +9,12 @@ from __future__ import annotations
 import uuid
 from datetime import date, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.outbox import OutboxEvent
 from api.models.shop import Order, OrderItem, OrderStatus, ProductCategory
 from api.models.user import User
 from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
@@ -450,9 +452,7 @@ async def test_product_purchase_limit_applies_to_cart_and_existing_orders(
     db_session, member_user, authed_client_factory
 ) -> None:
     creator = await _bare_user(db_session)
-    product = await _make_active_product(
-        db_session, creator, price=50, max_quantity_per_user=1
-    )
+    product = await _make_active_product(db_session, creator, price=50, max_quantity_per_user=1)
     ac = authed_client_factory(member_user)
 
     detail = await ac.get(f"/shop/products/{product.id}")
@@ -460,9 +460,7 @@ async def test_product_purchase_limit_applies_to_cart_and_existing_orders(
     assert detail.json()["max_quantity_per_user"] == 1
     assert detail.json()["remaining_quantity_for_user"] == 1
 
-    added = await ac.post(
-        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
-    )
+    added = await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
     assert added.status_code == 201
     assert added.json()["items"][0]["quantity"] == 1
 
@@ -490,13 +488,9 @@ async def test_cart_update_cannot_exceed_purchase_limit(
     db_session, member_user, authed_client_factory
 ) -> None:
     creator = await _bare_user(db_session)
-    product = await _make_active_product(
-        db_session, creator, price=50, max_quantity_per_user=2
-    )
+    product = await _make_active_product(db_session, creator, price=50, max_quantity_per_user=2)
     ac = authed_client_factory(member_user)
-    added = await ac.post(
-        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 1}
-    )
+    added = await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
     item_id = added.json()["items"][0]["id"]
 
     updated = await ac.patch(f"/shop/cart/items/{item_id}", json={"quantity": 3})
@@ -508,14 +502,10 @@ async def test_purchase_limit_allows_multiple_tickets_within_limit(
     db_session, member_user, authed_client_factory
 ) -> None:
     creator = await _bare_user(db_session)
-    product = await _make_active_product(
-        db_session, creator, price=50, max_quantity_per_user=3
-    )
+    product = await _make_active_product(db_session, creator, price=50, max_quantity_per_user=3)
     ac = authed_client_factory(member_user)
 
-    added = await ac.post(
-        "/shop/cart/items", json={"product_id": str(product.id), "quantity": 2}
-    )
+    added = await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 2})
     assert added.status_code == 201
     checkout = await ac.post("/shop/cart/checkout", json={})
     assert checkout.status_code == 201
@@ -558,6 +548,30 @@ async def test_checkout_happy_path_creates_order_and_clears_cart(
     assert orders[0]["total_price"] == 160
     assert orders[0]["class_id"] == str(sc.id)
 
+    events = (
+        (
+            await db_session.execute(
+                select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_confirmed")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    confirmation = next(
+        event for event in events if event.payload["serial_number"] == orders[0]["serial_number"]
+    )
+    assert confirmation.payload["subtotal_price"] == 160
+    assert confirmation.payload["discount_amount"] == 0
+    assert confirmation.payload["items"] == [
+        {
+            "product_name": product.name,
+            "unit_price": 80,
+            "quantity": 2,
+            "subtotal": 160,
+            "selected_options": [],
+        }
+    ]
+
     cart = await ac.get("/shop/cart")
     assert cart.json()["items"] == []
 
@@ -592,6 +606,71 @@ async def test_checkout_applies_account_coupon_and_snapshots_discount(
     assert order["discount_amount"] == 40
     assert order["total_price"] == 160
     assert order["promotion_code"] == "SAVE20"
+
+
+async def test_coupon_preview_shows_minimum_and_applied_discount(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    product = await _make_active_product(db_session, member_user, price=100, stock=5)
+    ac = authed_client_factory(member_user)
+    promotion = await ac.post(
+        "/shop/promotions",
+        json={
+            "name": "滿額折扣",
+            "target_email": member_user.email,
+            "code": "MIN300",
+            "discount_type": "percentage",
+            "discount_value": 10,
+            "min_order_price": 300,
+        },
+    )
+    assert promotion.status_code == 201
+    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 2})
+
+    preview = await ac.post("/shop/cart/promotion-preview", json={"code": "min300"})
+    assert preview.status_code == 200
+    assert preview.json()["eligible"] is False
+    assert preview.json()["reason_code"] == "minimum_not_met"
+    assert preview.json()["subtotal_price"] == 200
+    assert preview.json()["shortfall"] == 100
+    assert "還差 NT$100" in preview.json()["reason"]
+
+    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
+    preview = await ac.post("/shop/cart/promotion-preview", json={"code": "MIN300"})
+    assert preview.status_code == 200
+    assert preview.json()["eligible"] is True
+    assert preview.json()["discount_amount"] == 30
+    assert preview.json()["total_price"] == 270
+
+
+async def test_coupon_preview_explains_account_eligibility(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    target = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    product = await _make_active_product(db_session, member_user, price=100, stock=5)
+    manager = authed_client_factory(member_user)
+    promotion = await manager.post(
+        "/shop/promotions",
+        json={
+            "name": "指定帳號優惠",
+            "target_identifiers": [target.email],
+            "code": "ONLYTARGET",
+            "discount_type": "amount",
+            "discount_value": 20,
+        },
+    )
+    assert promotion.status_code == 201
+    ac = authed_client_factory(buyer)
+    await ac.post("/shop/cart/items", json={"product_id": str(product.id), "quantity": 1})
+
+    preview = await ac.post("/shop/cart/promotion-preview", json={"code": "ONLYTARGET"})
+    assert preview.status_code == 200
+    assert preview.json()["eligible"] is False
+    assert preview.json()["reason_code"] == "account_not_eligible"
+    assert "不符合資格" in preview.json()["reason"]
 
 
 # ── 訂單 ──────────────────────────────────────────────────────────────────────
