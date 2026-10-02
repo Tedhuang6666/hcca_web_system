@@ -270,7 +270,6 @@ function PublicSiteHeaderContent({
               aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
             >
               {item.label}
-              {item.guestUsable && <span className="public-nav-badge">免登入</span>}
             </Link>
           ))}
           {menuGroups.length > 0 && (
@@ -321,7 +320,6 @@ function PublicSiteHeaderContent({
                           <span className="min-w-0">
                             <span className="flex items-center gap-1.5">
                               <span className="text-sm font-semibold">{item.label}</span>
-                              {item.guestUsable && <span className="public-nav-badge">免登入</span>}
                             </span>
                             <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
                               {item.description}
@@ -354,9 +352,7 @@ function PublicSiteHeaderContent({
                           <span className="min-w-0">
                             <span className="flex items-center gap-1.5">
                               <span className="text-sm font-semibold">{item.label}</span>
-                              {item.guestUsable && !group.meta.hint && (
-                                <span className="public-nav-badge">免登入</span>
-                              )}
+                              {item.guestUsable && !group.meta.hint}
                             </span>
                             <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
                               {item.description}
@@ -474,7 +470,6 @@ function PublicSiteHeaderContent({
                   aria-current={isCurrentPath(pathname, featuredArticle.href) ? "page" : undefined}
                 >
                   {featuredArticle.label}
-                  {featuredArticle.guestUsable && <span className="public-nav-badge">免登入</span>}
                 </Link>
               )}
               {otherTaskNav.map((item) => (
@@ -486,7 +481,6 @@ function PublicSiteHeaderContent({
                   aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
                 >
                   {item.label}
-                  {item.guestUsable && <span className="public-nav-badge">免登入</span>}
                 </Link>
               ))}
             </div>
@@ -522,9 +516,6 @@ function PublicSiteHeaderContent({
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5">
                             <span className="truncate text-sm font-semibold">{item.label}</span>
-                            {item.guestUsable && !group.meta.hint && (
-                              <span className="public-nav-badge">免登入</span>
-                            )}
                           </span>
                         </span>
                       </Link>

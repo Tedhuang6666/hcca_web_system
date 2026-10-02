@@ -1836,7 +1836,6 @@ export default function PublicSiteAdminPage() {
                           />
                           <p className="mt-1 text-xs text-[var(--text-muted)]">
                             {item.href}
-                            {item.guestUsable && <span className="ml-2 font-medium text-[var(--primary)]">免登入可用</span>}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
