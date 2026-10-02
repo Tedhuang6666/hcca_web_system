@@ -349,8 +349,15 @@ async def list_products(
 
 
 @router.get("/products/{product_id}", response_model=ProductOut, summary="取得商品詳情")
-async def get_product(product_id: uuid.UUID, session: DbDep, _: OptionalUser) -> Product:
-    return await _get_product_or_404(product_id, session)
+async def get_product(
+    product_id: uuid.UUID, session: DbDep, current_user: OptionalUser
+) -> ProductOut:
+    product = await _get_product_or_404(product_id, session)
+    product_out = ProductOut.model_validate(product)
+    remaining = await shop_svc.remaining_product_quantity(
+        session, product, current_user.id if current_user else None
+    )
+    return product_out.model_copy(update={"remaining_quantity_for_user": remaining})
 
 
 # ── 優惠管理 ──────────────────────────────────────────────────────────────────
@@ -638,6 +645,8 @@ async def update_cart_item(
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except shop_svc.PurchaseLimitError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     return shop_svc.serialize_cart(cart)

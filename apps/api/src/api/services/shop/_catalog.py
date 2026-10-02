@@ -243,6 +243,7 @@ async def create_product(
         price=data.price,
         stock_quantity=data.stock_quantity,
         is_unlimited=data.is_unlimited,
+        max_quantity_per_user=data.max_quantity_per_user,
         series_id=series.id,
         created_by=created_by,
         sale_start=data.sale_start,

@@ -153,6 +153,9 @@ class ProductCreate(BaseModel):
     price: int = Field(..., ge=0, description="售價（新台幣）")
     stock_quantity: int = Field(0, ge=0, description="庫存（is_unlimited=True 時忽略）")
     is_unlimited: bool = False
+    max_quantity_per_user: int | None = Field(
+        None, ge=1, description="每位使用者累計購買上限；留空表示不限購"
+    )
     sale_start: datetime | None = Field(None, description="開售時間")
     sale_end: datetime | None = Field(None, description="截止時間")
     requires_seating: bool = Field(False, description="是否為需劃位票種")
@@ -171,6 +174,9 @@ class ProductUpdate(BaseModel):
     price: int | None = Field(None, ge=0)
     stock_quantity: int | None = Field(None, ge=0)
     is_unlimited: bool | None = None
+    max_quantity_per_user: int | None = Field(
+        None, ge=1, description="每位使用者累計購買上限；設為 null 表示不限購"
+    )
     sale_start: datetime | None = None
     sale_end: datetime | None = None
     requires_seating: bool | None = None
@@ -188,6 +194,8 @@ class ProductOut(BaseModel):
     price: int
     stock_quantity: int
     is_unlimited: bool
+    max_quantity_per_user: int | None = None
+    remaining_quantity_for_user: int | None = None
     status: ProductStatus
     version: int
     series_id: uuid.UUID
@@ -268,6 +276,7 @@ class CartItemOut(BaseModel):
     product_id: uuid.UUID
     product_name: str
     product_image_url: str | None = None
+    max_quantity_per_user: int | None = None
     quantity: int
     unit_price: int
     subtotal: int

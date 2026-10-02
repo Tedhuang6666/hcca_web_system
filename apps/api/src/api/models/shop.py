@@ -123,6 +123,10 @@ class Product(Base, TimestampMixin):
 
     __tablename__ = "products"
     __table_args__ = (
+        CheckConstraint(
+            "max_quantity_per_user IS NULL OR max_quantity_per_user >= 1",
+            name="ck_products_max_quantity_per_user_positive",
+        ),
         Index(
             "ix_products_series_status_created",
             "series_id",
@@ -145,6 +149,8 @@ class Product(Base, TimestampMixin):
     # 庫存數量（-1 = 無限量）
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 每位使用者累計購買上限；None 表示不限購。
+    max_quantity_per_user: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[ProductStatus] = mapped_column(
         Enum(ProductStatus, name="productstatus"),
         nullable=False,

@@ -39,6 +39,7 @@ from api.services.shop._export import (
     export_orders_excel,
 )
 from api.services.shop._orders import (
+    PurchaseLimitError,
     _assert_activity_open,
     _cart_item_availability,
     _create_order_from_items,
@@ -61,6 +62,7 @@ from api.services.shop._orders import (
     list_orders,
     order_quantities,
     order_summary,
+    remaining_product_quantity,
     remove_cart_item,
     reopen_category_for_class,
     replace_order_items,
@@ -115,6 +117,7 @@ __all__ = [
     "_options_signature",
     "_options_delta",
     "get_or_create_cart",
+    "PurchaseLimitError",
     "add_cart_item",
     "update_cart_item",
     "create_promotion",
@@ -125,6 +128,7 @@ __all__ = [
     "update_promotion",
     "remove_cart_item",
     "clear_cart",
+    "remaining_product_quantity",
     "class_order_summary",
     "_cart_item_availability",
     "serialize_cart",

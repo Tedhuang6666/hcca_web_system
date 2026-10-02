@@ -56861,3 +56861,19 @@ export interface operations {
         };
     };
 }
+            /** Max Quantity Per User */
+            max_quantity_per_user?: number | null;
+            /**
+             * Max Quantity Per User
+             * @description 每位使用者累計購買上限；留空表示不限購
+             */
+            max_quantity_per_user?: number | null;
+            /** Max Quantity Per User */
+            max_quantity_per_user?: number | null;
+            /** Remaining Quantity For User */
+            remaining_quantity_for_user?: number | null;
+            /**
+             * Max Quantity Per User
+             * @description 每位使用者累計購買上限；設為 null 表示不限購
+             */
+            max_quantity_per_user?: number | null;

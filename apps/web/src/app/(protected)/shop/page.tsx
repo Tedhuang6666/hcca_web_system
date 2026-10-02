@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CircleAlert, CircleCheck, Package, ShoppingBag } from "lucide-react";
 import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
@@ -16,7 +17,7 @@ import type {
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
-import { addGuestCartItem, guestCartCount } from "@/lib/shop-guest-cart";
+import { addGuestCartItem, getGuestCart, guestCartCount } from "@/lib/shop-guest-cart";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
@@ -53,14 +54,16 @@ function ProductModal({
   productId,
   classClosed,
   isLoggedIn,
+  goToCartAfterAdd,
   onClose,
   onAdded,
 }: {
   productId: string;
   classClosed: boolean;
   isLoggedIn: boolean;
+  goToCartAfterAdd: boolean;
   onClose: () => void;
-  onAdded: () => void;
+  onAdded: (goToCart: boolean) => void;
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -149,7 +152,29 @@ function ProductModal({
   const allPicked = variantGroups.every((g) => picked[g.id]);
   const available =
     Boolean(product && product.status === "active" && (product.is_unlimited || product.stock_quantity > 0));
-  const canAddToCart = available && !classClosed;
+  const guestCartQuantity = product && !isLoggedIn
+    ? getGuestCart()
+        .filter((item) => item.product_id === product.id)
+        .reduce((total, item) => total + item.quantity, 0)
+    : 0;
+  const remainingForUser = product?.max_quantity_per_user == null
+    ? null
+    : Math.max(
+        0,
+        (product.remaining_quantity_for_user ?? product.max_quantity_per_user) - guestCartQuantity,
+      );
+  const maxSelectableQuantity = product
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          product.is_unlimited ? 100 : product.stock_quantity,
+          remainingForUser ?? 100,
+        ),
+      )
+    : 0;
+  const purchaseLimitReached = remainingForUser === 0;
+  const canAddToCart = available && !classClosed && maxSelectableQuantity > 0;
   const variantImage = variantGroups.reduce<string | null>((current, group) => {
     const option = (group.options ?? []).find((o) => o.id === picked[group.id]);
     return option?.image_url || current;
@@ -172,6 +197,10 @@ function ProductModal({
       toast.error("本班已結單，請聯繫班級幹部確認訂購安排");
       return;
     }
+    if (maxSelectableQuantity === 0 || qty > maxSelectableQuantity) {
+      toast.error(purchaseLimitReached ? "此帳號已達商品購買上限" : "可購買數量已更新，請重新選擇");
+      return;
+    }
     if (!allPicked) {
       toast.error("請選擇所有規格");
       return;
@@ -188,7 +217,7 @@ function ProductModal({
         addGuestCartItem(product, qty, Object.values(picked));
       }
       toast.success("已加入購物車");
-      onAdded();
+      onAdded(goToCartAfterAdd);
     } catch (e) {
       toast.error(apiErrorMessage(e, "加入失敗"));
     } finally {
@@ -279,6 +308,12 @@ function ProductModal({
                 {!product.is_unlimited && product.status === "active" && (
                   <p className="shop-product-dialog-stock">剩餘 {product.stock_quantity} 件</p>
                 )}
+                {product.max_quantity_per_user != null && (
+                  <p className="shop-product-dialog-stock">
+                    每人限購 {product.max_quantity_per_user} 件
+                    {remainingForUser != null && ` · 此帳號尚可選 ${remainingForUser} 件`}
+                  </p>
+                )}
               </div>
 
               {variantGroups.map((g) => (
@@ -314,14 +349,27 @@ function ProductModal({
 
               <div className="shop-product-dialog-section">
                 <label>數量</label>
-                <div className="shop-product-quantity">
-                  <button onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="減少數量">−</button>
-                  <span>{qty}</span>
-                  <button
-                    onClick={() => setQty((q) =>
-                      product.is_unlimited ? q + 1 : Math.min(product.stock_quantity, q + 1))}
-                    aria-label="增加數量">＋</button>
-                </div>
+                {maxSelectableQuantity === 0 ? (
+                  <p className="text-sm" style={{ color: "var(--public-secondary)" }}>
+                    {purchaseLimitReached ? "此帳號已達購買上限。" : "目前沒有可選數量。"}
+                  </p>
+                ) : product.max_quantity_per_user === 1 ? (
+                  <p className="text-sm" style={{ color: "var(--public-secondary)" }}>每人限購 1 件</p>
+                ) : (
+                  <div className="shop-product-quantity">
+                    <button
+                      type="button"
+                      onClick={() => setQty((q) => Math.max(1, q - 1))}
+                      disabled={qty <= 1}
+                      aria-label="減少數量">−</button>
+                    <span>{qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setQty((q) => Math.min(maxSelectableQuantity, q + 1))}
+                      disabled={qty >= maxSelectableQuantity}
+                      aria-label="增加數量">＋</button>
+                  </div>
+                )}
               </div>
 
               <div className="shop-product-dialog-actions">
@@ -336,7 +384,11 @@ function ProductModal({
                       ? "本班已結單"
                       : loading
                         ? "處理中…"
-                        : `加入購物車 · NT$${(unitPrice * qty).toLocaleString()}`}
+                        : purchaseLimitReached
+                          ? "已達購買上限"
+                          : goToCartAfterAdd
+                          ? `加入並前往購物車 · NT$${(unitPrice * qty).toLocaleString()}`
+                          : `加入購物車 · NT$${(unitPrice * qty).toLocaleString()}`}
                 </button>
                 <button onClick={onClose} className="shop-product-cancel">取消</button>
               </div>
@@ -420,19 +472,24 @@ function ProductCard({
 // ── 購買頁 ────────────────────────────────────────────────────────────────────
 
 export default function ShopPage() {
+  const router = useRouter();
   const catalogCacheKey = "shop/catalog/all";
 
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
   const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
+  const [directOrderProductId, setDirectOrderProductId] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
-  const closeProduct = useCallback(() => setOpenProduct(null), []);
+  const closeProduct = useCallback(() => {
+    setOpenProduct(null);
+    setDirectOrderProductId(null);
+  }, []);
 
   const loadCatalog = useCallback(() => {
     if (!cacheHas(catalogCacheKey)) setLoading(true);
@@ -488,8 +545,9 @@ export default function ShopPage() {
     if (!category) return;
     setSelectedCategoryId(category.id);
     setSelectedSeriesId(null);
+    setDirectOrderProductId(productId);
     setOpenProduct(productId);
-  }, [catalog, setSelectedCategoryId]);
+  }, [catalog, setSelectedCategoryId, setDirectOrderProductId]);
 
   useEffect(() => { loadCart(); }, [loadCart]);
 
@@ -647,7 +705,10 @@ export default function ShopPage() {
                           key={product.id}
                           product={product}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
-                          onClick={() => setOpenProduct(product.id)}
+                          onClick={() => {
+                            setDirectOrderProductId(null);
+                            setOpenProduct(product.id);
+                          }}
                         />
                       ))}
                     </div>
@@ -664,10 +725,13 @@ export default function ShopPage() {
           productId={openProduct}
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           isLoggedIn={isLoggedIn}
+          goToCartAfterAdd={directOrderProductId === openProduct}
           onClose={closeProduct}
-          onAdded={() => {
+          onAdded={(goToCart) => {
             setOpenProduct(null);
+            setDirectOrderProductId(null);
             loadCart();
+            if (goToCart) router.push("/shop/cart");
           }}
         />
       )}
