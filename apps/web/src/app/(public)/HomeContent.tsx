@@ -28,6 +28,74 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | null }) {
+  const publicDatabaseDescription = bundle?.settings?.public_database_description?.trim();
+
+  return (
+    <section className="public-home-entry-section" aria-labelledby="public-entry-title">
+      <div className="public-home-entry-heading">
+        <h2 id="public-entry-title">所有校園服務</h2>
+        <p>挑選想要查看的內容，所有資訊已整理在本數位系統中！</p>
+      </div>
+      <nav className="public-quick-grid public-home-quick-grid" aria-label="公開網站主要入口">
+        {[
+          {
+            href: "/news",
+            title: "最新公告",
+            desc: "掌握最新消息",
+            action: "查看公告",
+            icon: Megaphone,
+          },
+          {
+            href: "/articles",
+            title: "文章專欄",
+            desc: "校園生活指南與實用文章",
+            action: "閱讀文章",
+            icon: FileText,
+          },
+          {
+            href: "/public",
+            title: "公開資料",
+            desc: publicDatabaseDescription || "法規、公文與治理紀錄",
+            action: "查詢資料",
+            icon: Database,
+          },
+          {
+            href: "/petitions/public",
+            title: "公開陳情",
+            desc: "閱讀公開案件與處理回覆",
+            action: "查看陳情",
+            icon: MessageCircle,
+          },
+        ].map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="public-feature-card public-home-feature-card"
+              data-entry={index}
+            >
+              <span className="public-home-card-wash" aria-hidden="true" />
+              <span className="public-feature-icon"><Icon size={20} aria-hidden /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-semibold">{item.title}</span>
+                <span className="mt-0.5 block text-sm text-[var(--public-secondary)]">
+                  {item.desc}
+                </span>
+              </span>
+              <span className="public-home-card-action" aria-hidden="true">
+                {item.action}
+                <ArrowRight className="public-feature-arrow" size={17} />
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+    </section>
+  );
+}
+
 export default function HomeContent({
   bundle,
   announcements,
@@ -41,7 +109,6 @@ export default function HomeContent({
   openSurveys: SurveyListItem[];
   catalog: CatalogCategoryOut[] | null;
 }) {
-  const settings = bundle?.settings;
   const openSurvey = openSurveys[0] ?? null;
   const latestAnnouncements = announcements
     .filter((item) => item.id !== urgentAnnouncement?.id)
@@ -49,7 +116,6 @@ export default function HomeContent({
   const recentlyUpdatedPages = [...(bundle?.nav_pages ?? [])]
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, 2);
-  const publicDatabaseDescription = settings?.public_database_description?.trim();
   const recentItems = [
     ...latestAnnouncements.map((item) => ({
       href: `/news/${item.id}`,
@@ -204,67 +270,6 @@ export default function HomeContent({
         )}
       </section>
 
-      <section className="public-home-entry-section" aria-labelledby="public-entry-title">
-        <div className="public-home-entry-heading">
-          <h2 id="public-entry-title">所有校園服務</h2>
-          <p>挑選想要查看的內容，所有資訊已整理在本數位系統中！</p>
-        </div>
-        <nav className="public-quick-grid public-home-quick-grid" aria-label="公開網站主要入口">
-          {[
-            {
-              href: "/news",
-              title: "最新公告",
-              desc: "掌握最新消息",
-              action: "查看公告",
-              icon: Megaphone,
-            },
-            {
-              href: "/articles",
-              title: "文章專欄",
-              desc: "校園生活指南與實用文章",
-              action: "閱讀文章",
-              icon: FileText,
-            },
-            {
-              href: "/public",
-              title: "公開資料",
-              desc: publicDatabaseDescription || "法規、公文與治理紀錄",
-              action: "查詢資料",
-              icon: Database,
-            },
-            {
-              href: "/petitions/public",
-              title: "公開陳情",
-              desc: "閱讀公開案件與處理回覆",
-              action: "查看陳情",
-              icon: MessageCircle,
-            },
-          ].map((item, index) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="public-feature-card public-home-feature-card"
-                data-entry={index}
-              >
-                <span className="public-home-card-wash" aria-hidden="true" />
-                <span className="public-feature-icon"><Icon size={20} aria-hidden /></span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-base font-semibold">{item.title}</span>
-                  <span className="mt-0.5 block text-sm text-[var(--public-secondary)]">
-                    {item.desc}
-                  </span>
-                </span>
-                <span className="public-home-card-action" aria-hidden="true">
-                  {item.action}
-                  <ArrowRight className="public-feature-arrow" size={17} />
-                </span>
-              </Link>
-            );
-          })}
-        </nav>
-      </section>
     </>
   );
 }
