@@ -89,7 +89,7 @@ from api.services import context as context_svc
 from api.services import petition as petition_svc
 from api.services import petition_notification as petition_notification_svc
 from api.services.discord_bot import enqueue_petition_private_channel
-from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
+from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/petitions", tags=["陳情系統"])
@@ -167,7 +167,11 @@ async def _manageable_org_ids(
         return None
     org_ids: set[uuid.UUID] = set()
     for permission in permissions:
-        org_ids.update(await get_user_org_ids_with_permission(session, user.id, permission))
+        org_ids.update(
+            await petition_svc.get_user_case_org_ids_with_permission(
+                session, user.id, permission
+            )
+        )
     return list(org_ids)
 
 
@@ -219,7 +223,11 @@ async def _assert_case_access(
         PermissionCode.PETITION_TRANSFER,
         PermissionCode.PETITION_ANALYTICS_ORG,
     ):
-        org_ids.update(await get_user_org_ids_with_permission(session, user.id, str(permission)))
+        org_ids.update(
+            await petition_svc.get_user_case_org_ids_with_permission(
+                session, user.id, str(permission)
+            )
+        )
     if case_obj.current_org_id in org_ids:
         return True, True
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此陳情案件")
@@ -1323,12 +1331,15 @@ async def list_assignable_users(
     await _assert_case_access(session, case_obj, user)
 
     today = local_today()
+    assignable_org_ids = await petition_svc.case_assignable_org_ids(
+        session, current_org_id=case_obj.current_org_id, actor_id=user.id
+    )
     result = await session.execute(
         select(User)
         .join(UserPosition, UserPosition.user_id == User.id)
         .join(Position, Position.id == UserPosition.position_id)
         .where(
-            Position.org_id == case_obj.current_org_id,
+            Position.org_id.in_(assignable_org_ids),
             User.is_active == True,  # noqa: E712
             UserPosition.start_date <= today,
             (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
@@ -1428,7 +1439,7 @@ async def supplement_case(
 @router.patch(
     "/{case_id}/assign",
     response_model=PetitionCaseOut,
-    summary="機關內部分案",
+    summary="負責機關及直屬上級機關分案",
     dependencies=[
         Depends(require_any(PermissionCode.PETITION_ASSIGN, PermissionCode.PETITION_ADMIN))
     ],

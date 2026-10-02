@@ -108,8 +108,28 @@ async def can_view_case(session: AsyncSession, case_obj: PetitionCase, user: Use
         PermissionCode.PETITION_TRANSFER,
         PermissionCode.PETITION_ANALYTICS_ORG,
     ):
-        org_ids.update(await get_user_org_ids_with_permission(session, user.id, str(permission)))
+        org_ids.update(
+            await get_user_case_org_ids_with_permission(session, user.id, str(permission))
+        )
     return case_obj.current_org_id in org_ids
+
+
+async def get_user_case_org_ids_with_permission(
+    session: AsyncSession, user_id: uuid.UUID, permission_code: str
+) -> list[uuid.UUID]:
+    """回傳具陳情權限的組織；分案／處理權限包含直屬下級機關案件。"""
+    org_ids = set(
+        await get_user_org_ids_with_permission(session, user_id, permission_code)
+    )
+    if permission_code not in {
+        str(PermissionCode.PETITION_ASSIGN),
+        str(PermissionCode.PETITION_HANDLE),
+    } or not org_ids:
+        return list(org_ids)
+
+    result = await session.scalars(select(Org.id).where(Org.parent_id.in_(org_ids)))
+    org_ids.update(result.all())
+    return list(org_ids)
 
 
 NEXT_ACTIONS: dict[PetitionStatus, str] = {
@@ -556,6 +576,24 @@ async def get_public_case(session: AsyncSession, case_id: uuid.UUID) -> Petition
     return result.scalar_one_or_none()
 
 
+async def case_assignable_org_ids(
+    session: AsyncSession, *, current_org_id: uuid.UUID, actor_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """回傳操作者可指派承辦人的組織：案件機關，以及具分案權的直接上級。"""
+    parent_org_id = await session.scalar(
+        select(Org.parent_id).where(Org.id == current_org_id)
+    )
+    if parent_org_id is None:
+        return [current_org_id]
+
+    actor_org_ids = await get_user_org_ids_with_permission(
+        session, actor_id, str(PermissionCode.PETITION_ASSIGN)
+    )
+    if parent_org_id in actor_org_ids:
+        return [current_org_id, parent_org_id]
+    return [current_org_id]
+
+
 async def assign_case(
     session: AsyncSession,
     case_obj: PetitionCase,
@@ -563,9 +601,16 @@ async def assign_case(
     data: PetitionAssignUpdate,
     actor_id: uuid.UUID,
 ) -> PetitionCase:
-    user_in_org = await _user_in_org(session, data.assigned_to_id, case_obj.current_org_id)
+    assignable_org_ids = await case_assignable_org_ids(
+        session, current_org_id=case_obj.current_org_id, actor_id=actor_id
+    )
+    user_in_org = False
+    for org_id in assignable_org_ids:
+        if await _user_in_org(session, data.assigned_to_id, org_id):
+            user_in_org = True
+            break
     if not user_in_org:
-        raise ValueError("只能指派給目前負責機關內的有效任期成員")
+        raise ValueError("只能指派給目前負責機關或具分案權的直接上級機關成員")
     previous = case_obj.status
     case_obj.assigned_to_id = data.assigned_to_id
     case_obj.assigned_at = datetime.now(UTC)
