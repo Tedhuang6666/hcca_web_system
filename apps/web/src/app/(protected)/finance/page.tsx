@@ -783,18 +783,22 @@ export default function FinancePage() {
     },
   ].filter((queue) => queue.visible);
   const availableCapabilities = [
-    canClaimExpense && "提出支出／報帳",
-    canReview && "覆核案件",
-    canProcurement && "追蹤校商請購",
-    (canSchoolPayment || canDuesPayment) && "登錄付款或代墊償還",
-    canBudget && "列管預算",
-    canManage && "管理帳本設定",
+    canClaimExpense && "新增支出紀錄",
+    (canReview || canProcurement || canSchoolPayment || canDuesPayment) && "處理支出紀錄",
+    canBudget && "管理預算",
+    canManage && "管理財務設定",
   ].filter(Boolean) as string[];
   const editingEntry = editingEntryId ? journals.find((item) => item.id === editingEntryId) : undefined;
   const editingBudgetedClaim = Boolean(editingEntry && isBudgetedClaimEditable(editingEntry));
   const totalFundBalance = funds.reduce((total, fund) => total + fund.balance, 0);
   const actionableCount = roleQueues.reduce((total, queue) => total + queue.count, 0);
   const recentClaims = expenseClaims.slice(0, 3);
+  const nonClaimEntries = journals.filter((entry) => entry.source_type !== "expense_claim");
+  const isSettingsTab = ["ledger", "funds", "accounts"].includes(activeTab);
+  const isExpenseWorkspace = ["entry", "review", "claims"].includes(activeTab);
+  const activePrimaryTab = isSettingsTab
+    ? null
+    : activeTab === "workspace" || activeTab === "budget" ? activeTab : "claims";
   const expenseBasicsReady = Boolean(
     periodId && fundId && counterAccountId && entryDescription.trim() && claimOrgId,
   );
@@ -807,11 +811,9 @@ export default function FinancePage() {
   const expensePaymentReady = paymentMethod === "direct" || Boolean(advancedById);
   const expenseReady = expenseBasicsReady && expenseItemsReady && expensePaymentReady;
   const primaryNavigation = [
-    { id: "workspace" as const, label: "工作台", icon: LayoutDashboard },
-    { id: "entry" as const, label: "建立報帳", icon: FilePlus2 },
-    { id: "review" as const, label: "待我覆核", icon: ClipboardCheck, count: pendingReviewClaims.length },
-    { id: "claims" as const, label: "案件追蹤", icon: ListChecks },
-    { id: "budget" as const, label: "共同預算", icon: PiggyBank },
+    { id: "workspace" as const, label: "財務總覽", icon: LayoutDashboard },
+    { id: "budget" as const, label: "預算管理", icon: PiggyBank },
+    { id: "claims" as const, label: "收支紀錄", icon: ReceiptText },
   ];
   const settingsNavigation = [
     { id: "ledger" as const, label: "帳本與期間", icon: BookOpenText },
@@ -837,8 +839,8 @@ export default function FinancePage() {
     <main className="finance-page">
       <header className="finance-header">
         <div className="finance-header__copy">
-          <h1>財務作業桌</h1>
-          <p>報帳、覆核、付款與核銷共用同一條案件脈絡，現在輪到誰一眼就知道。</p>
+          <h1>財務總覽</h1>
+          <p>預算、收支紀錄與待處理事項集中在三個工作區。</p>
         </div>
         {ledger && (
           <div className="finance-header__actions">
@@ -851,7 +853,7 @@ export default function FinancePage() {
                   setActiveTab("entry");
                 }}
               >
-                <FilePlus2 size={16} aria-hidden="true" />建立報帳
+                <FilePlus2 size={16} aria-hidden="true" />新增支出
               </button>
             )}
           </div>
@@ -900,39 +902,52 @@ export default function FinancePage() {
               <span>{activePeriod?.name || "尚未選擇會計期間"}</span>
             </div>
             <div className="finance-workspace-nav__primary">
-              {primaryNavigation.map(({ id, label, icon: Icon, count }) => (
+              {primaryNavigation.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
-                  className={`finance-workspace-nav__link ${activeTab === id ? "is-active" : ""}`}
-                  aria-current={activeTab === id ? "page" : undefined}
+                  className={`finance-workspace-nav__link ${activePrimaryTab === id ? "is-active" : ""}`}
+                  aria-current={activePrimaryTab === id ? "page" : undefined}
                   onClick={() => {
-                    if (id === "entry") setEntryType("expense");
                     setActiveTab(id);
                   }}
                 >
                   <Icon size={17} aria-hidden="true" />
                   <span>{label}</span>
-                  {count ? <b>{count}</b> : null}
                 </button>
               ))}
             </div>
             <div className="finance-workspace-nav__secondary">
-              <span>帳務設定</span>
-              {settingsNavigation.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  className={`finance-workspace-nav__link ${activeTab === id ? "is-active" : ""}`}
-                  aria-current={activeTab === id ? "page" : undefined}
-                  onClick={() => setActiveTab(id)}
-                >
-                  <Icon size={16} aria-hidden="true" />
-                  <span>{label}</span>
-                </button>
-              ))}
+              <details className="finance-workspace-nav__settings" open={isSettingsTab}>
+                <summary><Settings2 size={16} aria-hidden="true" /><span>財務設定</span></summary>
+                <div>
+                  {settingsNavigation.map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      className={`finance-workspace-nav__link ${activeTab === id ? "is-active" : ""}`}
+                      aria-current={activeTab === id ? "page" : undefined}
+                      onClick={() => setActiveTab(id)}
+                    >
+                      <Icon size={16} aria-hidden="true" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </details>
             </div>
           </nav>
 
           <div className="finance-module__content">
+          {isExpenseWorkspace && <nav className="finance-expense-nav" aria-label="收支紀錄操作">
+            <button className={activeTab === "claims" ? "is-active" : ""} aria-pressed={activeTab === "claims"} onClick={() => setActiveTab("claims")}>
+              <ListChecks size={16} aria-hidden="true" />所有紀錄
+            </button>
+            <button className={activeTab === "review" ? "is-active" : ""} aria-pressed={activeTab === "review"} onClick={() => setActiveTab("review")}>
+              <ClipboardCheck size={16} aria-hidden="true" />待確認<span>{pendingReviewClaims.length}</span>
+            </button>
+            {canClaimExpense && <button className={activeTab === "entry" ? "is-active" : ""} aria-pressed={activeTab === "entry"} onClick={() => { setEntryType("expense"); setActiveTab("entry"); }}>
+              <FilePlus2 size={16} aria-hidden="true" />新增紀錄
+            </button>}
+          </nav>}
           {activeTab === "workspace" && <section className="finance-workspace">
             <div className="finance-workspace__intro">
               <div>
@@ -948,18 +963,15 @@ export default function FinancePage() {
                 <button onClick={() => setActiveTab("funds")}>查看 {funds.length} 個保管點</button>
               </div>
             </div>
-            <div className="finance-workspace__flow" aria-label="報帳案件流程">
-              {["提出報帳", "覆核確認", "預算列管", "請購／付款", "確認憑證", "完成核銷"].map((step, index) => <div key={step} className="finance-workspace__flow-step"><span>{index + 1}</span><p>{step}</p></div>)}
-            </div>
             <div className="finance-workspace__body">
               <section aria-labelledby="finance-queue-heading">
                 <div className="finance-workspace__section-heading"><div><h3 id="finance-queue-heading">你的處理佇列</h3><p>依你目前的權限，只顯示能由你接手的工作。</p></div><span className="finance-workspace__count">{actionableCount} 件</span></div>
-                {roleQueues.length > 0 ? <div className="finance-workspace__queues">{roleQueues.map((queue) => { const Icon = queue.icon; return <button key={queue.title} className="finance-workspace__queue" onClick={() => setActiveTab(queue.id)}><Icon size={19} aria-hidden="true" /><span><strong>{queue.title}</strong><small>{queue.description}</small></span><b>{queue.count}</b><ArrowRight size={17} aria-hidden="true" /></button>; })}</div> : <div className="finance-workspace__empty"><Check size={18} aria-hidden="true" />目前沒有可處理的待辦。你仍可從「所有案件」查看已授權的資料。</div>}
+                {actionableCount > 0 ? <div className="finance-workspace__queues"><button className="finance-workspace__queue" onClick={() => setActiveTab("claims")}><ClipboardCheck size={19} aria-hidden="true" /><span><strong>查看待處理收支</strong><small>覆核、請購、付款與預算更新都在收支紀錄中處理。</small></span><b>{actionableCount}</b><ArrowRight size={17} aria-hidden="true" /></button></div> : <div className="finance-workspace__empty"><Check size={18} aria-hidden="true" />目前沒有待處理的收支紀錄。</div>}
               </section>
               <aside className="finance-workspace__side">
                 <section className="finance-workspace__recent" aria-labelledby="finance-recent-heading">
                   <div><ReceiptText size={19} aria-hidden="true" /><h3 id="finance-recent-heading">最近案件</h3></div>
-                  {recentClaims.length > 0 ? <ul>{recentClaims.map((claim) => <li key={claim.id}><button onClick={() => { setExpandedEntryId(claim.id); setActiveTab("claims"); }}><span>{claim.description}</span><small>{claimNextStep(claim).title}</small></button></li>)}</ul> : <p>還沒有報帳案件。建立第一筆後，處理進度會顯示在這裡。</p>}
+                  {recentClaims.length > 0 ? <ul>{recentClaims.map((claim) => <li key={claim.id}><button onClick={() => { setExpandedEntryId(claim.id); setActiveTab("claims"); }}><span>{claim.description}</span><small>{claimNextStep(claim).title}</small></button></li>)}</ul> : <p>還沒有支出紀錄。新增第一筆後，處理狀態會顯示在這裡。</p>}
                 </section>
                 <section className="finance-workspace__permissions" aria-labelledby="finance-permissions-heading"><div><ShieldCheck size={19} aria-hidden="true" /><h3 id="finance-permissions-heading">你的處理權限</h3></div>{availableCapabilities.length > 0 ? <ul>{availableCapabilities.map((capability) => <li key={capability}><Check size={15} aria-hidden="true" />{capability}</li>)}</ul> : <p>目前只有查看權限。需要處理案件時，請由管理員指派對應財務權限。</p>}<button className="finance-workspace__text-action" onClick={() => setActiveTab("claims")}>查看所有已授權案件 <ArrowRight size={15} aria-hidden="true" /></button></section>
               </aside>
@@ -1173,7 +1185,7 @@ export default function FinancePage() {
 
           {activeTab === "review" && <section className="finance-case-list">
             <div className="finance-case-list__heading">
-              <div><h2>待我覆核</h2><p>具覆核權限的人員確認後，報帳案件才能進入付款、請購與預算列管。</p></div>
+              <div><h2>待確認</h2><p>確認支出資料後，可在同一筆紀錄接續付款、請購與預算列管。</p></div>
               <span className="finance-workspace__count">{pendingReviewClaims.length} 件</span>
             </div>
             {canReview ? pendingReviewClaims.length > 0 ? <div className="finance-case-list__items">{pendingReviewClaims.map((item) => {
@@ -1187,9 +1199,17 @@ export default function FinancePage() {
 
           {activeTab === "claims" && <section className="finance-case-list">
             <div className="finance-case-list__heading">
-              <div><h2>所有案件</h2><p>只顯示你依目前權限可查閱的報帳案件。每一列都會說明下一步與負責角色。</p></div>
-              <span className="finance-workspace__count">{expenseClaims.length} 件</span>
+              <div><h2>收支紀錄</h2><p>支出案件、收入與其他收支都集中在這裡查看。</p></div>
+              <span className="finance-workspace__count">{expenseClaims.length + nonClaimEntries.length} 筆</span>
             </div>
+            {nonClaimEntries.length > 0 && <section className="finance-case-list__items" aria-label="收入與其他收支紀錄">{nonClaimEntries.map((item) => (
+              <article key={item.id} className="finance-case-list__item">
+                <div className="finance-case-list__summary">
+                  <div><p className="finance-case-list__meta">{item.entry_date} · {sourceLabel(item.source_type, item.source_event)}</p><h3>{item.description}</h3></div>
+                  <div className="finance-case-list__next"><span>{claimStatusLabel[item.status] || item.status}</span><strong>NT${(item.effective_amount ?? item.lines.reduce((sum, line) => sum + line.debit, 0)).toLocaleString()}</strong></div>
+                </div>
+              </article>
+            ))}</section>}
             {expenseClaims.length > 0 ? <div className="finance-case-list__items">{expenseClaims.map((item) => {
               const next = claimNextStep(item);
               return <article key={item.id} className="finance-case-list__item finance-case-list__item--claim">

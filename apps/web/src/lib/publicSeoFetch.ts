@@ -4,6 +4,8 @@ import type {
   PetitionPublicOut,
   PublicBudgetDetail,
   PublicBudgetListItem,
+  PublicExpenseOut,
+  PublicFinanceTotalsOut,
   RegulationOut,
 } from "@/lib/types";
 import {
@@ -57,6 +59,22 @@ export async function fetchPublicBudgets(): Promise<PublicBudgetListItem[]> {
     "/finance/public/budgets",
     { revalidate: 15 },
   )) ?? [];
+}
+
+export async function fetchPublicExpenses(limit = 10): Promise<PublicExpenseOut[]> {
+  return (await fetchCachedPublicJson<PublicExpenseOut[]>(
+    `/finance/public/expenses?limit=${limit}`,
+    { revalidate: 15 },
+  )) ?? [];
+}
+
+export async function fetchPublicBudgetTotals(
+  budgetId: string,
+): Promise<PublicFinanceTotalsOut | null> {
+  return fetchCachedPublicJson<PublicFinanceTotalsOut>(
+    `/finance/public/budgets/${encodeURIComponent(budgetId)}/totals`,
+    { revalidate: 15 },
+  );
 }
 
 export async function fetchPublicBudget(

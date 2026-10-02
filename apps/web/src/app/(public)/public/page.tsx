@@ -33,8 +33,8 @@ const DATABASES = [
   },
   {
     href: "/public/budgets",
-    title: "預算與決算",
-    description: "已核准的預算明細與執行情況",
+    title: "財務總覽",
+    description: "公開預算、支出總額與最近支出紀錄",
     icon: Landmark,
   },
   {

@@ -75,6 +75,8 @@ from api.schemas.finance import (
     PublicBudgetDetailOut,
     PublicBudgetListItem,
     PublicBudgetSubmissionOut,
+    PublicExpenseOut,
+    PublicFinanceTotalsOut,
     TransferCreate,
 )
 from api.services import audit as audit_svc
@@ -1289,6 +1291,25 @@ async def list_public_budgets(db: DbDep) -> list[PublicBudgetListItem]:
         )
         for budget, period, submission in await service.list_public_budgets(db)
     ]
+
+
+@router.get("/public/expenses", response_model=list[PublicExpenseOut])
+async def list_public_expenses(
+    db: DbDep, limit: int = Query(10, ge=1, le=100)
+) -> list[PublicExpenseOut]:
+    return [
+        PublicExpenseOut.model_validate(item)
+        for item in await service.list_public_expenses(db, limit)
+    ]
+
+
+@router.get("/public/budgets/{budget_id}/totals", response_model=PublicFinanceTotalsOut)
+async def get_public_budget_period_totals(
+    budget_id: uuid.UUID, db: DbDep
+) -> PublicFinanceTotalsOut:
+    return PublicFinanceTotalsOut.model_validate(
+        await service.public_budget_period_totals(db, budget_id)
+    )
 
 
 @router.get("/public/budgets/{budget_id}", response_model=PublicBudgetDetailOut)

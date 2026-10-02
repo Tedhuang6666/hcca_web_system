@@ -9267,6 +9267,54 @@ input[type="radio"]:checked {
   font-variant-numeric: tabular-nums;
 }
 
+.finance-workspace-nav__settings { min-width: 0; }
+.finance-workspace-nav__settings > summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.finance-workspace-nav__settings > summary::-webkit-details-marker { display: none; }
+.finance-workspace-nav__settings > summary:hover { background: var(--bg-hover); color: var(--text-primary); }
+.finance-workspace-nav__settings[open] > summary { color: var(--text-primary); }
+.finance-workspace-nav__settings > div { display: grid; gap: 0.15rem; padding-left: 0.65rem; }
+
+.finance-expense-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.65rem;
+}
+.finance-expense-nav button {
+  display: inline-flex;
+  min-height: 2.4rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.65rem;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.finance-expense-nav button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.finance-expense-nav button.is-active { border-color: var(--border); background: var(--bg-elevated); color: var(--text-primary); }
+.finance-expense-nav button:focus-visible,
+.finance-workspace-nav__settings > summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 34%, transparent); outline-offset: 2px; }
+.finance-expense-nav button > span { display: inline-grid; min-width: 1.25rem; height: 1.25rem; place-items: center; border-radius: 999px; background: var(--warning-dim); color: var(--warning); font-size: 0.62rem; }
+
 .finance-module__content { min-width: 0; }
 
 .finance-workspace {
@@ -9605,6 +9653,8 @@ input[type="radio"]:checked {
   .finance-workspace-nav__secondary { display: flex; flex-wrap: nowrap; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.25rem; }
   .finance-workspace-nav__secondary > span { display: none; }
   .finance-workspace-nav__link { width: auto; flex: 0 0 auto; }
+  .finance-workspace-nav__settings { position: relative; flex: 0 0 auto; }
+  .finance-workspace-nav__settings > div { position: absolute; z-index: 20; top: calc(100% + 0.25rem); right: 0; width: max-content; min-width: 13rem; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0.5rem; background: var(--bg-elevated); box-shadow: var(--shadow-lg); }
 }
 
 @media (max-width: 860px) {
@@ -10362,6 +10412,64 @@ input[type="radio"]:checked {
 .public-budget-detail__approvals p { margin: 0.25rem 0 0; color: var(--text-secondary); font-size: 0.72rem; line-height: 1.45; }
 .public-budget-detail__approvals time { display: block; margin-top: 0.3rem; color: var(--text-muted); font-size: 0.66rem; }
 
+.public-finance { padding-bottom: 1.5rem; }
+.public-finance__eyebrow { display: block; margin-bottom: 0.45rem; color: var(--public-accent-text); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.11em; }
+.public-finance__overview,
+.public-finance__expenses,
+.public-finance__budget-list { overflow: hidden; margin-top: 1.25rem; border: 1px solid var(--public-border); border-radius: var(--radius-xl); background: var(--public-surface); }
+.public-finance__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; border-bottom: 1px solid var(--public-border); }
+.public-finance__section-heading > div > span { color: var(--public-accent-text); font-size: 0.65rem; font-weight: 800; letter-spacing: 0.07em; }
+.public-finance__section-heading h2 { margin: 0.2rem 0 0; font-size: 1rem; }
+.public-finance__section-heading > span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; }
+.public-finance__totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--public-border); }
+.public-finance__totals article { display: grid; min-width: 0; gap: 0.35rem; padding: 1.1rem 1.25rem; }
+.public-finance__totals article + article { border-left: 1px solid var(--public-border); }
+.public-finance__totals article > span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; }
+.public-finance__totals strong { color: var(--text-primary); font-size: clamp(1.05rem, 2.4vw, 1.55rem); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+.public-finance__totals .is-over-budget strong { color: var(--danger); }
+.public-finance__cash-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem 1.25rem; border-bottom: 1px solid var(--public-border); padding: 0.65rem 1.25rem; }
+.public-finance__cash-flow > span { margin-right: auto; color: var(--text-muted); font-size: 0.67rem; font-weight: 750; }
+.public-finance__cash-flow p { display: flex; align-items: baseline; gap: 0.45rem; margin: 0; color: var(--text-muted); font-size: 0.65rem; }
+.public-finance__cash-flow strong { color: var(--text-primary); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.public-finance__lines { padding: 0.25rem 1.1rem; }
+.public-finance__lines > article { padding: 0.9rem 0; border-bottom: 1px solid var(--public-border); }
+.public-finance__lines > article:last-child { border-bottom: 0; }
+.public-finance__line-label { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.public-finance__line-label > span { display: grid; gap: 0.2rem; }
+.public-finance__line-label strong { color: var(--text-primary); font-size: 0.8rem; }
+.public-finance__line-label small { color: var(--text-muted); font-size: 0.65rem; }
+.public-finance__line-label > b { color: var(--public-accent-text); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.public-finance__progress { display: block; overflow: hidden; height: 0.42rem; margin-top: 0.65rem; border-radius: 999px; background: var(--public-soft); }
+.public-finance__progress i { display: block; height: 100%; border-radius: inherit; background: var(--public-accent); }
+.public-finance__lines dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin: 0.6rem 0 0; }
+.public-finance__lines dl > div { display: flex; align-items: baseline; justify-content: space-between; gap: 0.4rem; }
+.public-finance__lines dt { color: var(--text-muted); font-size: 0.62rem; }
+.public-finance__lines dd { margin: 0; color: var(--text-secondary); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+.public-finance__calculation-note { margin: 0; border-top: 1px solid var(--public-border); padding: 0.7rem 1.1rem; color: var(--text-muted); font-size: 0.65rem; line-height: 1.5; }
+.public-finance__empty-line,
+.public-finance__empty-budgets { margin: 0; padding: 1.25rem; color: var(--text-muted); font-size: 0.75rem; }
+.public-finance__expenses > .public-finance__section-heading { margin-bottom: 0; }
+.public-finance__expense-table { overflow-x: auto; }
+.public-finance__expense-table table { width: 100%; min-width: 54rem; border-collapse: collapse; font-size: 0.72rem; }
+.public-finance__expense-table th { padding: 0.7rem 0.85rem; background: var(--public-soft); color: var(--text-secondary); font-size: 0.64rem; font-weight: 750; text-align: left; }
+.public-finance__expense-table td { padding: 0.8rem 0.85rem; border-top: 1px solid var(--public-border); color: var(--text-secondary); vertical-align: middle; }
+.public-finance__expense-table td strong,
+.public-finance__expense-table td small,
+.public-finance__expense-table td a small { display: block; }
+.public-finance__expense-table td strong { color: var(--text-primary); font-size: 0.73rem; }
+.public-finance__expense-table td small { margin-top: 0.2rem; color: var(--text-muted); font-size: 0.63rem; }
+.public-finance__expense-table td a { color: var(--public-accent-text); font-weight: 700; text-decoration: none; }
+.public-finance__expense-table td a:hover { text-decoration: underline; }
+.public-finance__expense-table .public-finance__expense-amount { color: var(--text-primary); font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.public-finance__status { display: inline-flex; min-height: 1.65rem; align-items: center; border: 1px solid var(--public-border); border-radius: 999px; padding: 0.15rem 0.55rem; color: var(--text-secondary); font-size: 0.62rem; font-weight: 750; white-space: nowrap; }
+.public-finance__status.is-spent { border-color: var(--success-border); background: var(--success-dim); color: var(--success); }
+.public-finance__status.is-pending { border-color: var(--info-border); background: var(--info-dim); color: var(--info); }
+.public-finance__status.is-awaiting_reimbursement { border-color: var(--warning-border); background: var(--warning-dim); color: var(--warning); }
+.public-finance__empty-expenses { display: flex; min-height: 6.5rem; align-items: center; justify-content: center; gap: 0.55rem; color: var(--text-muted); }
+.public-finance__empty-expenses p { margin: 0; font-size: 0.74rem; }
+.public-finance__budget-list .public-budget-index__list { margin: 0; border: 0; }
+.public-finance__budget-list .public-budget-index__row h3 { margin: 0; font-size: 0.95rem; }
+
 @media (max-width: 680px) {
   .public-budget-index__header,
   .public-budget-detail__header { align-items: start; }
@@ -10386,6 +10494,17 @@ input[type="radio"]:checked {
   .public-budget-detail__cards dt { color: var(--text-muted); font-size: 0.62rem; }
   .public-budget-detail__cards dd { margin: 0; color: var(--text-primary); font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
   .public-budget-detail__cards article > p { margin: 0.65rem 0 0; color: var(--text-secondary); font-size: 0.7rem; }
+  .public-finance__section-heading { align-items: start; }
+  .public-finance__totals { grid-template-columns: 1fr; }
+  .public-finance__totals article { grid-template-columns: 1fr auto; align-items: baseline; padding: 0.75rem 0.9rem; }
+  .public-finance__totals article + article { border-top: 1px solid var(--public-border); border-left: 0; }
+  .public-finance__totals strong { font-size: 1.05rem; }
+  .public-finance__cash-flow { align-items: start; padding-inline: 0.9rem; }
+  .public-finance__cash-flow > span { flex-basis: 100%; }
+  .public-finance__cash-flow p { flex: 1 1 auto; justify-content: space-between; }
+  .public-finance__lines { padding-inline: 0.9rem; }
+  .public-finance__lines dl { gap: 0.45rem; }
+  .public-finance__lines dl > div { display: grid; gap: 0.15rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
