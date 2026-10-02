@@ -10,12 +10,14 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Column,
     DateTime,
     Enum,
     ForeignKey,
     Index,
     Integer,
     String,
+    Table,
     Text,
     text,
 )
@@ -85,6 +87,7 @@ class ProductCategory(Base, TimestampMixin):
     series: Mapped[list[ProductSeries]] = relationship(
         "ProductSeries", back_populates="category", cascade="all, delete-orphan"
     )
+    products: Mapped[list[Product]] = relationship("Product", back_populates="category")
 
 
 class ProductSeries(Base, TimestampMixin):
@@ -126,6 +129,16 @@ class Product(Base, TimestampMixin):
         CheckConstraint(
             "max_quantity_per_user IS NULL OR max_quantity_per_user >= 1",
             name="ck_products_max_quantity_per_user_positive",
+        ),
+        CheckConstraint(
+            "category_id IS NOT NULL OR series_id IS NOT NULL",
+            name="ck_products_category_or_series",
+        ),
+        Index(
+            "ix_products_category_status_created",
+            "category_id",
+            "status",
+            text("created_at DESC"),
         ),
         Index(
             "ix_products_series_status_created",
@@ -169,10 +182,15 @@ class Product(Base, TimestampMixin):
     # 劃位時機：at_purchase / scheduled / admin_assign（見 SeatingMode）
     seating_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    series_id: Mapped[uuid.UUID] = mapped_column(
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_categories.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    series_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("product_series.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
@@ -183,7 +201,10 @@ class Product(Base, TimestampMixin):
     )
 
     creator: Mapped[User] = relationship("User")
-    series: Mapped[ProductSeries] = relationship("ProductSeries", back_populates="products")
+    category: Mapped[ProductCategory | None] = relationship(
+        "ProductCategory", back_populates="products"
+    )
+    series: Mapped[ProductSeries | None] = relationship("ProductSeries", back_populates="products")
     variant_groups: Mapped[list[ProductVariantGroup]] = relationship(
         "ProductVariantGroup",
         back_populates="product",
@@ -482,6 +503,25 @@ class ShopOrderClose(Base, TimestampMixin):
     reopened_by: Mapped[User | None] = relationship("User", foreign_keys=[reopened_by_id])
 
 
+shop_promotion_users = Table(
+    "shop_promotion_users",
+    Base.metadata,
+    Column(
+        "promotion_id",
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+Index("ix_shop_promotion_users_user_id", shop_promotion_users.c.user_id)
+
+
 class ShopPromotion(Base, TimestampMixin):
     """校商優惠：可指定帳號自動套用，或建立優惠碼供結帳時輸入。"""
 
@@ -513,6 +553,9 @@ class ShopPromotion(Base, TimestampMixin):
     )
 
     target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
+    target_users: Mapped[list[User]] = relationship(
+        "User", secondary=shop_promotion_users, lazy="selectin"
+    )
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
 
 

@@ -91,9 +91,12 @@ export default function HomeContent({
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
   const hasActivityContent = activityItems.length > 0;
   const featuredProducts = (catalog ?? [])
-    .flatMap((category) => category.series.flatMap((series) =>
-      series.products.map((product) => ({ ...product, categoryName: category.name })),
-    ))
+    .flatMap((category) => [
+      ...category.products.map((product) => ({ ...product, categoryName: category.name })),
+      ...category.series.flatMap((series) =>
+        series.products.map((product) => ({ ...product, categoryName: category.name })),
+      ),
+    ])
     .filter((product) => product.status === "active")
     .slice(0, 3);
 

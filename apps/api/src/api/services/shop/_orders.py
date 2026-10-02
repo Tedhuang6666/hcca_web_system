@@ -91,6 +91,20 @@ def _options_delta(selected_options: list[dict]) -> int:
     return sum(int(o.get("price_delta", 0) or 0) for o in selected_options)
 
 
+def _product_category_filter(category_id: uuid.UUID):
+    return or_(
+        Product.category_id == category_id,
+        Product.series.has(ProductSeries.category_id == category_id),
+    )
+
+
+def _product_activity_filter(activity_id: uuid.UUID):
+    return or_(
+        Product.category.has(ProductCategory.activity_id == activity_id),
+        Product.series.has(ProductSeries.category.has(ProductCategory.activity_id == activity_id)),
+    )
+
+
 async def _purchased_quantity(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -274,8 +288,10 @@ def serialize_cart(cart: Cart) -> CartOut:
 async def _assert_activity_open(session: AsyncSession, product: Product) -> None:
     from api.models.activity import Activity, ActivityStatus
 
+    category = getattr(product, "category", None)
     series = getattr(product, "series", None)
-    category = getattr(series, "category", None) if series else None
+    if category is None and series is not None:
+        category = getattr(series, "category", None)
     activity_id = getattr(category, "activity_id", None) if category else None
     if not activity_id:
         return
@@ -290,8 +306,10 @@ async def _assert_activity_open(session: AsyncSession, product: Product) -> None
 def _order_activity_id(order: Order) -> uuid.UUID | None:
     for item in getattr(order, "items", []) or []:
         product = getattr(item, "product", None)
+        category = getattr(product, "category", None) if product else None
         series = getattr(product, "series", None) if product else None
-        category = getattr(series, "category", None) if series else None
+        if category is None and series is not None:
+            category = getattr(series, "category", None)
         if category and category.activity_id:
             return category.activity_id
     return None
@@ -464,8 +482,11 @@ async def checkout(
         cat_ids: list[uuid.UUID] = []
         for ci in cart.items:
             p = await get_product(session, ci.product_id)
-            if p and p.series and p.series.category_id not in cat_ids:
-                cat_ids.append(p.series.category_id)
+            category_id = p.category_id if p else None
+            if p and category_id is None and p.series:
+                category_id = p.series.category_id
+            if category_id and category_id not in cat_ids:
+                cat_ids.append(category_id)
         if cat_ids:
             close_map = await get_close_status(session, cat_ids, class_id)
             closed_cats = [str(cid) for cid, row in close_map.items() if row is not None]
@@ -514,6 +535,9 @@ async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
         .options(
             selectinload(Order.items)
             .selectinload(OrderItem.product)
+            .selectinload(Product.category),
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
             .selectinload(Product.series)
             .selectinload(ProductSeries.category),
             selectinload(Order.school_class),
@@ -550,6 +574,9 @@ async def list_orders(
             selectinload(Order.user),
             selectinload(Order.items)
             .selectinload(OrderItem.product)
+            .selectinload(Product.category),
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
             .selectinload(Product.series)
             .selectinload(ProductSeries.category),
         )
@@ -558,15 +585,7 @@ async def list_orders(
     if user_id:
         q = q.where(Order.user_id == user_id)
     if activity_id:
-        q = q.where(
-            Order.items.any(
-                OrderItem.product.has(
-                    Product.series.has(
-                        ProductSeries.category.has(ProductCategory.activity_id == activity_id)
-                    )
-                )
-            )
-        )
+        q = q.where(Order.items.any(OrderItem.product.has(_product_activity_filter(activity_id))))
     if class_ids is not None:
         if not class_ids:
             return []
@@ -578,11 +597,7 @@ async def list_orders(
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if category_id:
-        q = q.where(
-            Order.items.any(
-                OrderItem.product.has(Product.series.has(ProductSeries.category_id == category_id))
-            )
-        )
+        q = q.where(Order.items.any(OrderItem.product.has(_product_category_filter(category_id))))
     if status:
         q = q.where(Order.status == status)
     if is_paid is not None:
@@ -878,6 +893,7 @@ async def order_summary(
         raise ValueError("group_by 必須為 class / grade / user")
 
     q = select(Order).options(
+        selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
         selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.series),
         selectinload(Order.school_class),
         selectinload(Order.user),
@@ -889,11 +905,7 @@ async def order_summary(
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if category_id:
-        q = q.where(
-            Order.items.any(
-                OrderItem.product.has(Product.series.has(ProductSeries.category_id == category_id))
-            )
-        )
+        q = q.where(Order.items.any(OrderItem.product.has(_product_category_filter(category_id))))
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
     if class_id:
@@ -937,7 +949,19 @@ async def order_summary(
             item
             for item in order.items
             if (product_id is None or item.product_id == product_id)
-            and (category_id is None or item.product.series.category_id == category_id)
+            and (
+                category_id is None
+                or (
+                    item.product is not None
+                    and (
+                        item.product.category_id == category_id
+                        or (
+                            item.product.series is not None
+                            and item.product.series.category_id == category_id
+                        )
+                    )
+                )
+            )
         ]
         if not matched_items and (product_id is not None or category_id is not None):
             continue
@@ -1096,6 +1120,9 @@ async def order_quantities(
         .options(
             selectinload(Order.items)
             .selectinload(OrderItem.product)
+            .selectinload(Product.category),
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
             .selectinload(Product.series)
             .selectinload(ProductSeries.category),
             selectinload(Order.school_class),
@@ -1119,11 +1146,7 @@ async def order_quantities(
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if category_id:
-        q = q.where(
-            Order.items.any(
-                OrderItem.product.has(Product.series.has(ProductSeries.category_id == category_id))
-            )
-        )
+        q = q.where(Order.items.any(OrderItem.product.has(_product_category_filter(category_id))))
     orders = (await session.execute(q)).scalars().unique().all()
 
     # 逐 item 展開 variant key
@@ -1135,7 +1158,10 @@ async def order_quantities(
             p = item.product
             if p is None:
                 continue
-            if category_id and (p.series is None or p.series.category_id != category_id):
+            if category_id and not (
+                p.category_id == category_id
+                or (p.series is not None and p.series.category_id == category_id)
+            ):
                 continue
             variant_key = (
                 " / ".join(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.shop import Order, OrderItem, Product, ProductCategory, ProductSeries
@@ -32,8 +32,11 @@ async def _fetch_order_report_rows(
     )
     if activity_id:
         q = q.where(
-            Product.series.has(
-                ProductSeries.category.has(ProductCategory.activity_id == activity_id)
+            or_(
+                Product.category.has(ProductCategory.activity_id == activity_id),
+                Product.series.has(
+                    ProductSeries.category.has(ProductCategory.activity_id == activity_id)
+                ),
             )
         )
 

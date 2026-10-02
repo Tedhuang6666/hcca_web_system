@@ -234,7 +234,10 @@ export default function CouncilOrdersPage() {
   };
 
   const allProducts = useMemo(() =>
-    catalog.flatMap((c) => c.series.flatMap((s) => s.products.map((p) => ({ ...p, catId: c.id })))),
+    catalog.flatMap((c) => [
+      ...c.products.map((p) => ({ ...p, catId: c.id })),
+      ...c.series.flatMap((s) => s.products.map((p) => ({ ...p, catId: c.id }))),
+    ]),
     [catalog],
   );
 

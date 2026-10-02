@@ -146,7 +146,8 @@ class ProductMediaOut(BaseModel):
 
 
 class ProductCreate(BaseModel):
-    series_id: uuid.UUID = Field(..., description="所屬系列 ID")
+    category_id: uuid.UUID | None = Field(None, description="所屬主題 ID；單一商品可不選系列")
+    series_id: uuid.UUID | None = Field(None, description="所屬系列 ID；可留空直接放在主題下")
     name: str = Field(..., min_length=1, max_length=200, description="商品名稱")
     description: str | None = None
     image_url: str | None = None
@@ -167,6 +168,7 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
+    category_id: uuid.UUID | None = None
     series_id: uuid.UUID | None = None
     name: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = None
@@ -198,7 +200,8 @@ class ProductOut(BaseModel):
     remaining_quantity_for_user: int | None = None
     status: ProductStatus
     version: int
-    series_id: uuid.UUID
+    category_id: uuid.UUID | None = None
+    series_id: uuid.UUID | None
     created_by: uuid.UUID
     sale_start: datetime | None
     sale_end: datetime | None
@@ -242,6 +245,7 @@ class CatalogCategoryOut(BaseModel):
     activity_id: uuid.UUID | None = None
     image_url: str | None = None
     sort_order: int = 0
+    products: list[CatalogProductOut] = []
     series: list[CatalogSeriesOut] = []
 
 
@@ -398,6 +402,11 @@ class ClassPaymentOut(BaseModel):
 class ShopPromotionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     target_email: str | None = Field(None, max_length=255, description="指定帳號 Email")
+    target_identifiers: list[str] = Field(
+        default_factory=list,
+        max_length=500,
+        description="可使用優惠的帳號 Email 或學號",
+    )
     code: str | None = Field(None, max_length=80, description="優惠碼；留空則指定帳號自動套用")
     discount_type: ShopDiscountType
     discount_value: int = Field(..., gt=0)
@@ -411,6 +420,7 @@ class ShopPromotionCreate(BaseModel):
 class ShopPromotionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     target_email: str | None = Field(None, max_length=255)
+    target_identifiers: list[str] | None = Field(None, max_length=500)
     code: str | None = Field(None, max_length=80)
     discount_type: ShopDiscountType | None = None
     discount_value: int | None = Field(None, gt=0)
@@ -422,12 +432,18 @@ class ShopPromotionUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class ShopPromotionTargetOut(BaseModel):
+    email: str
+    student_id: str | None = None
+
+
 class ShopPromotionOut(BaseModel):
     id: uuid.UUID
     name: str
     code: str | None = None
     target_user_id: uuid.UUID | None = None
     target_email: str | None = None
+    target_users: list[ShopPromotionTargetOut] = Field(default_factory=list)
     discount_type: ShopDiscountType
     discount_value: int
     min_order_price: int

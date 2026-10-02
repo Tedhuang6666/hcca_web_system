@@ -13760,6 +13760,11 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Products
+             * @default []
+             */
+            products: components["schemas"]["CatalogProductOut"][];
+            /**
              * Series
              * @default []
              */
@@ -24042,6 +24047,11 @@ export interface components {
         };
         /** ProductCreate */
         ProductCreate: {
+            /**
+             * Category Id
+             * @description 所屬主題 ID；單一商品可不選系列
+             */
+            category_id?: string | null;
             /** Description */
             description?: string | null;
             /** Image Url */
@@ -24091,10 +24101,9 @@ export interface components {
             seating_mode?: string | null;
             /**
              * Series Id
-             * Format: uuid
-             * @description 所屬系列 ID
+             * @description 所屬系列 ID；可留空直接放在主題下
              */
-            series_id: string;
+            series_id?: string | null;
             /**
              * Stock Quantity
              * @description 庫存（is_unlimited=True 時忽略）
@@ -24142,6 +24151,8 @@ export interface components {
         };
         /** ProductOut */
         ProductOut: {
+            /** Category Id */
+            category_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -24187,11 +24198,8 @@ export interface components {
             sale_start: string | null;
             /** Seating Mode */
             seating_mode?: string | null;
-            /**
-             * Series Id
-             * Format: uuid
-             */
-            series_id: string;
+            /** Series Id */
+            series_id: string | null;
             status: components["schemas"]["ProductStatus"];
             /** Stock Quantity */
             stock_quantity: number;
@@ -24286,6 +24294,8 @@ export interface components {
         ProductStatus: "draft" | "active" | "sold_out" | "cancelled";
         /** ProductUpdate */
         ProductUpdate: {
+            /** Category Id */
+            category_id?: string | null;
             /** Description */
             description?: string | null;
             /** Image Url */
@@ -28120,6 +28130,11 @@ export interface components {
              * @description 指定帳號 Email
              */
             target_email?: string | null;
+            /**
+             * Target Identifiers
+             * @description 可使用優惠的帳號 Email 或學號
+             */
+            target_identifiers?: string[];
         };
         /** ShopPromotionOut */
         ShopPromotionOut: {
@@ -28156,6 +28171,8 @@ export interface components {
             target_email?: string | null;
             /** Target User Id */
             target_user_id?: string | null;
+            /** Target Users */
+            target_users?: components["schemas"]["ShopPromotionTargetOut"][];
             /**
              * Updated At
              * Format: date-time
@@ -28163,6 +28180,13 @@ export interface components {
             updated_at: string;
             /** Used Count */
             used_count: number;
+        };
+        /** ShopPromotionTargetOut */
+        ShopPromotionTargetOut: {
+            /** Email */
+            email: string;
+            /** Student Id */
+            student_id?: string | null;
         };
         /** ShopPromotionUpdate */
         ShopPromotionUpdate: {
@@ -28187,6 +28211,8 @@ export interface components {
             starts_at?: string | null;
             /** Target Email */
             target_email?: string | null;
+            /** Target Identifiers */
+            target_identifiers?: string[] | null;
         };
         /** StatusOut */
         StatusOut: {
@@ -53458,6 +53484,7 @@ export interface operations {
         parameters: {
             query?: {
                 activity_id?: string | null;
+                category_id?: string | null;
                 series_id?: string | null;
                 status?: components["schemas"]["ProductStatus"] | null;
                 limit?: number;

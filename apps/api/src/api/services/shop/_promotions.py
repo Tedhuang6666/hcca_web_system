@@ -6,13 +6,18 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.shop import ShopDiscountType, ShopPromotion
 from api.models.user import User
-from api.schemas.shop import ShopPromotionCreate, ShopPromotionOut, ShopPromotionUpdate
+from api.schemas.shop import (
+    ShopPromotionCreate,
+    ShopPromotionOut,
+    ShopPromotionTargetOut,
+    ShopPromotionUpdate,
+)
 from api.services._base import apply_updates
 
 
@@ -32,29 +37,76 @@ def _validate_discount(discount_type: ShopDiscountType, discount_value: int) -> 
         raise ValueError("百分比優惠必須介於 1 到 100")
 
 
-async def _target_user(session: AsyncSession, target_email: str | None) -> User | None:
-    if not target_email:
-        return None
-    normalized = target_email.strip().lower()
-    if "@" not in normalized:
-        raise ValueError("指定帳號必須填寫有效 Email")
-    user = await session.scalar(select(User).where(func.lower(User.email) == normalized))
-    if user is None:
-        raise ValueError("找不到指定的帳號")
-    return user
+async def _target_users(session: AsyncSession, identifiers: list[str]) -> list[User]:
+    normalized: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw_identifier in identifiers:
+        identifier = raw_identifier.strip()
+        key = identifier.lower()
+        if not identifier or key in seen:
+            continue
+        if "@" in identifier:
+            local, separator, domain = identifier.partition("@")
+            if (
+                not separator
+                or not local
+                or not domain
+                or any(char.isspace() for char in identifier)
+            ):
+                raise ValueError(f"Email 格式不正確：{identifier}")
+            normalized.append(("email", key))
+        else:
+            normalized.append(("student_id", key))
+        seen.add(key)
+
+    if not normalized:
+        return []
+
+    emails = [value for kind, value in normalized if kind == "email"]
+    student_ids = [value for kind, value in normalized if kind == "student_id"]
+    filters = []
+    if emails:
+        filters.append(func.lower(User.email).in_(emails))
+    if student_ids:
+        filters.append(func.lower(User.student_id).in_(student_ids))
+    users = (await session.execute(select(User).where(or_(*filters)))).scalars().all()
+    by_email = {user.email.strip().lower(): user for user in users}
+    by_student_id = {user.student_id.strip().lower(): user for user in users if user.student_id}
+
+    targets: list[User] = []
+    target_ids: set[uuid.UUID] = set()
+    for kind, identifier in normalized:
+        user = by_email.get(identifier) if kind == "email" else by_student_id.get(identifier)
+        if user is None:
+            label = "Email" if kind == "email" else "學號"
+            raise ValueError(f"找不到指定的{label}：{identifier}")
+        if user.id not in target_ids:
+            targets.append(user)
+            target_ids.add(user.id)
+    return targets
 
 
-def _validate_target(code: str | None, target_user: User | None) -> None:
-    if code is None and target_user is None:
+def _validate_target(code: str | None, target_users: list[User]) -> None:
+    if code is None and not target_users:
         raise ValueError("請指定帳號或設定優惠碼")
+
+
+def _promotion_targets_user(user_id: uuid.UUID):
+    return or_(
+        ShopPromotion.target_user_id == user_id,
+        ShopPromotion.target_users.any(User.id == user_id),
+    )
 
 
 async def create_promotion(
     session: AsyncSession, *, data: ShopPromotionCreate, created_by: uuid.UUID
 ) -> ShopPromotion:
     code = normalize_promotion_code(data.code)
-    target_user = await _target_user(session, data.target_email)
-    _validate_target(code, target_user)
+    identifiers = list(data.target_identifiers)
+    if data.target_email:
+        identifiers.append(data.target_email)
+    target_users = await _target_users(session, identifiers)
+    _validate_target(code, target_users)
     _validate_discount(data.discount_type, data.discount_value)
     if data.starts_at and data.ends_at and data.starts_at >= data.ends_at:
         raise ValueError("優惠開始時間必須早於結束時間")
@@ -66,7 +118,8 @@ async def create_promotion(
     promotion = ShopPromotion(
         name=data.name.strip(),
         code=code,
-        target_user_id=target_user.id if target_user else None,
+        target_user_id=target_users[0].id if len(target_users) == 1 else None,
+        target_users=target_users,
         discount_type=data.discount_type,
         discount_value=data.discount_value,
         min_order_price=data.min_order_price,
@@ -78,14 +131,16 @@ async def create_promotion(
     )
     session.add(promotion)
     await session.flush()
-    await session.refresh(promotion, attribute_names=["target_user"])
-    return promotion
+    return await get_promotion(session, promotion.id) or promotion
 
 
 async def list_promotions(
     session: AsyncSession, *, include_inactive: bool = False
 ) -> list[ShopPromotion]:
-    query = select(ShopPromotion).options(selectinload(ShopPromotion.target_user))
+    query = select(ShopPromotion).options(
+        selectinload(ShopPromotion.target_user),
+        selectinload(ShopPromotion.target_users),
+    )
     if not include_inactive:
         query = query.where(ShopPromotion.is_active.is_(True))
     query = query.order_by(ShopPromotion.created_at.desc())
@@ -95,7 +150,10 @@ async def list_promotions(
 async def get_promotion(session: AsyncSession, promotion_id: uuid.UUID) -> ShopPromotion | None:
     return await session.scalar(
         select(ShopPromotion)
-        .options(selectinload(ShopPromotion.target_user))
+        .options(
+            selectinload(ShopPromotion.target_user),
+            selectinload(ShopPromotion.target_users),
+        )
         .where(ShopPromotion.id == promotion_id)
     )
 
@@ -104,7 +162,15 @@ async def update_promotion(
     session: AsyncSession, promotion: ShopPromotion, *, data: ShopPromotionUpdate
 ) -> ShopPromotion:
     payload = data.model_dump(exclude_unset=True)
-    target_email = payload.pop("target_email", None) if "target_email" in payload else None
+    target_users: list[User] | None = None
+    if "target_identifiers" in payload or "target_email" in payload:
+        identifiers = payload.pop("target_identifiers", None)
+        target_email = payload.pop("target_email", None)
+        if identifiers is None:
+            identifiers = []
+        if target_email:
+            identifiers = [*identifiers, target_email]
+        target_users = await _target_users(session, identifiers)
     if "code" in payload:
         payload["code"] = normalize_promotion_code(payload["code"])
         if payload["code"] and await session.scalar(
@@ -114,14 +180,11 @@ async def update_promotion(
             )
         ):
             raise ValueError("優惠碼已存在")
-    if target_email is not None or "target_email" in data.model_fields_set:
-        target_user = await _target_user(session, target_email)
-        payload["target_user_id"] = target_user.id if target_user else None
+    if target_users is not None:
+        promotion.target_users = target_users
+        promotion.target_user_id = target_users[0].id if len(target_users) == 1 else None
     apply_updates(promotion, payload)
-    _validate_target(
-        promotion.code,
-        await session.get(User, promotion.target_user_id) if promotion.target_user_id else None,
-    )
+    _validate_target(promotion.code, list(promotion.target_users))
     _validate_discount(promotion.discount_type, promotion.discount_value)
     if promotion.starts_at and promotion.ends_at and promotion.starts_at >= promotion.ends_at:
         raise ValueError("優惠開始時間必須早於結束時間")
@@ -160,7 +223,11 @@ async def resolve_promotion(
                 *base_filters,
                 func.upper(ShopPromotion.code) == normalized_code,
                 or_(
-                    ShopPromotion.target_user_id.is_(None), ShopPromotion.target_user_id == user_id
+                    and_(
+                        ShopPromotion.target_user_id.is_(None),
+                        ~ShopPromotion.target_users.any(),
+                    ),
+                    _promotion_targets_user(user_id),
                 ),
             )
             .with_for_update()
@@ -179,7 +246,7 @@ async def resolve_promotion(
                 .where(
                     *base_filters,
                     ShopPromotion.code.is_(None),
-                    ShopPromotion.target_user_id == user_id,
+                    _promotion_targets_user(user_id),
                 )
                 .with_for_update()
             )
@@ -195,12 +262,19 @@ async def resolve_promotion(
 
 
 def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
+    target_users = list(promotion.target_users or [])
+    if not target_users and promotion.target_user is not None:
+        target_users = [promotion.target_user]
     return ShopPromotionOut(
         id=promotion.id,
         name=promotion.name,
         code=promotion.code,
         target_user_id=promotion.target_user_id,
         target_email=promotion.target_user.email if promotion.target_user else None,
+        target_users=[
+            ShopPromotionTargetOut(email=user.email, student_id=user.student_id)
+            for user in target_users
+        ],
         discount_type=promotion.discount_type,
         discount_value=promotion.discount_value,
         min_order_price=promotion.min_order_price,

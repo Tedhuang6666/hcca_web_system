@@ -34,13 +34,16 @@ function money(value: number) {
 }
 
 function flattenCatalog(catalog: CatalogCategoryOut[]): CatalogChoice[] {
-  return catalog.flatMap((cat) =>
-    cat.series.flatMap((series) =>
+  return catalog.flatMap((cat) => [
+    ...cat.products.map((product) => ({
+      ...product, category: cat.name, series: "單一商品", categoryId: cat.id,
+    })),
+    ...cat.series.flatMap((series) =>
       series.products.map((product) => ({
         ...product, category: cat.name, series: series.name, categoryId: cat.id,
       })),
     ),
-  );
+  ]);
 }
 
 export default function ClassOrdersPage() {
