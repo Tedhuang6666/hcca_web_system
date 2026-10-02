@@ -267,10 +267,22 @@ def render_personalized_text(
     raw: str, variables: dict[str, Any], *, allow_missing_variables: bool = False
 ) -> str:
     """以受限 Jinja2 語法渲染文字；預覽可選擇將未提供的變數視為空字串。"""
+    text = raw or ""
+    depth = 0
+    for character in text:
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("佔位符渲染失敗：大括號不成對")
+    if depth:
+        raise ValueError("佔位符渲染失敗：大括號不成對")
+
     try:
         return (
             _personalization_environment(allow_missing_variables)
-            .from_string(raw or "")
+            .from_string(text)
             .render(**variables)
         )
     except TemplateError as exc:
