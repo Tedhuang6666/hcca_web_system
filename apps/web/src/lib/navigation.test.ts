@@ -5,6 +5,7 @@ import {
   NAV_DEF_LOGGED_OUT,
   NAV_ITEMS,
   NAVIGATION_PROFILES,
+  isNavItemVisible,
   navItemsFromEntries,
   navProfileFromApi,
   resolveNavigationProfile,
@@ -47,12 +48,23 @@ describe("navigation visibility", () => {
     expect(ids).toEqual(["publicPetition"]);
   });
 
-  it("shows校商投稿管理 to its dedicated permissions", () => {
+  it("routes operations permissions through the operations center", () => {
     const defaultIds = navItemsFromEntries(NAVIGATION_PROFILES.default.desktopSections)
       .map((item) => item.id);
     const adminItem = NAV_ITEMS.find((item) => item.id === "merchandiseSubmissionsAdmin");
+    const operationsItem = NAV_ITEMS.find((item) => item.id === "operations");
+    const systemOperationsItem = NAV_ITEMS.find((item) => item.id === "systemOperations");
+    const merchandisePermissions = new Set(["merchandise_submission:manage"]);
 
-    expect(defaultIds).toContain("merchandiseSubmissionsAdmin");
+    expect(defaultIds).not.toContain("merchandiseSubmissionsAdmin");
+    expect(defaultIds).not.toContain("analytics");
+    expect(isNavItemVisible(operationsItem!, {
+      can: (permission) => merchandisePermissions.has(permission),
+      hasPrefix: (prefix) =>
+        [...merchandisePermissions].some((permission) => permission.startsWith(prefix)),
+      isAdmin: false,
+    })).toBe(true);
+    expect(systemOperationsItem?.perms).toContain("analytics:view");
     expect(adminItem?.perms).toEqual(expect.arrayContaining([
       "merchandise_submission:view",
       "merchandise_submission:manage",
@@ -60,6 +72,7 @@ describe("navigation visibility", () => {
     ]));
     expect(resolveNavigationProfile(new Set(["merchandise_submission:manage"]), false))
       .toBe("default");
+    expect(resolveNavigationProfile(new Set(["analytics:view"]), false)).toBe("default");
     expect(resolveNavigationProfile(new Set(["shop:manage"]), false)).toBe("default");
   });
 

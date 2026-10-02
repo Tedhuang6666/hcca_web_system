@@ -81,7 +81,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
-  { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
   { id: "orgs", href: "/orgs", iconKey: "org", label: "組織總覽", perm: "org:*" },
   {
     id: "raffleAdmin",
@@ -138,7 +137,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin/system",
     iconKey: "systemOperations",
     label: "系統營運",
-    perm: "admin:all",
+    perms: ["admin:all", "analytics:view"],
   },
   {
     id: "systemSettings",
@@ -299,23 +298,15 @@ export const NAV_DEF: NavEntry[] = [
     id: "operations",
     heading: "營運管理",
     collapsible: true,
-    defaultCollapsed: true,
-    items: byIds([
-      "operations",
-      "publications",
-      "email",
-      "finance",
-      "receivables",
-      "merchandiseSubmissionsAdmin",
-    ]),
+    defaultCollapsed: false,
+    items: byIds(["operations"]),
   },
   {
     id: "workbench",
     heading: "管理後台",
     collapsible: true,
-    defaultCollapsed: true,
+    defaultCollapsed: false,
     items: byIds([
-      "operations",
       "qrCode",
       "moduleBackoffice",
       "adminDashboard",
@@ -499,8 +490,8 @@ export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): 
       || options.hasPrefix("email:")
       || options.hasPrefix("activity:")
       || options.hasPrefix("site:")
-      || options.hasPrefix("analytics:")
       || options.hasPrefix("finance:")
+      || options.hasPrefix("merchandise_submission:")
     );
   }
   return filterNavItems([item], options.can, options.hasPrefix).length > 0;

@@ -32,6 +32,7 @@ export function resolveNavigationProfile(
     "election:",
     "audit:",
     "email:",
+    "analytics:",
     "merchandise_submission:",
     "shop:",
     "electronic_credential:",
