@@ -1,4 +1,4 @@
-"""商品訂購系統 Router - 分類 / 變體 / 商品 / 購物車 / 結單 / 統計 / 報表"""
+"""商品訂購系統 Router - 分類 / 變體 / 登記 / 訂單 / 統計 / 報表"""
 
 from __future__ import annotations
 
@@ -32,15 +32,12 @@ from api.models.shop import (
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.shop import (
-    CartItemCreate,
-    CartItemUpdate,
-    CartOut,
     CatalogCategoryOut,
-    CheckoutRequest,
     ClassCollectionUpdate,
     ClassOrderUpsert,
     ClassPaymentOut,
     CloseStatusOut,
+    CurrentRegistrationUpdate,
     ImageUploadOut,
     OrderCancelRequest,
     OrderListItem,
@@ -68,8 +65,6 @@ from api.schemas.shop import (
     ShopOrderCloseOut,
     ShopPromotionCreate,
     ShopPromotionOut,
-    ShopPromotionPreviewOut,
-    ShopPromotionPreviewRequest,
     ShopPromotionUpdate,
 )
 from api.services import activity as activity_svc
@@ -696,145 +691,62 @@ async def delete_variant_option(
     await shop_svc.delete_variant_option(session, option)
 
 
-# ── 購物車 ────────────────────────────────────────────────────────────────────
+# ── 商品登記 ──────────────────────────────────────────────────────────────────
 
 
-@router.get("/cart", response_model=CartOut, summary="檢視購物車")
-async def get_cart(session: DbDep, current_user: CurrentUser) -> CartOut:
-    cart = await shop_svc.get_or_create_cart(session, current_user.id)
-    return shop_svc.serialize_cart(cart)
-
-
-@router.post(
-    "/cart/items",
-    response_model=CartOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="加入購物車",
+@router.get(
+    "/registrations/current",
+    response_model=OrderOut | None,
+    summary="取得目前商品登記",
 )
-async def add_cart_item(
-    payload: CartItemCreate, session: DbDep, current_user: CurrentUser
-) -> CartOut:
-    try:
-        cart = await shop_svc.add_cart_item(session, current_user.id, data=payload)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    return shop_svc.serialize_cart(cart)
+async def get_current_registration(session: DbDep, current_user: CurrentUser) -> OrderOut | None:
+    order = await shop_svc.get_current_registration(session, current_user.id)
+    return shop_svc.serialize_order(order) if order else None
 
 
-@router.patch("/cart/items/{item_id}", response_model=CartOut, summary="調整購物車品項數量")
-async def update_cart_item(
-    item_id: uuid.UUID,
-    payload: CartItemUpdate,
+@router.put(
+    "/registrations/current/products/{product_id}",
+    response_model=OrderOut | None,
+    summary="立即更新商品登記",
+)
+async def update_current_registration_product(
+    product_id: uuid.UUID,
+    payload: CurrentRegistrationUpdate,
     session: DbDep,
     current_user: CurrentUser,
-) -> CartOut:
+) -> OrderOut | None:
     try:
-        cart = await shop_svc.update_cart_item(
-            session, current_user.id, item_id, quantity=payload.quantity
-        )
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except shop_svc.PurchaseLimitError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return shop_svc.serialize_cart(cart)
-
-
-@router.delete("/cart/items/{item_id}", response_model=CartOut, summary="移除購物車品項")
-async def remove_cart_item(
-    item_id: uuid.UUID, session: DbDep, current_user: CurrentUser
-) -> CartOut:
-    try:
-        cart = await shop_svc.remove_cart_item(session, current_user.id, item_id)
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    return shop_svc.serialize_cart(cart)
-
-
-@router.delete("/cart", response_model=CartOut, summary="清空購物車")
-async def clear_cart(session: DbDep, current_user: CurrentUser) -> CartOut:
-    cart = await shop_svc.clear_cart(session, current_user.id)
-    return shop_svc.serialize_cart(cart)
-
-
-@router.post(
-    "/cart/promotion-preview",
-    response_model=ShopPromotionPreviewOut,
-    summary="檢查購物車優惠資格與折扣",
-)
-async def preview_cart_promotion(
-    payload: ShopPromotionPreviewRequest,
-    session: DbDep,
-    current_user: CurrentUser,
-) -> ShopPromotionPreviewOut:
-    cart = await shop_svc.get_or_create_cart(session, current_user.id)
-    subtotal = shop_svc.serialize_cart(cart).total_price
-    result = await shop_svc.preview_promotion(
-        session,
-        user_id=current_user.id,
-        subtotal=subtotal,
-        code=payload.code,
-    )
-    promotion = result.promotion
-    return ShopPromotionPreviewOut(
-        eligible=result.eligible,
-        promotion_name=promotion.name if promotion else None,
-        promotion_code=promotion.code if promotion else None,
-        reason_code=result.reason_code,
-        reason=result.reason,
-        subtotal_price=subtotal,
-        discount_amount=result.discount_amount,
-        total_price=max(0, subtotal - result.discount_amount),
-        min_order_price=promotion.min_order_price if promotion else None,
-        shortfall=result.shortfall,
-        discount_type=promotion.discount_type if promotion else None,
-        discount_value=promotion.discount_value if promotion else None,
-    )
-
-
-@router.post(
-    "/cart/checkout",
-    response_model=list[OrderOut],
-    status_code=status.HTTP_201_CREATED,
-    summary="購物車送單（依組織拆單，依班級歸戶）",
-)
-async def checkout(
-    payload: CheckoutRequest, session: DbDep, current_user: CurrentUser
-) -> list[OrderOut]:
-    try:
-        orders = await shop_svc.checkout(
+        order = await shop_svc.set_current_registration_product(
             session,
             current_user,
-            notes=payload.notes,
-            coupon_code=payload.coupon_code,
-            payment_method=payload.payment_method,
+            product_id,
+            data=payload,
         )
     except StaleDataError as e:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="庫存發生並發衝突，請稍後重試（商品已被他人搶購更新）",
+            status_code=status.HTTP_409_CONFLICT, detail="庫存已更新，請重新載入"
         ) from e
-    except ValueError as e:
+    except shop_svc.PurchaseLimitError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    result: list[OrderOut] = []
-    for order in orders:
-        await audit_svc.record(
-            session,
-            entity_type="order",
-            entity_id=str(order.id),
-            action="shop.order_create",
-            actor_id=str(current_user.id),
-            actor_email=current_user.email,
-            meta={"serial_number": order.serial_number, "total_price": order.total_price},
-            summary=f"送出商品訂單「{order.serial_number}」",
-        )
-        full = await shop_svc.get_order(session, order.id)
-        if full is not None:
-            result.append(shop_svc.serialize_order(full))
-        await _broadcast_shop_order(full or order)
-        await _queue_order_confirmation(session, current_user, full or order)
-    return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+    if order is None:
+        return None
+    await audit_svc.record(
+        session,
+        entity_type="order",
+        entity_id=str(order.id),
+        action="shop.registration_update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"serial_number": order.serial_number, "product_id": str(product_id)},
+        summary=f"更新商品登記「{order.serial_number}」",
+    )
+    full = await shop_svc.get_order(session, order.id)
+    updated = full or order
+    await _broadcast_shop_order(updated)
+    return shop_svc.serialize_order(updated)
 
 
 # ── 訂單 ──────────────────────────────────────────────────────────────────────

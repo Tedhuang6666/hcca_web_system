@@ -1,4 +1,4 @@
-"""商品訂購系統 Pydantic Schemas - 分類 / 變體 / 商品 / 購物車 / 訂單 / 統計"""
+"""商品訂購系統 Pydantic Schemas - 分類 / 變體 / 商品登記 / 訂單 / 統計"""
 
 from __future__ import annotations
 
@@ -314,6 +314,15 @@ class OrderItemCreate(BaseModel):
     option_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
+class RegistrationVariantCreate(BaseModel):
+    option_ids: list[uuid.UUID] = Field(default_factory=list)
+    quantity: int = Field(..., ge=1, le=100)
+
+
+class CurrentRegistrationUpdate(BaseModel):
+    variants: list[RegistrationVariantCreate] = Field(default_factory=list, max_length=100)
+
+
 class OrderCreate(BaseModel):
     items: list[OrderItemCreate] = Field(..., min_length=1)
     notes: str | None = Field(None, max_length=500)
@@ -583,10 +592,12 @@ __all__ = [
     "CatalogProductOut",
     "CatalogSeriesOut",
     "CheckoutRequest",
+    "CurrentRegistrationUpdate",
     "ImageUploadOut",
     "OrderCancelRequest",
     "OrderCreate",
     "OrderItemCreate",
+    "RegistrationVariantCreate",
     "OrderItemOut",
     "OrderListItem",
     "OrderOut",
