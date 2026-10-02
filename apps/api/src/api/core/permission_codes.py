@@ -509,13 +509,13 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "group": "陳情系統",
         "code": PermissionCode.PETITION_ASSIGN,
         "label": "陳情分案",
-        "desc": "將本機關陳情案件指派給內部承辦人",
+        "desc": "可分派本機關案件；上級機關可分派直屬下級機關案件並指派給自身成員",
     },
     {
         "group": "陳情系統",
         "code": PermissionCode.PETITION_HANDLE,
         "label": "處理陳情",
-        "desc": "回覆、退回補件、結案、不受理與新增內部備註",
+        "desc": "處理本機關及直屬下級機關案件：回覆、退回補件、結案、不受理與新增內部備註",
     },
     {
         "group": "陳情系統",

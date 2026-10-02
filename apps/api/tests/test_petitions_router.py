@@ -60,6 +60,18 @@ async def _make_org_and_type(db, *, name: str = "學生事務處") -> tuple[Org,
     return org, petition_type
 
 
+async def _make_child_org_and_type(db, parent: Org) -> tuple[Org, PetitionType]:
+    org = Org(name=f"下級機關-{uuid.uuid4().hex[:6]}", parent_id=parent.id)
+    db.add(org)
+    await db.flush()
+    petition_type = PetitionType(
+        name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id
+    )
+    db.add(petition_type)
+    await db.flush()
+    return org, petition_type
+
+
 async def _create_case(
     db,
     petition_type: PetitionType,
@@ -565,6 +577,36 @@ async def test_list_manage_cases_scoped_to_org_permission(
     assert payload[0]["current_org_id"] == str(org_a.id)
 
 
+async def test_parent_org_handler_can_manage_child_cases_but_viewer_cannot(
+    db_session, authed_client_factory
+) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    _child, child_type = await _make_child_org_and_type(db_session, parent)
+    _unrelated_org, unrelated_type = await _make_org_and_type(db_session)
+    child_case, _code = await _create_case(db_session, child_type)
+    unrelated_case, _code = await _create_case(db_session, unrelated_type)
+    parent_handler = await _bare_user(db_session)
+    parent_viewer = await _bare_user(db_session)
+    await _grant_org_permission(db_session, parent_handler, parent, "petition:assign")
+    await _grant_org_permission(db_session, parent_handler, parent, "petition:handle")
+    await _grant_org_permission(db_session, parent_viewer, parent, "petition:view_org")
+
+    handler_client = authed_client_factory(parent_handler)
+    managed_cases = await handler_client.get("/petitions/manage")
+    assert managed_cases.status_code == 200
+    assert [item["id"] for item in managed_cases.json()] == [str(child_case.id)]
+    assert (await handler_client.get(f"/petitions/{child_case.id}")).status_code == 200
+    assert (await handler_client.get(f"/petitions/{unrelated_case.id}")).status_code == 403
+
+    viewer_client = authed_client_factory(parent_viewer)
+    viewer_cases = await viewer_client.get("/petitions/manage")
+    assert viewer_cases.status_code == 200
+    assert viewer_cases.json() == []
+    assert (await viewer_client.get(f"/petitions/{child_case.id}")).status_code == 403
+
+
 async def test_confidential_petition_access_is_scoped_by_role(
     db_session, authed_client_factory, admin_user: User
 ) -> None:
@@ -770,6 +812,38 @@ async def test_list_assignable_users_returns_org_members(db_session, authed_clie
     assert any(u["id"] == str(handler.id) for u in resp.json())
 
 
+async def test_list_assignable_users_includes_parent_members_only_for_parent_assigner(
+    db_session, authed_client_factory
+) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    org, petition_type = await _make_child_org_and_type(db_session, parent)
+    child_member = await _bare_user(db_session)
+    parent_assigner = await _bare_user(db_session)
+    child_assigner = await _bare_user(db_session)
+    await _grant_org_permission(db_session, child_member, org, "petition:view_org")
+    await _grant_org_permission(db_session, parent_assigner, parent, "petition:assign")
+    await _grant_org_permission(db_session, child_assigner, org, "petition:assign")
+    case_obj, _code = await _create_case(db_session, petition_type)
+
+    parent_response = await authed_client_factory(parent_assigner).get(
+        f"/petitions/{case_obj.id}/assignable-users"
+    )
+    assert parent_response.status_code == 200
+    parent_ids = {entry["id"] for entry in parent_response.json()}
+    assert str(child_member.id) in parent_ids
+    assert str(parent_assigner.id) in parent_ids
+
+    child_response = await authed_client_factory(child_assigner).get(
+        f"/petitions/{case_obj.id}/assignable-users"
+    )
+    assert child_response.status_code == 200
+    child_ids = {entry["id"] for entry in child_response.json()}
+    assert str(child_member.id) in child_ids
+    assert str(parent_assigner.id) not in child_ids
+
+
 # ── 分案 / 轉派 / 回覆 / 狀態 / 備註 ───────────────────────────────────────────
 
 
@@ -811,6 +885,53 @@ async def test_assign_case_succeeds_for_org_member(db_session, authed_client_fac
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "assigned"
+
+
+async def test_parent_org_can_assign_and_handle_child_case(db_session, authed_client_factory) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    _org, petition_type = await _make_child_org_and_type(db_session, parent)
+    chair = await _bare_user(db_session)
+    await _grant_org_permission(db_session, chair, parent, "petition:assign")
+    await _grant_org_permission(db_session, chair, parent, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type)
+    ac = authed_client_factory(chair)
+
+    assigned = await ac.patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(chair.id)}
+    )
+    assert assigned.status_code == 200
+    assert assigned.json()["assigned_to_id"] == str(chair.id)
+
+    replied = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已由上級機關處理", "close": True},
+    )
+    assert replied.status_code == 200
+    assert replied.json()["status"] == "closed"
+
+
+async def test_parent_assigner_cannot_assign_to_sibling_org_member(
+    db_session, authed_client_factory
+) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    _org, petition_type = await _make_child_org_and_type(db_session, parent)
+    sibling_org, _ = await _make_child_org_and_type(db_session, parent)
+    assigner = await _bare_user(db_session)
+    sibling_member = await _bare_user(db_session)
+    await _grant_org_permission(db_session, assigner, parent, "petition:assign")
+    await _grant_org_permission(db_session, sibling_member, sibling_org, "petition:view_org")
+    case_obj, _code = await _create_case(db_session, petition_type)
+
+    response = await authed_client_factory(assigner).patch(
+        f"/petitions/{case_obj.id}/assign",
+        json={"assigned_to_id": str(sibling_member.id)},
+    )
+
+    assert response.status_code == 422
 
 
 async def test_transfer_case_moves_to_new_org(db_session, authed_client_factory) -> None:
