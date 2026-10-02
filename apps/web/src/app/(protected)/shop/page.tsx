@@ -498,9 +498,6 @@ function ProductModal({
                 </div>
               )}
 
-              <p className="shop-product-purchase-hint">
-                登記會立即保存；截止前可隨時調整數量或移除規格。
-              </p>
               {!isLoggedIn ? (
                 <p className="shop-product-purchase-hint" role="status">
                   {authLoading ? "正在確認登入狀態…" : "登入後即可登記商品。"}
@@ -732,10 +729,7 @@ export default function ShopPage() {
     <div className="shop-public-page">
       <header className="shop-public-hero">
         <div>
-          <h1>商品訂購</h1>
-          <p className="shop-public-hero-copy">
-            選好規格與數量就完成登記；截止前可隨時增減商品。
-          </p>
+          <h1>商品預購</h1>
         </div>
         <div className="shop-public-hero-actions">
           <Link
@@ -762,9 +756,6 @@ export default function ShopPage() {
               </strong>
             </p>
             <p>{myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}</p>
-            <p>
-              登記後直接列入應繳項目；班代登記已收款後，商品數量就會鎖定。
-            </p>
             {isLoggedIn && <ClassCorrectionRequest currentClass={myClass} />}
           </div>
         </section>

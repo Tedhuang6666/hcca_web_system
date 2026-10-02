@@ -112,9 +112,6 @@ export default function OrderDetailPage() {
             <dd className="mt-1 font-medium">{order.is_paid ? "班聯會已確認" : "尚未確認"}</dd>
           </div>
         </dl>
-        {order.class_id && <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          班代的登記僅供班級收款紀錄；班聯會會另行確認整班繳款。
-        </p>}
       </section>
 
       {/* 品項 */}
