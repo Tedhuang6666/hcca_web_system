@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.shop import Order, OrderItem, OrderStatus, Product
+from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductMedia
 from api.models.user import User
 from api.schemas.school_class import (
     ClassManualMemberCreate,
@@ -331,6 +331,35 @@ async def test_build_catalog_tree_includes_active_product_with_variants(
     assert len(tree) == 1
     assert tree[0].name == "商品"
     assert tree[0].series[0].products[0].has_variants is True
+
+
+async def test_build_catalog_tree_uses_first_media_image_when_product_image_is_missing(
+    db_session: AsyncSession,
+) -> None:
+    product = await _make_product(db_session)
+    product.media = [
+        ProductMedia(image_url="/uploads/front.jpg", kind="product", sort_order=0),
+        ProductMedia(image_url="/uploads/back.jpg", kind="product", sort_order=1),
+    ]
+    standalone_product = await shop_svc.create_product(
+        db_session,
+        data=ProductCreate(
+            category_id=product.category_id,
+            name="單一商品",
+            price=80,
+        ),
+        created_by=await _make_actor(db_session),
+    )
+    await shop_svc.activate_product(db_session, standalone_product)
+    standalone_product.media = [
+        ProductMedia(image_url="/uploads/single.jpg", kind="product", sort_order=0),
+    ]
+    await db_session.flush()
+
+    tree = await shop_svc.build_catalog_tree(db_session)
+
+    assert tree[0].products[0].image_url == "/uploads/single.jpg"
+    assert tree[0].series[0].products[0].image_url == "/uploads/front.jpg"
 
 
 async def test_add_cart_item_requires_one_option_per_variant_group(

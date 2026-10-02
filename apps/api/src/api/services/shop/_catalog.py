@@ -41,6 +41,13 @@ from api.services._base import apply_updates
 logger = logging.getLogger(__name__)
 
 
+def _catalog_image_url(product: Product) -> str | None:
+    """Return the same lead image shown first in the product detail gallery."""
+    if product.image_url:
+        return product.image_url
+    return product.media[0].image_url if product.media else None
+
+
 async def generate_order_serial(session: AsyncSession) -> str:
     """使用 PostgreSQL Sequence 原子性生成訂單字號：ORD-YYYY-NNNNNN。"""
     if session.get_bind().dialect.name == "sqlite":
@@ -459,7 +466,11 @@ async def build_catalog_tree(
             selectinload(ProductCategory.series)
             .selectinload(ProductSeries.products)
             .selectinload(Product.variant_groups),
+            selectinload(ProductCategory.series)
+            .selectinload(ProductSeries.products)
+            .selectinload(Product.media),
             selectinload(ProductCategory.products).selectinload(Product.variant_groups),
+            selectinload(ProductCategory.products).selectinload(Product.media),
         )
         .where(ProductCategory.is_active.is_(True))
         .order_by(ProductCategory.sort_order, ProductCategory.created_at)
@@ -475,7 +486,7 @@ async def build_catalog_tree(
             CatalogProductOut(
                 id=product.id,
                 name=product.name,
-                image_url=product.image_url,
+                image_url=_catalog_image_url(product),
                 price=product.price,
                 status=product.status,
                 stock_quantity=product.stock_quantity,
@@ -497,7 +508,7 @@ async def build_catalog_tree(
                 CatalogProductOut(
                     id=p.id,
                     name=p.name,
-                    image_url=p.image_url,
+                    image_url=_catalog_image_url(p),
                     price=p.price,
                     status=p.status,
                     stock_quantity=p.stock_quantity,

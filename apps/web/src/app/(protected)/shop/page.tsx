@@ -314,9 +314,6 @@ function ProductModal({
               <Package size={48} strokeWidth={1.2} aria-hidden="true" />
             </div>
           )}
-          {product && displayMedia && (
-            <p className="shop-product-dialog-image-caption">{displayLabel}</p>
-          )}
           {product && media.length > 1 && (
             <div className="shop-product-dialog-gallery" role="group" aria-label="商品圖片">
               {media.map((item, index) => {
@@ -801,29 +798,28 @@ export default function ShopPage() {
 
           <section className="shop-public-catalog">
             <header className="shop-public-category-heading">
-              <div>
-                <h2>{selectedCategory.name}</h2>
-                <p>{selectedCategory.series.length} 個系列 · {selectedCategory.products.length} 件單一商品</p>
-              </div>
+              <h2>{selectedCategory.name}</h2>
             </header>
-            <div className="shop-public-series-filter" aria-label="篩選商品系列">
-              <button
-                onClick={() => setSelectedSeriesId(null)}
-                aria-pressed={!selectedSeriesId}>
-                全部商品
-              </button>
-              {selectedCategory.series.map((series) => {
-                const isSelected = selectedSeriesId === series.id;
-                return (
-                  <button
-                    key={series.id}
-                    onClick={() => setSelectedSeriesId(series.id)}
-                    aria-pressed={isSelected}>
-                    {series.name} <span>({series.products.length})</span>
-                  </button>
-                );
-              })}
-            </div>
+            {selectedCategory.series.length > 0 && (
+              <div className="shop-public-series-filter" aria-label="篩選商品系列">
+                <button
+                  onClick={() => setSelectedSeriesId(null)}
+                  aria-pressed={!selectedSeriesId}>
+                  全部商品
+                </button>
+                {selectedCategory.series.map((series) => {
+                  const isSelected = selectedSeriesId === series.id;
+                  return (
+                    <button
+                      key={series.id}
+                      onClick={() => setSelectedSeriesId(series.id)}
+                      aria-pressed={isSelected}>
+                      {series.name} <span>({series.products.length})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {closeStatus[selectedCategory.id]?.is_closed && (
               <div className="shop-public-alert mt-6">
                 <CircleAlert size={18} aria-hidden="true" />
@@ -841,12 +837,10 @@ export default function ShopPage() {
             <div className="shop-public-series-list">
               {!selectedSeriesId && selectedCategory.products.length > 0 && (
                 <section className="shop-public-series">
-                  <div className="shop-public-series-heading">
+                  <div className="shop-public-series-heading shop-public-series-heading--single">
                     <div>
                       <h3>單一商品</h3>
-                      <p>{selectedCategory.products.length} 件商品</p>
                     </div>
-                    <span className="shop-public-series-rule" aria-hidden="true" />
                   </div>
                   <div className="shop-public-product-grid">
                     {selectedCategory.products.map((product) => (
