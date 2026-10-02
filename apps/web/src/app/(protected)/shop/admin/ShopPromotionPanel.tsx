@@ -8,7 +8,7 @@ import type { ShopDiscountType, ShopPromotionOut } from "@/lib/types";
 
 const emptyForm = {
   name: "",
-  target_email: "",
+  target_identifiers: "",
   code: "",
   discount_type: "percentage" as ShopDiscountType,
   discount_value: "10",
@@ -37,19 +37,23 @@ export default function ShopPromotionPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const create = async () => {
+    const targetIdentifiers = form.target_identifiers
+      .split(/[\r\n,;]+/)
+      .map((identifier) => identifier.trim())
+      .filter(Boolean);
     if (!form.name.trim()) {
       toast.error("請輸入優惠名稱");
       return;
     }
-    if (!form.code.trim() && !form.target_email.trim()) {
-      toast.error("請填寫指定帳號或優惠碼");
+    if (!form.code.trim() && targetIdentifiers.length === 0) {
+      toast.error("請填寫可使用帳號或優惠碼");
       return;
     }
     setSaving(true);
     try {
       await shopApi.createPromotion({
         name: form.name.trim(),
-        target_email: form.target_email.trim() || null,
+        target_identifiers: targetIdentifiers,
         code: form.code.trim().toUpperCase() || null,
         discount_type: form.discount_type,
         discount_value: Number(form.discount_value),
@@ -87,7 +91,7 @@ export default function ShopPromotionPanel() {
         <div>
           <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>建立優惠</h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            指定帳號會在登入後自動套用；填寫優惠碼則可讓使用者在結帳時輸入。兩者可同時設定。
+            可輸入已建立帳號的 Email 或學號，每行一個；指定帳號登入後自動套用。也可設定結帳優惠碼。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -96,8 +100,14 @@ export default function ShopPromotionPanel() {
             <input className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
           </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-            指定帳號 Email（選填）
-            <input className="input mt-1 w-full" value={form.target_email} onChange={(e) => update("target_email", e.target.value)} placeholder="buyer@example.com" inputMode="email" />
+            可使用帳號（選填）
+            <textarea className="input mt-1 w-full min-h-24 resize-y" rows={3}
+              value={form.target_identifiers}
+              onChange={(e) => update("target_identifiers", e.target.value)}
+              placeholder={"每行一個 Email 或學號\nstudent@example.edu.tw\n1101234"} />
+            <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
+              指定帳號登入後自動套用；搭配優惠碼時，只有名單內帳號能使用。
+            </span>
           </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             優惠碼（選填）
@@ -127,7 +137,7 @@ export default function ShopPromotionPanel() {
             <input className="input mt-1 w-full" value={form.description} onChange={(e) => update("description", e.target.value)} />
           </label>
         </div>
-        <button className="btn" onClick={create} disabled={saving} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+        <button className="btn min-h-11" onClick={create} disabled={saving} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
           {saving ? "建立中…" : "建立優惠"}
         </button>
       </section>
@@ -142,22 +152,30 @@ export default function ShopPromotionPanel() {
           <p className="p-5 text-sm" style={{ color: "var(--text-muted)" }}>尚未建立優惠。</p>
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {promotions.map((promotion) => (
-              <div key={promotion.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium" style={{ color: "var(--text-primary)" }}>{promotion.name}</p>
-                    <span className="rounded-md px-2 py-1 text-[11px]" style={{ background: promotion.is_active ? "var(--success-dim)" : "var(--bg-elevated)", color: promotion.is_active ? "var(--success)" : "var(--text-muted)" }}>
-                      {promotion.is_active ? "啟用中" : "已停用"}
-                    </span>
+            {promotions.map((promotion) => {
+              const targetUsers = promotion.target_users ?? [];
+              const targetLabel = targetUsers.length > 0
+                ? targetUsers.map((user) => user.student_id
+                  ? `${user.email}（學號 ${user.student_id}）`
+                  : user.email).join("、")
+                : promotion.target_email || "所有可使用帳號";
+              return (
+                <div key={promotion.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium" style={{ color: "var(--text-primary)" }}>{promotion.name}</p>
+                      <span className="rounded-md px-2 py-1 text-[11px]" style={{ background: promotion.is_active ? "var(--success-dim)" : "var(--bg-elevated)", color: promotion.is_active ? "var(--success)" : "var(--text-muted)" }}>
+                        {promotion.is_active ? "啟用中" : "已停用"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      {promotion.code ? `優惠碼 ${promotion.code}` : "登入後自動套用"} · {targetLabel} · {promotion.discount_type === "percentage" ? `${promotion.discount_value}% off` : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {promotion.code ? `優惠碼 ${promotion.code}` : "登入後自動套用"} · {promotion.target_email || "所有可使用帳號"} · {promotion.discount_type === "percentage" ? `${promotion.discount_value}% off` : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
-                  </p>
+                  {promotion.is_active && <button className="btn btn-ghost min-h-11 shrink-0 self-start text-xs sm:self-auto" onClick={() => deactivate(promotion)}>停用</button>}
                 </div>
-                {promotion.is_active && <button className="btn btn-ghost shrink-0 self-start text-xs sm:self-auto" onClick={() => deactivate(promotion)}>停用</button>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -106,8 +106,11 @@ async def delete_category(session: AsyncSession, category: ProductCategory) -> N
     result = await session.execute(
         select(ProductSeries.id).where(ProductSeries.category_id == category.id).limit(1)
     )
-    if result.scalar_one_or_none() is not None:
-        raise ValueError("主題下仍有系列，無法刪除（請先刪除或移動系列）")
+    direct_product = await session.scalar(
+        select(Product.id).where(Product.category_id == category.id).limit(1)
+    )
+    if result.scalar_one_or_none() is not None or direct_product is not None:
+        raise ValueError("主題下仍有系列或商品，無法刪除（請先刪除或移動內容）")
     await session.delete(category)
     await session.flush()
 
@@ -172,6 +175,7 @@ async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product |
         select(Product)
         .options(
             selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
+            selectinload(Product.category),
             selectinload(Product.series).selectinload(ProductSeries.category),
             selectinload(Product.media),
         )
@@ -184,6 +188,7 @@ async def list_products(
     session: AsyncSession,
     *,
     activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
     series_id: uuid.UUID | None = None,
     status: ProductStatus | None = None,
     limit: int = 20,
@@ -200,6 +205,7 @@ async def list_products(
             Product.is_unlimited,
             Product.status,
             Product.version,
+            Product.category_id,
             Product.series_id,
             Product.created_by,
             Product.sale_start,
@@ -213,10 +219,16 @@ async def list_products(
         selectinload(Product.media),
     )
     if activity_id:
-        q = q.join(ProductSeries, Product.series_id == ProductSeries.id).join(
-            ProductCategory, ProductSeries.category_id == ProductCategory.id
+        q = q.where(
+            or_(
+                Product.category.has(ProductCategory.activity_id == activity_id),
+                Product.series.has(
+                    ProductSeries.category.has(ProductCategory.activity_id == activity_id)
+                ),
+            )
         )
-        q = q.where(ProductCategory.activity_id == activity_id)
+    if category_id:
+        q = q.where(Product.category_id == category_id, Product.series_id.is_(None))
     if series_id:
         q = q.where(Product.series_id == series_id)
     if status:
@@ -229,12 +241,17 @@ async def list_products(
 async def create_product(
     session: AsyncSession, *, data: ProductCreate, created_by: uuid.UUID
 ) -> Product:
-    series = await get_series(session, data.series_id)
-    if series is None:
+    series = await get_series(session, data.series_id) if data.series_id else None
+    if data.series_id and series is None:
         raise ValueError("找不到所屬系列")
-    category = await get_category(session, series.category_id)
+    category_id = data.category_id or (series.category_id if series else None)
+    if category_id is None:
+        raise ValueError("請選擇所屬主題")
+    category = await get_category(session, category_id)
     if category is None:
-        raise ValueError("系列所屬主題不存在")
+        raise ValueError("找不到所屬主題")
+    if series and series.category_id != category.id:
+        raise ValueError("所選系列不屬於此主題")
 
     product = Product(
         name=data.name,
@@ -244,7 +261,8 @@ async def create_product(
         stock_quantity=data.stock_quantity,
         is_unlimited=data.is_unlimited,
         max_quantity_per_user=data.max_quantity_per_user,
-        series_id=series.id,
+        category_id=category.id,
+        series_id=series.id if series else None,
         created_by=created_by,
         sale_start=data.sale_start,
         sale_end=data.sale_end,
@@ -290,10 +308,22 @@ async def update_product(
     if product.status not in (ProductStatus.DRAFT, ProductStatus.ACTIVE, ProductStatus.CANCELLED):
         raise ValueError(f"商品狀態 {product.status} 不允許編輯")
     payload = data.model_dump(exclude_unset=True)
-    if "series_id" in payload:
-        series = await get_series(session, payload["series_id"])
-        if series is None:
+    if "series_id" in payload or "category_id" in payload:
+        target_series_id = payload.get("series_id", product.series_id)
+        target_series = await get_series(session, target_series_id) if target_series_id else None
+        if target_series_id and target_series is None:
             raise ValueError("找不到目標系列")
+        target_category_id = payload.get("category_id", product.category_id)
+        if target_category_id is None and target_series is not None:
+            target_category_id = target_series.category_id
+        if target_category_id is None:
+            raise ValueError("請選擇所屬主題")
+        target_category = await get_category(session, target_category_id)
+        if target_category is None:
+            raise ValueError("找不到所屬主題")
+        if target_series and target_series.category_id != target_category.id:
+            raise ValueError("所選系列不屬於此主題")
+        payload["category_id"] = target_category.id
     media_data = payload.pop("media", None)
     for field, value in payload.items():
         setattr(product, field, value)
@@ -416,7 +446,8 @@ async def build_catalog_tree(
         .options(
             selectinload(ProductCategory.series)
             .selectinload(ProductSeries.products)
-            .selectinload(Product.variant_groups)
+            .selectinload(Product.variant_groups),
+            selectinload(ProductCategory.products).selectinload(Product.variant_groups),
         )
         .where(ProductCategory.is_active.is_(True))
         .order_by(ProductCategory.sort_order, ProductCategory.created_at)
@@ -428,6 +459,24 @@ async def build_catalog_tree(
     visible = {ProductStatus.ACTIVE, ProductStatus.SOLD_OUT}
     tree: list[CatalogCategoryOut] = []
     for category in categories:
+        category_products = [
+            CatalogProductOut(
+                id=product.id,
+                name=product.name,
+                image_url=product.image_url,
+                price=product.price,
+                status=product.status,
+                stock_quantity=product.stock_quantity,
+                is_unlimited=product.is_unlimited,
+                sale_start=product.sale_start,
+                sale_end=product.sale_end,
+                has_variants=len(product.variant_groups) > 0,
+                requires_seating=product.requires_seating,
+                seating_mode=product.seating_mode,
+            )
+            for product in sorted(category.products, key=lambda item: item.created_at)
+            if product.series_id is None and product.status in visible
+        ]
         series_out: list[CatalogSeriesOut] = []
         for series in sorted(category.series, key=lambda s: (s.sort_order, s.created_at)):
             if not series.is_active:
@@ -466,6 +515,7 @@ async def build_catalog_tree(
                 activity_id=category.activity_id,
                 image_url=category.image_url,
                 sort_order=category.sort_order,
+                products=category_products,
                 series=series_out,
             )
         )

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
@@ -82,8 +82,8 @@ function MiniBtn({
     danger: { color: "#f87171", border: "1px solid rgba(248,113,113,0.3)" },
   }[tone];
   return (
-    <button onClick={onClick} disabled={disabled}
-      className="px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-45"
+    <button type="button" onClick={onClick} disabled={disabled}
+      className="min-h-11 px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-45 sm:min-h-0 sm:px-2.5"
       style={style}>
       {children}
     </button>
@@ -233,15 +233,17 @@ function toLocalInput(iso: string | null): string {
 }
 
 function ProductFormModal({
+  categoryId,
   seriesId,
   initial,
   onClose,
   onSaved,
 }: {
-  seriesId: string;
+  categoryId: string;
+  seriesId: string | null;
   initial: ProductOut | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (product: ProductOut) => void;
 }) {
   const editing = initial !== null;
   type ProductMediaDraft = { id: string; image_url: string | null; kind: "product" | "model" };
@@ -262,6 +264,30 @@ function ProductFormModal({
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
   const [mediaUploadsInProgress, setMediaUploadsInProgress] = useState(0);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadProductImages = async (files: File[]) => {
+    const remaining = Math.max(0, 20 - media.length);
+    const selected = files.slice(0, remaining);
+    if (files.length > remaining) {
+      toast.error(`商品照片最多 20 張，這次只會上傳前 ${remaining} 張`);
+    }
+    if (selected.length === 0) return;
+
+    setMediaUploadsInProgress((count) => count + selected.length);
+    const results = await Promise.allSettled(selected.map((file) => shopApi.uploadImage(file)));
+    const uploaded = results.flatMap((result) =>
+      result.status === "fulfilled"
+        ? [{ id: crypto.randomUUID(), image_url: result.value.url, kind: "product" as const }]
+        : [],
+    );
+    setMedia((current) => [...current, ...uploaded].slice(0, 20));
+    const failedCount = results.length - uploaded.length;
+    if (failedCount > 0) {
+      toast.error(`${failedCount} 張照片上傳失敗，請重新選取後再試`);
+    }
+    setMediaUploadsInProgress((count) => Math.max(0, count - selected.length));
+  };
 
   return (
     <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={onClose} size="md">
@@ -270,7 +296,9 @@ function ProductFormModal({
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full" />
         </Field>
         <Field label="商品描述（選填）">
-          <input value={description} onChange={(e) => setDescription(e.target.value)} className="input w-full" />
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+            className="input w-full min-h-28 resize-y" rows={4}
+            placeholder="可分行填寫規格、取貨方式或注意事項" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="售價">
@@ -318,10 +346,19 @@ function ProductFormModal({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={media.length >= 20}
-              onClick={() => setMedia((current) => [...current, { id: crypto.randomUUID(), image_url: null, kind: "product" }])}
-              className="btn btn-ghost min-h-11 text-xs">新增商品照片</button>
-            <button type="button" disabled={media.length >= 20}
+            <button type="button" disabled={media.length >= 20 || mediaUploadsInProgress > 0}
+              onClick={() => mediaInputRef.current?.click()}
+              className="btn btn-ghost min-h-11 text-xs">
+              {mediaUploadsInProgress > 0 ? `上傳中 ${mediaUploadsInProgress} 張…` : "一次選取多張商品照片"}
+            </button>
+            <input ref={mediaInputRef} type="file" accept="image/*" multiple className="sr-only"
+              aria-label="一次選取多張商品照片"
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = "";
+                void uploadProductImages(files);
+              }} />
+            <button type="button" disabled={media.length >= 20 || mediaUploadsInProgress > 0}
               onClick={() => setMedia((current) => [...current, { id: crypto.randomUUID(), image_url: null, kind: "model" }])}
               className="btn btn-ghost min-h-11 text-xs">新增模特兒宣傳照</button>
           </div>
@@ -363,7 +400,7 @@ function ProductFormModal({
             </div>
           ))}
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            最多 20 張；商品主圖仍會顯示在商品卡片上。
+            最多 20 張；可一次多選商品照片。商品主圖仍會顯示在商品卡片上。
           </p>
         </section>
         <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
@@ -418,10 +455,19 @@ function ProductFormModal({
                 requires_seating: requiresSeating,
                 seating_mode: requiresSeating ? seatingMode : null,
               };
-              if (editing) await shopApi.updateProduct(initial!.id, body);
-              else await shopApi.createProduct({ ...body, series_id: seriesId });
-              toast.success("已儲存");
-              onSaved();
+              const savedProduct = editing
+                ? await shopApi.updateProduct(initial!.id, {
+                    ...body,
+                    category_id: categoryId,
+                    series_id: seriesId,
+                  })
+                : await shopApi.createProduct({
+                    ...body,
+                    category_id: categoryId,
+                    series_id: seriesId,
+                  });
+              onSaved(savedProduct);
+              toast.success(editing ? "商品已更新" : "商品已建立");
             } catch (e) {
               toast.error(apiErrorMessage(e, "儲存失敗"));
             } finally { setBusy(false); }
@@ -1187,6 +1233,7 @@ export default function ShopAdminPage() {
   const [categories, setCategories] = useState<ProductCategoryOut[]>([]);
   const [seriesList, setSeriesList] = useState<ProductSeriesOut[]>([]);
   const [products, setProducts] = useState<ProductOut[]>([]);
+  const [directProducts, setDirectProducts] = useState<ProductOut[]>([]);
   const [allProducts, setAllProducts] = useState<ProductOut[]>([]);
   const [product, setProduct] = useState<ProductOut | null>(null);
 
@@ -1204,7 +1251,10 @@ export default function ShopAdminPage() {
   // Modal
   const [catModal, setCatModal] = useState<{ initial: ProductCategoryOut | null } | null>(null);
   const [seriesModal, setSeriesModal] = useState<{ initial: ProductSeriesOut | null } | null>(null);
-  const [productModal, setProductModal] = useState<{ initial: ProductOut | null } | null>(null);
+  const [productModal, setProductModal] = useState<{
+    initial: ProductOut | null;
+    seriesId?: string | null;
+  } | null>(null);
 
   const loadCategories = useCallback(() => {
     shopApi
@@ -1216,13 +1266,25 @@ export default function ShopAdminPage() {
     shopApi.listSeries({ category_id: categoryId }).then(setSeriesList).catch(() => setSeriesList([]));
   }, []);
   const loadProducts = useCallback((sid: string) => {
-    shopApi.listProducts({ series_id: sid }).then(setProducts).catch(() => setProducts([]));
+    shopApi.listProducts({ series_id: sid }).then(setProducts).catch((error) => {
+      setProducts([]);
+      toast.error(apiErrorMessage(error, "載入商品清單失敗"));
+    });
+  }, []);
+  const loadDirectProducts = useCallback((categoryId: string) => {
+    shopApi.listProducts({ category_id: categoryId }).then(setDirectProducts).catch((error) => {
+      setDirectProducts([]);
+      toast.error(apiErrorMessage(error, "載入單一商品失敗"));
+    });
   }, []);
   const loadAllProducts = useCallback(() => {
     shopApi.listProducts({ limit: "100" }).then(setAllProducts).catch(() => setAllProducts([]));
   }, []);
   const loadProduct = useCallback((pid: string) => {
-    shopApi.getProduct(pid).then(setProduct).catch(() => setProduct(null));
+    shopApi.getProduct(pid).then(setProduct).catch((error) => {
+      setProduct(null);
+      toast.error(apiErrorMessage(error, "載入商品詳情失敗"));
+    });
   }, []);
 
   useEffect(() => {
@@ -1235,7 +1297,12 @@ export default function ShopAdminPage() {
     loadAllProducts();
   }, [allowed, loadAllProducts, loadCategories]);
 
-  useEffect(() => { if (cat) loadSeries(cat.id); }, [cat, loadSeries]);
+  useEffect(() => {
+    if (cat) {
+      loadSeries(cat.id);
+      loadDirectProducts(cat.id);
+    }
+  }, [cat, loadDirectProducts, loadSeries]);
   useEffect(() => { if (series) loadProducts(series.id); }, [series, loadProducts]);
   useEffect(() => { if (productId) loadProduct(productId); }, [productId, loadProduct]);
 
@@ -1269,10 +1336,14 @@ export default function ShopAdminPage() {
   };
   const toggleProduct = async (p: ProductOut) => {
     try {
-      if (p.status === "draft" || p.status === "cancelled") await shopApi.activateProduct(p.id);
-      else await shopApi.deactivateProduct(p.id);
-      if (series) loadProducts(series.id);
-      if (productId === p.id) loadProduct(p.id);
+      const updated = p.status === "draft" || p.status === "cancelled"
+        ? await shopApi.activateProduct(p.id)
+        : await shopApi.deactivateProduct(p.id);
+      const updateList = (items: ProductOut[]) => items.map((item) => item.id === updated.id ? updated : item);
+      setProducts(updateList);
+      setDirectProducts(updateList);
+      setAllProducts(updateList);
+      if (productId === p.id) setProduct(updated);
     } catch (e) {
       toast.error(apiErrorMessage(e, "操作失敗"));
     }
@@ -1283,44 +1354,46 @@ export default function ShopAdminPage() {
     setProductId(null);
     setProduct(null);
     setProducts([]);
+    setDirectProducts([]);
     setSeriesList([]);
-    if (next && typeof window !== "undefined" && window.innerWidth < 1024) {
-      setMobileDetailOpen(true);
-    }
   };
   const selectSeries = (next: ProductSeriesOut | null) => {
     setSeries(next);
     setProductId(null);
     setProduct(null);
     setProducts([]);
-    if (next && typeof window !== "undefined" && window.innerWidth < 1024) {
-      setMobileDetailOpen(true);
-    }
   };
   const selectProduct = (nextProductId: string) => {
     setProductId(nextProductId);
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      setMobileDetailOpen(true);
-    }
   };
+  const productRow = (item: ProductOut) => (
+    <div key={item.id} className="flex min-w-0 items-center gap-1.5">
+      <button type="button" onClick={() => selectProduct(item.id)}
+        className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg p-2 text-left"
+        style={productId === item.id
+          ? { background: "var(--primary-dim)", color: "var(--primary)" }
+          : { background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+        <Thumb url={item.image_url} size={34} />
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-medium truncate">{item.name}</span>
+          <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
+            NT${item.price.toLocaleString()} · {STATUS_LABEL[item.status] ?? item.status} · {item.variant_groups.length} 組變體
+          </span>
+        </span>
+      </button>
+      <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
+        onClick={() => { selectProduct(item.id); setMobileDetailOpen(true); }}>
+        詳情
+      </button>
+      <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
+        onClick={() => setProductModal({ initial: item })}>
+        編輯
+      </button>
+    </div>
+  );
 
   const detailContent = !cat ? (
     <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>選擇主題後，可在右側編輯主題、系列、商品與多組變體。</div>
-  ) : !series ? (
-    <div className="p-5 space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>主題詳情</p>
-          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{cat.name}</h2>
-          <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>{cat.description || "無描述"}</p>
-        </div>
-        <Thumb url={cat.image_url} size={72} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯主題</MiniBtn>
-        <MiniBtn tone="danger" onClick={() => delCategory(cat)}>刪除主題</MiniBtn>
-      </div>
-    </div>
   ) : productId && !product ? (
     <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入商品詳情中…</div>
   ) : product ? (
@@ -1330,6 +1403,11 @@ export default function ShopAdminPage() {
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>商品詳情</p>
           <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{product.name}</h2>
+          {product.description && (
+            <p className="text-sm mt-2 whitespace-pre-line" style={{ color: "var(--text-secondary)" }}>
+              {product.description}
+            </p>
+          )}
           <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
             NT${product.price.toLocaleString()} · {product.is_unlimited ? "無限量" : `庫存 ${product.stock_quantity}`} · {STATUS_LABEL[product.status] ?? product.status}
             {product.sale_end && ` · 截止 ${new Date(product.sale_end).toLocaleString("zh-TW")}`}
@@ -1350,6 +1428,22 @@ export default function ShopAdminPage() {
         onChanged={() => { loadProduct(product.id); loadAllProducts(); }}
       />
     </div>
+  ) : !series ? (
+    <div className="p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>主題詳情</p>
+          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{cat.name}</h2>
+          <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>{cat.description || "無描述"}</p>
+        </div>
+        <Thumb url={cat.image_url} size={72} />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯主題</MiniBtn>
+        <MiniBtn tone="danger" onClick={() => delCategory(cat)}>刪除主題</MiniBtn>
+        <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增單一商品</MiniBtn>
+      </div>
+    </div>
   ) : (
     <div className="p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -1363,7 +1457,7 @@ export default function ShopAdminPage() {
       <div className="flex flex-wrap gap-2">
         <MiniBtn tone="primary" onClick={() => setSeriesModal({ initial: series })}>編輯系列</MiniBtn>
         <MiniBtn tone="danger" onClick={() => delSeries(series)}>刪除系列</MiniBtn>
-        <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null })}>新增商品</MiniBtn>
+        <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: series.id })}>新增商品</MiniBtn>
       </div>
     </div>
   );
@@ -1374,7 +1468,7 @@ export default function ShopAdminPage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品後台</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            逐層管理主題 → 系列 → 商品 → 變體
+            按主題管理單一商品或系列商品，再設定商品規格與變體
           </p>
         </div>
         <Link href="/shop/orders" className="btn btn-ghost">訂單記錄</Link>
@@ -1384,7 +1478,7 @@ export default function ShopAdminPage() {
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
         {([["catalog", "商品目錄"], ["stats", "訂購統計"], ["promotions", "優惠設定"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium"
+            className="min-h-11 px-4 py-1.5 rounded-lg text-xs font-medium"
             style={tab === k
               ? { background: "var(--primary-dim)", color: "var(--primary)" }
               : { color: "var(--text-muted)" }}>
@@ -1437,7 +1531,14 @@ export default function ShopAdminPage() {
                       {cat ? cat.name : "請先選擇主題"}
                     </p>
                   </div>
-                  {cat && <MiniBtn tone="primary" onClick={() => setSeriesModal({ initial: null })}>新增系列</MiniBtn>}
+                  {cat && (
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
+                        onClick={() => setMobileDetailOpen(true)}>主題設定</button>
+                      <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增單一商品</MiniBtn>
+                      <MiniBtn tone="primary" onClick={() => setSeriesModal({ initial: null })}>新增系列</MiniBtn>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
@@ -1445,41 +1546,45 @@ export default function ShopAdminPage() {
                   <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>從左側選一個主題開始管理。</p>
                 ) : (
                   <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+                    <section className="space-y-2 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>單一商品</p>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>直接放在「{cat.name}」下，不需要建立系列</p>
+                        </div>
+                      </div>
+                      {directProducts.map(productRow)}
+                      {directProducts.length === 0 && (
+                        <p className="py-2 text-xs" style={{ color: "var(--text-muted)" }}>目前沒有單一商品</p>
+                      )}
+                    </section>
                     {seriesList.map((s) => (
                       <div key={s.id}>
                         <div className="flex items-center gap-3 px-4 py-3" style={{ background: series?.id === s.id ? "var(--bg-elevated)" : undefined }}>
-                          <button onClick={() => selectSeries(s)} className="flex-1 min-w-0 text-left">
+                          <button type="button" onClick={() => selectSeries(s)} className="flex-1 min-h-11 min-w-0 text-left">
                             <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary)" : "var(--text-primary)" }}>{s.name}</p>
                             <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.description || "無描述"}</p>
                           </button>
+                          <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
+                            onClick={() => { selectSeries(s); setMobileDetailOpen(true); }}>管理</button>
                           <MiniBtn onClick={() => setSeriesModal({ initial: s })}>編輯</MiniBtn>
                         </div>
                         {series?.id === s.id && (
                           <div className="px-3 pb-3 space-y-2">
                             <div className="flex justify-end">
-                              <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null })}>新增商品</MiniBtn>
+                              <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: s.id })}>新增商品</MiniBtn>
                             </div>
-                            {products.map((p) => (
-                              <button key={p.id} onClick={() => selectProduct(p.id)}
-                                className="w-full flex items-center gap-2 rounded-lg p-2 text-left"
-                                style={productId === p.id
-                                  ? { background: "var(--primary-dim)", color: "var(--primary)" }
-                                  : { background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-                                <Thumb url={p.image_url} size={34} />
-                                <span className="flex-1 min-w-0">
-                                  <span className="block text-sm font-medium truncate">{p.name}</span>
-                                  <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
-                                    NT${p.price.toLocaleString()} · {STATUS_LABEL[p.status] ?? p.status} · {p.variant_groups.length} 組變體
-                                  </span>
-                                </span>
-                              </button>
-                            ))}
+                            {products.map(productRow)}
                             {products.length === 0 && <p className="py-4 text-xs text-center" style={{ color: "var(--text-muted)" }}>此系列尚無商品</p>}
                           </div>
                         )}
                       </div>
                     ))}
-                    {seriesList.length === 0 && <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>此主題尚無系列</p>}
+                    {seriesList.length === 0 && (
+                      <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+                        此主題尚無系列；可直接新增商品，或建立系列管理多件商品。
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1519,13 +1624,28 @@ export default function ShopAdminPage() {
               onClose={() => setSeriesModal(null)}
               onSaved={() => { setSeriesModal(null); loadSeries(cat.id); }} />
       )}
-      {productModal && series && (
-        <ProductFormModal seriesId={series.id} initial={productModal.initial}
+      {productModal && cat && (
+        <ProductFormModal
+          categoryId={productModal.initial?.category_id ?? cat.id}
+          seriesId={productModal.initial?.series_id ?? productModal.seriesId ?? null}
+          initial={productModal.initial}
           onClose={() => setProductModal(null)}
-          onSaved={() => {
+          onSaved={(savedProduct) => {
             setProductModal(null);
-            loadProducts(series.id);
-            if (productId) loadProduct(productId);
+            if (savedProduct.series_id) {
+              setProducts((current) => current.some((item) => item.id === savedProduct.id)
+                ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
+                : [savedProduct, ...current]);
+            } else {
+              setDirectProducts((current) => current.some((item) => item.id === savedProduct.id)
+                ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
+                : [savedProduct, ...current]);
+            }
+            setAllProducts((current) => current.some((item) => item.id === savedProduct.id)
+              ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
+              : [savedProduct, ...current]);
+            setProductId(savedProduct.id);
+            setProduct(savedProduct);
           }} />
       )}
     </div>

@@ -304,7 +304,7 @@ function ProductModal({
             <>
               <div className="shop-product-dialog-heading">
                 <h3 id="product-modal-title">{product.name}</h3>
-                {product.description && <p>{product.description}</p>}
+                {product.description && <p className="whitespace-pre-line">{product.description}</p>}
                 {!product.is_unlimited && product.status === "active" && (
                   <p className="shop-product-dialog-stock">剩餘 {product.stock_quantity} 件</p>
                 )}
@@ -473,7 +473,7 @@ function ProductCard({
 
 export default function ShopPage() {
   const router = useRouter();
-  const catalogCacheKey = "shop/catalog/all";
+  const catalogCacheKey = "shop/catalog/all:v2";
 
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
@@ -540,7 +540,8 @@ export default function ShopPage() {
     const productId = new URLSearchParams(window.location.search).get("product");
     if (!productId || catalog.length === 0) return;
     const category = catalog.find((item) =>
-      item.series.some((series) => series.products.some((product) => product.id === productId))
+      item.products.some((product) => product.id === productId)
+      || item.series.some((series) => series.products.some((product) => product.id === productId))
     );
     if (!category) return;
     setSelectedCategoryId(category.id);
@@ -629,7 +630,8 @@ export default function ShopPage() {
           <nav className="shop-public-category-nav" aria-label="商品分類">
             {catalog.map((category) => {
               const isSelected = category.id === selectedCategory.id;
-              const productCount = category.series.reduce((sum, series) => sum + series.products.length, 0);
+              const productCount = category.products.length
+                + category.series.reduce((sum, series) => sum + series.products.length, 0);
               return (
                 <button
                   key={category.id}
@@ -650,7 +652,7 @@ export default function ShopPage() {
             <header className="shop-public-category-heading">
               <div>
                 <h2>{selectedCategory.name}</h2>
-                <p>{selectedCategory.series.length} 個系列 · 選擇一件適合現在的商品</p>
+                <p>{selectedCategory.series.length} 個系列 · {selectedCategory.products.length} 件單一商品</p>
               </div>
             </header>
             <div className="shop-public-series-filter" aria-label="篩選商品系列">
@@ -686,6 +688,30 @@ export default function ShopPage() {
               </div>
             )}
             <div className="shop-public-series-list">
+              {!selectedSeriesId && selectedCategory.products.length > 0 && (
+                <section className="shop-public-series">
+                  <div className="shop-public-series-heading">
+                    <div>
+                      <h3>單一商品</h3>
+                      <p>{selectedCategory.products.length} 件商品</p>
+                    </div>
+                    <span className="shop-public-series-rule" aria-hidden="true" />
+                  </div>
+                  <div className="shop-public-product-grid">
+                    {selectedCategory.products.map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                        onClick={() => {
+                          setDirectOrderProductId(null);
+                          setOpenProduct(product.id);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
               {visibleSeries.map((series) => (
                 <section key={series.id} className="shop-public-series">
                   <div className="shop-public-series-heading">

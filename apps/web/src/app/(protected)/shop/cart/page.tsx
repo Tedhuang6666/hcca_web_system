@@ -180,6 +180,8 @@ export default function CartPage() {
           const catNameMap = new Map<string, string>();
           for (const cat of catalog) {
             catNameMap.set(cat.id, cat.name);
+            for (const product of cat.products)
+              productCatMap.set(product.id, cat.id);
             for (const s of cat.series)
               for (const p of s.products)
                 productCatMap.set(p.id, cat.id);

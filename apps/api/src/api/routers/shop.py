@@ -175,6 +175,9 @@ def _category_activity(category: ProductCategory | None) -> uuid.UUID | None:
 
 
 def _product_activity(product: Product) -> uuid.UUID | None:
+    category = getattr(product, "category", None)
+    if category is not None:
+        return _category_activity(category)
     series = getattr(product, "series", None)
     return _category_activity(getattr(series, "category", None) if series else None)
 
@@ -333,6 +336,7 @@ async def list_products(
     session: DbDep,
     _: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
     series_id: uuid.UUID | None = Query(None),
     status_filter: ProductStatus | None = Query(None, alias="status"),
     limit: int = Query(20, ge=1, le=100),
@@ -341,6 +345,7 @@ async def list_products(
     return await shop_svc.list_products(
         session,
         activity_id=activity_id,
+        category_id=category_id,
         series_id=series_id,
         status=status_filter,
         limit=limit,
@@ -415,8 +420,19 @@ async def update_promotion(
 async def create_product(
     payload: ProductCreate, session: DbDep, current_user: CurrentUser
 ) -> Product:
-    series = await _get_series_or_404(payload.series_id, session)
-    category = await _get_category_or_404(series.category_id, session)
+    series = await _get_series_or_404(payload.series_id, session) if payload.series_id else None
+    category_id = payload.category_id or (series.category_id if series else None)
+    if category_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="請選擇所屬主題",
+        )
+    category = await _get_category_or_404(category_id, session)
+    if series and series.category_id != category.id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="所選系列不屬於此主題",
+        )
     await _require_shop_manager(session, current_user, category.activity_id)
     try:
         product = await shop_svc.create_product(session, data=payload, created_by=current_user.id)
@@ -444,6 +460,17 @@ async def update_product(
 ) -> Product:
     product = await _get_product_or_404(product_id, session)
     await _require_shop_manager(session, current_user, _product_activity(product))
+    target_category_id = payload.category_id
+    if payload.series_id:
+        target_series = await _get_series_or_404(payload.series_id, session)
+        target_category_id = payload.category_id or target_series.category_id
+    if target_category_id is None:
+        target_category_id = product.category_id
+    if target_category_id is None and product.series is not None:
+        target_category_id = product.series.category_id
+    if target_category_id is not None:
+        target_category = await _get_category_or_404(target_category_id, session)
+        await _require_shop_manager(session, current_user, target_category.activity_id)
     try:
         product = await shop_svc.update_product(session, product, data=payload)
     except ValueError as e:
