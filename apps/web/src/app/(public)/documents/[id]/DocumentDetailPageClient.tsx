@@ -1284,9 +1284,6 @@ export default function DocumentDetailPageClient({
                 <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                   公文可見度
                 </p>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                  發文後仍可單獨調整，正文與簽核狀態不會被修改。
-                </p>
               </div>
               <div className="flex w-full items-center gap-2 sm:w-auto">
                 <select

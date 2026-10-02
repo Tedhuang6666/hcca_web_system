@@ -197,7 +197,7 @@ export function ApprovalPanel({
   return (
     <div className="approval-panel card p-5 space-y-5">
       <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-        審核工作流
+        審核紀錄
       </h2>
 
       {/* 步驟進度條 */}
