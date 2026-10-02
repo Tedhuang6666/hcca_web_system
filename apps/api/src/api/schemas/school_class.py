@@ -60,6 +60,18 @@ class ClassRosterEntryOut(BaseModel):
     user: ClassUserBrief | None = None
 
 
+class ClassRosterSummary(BaseModel):
+    """人員與帳號詳情使用的班級座號資訊。"""
+
+    class_id: uuid.UUID
+    academic_year: int
+    class_code: str
+    class_label: str | None = None
+    is_active: bool
+    seat_number: int
+    student_id: str
+
+
 class ClassRosterBulkCreate(BaseModel):
     entries: list[ClassRosterEntryCreate] = Field(..., min_length=1, max_length=999)
 
@@ -373,6 +385,7 @@ __all__ = [
     "ClassRosterBulkOut",
     "ClassRosterEntryCreate",
     "ClassRosterEntryOut",
+    "ClassRosterSummary",
     "ClassRosterEntryUpdate",
     "ClassRoleAssign",
     "ClassRoleBindingOut",

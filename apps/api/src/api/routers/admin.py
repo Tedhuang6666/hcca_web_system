@@ -36,6 +36,7 @@ from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.schemas.cadre_import import CadreDirectoryImportOut
+from api.schemas.school_class import ClassRosterSummary
 from api.services import audit as audit_svc
 from api.services import cadre_import as cadre_import_svc
 from api.services import mfa as mfa_svc
@@ -108,6 +109,7 @@ class UserDetail(BaseModel):
     created_at: str
     positions: list[PositionSummary] = []
     effective_permissions: list[str] = []
+    class_roster: list[ClassRosterSummary] = Field(default_factory=list)
 
 
 class UserPreRegister(BaseModel):
@@ -630,7 +632,13 @@ async def get_user(user_id: uuid.UUID, db: DbDep, _: AdminUser) -> UserDetail:
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
-    return await _enrich_user(db, user)
+    detail = await _enrich_user(db, user)
+    detail.class_roster = await person_svc.class_roster_for_identity(
+        db,
+        user_id=user.id,
+        student_id=user.student_id,
+    )
+    return detail
 
 
 @router.delete(

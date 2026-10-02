@@ -25,6 +25,7 @@ from api.models.school_class import (
     ClassMembership,
     ClassMembershipStatus,
     ClassRoleBinding,
+    ClassRosterEntry,
     SchoolClass,
 )
 from api.models.user import User
@@ -40,6 +41,7 @@ from api.schemas.person import (
     PersonRosterImportResult,
     PersonUpdate,
 )
+from api.schemas.school_class import ClassRosterSummary
 from api.services._base import apply_updates
 from api.services.discord_bot import enqueue_role_sync
 
@@ -89,6 +91,46 @@ def person_to_detail(person: Person) -> PersonDetailOut:
         updated_at=person.updated_at,
         affiliations=[affiliation_to_out(affiliation) for affiliation in person.affiliations],
     )
+
+
+async def class_roster_for_identity(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID | None,
+    student_id: str | None,
+) -> list[ClassRosterSummary]:
+    identity_filters = []
+    if user_id is not None:
+        identity_filters.append(ClassRosterEntry.user_id == user_id)
+    if student_id:
+        identity_filters.append(ClassRosterEntry.student_id == student_id)
+    if not identity_filters:
+        return []
+
+    result = await db.execute(
+        select(ClassRosterEntry)
+        .join(ClassRosterEntry.school_class)
+        .options(selectinload(ClassRosterEntry.school_class))
+        .where(or_(*identity_filters))
+        .order_by(
+            SchoolClass.academic_year.desc(),
+            SchoolClass.class_code,
+            ClassRosterEntry.seat_number,
+        )
+    )
+    entries = result.scalars().all()
+    return [
+        ClassRosterSummary(
+            class_id=entry.class_id,
+            academic_year=entry.school_class.academic_year,
+            class_code=entry.school_class.class_code,
+            class_label=_class_label(entry.school_class),
+            is_active=entry.school_class.is_active,
+            seat_number=entry.seat_number,
+            student_id=entry.student_id,
+        )
+        for entry in entries
+    ]
 
 
 async def get_person(db: AsyncSession, person_id: uuid.UUID) -> Person | None:

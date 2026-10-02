@@ -14347,6 +14347,29 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * ClassRosterSummary
+         * @description 人員與帳號詳情使用的班級座號資訊。
+         */
+        ClassRosterSummary: {
+            /** Academic Year */
+            academic_year: number;
+            /** Class Code */
+            class_code: string;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Label */
+            class_label?: string | null;
+            /** Is Active */
+            is_active: boolean;
+            /** Seat Number */
+            seat_number: number;
+            /** Student Id */
+            student_id: string;
+        };
         /** ClassStudentRangeCreate */
         ClassStudentRangeCreate: {
             /**
@@ -22494,6 +22517,8 @@ export interface components {
              * @default []
              */
             affiliations: components["schemas"]["PersonAffiliationOut"][];
+            /** Class Roster */
+            class_roster?: components["schemas"]["ClassRosterSummary"][];
             /**
              * Created At
              * Format: date-time
@@ -29120,6 +29145,8 @@ export interface components {
         UserDetail: {
             /** Avatar Url */
             avatar_url: string | null;
+            /** Class Roster */
+            class_roster?: components["schemas"]["ClassRosterSummary"][];
             /** Created At */
             created_at: string;
             /** Display Name */

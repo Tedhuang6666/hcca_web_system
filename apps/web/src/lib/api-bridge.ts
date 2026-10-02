@@ -132,6 +132,7 @@ export type ClassRosterEntryCreate = components['schemas']['ClassRosterEntryCrea
 export type ClassRosterEntryOut = components['schemas']['ClassRosterEntryOut']
 export type ClassRosterEntryUpdate = components['schemas']['ClassRosterEntryUpdate']
 export type ClassRosterPdfImportOut = components['schemas']['ClassRosterPdfImportOut']
+export type ClassRosterSummary = components['schemas']['ClassRosterSummary']
 export type ClassStudentRangeCreate = components['schemas']['ClassStudentRangeCreate']
 export type ClassStudentRangeOut = components['schemas']['ClassStudentRangeOut']
 export type ClassStudentRangeOverride = components['schemas']['ClassStudentRangeOverride']
