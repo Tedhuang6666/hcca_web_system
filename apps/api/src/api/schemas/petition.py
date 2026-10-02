@@ -257,6 +257,7 @@ class PetitionTransferUpdate(BaseModel):
 class PetitionReplyCreate(BaseModel):
     public_content: str = Field(..., min_length=1, max_length=10000)
     internal_note: str | None = Field(None, max_length=3000)
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)
     resolve: bool = True
     close: bool = False
 

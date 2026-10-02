@@ -36,6 +36,9 @@ RUN apt-get update && \
         libopenjp2-7 \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
+        libreoffice-calc \
+        libreoffice-impress \
+        libreoffice-writer \
         postgresql-client && \
     mkdir -p /usr/share/fonts/truetype/hcca /usr/share/fonts/opentype/noto-custom && \
     rm -rf /var/lib/apt/lists/*

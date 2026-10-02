@@ -55,6 +55,7 @@ def send_branded_email(
     template: str,
     context: dict,
     *,
+    attachments: list[dict[str, str]] | None = None,
     recipient_metadata: list[dict[str, str | None]] | None = None,
     source: str | None = None,
 ) -> list[str]:
@@ -64,6 +65,7 @@ def send_branded_email(
         to,
         subject,
         html,
+        attachments=attachments,
         recipient_metadata=recipient_metadata,
         source=source,
         message_template=template,

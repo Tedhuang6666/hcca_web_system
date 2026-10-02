@@ -7989,7 +7989,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** 機關內部分案 */
+        /** 負責機關及直屬上級機關分案 */
         patch: operations["assign_case_petitions__case_id__assign_patch"];
         trace?: never;
     };
@@ -8036,6 +8036,23 @@ export interface paths {
         };
         /** 下載陳情附件 */
         get: operations["download_attachment_petitions__case_id__attachments__attachment_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/petitions/{case_id}/attachments/{attachment_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 預覽陳情附件 */
+        get: operations["preview_attachment_petitions__case_id__attachments__attachment_id__preview_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13681,6 +13698,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Max Quantity Per User */
+            max_quantity_per_user?: number | null;
             /**
              * Product Id
              * Format: uuid
@@ -23413,6 +23432,8 @@ export interface components {
         PetitionPublicStatus: "not_requested" | "pending_user" | "pending_handler" | "published" | "declined";
         /** PetitionReplyCreate */
         PetitionReplyCreate: {
+            /** Attachment Ids */
+            attachment_ids?: string[];
             /**
              * Close
              * @default false
@@ -24030,6 +24051,11 @@ export interface components {
              * @default false
              */
             is_unlimited: boolean;
+            /**
+             * Max Quantity Per User
+             * @description 每位使用者累計購買上限；留空表示不限購
+             */
+            max_quantity_per_user?: number | null;
             /** Media */
             media?: components["schemas"]["ProductMediaCreate"][];
             /**
@@ -24137,6 +24163,8 @@ export interface components {
             image_url: string | null;
             /** Is Unlimited */
             is_unlimited: boolean;
+            /** Max Quantity Per User */
+            max_quantity_per_user?: number | null;
             /**
              * Media
              * @default []
@@ -24146,6 +24174,8 @@ export interface components {
             name: string;
             /** Price */
             price: number;
+            /** Remaining Quantity For User */
+            remaining_quantity_for_user?: number | null;
             /**
              * Requires Seating
              * @default false
@@ -24262,6 +24292,11 @@ export interface components {
             image_url?: string | null;
             /** Is Unlimited */
             is_unlimited?: boolean | null;
+            /**
+             * Max Quantity Per User
+             * @description 每位使用者累計購買上限；設為 null 表示不限購
+             */
+            max_quantity_per_user?: number | null;
             /** Media */
             media?: components["schemas"]["ProductMediaCreate"][] | null;
             /** Name */
@@ -47799,6 +47834,42 @@ export interface operations {
             };
         };
     };
+    preview_attachment_petitions__case_id__attachments__attachment_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 圖片與 PDF 原檔，或由 Office 文件轉換的 PDF。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "image/gif": string;
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_case_confidential_petitions__case_id__confidential_post: {
         parameters: {
             query?: never;
@@ -56861,19 +56932,3 @@ export interface operations {
         };
     };
 }
-            /** Max Quantity Per User */
-            max_quantity_per_user?: number | null;
-            /**
-             * Max Quantity Per User
-             * @description 每位使用者累計購買上限；留空表示不限購
-             */
-            max_quantity_per_user?: number | null;
-            /** Max Quantity Per User */
-            max_quantity_per_user?: number | null;
-            /** Remaining Quantity For User */
-            remaining_quantity_for_user?: number | null;
-            /**
-             * Max Quantity Per User
-             * @description 每位使用者累計購買上限；設為 null 表示不限購
-             */
-            max_quantity_per_user?: number | null;

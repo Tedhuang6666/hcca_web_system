@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -112,7 +113,9 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
     elif etype == "announcement.published":
         await _handle_announcement_published(db, payload)
     elif etype == "petition.external_notify":
-        _handle_petition_external_notify(payload)
+        await _handle_petition_external_notify(db, payload)
+    elif etype == "notification.email_with_attachments":
+        await _handle_notification_email_with_attachments(db, payload)
     else:
         logger.warning("Unknown outbox event_type: %s", etype)
 
@@ -218,7 +221,60 @@ async def _handle_announcement_published(db: AsyncSession, payload: dict) -> Non
                 logger.warning("announcement.published email failed user=%s: %s", user.id, exc)
 
 
-def _handle_petition_external_notify(payload: dict) -> None:
+async def _petition_email_attachments(
+    db: AsyncSession, payload: dict[str, Any]
+) -> list[dict[str, str]]:
+    """只讀取指定案件中已公開的附件，並轉為郵件服務接受的格式。"""
+    attachment_ids = payload.get("attachment_ids")
+    if not isinstance(attachment_ids, list) or not attachment_ids:
+        return []
+    try:
+        case_id = uuid.UUID(str(payload.get("related_id")))
+        parsed_ids = [uuid.UUID(str(item)) for item in attachment_ids]
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError("陳情通知附件識別碼無效") from exc
+    if len(set(parsed_ids)) != len(parsed_ids):
+        raise ValueError("陳情通知附件識別碼重複")
+
+    from api.models.petition import PetitionAttachment, PetitionAttachmentVisibility
+    from api.services.storage import get_storage
+
+    rows = (
+        (
+            await db.execute(
+                select(PetitionAttachment).where(
+                    PetitionAttachment.case_id == case_id,
+                    PetitionAttachment.id.in_(parsed_ids),
+                    PetitionAttachment.visibility == PetitionAttachmentVisibility.PUBLIC,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_id = {attachment.id: attachment for attachment in rows}
+    if len(by_id) != len(parsed_ids):
+        raise ValueError("陳情通知附件不存在或尚未公開")
+
+    storage = get_storage()
+    email_attachments: list[dict[str, str]] = []
+    total_size = 0
+    for attachment_id in parsed_ids:
+        attachment = by_id[attachment_id]
+        content = await storage.read_bytes(attachment.storage_key)
+        total_size += len(content)
+        if total_size > 20 * 1024 * 1024:
+            raise ValueError("陳情通知附件總大小超過 20 MB")
+        email_attachments.append(
+            {
+                "filename": attachment.display_name or attachment.filename,
+                "content": base64.b64encode(content).decode("ascii"),
+            }
+        )
+    return email_attachments
+
+
+async def _handle_petition_external_notify(db: AsyncSession, payload: dict) -> None:
     """陳情案件回覆/狀態更新後，發送 email 至外部聯絡信箱（無帳號提交者）。"""
     from api.services.mail import enqueue_email
 
@@ -231,9 +287,62 @@ def _handle_petition_external_notify(payload: dict) -> None:
     subject = f"您的陳情案件有新進展：{title}"
     html = f"<p>親愛的 {contact_name or '陳情人'}，您的陳情案件有新進展：{body}</p>"
     try:
-        enqueue_email(contact_email, subject, html)
+        attachments = await _petition_email_attachments(db, payload)
+        enqueue_email(contact_email, subject, html, attachments=attachments or None)
     except Exception as exc:
         logger.warning("petition.external_notify email failed: %s", exc)
+        raise
+
+
+async def _handle_notification_email_with_attachments(
+    db: AsyncSession, payload: dict[str, Any]
+) -> None:
+    """寄出含回覆附件的品牌通知信，並沿用使用者退訂資訊。"""
+    from api.core.config import settings
+    from api.email.renderer import make_unsubscribe_token
+    from api.email.sender import send_branded_email
+    from api.models.user import User
+    from api.services.notification_pref import TYPE_LABELS, normalize_preferences
+
+    try:
+        user_id = uuid.UUID(str(payload.get("user_id")))
+    except (TypeError, ValueError, AttributeError):
+        logger.warning("通知附件 Email 缺少有效 user_id")
+        return
+    user = await db.get(User, user_id)
+    if user is None or not user.is_active or not user.email:
+        return
+
+    notification_type = str(payload.get("type") or "")
+    preferences = normalize_preferences(user.notification_preferences or {})
+    if not preferences.get(notification_type, {}).get("email", False):
+        return
+
+    title = str(payload.get("title") or "陳情案件更新")
+    body = str(payload.get("body") or "")
+    link = payload.get("link")
+    base = settings.FRONTEND_BASE_URL.rstrip("/")
+    attachments = await _petition_email_attachments(db, payload)
+    send_branded_email(
+        to=[str(user.email)],
+        subject=f"【{TYPE_LABELS.get(notification_type, '通知')}】{title}",
+        template="notification",
+        context={
+            "heading": title,
+            "body_text": body,
+            "preview_text": (body or title)[:80],
+            "cta_url": f"{base}{link}" if link else "",
+            "cta_label": "前往查看",
+            "unsubscribe_url": (
+                f"{base}/unsubscribe?token={make_unsubscribe_token(user.id, notification_type)}"
+            ),
+        },
+        attachments=attachments or None,
+        recipient_metadata=[
+            {"user_id": str(user.id), "email": str(user.email), "name": user.display_name}
+        ],
+        source="notification",
+    )
 
 
 async def process_pending_outbox() -> None:

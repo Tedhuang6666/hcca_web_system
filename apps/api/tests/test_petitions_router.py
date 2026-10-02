@@ -54,7 +54,9 @@ async def _make_org_and_type(db, *, name: str = "學生事務處") -> tuple[Org,
     org = Org(name=name)
     db.add(org)
     await db.flush()
-    petition_type = PetitionType(name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id)
+    petition_type = PetitionType(
+        name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id
+    )
     db.add(petition_type)
     await db.flush()
     return org, petition_type
@@ -64,9 +66,7 @@ async def _make_child_org_and_type(db, parent: Org) -> tuple[Org, PetitionType]:
     org = Org(name=f"下級機關-{uuid.uuid4().hex[:6]}", parent_id=parent.id)
     db.add(org)
     await db.flush()
-    petition_type = PetitionType(
-        name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id
-    )
+    petition_type = PetitionType(name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id)
     db.add(petition_type)
     await db.flush()
     return org, petition_type
@@ -989,11 +989,205 @@ async def test_public_petition_attachment_can_be_downloaded_by_submitter(
     assert uploaded.status_code == 201
     assert uploaded.json()["visibility"] == "public"
 
+    submitter_uploaded = await authed_client_factory(owner).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("使用者附件.pdf", b"%PDF-1.4 user", "application/pdf")},
+    )
+    assert submitter_uploaded.status_code == 201
+
+    handler_detail = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}")
+    assert handler_detail.status_code == 200
+    assert {item["id"] for item in handler_detail.json()["attachments"]} == {
+        uploaded.json()["id"],
+        submitter_uploaded.json()["id"],
+    }
+
     downloaded = await authed_client_factory(owner).get(
         f"/petitions/{case_obj.id}/attachments/{uploaded.json()['id']}/download"
     )
     assert downloaded.status_code == 200
     assert downloaded.content == b"%PDF-1.4 reply"
+
+    previewed = await authed_client_factory(owner).get(
+        f"/petitions/{case_obj.id}/attachments/{uploaded.json()['id']}/preview"
+    )
+    assert previewed.status_code == 200
+    assert previewed.headers["content-type"] == "application/pdf"
+    assert "inline" in previewed.headers["content-disposition"]
+    assert previewed.content == b"%PDF-1.4 reply"
+
+
+async def test_reply_promotes_handler_attachment_and_emails_external_submitter(
+    db_session, authed_client_factory, admin_user: User, tmp_path, monkeypatch
+) -> None:
+    import base64
+
+    from api.core import config as config_module
+    from api.services.outbox import _dispatch
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    created = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "外部收件人",
+            "contact_email": "reply@example.com",
+            "title": "回覆附件郵件測試",
+            "content": "陳情內容",
+        },
+    )
+    assert created.status_code == 201
+    case_id = created.json()["id"]
+    handler = await _bare_user(db_session)
+    second_handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    await _grant_org_permission(db_session, second_handler, org, "petition:handle")
+
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_id}/attachments",
+        files={"file": ("回覆附件.pdf", b"%PDF-1.4 attached", "application/pdf")},
+        data={"visibility": "internal"},
+    )
+    assert uploaded.status_code == 201
+
+    forbidden = await authed_client_factory(second_handler).post(
+        f"/petitions/{case_id}/reply",
+        json={"public_content": "回覆", "attachment_ids": [uploaded.json()["id"]]},
+    )
+    assert forbidden.status_code == 403
+
+    replied = await authed_client_factory(handler).post(
+        f"/petitions/{case_id}/reply",
+        json={
+            "public_content": "已處理",
+            "resolve": False,
+            "attachment_ids": [uploaded.json()["id"]],
+        },
+    )
+    assert replied.status_code == 200
+    assert replied.json()["status"] == "in_progress"
+    attachment = next(
+        item for item in replied.json()["attachments"] if item["id"] == uploaded.json()["id"]
+    )
+    assert attachment["visibility"] == "public"
+
+    event = await db_session.scalar(
+        select(OutboxEvent)
+        .where(OutboxEvent.event_type == "petition.external_notify")
+        .order_by(OutboxEvent.created_at.desc())
+    )
+    assert event is not None
+    assert event.payload["related_id"] == case_id
+    assert event.payload["attachment_ids"] == [uploaded.json()["id"]]
+
+    queued: dict[str, object] = {}
+
+    def fake_enqueue_email(*args: object, **kwargs: object) -> None:
+        queued["args"] = args
+        queued["kwargs"] = kwargs
+
+    monkeypatch.setattr("api.services.mail.enqueue_email", fake_enqueue_email)
+    await _dispatch(db_session, event)
+    assert queued["args"][:1] == ("reply@example.com",)
+    assert queued["kwargs"] == {
+        "attachments": [
+            {
+                "filename": "回覆附件.pdf",
+                "content": base64.b64encode(b"%PDF-1.4 attached").decode("ascii"),
+            }
+        ]
+    }
+
+
+async def test_office_attachment_preview_returns_converted_pdf(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from unittest.mock import AsyncMock
+    from urllib.parse import quote
+
+    from api.core import config as config_module
+    from api.services import petition_preview
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type)
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={
+            "file": (
+                "會議記錄.docx",
+                b"PK\x03\x04office-document",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert uploaded.status_code == 201
+    conversion = AsyncMock(return_value=b"%PDF-converted")
+    monkeypatch.setattr(petition_preview, "convert_office_attachment_to_pdf", conversion)
+
+    previewed = await authed_client_factory(handler).get(
+        f"/petitions/{case_obj.id}/attachments/{uploaded.json()['id']}/preview"
+    )
+
+    assert previewed.status_code == 200
+    assert previewed.headers["content-type"] == "application/pdf"
+    assert quote("會議記錄.pdf".encode()) in previewed.headers["content-disposition"]
+    assert previewed.content == b"%PDF-converted"
+    conversion.assert_awaited_once()
+
+
+async def test_account_reply_attachment_is_added_to_notification_email(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    import base64
+
+    from api.core import config as config_module
+    from api.services.outbox import _dispatch
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    owner.notification_preferences = {"petition_replied": {"inapp": True, "email": True}}
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("說明.pdf", b"%PDF-account", "application/pdf")},
+        data={"visibility": "internal"},
+    )
+    assert uploaded.status_code == 201
+    replied = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已完成處理", "attachment_ids": [uploaded.json()["id"]]},
+    )
+    assert replied.status_code == 200
+
+    event = await db_session.scalar(
+        select(OutboxEvent)
+        .where(OutboxEvent.event_type == "notification.email_with_attachments")
+        .order_by(OutboxEvent.created_at.desc())
+    )
+    assert event is not None
+    assert event.payload["user_id"] == str(owner.id)
+    assert event.payload["attachment_ids"] == [uploaded.json()["id"]]
+
+    captured: dict[str, object] = {}
+
+    def fake_send_branded_email(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr("api.email.sender.send_branded_email", fake_send_branded_email)
+    await _dispatch(db_session, event)
+
+    assert captured["to"] == [owner.email]
+    assert captured["attachments"] == [
+        {"filename": "說明.pdf", "content": base64.b64encode(b"%PDF-account").decode("ascii")}
+    ]
 
 
 async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(

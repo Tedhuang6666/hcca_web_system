@@ -207,7 +207,7 @@ export default function NewPetitionPage() {
         <input className="input w-full" placeholder="標題" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
         <textarea className="input w-full min-h-52" placeholder="請描述事實、期待處理方式與相關時間地點" value={content} onChange={(e) => setContent(e.target.value)} required />
         <AnimatedFileUpload
-          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
           multiple
           maxFiles={10}
           label="拖曳陳情附件到這裡"
