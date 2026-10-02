@@ -365,7 +365,7 @@ export default function BudgetWorkspace({
     const confirmed = await confirm({
       title: publishing ? "確認對外公開這份預算？" : "停止對外公開這份預算？",
       description: publishing
-        ? "公開後不需登入，任何取得網址的人都能查看已核准的預算明細與審核紀錄；報帳人、憑證與內部資料不會公開。"
+        ? "公開後不需登入，任何取得網址的人都能查看已核准的預算明細、支出項目與審核紀錄。支出會顯示日期、用途、品項、金額、預算項目、付款方式與狀態；報帳人、憑證及內部備註不會公開。請確認用途與品項文字不含個人資料。"
         : "停止後，公開網址將不再提供這份預算內容；內部預算與審核紀錄不受影響。",
       confirmLabel: publishing ? "確認公開" : "停止公開",
       danger: !publishing,

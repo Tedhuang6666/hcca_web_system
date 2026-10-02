@@ -477,6 +477,214 @@ async def test_council_review_draft_has_a_public_page_without_internal_data(
     assert "evidence" not in public_detail.json()["allocations"][0]
 
 
+async def test_public_finance_totals_and_expenses_only_show_published_budget_data(
+    db_session, member_user, make_user, client, authed_client_factory
+) -> None:
+    reviewer = await make_user(email="finance-public-reviewer@school.edu")
+    org = await _grant_many(
+        db_session,
+        [member_user, reviewer],
+        [
+            "finance:record",
+            "finance:view",
+            "finance:expense_claim",
+            "finance:review",
+            "finance:school_payment",
+            "finance:budget",
+            "finance:budget_review",
+        ],
+    )
+    ledger, period, fund, expense = await _make_ledger(db_session, org)
+    fund_account_id = await db_session.scalar(
+        select(FundAccount.id).where(FundAccount.chart_account_id == fund.id)
+    )
+    revenue = await db_session.scalar(
+        select(ChartAccount).where(
+            ChartAccount.ledger_id == ledger.id,
+            ChartAccount.code == "4101",
+        )
+    )
+    assert fund_account_id and revenue
+    creator = authed_client_factory(member_user)
+    reviewer_client = authed_client_factory(reviewer)
+
+    budget = await creator.post(
+        f"/finance/ledgers/{ledger.id}/budgets",
+        json={"period_id": str(period.id), "name": "公開活動預算"},
+    )
+    submission = await creator.post(
+        f"/finance/budgets/{budget.json()['id']}/submissions",
+        json={"kind": "initial", "title": "活動初始預算案"},
+    )
+    node = await creator.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/nodes",
+        json={"name": "活動印刷"},
+    )
+    allocation = await creator.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/allocations",
+        json={
+            "node_id": node.json()["id"],
+            "amount": 1000,
+            "proposing_org_id": str(org.id),
+        },
+    )
+    assert allocation.status_code == 201
+    assert (
+        await creator.post(f"/finance/budget-submissions/{submission.json()['id']}/submit")
+    ).status_code == 200
+    assert (
+        await reviewer_client.post(
+            f"/finance/budget-submissions/{submission.json()['id']}/review",
+            json={"status": "approved"},
+        )
+    ).status_code == 200
+
+    income = await creator.post(
+        f"/finance/ledgers/{ledger.id}/journals",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-18",
+            "description": "活動報名收入",
+            "lines": [
+                {"account_id": str(fund.id), "debit": 500},
+                {"account_id": str(revenue.id), "credit": 500},
+            ],
+        },
+    )
+    assert income.status_code == 201
+    assert (
+        await reviewer_client.post(f"/finance/journals/{income.json()['id']}/post")
+    ).status_code == 200
+
+    claim = await creator.post(
+        f"/finance/ledgers/{ledger.id}/expense-claims",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-19",
+            "fund_account_id": str(fund_account_id),
+            "expense_account_id": str(expense.id),
+            "description": "活動海報印刷",
+            "source_url": "https://private.example/source",
+            "note": "內部備註不公開",
+            "items": [
+                {
+                    "name": "海報印刷",
+                    "unit_price": 120,
+                    "quantity": 2,
+                    "budget_node_id": node.json()["id"],
+                    "evidence": [
+                        {
+                            "storage_key": f"finance/evidence/{ledger.id}/{'b' * 32}.pdf",
+                            "filename": "private-receipt.pdf",
+                            "content_type": "application/pdf",
+                            "file_size": 100,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    assert claim.status_code == 201
+    entry_id = claim.json()["id"]
+    assert (await reviewer_client.post(f"/finance/journals/{entry_id}/post")).status_code == 200
+    assert (
+        await reviewer_client.patch(f"/finance/journals/{entry_id}/budget", json={"included": True})
+    ).status_code == 200
+    assert (
+        await reviewer_client.post(f"/finance/journals/{entry_id}/school-payment")
+    ).status_code == 200
+    assert (await reviewer_client.post(f"/finance/journals/{entry_id}/complete")).status_code == 200
+
+    pending_claim = await creator.post(
+        f"/finance/ledgers/{ledger.id}/expense-claims",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-21",
+            "fund_account_id": str(fund_account_id),
+            "expense_account_id": str(expense.id),
+            "description": "活動文具支出",
+            "items": [
+                {
+                    "name": "活動文具",
+                    "unit_price": 100,
+                    "quantity": 1,
+                    "budget_node_id": node.json()["id"],
+                }
+            ],
+        },
+    )
+    assert pending_claim.status_code == 201
+    assert (
+        await reviewer_client.post(f"/finance/journals/{pending_claim.json()['id']}/post")
+    ).status_code == 200
+
+    advance_claim = await creator.post(
+        f"/finance/ledgers/{ledger.id}/expense-claims",
+        json={
+            "period_id": str(period.id),
+            "entry_date": "2026-07-20",
+            "fund_account_id": str(fund_account_id),
+            "expense_account_id": str(expense.id),
+            "description": "活動茶點代墊",
+            "payment_method": "advance",
+            "advanced_by_id": str(member_user.id),
+            "items": [
+                {
+                    "name": "活動茶點",
+                    "unit_price": 60,
+                    "quantity": 1,
+                    "budget_node_id": node.json()["id"],
+                }
+            ],
+        },
+    )
+    assert advance_claim.status_code == 201
+    assert (
+        await reviewer_client.post(f"/finance/journals/{advance_claim.json()['id']}/post")
+    ).status_code == 200
+
+    totals_path = f"/finance/public/budgets/{budget.json()['id']}/totals"
+    assert (await client.get(totals_path)).status_code == 404
+    assert (await client.get("/finance/public/expenses")).json() == []
+
+    published = await reviewer_client.patch(
+        f"/finance/budgets/{budget.json()['id']}/publication",
+        json={"is_public": True},
+    )
+    assert published.status_code == 200
+
+    totals = await client.get(totals_path)
+    assert totals.status_code == 200
+    assert totals.json() == {"income_total": 500, "expense_total": 400}
+    records = await client.get("/finance/public/expenses")
+    assert records.status_code == 200
+    record = next(item for item in records.json() if item["purpose"] == "活動海報印刷")
+    assert record == {
+        "id": record["id"],
+        "budget_id": budget.json()["id"],
+        "entry_date": "2026-07-19",
+        "purpose": "活動海報印刷",
+        "item_name": "海報印刷",
+        "amount": 240,
+        "budget_name": "公開活動預算",
+        "budget_item": "活動印刷",
+        "payment_method": "direct",
+        "status": "spent",
+    }
+    statuses = {item["purpose"]: item["status"] for item in records.json()}
+    assert statuses == {
+        "活動文具支出": "pending",
+        "活動茶點代墊": "awaiting_reimbursement",
+        "活動海報印刷": "spent",
+    }
+    for item in records.json():
+        assert "created_by_id" not in item
+        assert "advanced_by_id" not in item
+        assert "source_url" not in item
+        assert "evidence" not in item
+        assert "note" not in item
+
+
 async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
     db_session, member_user, make_user, authed_client_factory
 ) -> None:

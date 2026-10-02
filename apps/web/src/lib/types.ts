@@ -551,6 +551,8 @@ export type {
   PublicArticleViewCreate,
   PublicBudgetAllocationOut,
   PublicBudgetDetailOut,
+  PublicExpenseOut,
+  PublicFinanceTotalsOut,
   PublicBudgetSubmissionOut,
   PublicLinkCategoryCreate,
   PublicLinkCategoryOut,

@@ -411,6 +411,24 @@ class PublicBudgetListItem(BaseModel):
     review_title: str | None = None
 
 
+class PublicExpenseOut(BaseModel):
+    id: uuid.UUID
+    budget_id: uuid.UUID
+    entry_date: date
+    purpose: str
+    item_name: str
+    amount: int
+    budget_name: str
+    budget_item: str
+    payment_method: ExpensePaymentMethod
+    status: Literal["pending", "awaiting_reimbursement", "spent"]
+
+
+class PublicFinanceTotalsOut(BaseModel):
+    income_total: int
+    expense_total: int
+
+
 class PublicBudgetSubmissionOut(BaseModel):
     id: uuid.UUID
     kind: BudgetSubmissionKind

@@ -5679,6 +5679,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/public/budgets/{budget_id}/totals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Budget Period Totals */
+        get: operations["get_public_budget_period_totals_finance_public_budgets__budget_id__totals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/public/expenses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Public Expenses */
+        get: operations["list_public_expenses_finance_public_expenses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -24442,6 +24476,47 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** PublicExpenseOut */
+        PublicExpenseOut: {
+            /** Amount */
+            amount: number;
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /** Budget Item */
+            budget_item: string;
+            /** Budget Name */
+            budget_name: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Name */
+            item_name: string;
+            payment_method: components["schemas"]["ExpensePaymentMethod"];
+            /** Purpose */
+            purpose: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "awaiting_reimbursement" | "spent";
+        };
+        /** PublicFinanceTotalsOut */
+        PublicFinanceTotalsOut: {
+            /** Expense Total */
+            expense_total: number;
+            /** Income Total */
+            income_total: number;
+        };
         /** PublicLinkCategoryCreate */
         PublicLinkCategoryCreate: {
             /** Description */
@@ -42661,6 +42736,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicBudgetDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_budget_period_totals_finance_public_budgets__budget_id__totals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicFinanceTotalsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_public_expenses_finance_public_expenses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicExpenseOut"][];
                 };
             };
             /** @description Validation Error */

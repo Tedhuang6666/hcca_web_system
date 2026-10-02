@@ -9,10 +9,11 @@ from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import case, delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.finance import (
+    BudgetSubmissionKind,
     BudgetSubmissionStatus,
     ChartAccount,
     ExpenseClaimItem,
@@ -874,6 +875,118 @@ async def list_public_budgets(
         *((budget, period, None) for budget, period in approved),
         *((budget, period, submission) for budget, period, submission in council_review),
     ]
+
+
+async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
+    """公開預算所屬、已過帳報帳項目；不回傳承辦人、憑證或內部備註。"""
+    approved_initial = exists().where(
+        FinanceBudgetSubmission.budget_id == FinanceBudget.id,
+        FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
+        FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+    )
+    rows = (
+        await db.execute(
+            select(ExpenseClaimItem, JournalEntry, FinanceBudget, FinanceBudgetNode)
+            .join(JournalEntry, JournalEntry.id == ExpenseClaimItem.journal_entry_id)
+            .join(FinanceBudgetNode, FinanceBudgetNode.id == ExpenseClaimItem.budget_node_id)
+            .join(FinanceBudget, FinanceBudget.id == FinanceBudgetNode.budget_id)
+            .where(
+                JournalEntry.source_type == "expense_claim",
+                JournalEntry.status == JournalStatus.POSTED,
+                JournalEntry.claim_status.in_(
+                    [ExpenseClaimStatus.APPROVED, ExpenseClaimStatus.COMPLETED]
+                ),
+                FinanceBudget.is_public.is_(True),
+                FinanceBudget.ledger_id == JournalEntry.ledger_id,
+                approved_initial,
+            )
+            .order_by(JournalEntry.entry_date.desc(), JournalEntry.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+
+    public_expenses = []
+    for item, entry, budget, node in rows:
+        if entry.claim_status == ExpenseClaimStatus.COMPLETED:
+            public_status = "spent"
+        elif (
+            entry.payment_method == ExpensePaymentMethod.ADVANCE
+            and entry.payment_status != ExpensePaymentStatus.ADVANCE_REIMBURSED
+        ):
+            public_status = "awaiting_reimbursement"
+        else:
+            public_status = "pending"
+        public_expenses.append(
+            {
+                "id": item.id,
+                "budget_id": budget.id,
+                "entry_date": entry.entry_date,
+                "purpose": entry.description,
+                "item_name": item.name,
+                "amount": _claim_item_total(item.unit_price, item.tax_rate, item.quantity),
+                "budget_name": budget.name,
+                "budget_item": node.name,
+                "payment_method": entry.payment_method,
+                "status": public_status,
+            }
+        )
+    return public_expenses
+
+
+async def public_budget_period_totals(db: AsyncSession, budget_id: uuid.UUID) -> dict:
+    """Only expose ledger totals for the period of a published, approved budget."""
+    budget = await db.get(FinanceBudget, budget_id)
+    if not budget or not budget.is_public:
+        raise HTTPException(404, "公開預算不存在")
+    approved_initial = await db.scalar(
+        select(FinanceBudgetSubmission.id).where(
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not approved_initial:
+        raise HTTPException(404, "公開預算不存在")
+
+    income, expenses = (
+        await db.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ChartAccount.account_type == FinanceAccountType.REVENUE,
+                                JournalLine.credit - JournalLine.debit,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ChartAccount.account_type == FinanceAccountType.EXPENSE,
+                                JournalLine.debit - JournalLine.credit,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .select_from(JournalLine)
+            .join(ChartAccount, ChartAccount.id == JournalLine.account_id)
+            .join(JournalEntry, JournalEntry.id == JournalLine.entry_id)
+            .where(
+                JournalEntry.ledger_id == budget.ledger_id,
+                JournalEntry.period_id == budget.period_id,
+                JournalEntry.status == JournalStatus.POSTED,
+            )
+        )
+    ).one()
+    return {"income_total": int(income), "expense_total": int(expenses)}
 
 
 async def public_budget_detail(
