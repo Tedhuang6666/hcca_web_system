@@ -42,7 +42,7 @@
     "@opentelemetry/sdk-node": "^0.222.0",
     "@opentelemetry/sdk-trace-base": "^2.10.0",
     "@opentelemetry/semantic-conventions": "^1.37.0",
-    "@sentry/nextjs": "^10.75.0",
+    "@sentry/nextjs": "^11.1.0",
     "@simplewebauthn/browser": "^14.0.0",
     "@tiptap/extension-placeholder": "^3.31.3",
     "@tiptap/extension-underline": "^3.31.3",
