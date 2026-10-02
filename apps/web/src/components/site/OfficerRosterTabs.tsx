@@ -31,9 +31,9 @@ export default function OfficerRosterTabs({ tabs }: { tabs: OfficerRosterTab[] }
           <div>
             <div className="flex items-center gap-2 text-xs font-bold tracking-[0.12em] text-[var(--primary-text)]">
               <UsersRound size={15} aria-hidden />
-              <span>公開名冊</span>
+              <span>幹部名冊</span>
             </div>
-            <h2 id="officer-roster-heading" className="mt-2 text-2xl font-bold tracking-[-0.02em]">自治幹部</h2>
+            <h2 id="officer-roster-heading" className="mt-2 text-2xl font-bold tracking-[-0.02em]">班聯會幹部</h2>
           </div>
           <div className="flex items-baseline gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
             <strong className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{memberCount}</strong>

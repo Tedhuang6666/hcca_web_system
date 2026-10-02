@@ -181,13 +181,6 @@ export default function PublicOfficerDirectory({
     <div className="space-y-10">
       {showHeading && (
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold tracking-[0.12em] text-[var(--primary-text)]">
-              <UsersRound size={15} aria-hidden />
-              <span>組織名單</span>
-            </div>
-            <h2 className="mt-2 text-2xl font-bold">班聯會幹部</h2>
-          </div>
           {showFullPageLink && (
             <Link href="/officers" className="public-text-link inline-flex items-center gap-1.5">
               開啟完整幹部頁面
