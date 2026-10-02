@@ -949,7 +949,7 @@ async def add_attachment(
     uploaded_by: uuid.UUID | None,
 ) -> PetitionAttachment:
     attachment = PetitionAttachment(
-        case_id=case_obj.id,
+        case=case_obj,
         filename=filename,
         storage_key=storage_key,
         content_type=content_type,
