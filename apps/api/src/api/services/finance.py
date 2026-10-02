@@ -921,7 +921,7 @@ async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
                 "id": item.id,
                 "budget_id": budget.id,
                 "entry_date": entry.entry_date,
-                "purpose": entry.description,
+                "purpose": re.sub(r"^報帳｜|（\d+ 項）$", "", entry.description),
                 "item_name": item.name,
                 "amount": _claim_item_total(item.unit_price, item.tax_rate, item.quantity),
                 "budget_name": budget.name,
