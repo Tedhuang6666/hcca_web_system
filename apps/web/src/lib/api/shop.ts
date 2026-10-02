@@ -140,6 +140,7 @@ export const shopApi = {
     patch<ProductOut>(`/shop/products/${id}`, body),
   activateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/activate`, {}),
   deactivateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/deactivate`, {}),
+  deleteProduct: (id: string) => del<void>(`/shop/products/${id}`),
 
   // 變體管理
   addVariantGroup: (productId: string, body: Record<string, unknown>) =>

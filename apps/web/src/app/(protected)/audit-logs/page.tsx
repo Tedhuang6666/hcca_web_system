@@ -113,6 +113,7 @@ const ACTION_LABELS: Record<string, string> = {
   "announcement.media_delete": "刪除公告媒體",
   "shop.product_create": "建立商品",
   "shop.product_update": "更新商品",
+  "shop.product_delete": "刪除商品",
   "shop.product_activate": "上架商品",
   "shop.product_deactivate": "下架商品",
   "shop.order_create": "建立商品訂單",

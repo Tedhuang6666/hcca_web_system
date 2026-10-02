@@ -569,6 +569,31 @@ async def deactivate_product(
     return product
 
 
+@router.delete(
+    "/products/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除商品",
+)
+async def delete_product(product_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> None:
+    product = await _get_product_or_404(product_id, session)
+    product_name = product.name
+    await _require_shop_manager(session, current_user, _product_activity(product))
+    try:
+        await shop_svc.delete_product(session, product)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await audit_svc.record(
+        session,
+        entity_type="product",
+        entity_id=str(product.id),
+        action="shop.product_delete",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"name": product_name},
+        summary=f"刪除商品「{product_name}」",
+    )
+
+
 # ── 變體群組 / 選項 ───────────────────────────────────────────────────────────
 
 

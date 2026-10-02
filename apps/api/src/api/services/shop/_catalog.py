@@ -12,6 +12,7 @@ from sqlalchemy.orm import load_only, selectinload
 from api.core.clock import now_local
 from api.models.shop import (
     Order,
+    OrderItem,
     Product,
     ProductCategory,
     ProductMedia,
@@ -347,6 +348,16 @@ async def deactivate_product(session: AsyncSession, product: Product) -> Product
     product.status = ProductStatus.CANCELLED
     await session.flush()
     return product
+
+
+async def delete_product(session: AsyncSession, product: Product) -> None:
+    has_order_history = await session.scalar(
+        select(OrderItem.id).where(OrderItem.product_id == product.id).limit(1)
+    )
+    if has_order_history is not None:
+        raise ValueError("商品已有訂單紀錄，為保留購買歷史無法刪除")
+    await session.delete(product)
+    await session.flush()
 
 
 async def get_variant_group(
