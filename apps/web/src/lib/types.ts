@@ -704,6 +704,7 @@ export type {
   ShopOrderCloseOut,
   ShopPromotionCreate,
   ShopPromotionOut,
+  ShopPromotionPreviewOut,
   ShopPromotionUpdate,
   StatusOut,
   StructureContentRequest,

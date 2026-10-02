@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
-import type { CartOut, CartItemOut } from "@/lib/types";
+import type { CartOut, CartItemOut, ShopPromotionPreviewOut } from "@/lib/types";
 import {
   clearGuestCart,
   getGuestCart,
@@ -73,7 +73,9 @@ function CartVariantRow({
           NT${item.subtotal.toLocaleString()}
         </p>
         <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-          單價 {item.unit_price.toLocaleString()}
+          NT${item.unit_price.toLocaleString()} × {item.quantity}
+          <span className="sr-only">，</span>
+          <span className="ml-1">小計 NT${item.subtotal.toLocaleString()}</span>
         </p>
       </div>
     </div>
@@ -144,6 +146,11 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
   const [couponCode, setCouponCode] = useState("");
+  const [promotionPreview, setPromotionPreview] = useState<ShopPromotionPreviewOut | null>(null);
+  const [promotionPreviewSignature, setPromotionPreviewSignature] = useState<string | null>(null);
+  const [promotionPreviewError, setPromotionPreviewError] = useState<string | null>(null);
+  const [promotionPreviewLoading, setPromotionPreviewLoading] = useState(false);
+  const [requestedCouponCode, setRequestedCouponCode] = useState<string | null | undefined>(undefined);
   const [paymentMethod, setPaymentMethod] = useState("cash_on_pickup");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSchoolEmail, setIsSchoolEmail] = useState(false);
@@ -156,6 +163,9 @@ export default function CartPage() {
       const user = await authApi.me().catch(() => null);
       setIsLoggedIn(Boolean(user));
       setIsSchoolEmail(Boolean(user?.is_school_email));
+      setRequestedCouponCode(user ? null : undefined);
+      setPromotionPreview(null);
+      setPromotionPreviewSignature(null);
       if (user) {
         const guestItems = getGuestCart();
         for (const item of guestItems) {
@@ -206,7 +216,41 @@ export default function CartPage() {
     }
   }, []);
 
+  const cartSignature = (cart?.items ?? [])
+    .map((item) => `${item.id}:${item.product_id}:${item.quantity}:${item.unit_price}:${item.available}`)
+    .join("|");
+
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !cart || requestedCouponCode === undefined) {
+      setPromotionPreview(null);
+      setPromotionPreviewSignature(null);
+      setPromotionPreviewError(null);
+      setPromotionPreviewLoading(false);
+      return;
+    }
+    let active = true;
+    setPromotionPreviewLoading(true);
+    setPromotionPreviewError(null);
+    shopApi
+      .previewPromotion(requestedCouponCode === null ? undefined : { code: requestedCouponCode })
+      .then((preview) => {
+        if (!active) return;
+        setPromotionPreview(preview);
+        setPromotionPreviewSignature(cartSignature);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setPromotionPreview(null);
+        setPromotionPreviewSignature(null);
+        setPromotionPreviewError(apiErrorMessage(error, "無法檢查優惠碼，請稍後重試。"));
+      })
+      .finally(() => {
+        if (active) setPromotionPreviewLoading(false);
+      });
+    return () => { active = false; };
+  }, [cart, cartSignature, isLoggedIn, requestedCouponCode]);
 
   const changeQty = async (itemId: string, qty: number) => {
     const target = cart?.items.find((item) => item.id === itemId);
@@ -253,11 +297,21 @@ export default function CartPage() {
       router.push("/login?next=%2Fshop%2Fcart");
       return;
     }
+    const enteredCode = couponCode.trim();
+    if (enteredCode && (
+      requestedCouponCode !== enteredCode
+      || promotionPreviewSignature !== cartSignature
+      || promotionPreviewLoading
+      || !promotionPreview?.eligible
+    )) {
+      toast.error("請先檢查優惠碼；若不符合資格，請移除優惠碼後再送單。");
+      return;
+    }
     setSubmitting(true);
     try {
       const orders = await shopApi.checkout({
         notes: notes || undefined,
-        coupon_code: couponCode.trim() || undefined,
+        coupon_code: enteredCode || undefined,
         payment_method: isSchoolEmail ? undefined : paymentMethod,
       });
       toast.success(`送單成功，共 ${orders.length} 張訂單`);
@@ -289,6 +343,19 @@ export default function CartPage() {
     }, new Map<string, CartProductGroup>()).values()
   );
   const hasUnavailable = items.some((i) => !i.available);
+  const currentPreview = promotionPreviewSignature === cartSignature ? promotionPreview : null;
+  const displayedSubtotal = currentPreview?.subtotal_price ?? cart?.total_price ?? 0;
+  const displayedDiscount = currentPreview?.eligible ? currentPreview.discount_amount : 0;
+  const displayedTotal = currentPreview?.eligible
+    ? currentPreview.total_price
+    : cart?.total_price ?? 0;
+  const enteredCouponCode = couponCode.trim();
+  const couponBlocksCheckout = Boolean(enteredCouponCode) && (
+    requestedCouponCode !== enteredCouponCode
+    || promotionPreviewSignature !== cartSignature
+    || promotionPreviewLoading
+    || !promotionPreview?.eligible
+  );
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
@@ -336,14 +403,78 @@ export default function CartPage() {
                     <span className="mb-1.5 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
                       優惠碼（選填）
                     </span>
-                    <input
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      placeholder="輸入優惠碼"
-                      className="input w-full"
-                      autoCapitalize="characters"
-                    />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        value={couponCode}
+                        onChange={(e) => {
+                          const nextCode = e.target.value.toUpperCase();
+                          setCouponCode(nextCode);
+                          setPromotionPreview(null);
+                          setPromotionPreviewSignature(null);
+                          setPromotionPreviewError(null);
+                          setRequestedCouponCode(nextCode.trim() ? undefined : null);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            if (enteredCouponCode) setRequestedCouponCode(enteredCouponCode);
+                          }
+                        }}
+                        placeholder="輸入優惠碼"
+                        className="input w-full min-w-0 flex-1"
+                        autoCapitalize="characters"
+                        aria-describedby="coupon-help"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRequestedCouponCode(enteredCouponCode || null)}
+                        disabled={promotionPreviewLoading || !enteredCouponCode}
+                        className="btn btn-ghost min-h-11 sm:shrink-0"
+                        aria-busy={promotionPreviewLoading}>
+                        {promotionPreviewLoading ? "檢查中…" : "檢查優惠碼"}
+                      </button>
+                    </div>
+                    <span id="coupon-help" className="mt-1.5 block text-xs" style={{ color: "var(--text-muted)" }}>
+                      {enteredCouponCode
+                        ? "檢查後會顯示資格、可省金額與折後總額。"
+                        : "帳號符合自動優惠時，系統會在此顯示折扣。"}
+                    </span>
                   </label>
+                  {promotionPreviewError && (
+                    <p role="alert" className="text-sm" style={{ color: "var(--danger, #e11d48)" }}>
+                      {promotionPreviewError}
+                    </p>
+                  )}
+                  {currentPreview && currentPreview.reason_code !== "no_promotion" && (
+                    <div
+                      role={currentPreview.eligible ? "status" : "alert"}
+                      className="rounded-lg px-4 py-3 space-y-2"
+                      style={{
+                        border: `1px solid ${currentPreview.eligible ? "var(--success-border)" : "var(--danger-border, #fecaca)"}`,
+                        background: currentPreview.eligible ? "var(--success-dim)" : "var(--danger-dim, #fff1f2)",
+                        color: currentPreview.eligible ? "var(--success)" : "var(--danger, #be123c)",
+                      }}>
+                      <p className="font-semibold">
+                        {currentPreview.eligible ? "優惠已套用" : "目前無法使用此優惠"}
+                        {currentPreview.promotion_name ? `：${currentPreview.promotion_name}` : ""}
+                      </p>
+                      {currentPreview.reason && <p className="text-sm">{currentPreview.reason}</p>}
+                      <dl className="space-y-1 text-sm">
+                        <div className="flex justify-between gap-4">
+                          <dt>商品小計</dt>
+                          <dd>NT${currentPreview.subtotal_price.toLocaleString()}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <dt>優惠折抵</dt>
+                          <dd>− NT${currentPreview.discount_amount.toLocaleString()}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4 border-t pt-1 font-bold" style={{ borderColor: "currentColor" }}>
+                          <dt>折後總額</dt>
+                          <dd>NT${currentPreview.total_price.toLocaleString()}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
                   {isSchoolEmail ? (
                     <div className="rounded-lg px-3 py-2.5 text-xs" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border)", color: "var(--success)" }}>
                       校務信箱已確認身分，訂單會沿用校內收款流程，不需要選擇付款方式。
@@ -366,13 +497,23 @@ export default function CartPage() {
                 </div>
               )}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                可結算金額
-              </span>
-              <span className="text-xl font-bold" style={{ color: "var(--primary)" }}>
-                NT${(cart?.total_price ?? 0).toLocaleString()}
-              </span>
+            <div className="space-y-2 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: "var(--text-secondary)" }}>商品小計</span>
+                <span style={{ color: "var(--text-primary)" }}>NT${displayedSubtotal.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: "var(--text-secondary)" }}>優惠折抵</span>
+                <span style={{ color: displayedDiscount ? "var(--success)" : "var(--text-secondary)" }}>
+                  − NT${displayedDiscount.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2">
+                <span className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>應付總額</span>
+                <span className="text-xl font-bold" style={{ color: "var(--primary)" }}>
+                  NT${displayedTotal.toLocaleString()}
+                </span>
+              </div>
             </div>
             {hasUnavailable && (
               <p className="text-xs" style={{ color: "var(--danger, #e11d48)" }}>
@@ -390,7 +531,7 @@ export default function CartPage() {
             )}
             <button
               onClick={checkout}
-              disabled={submitting || (cart?.total_price ?? 0) === 0 || closedCategoryNames.length > 0}
+              disabled={submitting || (cart?.total_price ?? 0) === 0 || closedCategoryNames.length > 0 || couponBlocksCheckout}
               className="btn w-full"
               style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
               aria-busy={submitting}>

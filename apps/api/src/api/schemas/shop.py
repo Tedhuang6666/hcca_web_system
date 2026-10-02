@@ -377,6 +377,35 @@ class CheckoutRequest(BaseModel):
     payment_method: str | None = Field(None, max_length=30, description="付款方式")
 
 
+class ShopPromotionPreviewRequest(BaseModel):
+    code: str | None = Field(None, max_length=80, description="優惠碼；留空時檢查帳號自動優惠")
+
+
+class ShopPromotionPreviewOut(BaseModel):
+    eligible: bool
+    promotion_name: str | None = None
+    promotion_code: str | None = None
+    reason_code: Literal[
+        "applied",
+        "minimum_not_met",
+        "invalid_code",
+        "not_started",
+        "expired",
+        "inactive",
+        "usage_limit",
+        "account_not_eligible",
+        "no_promotion",
+    ]
+    reason: str | None = None
+    subtotal_price: int
+    discount_amount: int
+    total_price: int
+    min_order_price: int | None = None
+    shortfall: int = 0
+    discount_type: ShopDiscountType | None = None
+    discount_value: int | None = None
+
+
 class OrderCancelRequest(BaseModel):
     reason: str | None = Field(None, max_length=500, description="取消原因")
 

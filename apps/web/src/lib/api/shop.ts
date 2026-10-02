@@ -1,5 +1,5 @@
 import type {
-  CartOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionUpdate,
+  CartOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
@@ -21,6 +21,8 @@ export const shopApi = {
 
   // 購物車
   getCart: () => get<CartOut>("/shop/cart"),
+  previewPromotion: (body?: { code?: string | null }) =>
+    post<ShopPromotionPreviewOut>("/shop/cart/promotion-preview", body ?? {}),
   addCartItem: (body: { product_id: string; quantity: number; option_ids: string[] }) =>
     post<CartOut>("/shop/cart/items", body),
   updateCartItem: (itemId: string, quantity: number) =>

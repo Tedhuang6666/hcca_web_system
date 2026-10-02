@@ -27,6 +27,16 @@ class PromotionResult:
     discount_amount: int
 
 
+@dataclass(frozen=True)
+class PromotionPreviewResult:
+    promotion: ShopPromotion | None
+    eligible: bool
+    discount_amount: int
+    reason_code: str
+    reason: str | None = None
+    shortfall: int = 0
+
+
 def normalize_promotion_code(code: str | None) -> str | None:
     normalized = code.strip().upper() if code else None
     return normalized or None
@@ -95,6 +105,136 @@ def _promotion_targets_user(user_id: uuid.UUID):
     return or_(
         ShopPromotion.target_user_id == user_id,
         ShopPromotion.target_users.any(User.id == user_id),
+    )
+
+
+def _promotion_allows_user(promotion: ShopPromotion, user_id: uuid.UUID) -> bool:
+    targets = list(promotion.target_users or [])
+    if promotion.target_user_id is None and not targets:
+        return True
+    return promotion.target_user_id == user_id or any(user.id == user_id for user in targets)
+
+
+def _promotion_issue(
+    promotion: ShopPromotion,
+    *,
+    user_id: uuid.UUID,
+    subtotal: int,
+    now: datetime,
+) -> tuple[str, str, int] | None:
+    if not promotion.is_active:
+        return "inactive", "此優惠目前未開放使用。", 0
+    if promotion.starts_at and promotion.starts_at > now:
+        start = promotion.starts_at.astimezone(UTC).strftime("%Y/%m/%d %H:%M")
+        return "not_started", f"此優惠將於 {start} 開始。", 0
+    if promotion.ends_at and promotion.ends_at < now:
+        return "expired", "此優惠已結束。", 0
+    if promotion.max_uses is not None and promotion.used_count >= promotion.max_uses:
+        return "usage_limit", "此優惠已達可使用次數上限。", 0
+    if not _promotion_allows_user(promotion, user_id):
+        return "account_not_eligible", "此優惠碼限符合資格的帳號使用，您的帳號目前不符合資格。", 0
+    if subtotal < promotion.min_order_price:
+        shortfall = promotion.min_order_price - subtotal
+        reason = (
+            f"目前商品小計 NT${subtotal:,}，還差 NT${shortfall:,}；"
+            f"消費滿 NT${promotion.min_order_price:,} 即可使用。"
+        )
+        return "minimum_not_met", reason, shortfall
+    return None
+
+
+async def preview_promotion(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    subtotal: int,
+    code: str | None = None,
+) -> PromotionPreviewResult:
+    now = datetime.now(UTC)
+    normalized_code = normalize_promotion_code(code)
+    load_targets = selectinload(ShopPromotion.target_users)
+
+    if normalized_code:
+        promotion = await session.scalar(
+            select(ShopPromotion)
+            .options(load_targets)
+            .where(func.upper(ShopPromotion.code) == normalized_code)
+        )
+        if promotion is None:
+            return PromotionPreviewResult(
+                promotion=None,
+                eligible=False,
+                discount_amount=0,
+                reason_code="invalid_code",
+                reason="找不到此優惠碼，請確認輸入內容後再試。",
+            )
+        issue = _promotion_issue(promotion, user_id=user_id, subtotal=subtotal, now=now)
+        if issue:
+            reason_code, reason, shortfall = issue
+            return PromotionPreviewResult(
+                promotion=promotion,
+                eligible=False,
+                discount_amount=0,
+                reason_code=reason_code,
+                reason=reason,
+                shortfall=shortfall,
+            )
+        amount = _discount_amount(promotion, subtotal)
+        return PromotionPreviewResult(
+            promotion=promotion,
+            eligible=amount > 0,
+            discount_amount=amount,
+            reason_code="applied" if amount > 0 else "minimum_not_met",
+            reason=f"已套用「{promotion.name}」，共省下 NT${amount:,}。"
+            if amount
+            else "此優惠目前無法折抵。",
+        )
+
+    base_filters = (
+        ShopPromotion.is_active.is_(True),
+        or_(ShopPromotion.starts_at.is_(None), ShopPromotion.starts_at <= now),
+        or_(ShopPromotion.ends_at.is_(None), ShopPromotion.ends_at >= now),
+        or_(ShopPromotion.max_uses.is_(None), ShopPromotion.used_count < ShopPromotion.max_uses),
+        ShopPromotion.code.is_(None),
+        _promotion_targets_user(user_id),
+    )
+    promotions = list(
+        (await session.execute(select(ShopPromotion).options(load_targets).where(*base_filters)))
+        .scalars()
+        .all()
+    )
+    eligible = [promotion for promotion in promotions if _discount_amount(promotion, subtotal) > 0]
+    if eligible:
+        selected = max(eligible, key=lambda promotion: _discount_amount(promotion, subtotal))
+        amount = _discount_amount(selected, subtotal)
+        return PromotionPreviewResult(
+            promotion=selected,
+            eligible=True,
+            discount_amount=amount,
+            reason_code="applied",
+            reason=f"已自動套用「{selected.name}」，共省下 NT${amount:,}。",
+        )
+
+    below_minimum = [promotion for promotion in promotions if subtotal < promotion.min_order_price]
+    if below_minimum:
+        selected = min(below_minimum, key=lambda promotion: promotion.min_order_price - subtotal)
+        issue = _promotion_issue(selected, user_id=user_id, subtotal=subtotal, now=now)
+        if issue:
+            reason_code, reason, shortfall = issue
+            return PromotionPreviewResult(
+                promotion=selected,
+                eligible=False,
+                discount_amount=0,
+                reason_code=reason_code,
+                reason=reason,
+                shortfall=shortfall,
+            )
+
+    return PromotionPreviewResult(
+        promotion=None,
+        eligible=False,
+        discount_amount=0,
+        reason_code="no_promotion",
     )
 
 
@@ -219,6 +359,7 @@ async def resolve_promotion(
     if normalized_code:
         promotion = await session.scalar(
             select(ShopPromotion)
+            .options(selectinload(ShopPromotion.target_users))
             .where(
                 *base_filters,
                 func.upper(ShopPromotion.code) == normalized_code,
@@ -233,10 +374,30 @@ async def resolve_promotion(
             .with_for_update()
         )
         if promotion is None:
-            raise ValueError("優惠碼無效、已過期或不適用於此帳號")
+            promotion = await session.scalar(
+                select(ShopPromotion)
+                .options(selectinload(ShopPromotion.target_users))
+                .where(func.upper(ShopPromotion.code) == normalized_code)
+                .with_for_update()
+            )
+            if promotion is None:
+                raise ValueError("找不到此優惠碼，請確認輸入內容後再試")
+            issue = _promotion_issue(
+                promotion,
+                user_id=user_id,
+                subtotal=subtotal,
+                now=now,
+            )
+            if issue:
+                _, reason, _ = issue
+                raise ValueError(reason)
         amount = _discount_amount(promotion, subtotal)
         if amount <= 0:
-            raise ValueError("此優惠碼未達使用門檻")
+            shortfall = max(0, promotion.min_order_price - subtotal)
+            raise ValueError(
+                f"目前商品小計 NT${subtotal:,}，還差 NT${shortfall:,}；"
+                f"消費滿 NT${promotion.min_order_price:,} 即可使用此優惠碼"
+            )
         return PromotionResult(promotion=promotion, discount_amount=amount)
 
     promotions = (

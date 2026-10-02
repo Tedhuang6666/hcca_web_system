@@ -71,6 +71,7 @@ export default function OrderDetailPage() {
     (acc[a.zone_id] ||= []).push(a);
     return acc;
   }, {});
+  const subtotalPrice = order.subtotal_price || order.items.reduce((sum, item) => sum + item.subtotal, 0);
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
@@ -117,14 +118,48 @@ export default function OrderDetailPage() {
       </section>
 
       {/* 品項 */}
-      <div className="card p-4 space-y-2">
+      <div className="card p-4 space-y-3">
         <h2 className="text-sm font-semibold">訂購內容</h2>
         {order.items.map((it) => (
-          <div key={it.id} className="flex items-center justify-between text-sm py-1">
-            <span>{it.product_name ?? it.product_id.slice(0, 8)} × {it.quantity}</span>
-            <span style={{ color: "var(--text-muted)" }}>NT${it.subtotal.toLocaleString()}</span>
+          <div key={it.id} className="border-t py-3" style={{ borderColor: "var(--border)" }}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                  {it.product_name ?? it.product_id.slice(0, 8)}
+                </p>
+                {it.selected_options.length > 0 && (
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {it.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")}
+                  </p>
+                )}
+              </div>
+              <p className="shrink-0 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                NT${it.subtotal.toLocaleString()}
+              </p>
+            </div>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              NT${it.unit_price.toLocaleString()} × {it.quantity} 件
+            </p>
           </div>
         ))}
+        <dl className="space-y-2 border-t pt-3 text-sm" style={{ borderColor: "var(--border)" }}>
+          <div className="flex justify-between gap-4">
+            <dt style={{ color: "var(--text-secondary)" }}>商品小計</dt>
+            <dd>NT${subtotalPrice.toLocaleString()}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt style={{ color: "var(--text-secondary)" }}>
+              優惠折抵{order.promotion_code ? `（${order.promotion_code}）` : ""}
+            </dt>
+            <dd style={{ color: order.discount_amount ? "var(--success)" : "var(--text-primary)" }}>
+              − NT${order.discount_amount.toLocaleString()}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4 border-t pt-2 font-bold" style={{ borderColor: "var(--border)" }}>
+            <dt>應付總額</dt>
+            <dd>NT${order.total_price.toLocaleString()}</dd>
+          </div>
+        </dl>
       </div>
 
       {/* 劃位 */}
