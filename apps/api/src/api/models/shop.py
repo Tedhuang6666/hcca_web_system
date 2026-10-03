@@ -406,7 +406,10 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     )
     total_price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     promotion_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shop_promotions.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     promotion_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     payment_method: Mapped[str] = mapped_column(
@@ -540,7 +543,7 @@ shop_promotion_products = Table(
     Column(
         "product_id",
         UUID(as_uuid=True),
-        ForeignKey("products.id", ondelete="CASCADE"),
+        ForeignKey("products.id", ondelete="RESTRICT"),
         primary_key=True,
     ),
 )
