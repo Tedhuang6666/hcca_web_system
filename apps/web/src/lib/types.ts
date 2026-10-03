@@ -322,19 +322,6 @@ export type {
   LinkedEmailsOut,
   LoadShedBody,
   LoadSignalsView,
-  LoanAvailableItem,
-  LoanCheckoutCreate,
-  LoanDashboard,
-  LoanItemCreate,
-  LoanItemOut,
-  LoanItemUpdate,
-  LoanRecordOut,
-  LoanRecordStatus,
-  LoanRecordUpdate,
-  LoanUnitCreate,
-  LoanUnitOut,
-  LoanUnitStatus,
-  LoanUnitUpdate,
   MFABackupCodesOut,
   MFAConfirmIn,
   MFALoginVerifyIn,
@@ -688,8 +675,6 @@ export type {
   SeatsReplace,
   SecurityEventOut,
   SelectedOption,
-  ShopPromotionPreviewOut,
-  ShopPromotionPublicOut,
   SelfAnonymizeRequestOut,
   SelfExportRequestOut,
   SerialTemplateCreate,
@@ -703,6 +688,8 @@ export type {
   ShopOrderCloseOut,
   ShopPromotionCreate,
   ShopPromotionOut,
+  ShopPromotionPreviewOut,
+  ShopPromotionPublicOut,
   ShopPromotionUpdate,
   StatusOut,
   StructureContentRequest,
@@ -1153,6 +1140,7 @@ export interface DashboardCompositeResponse {
 // ── 管理員 ────────────────────────────────────────────────────────────────────
 
 export interface PermissionCodeInfo {
+  category: string;
   group: string;
   code: string;
   label: string;

@@ -6187,179 +6187,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/loans/checkout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Checkout */
-        post: operations["checkout_loans_checkout_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loans/dashboard": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Dashboard */
-        get: operations["dashboard_loans_dashboard_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loans/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Items */
-        get: operations["list_items_loans_items_get"];
-        put?: never;
-        /** Create Item */
-        post: operations["create_item_loans_items_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loans/items/available": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Available Items */
-        get: operations["available_items_loans_items_available_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loans/items/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Item */
-        delete: operations["delete_item_loans_items__item_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Item */
-        patch: operations["update_item_loans_items__item_id__patch"];
-        trace?: never;
-    };
-    "/loans/items/{item_id}/units": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Units */
-        get: operations["list_units_loans_items__item_id__units_get"];
-        put?: never;
-        /** Add Units */
-        post: operations["add_units_loans_items__item_id__units_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loans/records": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Records */
-        get: operations["list_records_loans_records_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loans/records/{record_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Record */
-        patch: operations["update_record_loans_records__record_id__patch"];
-        trace?: never;
-    };
-    "/loans/records/{record_id}/return": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Return Item */
-        post: operations["return_item_loans_records__record_id__return_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/loans/units/{unit_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Unit */
-        patch: operations["update_unit_loans_units__unit_id__patch"];
-        trace?: never;
-    };
     "/merchandise-submissions/admin/items": {
         parameters: {
             query?: never;
@@ -10364,23 +10191,6 @@ export interface paths {
     };
     "/shop/orders/{order_id}": {
         parameters: {
-    "/shop/promotions/available": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出目前帳號可使用的優惠 */
-        get: operations["list_available_promotions_shop_promotions_available_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
             query?: never;
             header?: never;
             path?: never;
@@ -10432,40 +10242,6 @@ export interface paths {
         trace?: never;
     };
     "/shop/orders/{order_id}/payment": {
-    "/shop/registrations/current/promotion": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 套用目前商品登記的優惠 */
-        put: operations["apply_current_registration_promotion_shop_registrations_current_promotion_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/shop/registrations/current/promotion/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 預覽目前商品登記的優惠 */
-        post: operations["preview_current_registration_promotion_shop_registrations_current_promotion_preview_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
         parameters: {
             query?: never;
             header?: never;
@@ -10588,6 +10364,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/promotions/available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出目前帳號可使用的優惠 */
+        get: operations["list_available_promotions_shop_promotions_available_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/promotions/{promotion_id}": {
         parameters: {
             query?: never;
@@ -10633,6 +10426,40 @@ export interface paths {
         /** 立即更新商品登記 */
         put: operations["update_current_registration_product_shop_registrations_current_products__product_id__put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/registrations/current/promotion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 套用目前商品登記的優惠 */
+        put: operations["apply_current_registration_promotion_shop_registrations_current_promotion_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/registrations/current/promotion/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 預覽目前商品登記的優惠 */
+        post: operations["preview_current_registration_promotion_shop_registrations_current_promotion_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -19380,233 +19207,6 @@ export interface components {
             /** Window Seconds */
             window_seconds: number;
         };
-        /** LoanAvailableItem */
-        LoanAvailableItem: {
-            /** Available Count */
-            available_count: number;
-            /** Default Due Days */
-            default_due_days: number;
-            /** Description */
-            description: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Image Url */
-            image_url: string | null;
-            /** Name */
-            name: string;
-            /** Total Count */
-            total_count: number;
-        };
-        /** LoanCheckoutCreate */
-        LoanCheckoutCreate: {
-            /** Borrower Contact */
-            borrower_contact?: string | null;
-            /** Borrower Email */
-            borrower_email?: string | null;
-            /** Borrower Name */
-            borrower_name: string;
-            /** Borrower Student Id */
-            borrower_student_id?: string | null;
-            /**
-             * Due At
-             * Format: date-time
-             */
-            due_at: string;
-            /** Notes */
-            notes?: string | null;
-            /**
-             * Unit Id
-             * Format: uuid
-             */
-            unit_id: string;
-        };
-        /** LoanDashboard */
-        LoanDashboard: {
-            /** Active Count */
-            active_count: number;
-            /** Available Units */
-            available_units: number;
-            /** Overdue Count */
-            overdue_count: number;
-            /** Returned Today */
-            returned_today: number;
-            /** Total Items */
-            total_items: number;
-        };
-        /** LoanItemCreate */
-        LoanItemCreate: {
-            /**
-             * Default Due Days
-             * @default 7
-             */
-            default_due_days: number;
-            /** Description */
-            description?: string | null;
-            /** Image Url */
-            image_url?: string | null;
-            /** Name */
-            name: string;
-            /** Org Id */
-            org_id?: string | null;
-        };
-        /** LoanItemOut */
-        LoanItemOut: {
-            /**
-             * Available Count
-             * @default 0
-             */
-            available_count: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Default Due Days */
-            default_due_days: number;
-            /** Description */
-            description: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Image Url */
-            image_url: string | null;
-            /** Is Active */
-            is_active: boolean;
-            /** Name */
-            name: string;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
-            /**
-             * Total Count
-             * @default 0
-             */
-            total_count: number;
-        };
-        /** LoanItemUpdate */
-        LoanItemUpdate: {
-            /** Default Due Days */
-            default_due_days?: number | null;
-            /** Description */
-            description?: string | null;
-            /** Image Url */
-            image_url?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
-            /** Name */
-            name?: string | null;
-        };
-        /** LoanRecordOut */
-        LoanRecordOut: {
-            /**
-             * Borrowed At
-             * Format: date-time
-             */
-            borrowed_at: string;
-            /** Borrower Contact */
-            borrower_contact: string | null;
-            /** Borrower Email */
-            borrower_email: string | null;
-            /** Borrower Name */
-            borrower_name: string;
-            /** Borrower Student Id */
-            borrower_student_id: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Due At
-             * Format: date-time
-             */
-            due_at: string;
-            /** Handled By Name */
-            handled_by_name?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Item Name
-             * @default
-             */
-            item_name: string;
-            /** Notes */
-            notes: string | null;
-            /** Reminder Sent Count */
-            reminder_sent_count: number;
-            /** Returned At */
-            returned_at: string | null;
-            status: components["schemas"]["LoanRecordStatus"];
-            /**
-             * Unit Code
-             * @default
-             */
-            unit_code: string;
-            /**
-             * Unit Id
-             * Format: uuid
-             */
-            unit_id: string;
-        };
-        /**
-         * LoanRecordStatus
-         * @enum {string}
-         */
-        LoanRecordStatus: "active" | "returned" | "overdue" | "lost";
-        /** LoanRecordUpdate */
-        LoanRecordUpdate: {
-            /** Due At */
-            due_at?: string | null;
-            /** Notes */
-            notes?: string | null;
-            status?: components["schemas"]["LoanRecordStatus"] | null;
-        };
-        /** LoanUnitCreate */
-        LoanUnitCreate: {
-            /** Unit Codes */
-            unit_codes: string[];
-        };
-        /** LoanUnitOut */
-        LoanUnitOut: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Notes */
-            notes: string | null;
-            status: components["schemas"]["LoanUnitStatus"];
-            /** Unit Code */
-            unit_code: string;
-        };
-        /**
-         * LoanUnitStatus
-         * @enum {string}
-         */
-        LoanUnitStatus: "available" | "borrowed" | "lost" | "damaged" | "retired";
-        /** LoanUnitUpdate */
-        LoanUnitUpdate: {
-            /** Notes */
-            notes?: string | null;
-            status?: components["schemas"]["LoanUnitStatus"] | null;
-            /** Unit Code */
-            unit_code?: string | null;
-        };
         /** MFABackupCodesOut */
         MFABackupCodesOut: {
             /** Backup Codes */
@@ -20510,8 +20110,6 @@ export interface components {
             /** Match Any Prefixes */
             match_any_prefixes?: string[];
             /** Mobile Order */
-            /** Promotion Id */
-            promotion_id?: string | null;
             mobile_order?: string[];
             /** Position Ids */
             position_ids?: string[];
@@ -20912,6 +20510,8 @@ export interface components {
             payment_method: string;
             /** Promotion Code */
             promotion_code?: string | null;
+            /** Promotion Id */
+            promotion_id?: string | null;
             /** Serial Number */
             serial_number: string;
             status: components["schemas"]["OrderStatus"];
@@ -22314,6 +21914,8 @@ export interface components {
         };
         /** PermissionCatalogItem */
         PermissionCatalogItem: {
+            /** Category */
+            category: string;
             /** Code */
             code: string;
             /** Desc */
@@ -27757,11 +27359,6 @@ export interface components {
              */
             id: string;
             /** Label */
-            /**
-             * Min Quantity
-             * @default 1
-             */
-            min_quantity: number;
             label: string;
             /** Price Delta */
             price_delta: number;
@@ -27776,11 +27373,6 @@ export interface components {
             y: number;
             /**
              * Zone Id
-            /**
-             * Target Product Ids
-             * @description 需同時登記的商品組合；折扣僅套用在這些商品
-             */
-            target_product_ids?: string[];
              * Format: uuid
              */
             zone_id: string;
@@ -27809,16 +27401,12 @@ export interface components {
              * Id
              * Format: uuid
              */
-            /** Min Quantity */
-            min_quantity: number;
             id: string;
             /** Label */
             label: string;
             /** Price Delta */
             price_delta: number;
             /** Row Label */
-            /** Target Products */
-            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
             row_label?: string | null;
             /** Seat Type */
             seat_type: string;
@@ -27831,92 +27419,6 @@ export interface components {
         };
         /**
          * SeatStatus
-        /** ShopPromotionPreviewOut */
-        ShopPromotionPreviewOut: {
-            /** Discount Amount */
-            discount_amount: number;
-            discount_type?: components["schemas"]["ShopDiscountType"] | null;
-            /** Discount Value */
-            discount_value?: number | null;
-            /** Eligible */
-            eligible: boolean;
-            /** Min Order Price */
-            min_order_price?: number | null;
-            /** Min Quantity */
-            min_quantity?: number | null;
-            /** Promotion Code */
-            promotion_code?: string | null;
-            /** Promotion Name */
-            promotion_name?: string | null;
-            /**
-             * Quantity Shortfall
-             * @default 0
-             */
-            quantity_shortfall: number;
-            /** Reason */
-            reason?: string | null;
-            /**
-             * Reason Code
-             * @enum {string}
-             */
-            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "items_not_matched" | "quantity_not_met" | "no_promotion";
-            /**
-             * Shortfall
-             * @default 0
-             */
-            shortfall: number;
-            /** Subtotal Price */
-            subtotal_price: number;
-            /** Target Products */
-            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
-            /** Total Price */
-            total_price: number;
-        };
-        /** ShopPromotionPreviewRequest */
-        ShopPromotionPreviewRequest: {
-            /**
-             * Code
-             * @description 優惠碼；留空時檢查帳號自動優惠
-             */
-            code?: string | null;
-        };
-        /** ShopPromotionProductTargetOut */
-        ShopPromotionProductTargetOut: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-        };
-        /** ShopPromotionPublicOut */
-        ShopPromotionPublicOut: {
-            /** Code */
-            code?: string | null;
-            /** Description */
-            description?: string | null;
-            discount_type: components["schemas"]["ShopDiscountType"];
-            /** Discount Value */
-            discount_value: number;
-            /** Ends At */
-            ends_at?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Min Order Price */
-            min_order_price: number;
-            /** Min Quantity */
-            min_quantity: number;
-            /** Name */
-            name: string;
-            /** Starts At */
-            starts_at?: string | null;
-            /** Target Products */
-            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
-        };
          * @enum {string}
          */
         SeatStatus: "available" | "disabled" | "blocked";
@@ -27941,8 +27443,6 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Min Quantity */
-            min_quantity?: number | null;
             /**
              * Id
              * Format: uuid
@@ -27951,8 +27451,6 @@ export interface components {
             /** Summary */
             summary: string | null;
         };
-            /** Target Product Ids */
-            target_product_ids?: string[] | null;
         /** SelectedOption */
         SelectedOption: {
             /**
@@ -28272,7 +27770,7 @@ export interface components {
         ShopPromotionCreate: {
             /**
              * Code
-             * @description 優惠碼；留空則指定帳號自動套用
+             * @description 優惠碼；留空時符合條件即自動套用
              */
             code?: string | null;
             /** Description */
@@ -28289,6 +27787,11 @@ export interface components {
              * @default 0
              */
             min_order_price: number;
+            /**
+             * Min Quantity
+             * @default 1
+             */
+            min_quantity: number;
             /** Name */
             name: string;
             /** Starts At */
@@ -28303,6 +27806,11 @@ export interface components {
              * @description 可使用優惠的帳號 Email 或學號
              */
             target_identifiers?: string[];
+            /**
+             * Target Product Ids
+             * @description 需同時登記的商品組合；折扣僅套用在這些商品
+             */
+            target_product_ids?: string[];
         };
         /** ShopPromotionOut */
         ShopPromotionOut: {
@@ -28331,12 +27839,16 @@ export interface components {
             max_uses?: number | null;
             /** Min Order Price */
             min_order_price: number;
+            /** Min Quantity */
+            min_quantity: number;
             /** Name */
             name: string;
             /** Starts At */
             starts_at?: string | null;
             /** Target Email */
             target_email?: string | null;
+            /** Target Products */
+            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
             /** Target User Id */
             target_user_id?: string | null;
             /** Target Users */
@@ -28348,6 +27860,92 @@ export interface components {
             updated_at: string;
             /** Used Count */
             used_count: number;
+        };
+        /** ShopPromotionPreviewOut */
+        ShopPromotionPreviewOut: {
+            /** Discount Amount */
+            discount_amount: number;
+            discount_type?: components["schemas"]["ShopDiscountType"] | null;
+            /** Discount Value */
+            discount_value?: number | null;
+            /** Eligible */
+            eligible: boolean;
+            /** Min Order Price */
+            min_order_price?: number | null;
+            /** Min Quantity */
+            min_quantity?: number | null;
+            /** Promotion Code */
+            promotion_code?: string | null;
+            /** Promotion Name */
+            promotion_name?: string | null;
+            /**
+             * Quantity Shortfall
+             * @default 0
+             */
+            quantity_shortfall: number;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Reason Code
+             * @enum {string}
+             */
+            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "items_not_matched" | "quantity_not_met" | "no_promotion";
+            /**
+             * Shortfall
+             * @default 0
+             */
+            shortfall: number;
+            /** Subtotal Price */
+            subtotal_price: number;
+            /** Target Products */
+            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
+            /** Total Price */
+            total_price: number;
+        };
+        /** ShopPromotionPreviewRequest */
+        ShopPromotionPreviewRequest: {
+            /**
+             * Code
+             * @description 優惠碼；留空時檢查帳號自動優惠
+             */
+            code?: string | null;
+        };
+        /** ShopPromotionProductTargetOut */
+        ShopPromotionProductTargetOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** ShopPromotionPublicOut */
+        ShopPromotionPublicOut: {
+            /** Code */
+            code?: string | null;
+            /** Description */
+            description?: string | null;
+            discount_type: components["schemas"]["ShopDiscountType"];
+            /** Discount Value */
+            discount_value: number;
+            /** Ends At */
+            ends_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Min Order Price */
+            min_order_price: number;
+            /** Min Quantity */
+            min_quantity: number;
+            /** Name */
+            name: string;
+            /** Starts At */
+            starts_at?: string | null;
+            /** Target Products */
+            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
         };
         /** ShopPromotionTargetOut */
         ShopPromotionTargetOut: {
@@ -28373,6 +27971,8 @@ export interface components {
             max_uses?: number | null;
             /** Min Order Price */
             min_order_price?: number | null;
+            /** Min Quantity */
+            min_quantity?: number | null;
             /** Name */
             name?: string | null;
             /** Starts At */
@@ -28381,6 +27981,8 @@ export interface components {
             target_email?: string | null;
             /** Target Identifiers */
             target_identifiers?: string[] | null;
+            /** Target Product Ids */
+            target_product_ids?: string[] | null;
         };
         /** StatusOut */
         StatusOut: {
@@ -31017,11 +30619,13 @@ export interface operations {
     query_permission_codes_admin_permission_codes_query_get: {
         parameters: {
             query?: {
+                /** @description 上層分類精確篩選 */
+                category?: string | null;
                 /** @description 群組精確篩選 */
                 group?: string | null;
                 /** @description 模糊搜尋 code/label/desc */
                 keyword?: string | null;
-                sort_by?: "group" | "code" | "label";
+                sort_by?: "category" | "group" | "code" | "label";
                 order?: "asc" | "desc";
             };
             header?: never;
@@ -43778,397 +43382,6 @@ export interface operations {
             };
         };
     };
-    checkout_loans_checkout_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoanCheckoutCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanRecordOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dashboard_loans_dashboard_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanDashboard"];
-                };
-            };
-        };
-    };
-    list_items_loans_items_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanItemOut"][];
-                };
-            };
-        };
-    };
-    create_item_loans_items_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoanItemCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanItemOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    available_items_loans_items_available_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanAvailableItem"][];
-                };
-            };
-        };
-    };
-    delete_item_loans_items__item_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_item_loans_items__item_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoanItemUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanItemOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_units_loans_items__item_id__units_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanUnitOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_units_loans_items__item_id__units_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoanUnitCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanUnitOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_records_loans_records_get: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["LoanRecordStatus"] | null;
-                item_id?: string | null;
-                keyword?: string | null;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanRecordOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_record_loans_records__record_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoanRecordUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanRecordOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    return_item_loans_records__record_id__return_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                record_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanRecordOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_unit_loans_units__unit_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                unit_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoanUnitUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoanUnitOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     admin_items_merchandise_submissions_admin_items_get: {
         parameters: {
             query?: never;
@@ -53078,26 +52291,6 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_upload_image_shop_images_post"];
-    list_available_promotions_shop_promotions_available_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShopPromotionPublicOut"][];
-                };
-            };
-        };
-    };
             };
         };
         responses: {
@@ -53188,72 +52381,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-    apply_current_registration_promotion_shop_registrations_current_promotion_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    preview_current_registration_promotion_shop_registrations_current_promotion_preview_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShopPromotionPreviewOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -53951,6 +53078,26 @@ export interface operations {
             };
         };
     };
+    list_available_promotions_shop_promotions_available_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopPromotionPublicOut"][];
+                };
+            };
+        };
+    };
     update_promotion_shop_promotions__promotion_id__patch: {
         parameters: {
             query?: never;
@@ -54028,6 +53175,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_current_registration_promotion_shop_registrations_current_promotion_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_current_registration_promotion_shop_registrations_current_promotion_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopPromotionPreviewOut"];
                 };
             };
             /** @description Validation Error */

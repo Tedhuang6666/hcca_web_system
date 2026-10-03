@@ -20,4 +20,12 @@ describe("module registry", () => {
       "公開內容",
     ]);
   });
+
+  it("does not expose the removed loan module in frontend routes", () => {
+    const moduleRoutes = Object.values(MODULE_MANIFEST).flatMap((module) => module.routePrefixes);
+    const navigationRoutes = ROUTE_MANIFEST.flatMap((group) => group.routePrefixes);
+
+    expect(moduleRoutes).not.toContain("/loans");
+    expect(navigationRoutes.some((route) => route.startsWith("/admin/loans"))).toBe(false);
+  });
 });

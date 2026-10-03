@@ -146,10 +146,6 @@ class PermissionCode(StrEnum):
 
     QR_CODE_MANAGE = "qr_code:manage"
 
-    LOAN_MANAGE = "loan:manage"
-    LOAN_CHECKOUT = "loan:checkout"
-    LOAN_VIEW_ALL = "loan:view_all"
-
     POLICY_ADMIN = "policy:admin"
     API_KEY_ADMIN = "api_key:admin"
     WEBHOOK_ADMIN = "webhook:admin"
@@ -865,25 +861,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "label": "管理公開網站",
         "desc": "管理官網首頁、公開頁面、平台連結與公開幹部顯示設定",
     },
-    # ── 平台治理 ──────────────────────────────────────────────────────
-    {
-        "group": "借用系統",
-        "code": PermissionCode.LOAN_MANAGE,
-        "label": "管理借用物品",
-        "desc": "建立/修改物品類型與個體、標記遺失/損壞",
-    },
-    {
-        "group": "借用系統",
-        "code": PermissionCode.LOAN_CHECKOUT,
-        "label": "執行借還操作",
-        "desc": "辦理物品借出與歸還、查看本組織借用紀錄",
-    },
-    {
-        "group": "借用系統",
-        "code": PermissionCode.LOAN_VIEW_ALL,
-        "label": "查看所有借用紀錄",
-        "desc": "跨組織查看所有借用紀錄（唯讀）",
-    },
     {
         "group": "企業級治理",
         "code": PermissionCode.POLICY_ADMIN,
@@ -915,6 +892,45 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "使用後台 QR Code 產生器，調整樣式並匯出圖片",
     },
 ]
+
+PERMISSION_CATEGORY_BY_GROUP: dict[str, str] = {
+    "系統管理": "系統與安全",
+    "企業級治理": "系統與安全",
+    "工具": "系統與安全",
+    "組織管理": "組織與人員",
+    "班級管理": "組織與人員",
+    "公文系統": "治理與法規",
+    "字號系統": "治理與法規",
+    "法規系統": "治理與法規",
+    "法規審議": "治理與法規",
+    "陳情系統": "治理與法規",
+    "議事系統": "治理與法規",
+    "評議委員會": "治理與法規",
+    "即時開票": "治理與法規",
+    "商品系統": "校園營運",
+    "校商投稿": "校園營運",
+    "財務系統": "校園營運",
+    "問卷系統": "校園營運",
+    "段考題庫": "校園營運",
+    "特約地圖": "校園營運",
+    "推薦商家": "校園營運",
+    "電子證件": "校園營運",
+    "數據分析": "校園營運",
+    "公告系統": "發布與溝通",
+    "公開網站": "發布與溝通",
+    "通知與郵件": "發布與溝通",
+}
+
+PERMISSION_CATEGORY_ORDER: tuple[str, ...] = (
+    "系統與安全",
+    "組織與人員",
+    "治理與法規",
+    "校園營運",
+    "發布與溝通",
+)
+
+for _permission in ALL_PERMISSION_CODES:
+    _permission["category"] = PERMISSION_CATEGORY_BY_GROUP[_permission["group"]]
 
 KNOWN_PERMISSION_CODES: frozenset[str] = frozenset(
     item["code"] for item in ALL_PERMISSION_CODES

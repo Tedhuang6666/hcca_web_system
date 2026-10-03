@@ -129,7 +129,6 @@ const ROBOTS_DISALLOW_PATHS = [
   "/documents/new",
   "/email/",
   "/finance/",
-  "/loans/",
   "/operations/",
   "/orgs/",
   "/receivables/",

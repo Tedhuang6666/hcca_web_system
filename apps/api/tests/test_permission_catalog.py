@@ -2,6 +2,8 @@
 
 from api.core.permission_codes import (
     ALL_PERMISSION_CODES,
+    PERMISSION_CATEGORY_BY_GROUP,
+    PERMISSION_CATEGORY_ORDER,
     PermissionCode,
     validate_permission_codes,
 )
@@ -31,3 +33,15 @@ def test_specialized_modules_have_separate_permission_nodes() -> None:
         "partner_map:application_review",
         "electronic_credential:manage",
     } <= codes
+
+
+def test_permission_catalog_groups_are_classified_and_loan_codes_are_removed() -> None:
+    catalog_groups = {item["group"] for item in ALL_PERMISSION_CODES}
+
+    assert catalog_groups == set(PERMISSION_CATEGORY_BY_GROUP)
+    assert {item["category"] for item in ALL_PERMISSION_CODES} == set(PERMISSION_CATEGORY_ORDER)
+    assert all(
+        item["category"] == PERMISSION_CATEGORY_BY_GROUP[item["group"]]
+        for item in ALL_PERMISSION_CODES
+    )
+    assert not any(str(item["code"]).startswith("loan:") for item in ALL_PERMISSION_CODES)

@@ -86,6 +86,33 @@ async def test_admin_can_update_position_weight(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_filter_permission_catalog_by_category(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, _, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.get(
+        "/admin/permission-codes/query",
+        params={"category": "系統與安全", "sort_by": "category"},
+    )
+
+    assert response.status_code == 200, response.text
+    items = response.json()
+    assert items
+    assert all(item["category"] == "系統與安全" for item in items)
+    assert not any(item["code"].startswith("loan:") for item in items)
+
+
+@pytest.mark.asyncio
+async def test_loan_routes_are_no_longer_mounted(client: AsyncClient) -> None:
+    response = await client.get("/loans/items")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_admin_dashboard_stats_returns_counts(
     client: AsyncClient,
     db_session: AsyncSession,

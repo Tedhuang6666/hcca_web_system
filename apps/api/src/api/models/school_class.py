@@ -101,10 +101,6 @@ class ClassRoleKey(enum.StrEnum):
     CLASS_LEADER = "class_leader"
     CLASS_REPRESENTATIVE = "class_representative"
     VICE_LEADER = "vice_leader"
-    DISCIPLINE = "discipline"
-    LUNCH_MANAGER = "lunch_manager"
-    TREASURER = "treasurer"
-    GENERAL_AFFAIRS = "general_affairs"
 
 
 class ClassMembership(Base, TimestampMixin):

@@ -238,6 +238,7 @@ async def test_list_class_roles_includes_default_bindings(
     roles = response.json()
     role_keys = {row["role_key"] for row in roles}
     assert "class_leader" in role_keys
+    assert role_keys.isdisjoint({"lunch_manager", "treasurer", "discipline", "general_affairs"})
     representative = next(row for row in roles if row["role_key"] == "class_representative")
     assert "class:shop_collect" in representative["permission_codes"]
 
@@ -260,7 +261,7 @@ async def test_assign_class_role_returns_position(
     assert "position_id" in body
 
 
-async def test_assign_class_role_unknown_role_key_returns_422(
+async def test_assign_class_role_unknown_or_removed_role_key_returns_422(
     authed_client_factory: Callable[[User], AsyncClient],
     admin_user: User,
     make_user: Callable[..., User],
@@ -269,10 +270,17 @@ async def test_assign_class_role_unknown_role_key_returns_422(
     sc = await _make_class(db_session, admin_user)
     student = await make_user(email="unknown-role-candidate@school.edu")
     ac = authed_client_factory(admin_user)
-    response = await ac.post(
-        f"/classes/{sc.id}/roles/not_a_real_role/assign", json={"user_id": str(student.id)}
-    )
-    assert response.status_code == 422
+    for role_key in (
+        "not_a_real_role",
+        "lunch_manager",
+        "treasurer",
+        "discipline",
+        "general_affairs",
+    ):
+        response = await ac.post(
+            f"/classes/{sc.id}/roles/{role_key}/assign", json={"user_id": str(student.id)}
+        )
+        assert response.status_code == 422
 
 
 async def test_add_and_delete_range(

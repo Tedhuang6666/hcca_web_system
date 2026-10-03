@@ -147,13 +147,6 @@ from api.models.judicial_petition import (  # noqa: F401
     JudicialPetitionType,
 )
 from api.models.line_account import LineAccountLink  # noqa: F401
-from api.models.loan import (  # noqa: F401
-    LoanItemCategory,
-    LoanRecord,
-    LoanRecordStatus,
-    LoanUnit,
-    LoanUnitStatus,
-)
 from api.models.meal import (  # noqa: F401
     MealClassPickupCode,
     MealOrder,
