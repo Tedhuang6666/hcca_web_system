@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import { adminApi, apiErrorMessage } from "@/lib/api";
 import type { AccountMergeConflict, AdminUserDetail } from "@/lib/types";
+import { AccountLifecycleSection, AccountTenureSection } from "./AccountGovernanceSections";
 
 const NOTIFICATION_LABELS: Record<string, string> = {
   document_pending: "公文待審",
@@ -251,7 +252,6 @@ function AccountDetail({
 }) {
   const [displayName, setDisplayName] = useState(user.display_name);
   const [studentId, setStudentId] = useState(user.student_id ?? "");
-  const [isActive, setIsActive] = useState(user.is_active);
   const [isVerified, setIsVerified] = useState(user.is_verified);
   const [showEmail, setShowEmail] = useState(user.show_email);
   const [theme, setTheme] = useState<AdminUserDetail["ui_theme"]>(user.ui_theme);
@@ -270,7 +270,6 @@ function AccountDetail({
   useEffect(() => {
     setDisplayName(user.display_name);
     setStudentId(user.student_id ?? "");
-    setIsActive(user.is_active);
     setIsVerified(user.is_verified);
     setShowEmail(user.show_email);
     setTheme(user.ui_theme);
@@ -297,7 +296,6 @@ function AccountDetail({
       await adminApi.updateUser(user.id, {
         display_name: displayName.trim(),
         student_id: studentId.trim() || null,
-        is_active: isActive,
         is_verified: isVerified,
         show_email: showEmail,
         ui_theme: theme,
@@ -415,7 +413,10 @@ function AccountDetail({
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="space-y-4">
-          <Section title="基本資料與帳號狀態" description="可調整管理資料與登入狀態；主要登入 Email 僅供識別，請透過連結登入身分處理帳號歸戶。">
+          <AccountLifecycleSection user={user} onChanged={onChanged} />
+          <AccountTenureSection user={user} onChanged={onChanged} />
+
+          <Section title="基本資料與帳號設定" description="可調整管理資料與登入偏好；主要登入 Email 僅供識別，請透過連結登入身分處理帳號歸戶。">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>顯示姓名<TextInput className="mt-1" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>學號<TextInput className="mt-1" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="留白可清除" /></label>
@@ -423,7 +424,6 @@ function AccountDetail({
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>介面語言<SelectInput className="mt-1" value={user.ui_locale} disabled><option value="zh-TW">繁體中文</option></SelectInput></label>
             </div>
             <div className="mt-3 grid gap-1 rounded-lg" style={{ background: "var(--bg-elevated)" }}>
-              <ToggleRow label="帳號啟用" hint="停用後無法使用任何登入憑證。" checked={isActive} onChange={setIsActive} />
               <ToggleRow label="Email 已驗證" hint="調整外部帳號的信任狀態；請確認來源後再變更。" checked={isVerified} onChange={setIsVerified} />
               <ToggleRow label="允許對外顯示 Email" hint="影響公開人員資料與承辦人資訊的 Email 顯示。" checked={showEmail} onChange={setShowEmail} />
             </div>

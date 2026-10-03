@@ -33,6 +33,8 @@ export const usersApi = {
   revokeOtherSessions: () => post<{ revoked_count: number }>("/users/me/sessions/revoke-others"),
   revokeAllSessions: () => post<{ revoked_count: number }>("/users/me/sessions/revoke-all"),
   securityEvents: () => get<SecurityEventRead[]>("/users/me/security-events"),
+  positionsForAdmin: (userId: string) =>
+    get<import("@/lib/types").UserPositionRead[]>(`/user-positions?user_id=${encodeURIComponent(userId)}`),
   myPositions: (activeOnly = false) =>
     get<import("@/lib/types").UserPositionRead[]>(
       `/user-positions/me?active_only=${activeOnly}`

@@ -164,13 +164,13 @@ export function AccountDirectoryPanel({
         </div>
       </section>
 
-      <section className="flex min-h-[60dvh] min-w-0 flex-col overflow-hidden rounded-xl xl:min-h-0" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <section className="flex min-w-0 flex-col overflow-visible rounded-xl xl:min-h-0 xl:overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
         {detailLoading ? (
           <div className="p-6 text-sm" role="status" style={{ color: "var(--text-muted)" }}>載入帳號詳情…</div>
         ) : detailError ? (
           <div className="p-6 text-sm" role="alert" style={{ color: "var(--danger)" }}>無法載入帳號詳情，請重新整理後再試。</div>
         ) : selectedUser ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
             <AccountDetailPanel
               key={selectedUser.id}
               user={selectedUser}
@@ -179,7 +179,7 @@ export function AccountDirectoryPanel({
             />
           </div>
         ) : (
-          <div className="flex min-h-[50dvh] items-center justify-center p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+          <div className="flex min-h-[35dvh] items-center justify-center p-8 text-center text-sm xl:min-h-0 xl:flex-1" style={{ color: "var(--text-muted)" }}>
             {loading ? "正在載入帳號清單…" : "沒有符合條件的帳號。"}
           </div>
         )}

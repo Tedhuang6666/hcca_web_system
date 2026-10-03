@@ -72,15 +72,11 @@ const CLASS_ROLE_OPTIONS = [
   { key: "general_affairs", label: "事務" },
 ];
 
-type PeopleManagementSection = "people" | "defense" | "lifecycle" | "organization" | "classes" | "import";
+type PeopleManagementSection = "people" | "defense" | "organization" | "classes";
 const PEOPLE_PAGE_SIZE = 200;
 
 const UserAndFeatureActionsPanel = dynamic(
   () => import("@/components/admin/UserAndFeatureActionsPanel"),
-  { loading: () => <WorkspaceLoading /> },
-);
-const AccountLifecyclePanel = dynamic(
-  () => import("../user-lifecycle/page"),
   { loading: () => <WorkspaceLoading /> },
 );
 const OrganizationPermissionPanel = dynamic(
@@ -91,11 +87,6 @@ const ClassManagementPanel = dynamic(
   () => import("../classes/page"),
   { loading: () => <WorkspaceLoading /> },
 );
-const CadreImportPanel = dynamic(
-  () => import("../cadre-import/page"),
-  { loading: () => <WorkspaceLoading /> },
-);
-
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
@@ -184,10 +175,8 @@ export default function PeopleAdminPage() {
   const canOpen: Record<PeopleManagementSection, boolean> = {
     people: canManagePeople,
     defense: isAdmin,
-    lifecycle: isAdmin,
     organization: isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members"),
     classes: isAdmin || can("admin:all") || can("class:manage"),
-    import: isAdmin || can("admin:all"),
   };
   const section = Object.hasOwn(canOpen, requestedSection ?? "") && canOpen[requestedSection as PeopleManagementSection]
     ? requestedSection as PeopleManagementSection
@@ -202,16 +191,14 @@ export default function PeopleAdminPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col">
+    <div className="flex min-h-0 flex-col xl:h-full">
       <AdminWorkbenchTabs />
-      <main className="min-h-0 flex-1 overflow-auto" aria-label="人員與使用者防護工作區">
+      <main className="xl:min-h-0 xl:flex-1 xl:overflow-auto" aria-label="人員與使用者防護工作區">
         <PeopleManagementEmbedProvider>
           {section === "people" && <PersonDirectoryPanel />}
           {section === "defense" && <UserAndFeatureActionsPanel />}
-          {section === "lifecycle" && <AccountLifecyclePanel />}
           {section === "organization" && <OrganizationPermissionPanel />}
           {section === "classes" && <ClassManagementPanel />}
-          {section === "import" && <CadreImportPanel />}
         </PeopleManagementEmbedProvider>
       </main>
     </div>
@@ -342,14 +329,14 @@ function PersonDirectoryPanel() {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 max-w-7xl flex-col gap-4 p-4 md:p-5">
+    <div className="mx-auto flex min-h-0 max-w-7xl flex-col gap-4 p-4 md:p-5 xl:h-full xl:flex-1">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
             人員與身分
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            人員主檔與平台帳號集中管理；選取人員可查看學號、班級座號、身分及帳號安全操作。
+            人員主檔與平台帳號集中管理；選取人員可查看學號、班級座號、身分，並在帳號詳情管理學籍、幹部任期與安全設定。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -403,7 +390,7 @@ function PersonDirectoryPanel() {
         <Stat icon={<CircleSlash size={15} />} label="待連帳號" value={stats?.pending_link_count ?? null} />
       </div>
 
-      <div className="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[24rem_1fr]">
+      <div className="grid grid-cols-1 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[24rem_1fr]">
         <Panel className="flex min-h-0 max-h-[38dvh] flex-col overflow-hidden xl:max-h-none">
           <div className="space-y-2 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="flex items-center gap-2">
@@ -532,7 +519,7 @@ function PersonDirectoryPanel() {
           </div>
         </Panel>
 
-        <Panel className="flex min-h-[60dvh] flex-col overflow-hidden xl:min-h-0">
+        <Panel className="flex min-w-0 flex-col overflow-visible xl:min-h-0 xl:overflow-hidden">
           {detailLoading ? (
             <div className="p-8 text-sm" style={{ color: "var(--text-muted)" }}>載入人員詳情...</div>
           ) : detail ? (
@@ -747,7 +734,7 @@ function PersonDetailPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-col xl:h-full">
       <div className="flex-shrink-0 p-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -834,7 +821,7 @@ function PersonDetailPanel({
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto overscroll-contain p-5 [touch-action:pan-y] xl:grid-cols-[1fr_18rem]">
+      <div className="grid grid-cols-1 gap-4 overflow-visible p-4 sm:p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:grid-cols-[1fr_18rem] xl:[touch-action:pan-y]">
         <div className="space-y-4">
           <AffiliationSection title="有效身分" items={active} onChanged={onChanged} />
           <AffiliationSection title="歷史紀錄" items={ended} onChanged={onChanged} muted />
@@ -879,7 +866,7 @@ function PersonDetailPanel({
           <div className="xl:col-span-2">
             <details className="rounded-md" style={{ border: "1px solid var(--border)" }}>
               <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                <span>平台帳號、安全設定與管理操作</span>
+                <span className="min-w-0">帳號詳情：學籍、幹部任期與安全設定</span>
                 <span className="min-w-0 truncate text-xs font-normal" style={{ color: "var(--text-muted)" }}>
                   {linkedAccount?.email ?? person.email ?? "已連結平台帳號"}
                 </span>

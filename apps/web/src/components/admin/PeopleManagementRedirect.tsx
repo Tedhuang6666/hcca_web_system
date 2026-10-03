@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 
 type PeopleManagementSection =
   | "people"
-  | "lifecycle"
   | "organization"
-  | "classes"
-  | "import";
+  | "classes";
 
 export default function PeopleManagementRedirect({ section }: { section: PeopleManagementSection }) {
   const router = useRouter();
