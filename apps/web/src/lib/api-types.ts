@@ -10364,6 +10364,23 @@ export interface paths {
     };
     "/shop/orders/{order_id}": {
         parameters: {
+    "/shop/promotions/available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出目前帳號可使用的優惠 */
+        get: operations["list_available_promotions_shop_promotions_available_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
             query?: never;
             header?: never;
             path?: never;
@@ -10415,6 +10432,40 @@ export interface paths {
         trace?: never;
     };
     "/shop/orders/{order_id}/payment": {
+    "/shop/registrations/current/promotion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 套用目前商品登記的優惠 */
+        put: operations["apply_current_registration_promotion_shop_registrations_current_promotion_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/registrations/current/promotion/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 預覽目前商品登記的優惠 */
+        post: operations["preview_current_registration_promotion_shop_registrations_current_promotion_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
         parameters: {
             query?: never;
             header?: never;
@@ -20459,6 +20510,8 @@ export interface components {
             /** Match Any Prefixes */
             match_any_prefixes?: string[];
             /** Mobile Order */
+            /** Promotion Id */
+            promotion_id?: string | null;
             mobile_order?: string[];
             /** Position Ids */
             position_ids?: string[];
@@ -27704,6 +27757,11 @@ export interface components {
              */
             id: string;
             /** Label */
+            /**
+             * Min Quantity
+             * @default 1
+             */
+            min_quantity: number;
             label: string;
             /** Price Delta */
             price_delta: number;
@@ -27718,6 +27776,11 @@ export interface components {
             y: number;
             /**
              * Zone Id
+            /**
+             * Target Product Ids
+             * @description 需同時登記的商品組合；折扣僅套用在這些商品
+             */
+            target_product_ids?: string[];
              * Format: uuid
              */
             zone_id: string;
@@ -27746,12 +27809,16 @@ export interface components {
              * Id
              * Format: uuid
              */
+            /** Min Quantity */
+            min_quantity: number;
             id: string;
             /** Label */
             label: string;
             /** Price Delta */
             price_delta: number;
             /** Row Label */
+            /** Target Products */
+            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
             row_label?: string | null;
             /** Seat Type */
             seat_type: string;
@@ -27764,6 +27831,92 @@ export interface components {
         };
         /**
          * SeatStatus
+        /** ShopPromotionPreviewOut */
+        ShopPromotionPreviewOut: {
+            /** Discount Amount */
+            discount_amount: number;
+            discount_type?: components["schemas"]["ShopDiscountType"] | null;
+            /** Discount Value */
+            discount_value?: number | null;
+            /** Eligible */
+            eligible: boolean;
+            /** Min Order Price */
+            min_order_price?: number | null;
+            /** Min Quantity */
+            min_quantity?: number | null;
+            /** Promotion Code */
+            promotion_code?: string | null;
+            /** Promotion Name */
+            promotion_name?: string | null;
+            /**
+             * Quantity Shortfall
+             * @default 0
+             */
+            quantity_shortfall: number;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Reason Code
+             * @enum {string}
+             */
+            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "items_not_matched" | "quantity_not_met" | "no_promotion";
+            /**
+             * Shortfall
+             * @default 0
+             */
+            shortfall: number;
+            /** Subtotal Price */
+            subtotal_price: number;
+            /** Target Products */
+            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
+            /** Total Price */
+            total_price: number;
+        };
+        /** ShopPromotionPreviewRequest */
+        ShopPromotionPreviewRequest: {
+            /**
+             * Code
+             * @description 優惠碼；留空時檢查帳號自動優惠
+             */
+            code?: string | null;
+        };
+        /** ShopPromotionProductTargetOut */
+        ShopPromotionProductTargetOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** ShopPromotionPublicOut */
+        ShopPromotionPublicOut: {
+            /** Code */
+            code?: string | null;
+            /** Description */
+            description?: string | null;
+            discount_type: components["schemas"]["ShopDiscountType"];
+            /** Discount Value */
+            discount_value: number;
+            /** Ends At */
+            ends_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Min Order Price */
+            min_order_price: number;
+            /** Min Quantity */
+            min_quantity: number;
+            /** Name */
+            name: string;
+            /** Starts At */
+            starts_at?: string | null;
+            /** Target Products */
+            target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
+        };
          * @enum {string}
          */
         SeatStatus: "available" | "disabled" | "blocked";
@@ -27788,6 +27941,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Min Quantity */
+            min_quantity?: number | null;
             /**
              * Id
              * Format: uuid
@@ -27796,6 +27951,8 @@ export interface components {
             /** Summary */
             summary: string | null;
         };
+            /** Target Product Ids */
+            target_product_ids?: string[] | null;
         /** SelectedOption */
         SelectedOption: {
             /**
@@ -52891,6 +53048,26 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_upload_image_shop_images_post"];
+    list_available_promotions_shop_promotions_available_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopPromotionPublicOut"][];
+                };
+            };
+        };
+    };
             };
         };
         responses: {
@@ -52981,6 +53158,72 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
+    apply_current_registration_promotion_shop_registrations_current_promotion_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_current_registration_promotion_shop_registrations_current_promotion_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopPromotionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopPromotionPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
             200: {
                 headers: {
                     [name: string]: unknown;

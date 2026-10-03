@@ -238,7 +238,7 @@ class ProductMedia(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     product_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("products.id", ondelete="CASCADE"),
+        ForeignKey("products.id", ondelete="RESTRICT"),
         nullable=False,
     )
     image_url: Mapped[str] = mapped_column(Text, nullable=False)
@@ -405,6 +405,9 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         Integer, nullable=False, default=0, server_default="0"
     )
     total_price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    promotion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("shop_promotions.id", ondelete="SET NULL"), nullable=True
+    )
     promotion_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     payment_method: Mapped[str] = mapped_column(
         String(30), nullable=False, default="cash_on_pickup", server_default="cash_on_pickup"
@@ -415,6 +418,9 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])
     school_class: Mapped[SchoolClass | None] = relationship(
         "SchoolClass", foreign_keys="Order.class_id"
+    )
+    promotion: Mapped[ShopPromotion | None] = relationship(
+        "ShopPromotion", foreign_keys=[promotion_id]
     )
     items: Mapped[list[OrderItem]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
@@ -522,8 +528,27 @@ shop_promotion_users = Table(
 Index("ix_shop_promotion_users_user_id", shop_promotion_users.c.user_id)
 
 
+shop_promotion_products = Table(
+    "shop_promotion_products",
+    Base.metadata,
+    Column(
+        "promotion_id",
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "product_id",
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+Index("ix_shop_promotion_products_product_id", shop_promotion_products.c.product_id)
+
+
 class ShopPromotion(Base, TimestampMixin):
-    """校商優惠：可指定帳號自動套用，或建立優惠碼供結帳時輸入。"""
+    """校商優惠：可依帳號、金額與商品組合自動套用，或建立優惠碼。"""
 
     __tablename__ = "shop_promotions"
 
@@ -540,6 +565,9 @@ class ShopPromotion(Base, TimestampMixin):
     min_order_price: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    min_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -555,6 +583,9 @@ class ShopPromotion(Base, TimestampMixin):
     target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
     target_users: Mapped[list[User]] = relationship(
         "User", secondary=shop_promotion_users, lazy="selectin"
+    )
+    target_products: Mapped[list[Product]] = relationship(
+        "Product", secondary=shop_promotion_products, lazy="selectin"
     )
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
 

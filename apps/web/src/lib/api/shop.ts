@@ -1,5 +1,5 @@
 import type {
-  CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionUpdate,
+  CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
@@ -25,10 +25,15 @@ export const shopApi = {
     productId: string,
     body: { variants: { option_ids: string[]; quantity: number }[] },
   ) => put<OrderOut | null>(`/shop/registrations/current/products/${productId}`, body),
+  previewCurrentPromotion: (code: string | null) =>
+    post<ShopPromotionPreviewOut>("/shop/registrations/current/promotion/preview", { code }),
+  applyCurrentPromotion: (code: string | null) =>
+    put<OrderOut>("/shop/registrations/current/promotion", { code }),
 
   // 優惠管理（shop:manage）
   listPromotions: (includeInactive = true) =>
     get<ShopPromotionOut[]>(`/shop/promotions?include_inactive=${includeInactive}`),
+  listAvailablePromotions: () => get<ShopPromotionPublicOut[]>("/shop/promotions/available"),
   createPromotion: (body: ShopPromotionCreate) =>
     post<ShopPromotionOut>("/shop/promotions", body),
   updatePromotion: (id: string, body: ShopPromotionUpdate) =>
