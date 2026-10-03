@@ -153,6 +153,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/shop/catalog", "GET"),
     ("/shop/products", "GET"),
     ("/shop/products/{product_id}", "GET"),
+    # 公開可用優惠可匿名瀏覽，登入時再按帳號篩選。
+    ("/shop/promotions/available", "GET"),
     # 校外合作地圖（公開）
     ("/partner-map", "GET"),
     ("/partner-map/businesses/{business_id}", "GET"),
