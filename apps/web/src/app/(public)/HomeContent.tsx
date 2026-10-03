@@ -176,7 +176,7 @@ export default function HomeContent({
           <div className="public-home-dynamics-heading">
             <div>
               <h2 id="public-dynamics-title">重要資訊</h2>
-              <p>整合最近的重要更新，記得查看！</p>
+              <p>整理最近的重要更新，記得查看！</p>
             </div>
             <div className="public-home-dynamics-actions" aria-label="校園動態導覽">
               <Link href="/news" className="public-text-link">所有公告</Link>
@@ -227,7 +227,7 @@ export default function HomeContent({
           <FileText size={22} aria-hidden />
           <div>
             <h2 id="public-empty-title">目前沒有新的校園動態</h2>
-            <p>你仍可查看公開資料、填寫問卷，或提出意見陳情</p>
+            <p>歡迎到其他地方看看！</p>
           </div>
           <Link href="/public" className="public-text-link">查詢公開資料</Link>
         </section>
@@ -237,8 +237,8 @@ export default function HomeContent({
         <div className="public-home-shop-heading">
           <div>
             <span className="public-home-shop-eyebrow"><ShoppingBag size={16} aria-hidden /> 商品訂購</span>
-            <h2 id="public-shop-title">挑選你需要的商品</h2>
-            <p>選好商品規格與數量即完成登記，截止前可隨時調整。</p>
+            <h2 id="public-shop-title">各項活動商品販售</h2>
+            <p>Nothing beats a HCCA merch!</p>
           </div>
           <Link href="/shop" className="public-home-shop-all">
             瀏覽所有商品 <ArrowRight size={18} aria-hidden />
