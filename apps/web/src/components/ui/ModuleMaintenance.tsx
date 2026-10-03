@@ -32,8 +32,8 @@ export default function ModuleMaintenance({ moduleId }: { moduleId: ModuleId }) 
       </h1>
       <p className="mt-3 max-w-md text-sm leading-7 text-[var(--text-secondary)]">
         {closed
-          ? "此模組目前已由系統管理員關閉，平台其他功能不受影響。"
-          : "此模組暫時停止服務，平台其他功能不受影響，您可以從左側選單前往其他模組。"}
+          ? "此模組目前已由管理員關閉，暫時無法使用"
+          : "此模組暫時停止服務，您可以從左側選單前往其他模組。"}
       </p>
       {reason && (
         <p className="mt-4 max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm leading-6 text-[var(--text-secondary)] shadow-sm">
