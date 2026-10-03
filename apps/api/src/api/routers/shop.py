@@ -463,6 +463,24 @@ async def update_promotion(
     return shop_svc.serialize_promotion(updated)
 
 
+@router.delete(
+    "/promotions/{promotion_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除校商優惠",
+    responses={
+        status.HTTP_403_FORBIDDEN: {"description": "需要商品管理權限"},
+        status.HTTP_404_NOT_FOUND: {"description": "找不到此優惠"},
+        status.HTTP_409_CONFLICT: {"description": "優惠已有訂單紀錄，無法刪除"},
+    },
+)
+async def delete_promotion(promotion_id: uuid.UUID, session: DbDep, _: ManagerUser) -> None:
+    promotion = await _get_promotion_or_404(promotion_id, session)
+    try:
+        await shop_svc.delete_promotion(session, promotion)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
 @router.post(
     "/products",
     response_model=ProductOut,

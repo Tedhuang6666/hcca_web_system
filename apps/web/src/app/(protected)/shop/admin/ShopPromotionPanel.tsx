@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { apiErrorMessage, shopApi } from "@/lib/api";
@@ -52,8 +52,12 @@ export default function ShopPromotionPanel() {
   const [products, setProducts] = useState<ProductOut[]>([]);
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [editingPromotionId, setEditingPromotionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingPromotionId, setDeletingPromotionId] = useState<string | null>(null);
+  const formSectionRef = useRef<HTMLElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,7 +79,7 @@ export default function ShopPromotionPanel() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const create = async () => {
+  const save = async () => {
     const targetIdentifiers = form.target_identifiers
       .split(/[\r\n,;]+/)
       .map((identifier) => identifier.trim())
@@ -86,7 +90,7 @@ export default function ShopPromotionPanel() {
     }
     setSaving(true);
     try {
-      await shopApi.createPromotion({
+      const payload = {
         activity_id: form.activity_id === GENERAL_ACTIVITY_SCOPE ? null : form.activity_id,
         name: form.name.trim(),
         target_identifiers: targetIdentifiers,
@@ -98,15 +102,51 @@ export default function ShopPromotionPanel() {
         min_quantity: Number(form.min_quantity) || 1,
         max_uses: form.max_uses ? Number(form.max_uses) : null,
         description: form.description.trim() || null,
-      });
-      toast.success("優惠已建立");
+      };
+      if (editingPromotionId) {
+        await shopApi.updatePromotion(editingPromotionId, payload);
+        toast.success("優惠已更新");
+      } else {
+        await shopApi.createPromotion(payload);
+        toast.success("優惠已建立");
+      }
+      setEditingPromotionId(null);
       setForm(emptyForm);
       await load();
     } catch (error) {
-      toast.error(apiErrorMessage(error, "建立優惠失敗"));
+      toast.error(apiErrorMessage(error, editingPromotionId ? "更新優惠失敗" : "建立優惠失敗"));
     } finally {
       setSaving(false);
     }
+  };
+
+  const editPromotion = (promotion: ShopPromotionOut) => {
+    setEditingPromotionId(promotion.id);
+    setForm({
+      activity_id: promotion.activity_id ?? GENERAL_ACTIVITY_SCOPE,
+      name: promotion.name,
+      target_identifiers: (promotion.target_users ?? [])
+        .map((user) => user.student_id || user.email)
+        .join("\n"),
+      target_product_ids: (promotion.target_products ?? []).map((product) => product.id),
+      code: promotion.code ?? "",
+      discount_type: promotion.discount_type,
+      discount_value: String(promotion.discount_value),
+      min_order_price: String(promotion.min_order_price),
+      min_quantity: String(promotion.min_quantity),
+      max_uses: promotion.max_uses === null ? "" : String(promotion.max_uses),
+      description: promotion.description ?? "",
+    });
+    formSectionRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    nameInputRef.current?.focus({ preventScroll: true });
+  };
+
+  const cancelEditing = () => {
+    setEditingPromotionId(null);
+    setForm(emptyForm);
   };
 
   const deactivate = async (promotion: ShopPromotionOut) => {
@@ -116,6 +156,21 @@ export default function ShopPromotionPanel() {
       await load();
     } catch (error) {
       toast.error(apiErrorMessage(error, "停用優惠失敗"));
+    }
+  };
+
+  const deletePromotion = async (promotion: ShopPromotionOut) => {
+    if (!window.confirm(`確定刪除「${promotion.name}」？此操作無法復原。`)) return;
+    setDeletingPromotionId(promotion.id);
+    try {
+      await shopApi.deletePromotion(promotion.id);
+      toast.success("優惠已刪除");
+      if (editingPromotionId === promotion.id) cancelEditing();
+      await load();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "刪除優惠失敗"));
+    } finally {
+      setDeletingPromotionId(null);
     }
   };
 
@@ -168,9 +223,11 @@ export default function ShopPromotionPanel() {
 
   return (
     <div className="space-y-5">
-      <section className="card space-y-4 p-5">
+      <section ref={formSectionRef} className="card space-y-4 p-5">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>建立優惠</h2>
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            {editingPromotionId ? "編輯優惠" : "建立優惠"}
+          </h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
             每項優惠只適用一個活動。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
           </p>
@@ -197,7 +254,7 @@ export default function ShopPromotionPanel() {
           </label>
           <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
             優惠名稱
-            <input className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
+            <input ref={nameInputRef} className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
           </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             可使用帳號（選填）
@@ -260,9 +317,16 @@ export default function ShopPromotionPanel() {
             <input className="input mt-1 w-full" value={form.description} onChange={(e) => update("description", e.target.value)} />
           </label>
         </div>
-        <button className="btn min-h-11" onClick={create} disabled={saving} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-          {saving ? "建立中…" : "建立優惠"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn min-h-11" onClick={save} disabled={saving || deletingPromotionId !== null} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+            {saving ? "儲存中…" : editingPromotionId ? "儲存變更" : "建立優惠"}
+          </button>
+          {editingPromotionId && (
+            <button className="btn btn-ghost min-h-11" onClick={cancelEditing} disabled={saving || deletingPromotionId !== null}>
+              取消編輯
+            </button>
+          )}
+        </div>
       </section>
 
       <section className="card overflow-hidden">
@@ -302,7 +366,30 @@ export default function ShopPromotionPanel() {
                         : "全品項"}
                     </p>
                   </div>
-                  {promotion.is_active && <button className="btn btn-ghost min-h-11 shrink-0 self-start text-xs sm:self-auto" onClick={() => deactivate(promotion)}>停用</button>}
+                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    {promotion.is_active && (
+                      <button className="btn btn-ghost min-h-11 text-xs" onClick={() => deactivate(promotion)} disabled={saving || deletingPromotionId !== null}>
+                        停用
+                      </button>
+                    )}
+                    <button className="btn btn-ghost min-h-11 text-xs" onClick={() => editPromotion(promotion)} disabled={saving || deletingPromotionId !== null}>
+                      編輯
+                    </button>
+                    {promotion.used_count === 0 ? (
+                      <button
+                        className="btn btn-ghost min-h-11 text-xs"
+                        onClick={() => deletePromotion(promotion)}
+                        disabled={saving || deletingPromotionId !== null}
+                        style={{ color: "var(--danger)" }}
+                      >
+                        {deletingPromotionId === promotion.id ? "刪除中…" : "刪除"}
+                      </button>
+                    ) : (
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        已使用 {promotion.used_count} 次，請停用以保留訂單紀錄
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}

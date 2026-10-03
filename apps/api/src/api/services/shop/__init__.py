@@ -82,6 +82,7 @@ from api.services.shop._orders import (
 )
 from api.services.shop._promotions import (
     create_promotion,
+    delete_promotion,
     get_promotion,
     list_promotions,
     list_public_promotions,
@@ -133,6 +134,7 @@ __all__ = [
     "add_cart_item",
     "update_cart_item",
     "create_promotion",
+    "delete_promotion",
     "get_promotion",
     "list_promotions",
     "list_public_promotions",
