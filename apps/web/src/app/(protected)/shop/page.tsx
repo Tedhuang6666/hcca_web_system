@@ -901,9 +901,8 @@ export default function ShopPage() {
         <section className="shop-public-promotions" aria-labelledby="shop-promotions-title">
           <div className="shop-public-promotions-heading">
             <div>
-              <p className="shop-public-eyebrow"><Gift size={15} aria-hidden="true" /> 可使用優惠</p>
-              <h2 id="shop-promotions-title">登記商品，看看能省多少</h2>
-              <p>每項優惠都會列出適用品項與門檻；符合條件時顯示實際折抵金額。</p>
+              <p className="shop-public-eyebrow"><Gift size={15} aria-hidden="true" /> 優惠專區</p>
+              <h2 id="shop-promotions-title">Nothing beats HCHS Student Association merch!</h2>
             </div>
             <label className="shop-public-coupon-entry">
               <span>優惠碼</span>
@@ -957,7 +956,7 @@ export default function ShopPage() {
               const progressValue = Math.min(100, Math.round(Math.min(...progressParts) * 100));
               const requirementsMet = missingProducts.length === 0 && quantityShortfall === 0 && spendShortfall === 0;
               const progressLabel = !isLoggedIn
-                ? "登入並登記商品後即可查看個人優惠進度。"
+                ? "登入並登記商品後即可查看。"
                 : missingProducts.length > 0
                   ? `還需登記：${missingProducts.map((product) => product.name).join("、")}`
                   : quantityShortfall > 0
@@ -967,7 +966,7 @@ export default function ShopPage() {
                       : isApplied
                         ? `已套用，折抵 NT$${registration?.discount_amount.toLocaleString() ?? 0}。`
                         : requirementsMet && registration
-                          ? `已達優惠條件，預估可折抵 NT$${estimatedDiscount.toLocaleString()}。`
+                          ? `已達優惠條件，可折抵 NT$${estimatedDiscount.toLocaleString()}。`
                           : "登記商品後即可查看進度。";
               const actionLabel = promotion.code
                 ? claimedPromotionIds.has(promotion.id) ? "已領取優惠券" : "領取優惠券"
@@ -976,7 +975,7 @@ export default function ShopPage() {
                 <article className="shop-public-promotion-card" key={promotion.id}>
                   <div className="shop-public-promotion-card-top">
                     <span className="shop-public-promotion-icon"><Gift size={17} aria-hidden="true" /></span>
-                    <span>{promotion.code ? "優惠券" : "自動優惠"}</span>
+                    <span>{promotion.code ? "優惠券" : "優惠自動套用"}</span>
                     {isApplied && <span className="shop-public-promotion-applied"><CircleCheck size={14} aria-hidden="true" />已套用</span>}
                   </div>
                   <h3>{promotion.name}</h3>
