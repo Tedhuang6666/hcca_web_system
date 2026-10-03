@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Gauge, LoaderCircle, RefreshCw } from "lucide-react";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import SystemRecentErrorsPanel from "@/components/admin/system/SystemRecentErrorsPanel";
 import { authFetch, post, request } from "@/lib/api/core";
+import type { RecentErrorItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 
 type HealthItem = { name: string; healthy: boolean; detail?: Record<string, unknown> };
@@ -62,7 +64,7 @@ type ErrorsData = {
   resolved_issues?: number;
   auto_resolve_after_hours?: number | null;
   incidents?: Incident[];
-  top_exceptions: RecentError[];
+  top_exceptions: RecentErrorItem[];
   slow_transactions: SlowQuery[];
   sentry?: { configured?: boolean; error?: string; stats?: unknown };
   slow_query_source?: string;
@@ -158,7 +160,7 @@ function normalizeTabData(tab: Tab, value: ErrorsData | RealUsersData | Performa
       resolved_issues: raw.resolved_issues ?? 0,
       auto_resolve_after_hours: raw.auto_resolve_after_hours ?? null,
       incidents: asArray<Incident>(raw.incidents),
-      top_exceptions: asArray<RecentError>(raw.top_exceptions),
+      top_exceptions: asArray<RecentErrorItem>(raw.top_exceptions),
       slow_transactions: asArray<SlowQuery>(raw.slow_transactions),
     } as ErrorsData;
   }
@@ -411,7 +413,7 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
       )}
     </section>
 
-    <DataList title="近期原始錯誤" empty="目前沒有被保留的錯誤" items={data.top_exceptions} render={(item) => <div><div className="font-medium">{item.exc_type || item.category || "未分類錯誤"}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{item.path || "—"} · {item.occurrences ?? 1} 次 · HTTP {item.status_code ?? "—"}</div><div className="mt-1 truncate text-sm" style={{ color: "var(--text-secondary)" }}>{item.message || "—"}</div></div>} />
+    <SystemRecentErrorsPanel initialItems={data.top_exceptions} />
     <DataList title="慢查詢" empty="目前沒有超過門檻的慢查詢" items={data.slow_transactions} render={(item) => <div><div className="font-mono text-xs">{item.template}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最高 {formatNumber(item.max_ms, " ms")} · {item.occurrences} 次 · {item.paths?.[0]?.path || "—"}</div></div>} />
   </div>;
 }

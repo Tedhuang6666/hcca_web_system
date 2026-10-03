@@ -72,9 +72,13 @@ const CLASS_ROLE_OPTIONS = [
   { key: "general_affairs", label: "事務" },
 ];
 
-type PeopleManagementSection = "people" | "lifecycle" | "organization" | "classes" | "import";
+type PeopleManagementSection = "people" | "defense" | "lifecycle" | "organization" | "classes" | "import";
 const PEOPLE_PAGE_SIZE = 200;
 
+const UserAndFeatureActionsPanel = dynamic(
+  () => import("@/components/admin/UserAndFeatureActionsPanel"),
+  { loading: () => <WorkspaceLoading /> },
+);
 const AccountLifecyclePanel = dynamic(
   () => import("../user-lifecycle/page"),
   { loading: () => <WorkspaceLoading /> },
@@ -179,6 +183,7 @@ export default function PeopleAdminPage() {
   const canManagePeople = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
   const canOpen: Record<PeopleManagementSection, boolean> = {
     people: canManagePeople,
+    defense: isAdmin,
     lifecycle: isAdmin,
     organization: isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members"),
     classes: isAdmin || can("admin:all") || can("class:manage"),
@@ -199,9 +204,10 @@ export default function PeopleAdminPage() {
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col">
       <AdminWorkbenchTabs />
-      <main className="min-h-0 flex-1 overflow-auto" aria-label="人員管理工作區">
+      <main className="min-h-0 flex-1 overflow-auto" aria-label="人員與使用者防護工作區">
         <PeopleManagementEmbedProvider>
           {section === "people" && <PersonDirectoryPanel />}
+          {section === "defense" && <UserAndFeatureActionsPanel />}
           {section === "lifecycle" && <AccountLifecyclePanel />}
           {section === "organization" && <OrganizationPermissionPanel />}
           {section === "classes" && <ClassManagementPanel />}
