@@ -21,7 +21,34 @@ import type {
 type PaidFilter = "all" | "paid" | "unpaid";
 type AssistedFilter = "all" | "assisted";
 
-type CatalogChoice = CatalogProductOut & { category: string; series: string; categoryId: string };
+type CatalogChoice = CatalogProductOut & {
+  activity_id: string | null;
+  category: string;
+  series: string;
+  categoryId: string;
+};
+type ClassOrderQuery = NonNullable<Parameters<typeof shopApi.listClassOrders>[0]>;
+type AssistedItemDraft = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  option_ids: string[];
+  option_label: string;
+  unit_price: number;
+};
+
+type ActivityCollectionRow = {
+  activity_id: string | null;
+  label: string;
+  order_count: number;
+  total_amount: number;
+  collected_amount: number;
+  outstanding_amount: number;
+};
+
+const CLASS_ORDER_PAGE_SIZE = 500;
+const ORDER_LIST_PAGE_SIZE = 50;
 
 const emptySummary: ShopClassSummaryOut = {
   class_count: 0, order_count: 0, item_count: 0, total_amount: 0,
@@ -33,6 +60,10 @@ function money(value: number) {
   return `NT$${value.toLocaleString("zh-TW")}`;
 }
 
+function isCollectableOrder(order: Pick<OrderListItem, "status">) {
+  return order.status !== "cancelled" && order.status !== "refunded";
+}
+
 function scrollToSection(id: string) {
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   document.getElementById(id)?.scrollIntoView({ behavior, block: "start" });
@@ -41,19 +72,37 @@ function scrollToSection(id: string) {
 function flattenCatalog(catalog: CatalogCategoryOut[]): CatalogChoice[] {
   return catalog.flatMap((cat) => [
     ...cat.products.map((product) => ({
-      ...product, category: cat.name, series: "單一商品", categoryId: cat.id,
+      ...product, activity_id: cat.activity_id ?? null,
+      category: cat.name, series: "單一商品", categoryId: cat.id,
     })),
     ...cat.series.flatMap((series) =>
       series.products.map((product) => ({
-        ...product, category: cat.name, series: series.name, categoryId: cat.id,
+        ...product, activity_id: cat.activity_id ?? null,
+        category: cat.name, series: series.name, categoryId: cat.id,
       })),
     ),
   ]);
 }
 
+async function listAllClassOrders(params: ClassOrderQuery = {}): Promise<OrderListItem[]> {
+  const orders: OrderListItem[] = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await shopApi.listClassOrders({
+      ...params,
+      limit: String(CLASS_ORDER_PAGE_SIZE),
+      offset: String(offset),
+    });
+    orders.push(...page);
+    if (page.length < CLASS_ORDER_PAGE_SIZE) return orders;
+    offset += CLASS_ORDER_PAGE_SIZE;
+  }
+}
+
 export default function ClassOrdersPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
-  const [summary, setSummary] = useState<ShopClassSummaryOut>(emptySummary);
+  const [activityOrders, setActivityOrders] = useState<OrderListItem[]>([]);
   const [productSummary, setProductSummary] = useState<ShopClassSummaryOut>(emptySummary);
   const [members, setMembers] = useState<ClassMemberOut[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
@@ -70,11 +119,14 @@ export default function ClassOrdersPage() {
   const [closeBusy, setCloseBusy] = useState<string | null>(null);
   const [paidFilter, setPaidFilter] = useState<PaidFilter>("all");
   const [assistedFilter, setAssistedFilter] = useState<AssistedFilter>("all");
+  const [activityFilter, setActivityFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("");
   const [memberFilter, setMemberFilter] = useState("");
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [orderPage, setOrderPage] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
+  const [assistedItems, setAssistedItems] = useState<AssistedItemDraft[]>([]);
 
   // 代建 / 修改共用表單
   const [editOrder, setEditOrder] = useState<OrderOut | null>(null);
@@ -92,6 +144,11 @@ export default function ClassOrdersPage() {
   const activeProducts = useMemo(
     () => catalogProducts.filter((p) => p.status === "active"),
     [catalogProducts],
+  );
+  const formProducts = useMemo(
+    () => activeProducts.filter((product) =>
+      !editOrder || product.activity_id === (editOrder.activity_id ?? null)),
+    [activeProducts, editOrder],
   );
   const productRows = useMemo(() => {
     const rows = new Map(productSummary.product_rows.map((row) => [row.product_id, row]));
@@ -119,26 +176,100 @@ export default function ClassOrdersPage() {
     return Array.from(byId.entries()).sort((a, b) => a[1].localeCompare(b[1], "zh-Hant"));
   }, [catalogProducts, productRows]);
 
+  const activityLabels = useMemo(() => {
+    const namesById = new Map<string, Set<string>>();
+    for (const category of catalog) {
+      if (!category.activity_id) continue;
+      const names = namesById.get(category.activity_id) ?? new Set<string>();
+      names.add(category.name);
+      namesById.set(category.activity_id, names);
+    }
+    return new Map(
+      Array.from(namesById, ([id, names]) => [id, Array.from(names).join("／")]),
+    );
+  }, [catalog]);
+
+  const activityLabel = useCallback((activityId: string | null | undefined) => {
+    if (!activityId) return "一般商品";
+    return activityLabels.get(activityId) ?? `已結束活動 · ${activityId.slice(0, 6)}`;
+  }, [activityLabels]);
+
+  const activityRows = useMemo(() => {
+    const rows = new Map<string, ActivityCollectionRow>();
+    for (const order of activityOrders) {
+      if (!isCollectableOrder(order)) continue;
+      const key = order.activity_id ?? "none";
+      const row = rows.get(key) ?? {
+        activity_id: order.activity_id ?? null,
+        label: activityLabel(order.activity_id),
+        order_count: 0,
+        total_amount: 0,
+        collected_amount: 0,
+        outstanding_amount: 0,
+      };
+      row.order_count += 1;
+      row.total_amount += order.total_price;
+      if (order.is_class_collected) row.collected_amount += order.total_price;
+      else row.outstanding_amount += order.total_price;
+      rows.set(key, row);
+    }
+    return Array.from(rows.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
+  }, [activityOrders, activityLabel]);
+
+  const activityTotals = useMemo(() => activityRows.reduce((total, row) => ({
+    order_count: total.order_count + row.order_count,
+    total_amount: total.total_amount + row.total_amount,
+    collected_amount: total.collected_amount + row.collected_amount,
+    outstanding_amount: total.outstanding_amount + row.outstanding_amount,
+  }), { order_count: 0, total_amount: 0, collected_amount: 0, outstanding_amount: 0 }), [activityRows]);
+
+  const selectedActivityLabel = activityFilter === "all"
+    ? "全部活動"
+    : activityFilter === "none"
+      ? "一般商品"
+      : activityLabels.get(activityFilter) ?? `已結束活動 · ${activityFilter.slice(0, 6)}`;
+
+  const currentOptionIds = productDetail?.variant_groups
+    .map((group) => optionIds[group.id])
+    .filter((optionId): optionId is string => Boolean(optionId)) ?? [];
+  const currentItemReady = Boolean(
+    orderProductId && productDetail && currentOptionIds.length === productDetail.variant_groups.length,
+  );
+  const currentUnitPrice = (productDetail?.price ?? 0) + (productDetail?.variant_groups ?? [])
+    .reduce((total, group) => {
+      const option = group.options.find((item) => item.id === optionIds[group.id]);
+      return total + (option?.price_delta ?? 0);
+    }, 0);
+  const assistedTotal = assistedItems.reduce((total, item) => total + item.quantity * item.unit_price, 0)
+    + (currentItemReady && orderProductId ? quantity * currentUnitPrice : 0);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadFailed(false);
-    const params: Record<string, string> = { limit: "500" };
+    const params: ClassOrderQuery = {};
     if (paidFilter !== "all") params.is_class_collected = paidFilter === "paid" ? "true" : "false";
     if (assistedFilter === "assisted") params.assisted_only = "true";
     if (productFilter) params.product_id = productFilter;
     if (memberFilter) params.member_user_id = memberFilter;
-    const needsUnfilteredProductStatus =
-      paidFilter !== "all" || assistedFilter !== "all" || productFilter !== "";
+    const hasFilters = paidFilter !== "all"
+      || assistedFilter !== "all"
+      || productFilter !== ""
+      || memberFilter !== "";
+    const filteredOrdersPromise = listAllClassOrders(params);
+    const activityOrdersPromise = hasFilters
+      ? listAllClassOrders()
+      : filteredOrdersPromise;
     try {
-      const [orderItems, summaryData, productStatus] = await Promise.all([
-        shopApi.listClassOrders(params),
-        shopApi.classSummary({ is_class_collected: params.is_class_collected, assisted_only: params.assisted_only, product_id: params.product_id }),
-        needsUnfilteredProductStatus ? shopApi.classSummary() : Promise.resolve(null),
+      const [orderItems, activityItems, productStatus] = await Promise.all([
+        filteredOrdersPromise,
+        activityOrdersPromise,
+        shopApi.classSummary(),
       ]);
       setOrders(orderItems);
-      setSummary(summaryData);
-      setProductSummary(productStatus ?? summaryData);
-      setSelectedIds((cur) => cur.filter((id) => orderItems.some((o) => o.id === id)));
+      setActivityOrders(activityItems);
+      setProductSummary(productStatus);
+      setSelectedIds((cur) => cur.filter((id) => orderItems.some((order) =>
+        order.id === id && isCollectableOrder(order))));
     } catch (e) {
       setLoadFailed(true);
       toast.error(apiErrorMessage(e, "載入失敗"));
@@ -197,18 +328,26 @@ export default function ClassOrdersPage() {
   }, [loadCloseStatus]);
 
   useEffect(() => {
-    setOptionIds({});
     setProductDetail(null);
-    if (!orderProductId) return;
+    if (!orderProductId) {
+      setOptionIds({});
+      return;
+    }
     shopApi.getProduct(orderProductId)
       .then((product) => {
         setProductDetail(product);
-        setOptionIds(Object.fromEntries(
-          product.variant_groups.map((g) => [g.id, g.options.find((o) => o.is_active)?.id ?? ""]),
-        ));
+        const existingItem = editOrder?.items.find((item) => item.product_id === orderProductId);
+        const editedOptions = Object.fromEntries(
+          (existingItem?.selected_options ?? []).map((option) => [option.group_id, option.option_id]),
+        );
+        const defaults = Object.fromEntries(product.variant_groups.map((group) => {
+          const activeOptions = group.options.filter((option) => option.is_active);
+          return [group.id, activeOptions.length === 1 ? activeOptions[0].id : ""];
+        }));
+        setOptionIds(existingItem ? editedOptions : defaults);
       })
       .catch((e) => toast.error(apiErrorMessage(e, "商品載入失敗")));
-  }, [orderProductId]);
+  }, [editOrder, orderProductId]);
 
   const openCreate = () => {
     setFormOpen(true);
@@ -218,14 +357,30 @@ export default function ClassOrdersPage() {
     setQuantity(1);
     setOptionIds({});
     setNotes("");
+    setAssistedItems([]);
   };
 
   const openEdit = async (order: OrderListItem) => {
     setFormOpen(true);
+    setEditOrder(null);
+    setOrderProductId("");
+    setQuantity(1);
+    setOptionIds({});
+    setAssistedItems([]);
     try {
       const full = await shopApi.getOrder(order.id);
       setEditOrder(full);
       setStudentId(full.user_id);
+      setNotes(full.notes ?? "");
+      setAssistedItems(full.items.slice(1).map((item) => ({
+        id: item.id,
+        product_id: item.product_id,
+        product_name: item.product_name ?? "未命名商品",
+        quantity: item.quantity,
+        option_ids: (item.selected_options ?? []).map((option) => option.option_id),
+        option_label: (item.selected_options ?? []).map((option) => `${option.group_name}：${option.value}`).join(" · "),
+        unit_price: item.unit_price,
+      })));
       const firstItem = full.items?.[0];
       if (firstItem) {
         setOrderProductId(firstItem.product_id);
@@ -235,26 +390,75 @@ export default function ClassOrdersPage() {
           if (opt.group_id) opts[opt.group_id] = opt.option_id;
         }
         setOptionIds(opts);
-        setNotes(full.notes ?? "");
       }
     } catch (e) {
       toast.error(apiErrorMessage(e, "載入訂單失敗"));
     }
   };
 
+  const addCurrentProduct = () => {
+    if (!orderProductId || !productDetail) {
+      toast.error("請先選擇商品，並等商品資料載入完成");
+      return;
+    }
+    if (!currentItemReady) {
+      toast.error("請完成所有商品規格");
+      return;
+    }
+    const optionLabel = productDetail.variant_groups.map((group) => {
+      const option = group.options.find((item) => item.id === optionIds[group.id]);
+      return option ? `${group.name} ${option.value}` : "";
+    }).filter(Boolean).join(" · ");
+    setAssistedItems((current) => [...current, {
+      id: `${productDetail.id}-${Date.now()}-${Math.random()}`,
+      product_id: productDetail.id,
+      product_name: productDetail.name,
+      quantity,
+      option_ids: currentOptionIds,
+      option_label: optionLabel,
+      unit_price: currentUnitPrice,
+    }]);
+    setOrderProductId("");
+    setQuantity(1);
+    setOptionIds({});
+  };
+
   const visibleOrders = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return orders;
     return orders.filter((o) =>
-      o.serial_number.toLowerCase().includes(needle)
-      || (o.user_name ?? "").toLowerCase().includes(needle)
-      || (o.class_label ?? "").toLowerCase().includes(needle),
+      (activityFilter === "all"
+        || (activityFilter === "none" ? !o.activity_id : o.activity_id === activityFilter))
+      && (!needle
+        || o.serial_number.toLowerCase().includes(needle)
+        || (o.user_name ?? "").toLowerCase().includes(needle)
+        || (o.class_label ?? "").toLowerCase().includes(needle)),
     );
-  }, [orders, query]);
+  }, [activityFilter, orders, query]);
 
   const selectedSet = new Set(selectedIds);
-  const selectedOrders = visibleOrders.filter((o) => selectedSet.has(o.id));
-  const allVisibleSelected = visibleOrders.length > 0 && visibleOrders.every((o) => selectedSet.has(o.id));
+  const selectedOrders = visibleOrders.filter((order) =>
+    selectedSet.has(order.id) && isCollectableOrder(order));
+  const selectedActivityGroups = new Map<string, { label: string; orders: OrderListItem[] }>();
+  for (const order of selectedOrders) {
+    const key = order.activity_id ?? "none";
+    const group = selectedActivityGroups.get(key) ?? {
+      label: activityLabel(order.activity_id),
+      orders: [],
+    };
+    group.orders.push(order);
+    selectedActivityGroups.set(key, group);
+  }
+  const pageCount = Math.max(1, Math.ceil(visibleOrders.length / ORDER_LIST_PAGE_SIZE));
+  const currentPage = Math.min(orderPage, pageCount - 1);
+  const pageOrders = visibleOrders.slice(currentPage * ORDER_LIST_PAGE_SIZE, (currentPage + 1) * ORDER_LIST_PAGE_SIZE);
+  const selectablePageOrders = pageOrders.filter(isCollectableOrder);
+  const allVisibleSelected = selectablePageOrders.length > 0
+    && selectablePageOrders.every((order) => selectedSet.has(order.id));
+
+  useEffect(() => {
+    setOrderPage(0);
+    setSelectedIds([]);
+  }, [activityFilter, assistedFilter, memberFilter, paidFilter, productFilter, query]);
 
   const togglePaid = async (order: OrderListItem) => {
     setBusy(order.id);
@@ -269,14 +473,15 @@ export default function ClassOrdersPage() {
     }
   };
 
-  const batchSetPaid = async (isPaid: boolean) => {
-    const targets = selectedOrders.filter((o) => o.is_class_collected !== isPaid);
+  const batchSetPaid = async (activityKey: string, isPaid: boolean) => {
+    const targets = (selectedActivityGroups.get(activityKey)?.orders ?? [])
+      .filter((o) => o.is_class_collected !== isPaid);
     if (!targets.length) { toast.info(isPaid ? "選取訂單都已繳費" : "選取訂單都是未繳費"); return; }
     setBatchBusy(true);
     try {
       await Promise.all(targets.map((o) => shopApi.setClassCollected(o.id, isPaid)));
       setSelectedIds([]);
-      toast.success(isPaid ? `已標示 ${targets.length} 筆為已繳費` : `已取消 ${targets.length} 筆繳費標示`);
+      toast.success(isPaid ? `已標記 ${targets.length} 筆已收款` : `已撤銷 ${targets.length} 筆收款紀錄`);
       await load();
     } catch (e) {
       toast.error(apiErrorMessage(e, "批量更新失敗"));
@@ -286,12 +491,30 @@ export default function ClassOrdersPage() {
   };
 
   const submitOrder = async () => {
-    if (!studentId || !orderProductId) { toast.error("請選擇學生與商品"); return; }
-    const optionValues = productDetail?.variant_groups.map((g) => optionIds[g.id]).filter(Boolean) ?? [];
-    if ((productDetail?.variant_groups.length ?? 0) !== optionValues.length) { toast.error("請完成所有商品選項"); return; }
+    if (!studentId) { toast.error("請先選擇同班學生"); return; }
+    if (orderProductId && !productDetail) {
+      toast.error("商品資料尚未載入完成，請稍候再試");
+      return;
+    }
+    if (orderProductId && !currentItemReady) {
+      toast.error("請完成所有商品規格");
+      return;
+    }
+    const currentItem = orderProductId && productDetail
+      ? [{ product_id: productDetail.id, quantity, option_ids: currentOptionIds }]
+      : [];
+    const items = [
+      ...currentItem,
+      ...assistedItems.map((item) => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        option_ids: item.option_ids,
+      })),
+    ];
+    if (!items.length) { toast.error("請至少加入一項商品"); return; }
     setCreating(true);
     try {
-      const body = { user_id: studentId, items: [{ product_id: orderProductId, quantity, option_ids: optionValues }], notes: notes.trim() || null };
+      const body = { user_id: studentId, items, notes: notes.trim() || null };
       if (editOrder) {
         await shopApi.updateOrder(editOrder.id, body);
         toast.success("訂單已修改");
@@ -301,6 +524,7 @@ export default function ClassOrdersPage() {
       }
       setEditOrder(null);
       setStudentId(""); setOrderProductId(""); setQuantity(1); setNotes("");
+      setAssistedItems([]);
       setFormOpen(false);
       await load();
     } catch (e) {
@@ -326,26 +550,10 @@ export default function ClassOrdersPage() {
     }
   };
 
-  const toggleClose = async (categoryId: string, isCurrentlyClosed: boolean) => {
-    if (!myClassId) { toast.error("無法取得班級資訊"); return; }
-    setCloseBusy(categoryId);
-    try {
-      if (isCurrentlyClosed) {
-        await shopApi.reopenCategory(categoryId, myClassId);
-        toast.success("已重新開單");
-      } else {
-        await shopApi.closeCategory(categoryId, { class_id: myClassId });
-        toast.success("已結單，學生無法新增訂單");
-      }
-      await loadCloseStatus(catalog.map((c) => c.id), myClassId);
-    } catch (e) {
-      toast.error(apiErrorMessage(e, isCurrentlyClosed ? "重新開單失敗" : "結單失敗"));
-    } finally {
-      setCloseBusy(null);
-    }
-  };
-
   const showProductCollection = (productId: string, hasUncollectedOrders: boolean) => {
+    const product = catalogProducts.find((item) => item.id === productId);
+    const category = catalog.find((item) => item.id === product?.categoryId);
+    setActivityFilter(category?.activity_id ?? "none");
     setProductFilter(productId);
     setPaidFilter(hasUncollectedOrders ? "unpaid" : "all");
     setAssistedFilter("all");
@@ -354,13 +562,35 @@ export default function ClassOrdersPage() {
     scrollToSection("class-orders-list");
   };
 
+  const showActivityCollection = (activityId: string | null) => {
+    setActivityFilter(activityId ?? "none");
+    setProductFilter("");
+    setPaidFilter("all");
+    setAssistedFilter("all");
+    setMemberFilter("");
+    setQuery("");
+    setSelectedIds([]);
+    scrollToSection("class-orders-list");
+  };
+
+  const clearFilters = () => {
+    setActivityFilter("all");
+    setProductFilter("");
+    setPaidFilter("all");
+    setAssistedFilter("all");
+    setMemberFilter("");
+    setQuery("");
+    setSelectedIds([]);
+    setOrderPage(0);
+  };
+
   return (
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班級商品收款</h1>
           <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
-            查看每項商品的登記與收款進度，協助同學下單並記錄已收款項。
+            按活動核對應收與已收款項，也能替同學一次登記多項商品。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -388,11 +618,16 @@ export default function ClassOrdersPage() {
               {editOrder ? <Edit2 size={15} /> : <Plus size={15} />}
               {editOrder ? `修改訂單 ${editOrder.serial_number}` : "幫同學下單"}
             </h2>
-            <button type="button" onClick={() => { setFormOpen(false); setEditOrder(null); setStudentId(""); setOrderProductId(""); }}
+            <button type="button" onClick={() => { setFormOpen(false); setEditOrder(null); setStudentId(""); setOrderProductId(""); setAssistedItems([]); }}
               className="min-h-11 min-w-11" style={{ color: "var(--text-muted)" }} aria-label="關閉下單表單">
               <X size={15} />
             </button>
           </div>
+          <p className="mb-3 text-xs" style={{ color: "var(--text-muted)" }}>
+            {editOrder
+              ? "此訂單限修改原活動的商品。"
+              : "可一次登記多個活動的商品；送出後會依活動分開建立訂單。"}
+          </p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <label className="grid gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>同班學生</span>
@@ -407,7 +642,7 @@ export default function ClassOrdersPage() {
               <span style={{ color: "var(--text-muted)" }}>商品</span>
               <select className="input min-h-11" value={orderProductId} onChange={(e) => setOrderProductId(e.target.value)}>
                 <option value="">選擇商品</option>
-                {activeProducts.map((p) => (
+                {formProducts.map((p) => (
                   <option key={p.id} value={p.id}>{p.category} / {p.series} / {p.name}</option>
                 ))}
               </select>
@@ -434,14 +669,79 @@ export default function ClassOrdersPage() {
               <input className="input min-h-11" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} placeholder="尺寸確認等" />
             </label>
             <div className="flex items-end">
-              <button type="button" onClick={submitOrder}
-                disabled={creating || membersLoading || membersLoadFailed || members.length === 0 || activeProducts.length === 0}
-                className="btn min-h-11 w-full disabled:opacity-50"
-                style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-                {creating ? "處理中..." : editOrder ? "儲存修改" : "建立代訂"}
-              </button>
+              <div className="grid w-full gap-2">
+                <button type="button" onClick={addCurrentProduct}
+                  disabled={!currentItemReady || creating}
+                  className="btn btn-ghost min-h-11 w-full disabled:opacity-50">
+                  <Plus size={14} /> 加入商品
+                </button>
+                <button type="button" onClick={submitOrder}
+                  disabled={creating || membersLoading || membersLoadFailed || members.length === 0
+                    || (!editOrder && formProducts.length === 0)
+                    || (!orderProductId && assistedItems.length === 0) || Boolean(orderProductId && !currentItemReady)}
+                  className="btn min-h-11 w-full disabled:opacity-50"
+                  style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+                  {creating ? "處理中..." : editOrder
+                    ? `儲存修改 · 小計 ${money(assistedTotal)}`
+                    : `建立代訂 · 小計 ${money(assistedTotal)}`}
+                </button>
+              </div>
             </div>
           </div>
+          {(assistedItems.length > 0 || (orderProductId && currentItemReady)) && (
+            <div className="mt-4 rounded-md" style={{ border: "1px solid var(--border)" }}>
+              <div className="flex items-center justify-between gap-3 px-3 py-2"
+                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+                <h3 className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>商品清單</h3>
+                <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                  {assistedItems.length + (orderProductId && currentItemReady ? 1 : 0)} 項 · 商品小計 {money(assistedTotal)}
+                </span>
+              </div>
+              <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+                {assistedItems.map((item) => (
+                  <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.product_name}</p>
+                      <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                        {item.option_label ? `${item.option_label} · ` : ""}{money(item.unit_price)} / 件
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                      數量
+                      <input className="input min-h-11 w-20 text-center tabular-nums" type="number" min={1} max={100}
+                        value={item.quantity} aria-label={`${item.product_name}數量`}
+                        onChange={(event) => setAssistedItems((current) => current.map((entry) => entry.id === item.id
+                          ? { ...entry, quantity: Math.max(1, Math.min(100, Number(event.target.value) || 1)) }
+                          : entry))} />
+                    </label>
+                    <strong className="w-24 text-right text-sm tabular-nums" style={{ color: "var(--text-primary)" }}>
+                      {money(item.quantity * item.unit_price)}
+                    </strong>
+                    <button type="button" onClick={() => setAssistedItems((current) => current.filter((entry) => entry.id !== item.id))}
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md"
+                      style={{ color: "var(--text-muted)" }} aria-label={`移除${item.product_name}`}>
+                      <X size={15} />
+                    </button>
+                  </li>
+                ))}
+                {orderProductId && currentItemReady && productDetail && (
+                  <li className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{productDetail.name}</p>
+                      <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                        {productDetail.variant_groups.map((group) => group.options.find((option) => option.id === optionIds[group.id])?.value)
+                          .filter(Boolean).join(" · ") || "無規格"} · {money(currentUnitPrice)} / 件
+                      </p>
+                    </div>
+                    <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>× {quantity}</span>
+                    <strong className="w-24 text-right text-sm tabular-nums" style={{ color: "var(--text-primary)" }}>
+                      {money(quantity * currentUnitPrice)}
+                    </strong>
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
           {membersLoading && (
             <p className="mt-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>正在載入本班名冊...</p>
           )}
@@ -457,26 +757,127 @@ export default function ClassOrdersPage() {
         </section>
       )}
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        {[
-          { label: "待收款", value: `${summary.unpaid_order_count} 筆`, detail: money(summary.unpaid_amount), tone: "var(--warning)" },
-          { label: "已收款", value: `${summary.paid_order_count} 筆`, detail: money(summary.paid_amount), tone: "var(--success)" },
-          { label: "應收總額", value: money(summary.total_amount), detail: `${summary.order_count} 筆有效訂單`, tone: "var(--text-primary)" },
-        ].map((item) => (
-          <div key={item.label} className="rounded-lg px-4 py-3"
-            style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-            <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{item.label}</p>
-            <div className="mt-1 flex items-baseline justify-between gap-3">
-              <p className="text-lg font-semibold tabular-nums" style={{ color: item.tone }}>{item.value}</p>
-              <p className="text-sm tabular-nums" style={{ color: "var(--text-secondary)" }}>{item.detail}</p>
+      <section aria-labelledby="activity-collection-heading" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h2 id="activity-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+            活動收款總覽
+          </h2>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            應收包含已收與待收；取消及退款訂單不列入。選一列即可查看該活動。
+          </p>
+        </div>
+        {loading && activityOrders.length === 0 ? (
+          <p className="rounded-lg px-4 py-8 text-center text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+            正在整理各活動款項...
+          </p>
+        ) : loadFailed && activityOrders.length === 0 ? (
+          <p className="rounded-lg px-4 py-8 text-center text-sm" role="alert"
+            style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>
+            無法載入活動款項，請重新整理後再試。
+          </p>
+        ) : activityRows.length === 0 ? (
+          <div className="rounded-lg px-4 py-8 text-center" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>目前還沒有有效訂單</p>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>替同學建立代訂後，應收與收款進度會出現在這裡。</p>
+            <button type="button" onClick={openCreate} className="btn btn-ghost mt-3 min-h-11">幫同學下單</button>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+            <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
+              {activityRows.map((row) => {
+                const key = row.activity_id ?? "none";
+                return (
+                  <div key={key} className="px-4 py-3" style={{ background: activityFilter === key ? "var(--primary-dim)" : undefined }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="min-w-0 break-words text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{row.label}</h3>
+                      <span className="shrink-0 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>{row.order_count} 筆</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                      <div><p style={{ color: "var(--text-muted)" }}>應收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</p></div>
+                      <div><p style={{ color: "var(--text-muted)" }}>已收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</p></div>
+                      <div><p style={{ color: "var(--text-muted)" }}>待收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--warning)" }}>{money(row.outstanding_amount)}</p></div>
+                    </div>
+                    <button type="button" onClick={() => showActivityCollection(row.activity_id)}
+                      className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium"
+                      style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                      查看此活動訂單
+                    </button>
+                  </div>
+                );
+              })}
+              <div className="px-4 py-3" style={{ background: "var(--bg-elevated)" }}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <strong className="text-sm" style={{ color: "var(--text-primary)" }}>全部活動</strong>
+                  <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>{activityTotals.order_count} 筆</span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                  <div><p style={{ color: "var(--text-muted)" }}>應收</p><p className="mt-0.5 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(activityTotals.total_amount)}</p></div>
+                  <div><p style={{ color: "var(--text-muted)" }}>已收</p><p className="mt-0.5 font-semibold tabular-nums" style={{ color: "var(--success)" }}>{money(activityTotals.collected_amount)}</p></div>
+                  <div><p style={{ color: "var(--text-muted)" }}>待收</p><p className="mt-0.5 font-semibold tabular-nums" style={{ color: "var(--warning)" }}>{money(activityTotals.outstanding_amount)}</p></div>
+                </div>
+                <button type="button" onClick={() => showActivityCollection(null)}
+                  className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium"
+                  style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                  查看全部活動訂單
+                </button>
+              </div>
+            </div>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[720px] text-sm" aria-label="各活動應收與收款金額">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+                    {["活動", "訂單", "應收總額", "已收", "待收", ""].map((heading) => (
+                      <th key={heading || "action"} scope="col" className="px-4 py-3 text-left text-xs font-semibold"
+                        style={{ color: "var(--text-muted)" }}>{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activityRows.map((row) => {
+                    const key = row.activity_id ?? "none";
+                    return (
+                      <tr key={key} style={{ borderBottom: "1px solid var(--border)", background: activityFilter === key ? "var(--primary-dim)" : undefined }}>
+                        <th scope="row" className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</th>
+                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{row.order_count}</td>
+                        <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</td>
+                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</td>
+                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--warning)" }}>{money(row.outstanding_amount)}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button type="button" onClick={() => showActivityCollection(row.activity_id)}
+                            className="min-h-11 rounded-md px-3 text-xs font-medium"
+                            style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                            查看訂單
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: "var(--bg-elevated)" }}>
+                    <th scope="row" className="px-4 py-3 text-left text-sm font-semibold" style={{ color: "var(--text-primary)" }}>全部活動</th>
+                    <td className="px-4 py-3 font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>{activityTotals.order_count}</td>
+                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(activityTotals.total_amount)}</td>
+                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--success)" }}>{money(activityTotals.collected_amount)}</td>
+                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--warning)" }}>{money(activityTotals.outstanding_amount)}</td>
+                    <td className="px-4 py-2 text-right">
+                      <button type="button" onClick={() => showActivityCollection(null)}
+                        className="min-h-11 rounded-md px-3 text-xs font-medium"
+                        style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                        全部訂單
+                      </button>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
-        ))}
+        )}
       </section>
 
       <section aria-labelledby="product-collection-heading" className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <h2 id="product-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>商品收款進度</h2>
+          <h2 id="product-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>商品收款明細</h2>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>收款紀錄代表班代已向同學收款；整班繳款由班聯會確認。</p>
         </div>
         {loading && productSummary.product_rows.length === 0 ? (
@@ -497,43 +898,63 @@ export default function ClassOrdersPage() {
             )}
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {productRows.map((row) => {
-              const orderCount = row.collected_order_count + row.uncollected_order_count;
-              const progress = orderCount ? (row.collected_order_count / orderCount) * 100 : 0;
-              return (
-                <article key={row.product_id} className="min-w-0 rounded-lg p-4"
-                  style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="min-w-0 break-words text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{row.product_name}</h3>
-                    <span className="shrink-0 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>{row.quantity} 件</span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3 text-xs">
-                    <span style={{ color: "var(--success)" }}>已收 {row.collected_order_count} 筆 · {money(row.collected_amount)}</span>
-                    <span style={{ color: "var(--warning)" }}>待收 {row.uncollected_order_count} 筆</span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full" role="progressbar"
-                    aria-label={`${row.product_name}收款進度`}
-                    aria-valuemin={0}
-                    aria-valuemax={orderCount || 1}
-                    aria-valuenow={row.collected_order_count}
-                    style={{ background: "var(--warning-dim)" }}>
-                    <div className="h-full rounded-full" style={{ width: `${progress}%`, background: "var(--success)" }} />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-xs">
-                    <span style={{ color: "var(--text-muted)" }}>共 {orderCount} 筆訂單 · {money(row.total_amount)}</span>
-                    <span className="tabular-nums" style={{ color: "var(--warning)" }}>待收 {money(row.uncollected_amount)}</span>
-                  </div>
-                  <button type="button" onClick={() => showProductCollection(row.product_id, row.uncollected_order_count > 0)}
-                    className="mt-3 min-h-11 w-full rounded-md px-3 text-left text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)]"
-                    style={{ border: "1px solid var(--border)", color: row.uncollected_order_count ? "var(--primary-text)" : "var(--text-secondary)" }}>
-                    {row.uncollected_order_count
-                      ? `查看 ${row.uncollected_order_count} 筆待收訂單`
-                      : "查看全部訂單"}
-                  </button>
-                </article>
-              );
-            })}
+          <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+            <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
+              {productRows.map((row) => {
+                const orderCount = row.collected_order_count + row.uncollected_order_count;
+                return (
+                  <article key={row.product_id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="min-w-0 break-words text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{row.product_name}</h3>
+                      <span className="shrink-0 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>{row.quantity} 件</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                      <div><p style={{ color: "var(--text-muted)" }}>應收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</p></div>
+                      <div><p style={{ color: "var(--text-muted)" }}>已收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</p></div>
+                      <div><p style={{ color: "var(--text-muted)" }}>待收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--warning)" }}>{money(row.uncollected_amount)}</p></div>
+                    </div>
+                    <button type="button" onClick={() => showProductCollection(row.product_id, row.uncollected_order_count > 0)}
+                      className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium"
+                      style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                      {row.uncollected_order_count ? `查看 ${row.uncollected_order_count} 筆待收訂單` : `查看 ${orderCount} 筆訂單`}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[760px] text-sm" aria-label="各商品訂購與收款金額">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+                    {["商品", "件數／訂單", "應收總額", "已收", "待收", ""].map((heading) => (
+                      <th key={heading || "action"} scope="col" className="px-4 py-3 text-left text-xs font-semibold"
+                        style={{ color: "var(--text-muted)" }}>{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {productRows.map((row) => {
+                    const orderCount = row.collected_order_count + row.uncollected_order_count;
+                    return (
+                      <tr key={row.product_id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <th scope="row" className="max-w-xs px-4 py-3 text-left font-medium" style={{ color: "var(--text-primary)" }}>{row.product_name}</th>
+                        <td className="px-4 py-3 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>{row.quantity} 件 · {orderCount} 筆</td>
+                        <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</td>
+                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</td>
+                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--warning)" }}>{money(row.uncollected_amount)}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button type="button" onClick={() => showProductCollection(row.product_id, row.uncollected_order_count > 0)}
+                            className="min-h-11 rounded-md px-3 text-xs font-medium"
+                            style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                            {row.uncollected_order_count ? `看 ${row.uncollected_order_count} 筆待收` : "查看訂單"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>
@@ -543,7 +964,7 @@ export default function ClassOrdersPage() {
         <section id="class-orders-list" className="min-w-0 scroll-mt-5 space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>班級訂單</h2>
+              <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>班級訂單 · {selectedActivityLabel}</h2>
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>確認收款只記錄班代收到同學款項，不會變更班聯會的整班繳款狀態。</p>
             </div>
             <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>{visibleOrders.length} 筆</span>
@@ -552,52 +973,79 @@ export default function ClassOrdersPage() {
             <div className="grid gap-3 md:grid-cols-[1fr_180px_160px]">
               <label className="relative block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" size={15} style={{ color: "var(--text-muted)" }} />
-                <input className="input w-full pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜尋訂單編號、姓名" />
+                <input className="input w-full pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜尋訂單編號、姓名" aria-label="搜尋訂單編號或姓名" />
               </label>
-              <select className="input" value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)}>
+              <select className="input min-h-11" value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label="依學生篩選">
                 <option value="">全班學生</option>
                 {members.map((m) => (
                   <option key={m.id} value={m.id}>{m.display_name}{m.student_id ? `（${m.student_id}）` : ""}</option>
                 ))}
               </select>
-              <select className="input" value={paidFilter} onChange={(e) => setPaidFilter(e.target.value as PaidFilter)}>
+              <select className="input min-h-11" value={paidFilter} onChange={(e) => setPaidFilter(e.target.value as PaidFilter)} aria-label="依收款狀態篩選">
                 <option value="all">全部收款紀錄</option>
                 <option value="unpaid">待收款</option>
                 <option value="paid">已收款</option>
               </select>
             </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <select className="input" value={assistedFilter} onChange={(e) => setAssistedFilter(e.target.value as AssistedFilter)}>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <select className="input min-h-11" value={assistedFilter} onChange={(e) => setAssistedFilter(e.target.value as AssistedFilter)} aria-label="依訂單來源篩選">
                 <option value="all">全班訂單</option>
                 <option value="assisted">只看代訂</option>
               </select>
-              <select className="input" value={productFilter} onChange={(e) => setProductFilter(e.target.value)}>
+              <select className="input min-h-11" value={productFilter} onChange={(e) => setProductFilter(e.target.value)} aria-label="依商品篩選">
                 <option value="">全部商品</option>
                 {productFilterOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
+              <select className="input min-h-11" value={activityFilter} onChange={(e) => setActivityFilter(e.target.value)} aria-label="依活動篩選">
+                <option value="all">全部活動</option>
+                <option value="none">一般商品</option>
+                {activityRows.filter((row) => row.activity_id).map((row) => (
+                  <option key={row.activity_id} value={row.activity_id ?? ""}>{row.label}</option>
+                ))}
+              </select>
             </div>
+            {(activityFilter !== "all" || productFilter || paidFilter !== "all" || assistedFilter !== "all" || memberFilter || query) && (
+              <div className="mt-3 flex justify-end">
+                <button type="button" onClick={clearFilters} className="btn btn-ghost min-h-11 px-3 text-xs">
+                  清除所有篩選
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
             <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               style={{ borderBottom: "1px solid var(--border)" }}>
               <div className="flex flex-wrap items-center gap-2">
-                <button type="button" onClick={() => setSelectedIds(allVisibleSelected ? [] : visibleOrders.map((o) => o.id))}
-                  disabled={!visibleOrders.length}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
+                <button type="button" onClick={() => {
+                  const pageIds = selectablePageOrders.map((order) => order.id);
+                  setSelectedIds((current) => allVisibleSelected
+                    ? current.filter((id) => !pageIds.includes(id))
+                    : Array.from(new Set([...current, ...pageIds])));
+                }}
+                  disabled={!selectablePageOrders.length}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-xs disabled:opacity-50"
                   style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                   {allVisibleSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                  {allVisibleSelected ? "取消選取" : "全選列表"}
+                  {allVisibleSelected ? "取消選取本頁" : "全選本頁"}
                 </button>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>已選 {selectedIds.length} 筆</span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>已選 {selectedOrders.length} 筆</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={!selectedIds.length || batchBusy} onClick={() => batchSetPaid(true)}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
-                  style={{ border: "1px solid var(--border)", color: "#16a34a" }}>確認已收款</button>
-                <button type="button" disabled={!selectedIds.length || batchBusy} onClick={() => batchSetPaid(false)}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
-                  style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>撤銷收款</button>
+                {[...selectedActivityGroups.entries()].map(([activityKey, group]) => (
+                  <div key={activityKey} className="flex flex-wrap items-center gap-1 rounded-md px-2 py-1"
+                    style={{ border: "1px solid var(--border)" }}>
+                    <span className="mr-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      {group.label} · {group.orders.length} 筆
+                    </span>
+                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(activityKey, true)}
+                      className="min-h-9 rounded-md px-2 text-xs font-medium disabled:opacity-50"
+                      style={{ border: "1px solid var(--border)", color: "var(--success)" }}>標記已收款</button>
+                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(activityKey, false)}
+                      className="min-h-9 rounded-md px-2 text-xs font-medium disabled:opacity-50"
+                      style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>撤銷收款</button>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -611,7 +1059,7 @@ export default function ClassOrdersPage() {
             ) : (
               <>
               <div className="space-y-2 p-3 md:hidden">
-                {visibleOrders.map((order) => (
+                {pageOrders.map((order) => (
                   <article key={order.id} className="rounded-md p-3" style={{ border: "1px solid var(--border)" }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -620,7 +1068,7 @@ export default function ClassOrdersPage() {
                         </Link>
                         <p className="mt-1 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{order.user_name ?? "未具名訂購人"}</p>
                         <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                          {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"} · {order.class_label ?? "未歸班"}
+                          {activityLabel(order.activity_id)} · {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
@@ -632,22 +1080,33 @@ export default function ClassOrdersPage() {
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <OrderStatusBadge status={order.status} />
-                      <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</span>
+                      <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
-                        className="min-h-11 rounded-md px-3 text-xs font-medium disabled:opacity-50"
-                        style={{ border: "1px solid var(--border)", color: order.is_class_collected ? "var(--text-secondary)" : "#16a34a" }}>
-                        {order.is_class_collected ? "撤銷收款" : "確認收款"}
+                      {isCollectableOrder(order) ? (
+                        <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
+                          className="min-h-11 rounded-md px-3 text-xs font-medium disabled:opacity-50"
+                          aria-label={order.is_class_collected ? `撤銷${order.user_name ?? "此筆"}收款` : `標記${order.user_name ?? "此筆"}已收款`}
+                          style={{ border: "1px solid var(--border)", color: order.is_class_collected ? "var(--text-secondary)" : "var(--success)" }}>
+                          {order.is_class_collected ? "撤銷收款" : "標記已收"}
+                        </button>
+                      ) : (
+                        <span className="inline-flex min-h-11 items-center px-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                          不列入收款
+                        </span>
+                      )}
+                      <button type="button" disabled={!isCollectableOrder(order)}
+                        onClick={() => setSelectedIds((current) => current.includes(order.id) ? current.filter((id) => id !== order.id) : [...current, order.id])}
+                        aria-pressed={selectedSet.has(order.id)}
+                        className="min-h-11 rounded-md px-3 text-xs disabled:opacity-50" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                        {!isCollectableOrder(order) ? "無法選取" : selectedSet.has(order.id) ? "取消選取" : "選取"}
                       </button>
-                      <button type="button" onClick={() => setSelectedIds((current) => current.includes(order.id) ? current.filter((id) => id !== order.id) : [...current, order.id])}
-                        className="min-h-11 rounded-md px-3 text-xs" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                        {selectedSet.has(order.id) ? "取消選取" : "選取"}
-                      </button>
-                      {order.status !== "cancelled" && order.status !== "refunded" && (
+                      {isCollectableOrder(order) && (
                         <>
-                          <button type="button" onClick={() => openEdit(order)} className="min-h-11 rounded-md px-3 text-xs"
+                          {!order.is_paid && !order.is_class_collected && (
+                            <button type="button" onClick={() => openEdit(order)} className="min-h-11 rounded-md px-3 text-xs"
                             style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>修改</button>
+                          )}
                           <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} className="min-h-11 rounded-md px-3 text-xs"
                             style={{ border: "1px solid var(--border)", color: "#ef4444" }}>取消</button>
                         </>
@@ -660,17 +1119,21 @@ export default function ClassOrdersPage() {
                 <table className="w-full min-w-[820px] text-sm" role="table">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["", "訂單編號", "訂購人", "班級", "來源", "狀態", "金額", "個人收款", "操作"].map((h, i) => (
+                      {["", "訂單編號", "訂購人", "活動", "來源", "狀態", "應收金額", "班代收款", "操作"].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold"
                           style={{ color: "var(--text-muted)" }} scope="col">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleOrders.map((order, idx) => (
-                      <tr key={order.id} style={idx < visibleOrders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                    {pageOrders.map((order, idx) => (
+                      <tr key={order.id} style={idx < pageOrders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                         <td className="px-4 py-3">
-                          <button type="button" onClick={() => setSelectedIds((cur) => cur.includes(order.id) ? cur.filter((id) => id !== order.id) : [...cur, order.id])}
+                          <button type="button" disabled={!isCollectableOrder(order)}
+                            onClick={() => setSelectedIds((cur) => cur.includes(order.id) ? cur.filter((id) => id !== order.id) : [...cur, order.id])}
+                            aria-label={`${selectedSet.has(order.id) ? "取消選取" : "選取"}${order.user_name ?? order.serial_number}`}
+                            aria-pressed={selectedSet.has(order.id)}
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md disabled:opacity-40"
                             style={{ color: selectedSet.has(order.id) ? "var(--primary)" : "var(--text-muted)" }}>
                             {selectedSet.has(order.id) ? <CheckSquare size={16} /> : <Square size={16} />}
                           </button>
@@ -681,12 +1144,12 @@ export default function ClassOrdersPage() {
                           </Link>
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.class_label ?? "-"}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{activityLabel(order.activity_id)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
                           {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
                         </td>
                         <td className="px-4 py-3"><OrderStatusBadge status={order.status} /></td>
-                        <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</td>
+                        <td className="px-4 py-3 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</td>
                         <td className="px-4 py-3">
                           <span className="rounded-full px-2 py-0.5 text-xs font-medium"
                             style={order.is_class_collected
@@ -697,17 +1160,24 @@ export default function ClassOrdersPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
-                              className="rounded-md px-2 py-1 text-xs disabled:opacity-50"
-                              style={{ border: "1px solid var(--border)" }}>
-                              {order.is_class_collected ? "撤銷" : "確認收款"}
-                            </button>
-                            {order.status !== "cancelled" && order.status !== "refunded" && (
+                            {isCollectableOrder(order) ? (
+                              <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
+                                aria-label={order.is_class_collected ? `撤銷${order.user_name ?? "此筆"}收款` : `標記${order.user_name ?? "此筆"}已收款`}
+                                className="min-h-11 rounded-md px-3 text-xs disabled:opacity-50"
+                                style={{ border: "1px solid var(--border)" }}>
+                                {order.is_class_collected ? "撤銷收款" : "標記已收"}
+                              </button>
+                            ) : (
+                              <span className="px-2 text-xs" style={{ color: "var(--text-muted)" }}>不列入收款</span>
+                            )}
+                            {isCollectableOrder(order) && (
                               <>
-                                <button type="button" onClick={() => openEdit(order)} title="修改訂單"
+                                {!order.is_paid && !order.is_class_collected && (
+                                  <button type="button" onClick={() => openEdit(order)} title="修改訂單"
                                   className="rounded-md p-1 hover:opacity-70" style={{ color: "var(--primary)" }}>
                                   <Edit2 size={14} />
-                                </button>
+                                  </button>
+                                )}
                                 <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} title="取消訂單"
                                   className="rounded-md p-1 hover:opacity-70" style={{ color: "#ef4444" }}>
                                   <Trash2 size={14} />
@@ -724,6 +1194,23 @@ export default function ClassOrdersPage() {
               </>
             )}
           </div>
+          {visibleOrders.length > ORDER_LIST_PAGE_SIZE && (
+            <nav className="flex flex-wrap items-center justify-between gap-3" aria-label="訂單分頁">
+              <p className="text-xs tabular-nums" aria-live="polite" style={{ color: "var(--text-muted)" }}>
+                第 {currentPage + 1} / {pageCount} 頁 · 共 {visibleOrders.length} 筆
+              </p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setOrderPage(Math.max(0, currentPage - 1))}
+                  disabled={currentPage === 0} className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
+                  上一頁
+                </button>
+                <button type="button" onClick={() => setOrderPage(Math.min(pageCount - 1, currentPage + 1))}
+                  disabled={currentPage >= pageCount - 1} className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
+                  下一頁
+                </button>
+              </div>
+            </nav>
+          )}
         </section>
 
       </div>
