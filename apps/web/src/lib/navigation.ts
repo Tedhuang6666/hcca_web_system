@@ -295,18 +295,12 @@ export const NAV_DEF: NavEntry[] = [
     items: byIds(["shop", "merchandiseSubmissions", "surveys", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
   },
   {
-    id: "operations",
-    heading: "營運管理",
-    collapsible: true,
-    defaultCollapsed: false,
-    items: byIds(["operations"]),
-  },
-  {
     id: "workbench",
     heading: "管理後台",
     collapsible: true,
     defaultCollapsed: false,
     items: byIds([
+      "operations",
       "qrCode",
       "moduleBackoffice",
       "adminDashboard",
