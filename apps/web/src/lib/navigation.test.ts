@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { NavigationProfileOut } from "./types";
 import {
+  NAV_DEF,
   NAV_DEF_LOGGED_OUT,
   NAV_ITEMS,
   NAVIGATION_PROFILES,
+  isSection,
   isNavItemVisible,
   navItemsFromEntries,
   navProfileFromApi,
@@ -12,6 +14,14 @@ import {
 } from "./navigation";
 
 describe("navigation visibility", () => {
+  it("groups the operations center under the management back office", () => {
+    const sections = NAV_DEF.filter(isSection);
+    const managementSection = sections.find((section) => section.heading === "管理後台");
+
+    expect(sections.map((section) => section.heading)).not.toContain("營運管理");
+    expect(managementSection?.items.map((item) => item.id)).toContain("operations");
+  });
+
   it("keeps private services out of the logged-out fallback", () => {
     const ids = navItemsFromEntries(NAV_DEF_LOGGED_OUT).map((item) => item.id);
 
