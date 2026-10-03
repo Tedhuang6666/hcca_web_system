@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { apiErrorMessage, shopApi } from "@/lib/api";
-import type { ProductOut, ShopDiscountType, ShopPromotionOut } from "@/lib/types";
+import type { CatalogCategoryOut, ProductOut, ShopDiscountType, ShopPromotionOut } from "@/lib/types";
+
+const GENERAL_ACTIVITY_SCOPE = "__general__";
 
 type PromotionForm = {
+  activity_id: string;
   name: string;
   target_identifiers: string;
   target_product_ids: string[];
@@ -20,6 +23,7 @@ type PromotionForm = {
 };
 
 const emptyForm: PromotionForm = {
+  activity_id: GENERAL_ACTIVITY_SCOPE,
   name: "",
   target_identifiers: "",
   target_product_ids: [],
@@ -46,6 +50,7 @@ async function listAllActiveProducts() {
 export default function ShopPromotionPanel() {
   const [promotions, setPromotions] = useState<ShopPromotionOut[]>([]);
   const [products, setProducts] = useState<ProductOut[]>([]);
+  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,12 +58,14 @@ export default function ShopPromotionPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [promotionRows, productRows] = await Promise.all([
+      const [promotionRows, productRows, catalogRows] = await Promise.all([
         shopApi.listPromotions(),
         listAllActiveProducts(),
+        shopApi.catalog(),
       ]);
       setPromotions(promotionRows);
       setProducts(productRows);
+      setCatalog(catalogRows);
     } catch (error) {
       toast.error(apiErrorMessage(error, "載入優惠失敗"));
     } finally {
@@ -80,6 +87,7 @@ export default function ShopPromotionPanel() {
     setSaving(true);
     try {
       await shopApi.createPromotion({
+        activity_id: form.activity_id === GENERAL_ACTIVITY_SCOPE ? null : form.activity_id,
         name: form.name.trim(),
         target_identifiers: targetIdentifiers,
         target_product_ids: form.target_product_ids,
@@ -124,16 +132,69 @@ export default function ShopPromotionPanel() {
     }));
   };
 
+  const productScopes = new Map<string, string>();
+  const activityNames = new Map<string, Set<string>>();
+  for (const category of catalog) {
+    const scope = category.activity_id ?? GENERAL_ACTIVITY_SCOPE;
+    if (category.activity_id) {
+      const names = activityNames.get(category.activity_id) ?? new Set<string>();
+      names.add(category.name);
+      activityNames.set(category.activity_id, names);
+    }
+    for (const product of category.products) productScopes.set(product.id, scope);
+    for (const series of category.series) {
+      for (const product of series.products) productScopes.set(product.id, scope);
+    }
+  }
+  const activityOptions = [
+    ...(catalog.some((category) => category.activity_id == null)
+      ? [{ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" }]
+      : []),
+    ...[...activityNames.entries()].map(([id, names]) => ({
+      id,
+      label: [...names].join("、") || "活動商品",
+    })),
+  ];
+  if (!activityOptions.some((option) => option.id === form.activity_id)) {
+    activityOptions.unshift({ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" });
+  }
+  const scopedProducts = products.filter(
+    (product) => productScopes.get(product.id) === form.activity_id,
+  );
+  const activityLabel = (activityId: string | null | undefined) => {
+    if (!activityId) return "一般商品";
+    return activityOptions.find((option) => option.id === activityId)?.label ?? "指定活動";
+  };
+
   return (
     <div className="space-y-5">
       <section className="card space-y-4 p-5">
         <div>
           <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>建立優惠</h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            可依帳號、消費金額、指定商品與件數設定優惠。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
+            每項優惠只適用一個活動。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
+            適用活動
+            <select
+              className="input mt-1 w-full"
+              value={form.activity_id}
+              onChange={(event) => setForm((current) => ({
+                ...current,
+                activity_id: event.target.value,
+                target_product_ids: [],
+              }))}
+            >
+              {activityOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
+              優惠碼只會套用在這個活動的訂單。
+            </span>
+          </label>
           <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
             優惠名稱
             <input className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
@@ -180,9 +241,9 @@ export default function ShopPromotionPanel() {
               折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。
             </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
-              {products.length === 0 ? (
-                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>目前沒有上架商品，仍可建立全品項優惠。</p>
-              ) : products.map((product) => (
+              {scopedProducts.length === 0 ? (
+                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>此活動目前沒有上架商品；仍可建立適用於該活動全部商品的優惠。</p>
+              ) : scopedProducts.map((product) => (
                 <label key={product.id} className="flex min-h-10 items-center gap-2 rounded-md px-2 text-xs" style={{ color: "var(--text-secondary)" }}>
                   <input type="checkbox" checked={form.target_product_ids.includes(product.id)} onChange={() => toggleProduct(product.id)} />
                   <span>{product.name}</span>
@@ -231,7 +292,7 @@ export default function ShopPromotionPanel() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {promotion.code ? `優惠碼 ${promotion.code}` : "符合條件自動套用"} · {targetLabel} · {promotion.discount_type === "percentage" ? `${promotion.discount_value}% 折扣` : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
+                      {promotion.code ? `優惠碼 ${promotion.code}` : "符合條件自動套用"} · 適用：{activityLabel(promotion.activity_id)} · {targetLabel} · {promotion.discount_type === "percentage" ? `${promotion.discount_value}% 折扣` : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
                     </p>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                       {promotion.min_order_price > 0 ? `滿 NT$${promotion.min_order_price.toLocaleString()} · ` : ""}

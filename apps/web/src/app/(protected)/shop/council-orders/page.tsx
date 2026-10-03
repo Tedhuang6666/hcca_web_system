@@ -24,7 +24,12 @@ function money(v: number) {
 
 // ── 結單狀態徽章 ─────────────────────────────────────────────────────────────
 
-function CloseBadge({ status }: { status: CloseStatusItem | undefined }) {
+function CloseBadge({ status, partial = false }: { status: CloseStatusItem | undefined; partial?: boolean }) {
+  if (partial) return (
+    <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
+      部分結單
+    </span>
+  );
   if (!status?.is_closed) return (
     <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(34,197,94,0.12)", color: "#16a34a" }}>
       開放中
@@ -47,6 +52,7 @@ export default function CouncilOrdersPage() {
   const [grade, setGrade] = useState("");
   const [classId, setClassId] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [activityId, setActivityId] = useState("all");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -66,7 +72,12 @@ export default function CouncilOrdersPage() {
   const [paymentBusy, setPaymentBusy] = useState<string | null>(null);
 
   // 班聯結單選擇
-  const [closeTarget, setCloseTarget] = useState<{ categoryId: string; classId: string; label: string } | null>(null);
+  const [closeTarget, setCloseTarget] = useState<{
+    categoryIds: string[];
+    classId: string;
+    label: string;
+    busyKey: string;
+  } | null>(null);
 
   useEffect(() => {
     shopApi.catalog().then(setCatalog).catch(() => {});
@@ -78,10 +89,36 @@ export default function CouncilOrdersPage() {
     date_to: dateTo ? new Date(`${dateTo}T23:59:59+08:00`).toISOString() : undefined,
   }), [dateFrom, dateTo]);
 
+  const activityGroups = useMemo(() => {
+    type ActivityGroup = {
+      key: string;
+      activityId: string | null;
+      label: string;
+      categories: CatalogCategoryOut[];
+    };
+    const groups = new Map<string, ActivityGroup>();
+    for (const category of catalog) {
+      const key = category.activity_id ?? "__general__";
+      const group = groups.get(key) ?? {
+        key,
+        activityId: category.activity_id ?? null,
+        label: category.activity_id ? "" : "一般商品",
+        categories: [],
+      };
+      group.categories.push(category);
+      group.label = category.activity_id
+        ? [...new Set([...group.label.split("、").filter(Boolean), category.name])].join("、")
+        : group.label;
+      groups.set(key, group);
+    }
+    return [...groups.values()];
+  }, [catalog]);
+
   const loadSummary = useCallback(async () => {
     setLoading(true);
     try {
       const params: Parameters<typeof shopApi.orderSummary>[0] = { group_by: groupBy, ...dateParams };
+      if (activityId !== "all" && activityId !== "__general__") params.activity_id = activityId;
       if (grade) params.grade = grade;
       if (classId) params.class_id = classId;
       if (isPaid) params.is_paid = isPaid;
@@ -112,12 +149,13 @@ export default function CouncilOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [groupBy, grade, classId, isPaid, productId, categoryId, statusFilter, catalog, dateParams]);
+  }, [groupBy, grade, classId, activityId, isPaid, productId, categoryId, statusFilter, catalog, dateParams]);
 
   const loadQuantities = useCallback(async () => {
     setLoading(true);
     try {
       const params: Parameters<typeof shopApi.orderQuantities>[0] = { ...dateParams };
+      if (activityId !== "all" && activityId !== "__general__") params!.activity_id = activityId;
       if (grade) params!.grade = grade;
       if (classId) params!.class_id = classId;
       if (categoryId) params!.category_id = categoryId;
@@ -131,12 +169,13 @@ export default function CouncilOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [grade, classId, categoryId, productId, isPaid, statusFilter, dateParams]);
+  }, [activityId, grade, classId, categoryId, productId, isPaid, statusFilter, dateParams]);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
       const params: Record<string, string> = { my_only: "false", limit: "500" };
+      if (activityId !== "all" && activityId !== "__general__") params.activity_id = activityId;
       if (grade) params.grade = grade;
       if (classId) params.class_id = classId;
       if (isPaid) params.is_paid = isPaid;
@@ -153,16 +192,21 @@ export default function CouncilOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [grade, classId, isPaid, productId, categoryId, statusFilter, search, dateParams]);
+  }, [activityId, grade, classId, isPaid, productId, categoryId, statusFilter, search, dateParams]);
 
-  const updateClassPayment = async (row: OrderSummaryRow, paid: boolean) => {
+  const updateClassPayment = async (
+    row: OrderSummaryRow,
+    activity: { activityId: string | null; label: string },
+    paid: boolean,
+  ) => {
     if (row.key === "none") return;
     const action = paid ? "確認已繳費" : "撤銷繳費確認";
-    if (!window.confirm(`要為「${row.label}」${action}嗎？這會更新該班所有未取消的商品訂單，不受目前篩選條件限制。`)) return;
-    setPaymentBusy(row.key);
+    if (!window.confirm(`要為「${row.label}」的「${activity.label}」${action}嗎？只會更新這個活動的訂單。`)) return;
+    const busyKey = `${row.key}:${activity.activityId ?? "__general__"}`;
+    setPaymentBusy(busyKey);
     try {
-      const result = await shopApi.setClassPaid(row.key, paid);
-      toast.success(`已更新 ${result.updated_orders} 筆班級訂單`);
+      const result = await shopApi.setClassPaid(row.key, paid, activity.activityId);
+      toast.success(`已更新「${activity.label}」${result.updated_orders} 筆訂單`);
       await loadSummary();
     } catch (e) {
       toast.error(apiErrorMessage(e, "更新整班繳費狀態失敗"));
@@ -177,20 +221,34 @@ export default function CouncilOrdersPage() {
     else loadOrders();
   }, [tab, loadSummary, loadQuantities, loadOrders]);
 
-  const handleToggleClose = async (catId: string, targetClassId: string, isCurrentlyClosed: boolean, label: string) => {
+  const handleToggleClose = async (
+    group: { key: string; activityId: string | null; label: string; categories: CatalogCategoryOut[] },
+    targetClassId: string,
+    isCurrentlyClosed: boolean,
+    label: string,
+  ) => {
     if (!isCurrentlyClosed) {
-      setCloseTarget({ categoryId: catId, classId: targetClassId, label });
+      setCloseTarget({
+        categoryIds: group.categories
+          .filter((category) => !closeStatus[targetClassId]?.[category.id]?.is_closed)
+          .map((category) => category.id),
+        classId: targetClassId,
+        label: `${label} · ${group.label}`,
+        busyKey: `${group.key}:${targetClassId}`,
+      });
       return;
     }
-    await doReopen(catId, targetClassId);
+    await doReopen(group, targetClassId);
   };
 
   const doClose = async () => {
     if (!closeTarget) return;
-    setCloseBusy(`${closeTarget.categoryId}:${closeTarget.classId}`);
+    setCloseBusy(closeTarget.busyKey);
     try {
-      await shopApi.closeCategory(closeTarget.categoryId, { class_id: closeTarget.classId });
-      toast.success(`已為班級「${closeTarget.label}」結單`);
+      for (const categoryId of closeTarget.categoryIds) {
+        await shopApi.closeCategory(categoryId, { class_id: closeTarget.classId });
+      }
+      toast.success(`已為「${closeTarget.label}」結單`);
       setCloseTarget(null);
       await loadSummary();
     } catch (e) {
@@ -200,11 +258,18 @@ export default function CouncilOrdersPage() {
     }
   };
 
-  const doReopen = async (catId: string, targetClassId: string) => {
-    setCloseBusy(`${catId}:${targetClassId}`);
+  const doReopen = async (
+    group: { key: string; label: string; categories: CatalogCategoryOut[] },
+    targetClassId: string,
+  ) => {
+    setCloseBusy(`${group.key}:${targetClassId}`);
     try {
-      await shopApi.reopenCategory(catId, targetClassId);
-      toast.success("已重新開單");
+      for (const category of group.categories) {
+        if (closeStatus[targetClassId]?.[category.id]?.is_closed) {
+          await shopApi.reopenCategory(category.id, targetClassId);
+        }
+      }
+      toast.success(`已重新開放「${group.label}」`);
       await loadSummary();
     } catch (e) {
       toast.error(apiErrorMessage(e, "重新開單失敗"));
@@ -213,22 +278,28 @@ export default function CouncilOrdersPage() {
     }
   };
 
-  const batchClose = async (rows: OrderSummaryRow[], open: boolean) => {
-    if (!catalog.length) return;
-    const catIds = catalog.map((c) => c.id);
+  const batchClose = async (
+    rows: OrderSummaryRow[],
+    group: { key: string; label: string; categories: CatalogCategoryOut[] },
+    open: boolean,
+  ) => {
+    if (!group.categories.length) return;
     setLoading(true);
     let count = 0;
     for (const row of rows) {
-      for (const catId of catIds) {
-        const isClosed = closeStatus[row.key]?.[catId]?.is_closed ?? false;
+      if (row.key === "none") continue;
+      for (const category of group.categories) {
+        const isClosed = closeStatus[row.key]?.[category.id]?.is_closed ?? false;
         if (open && isClosed) {
-          try { await shopApi.reopenCategory(catId, row.key); count++; } catch { /* skip */ }
+          try { await shopApi.reopenCategory(category.id, row.key); count++; } catch { /* skip */ }
         } else if (!open && !isClosed) {
-          try { await shopApi.closeCategory(catId, { class_id: row.key }); count++; } catch { /* skip */ }
+          try { await shopApi.closeCategory(category.id, { class_id: row.key }); count++; } catch { /* skip */ }
         }
       }
     }
-    toast.success(open ? `已重開 ${count} 個結單` : `已結單 ${count} 個`);
+    toast.success(open
+      ? `已重新開放「${group.label}」${count} 個分類結單`
+      : `已結單「${group.label}」${count} 個分類`);
     await loadSummary();
     setLoading(false);
   };
@@ -271,6 +342,15 @@ export default function CouncilOrdersPage() {
               <option value="user">依學生</option>
             </select>
           </label>}
+          <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>活動</span>
+            <select className="input" value={activityId} onChange={(e) => setActivityId(e.target.value)}>
+              <option value="all">全部活動</option>
+              {activityGroups.filter((group) => group.activityId).map((group) => (
+                <option key={group.key} value={group.activityId ?? ""}>{group.label}</option>
+              ))}
+            </select>
+          </label>
           <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>年級</span>
             <select className="input" value={grade} onChange={(e) => { setGrade(e.target.value); setClassId(""); }}>
@@ -367,16 +447,22 @@ export default function CouncilOrdersPage() {
 
           {groupBy === "class" && summary && summary.rows.length > 0 && catalog.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
-              <button type="button" onClick={() => batchClose(summary.rows, false)} disabled={loading}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                style={{ border: "1px solid var(--border)", color: "#ef4444" }}>
-                <Lock size={12} /> 批次結單（全篩選班級）
-              </button>
-              <button type="button" onClick={() => batchClose(summary.rows, true)} disabled={loading}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                style={{ border: "1px solid var(--border)", color: "#16a34a" }}>
-                <LockOpen size={12} /> 批次重開（全篩選班級）
-              </button>
+              {activityGroups.map((group) => (
+                <div key={group.key} className="flex flex-wrap items-center gap-1.5 rounded-md px-2 py-1"
+                  style={{ border: "1px solid var(--border)" }}>
+                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{group.label}</span>
+                  <button type="button" onClick={() => batchClose(summary.rows, group, false)} disabled={loading}
+                    className="flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-medium disabled:opacity-50"
+                    style={{ border: "1px solid var(--border)", color: "#ef4444" }}>
+                    <Lock size={12} /> 批次結單
+                  </button>
+                  <button type="button" onClick={() => batchClose(summary.rows, group, true)} disabled={loading}
+                    className="flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-medium disabled:opacity-50"
+                    style={{ border: "1px solid var(--border)", color: "#16a34a" }}>
+                    <LockOpen size={12} /> 批次重開
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
@@ -390,7 +476,7 @@ export default function CouncilOrdersPage() {
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "總金額", "已繳", "未繳", ...(groupBy === "class" ? catalog.map((c) => c.name + "結單") : []), ...(groupBy === "class" ? ["操作"] : [])].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "總金額", "已繳", "未繳", ...(groupBy === "class" ? activityGroups.map((group) => group.label + "結單") : []), ...(groupBy === "class" ? ["活動收款與結單"] : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
                     </tr>
@@ -403,39 +489,54 @@ export default function CouncilOrdersPage() {
                         <td className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: "#16a34a" }}>{money(row.paid_amount)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: "#ef4444" }}>{money(row.unpaid_amount)}</td>
-                        {groupBy === "class" && catalog.map((cat) => (
-                          <td key={cat.id} className="px-4 py-3">
-                            <CloseBadge status={closeStatus[row.key]?.[cat.id]} />
+                        {groupBy === "class" && activityGroups.map((group) => {
+                          const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
+                          const closedCount = statuses.filter((item) => item?.is_closed).length;
+                          return (
+                          <td key={group.key} className="px-4 py-3">
+                            <CloseBadge
+                              status={statuses.find((item) => item?.is_closed)}
+                              partial={closedCount > 0 && closedCount < group.categories.length}
+                            />
                           </td>
-                        ))}
+                        );})}
                         {groupBy === "class" && <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {row.key !== "none" && <>
-                              <button type="button" disabled={paymentBusy === row.key}
-                                onClick={() => updateClassPayment(row, true)}
-                                className="rounded px-2 py-1 text-xs disabled:opacity-50"
-                                style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
-                                確認整班繳費
-                              </button>
-                              <button type="button" disabled={paymentBusy === row.key}
-                                onClick={() => updateClassPayment(row, false)}
-                                className="rounded px-2 py-1 text-xs disabled:opacity-50"
-                                style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                                撤銷
-                              </button>
-                            </>}
-                            {catalog.map((cat) => {
-                              const isClosed = closeStatus[row.key]?.[cat.id]?.is_closed ?? false;
-                              const isBusy = closeBusy === `${cat.id}:${row.key}`;
+                          <div className="flex min-w-56 flex-col gap-2">
+                            {activityGroups.map((group) => {
+                              const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
+                              const closedCount = statuses.filter((item) => item?.is_closed).length;
+                              const isClosed = closedCount === group.categories.length;
+                              const isBusy = closeBusy === `${group.key}:${row.key}`;
+                              const paymentKey = `${row.key}:${group.activityId ?? "__general__"}`;
                               return (
-                                <button key={cat.id} type="button" disabled={isBusy}
-                                  onClick={() => handleToggleClose(cat.id, row.key, isClosed, row.label)}
-                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs disabled:opacity-50"
-                                  style={{ border: "1px solid var(--border)", color: isClosed ? "#16a34a" : "#ef4444" }}
-                                  title={`${isClosed ? "重開" : "結單"}：${cat.name}`}>
-                                  {isBusy ? "..." : isClosed ? <LockOpen size={10} /> : <Lock size={10} />}
-                                  {cat.name.slice(0, 4)}
-                                </button>
+                                <div key={group.key} className="flex flex-wrap items-center gap-1 border-t pt-1.5 first:border-t-0 first:pt-0"
+                                  style={{ borderColor: "var(--border)" }}>
+                                  <span className="w-full text-[11px]" style={{ color: "var(--text-muted)" }}>{group.label}</span>
+                                  {row.key !== "none" && <>
+                                    <button type="button" disabled={paymentBusy === paymentKey}
+                                      onClick={() => updateClassPayment(row, group, true)}
+                                      className="rounded px-2 py-1 text-xs disabled:opacity-50"
+                                      style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
+                                      確認已繳
+                                    </button>
+                                    <button type="button" disabled={paymentBusy === paymentKey}
+                                      onClick={() => updateClassPayment(row, group, false)}
+                                      className="rounded px-2 py-1 text-xs disabled:opacity-50"
+                                      style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                                      撤銷
+                                    </button>
+                                  </>}
+                                  {group.categories.length > 0 && row.key !== "none" && (
+                                    <button type="button" disabled={isBusy}
+                                      onClick={() => handleToggleClose(group, row.key, isClosed, row.label)}
+                                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs disabled:opacity-50"
+                                      style={{ border: "1px solid var(--border)", color: isClosed ? "#16a34a" : "#ef4444" }}
+                                      title={`${isClosed ? "重開" : "結單"}：${group.label}`}>
+                                      {isBusy ? "處理中" : isClosed ? <LockOpen size={10} /> : <Lock size={10} />}
+                                      {isClosed ? "重開" : "結單"}
+                                    </button>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>

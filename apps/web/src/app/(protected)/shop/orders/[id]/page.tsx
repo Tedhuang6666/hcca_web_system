@@ -36,19 +36,20 @@ export default function OrderDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, user, currentRegistration] = await Promise.all([
+      const [o, user, currentRegistrations] = await Promise.all([
         shopApi.getOrder(id),
         authApi.me().catch(() => null),
-        shopApi.getCurrentRegistration().catch(() => null),
+        shopApi.getCurrentRegistrations().catch(() => []),
       ]);
       setOrder(o);
       setCurrentUserId(user?.id ?? null);
-      setCurrentRegistrationId(currentRegistration?.id ?? null);
+      const isCurrentRegistration = currentRegistrations.some((registration) => registration.id === o.id);
+      setCurrentRegistrationId(isCurrentRegistration ? o.id : null);
       seatingApi.orderAssignments(id).then((r) => setAssignments(r)).catch(() => setAssignments([]));
 
       const editableIds = new Set<string>();
       const registrationIsEditable = user?.id === o.user_id
-        && currentRegistration?.id === o.id
+        && isCurrentRegistration
         && (o.status === "pending" || o.status === "confirmed")
         && !o.is_paid
         && !o.is_class_collected;
@@ -250,12 +251,21 @@ export default function OrderDetailPage() {
             <dt>商品小計</dt>
             <dd>NT${subtotalPrice.toLocaleString()}</dd>
           </div>
-          <div>
-            <dt>優惠折抵{order.promotion_code ? `（${order.promotion_code}）` : ""}</dt>
-            <dd style={{ color: order.discount_amount ? "var(--success)" : "var(--text-primary)" }}>
-              − NT${order.discount_amount.toLocaleString()}
-            </dd>
-          </div>
+          {order.applied_promotions?.length ? order.applied_promotions.map((promotion) => (
+            <div key={promotion.promotion_id}>
+              <dt>優惠折抵{promotion.code ? `（${promotion.code}）` : `（${promotion.name}）`}</dt>
+              <dd style={{ color: promotion.discount_amount ? "var(--success)" : "var(--text-primary)" }}>
+                − NT${promotion.discount_amount.toLocaleString()}
+              </dd>
+            </div>
+          )) : (
+            <div>
+              <dt>優惠折抵{order.promotion_code ? `（${order.promotion_code}）` : ""}</dt>
+              <dd style={{ color: order.discount_amount ? "var(--success)" : "var(--text-primary)" }}>
+                − NT${order.discount_amount.toLocaleString()}
+              </dd>
+            </div>
+          )}
           <div className="shop-order-grand-total">
             <dt>應付總額</dt>
             <dd>NT${order.total_price.toLocaleString()}</dd>

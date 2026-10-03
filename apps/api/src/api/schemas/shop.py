@@ -334,6 +334,13 @@ class ClassOrderUpsert(BaseModel):
     notes: str | None = Field(None, max_length=500)
 
 
+class OrderPromotionOut(BaseModel):
+    promotion_id: uuid.UUID
+    name: str
+    code: str | None = None
+    discount_amount: int
+
+
 class OrderOut(BaseModel):
     id: uuid.UUID
     serial_number: str
@@ -345,6 +352,7 @@ class OrderOut(BaseModel):
     total_price: int
     promotion_id: uuid.UUID | None = None
     promotion_code: str | None = None
+    applied_promotions: list[OrderPromotionOut] = Field(default_factory=list)
     payment_method: str = "cash_on_pickup"
     notes: str | None = None
     class_id: uuid.UUID | None = None
@@ -389,6 +397,7 @@ class CheckoutRequest(BaseModel):
 
 class ShopPromotionPreviewRequest(BaseModel):
     code: str | None = Field(None, max_length=80, description="優惠碼；留空時檢查帳號自動優惠")
+    activity_id: uuid.UUID | None = Field(None, description="優惠所屬活動；未指定時代表一般商品")
 
 
 class ShopPromotionPreviewOut(BaseModel):
@@ -406,6 +415,7 @@ class ShopPromotionPreviewOut(BaseModel):
         "account_not_eligible",
         "items_not_matched",
         "quantity_not_met",
+        "activity_not_matched",
         "no_promotion",
     ]
     reason: str | None = None
@@ -429,6 +439,11 @@ class OrderPaymentUpdate(BaseModel):
     is_paid: bool = Field(..., description="是否已繳費")
 
 
+class ClassPaymentUpdate(BaseModel):
+    is_paid: bool = Field(description="班聯會是否已收到款項")
+    activity_id: uuid.UUID | None = Field(description="本次更新的活動；null 代表一般商品")
+
+
 class ClassCollectionUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -439,12 +454,14 @@ class ClassPaymentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     class_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
     updated_orders: int
     is_paid: bool
 
 
 class ShopPromotionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
+    activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
     target_email: str | None = Field(None, max_length=255, description="指定帳號 Email")
     target_identifiers: list[str] = Field(
         default_factory=list,
@@ -469,6 +486,7 @@ class ShopPromotionCreate(BaseModel):
 
 class ShopPromotionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
+    activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
     target_email: str | None = Field(None, max_length=255)
     target_identifiers: list[str] | None = Field(None, max_length=500)
     target_product_ids: list[uuid.UUID] | None = Field(None, max_length=100)
@@ -497,6 +515,7 @@ class ShopPromotionProductTargetOut(BaseModel):
 class ShopPromotionPublicOut(BaseModel):
     id: uuid.UUID
     name: str
+    activity_id: uuid.UUID | None = None
     code: str | None = None
     discount_type: ShopDiscountType
     discount_value: int
@@ -511,6 +530,7 @@ class ShopPromotionPublicOut(BaseModel):
 class ShopPromotionOut(BaseModel):
     id: uuid.UUID
     name: str
+    activity_id: uuid.UUID | None = None
     code: str | None = None
     target_user_id: uuid.UUID | None = None
     target_email: str | None = None
@@ -643,6 +663,7 @@ __all__ = [
     "OrderListItem",
     "OrderOut",
     "OrderPaymentUpdate",
+    "ClassPaymentUpdate",
     "ClassCollectionUpdate",
     "ClassPaymentOut",
     "OrderSummaryOut",

@@ -10,7 +10,8 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models.shop import Product, ShopDiscountType, ShopPromotion
+from api.models.activity import Activity
+from api.models.shop import Product, ProductSeries, ShopDiscountType, ShopPromotion
 from api.models.user import User
 from api.schemas.shop import (
     ShopPromotionCreate,
@@ -30,6 +31,28 @@ class PromotionResult:
 
 
 @dataclass(frozen=True)
+class PromotionAllocation:
+    promotion: ShopPromotion
+    discount_amount: int
+
+
+@dataclass(frozen=True)
+class PromotionBundleResult:
+    allocations: tuple[PromotionAllocation, ...]
+
+    @property
+    def promotion(self) -> ShopPromotion | None:
+        for allocation in self.allocations:
+            if allocation.promotion.code:
+                return allocation.promotion
+        return self.allocations[0].promotion if self.allocations else None
+
+    @property
+    def discount_amount(self) -> int:
+        return sum(row.discount_amount for row in self.allocations)
+
+
+@dataclass(frozen=True)
 class PromotionPreviewResult:
     promotion: ShopPromotion | None
     eligible: bool
@@ -38,6 +61,7 @@ class PromotionPreviewResult:
     reason: str | None = None
     shortfall: int = 0
     quantity_shortfall: int = 0
+    allocations: tuple[PromotionAllocation, ...] = ()
 
 
 def normalize_promotion_code(code: str | None) -> str | None:
@@ -106,7 +130,13 @@ async def _target_products(session: AsyncSession, product_ids: list[uuid.UUID]) 
     products = list(
         (
             await session.execute(
-                select(Product).where(Product.id.in_(unique_ids)).order_by(Product.name)
+                select(Product)
+                .options(
+                    selectinload(Product.category),
+                    selectinload(Product.series).selectinload(ProductSeries.category),
+                )
+                .where(Product.id.in_(unique_ids))
+                .order_by(Product.name)
             )
         )
         .scalars()
@@ -117,6 +147,30 @@ async def _target_products(session: AsyncSession, product_ids: list[uuid.UUID]) 
     if missing_ids:
         raise ValueError(f"找不到指定商品：{', '.join(missing_ids)}")
     return products
+
+
+def _product_activity_id(product: Product) -> uuid.UUID | None:
+    category = product.category
+    if category is None and product.series is not None:
+        category = product.series.category
+    return category.activity_id if category is not None else None
+
+
+def _resolve_activity_scope(
+    requested_activity_id: uuid.UUID | None,
+    target_products: list[Product],
+    *,
+    infer_activity: bool,
+) -> uuid.UUID | None:
+    product_scopes = {_product_activity_id(product) for product in target_products}
+    if len(product_scopes) > 1:
+        raise ValueError("同一項優惠的指定商品必須屬於同一活動")
+    product_scope = next(iter(product_scopes), None)
+    if infer_activity and requested_activity_id is None:
+        return product_scope
+    if target_products and product_scope != requested_activity_id:
+        raise ValueError("優惠適用活動必須與指定商品所屬活動一致")
+    return requested_activity_id
 
 
 def _promotion_targets_user(user_id: uuid.UUID):
@@ -175,7 +229,9 @@ def _promotion_issue(
     now: datetime,
     product_subtotals: dict[uuid.UUID, int] | None = None,
     product_quantities: dict[uuid.UUID, int] | None = None,
+    activity_id: uuid.UUID | None = None,
     current_promotion_id: uuid.UUID | None = None,
+    current_promotion_ids: set[uuid.UUID] | None = None,
 ) -> tuple[str, str, int, int] | None:
     if not promotion.is_active:
         return "inactive", "此優惠目前未開放使用。", 0, 0
@@ -184,10 +240,15 @@ def _promotion_issue(
         return "not_started", f"此優惠將於 {start} 開始。", 0, 0
     if promotion.ends_at and promotion.ends_at < now:
         return "expired", "此優惠已結束。", 0, 0
+    if promotion.activity_id != activity_id:
+        return "activity_not_matched", "此優惠僅適用於所屬活動。", 0, 0
+    current_ids = set(current_promotion_ids or ())
+    if current_promotion_id is not None:
+        current_ids.add(current_promotion_id)
     if (
         promotion.max_uses is not None
         and promotion.used_count >= promotion.max_uses
-        and promotion.id != current_promotion_id
+        and promotion.id not in current_ids
     ):
         return "usage_limit", "此優惠已達可使用次數上限。", 0, 0
     if not _promotion_allows_user(promotion, user_id):
@@ -230,13 +291,39 @@ async def preview_promotion(
     code: str | None = None,
     product_subtotals: dict[uuid.UUID, int] | None = None,
     product_quantities: dict[uuid.UUID, int] | None = None,
+    activity_id: uuid.UUID | None = None,
     current_promotion_id: uuid.UUID | None = None,
+    current_promotion_ids: set[uuid.UUID] | None = None,
 ) -> PromotionPreviewResult:
     now = datetime.now(UTC)
     normalized_code = normalize_promotion_code(code)
     load_targets = (
         selectinload(ShopPromotion.target_users),
         selectinload(ShopPromotion.target_products),
+    )
+    current_ids = set(current_promotion_ids or ())
+    if current_promotion_id is not None:
+        current_ids.add(current_promotion_id)
+    usage_filter = (
+        or_(
+            ShopPromotion.max_uses.is_(None),
+            ShopPromotion.used_count < ShopPromotion.max_uses,
+            ShopPromotion.id.in_(current_ids),
+        )
+        if current_ids
+        else or_(
+            ShopPromotion.max_uses.is_(None),
+            ShopPromotion.used_count < ShopPromotion.max_uses,
+        )
+    )
+    base_filters = (
+        ShopPromotion.is_active.is_(True),
+        or_(ShopPromotion.starts_at.is_(None), ShopPromotion.starts_at <= now),
+        or_(ShopPromotion.ends_at.is_(None), ShopPromotion.ends_at >= now),
+        usage_filter,
+        ShopPromotion.code.is_(None),
+        ShopPromotion.activity_id == activity_id,
+        _promotion_can_target_user(user_id),
     )
 
     if normalized_code:
@@ -260,7 +347,9 @@ async def preview_promotion(
             now=now,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
+            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
+            current_promotion_ids=current_promotion_ids,
         )
         if issue:
             reason_code, reason, shortfall, quantity_shortfall = issue
@@ -274,29 +363,72 @@ async def preview_promotion(
                 quantity_shortfall=quantity_shortfall,
             )
         amount = _discount_amount(promotion, subtotal, product_subtotals, product_quantities)
+        allocations = [PromotionAllocation(promotion=promotion, discount_amount=amount)]
+        remaining = max(0, subtotal - amount)
+        automatic_promotions = list(
+            (
+                await session.execute(
+                    select(ShopPromotion)
+                    .options(*load_targets)
+                    .where(
+                        *base_filters,
+                        ShopPromotion.activity_id == activity_id,
+                        ShopPromotion.code.is_(None),
+                        _promotion_can_target_user(user_id),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        eligible_automatic = [
+            candidate
+            for candidate in automatic_promotions
+            if _promotion_issue(
+                candidate,
+                user_id=user_id,
+                subtotal=subtotal,
+                now=now,
+                product_subtotals=product_subtotals,
+                product_quantities=product_quantities,
+                activity_id=activity_id,
+                current_promotion_id=current_promotion_id,
+                current_promotion_ids=current_promotion_ids,
+            )
+            is None
+            and _discount_amount(candidate, subtotal, product_subtotals, product_quantities) > 0
+        ]
+        if remaining and eligible_automatic:
+            automatic = max(
+                eligible_automatic,
+                key=lambda candidate: _discount_amount(
+                    candidate, subtotal, product_subtotals, product_quantities
+                ),
+            )
+            automatic_amount = min(
+                remaining,
+                _discount_amount(automatic, subtotal, product_subtotals, product_quantities),
+            )
+            if automatic_amount:
+                allocations.append(
+                    PromotionAllocation(promotion=automatic, discount_amount=automatic_amount)
+                )
+        total_discount = sum(row.discount_amount for row in allocations)
+        detail = "、".join(
+            f"「{row.promotion.name}」折抵 NT${row.discount_amount:,}" for row in allocations
+        )
         return PromotionPreviewResult(
             promotion=promotion,
-            eligible=amount > 0,
-            discount_amount=amount,
-            reason_code="applied" if amount > 0 else "minimum_not_met",
-            reason=f"已套用「{promotion.name}」，共省下 NT${amount:,}。"
-            if amount
+            eligible=total_discount > 0,
+            discount_amount=total_discount,
+            reason_code="applied" if total_discount > 0 else "minimum_not_met",
+            reason=f"已套用{detail}，共省下 NT${total_discount:,}。"
+            if total_discount
             else "此優惠目前無法折抵。",
             quantity_shortfall=0,
+            allocations=tuple(allocations),
         )
 
-    base_filters = (
-        ShopPromotion.is_active.is_(True),
-        or_(ShopPromotion.starts_at.is_(None), ShopPromotion.starts_at <= now),
-        or_(ShopPromotion.ends_at.is_(None), ShopPromotion.ends_at >= now),
-        or_(
-            ShopPromotion.max_uses.is_(None),
-            ShopPromotion.used_count < ShopPromotion.max_uses,
-            ShopPromotion.id == current_promotion_id,
-        ),
-        ShopPromotion.code.is_(None),
-        _promotion_can_target_user(user_id),
-    )
     promotions = list(
         (await session.execute(select(ShopPromotion).options(*load_targets).where(*base_filters)))
         .scalars()
@@ -312,7 +444,9 @@ async def preview_promotion(
             now=now,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
+            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
+            current_promotion_ids=current_promotion_ids,
         )
         is None
         and _discount_amount(promotion, subtotal, product_subtotals, product_quantities) > 0
@@ -331,6 +465,7 @@ async def preview_promotion(
             discount_amount=amount,
             reason_code="applied",
             reason=f"已自動套用「{selected.name}」，共省下 NT${amount:,}。",
+            allocations=(PromotionAllocation(promotion=selected, discount_amount=amount),),
         )
 
     issue_candidates = []
@@ -342,7 +477,9 @@ async def preview_promotion(
             now=now,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
+            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
+            current_promotion_ids=current_promotion_ids,
         )
         if issue and issue[0] in {
             "items_not_matched",
@@ -387,6 +524,9 @@ async def create_promotion(
         identifiers.append(data.target_email)
     target_users = await _target_users(session, identifiers)
     target_products = await _target_products(session, data.target_product_ids)
+    activity_id = _resolve_activity_scope(data.activity_id, target_products, infer_activity=True)
+    if activity_id is not None and await session.get(Activity, activity_id) is None:
+        raise ValueError("找不到指定活動")
     _validate_discount(data.discount_type, data.discount_value)
     if data.starts_at and data.ends_at and data.starts_at >= data.ends_at:
         raise ValueError("優惠開始時間必須早於結束時間")
@@ -397,6 +537,7 @@ async def create_promotion(
 
     promotion = ShopPromotion(
         name=data.name.strip(),
+        activity_id=activity_id,
         code=code,
         target_user_id=target_users[0].id if len(target_users) == 1 else None,
         target_users=target_users,
@@ -477,6 +618,9 @@ async def update_promotion(
     session: AsyncSession, promotion: ShopPromotion, *, data: ShopPromotionUpdate
 ) -> ShopPromotion:
     payload = data.model_dump(exclude_unset=True)
+    activity_was_explicit = "activity_id" in payload
+    target_products_changed = "target_product_ids" in payload
+    requested_activity_id = payload.pop("activity_id", promotion.activity_id)
     target_users: list[User] | None = None
     target_products: list[Product] | None = None
     if "target_identifiers" in payload or "target_email" in payload:
@@ -504,6 +648,22 @@ async def update_promotion(
         promotion.target_user_id = target_users[0].id if len(target_users) == 1 else None
     if target_products is not None:
         promotion.target_products = target_products
+    if activity_was_explicit or target_products_changed:
+        effective_products = target_products
+        if effective_products is None:
+            effective_products = await _target_products(
+                session, [product.id for product in (promotion.target_products or [])]
+            )
+        activity_id = _resolve_activity_scope(
+            requested_activity_id,
+            effective_products,
+            infer_activity=(
+                target_products_changed and not activity_was_explicit and bool(effective_products)
+            ),
+        )
+        if activity_id is not None and await session.get(Activity, activity_id) is None:
+            raise ValueError("找不到指定活動")
+        promotion.activity_id = activity_id
     apply_updates(promotion, payload)
     _validate_discount(promotion.discount_type, promotion.discount_value)
     if promotion.starts_at and promotion.ends_at and promotion.starts_at >= promotion.ends_at:
@@ -539,19 +699,32 @@ async def resolve_promotion(
     code: str | None = None,
     product_subtotals: dict[uuid.UUID, int] | None = None,
     product_quantities: dict[uuid.UUID, int] | None = None,
+    activity_id: uuid.UUID | None = None,
     current_promotion_id: uuid.UUID | None = None,
+    current_promotion_ids: set[uuid.UUID] | None = None,
 ) -> PromotionResult:
     now = datetime.now(UTC)
     normalized_code = normalize_promotion_code(code)
+    current_ids = set(current_promotion_ids or ())
+    if current_promotion_id is not None:
+        current_ids.add(current_promotion_id)
+    usage_filter = (
+        or_(
+            ShopPromotion.max_uses.is_(None),
+            ShopPromotion.used_count < ShopPromotion.max_uses,
+            ShopPromotion.id.in_(current_ids),
+        )
+        if current_ids
+        else or_(
+            ShopPromotion.max_uses.is_(None),
+            ShopPromotion.used_count < ShopPromotion.max_uses,
+        )
+    )
     base_filters = (
         ShopPromotion.is_active.is_(True),
         or_(ShopPromotion.starts_at.is_(None), ShopPromotion.starts_at <= now),
         or_(ShopPromotion.ends_at.is_(None), ShopPromotion.ends_at >= now),
-        or_(
-            ShopPromotion.max_uses.is_(None),
-            ShopPromotion.used_count < ShopPromotion.max_uses,
-            ShopPromotion.id == current_promotion_id,
-        ),
+        usage_filter,
     )
     if normalized_code:
         promotion = await session.scalar(
@@ -586,7 +759,9 @@ async def resolve_promotion(
             now=now,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
+            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
+            current_promotion_ids=current_ids,
         )
         if issue:
             _, reason, _, _ = issue
@@ -619,6 +794,7 @@ async def resolve_promotion(
                 .where(
                     *base_filters,
                     ShopPromotion.code.is_(None),
+                    ShopPromotion.activity_id == activity_id,
                     _promotion_can_target_user(user_id),
                 )
                 .with_for_update()
@@ -637,7 +813,9 @@ async def resolve_promotion(
             now=now,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
+            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
+            current_promotion_ids=current_ids,
         )
         is None
         and _discount_amount(promotion, subtotal, product_subtotals, product_quantities) > 0
@@ -656,6 +834,59 @@ async def resolve_promotion(
     )
 
 
+async def resolve_promotions(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    subtotal: int,
+    code: str | None = None,
+    product_subtotals: dict[uuid.UUID, int] | None = None,
+    product_quantities: dict[uuid.UUID, int] | None = None,
+    activity_id: uuid.UUID | None = None,
+    current_promotion_id: uuid.UUID | None = None,
+    current_promotion_ids: set[uuid.UUID] | None = None,
+) -> PromotionBundleResult:
+    current_ids = set(current_promotion_ids or ())
+    if current_promotion_id is not None:
+        current_ids.add(current_promotion_id)
+    selected: list[PromotionResult] = []
+    if normalize_promotion_code(code):
+        coupon = await resolve_promotion(
+            session,
+            user_id=user_id,
+            subtotal=subtotal,
+            code=code,
+            product_subtotals=product_subtotals,
+            product_quantities=product_quantities,
+            activity_id=activity_id,
+            current_promotion_ids=current_ids,
+        )
+        selected.append(coupon)
+
+    automatic = await resolve_promotion(
+        session,
+        user_id=user_id,
+        subtotal=subtotal,
+        product_subtotals=product_subtotals,
+        product_quantities=product_quantities,
+        activity_id=activity_id,
+        current_promotion_ids=current_ids,
+    )
+    if automatic.promotion is not None:
+        selected.append(automatic)
+
+    remaining = max(0, subtotal)
+    allocations: list[PromotionAllocation] = []
+    for result in selected:
+        if result.promotion is None:
+            continue
+        amount = min(remaining, result.discount_amount)
+        if amount > 0:
+            allocations.append(PromotionAllocation(result.promotion, amount))
+            remaining -= amount
+    return PromotionBundleResult(tuple(allocations))
+
+
 def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
     target_users = list(promotion.target_users or [])
     if not target_users and promotion.target_user is not None:
@@ -663,6 +894,7 @@ def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
     return ShopPromotionOut(
         id=promotion.id,
         name=promotion.name,
+        activity_id=promotion.activity_id,
         code=promotion.code,
         target_user_id=promotion.target_user_id,
         target_email=promotion.target_user.email if promotion.target_user else None,
@@ -693,6 +925,7 @@ def serialize_public_promotion(promotion: ShopPromotion) -> ShopPromotionPublicO
     return ShopPromotionPublicOut(
         id=promotion.id,
         name=promotion.name,
+        activity_id=promotion.activity_id,
         code=promotion.code,
         discount_type=promotion.discount_type,
         discount_value=promotion.discount_value,

@@ -10398,6 +10398,23 @@ export interface paths {
         patch: operations["update_promotion_shop_promotions__promotion_id__patch"];
         trace?: never;
     };
+    "/shop/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得各活動目前商品登記 */
+        get: operations["list_current_registrations_shop_registrations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/registrations/current": {
         parameters: {
             query?: never;
@@ -13945,6 +13962,8 @@ export interface components {
         };
         /** ClassPaymentOut */
         ClassPaymentOut: {
+            /** Activity Id */
+            activity_id?: string | null;
             /**
              * Class Id
              * Format: uuid
@@ -13954,6 +13973,19 @@ export interface components {
             is_paid: boolean;
             /** Updated Orders */
             updated_orders: number;
+        };
+        /** ClassPaymentUpdate */
+        ClassPaymentUpdate: {
+            /**
+             * Activity Id
+             * @description 本次更新的活動；null 代表一般商品
+             */
+            activity_id: string | null;
+            /**
+             * Is Paid
+             * @description 班聯會是否已收到款項
+             */
+            is_paid: boolean;
         };
         /** ClassRoleAssign */
         ClassRoleAssign: {
@@ -20456,6 +20488,8 @@ export interface components {
         OrderOut: {
             /** Activity Id */
             activity_id?: string | null;
+            /** Applied Promotions */
+            applied_promotions?: components["schemas"]["OrderPromotionOut"][];
             /**
              * Assistance Scope
              * @default self
@@ -20540,6 +20574,20 @@ export interface components {
              * @description 是否已繳費
              */
             is_paid: boolean;
+        };
+        /** OrderPromotionOut */
+        OrderPromotionOut: {
+            /** Code */
+            code?: string | null;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Name */
+            name: string;
+            /**
+             * Promotion Id
+             * Format: uuid
+             */
+            promotion_id: string;
         };
         /** OrderQuantityRow */
         OrderQuantityRow: {
@@ -27769,6 +27817,11 @@ export interface components {
         /** ShopPromotionCreate */
         ShopPromotionCreate: {
             /**
+             * Activity Id
+             * @description 適用活動；未指定時僅適用一般商品
+             */
+            activity_id?: string | null;
+            /**
              * Code
              * @description 優惠碼；留空時符合條件即自動套用
              */
@@ -27814,6 +27867,8 @@ export interface components {
         };
         /** ShopPromotionOut */
         ShopPromotionOut: {
+            /** Activity Id */
+            activity_id?: string | null;
             /** Code */
             code?: string | null;
             /**
@@ -27889,7 +27944,7 @@ export interface components {
              * Reason Code
              * @enum {string}
              */
-            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "items_not_matched" | "quantity_not_met" | "no_promotion";
+            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "items_not_matched" | "quantity_not_met" | "activity_not_matched" | "no_promotion";
             /**
              * Shortfall
              * @default 0
@@ -27904,6 +27959,11 @@ export interface components {
         };
         /** ShopPromotionPreviewRequest */
         ShopPromotionPreviewRequest: {
+            /**
+             * Activity Id
+             * @description 優惠所屬活動；未指定時代表一般商品
+             */
+            activity_id?: string | null;
             /**
              * Code
              * @description 優惠碼；留空時檢查帳號自動優惠
@@ -27922,6 +27982,8 @@ export interface components {
         };
         /** ShopPromotionPublicOut */
         ShopPromotionPublicOut: {
+            /** Activity Id */
+            activity_id?: string | null;
             /** Code */
             code?: string | null;
             /** Description */
@@ -27956,6 +28018,11 @@ export interface components {
         };
         /** ShopPromotionUpdate */
         ShopPromotionUpdate: {
+            /**
+             * Activity Id
+             * @description 適用活動；未指定時僅適用一般商品
+             */
+            activity_id?: string | null;
             /** Code */
             code?: string | null;
             /** Description */
@@ -52480,7 +52547,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["OrderPaymentUpdate"];
+                "application/json": components["schemas"]["ClassPaymentUpdate"];
             };
         };
         responses: {
@@ -52507,6 +52574,7 @@ export interface operations {
     order_quantities_shop_orders_quantities_get: {
         parameters: {
             query?: {
+                activity_id?: string | null;
                 grade?: number | null;
                 class_id?: string | null;
                 category_id?: string | null;
@@ -52546,6 +52614,7 @@ export interface operations {
         parameters: {
             query?: {
                 group_by?: string;
+                activity_id?: string | null;
                 product_id?: string | null;
                 category_id?: string | null;
                 grade?: number | null;
@@ -53129,6 +53198,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_current_registrations_shop_registrations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"][];
                 };
             };
         };

@@ -19,10 +19,10 @@ from api.models.shop import (
     OrderItem,
     OrderStatus,
     Product,
-    ProductCategory,
     ProductSeries,
     ProductStatus,
     ShopOrderClose,
+    ShopOrderPromotion,
     ShopPromotion,
 )
 from api.models.user import User
@@ -36,6 +36,7 @@ from api.schemas.shop import (
     OrderItemOut,
     OrderListItem,
     OrderOut,
+    OrderPromotionOut,
     OrderQuantityRow,
     OrderSummaryOut,
     OrderSummaryRow,
@@ -49,7 +50,7 @@ from api.services.shop._catalog import (
     generate_order_serial,
     get_product,
 )
-from api.services.shop._promotions import resolve_promotion
+from api.services.shop._promotions import PromotionAllocation, resolve_promotions
 
 logger = logging.getLogger(__name__)
 
@@ -74,23 +75,47 @@ def _promotion_product_quantities(items: list[OrderItem]) -> dict[uuid.UUID, int
     return quantities
 
 
-async def _sync_promotion_reservation(
+async def _sync_order_promotions(
     session: AsyncSession,
-    *,
-    previous_id: uuid.UUID | None,
-    selected: ShopPromotion | None,
+    order: Order,
+    allocations: tuple[PromotionAllocation, ...],
 ) -> None:
-    selected_id = selected.id if selected is not None else None
-    if previous_id == selected_id:
-        return
-    if previous_id is not None:
+    existing_rows = list(order.applied_promotions or [])
+    existing_by_id = {row.promotion_id: row for row in existing_rows}
+    previous_ids = set(existing_by_id)
+    if not previous_ids and order.promotion_id is not None:
+        previous_ids.add(order.promotion_id)
+    selected_ids = {row.promotion.id for row in allocations}
+
+    for promotion_id in previous_ids - selected_ids:
         previous = await session.scalar(
-            select(ShopPromotion).where(ShopPromotion.id == previous_id).with_for_update()
+            select(ShopPromotion).where(ShopPromotion.id == promotion_id).with_for_update()
         )
         if previous is not None:
             previous.used_count = max(0, previous.used_count - 1)
-    if selected is not None:
-        selected.used_count += 1
+        existing = existing_by_id.get(promotion_id)
+        if existing is not None:
+            order.applied_promotions.remove(existing)
+            await session.delete(existing)
+    for allocation in allocations:
+        if allocation.promotion.id not in previous_ids:
+            allocation.promotion.used_count += 1
+        existing = existing_by_id.get(allocation.promotion.id)
+        if existing is not None:
+            existing.discount_amount = allocation.discount_amount
+        else:
+            order.applied_promotions.append(
+                ShopOrderPromotion(
+                    promotion_id=allocation.promotion.id,
+                    promotion=allocation.promotion,
+                    discount_amount=allocation.discount_amount,
+                )
+            )
+    primary = next((row.promotion for row in allocations if row.promotion.code), None)
+    if primary is None and allocations:
+        primary = allocations[0].promotion
+    order.promotion_id = primary.id if primary is not None else None
+    order.promotion_code = primary.code if primary is not None else None
 
 
 async def _apply_order_promotion(
@@ -101,22 +126,20 @@ async def _apply_order_promotion(
 ) -> None:
     product_subtotals = _promotion_product_subtotals(order.items)
     product_quantities = _promotion_product_quantities(order.items)
-    result = await resolve_promotion(
+    current_ids = {row.promotion_id for row in (order.applied_promotions or [])}
+    if order.promotion_id is not None:
+        current_ids.add(order.promotion_id)
+    result = await resolve_promotions(
         session,
         user_id=order.user_id,
         subtotal=order.subtotal_price,
         code=code,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
-        current_promotion_id=order.promotion_id,
+        activity_id=_order_activity_id(order),
+        current_promotion_ids=current_ids,
     )
-    await _sync_promotion_reservation(
-        session,
-        previous_id=order.promotion_id,
-        selected=result.promotion,
-    )
-    order.promotion_id = result.promotion.id if result.promotion else None
-    order.promotion_code = result.promotion.code if result.promotion else None
+    await _sync_order_promotions(session, order, result.allocations)
     order.discount_amount = result.discount_amount
     order.total_price = max(0, order.subtotal_price - result.discount_amount)
 
@@ -161,11 +184,23 @@ def _product_category_filter(category_id: uuid.UUID):
     )
 
 
-def _product_activity_filter(activity_id: uuid.UUID):
-    return or_(
-        Product.category.has(ProductCategory.activity_id == activity_id),
-        Product.series.has(ProductSeries.category.has(ProductCategory.activity_id == activity_id)),
-    )
+def _product_activity_id(product: Product) -> uuid.UUID | None:
+    category = product.category
+    if category is None and product.series is not None:
+        category = product.series.category
+    return category.activity_id if category is not None else None
+
+
+async def _group_cart_items_by_activity(
+    session: AsyncSession, cart_items: list[CartItem]
+) -> dict[uuid.UUID | None, list[CartItem]]:
+    groups: dict[uuid.UUID | None, list[CartItem]] = {}
+    for cart_item in cart_items:
+        product = await get_product(session, cart_item.product_id)
+        if product is None:
+            raise ValueError("購物車含已不存在的商品")
+        groups.setdefault(_product_activity_id(product), []).append(cart_item)
+    return groups
 
 
 async def _purchased_quantity(
@@ -361,15 +396,13 @@ async def _assert_activity_open(session: AsyncSession, product: Product) -> None
 
 
 def _order_activity_id(order: Order) -> uuid.UUID | None:
+    if order.activity_id is not None:
+        return order.activity_id
+    activity_ids: set[uuid.UUID | None] = set()
     for item in getattr(order, "items", []) or []:
         product = getattr(item, "product", None)
-        category = getattr(product, "category", None) if product else None
-        series = getattr(product, "series", None) if product else None
-        if category is None and series is not None:
-            category = getattr(series, "category", None)
-        if category and category.activity_id:
-            return category.activity_id
-    return None
+        activity_ids.add(_product_activity_id(product) if product is not None else None)
+    return next(iter(activity_ids)) if len(activity_ids) == 1 else None
 
 
 async def _create_order_from_items(
@@ -377,6 +410,7 @@ async def _create_order_from_items(
     *,
     user_id: uuid.UUID,
     class_id: uuid.UUID | None,
+    activity_id: uuid.UUID | None,
     cart_items: list[CartItem],
     notes: str | None,
     assistance_scope: str = "self",
@@ -384,6 +418,7 @@ async def _create_order_from_items(
     coupon_code: str | None = None,
     payment_method: str = "cash_on_pickup",
     current_promotion_id: uuid.UUID | None = None,
+    current_promotion_ids: set[uuid.UUID] | None = None,
     reserve_promotion_usage: bool = True,
 ) -> Order:
     subtotal_price = 0
@@ -415,6 +450,8 @@ async def _create_order_from_items(
         product = await get_product(session, cart_item.product_id)
         if product is None:
             raise ValueError("購物車含已不存在的商品")
+        if _product_activity_id(product) != activity_id:
+            raise ValueError("同一筆訂單只能包含同一活動的商品")
         if product.status != ProductStatus.ACTIVE:
             raise ValueError(f"商品「{product.name}」不在上架狀態")
         if product.sale_start and now < product.sale_start:
@@ -449,24 +486,27 @@ async def _create_order_from_items(
             }
         )
 
-    promotion_result = await resolve_promotion(
+    promotion_result = await resolve_promotions(
         session,
         user_id=user_id,
         subtotal=subtotal_price,
         code=coupon_code,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
-        current_promotion_id=current_promotion_id,
+        activity_id=activity_id,
+        current_promotion_ids=current_promotion_ids,
     )
     promotion = promotion_result.promotion
-    if promotion is not None and reserve_promotion_usage:
-        promotion.used_count += 1
+    if reserve_promotion_usage:
+        for allocation in promotion_result.allocations:
+            allocation.promotion.used_count += 1
     discount_amount = promotion_result.discount_amount
     total_price = max(0, subtotal_price - discount_amount)
     serial = await generate_order_serial(session)
     order = Order(
         serial_number=serial,
         user_id=user_id,
+        activity_id=activity_id,
         class_id=class_id,
         assistance_scope=assistance_scope,
         assisted_by_id=assisted_by_id,
@@ -476,6 +516,14 @@ async def _create_order_from_items(
         total_price=total_price,
         promotion_id=promotion.id if promotion else None,
         promotion_code=promotion.code if promotion else None,
+        applied_promotions=[
+            ShopOrderPromotion(
+                promotion_id=allocation.promotion.id,
+                promotion=allocation.promotion,
+                discount_amount=allocation.discount_amount,
+            )
+            for allocation in promotion_result.allocations
+        ],
         payment_method=payment_method,
         notes=notes,
     )
@@ -517,17 +565,23 @@ async def create_direct_order(
     assisted_by_id: uuid.UUID | None = None,
 ) -> list[Order]:
     cart_items = await _order_items_to_cart_items(session, data.items)
-    order = await _create_order_from_items(
-        session,
-        user_id=user_id,
-        class_id=class_id,
-        cart_items=cart_items,
-        notes=data.notes,
-        assistance_scope=assistance_scope,
-        assisted_by_id=assisted_by_id,
-    )
-    await receivable_svc.sync_shop_order(session, order)
-    return [order]
+    orders: list[Order] = []
+    for activity_id, activity_items in (
+        await _group_cart_items_by_activity(session, cart_items)
+    ).items():
+        order = await _create_order_from_items(
+            session,
+            user_id=user_id,
+            class_id=class_id,
+            activity_id=activity_id,
+            cart_items=activity_items,
+            notes=data.notes,
+            assistance_scope=assistance_scope,
+            assisted_by_id=assisted_by_id,
+        )
+        await receivable_svc.sync_shop_order(session, order)
+        orders.append(order)
+    return orders
 
 
 async def checkout(
@@ -536,6 +590,7 @@ async def checkout(
     *,
     notes: str | None = None,
     coupon_code: str | None = None,
+    coupon_activity_id: uuid.UUID | None = None,
     payment_method: str | None = None,
 ) -> list[Order]:
     cart = await get_or_create_cart(session, user.id)
@@ -561,21 +616,33 @@ async def checkout(
             if closed_cats:
                 raise ValueError("您的班級已結單，無法送出訂購，請聯繫班級幹部")
 
-    order = await _create_order_from_items(
-        session,
-        user_id=user.id,
-        class_id=class_id,
-        cart_items=list(cart.items),
-        notes=notes,
-        coupon_code=coupon_code,
-        payment_method=(
-            "school_collection"
-            if _is_school_email(user)
-            else _validate_payment_method(payment_method)
-        ),
-    )
-    await receivable_svc.sync_shop_order(session, order)
-    orders = [order]
+    grouped_items = await _group_cart_items_by_activity(session, list(cart.items))
+    if coupon_code and len(grouped_items) > 1 and coupon_activity_id is None:
+        raise ValueError("購物車包含多個活動，請指定優惠碼適用的活動")
+    if coupon_activity_id is not None and coupon_activity_id not in grouped_items:
+        raise ValueError("優惠碼適用活動不在購物車中")
+    orders: list[Order] = []
+    for activity_id, activity_items in grouped_items.items():
+        order = await _create_order_from_items(
+            session,
+            user_id=user.id,
+            class_id=class_id,
+            activity_id=activity_id,
+            cart_items=activity_items,
+            notes=notes,
+            coupon_code=(
+                coupon_code
+                if coupon_code and (len(grouped_items) == 1 or activity_id == coupon_activity_id)
+                else None
+            ),
+            payment_method=(
+                "school_collection"
+                if _is_school_email(user)
+                else _validate_payment_method(payment_method)
+            ),
+        )
+        await receivable_svc.sync_shop_order(session, order)
+        orders.append(order)
 
     cart.items.clear()
     await session.flush()
@@ -598,17 +665,22 @@ def _is_school_email(user) -> bool:
 
 
 async def get_current_registration(
-    session: AsyncSession, user_id: uuid.UUID, *, lock: bool = False
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    activity_id: uuid.UUID | None = None,
+    match_activity: bool = False,
+    lock: bool = False,
 ) -> Order | None:
-    query = (
-        select(Order)
-        .where(
-            Order.user_id == user_id,
-            Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
-        )
-        .order_by(Order.updated_at.desc(), Order.created_at.desc())
-        .limit(1)
+    query = select(Order).where(
+        Order.user_id == user_id,
+        Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
     )
+    if match_activity:
+        query = query.where(
+            Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
+        )
+    query = query.order_by(Order.updated_at.desc(), Order.created_at.desc()).limit(1)
     if lock:
         query = query.with_for_update().execution_options(populate_existing=True)
     result = await session.execute(query)
@@ -616,13 +688,33 @@ async def get_current_registration(
     return await get_order(session, order.id) if order else None
 
 
+async def get_current_registrations(session: AsyncSession, user_id: uuid.UUID) -> list[Order]:
+    result = await session.execute(
+        select(Order.id)
+        .where(
+            Order.user_id == user_id,
+            Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+        )
+        .order_by(Order.created_at.desc(), Order.updated_at.desc())
+    )
+    orders: list[Order] = []
+    for order_id in result.scalars().all():
+        order = await get_order(session, order_id)
+        if order is not None:
+            orders.append(order)
+    return orders
+
+
 async def apply_registration_promotion(
     session: AsyncSession,
     user: User,
     *,
     code: str | None,
+    activity_id: uuid.UUID | None = None,
 ) -> Order:
-    order = await get_current_registration(session, user.id, lock=True)
+    order = await get_current_registration(
+        session, user.id, activity_id=activity_id, match_activity=True, lock=True
+    )
     if order is None or not order.items:
         raise ValueError("請先登記商品，再套用優惠")
     if order.is_paid or order.is_class_collected:
@@ -686,7 +778,10 @@ async def set_current_registration_product(
     if product is None:
         raise ValueError("找不到此商品")
 
-    order = await get_current_registration(session, user.id, lock=True)
+    activity_id = _product_activity_id(product)
+    order = await get_current_registration(
+        session, user.id, activity_id=activity_id, match_activity=True, lock=True
+    )
     if order is not None:
         if order.is_paid or order.is_class_collected:
             raise ValueError("班級幹部已登記收款，商品登記已鎖定")
@@ -745,6 +840,7 @@ async def set_current_registration_product(
         order = Order(
             serial_number=await generate_order_serial(session),
             user_id=user.id,
+            activity_id=activity_id,
             class_id=class_id,
             status=OrderStatus.PENDING,
             payment_method="school_collection" if _is_school_email(user) else "cash_on_pickup",
@@ -798,13 +894,7 @@ async def set_current_registration_product(
         order.subtotal_price = 0
         order.discount_amount = 0
         order.total_price = 0
-        await _sync_promotion_reservation(
-            session,
-            previous_id=order.promotion_id,
-            selected=None,
-        )
-        order.promotion_id = None
-        order.promotion_code = None
+        await _sync_order_promotions(session, order, ())
         await receivable_svc.cancel_for_source(session, "shop_order", order.id)
     else:
         order.subtotal_price = subtotal
@@ -837,6 +927,7 @@ async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
             .selectinload(OrderItem.product)
             .selectinload(Product.series)
             .selectinload(ProductSeries.category),
+            selectinload(Order.applied_promotions).selectinload(ShopOrderPromotion.promotion),
             selectinload(Order.school_class),
             selectinload(Order.user),
         )
@@ -876,13 +967,14 @@ async def list_orders(
             .selectinload(OrderItem.product)
             .selectinload(Product.series)
             .selectinload(ProductSeries.category),
+            selectinload(Order.applied_promotions).selectinload(ShopOrderPromotion.promotion),
         )
         .order_by(Order.created_at.desc())
     )
     if user_id:
         q = q.where(Order.user_id == user_id)
     if activity_id:
-        q = q.where(Order.items.any(OrderItem.product.has(_product_activity_filter(activity_id))))
+        q = q.where(Order.activity_id == activity_id)
     if class_ids is not None:
         if not class_ids:
             return []
@@ -1022,6 +1114,15 @@ def serialize_order(order: Order) -> OrderOut:
         total_price=order.total_price,
         promotion_id=order.promotion_id,
         promotion_code=order.promotion_code,
+        applied_promotions=[
+            OrderPromotionOut(
+                promotion_id=row.promotion_id,
+                name=row.promotion.name if row.promotion else "優惠",
+                code=row.promotion.code if row.promotion else None,
+                discount_amount=row.discount_amount,
+            )
+            for row in order.applied_promotions
+        ],
         payment_method=order.payment_method,
         notes=order.notes,
         class_id=order.class_id,
@@ -1093,12 +1194,7 @@ async def cancel_order(
                 product.status = ProductStatus.ACTIVE
 
     order.status = OrderStatus.CANCELLED
-    await _sync_promotion_reservation(
-        session,
-        previous_id=order.promotion_id,
-        selected=None,
-    )
-    order.promotion_id = None
+    await _sync_order_promotions(session, order, ())
     if reason:
         order.notes = f"[取消原因] {reason}" + (f"\n{order.notes}" if order.notes else "")
     await receivable_svc.cancel_for_source(session, "shop_order", order.id)
@@ -1118,6 +1214,9 @@ async def replace_order_items(
     if order.is_paid or order.is_class_collected:
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
 
+    activity_id = _order_activity_id(order)
+    requested_activity_ids: set[uuid.UUID | None] = set()
+
     for item in order.items:
         product = await get_product(session, item.product_id)
         if product is not None:
@@ -1131,12 +1230,19 @@ async def replace_order_items(
         product = await get_product(session, item.product_id)
         if product is None:
             raise ValueError("找不到此商品")
+        requested_activity_ids.add(_product_activity_id(product))
         await _assert_product_registration_open(
             session,
             product,
             class_id=order.class_id,
             allow_sold_out=any(existing.product_id == product.id for existing in order.items),
         )
+    if len(requested_activity_ids) > 1 or (
+        requested_activity_ids and next(iter(requested_activity_ids)) != activity_id
+    ):
+        raise ValueError("同一筆訂單只能包含原活動的商品")
+    if order.activity_id is None:
+        order.activity_id = activity_id
 
     for item in list(order.items):
         product = await session.get(Product, item.product_id)
@@ -1152,6 +1258,7 @@ async def replace_order_items(
         session,
         user_id=order.user_id,
         class_id=order.class_id,
+        activity_id=activity_id,
         cart_items=temp_items,
         notes=data.notes,
         coupon_code=order.promotion_code,
@@ -1161,23 +1268,18 @@ async def replace_order_items(
         current_promotion_id=order.promotion_id,
         reserve_promotion_usage=False,
     )
-    new_promotion = None
-    if specs_order.promotion_id != order.promotion_id and specs_order.promotion_id is not None:
-        new_promotion = await session.scalar(
-            select(ShopPromotion)
-            .where(ShopPromotion.id == specs_order.promotion_id)
-            .with_for_update()
-        )
-    await _sync_promotion_reservation(
+    await _sync_order_promotions(
         session,
-        previous_id=order.promotion_id,
-        selected=new_promotion,
+        order,
+        tuple(
+            PromotionAllocation(row.promotion, row.discount_amount)
+            for row in specs_order.applied_promotions
+            if row.promotion is not None
+        ),
     )
     order.subtotal_price = specs_order.subtotal_price
     order.discount_amount = specs_order.discount_amount
     order.total_price = specs_order.total_price
-    order.promotion_id = specs_order.promotion_id
-    order.promotion_code = specs_order.promotion_code
     order.notes = data.notes
     temp_result = await session.execute(
         select(OrderItem).where(OrderItem.order_id == specs_order.id)
@@ -1217,14 +1319,23 @@ async def set_class_collected(
 
 
 async def set_class_paid(
-    session: AsyncSession, class_id: uuid.UUID, *, is_paid: bool, actor_id: uuid.UUID
+    session: AsyncSession,
+    class_id: uuid.UUID,
+    *,
+    is_paid: bool,
+    actor_id: uuid.UUID,
+    activity_id: uuid.UUID | None,
 ) -> list[Order]:
+    activity_filter = (
+        Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
+    )
     orders = list(
         (
             await session.execute(
                 select(Order)
                 .where(
                     Order.class_id == class_id,
+                    activity_filter,
                     Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
                 )
                 .order_by(Order.id)
@@ -1244,6 +1355,7 @@ async def order_summary(
     session: AsyncSession,
     *,
     group_by: str,
+    activity_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     grade: int | None = None,
@@ -1267,6 +1379,8 @@ async def order_summary(
         q = q.where(Order.status == status)
     else:
         q = q.where(Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]))
+    if activity_id is not None:
+        q = q.where(Order.activity_id == activity_id)
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if category_id:
@@ -1469,6 +1583,7 @@ async def reopen_category_for_class(
 async def order_quantities(
     session: AsyncSession,
     *,
+    activity_id: uuid.UUID | None = None,
     grade: int | None = None,
     class_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
@@ -1500,6 +1615,8 @@ async def order_quantities(
     )
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
+    if activity_id is not None:
+        q = q.where(Order.activity_id == activity_id)
     if class_id:
         q = q.where(Order.class_id == class_id)
     if is_paid is not None:

@@ -36,6 +36,7 @@ from api.schemas.shop import (
     ClassCollectionUpdate,
     ClassOrderUpsert,
     ClassPaymentOut,
+    ClassPaymentUpdate,
     CloseStatusOut,
     CurrentRegistrationUpdate,
     ImageUploadOut,
@@ -714,6 +715,16 @@ async def delete_variant_option(
 
 
 @router.get(
+    "/registrations",
+    response_model=list[OrderOut],
+    summary="取得各活動目前商品登記",
+)
+async def list_current_registrations(session: DbDep, current_user: CurrentUser) -> list[OrderOut]:
+    orders = await shop_svc.get_current_registrations(session, current_user.id)
+    return [shop_svc.serialize_order(order) for order in orders]
+
+
+@router.get(
     "/registrations/current",
     response_model=OrderOut | None,
     summary="取得目前商品登記",
@@ -733,7 +744,12 @@ async def preview_current_registration_promotion(
     session: DbDep,
     current_user: CurrentUser,
 ) -> ShopPromotionPreviewOut:
-    order = await shop_svc.get_current_registration(session, current_user.id)
+    order = await shop_svc.get_current_registration(
+        session,
+        current_user.id,
+        activity_id=payload.activity_id,
+        match_activity=True,
+    )
     subtotal = order.subtotal_price if order else 0
     product_subtotals: dict[uuid.UUID, int] = {}
     product_quantities: dict[uuid.UUID, int] = {}
@@ -752,7 +768,11 @@ async def preview_current_registration_promotion(
         code=payload.code,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
+        activity_id=payload.activity_id,
         current_promotion_id=order.promotion_id if order else None,
+        current_promotion_ids=(
+            {row.promotion_id for row in order.applied_promotions} if order else set()
+        ),
     )
     promotion = result.promotion
     return ShopPromotionPreviewOut(
@@ -794,6 +814,7 @@ async def apply_current_registration_promotion(
             session,
             current_user,
             code=payload.code,
+            activity_id=payload.activity_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
@@ -1011,6 +1032,7 @@ async def order_summary(
     session: DbDep,
     _: CurrentUser,
     group_by: str = Query("class", pattern="^(class|grade|user)$"),
+    activity_id: uuid.UUID | None = Query(None),
     product_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
@@ -1024,6 +1046,7 @@ async def order_summary(
     return await shop_svc.order_summary(
         session,
         group_by=group_by,
+        activity_id=activity_id,
         product_id=product_id,
         category_id=category_id,
         grade=grade,
@@ -1060,6 +1083,7 @@ async def order_summary(
 async def order_quantities(
     session: DbDep,
     _: CurrentUser,
+    activity_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None),
     class_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
@@ -1071,6 +1095,7 @@ async def order_quantities(
 ) -> list[OrderQuantityRow]:
     return await shop_svc.order_quantities(
         session,
+        activity_id=activity_id,
         grade=grade,
         class_id=class_id,
         category_id=category_id,
@@ -1217,14 +1242,18 @@ async def update_class_collection(
 )
 async def update_class_payment(
     class_id: uuid.UUID,
-    payload: OrderPaymentUpdate,
+    payload: ClassPaymentUpdate,
     session: DbDep,
     current_user: CurrentUser,
 ) -> ClassPaymentOut:
     if await session.get(SchoolClass, class_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
     orders = await shop_svc.set_class_paid(
-        session, class_id, is_paid=payload.is_paid, actor_id=current_user.id
+        session,
+        class_id,
+        is_paid=payload.is_paid,
+        actor_id=current_user.id,
+        activity_id=payload.activity_id,
     )
     await audit_svc.record(
         session,
@@ -1233,12 +1262,21 @@ async def update_class_payment(
         action="shop.class_payment",
         actor_id=str(current_user.id),
         actor_email=current_user.email,
-        meta={"is_paid": payload.is_paid, "order_count": len(orders)},
-        summary=f"班聯會標示整班{'已繳費' if payload.is_paid else '未繳費'}",
+        meta={
+            "is_paid": payload.is_paid,
+            "order_count": len(orders),
+            "activity_id": str(payload.activity_id) if payload.activity_id else None,
+        },
+        summary=f"班聯會標示整班{'已繳費' if payload.is_paid else '未繳費'}（單一活動）",
     )
     for order in orders:
         await _broadcast_shop_order(order)
-    return ClassPaymentOut(class_id=class_id, updated_orders=len(orders), is_paid=payload.is_paid)
+    return ClassPaymentOut(
+        class_id=class_id,
+        activity_id=payload.activity_id,
+        updated_orders=len(orders),
+        is_paid=payload.is_paid,
+    )
 
 
 @router.patch(
