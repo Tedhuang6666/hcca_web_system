@@ -633,6 +633,48 @@ async def test_registration_automatically_applies_account_item_quantity_promotio
     assert outsider_order.json()["discount_amount"] == 0
 
 
+async def test_shop_manager_can_edit_and_delete_unused_promotion(
+    db_session, authed_client_factory
+) -> None:
+    manager = await _bare_user(db_session)
+    outsider = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+    outsider_client = authed_client_factory(outsider)
+
+    created = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "原優惠名稱",
+            "code": "SAVE10",
+            "discount_type": "percentage",
+            "discount_value": 10,
+        },
+    )
+    assert created.status_code == 201
+    promotion_id = created.json()["id"]
+
+    forbidden = await outsider_client.delete(f"/shop/promotions/{promotion_id}")
+    assert forbidden.status_code == 403
+
+    updated = await manager_client.patch(
+        f"/shop/promotions/{promotion_id}",
+        json={"name": "更新後名稱", "code": "SAVE20", "discount_value": 20},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "更新後名稱"
+    assert updated.json()["code"] == "SAVE20"
+    assert updated.json()["discount_value"] == 20
+
+    deleted = await manager_client.delete(f"/shop/promotions/{promotion_id}")
+    assert deleted.status_code == 204
+    missing = await manager_client.delete(f"/shop/promotions/{promotion_id}")
+    assert missing.status_code == 404
+    remaining = await manager_client.get("/shop/promotions?include_inactive=true")
+    assert remaining.status_code == 200
+    assert all(row["id"] != promotion_id for row in remaining.json())
+
+
 async def test_public_coupon_requires_product_bundle_spend_and_quantity(
     db_session, client, authed_client_factory
 ) -> None:
@@ -656,6 +698,7 @@ async def test_public_coupon_requires_product_bundle_spend_and_quantity(
         },
     )
     assert created.status_code == 201
+    promotion_id = created.json()["id"]
     available = await client.get("/shop/promotions/available")
     assert available.status_code == 200
     assert available.json()[0]["code"] == "PAIR50"
@@ -701,6 +744,10 @@ async def test_public_coupon_requires_product_bundle_spend_and_quantity(
     assert applied.json()["promotion_code"] == "PAIR50"
     assert applied.json()["discount_amount"] == 50
     assert applied.json()["total_price"] == 450
+
+    cannot_delete_used = await manager_client.delete(f"/shop/promotions/{promotion_id}")
+    assert cannot_delete_used.status_code == 409
+    assert "使用紀錄" in cannot_delete_used.json()["detail"]
 
 
 async def test_activity_orders_keep_separate_and_stack_scoped_coupon_with_automatic_discount(

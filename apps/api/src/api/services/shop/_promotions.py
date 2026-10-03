@@ -11,7 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.activity import Activity
-from api.models.shop import Product, ProductSeries, ShopDiscountType, ShopPromotion
+from api.models.shop import (
+    Order,
+    Product,
+    ProductSeries,
+    ShopDiscountType,
+    ShopOrderPromotion,
+    ShopPromotion,
+)
 from api.models.user import User
 from api.schemas.shop import (
     ShopPromotionCreate,
@@ -612,6 +619,25 @@ async def get_promotion(session: AsyncSession, promotion_id: uuid.UUID) -> ShopP
         )
         .where(ShopPromotion.id == promotion_id)
     )
+
+
+async def delete_promotion(session: AsyncSession, promotion: ShopPromotion) -> None:
+    if promotion.used_count > 0:
+        raise ValueError("此優惠已有使用紀錄，為保留訂單歷史無法刪除")
+
+    has_order_reference = await session.scalar(
+        select(Order.id).where(Order.promotion_id == promotion.id).limit(1)
+    )
+    has_applied_promotion = await session.scalar(
+        select(ShopOrderPromotion.order_id)
+        .where(ShopOrderPromotion.promotion_id == promotion.id)
+        .limit(1)
+    )
+    if has_order_reference is not None or has_applied_promotion is not None:
+        raise ValueError("此優惠已有訂單紀錄，為保留訂單歷史無法刪除")
+
+    await session.delete(promotion)
+    await session.flush()
 
 
 async def update_promotion(

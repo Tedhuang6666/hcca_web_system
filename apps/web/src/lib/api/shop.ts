@@ -45,6 +45,7 @@ export const shopApi = {
     post<ShopPromotionOut>("/shop/promotions", body),
   updatePromotion: (id: string, body: ShopPromotionUpdate) =>
     patch<ShopPromotionOut>(`/shop/promotions/${id}`, body),
+  deletePromotion: (id: string) => del<void>(`/shop/promotions/${id}`),
 
   // 訂單
   listOrders: (params?: Record<string, string>) => {
