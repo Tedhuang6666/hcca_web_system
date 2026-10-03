@@ -494,6 +494,7 @@ class ShopOrderPromotion(Base):
         UUID(as_uuid=True),
         ForeignKey("shop_promotions.id", ondelete="RESTRICT"),
         primary_key=True,
+        index=True,
     )
     discount_amount: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
