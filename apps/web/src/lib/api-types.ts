@@ -28134,6 +28134,21 @@ export interface components {
         /** ShopClassProductSummaryRow */
         ShopClassProductSummaryRow: {
             /**
+             * Collected Amount
+             * @default 0
+             */
+            collected_amount: number;
+            /**
+             * Collected Order Count
+             * @default 0
+             */
+            collected_order_count: number;
+            /**
+             * Collected Quantity
+             * @default 0
+             */
+            collected_quantity: number;
+            /**
              * Product Id
              * Format: uuid
              */
@@ -28144,6 +28159,21 @@ export interface components {
             quantity: number;
             /** Total Amount */
             total_amount: number;
+            /**
+             * Uncollected Amount
+             * @default 0
+             */
+            uncollected_amount: number;
+            /**
+             * Uncollected Order Count
+             * @default 0
+             */
+            uncollected_order_count: number;
+            /**
+             * Uncollected Quantity
+             * @default 0
+             */
+            uncollected_quantity: number;
         };
         /** ShopClassSummaryOut */
         ShopClassSummaryOut: {

@@ -941,6 +941,7 @@ async def class_order_summary(
     amount_by_order_id: dict[uuid.UUID, int] = {}
     for order in active_orders:
         order_amount = 0
+        order_product_ids: set[uuid.UUID] = set()
         subtotal = order.subtotal_price or sum(
             item.quantity * item.unit_price for item in order.items
         )
@@ -965,6 +966,17 @@ async def class_order_summary(
                 product_totals[item.product_id] = row
             row.quantity += quantity
             row.total_amount += amount
+            if order.is_class_collected:
+                row.collected_quantity += quantity
+                row.collected_amount += amount
+                if item.product_id not in order_product_ids:
+                    row.collected_order_count += 1
+            else:
+                row.uncollected_quantity += quantity
+                row.uncollected_amount += amount
+                if item.product_id not in order_product_ids:
+                    row.uncollected_order_count += 1
+            order_product_ids.add(item.product_id)
         amount_by_order_id[order.id] = order_amount if product_id else order.total_price
     paid_orders = [order for order in active_orders if order.is_class_collected]
     unpaid_orders = [order for order in active_orders if not order.is_class_collected]

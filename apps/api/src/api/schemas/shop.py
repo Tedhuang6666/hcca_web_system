@@ -556,6 +556,12 @@ class ShopClassProductSummaryRow(BaseModel):
     product_name: str
     quantity: int
     total_amount: int
+    collected_order_count: int = 0
+    uncollected_order_count: int = 0
+    collected_quantity: int = 0
+    uncollected_quantity: int = 0
+    collected_amount: int = 0
+    uncollected_amount: int = 0
 
 
 class ShopClassSummaryOut(BaseModel):

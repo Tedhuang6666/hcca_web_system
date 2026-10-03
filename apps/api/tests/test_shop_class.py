@@ -688,6 +688,23 @@ async def test_class_order_summary_groups_products_and_payment(
         (product_a.id, 2),
         (product_b.id, 1),
     ]
+    product_rows = {row.product_id: row for row in summary.product_rows}
+    assert (
+        product_rows[product_a.id].collected_order_count,
+        product_rows[product_a.id].uncollected_order_count,
+        product_rows[product_a.id].collected_quantity,
+        product_rows[product_a.id].uncollected_quantity,
+        product_rows[product_a.id].collected_amount,
+        product_rows[product_a.id].uncollected_amount,
+    ) == (1, 0, 2, 0, 200, 0)
+    assert (
+        product_rows[product_b.id].collected_order_count,
+        product_rows[product_b.id].uncollected_order_count,
+        product_rows[product_b.id].collected_quantity,
+        product_rows[product_b.id].uncollected_quantity,
+        product_rows[product_b.id].collected_amount,
+        product_rows[product_b.id].uncollected_amount,
+    ) == (0, 1, 0, 1, 0, 250)
     assert filtered.order_count == 1
     assert filtered.total_amount == 200
 
