@@ -35,7 +35,7 @@ const TABS: SystemOperationsTab[] = [
   {
     id: "defense",
     label: "系統防護",
-    description: "維護、限流與存取規則",
+    description: "維護模式、全域限流與緊急封鎖",
     icon: ShieldCheck,
     adminOnly: true,
   },
