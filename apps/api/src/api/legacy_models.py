@@ -31,7 +31,6 @@ from api.models.types import JSONDict, JSONList
 
 if TYPE_CHECKING:
     from api.models.activity import Activity
-    from api.models.loan import LoanItemCategory
     from api.models.org import Org
     from api.models.user import User
 
@@ -149,7 +148,6 @@ __all__ = [
 class InventoryItemType(enum.StrEnum):
     CONSUMABLE = "consumable"  # 消耗品（紙張、電池等）
     EQUIPMENT = "equipment"  # 設備（延長線、麥克風等）
-    LOANABLE = "loanable"  # 可借用物品（連結借用模組）
 
 
 class InventoryTxnType(enum.StrEnum):
@@ -215,19 +213,10 @@ class InventoryItem(Base, TimestampMixin):
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
-    # 可選連結至借用模組的物品類型（loanable 時使用）
-    loan_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("loan_item_categories.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
     org: Mapped[Org] = relationship("Org")
     category: Mapped[InventoryCategory | None] = relationship(
         "InventoryCategory", back_populates="items"
     )
-    loan_item: Mapped[LoanItemCategory | None] = relationship("LoanItemCategory")
     transactions: Mapped[list[InventoryTransaction]] = relationship(
         "InventoryTransaction", back_populates="item", cascade="all, delete-orphan"
     )

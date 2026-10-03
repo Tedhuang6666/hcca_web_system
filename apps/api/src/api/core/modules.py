@@ -48,7 +48,7 @@ MODULES: dict[str, ModuleSpec] = {
     "finance": ModuleSpec("財務與收款", ("/finance", "/receivables")),
     "publications": ModuleSpec("發布中心", ("/publications",)),
     "email": ModuleSpec("電子郵件", ("/email",)),
-    "operations": ModuleSpec("營運中心", ("/tasks", "/work-items", "/loans")),
+    "operations": ModuleSpec("營運中心", ("/tasks", "/work-items")),
 }
 
 MODULE_IDS: tuple[str, ...] = tuple(MODULES.keys())

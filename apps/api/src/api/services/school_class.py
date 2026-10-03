@@ -80,18 +80,6 @@ CLASS_ROLE_DEFINITIONS: dict[str, tuple[str, list[str], int]] = {
         ],
         90,
     ),
-    ClassRoleKey.DISCIPLINE: ("風紀", ["class:view_members"], 40),
-    ClassRoleKey.LUNCH_MANAGER: (
-        "午餐股長",
-        ["class:view_members", "class:meal_collect", "class:meal_close", "class:meal_pickup"],
-        60,
-    ),
-    ClassRoleKey.TREASURER: (
-        "總務/收款",
-        ["class:view_members", "class:shop_collect", "class:meal_collect"],
-        60,
-    ),
-    ClassRoleKey.GENERAL_AFFAIRS: ("事務", ["class:view_members"], 40),
 }
 
 COUNCIL_ORG_NAMES = ("學生代表大會", "議會", "學生議會")

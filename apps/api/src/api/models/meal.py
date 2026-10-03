@@ -490,7 +490,7 @@ class MealOrderItem(Base, TimestampMixin):
 
 
 class MealClassPickupCode(Base, TimestampMixin):
-    """午餐股長使用的整班隨機領取碼，範圍為同班級、同商家、同取餐時段。"""
+    """班級幹部使用的整班隨機領取碼，範圍為同班級、同商家、同取餐時段。"""
 
     __tablename__ = "meal_class_pickup_codes"
     __table_args__ = (

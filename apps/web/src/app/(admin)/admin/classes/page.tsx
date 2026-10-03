@@ -43,20 +43,12 @@ const roleAccent: Record<string, string> = {
   class_representative: "#2563eb",
   class_leader: "#0f766e",
   vice_leader: "#7c3aed",
-  lunch_manager: "#d97706",
-  treasurer: "#be123c",
-  discipline: "#475569",
-  general_affairs: "#64748b",
 };
 
 const roleHelp: Record<string, string> = {
   class_representative: "同步成為議員，可參與議事、法規與公文流程。",
   class_leader: "管理班級日常與本班訂購收款。",
   vice_leader: "協助班長處理班級與訂購事項。",
-  lunch_manager: "處理本班學餐收款、班級領取碼與領餐。",
-  treasurer: "處理商品與學餐的本班收款彙整。",
-  discipline: "保留風紀身分與後續風紀模組權限。",
-  general_affairs: "處理班級一般事務。",
 };
 
 function roleColor(roleKey: string) {
@@ -1263,8 +1255,8 @@ function ClassWorkspace({
             </h2>
             <div className="mt-3 space-y-3 text-sm" style={{ color: "var(--text-secondary)" }}>
               <p className="flex gap-2"><BadgeCheck size={16} style={{ color: "#2563eb" }} />班代會同步取得議員職位與議事/法規/公文權限。</p>
-              <p className="flex gap-2"><CalendarDays size={16} style={{ color: "#d97706" }} />午餐股長可取得本班學餐整班領取碼。</p>
-              <p className="flex gap-2"><ShieldCheck size={16} style={{ color: "#0f766e" }} />班長、副班長與總務可處理本班訂購收款。</p>
+              <p className="flex gap-2"><CalendarDays size={16} style={{ color: "#d97706" }} />班長與副班長可處理本班學餐收款、領餐與整班領取碼。</p>
+              <p className="flex gap-2"><ShieldCheck size={16} style={{ color: "#0f766e" }} />班長與副班長可處理本班訂購收款。</p>
             </div>
           </section>
         </div>

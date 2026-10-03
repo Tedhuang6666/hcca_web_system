@@ -78,7 +78,6 @@ from api.routers import (
     finance,
     judicial_petitions,
     line_webhook,
-    loans,
     merchandise_submissions,
     metrics_endpoint,
     mfa,
@@ -469,7 +468,6 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router)
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
-    app.include_router(loans.router)
     app.include_router(recommended_vendors.router)
     app.include_router(raffles.router)
     app.include_router(work_items.router)

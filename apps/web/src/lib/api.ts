@@ -60,6 +60,5 @@ export * from "./api/api-keys";
 export * from "./api/webhooks";
 export * from "./api/policies";
 export * from "./api/privacy-requests";
-export * from "./api/loans";
 export * from "./api/electronic-credentials";
 export * from "./api/raffles";

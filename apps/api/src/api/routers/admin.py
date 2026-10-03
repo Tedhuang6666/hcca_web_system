@@ -253,6 +253,7 @@ class CopyPositionPermissionsRequest(BaseModel):
 
 
 class PermissionCatalogItem(BaseModel):
+    category: str
     group: str
     code: str
     label: str
@@ -1613,12 +1614,15 @@ async def list_permission_codes(_: AdminUser) -> list[dict]:
 )
 async def query_permission_codes(
     _: AdminUser,
+    category: str | None = Query(None, description="上層分類精確篩選"),
     group: str | None = Query(None, description="群組精確篩選"),
     keyword: str | None = Query(None, description="模糊搜尋 code/label/desc"),
-    sort_by: Literal["group", "code", "label"] = Query("group"),
+    sort_by: Literal["category", "group", "code", "label"] = Query("group"),
     order: Literal["asc", "desc"] = Query("asc"),
 ) -> list[PermissionCatalogItem]:
     items = ALL_PERMISSION_CODES
+    if category:
+        items = [item for item in items if item["category"] == category]
     if group:
         items = [item for item in items if item["group"] == group]
     if keyword:

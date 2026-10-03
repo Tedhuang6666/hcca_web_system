@@ -111,12 +111,14 @@ export const adminApi = {
   // 系統資訊
   listPermissionCodes: () => get<PermissionCodeInfo[]>("/admin/permission-codes"),
   queryPermissionCodes: (params?: {
+    category?: string;
     group?: string;
     keyword?: string;
-    sort_by?: "group" | "code" | "label";
+    sort_by?: "category" | "group" | "code" | "label";
     order?: "asc" | "desc";
   }) => {
     const q = new URLSearchParams();
+    if (params?.category) q.set("category", params.category);
     if (params?.group) q.set("group", params.group);
     if (params?.keyword) q.set("keyword", params.keyword);
     if (params?.sort_by) q.set("sort_by", params.sort_by);

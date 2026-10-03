@@ -22,7 +22,7 @@ export const MODULE_MANIFEST = {
   finance: { label: "財務與收款", routePrefixes: ["/finance", "/receivables"], navIds: ["finance", "receivables"], navigationGroup: "發布與營運" },
   publications: { label: "發布中心", routePrefixes: ["/publications"], navIds: ["publications"], navigationGroup: "發布與營運" },
   email: { label: "電子郵件", routePrefixes: ["/email"], navIds: ["email"], navigationGroup: "發布與營運" },
-  operations: { label: "營運中心", routePrefixes: ["/operations", "/tasks", "/work-items", "/loans", "/admin/loans"], navIds: ["operations", "workItems"], navigationGroup: "我的工作" },
+  operations: { label: "營運中心", routePrefixes: ["/operations", "/tasks", "/work-items"], navIds: ["operations", "workItems"], navigationGroup: "我的工作" },
 } as const;
 
 export const MODULE_IDS = Object.keys(MODULE_MANIFEST) as Array<keyof typeof MODULE_MANIFEST>;

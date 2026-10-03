@@ -66,10 +66,6 @@ const CLASS_ROLE_OPTIONS = [
   { key: "class_representative", label: "班代" },
   { key: "class_leader", label: "班長" },
   { key: "vice_leader", label: "副班長" },
-  { key: "discipline", label: "風紀" },
-  { key: "lunch_manager", label: "午餐股長" },
-  { key: "treasurer", label: "總務/收款" },
-  { key: "general_affairs", label: "事務" },
 ];
 
 type PeopleManagementSection = "people" | "defense" | "organization" | "classes";
