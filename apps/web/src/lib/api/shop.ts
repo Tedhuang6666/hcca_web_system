@@ -21,14 +21,21 @@ export const shopApi = {
 
   // 商品登記
   getCurrentRegistration: () => get<OrderOut | null>("/shop/registrations/current"),
+  getCurrentRegistrations: () => get<OrderOut[]>("/shop/registrations"),
   setCurrentRegistrationProduct: (
     productId: string,
     body: { variants: { option_ids: string[]; quantity: number }[] },
   ) => put<OrderOut | null>(`/shop/registrations/current/products/${productId}`, body),
-  previewCurrentPromotion: (code: string | null) =>
-    post<ShopPromotionPreviewOut>("/shop/registrations/current/promotion/preview", { code }),
-  applyCurrentPromotion: (code: string | null) =>
-    put<OrderOut>("/shop/registrations/current/promotion", { code }),
+  previewCurrentPromotion: (code: string | null, activityId: string | null) =>
+    post<ShopPromotionPreviewOut>("/shop/registrations/current/promotion/preview", {
+      code,
+      activity_id: activityId,
+    }),
+  applyCurrentPromotion: (code: string | null, activityId: string | null) =>
+    put<OrderOut>("/shop/registrations/current/promotion", {
+      code,
+      activity_id: activityId,
+    }),
 
   // 優惠管理（shop:manage）
   listPromotions: (includeInactive = true) =>
@@ -100,9 +107,12 @@ export const shopApi = {
     patch<OrderOut>(`/shop/orders/${id}/payment`, { is_paid: isPaid }),
   setClassCollected: (id: string, collected: boolean) =>
     patch<OrderOut>(`/shop/orders/${id}/collection`, { is_class_collected: collected }),
-  setClassPaid: (classId: string, isPaid: boolean) =>
+  setClassPaid: (classId: string, isPaid: boolean, activityId: string | null) =>
     patch<ClassPaymentOut>(
-      `/shop/orders/classes/${classId}/payment`, { is_paid: isPaid },
+      `/shop/orders/classes/${classId}/payment`, {
+        is_paid: isPaid,
+        activity_id: activityId,
+      },
     ),
   downloadReport: (format: "xlsx" | "csv", params?: { activity_id?: string }) => {
     const q = new URLSearchParams();
@@ -169,6 +179,7 @@ export const shopApi = {
 
   // 班聯數量彙總
   orderQuantities: (params?: {
+    activity_id?: string;
     grade?: string;
     class_id?: string;
     category_id?: string;

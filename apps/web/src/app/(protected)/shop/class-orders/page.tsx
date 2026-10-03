@@ -32,10 +32,19 @@ type AssistedItemDraft = {
   id: string;
   product_id: string;
   product_name: string;
+  activity_id: string | null;
   quantity: number;
   option_ids: string[];
   option_label: string;
   unit_price: number;
+};
+
+type AssistedOrderDraft = {
+  id: string;
+  student_id: string;
+  student_name: string;
+  items: AssistedItemDraft[];
+  notes: string;
 };
 
 type ActivityCollectionRow = {
@@ -127,6 +136,7 @@ export default function ClassOrdersPage() {
   const [orderPage, setOrderPage] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [assistedItems, setAssistedItems] = useState<AssistedItemDraft[]>([]);
+  const [assistedOrderDrafts, setAssistedOrderDrafts] = useState<AssistedOrderDraft[]>([]);
 
   // 代建 / 修改共用表單
   const [editOrder, setEditOrder] = useState<OrderOut | null>(null);
@@ -194,6 +204,25 @@ export default function ClassOrdersPage() {
     return activityLabels.get(activityId) ?? `已結束活動 · ${activityId.slice(0, 6)}`;
   }, [activityLabels]);
 
+  const closeActivityGroups = useMemo(() => {
+    const groups = new Map<string, {
+      key: string;
+      label: string;
+      categories: CatalogCategoryOut[];
+    }>();
+    for (const category of catalog) {
+      const key = category.activity_id ?? "none";
+      const group = groups.get(key) ?? {
+        key,
+        label: activityLabel(category.activity_id),
+        categories: [],
+      };
+      group.categories.push(category);
+      groups.set(key, group);
+    }
+    return [...groups.values()];
+  }, [catalog, activityLabel]);
+
   const activityRows = useMemo(() => {
     const rows = new Map<string, ActivityCollectionRow>();
     for (const order of activityOrders) {
@@ -242,6 +271,37 @@ export default function ClassOrdersPage() {
     }, 0);
   const assistedTotal = assistedItems.reduce((total, item) => total + item.quantity * item.unit_price, 0)
     + (currentItemReady && orderProductId ? quantity * currentUnitPrice : 0);
+  const currentDraftItemCount = assistedItems.length + (currentItemReady ? 1 : 0);
+  const pendingDraftStudentCount = assistedOrderDrafts.length
+    + (currentDraftItemCount > 0 ? 1 : 0);
+  const pendingDraftItemCount = assistedOrderDrafts.reduce((count, draft) => count + draft.items.length, 0)
+    + currentDraftItemCount;
+  const pendingDraftSubtotal = assistedOrderDrafts.reduce((total, draft) => total
+    + draft.items.reduce((amount, item) => amount + item.quantity * item.unit_price, 0), 0)
+    + assistedTotal;
+  const hasCurrentComposerInput = Boolean(studentId || notes.trim() || assistedItems.length > 0 || orderProductId);
+  const hasIncompleteCurrentItem = Boolean(orderProductId && !currentItemReady);
+  const canQueueCurrentDraft = Boolean(
+    !editOrder && studentId && currentDraftItemCount > 0 && !hasIncompleteCurrentItem,
+  );
+  const assistedOrderDraftRows = useMemo(() => assistedOrderDrafts.map((draft) => {
+    const activityTotals = new Map<string, { activity_id: string | null; label: string; amount: number }>();
+    for (const item of draft.items) {
+      const key = item.activity_id ?? "none";
+      const row = activityTotals.get(key) ?? {
+        activity_id: item.activity_id,
+        label: activityLabel(item.activity_id),
+        amount: 0,
+      };
+      row.amount += item.quantity * item.unit_price;
+      activityTotals.set(key, row);
+    }
+    return {
+      ...draft,
+      subtotal: draft.items.reduce((total, item) => total + item.quantity * item.unit_price, 0),
+      activity_totals: [...activityTotals.values()],
+    };
+  }), [assistedOrderDrafts, activityLabel]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -350,6 +410,10 @@ export default function ClassOrdersPage() {
   }, [editOrder, orderProductId]);
 
   const openCreate = () => {
+    if (formOpen && (editOrder || hasCurrentComposerInput)) {
+      scrollToSection("class-order-form");
+      return;
+    }
     setFormOpen(true);
     setEditOrder(null);
     setStudentId("");
@@ -361,6 +425,11 @@ export default function ClassOrdersPage() {
   };
 
   const openEdit = async (order: OrderListItem) => {
+    if (hasCurrentComposerInput) {
+      toast.info("請先把目前填寫的商品加入清單，再修改既有訂單");
+      scrollToSection("class-order-form");
+      return;
+    }
     setFormOpen(true);
     setEditOrder(null);
     setOrderProductId("");
@@ -376,6 +445,7 @@ export default function ClassOrdersPage() {
         id: item.id,
         product_id: item.product_id,
         product_name: item.product_name ?? "未命名商品",
+        activity_id: full.activity_id ?? null,
         quantity: item.quantity,
         option_ids: (item.selected_options ?? []).map((option) => option.option_id),
         option_label: (item.selected_options ?? []).map((option) => `${option.group_name}：${option.value}`).join(" · "),
@@ -409,10 +479,14 @@ export default function ClassOrdersPage() {
       const option = group.options.find((item) => item.id === optionIds[group.id]);
       return option ? `${group.name} ${option.value}` : "";
     }).filter(Boolean).join(" · ");
+    const activityId = editOrder?.activity_id
+      ?? catalogProducts.find((product) => product.id === productDetail.id)?.activity_id
+      ?? null;
     setAssistedItems((current) => [...current, {
       id: `${productDetail.id}-${Date.now()}-${Math.random()}`,
       product_id: productDetail.id,
       product_name: productDetail.name,
+      activity_id: activityId,
       quantity,
       option_ids: currentOptionIds,
       option_label: optionLabel,
@@ -421,6 +495,70 @@ export default function ClassOrdersPage() {
     setOrderProductId("");
     setQuantity(1);
     setOptionIds({});
+  };
+
+  const currentComposerItems = () => {
+    const items = [...assistedItems];
+    if (orderProductId && productDetail && currentItemReady) {
+      items.push({
+        id: `${productDetail.id}-${Date.now()}-${Math.random()}`,
+        product_id: productDetail.id,
+        product_name: productDetail.name,
+        activity_id: editOrder?.activity_id
+          ?? catalogProducts.find((product) => product.id === productDetail.id)?.activity_id
+          ?? null,
+        quantity,
+        option_ids: currentOptionIds,
+        option_label: productDetail.variant_groups.map((group) => {
+          const option = group.options.find((item) => item.id === optionIds[group.id]);
+          return option ? `${group.name} ${option.value}` : "";
+        }).filter(Boolean).join(" · "),
+        unit_price: currentUnitPrice,
+      });
+    }
+    return items;
+  };
+
+  const queueCurrentDraft = () => {
+    if (!studentId) { toast.error("請先選擇同班學生"); return; }
+    if (hasIncompleteCurrentItem) { toast.error("請先完成商品規格"); return; }
+    const items = currentComposerItems();
+    if (!items.length) { toast.error("請先加入至少一項商品"); return; }
+    if (assistedOrderDrafts.some((draft) => draft.student_id === studentId)) {
+      toast.info("這位同學已在登記清單中，請載入該列繼續新增商品");
+      return;
+    }
+    const studentName = members.find((member) => member.id === studentId)?.display_name ?? "未具名學生";
+    setAssistedOrderDrafts((drafts) => [...drafts, {
+      id: `draft-${Date.now()}-${Math.random()}`,
+      student_id: studentId,
+      student_name: studentName,
+      items,
+      notes: notes.trim(),
+    }]);
+    setStudentId("");
+    setOrderProductId("");
+    setQuantity(1);
+    setOptionIds({});
+    setNotes("");
+    setAssistedItems([]);
+    toast.success(`${studentName} 已加入待送出清單`);
+  };
+
+  const loadAssistedDraft = (draft: AssistedOrderDraft) => {
+    if (hasCurrentComposerInput) {
+      toast.info("請先把目前填寫的商品加入清單，再載入其他同學");
+      return;
+    }
+    setAssistedOrderDrafts((drafts) => drafts.filter((item) => item.id !== draft.id));
+    setEditOrder(null);
+    setStudentId(draft.student_id);
+    setOrderProductId("");
+    setQuantity(1);
+    setOptionIds({});
+    setNotes(draft.notes);
+    setAssistedItems(draft.items);
+    setFormOpen(true);
   };
 
   const visibleOrders = useMemo(() => {
@@ -491,7 +629,6 @@ export default function ClassOrdersPage() {
   };
 
   const submitOrder = async () => {
-    if (!studentId) { toast.error("請先選擇同班學生"); return; }
     if (orderProductId && !productDetail) {
       toast.error("商品資料尚未載入完成，請稍候再試");
       return;
@@ -500,30 +637,120 @@ export default function ClassOrdersPage() {
       toast.error("請完成所有商品規格");
       return;
     }
-    const currentItem = orderProductId && productDetail
-      ? [{ product_id: productDetail.id, quantity, option_ids: currentOptionIds }]
-      : [];
-    const items = [
-      ...currentItem,
-      ...assistedItems.map((item) => ({
-        product_id: item.product_id,
-        quantity: item.quantity,
-        option_ids: item.option_ids,
-      })),
-    ];
-    if (!items.length) { toast.error("請至少加入一項商品"); return; }
+    const currentItems = currentComposerItems();
+    if (currentItems.length > 0 && !studentId) {
+      toast.error("請先選擇同班學生");
+      return;
+    }
+    if (editOrder && !studentId) { toast.error("找不到訂單的學生資料"); return; }
+    if (editOrder && currentItems.length === 0) { toast.error("請至少保留一項商品"); return; }
+
+    const currentDraft = currentItems.length > 0 && studentId
+      ? {
+          id: `current-${Date.now()}-${Math.random()}`,
+          student_id: studentId,
+          student_name: members.find((member) => member.id === studentId)?.display_name ?? "未具名學生",
+          items: currentItems,
+          notes: notes.trim(),
+        }
+      : null;
+    const draftsToSubmit = editOrder
+      ? []
+      : [...assistedOrderDrafts, ...(currentDraft ? [currentDraft] : [])];
+    if (!editOrder && draftsToSubmit.length === 0) {
+      toast.error("請先加入至少一位同學的商品登記");
+      return;
+    }
+    const updateItems = currentItems.map((item) => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+      option_ids: item.option_ids,
+    }));
+
     setCreating(true);
     try {
-      const body = { user_id: studentId, items, notes: notes.trim() || null };
       if (editOrder) {
-        await shopApi.updateOrder(editOrder.id, body);
+        await shopApi.updateOrder(editOrder.id, {
+          user_id: studentId,
+          items: updateItems,
+          notes: notes.trim() || null,
+        });
         toast.success("訂單已修改");
       } else {
-        await shopApi.createClassOrder(body);
-        toast.success("已完成班級代訂");
+        const submissions: Array<{
+          user_id: string;
+          notes: string;
+          items: AssistedItemDraft[];
+        }> = [];
+        for (const draft of draftsToSubmit) {
+          const byActivity = new Map<string, AssistedItemDraft[]>();
+          for (const item of draft.items) {
+            const key = item.activity_id ?? "none";
+            const activityItems = byActivity.get(key) ?? [];
+            activityItems.push(item);
+            byActivity.set(key, activityItems);
+          }
+          for (const items of byActivity.values()) {
+            submissions.push({
+              user_id: draft.student_id,
+              notes: draft.notes,
+              items,
+            });
+          }
+        }
+
+        const completedItemIds = new Set<string>();
+        let failedRequest: unknown = null;
+        for (const submission of submissions) {
+          try {
+            await shopApi.createClassOrder({
+              user_id: submission.user_id,
+              items: submission.items.map((item) => ({
+                product_id: item.product_id,
+                quantity: item.quantity,
+                option_ids: item.option_ids,
+              })),
+              notes: submission.notes || null,
+            });
+            submission.items.forEach((item) => completedItemIds.add(item.id));
+          } catch (error) {
+            failedRequest = error;
+            break;
+          }
+        }
+
+        if (failedRequest) {
+          const remainingDrafts = draftsToSubmit.map((draft) => ({
+            ...draft,
+            items: draft.items.filter((item) => !completedItemIds.has(item.id)),
+          })).filter((draft) => draft.items.length > 0);
+          setAssistedOrderDrafts(remainingDrafts);
+          setEditOrder(null);
+          setStudentId("");
+          setOrderProductId("");
+          setQuantity(1);
+          setOptionIds({});
+          setNotes("");
+          setAssistedItems([]);
+          setFormOpen(true);
+          await load();
+          const completedCount = submissions.filter((submission) =>
+            submission.items.every((item) => completedItemIds.has(item.id))).length;
+          toast.error(completedCount > 0
+            ? `已送出 ${completedCount} 筆活動訂單；其餘 ${remainingDrafts.length} 位同學的草稿已保留，修正後可再送出。${apiErrorMessage(failedRequest, "送出中斷")}`
+            : `尚未送出的資料已保留在登記清單。${apiErrorMessage(failedRequest, "送出失敗")}`);
+          return;
+        }
+
+        toast.success(`已完成 ${draftsToSubmit.length} 位同學、${submissions.length} 筆活動代訂`);
+        setAssistedOrderDrafts([]);
       }
       setEditOrder(null);
-      setStudentId(""); setOrderProductId(""); setQuantity(1); setNotes("");
+      setStudentId("");
+      setOrderProductId("");
+      setQuantity(1);
+      setOptionIds({});
+      setNotes("");
       setAssistedItems([]);
       setFormOpen(false);
       await load();
@@ -547,6 +774,32 @@ export default function ClassOrdersPage() {
       toast.error(apiErrorMessage(e, "取消失敗"));
     } finally {
       setBusy(null);
+    }
+  };
+
+  const toggleActivityClose = async (
+    group: { key: string; label: string; categories: CatalogCategoryOut[] },
+    isCurrentlyClosed: boolean,
+  ) => {
+    if (!myClassId) { toast.error("無法取得班級資訊"); return; }
+    setCloseBusy(group.key);
+    try {
+      for (const category of group.categories) {
+        const categoryClosed = closeStatus[category.id]?.is_closed ?? false;
+        if (isCurrentlyClosed && categoryClosed) {
+          await shopApi.reopenCategory(category.id, myClassId);
+        } else if (!isCurrentlyClosed && !categoryClosed) {
+          await shopApi.closeCategory(category.id, { class_id: myClassId });
+        }
+      }
+      toast.success(isCurrentlyClosed
+        ? `「${group.label}」已重新開放`
+        : `「${group.label}」已結單`);
+      await loadCloseStatus(catalog.map((c) => c.id), myClassId);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, isCurrentlyClosed ? "重新開單失敗" : "結單失敗"));
+    } finally {
+      setCloseBusy(null);
     }
   };
 
@@ -595,7 +848,7 @@ export default function ClassOrdersPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={openCreate} className="btn min-h-11" style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-            <Plus size={15} /> 幫同學下單
+            <Plus size={15} /> {assistedOrderDrafts.length ? `繼續登記 · 待送出 ${assistedOrderDrafts.length} 位` : "幫同學下單"}
           </button>
           <button type="button" onClick={load} className="btn btn-ghost min-h-11" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
@@ -611,6 +864,18 @@ export default function ClassOrdersPage() {
         </p>
       )}
 
+      {!formOpen && assistedOrderDraftRows.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3"
+          style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            尚有 {assistedOrderDraftRows.length} 位同學、{assistedOrderDraftRows.reduce((count, row) => count + row.items.length, 0)} 項商品待送出
+          </p>
+          <button type="button" onClick={openCreate} className="btn btn-ghost min-h-11 px-3 text-xs">
+            繼續登記
+          </button>
+        </div>
+      )}
+
       {formOpen && (
         <section id="class-order-form" className="scroll-mt-5 rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
           <div className="mb-3 flex items-center justify-between">
@@ -618,7 +883,20 @@ export default function ClassOrdersPage() {
               {editOrder ? <Edit2 size={15} /> : <Plus size={15} />}
               {editOrder ? `修改訂單 ${editOrder.serial_number}` : "幫同學下單"}
             </h2>
-            <button type="button" onClick={() => { setFormOpen(false); setEditOrder(null); setStudentId(""); setOrderProductId(""); setAssistedItems([]); }}
+            <button type="button" onClick={() => {
+              if (!editOrder && (assistedItems.length > 0 || orderProductId)) {
+                toast.info("目前商品尚未加入登記清單，請先加入或送出");
+                return;
+              }
+              setFormOpen(false);
+              setEditOrder(null);
+              setStudentId("");
+              setOrderProductId("");
+              setQuantity(1);
+              setOptionIds({});
+              setNotes("");
+              setAssistedItems([]);
+            }}
               className="min-h-11 min-w-11" style={{ color: "var(--text-muted)" }} aria-label="關閉下單表單">
               <X size={15} />
             </button>
@@ -626,16 +904,21 @@ export default function ClassOrdersPage() {
           <p className="mb-3 text-xs" style={{ color: "var(--text-muted)" }}>
             {editOrder
               ? "此訂單限修改原活動的商品。"
-              : "可一次登記多個活動的商品；送出後會依活動分開建立訂單。"}
+              : "可連續登記一位或多位同學，每位可加入多項商品；送出時依活動自動分單。"}
           </p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <label className="grid gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>同班學生</span>
               <select className="input min-h-11" value={studentId} onChange={(e) => setStudentId(e.target.value)} disabled={!!editOrder}>
                 <option value="">選擇同班學生</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>{m.display_name}{m.student_id ? `（${m.student_id}）` : ""}</option>
-                ))}
+                {members.map((m) => {
+                  const isQueued = assistedOrderDrafts.some((draft) => draft.student_id === m.id);
+                  return (
+                    <option key={m.id} value={m.id} disabled={!editOrder && isQueued}>
+                      {m.display_name}{m.student_id ? `（${m.student_id}）` : ""}{isQueued ? "（已加入清單）" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
@@ -675,15 +958,24 @@ export default function ClassOrdersPage() {
                   className="btn btn-ghost min-h-11 w-full disabled:opacity-50">
                   <Plus size={14} /> 加入商品
                 </button>
+                {!editOrder && (
+                  <button type="button" onClick={queueCurrentDraft}
+                    disabled={!canQueueCurrentDraft || creating}
+                    className="btn btn-ghost min-h-11 w-full disabled:opacity-50">
+                    加入清單並登記下一位
+                  </button>
+                )}
                 <button type="button" onClick={submitOrder}
-                  disabled={creating || membersLoading || membersLoadFailed || members.length === 0
-                    || (!editOrder && formProducts.length === 0)
-                    || (!orderProductId && assistedItems.length === 0) || Boolean(orderProductId && !currentItemReady)}
+                  disabled={creating || (editOrder
+                    ? currentDraftItemCount === 0 || !studentId
+                    : pendingDraftStudentCount === 0
+                      || hasIncompleteCurrentItem
+                      || (currentDraftItemCount > 0 && !studentId))}
                   className="btn min-h-11 w-full disabled:opacity-50"
                   style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
                   {creating ? "處理中..." : editOrder
                     ? `儲存修改 · 小計 ${money(assistedTotal)}`
-                    : `建立代訂 · 小計 ${money(assistedTotal)}`}
+                    : `送出 ${pendingDraftStudentCount} 位 · ${pendingDraftItemCount} 項 · 小計 ${money(pendingDraftSubtotal)}`}
                 </button>
               </div>
             </div>
@@ -692,7 +984,9 @@ export default function ClassOrdersPage() {
             <div className="mt-4 rounded-md" style={{ border: "1px solid var(--border)" }}>
               <div className="flex items-center justify-between gap-3 px-3 py-2"
                 style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                <h3 className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>商品清單</h3>
+                <h3 className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+                  {editOrder ? "訂單商品" : `目前登記 · ${members.find((member) => member.id === studentId)?.display_name ?? "請先選擇同學"}`}
+                </h3>
                 <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
                   {assistedItems.length + (orderProductId && currentItemReady ? 1 : 0)} 項 · 商品小計 {money(assistedTotal)}
                 </span>
@@ -703,7 +997,7 @@ export default function ClassOrdersPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.product_name}</p>
                       <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                        {item.option_label ? `${item.option_label} · ` : ""}{money(item.unit_price)} / 件
+                        {activityLabel(item.activity_id)} · {item.option_label ? `${item.option_label} · ` : ""}{money(item.unit_price)} / 件
                       </p>
                     </div>
                     <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
@@ -729,7 +1023,8 @@ export default function ClassOrdersPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{productDetail.name}</p>
                       <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                        {productDetail.variant_groups.map((group) => group.options.find((option) => option.id === optionIds[group.id])?.value)
+                        {activityLabel(editOrder?.activity_id
+                          ?? catalogProducts.find((product) => product.id === productDetail.id)?.activity_id)} · {productDetail.variant_groups.map((group) => group.options.find((option) => option.id === optionIds[group.id])?.value)
                           .filter(Boolean).join(" · ") || "無規格"} · {money(currentUnitPrice)} / 件
                       </p>
                     </div>
@@ -741,6 +1036,108 @@ export default function ClassOrdersPage() {
                 )}
               </ul>
             </div>
+          )}
+          {!editOrder && assistedOrderDraftRows.length > 0 && (
+            <section aria-labelledby="assisted-drafts-heading" className="mt-4 overflow-hidden rounded-md"
+              style={{ border: "1px solid var(--border)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3"
+                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+                <div>
+                  <h3 id="assisted-drafts-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                    待送出登記 · {assistedOrderDraftRows.length} 位同學
+                  </h3>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {assistedOrderDraftRows.reduce((count, row) => count + row.items.length, 0)} 項商品 · 各活動小計分開計算
+                  </p>
+                </div>
+                <strong className="text-sm tabular-nums" style={{ color: "var(--primary-text)" }}>
+                  合計 {money(assistedOrderDraftRows.reduce((total, row) => total + row.subtotal, 0))}
+                </strong>
+              </div>
+              <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
+                {assistedOrderDraftRows.map((row) => (
+                  <article key={row.id} className="space-y-2 px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <strong className="min-w-0 truncate text-sm" style={{ color: "var(--text-primary)" }}>{row.student_name}</strong>
+                      <strong className="shrink-0 text-sm tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.subtotal)}</strong>
+                    </div>
+                    <div className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                      {row.items.map((item) => (
+                        <p key={item.id} className="break-words">
+                          {item.product_name}{item.option_label ? ` · ${item.option_label}` : ""} × {item.quantity}
+                        </p>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                      {row.activity_totals.map((activity) => (
+                        <span key={activity.activity_id ?? "none"}>{activity.label} {money(activity.amount)}</span>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => loadAssistedDraft(row)} disabled={creating || hasCurrentComposerInput}
+                        className="btn btn-ghost min-h-11 flex-1 text-xs disabled:opacity-50">載入編輯</button>
+                      <button type="button" onClick={() => setAssistedOrderDrafts((drafts) => drafts.filter((draft) => draft.id !== row.id))}
+                        disabled={creating} className="btn btn-ghost min-h-11 min-w-11 text-xs disabled:opacity-50"
+                        aria-label={`移除${row.student_name}的待送出登記`}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[860px] text-sm" aria-label="待送出的班級代訂清單">
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+                      {["同學", "商品品項", "活動小計", "商品小計", "操作"].map((heading) => (
+                        <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold"
+                          style={{ color: "var(--text-muted)" }}>{heading}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assistedOrderDraftRows.map((row) => (
+                      <tr key={row.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <th scope="row" className="px-3 py-3 text-left text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                          {row.student_name}
+                        </th>
+                        <td className="max-w-sm px-3 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+                          <ul className="space-y-1">
+                            {row.items.map((item) => (
+                              <li key={item.id} className="break-words">
+                                {item.product_name}{item.option_label ? ` · ${item.option_label}` : ""} × {item.quantity}
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                        <td className="px-3 py-3 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                          <div className="space-y-1">
+                            {row.activity_totals.map((activity) => (
+                              <p key={activity.activity_id ?? "none"}>{activity.label} · {money(activity.amount)}</p>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.subtotal)}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-1">
+                            <button type="button" onClick={() => loadAssistedDraft(row)}
+                              disabled={creating || hasCurrentComposerInput}
+                              className="min-h-11 rounded-md px-2 text-xs disabled:opacity-50"
+                              style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>載入編輯</button>
+                            <button type="button" onClick={() => setAssistedOrderDrafts((drafts) => drafts.filter((draft) => draft.id !== row.id))}
+                              disabled={creating} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md disabled:opacity-50"
+                              style={{ border: "1px solid var(--border)", color: "var(--danger)" }}
+                              aria-label={`移除${row.student_name}的待送出登記`}>
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           )}
           {membersLoading && (
             <p className="mt-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>正在載入本班名冊...</p>
@@ -1220,23 +1617,31 @@ export default function ClassOrdersPage() {
           style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
           <h2 id="close-management-heading" className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品結單管理</h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {catalog.map((cat) => {
-              const status = closeStatus[cat.id];
-              const isClosed = status?.is_closed ?? false;
-              const isBusy = closeBusy === cat.id;
+            {closeActivityGroups.map((group) => {
+              const statuses = group.categories
+                .map((category) => closeStatus[category.id])
+                .filter((status) => status?.is_closed);
+              const isClosed = statuses.length === group.categories.length;
+              const isPartiallyClosed = statuses.length > 0 && !isClosed;
+              const status = statuses[0];
+              const isBusy = closeBusy === group.key;
               return (
-                <div key={cat.id} className="flex items-center justify-between gap-3 rounded-md px-3 py-2"
-                  style={{ border: `1px solid ${isClosed ? "var(--danger-border)" : "var(--border)"}`, background: isClosed ? "var(--danger-dim)" : "transparent" }}>
+                <div key={group.key} className="flex items-center justify-between gap-3 rounded-md px-3 py-2"
+                  style={{ border: `1px solid ${isClosed || isPartiallyClosed ? "var(--danger-border)" : "var(--border)"}`, background: isClosed || isPartiallyClosed ? "var(--danger-dim)" : "transparent" }}>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{cat.name}</p>
+                    <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{group.label}</p>
+                    <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                      分類：{group.categories.map((category) => category.name).join("、")}
+                    </p>
                     {isClosed && status?.closed_at && (
                       <p className="text-xs" style={{ color: "var(--danger)" }}>
                         已結單 {new Date(status.closed_at).toLocaleDateString("zh-TW")} {status.closed_by_name ? `· ${status.closed_by_name}` : ""}
                       </p>
                     )}
-                    {!isClosed && <p className="text-xs" style={{ color: "var(--text-muted)" }}>開放中</p>}
+                    {isPartiallyClosed && <p className="text-xs" style={{ color: "var(--danger)" }}>部分結單 {statuses.length}/{group.categories.length} 個分類</p>}
+                    {!isClosed && !isPartiallyClosed && <p className="text-xs" style={{ color: "var(--text-muted)" }}>開放中</p>}
                   </div>
-                  <button type="button" onClick={() => toggleClose(cat.id, isClosed)} disabled={isBusy || !myClassId}
+                  <button type="button" onClick={() => toggleActivityClose(group, isClosed)} disabled={isBusy || !myClassId}
                     className="flex min-h-11 shrink-0 items-center gap-1 rounded-md px-3 text-xs font-medium disabled:opacity-50"
                     style={{ border: "1px solid var(--border)", color: isClosed ? "var(--success)" : "var(--danger)" }}>
                     {isBusy ? "處理中" : isClosed ? <><LockOpen size={12} /> 重新開單</> : <><Lock size={12} /> 結單</>}

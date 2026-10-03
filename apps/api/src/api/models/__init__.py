@@ -315,6 +315,7 @@ from api.models.shop import (  # noqa: F401
     ProductVariantOption,
     ShopDiscountType,
     ShopOrderClose,
+    ShopOrderPromotion,
     ShopPromotion,
 )
 from api.models.site import (  # noqa: F401

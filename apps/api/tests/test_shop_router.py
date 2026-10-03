@@ -17,6 +17,8 @@ from api.models.shop import Order, OrderItem, OrderStatus, ProductCategory
 from api.models.user import User
 from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
 from api.schemas.shop import (
+    ClassOrderUpsert,
+    OrderItemCreate,
     ProductCategoryCreate,
     ProductCreate,
     ProductSeriesCreate,
@@ -699,6 +701,176 @@ async def test_public_coupon_requires_product_bundle_spend_and_quantity(
     assert applied.json()["promotion_code"] == "PAIR50"
     assert applied.json()["discount_amount"] == 50
     assert applied.json()["total_price"] == 450
+
+
+async def test_activity_orders_keep_separate_and_stack_scoped_coupon_with_automatic_discount(
+    db_session, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session, student_id="11510")
+    manager = await _bare_user(db_session)
+    school_class = await _make_class(db_session)
+    org = Org(name=f"活動-{uuid.uuid4().hex[:6]}")
+    first_activity = Activity(name="校慶預購", org=org, status=ActivityStatus.ACTIVE)
+    second_activity = Activity(name="社團活動", org=org, status=ActivityStatus.ACTIVE)
+    db_session.add_all([org, first_activity, second_activity])
+    await db_session.flush()
+    card_category = await _make_category(
+        db_session, creator, activity_id=first_activity.id, name="卡片"
+    )
+    hat_category = await _make_category(
+        db_session, creator, activity_id=first_activity.id, name="帽子"
+    )
+    other_category = await _make_category(
+        db_session, creator, activity_id=second_activity.id, name="社團商品"
+    )
+    cards = await _make_active_product(db_session, creator, price=40, category=card_category)
+    hats = await _make_active_product(db_session, creator, price=999, category=hat_category)
+    other_product = await _make_active_product(
+        db_session, creator, price=100, category=other_category
+    )
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+    auto = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "第二件折抵",
+            "target_product_ids": [str(hats.id)],
+            "min_quantity": 2,
+            "discount_type": "fixed",
+            "discount_value": 20,
+        },
+    )
+    assert auto.status_code == 201
+    assert auto.json()["activity_id"] == str(first_activity.id)
+    coupon = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "校慶九折",
+            "activity_id": str(first_activity.id),
+            "code": "FESTIVAL10",
+            "discount_type": "percentage",
+            "discount_value": 10,
+            "min_order_price": 1000,
+        },
+    )
+    assert coupon.status_code == 201
+
+    buyer_client = authed_client_factory(buyer)
+    card_order = await buyer_client.put(
+        f"/shop/registrations/current/products/{cards.id}",
+        json={"variants": [{"option_ids": [], "quantity": 4}]},
+    )
+    assert card_order.status_code == 200
+    hat_order = await buyer_client.put(
+        f"/shop/registrations/current/products/{hats.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert hat_order.status_code == 200
+    assert hat_order.json()["activity_id"] == str(first_activity.id)
+    assert hat_order.json()["discount_amount"] == 20
+    preview = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview",
+        json={"code": "FESTIVAL10", "activity_id": str(first_activity.id)},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["discount_amount"] == 235
+    assert preview.json()["total_price"] == 1923
+    applied = await buyer_client.put(
+        "/shop/registrations/current/promotion",
+        json={"code": "FESTIVAL10", "activity_id": str(first_activity.id)},
+    )
+    assert applied.status_code == 200
+    assert applied.json()["discount_amount"] == 235
+    assert applied.json()["total_price"] == 1923
+    assert {row["promotion_id"] for row in applied.json()["applied_promotions"]} == {
+        auto.json()["id"],
+        coupon.json()["id"],
+    }
+
+    other_order = await buyer_client.put(
+        f"/shop/registrations/current/products/{other_product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert other_order.status_code == 200
+    assert other_order.json()["id"] != applied.json()["id"]
+    mismatch = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview",
+        json={"code": "FESTIVAL10", "activity_id": str(second_activity.id)},
+    )
+    assert mismatch.status_code == 200
+    assert mismatch.json()["reason_code"] == "activity_not_matched"
+
+    registrations = await buyer_client.get("/shop/registrations")
+    assert registrations.status_code == 200
+    assert {row["activity_id"] for row in registrations.json()} == {
+        str(first_activity.id),
+        str(second_activity.id),
+    }
+    first_order_id = applied.json()["id"]
+    second_order_id = other_order.json()["id"]
+    first_order = await shop_svc.get_order(db_session, uuid.UUID(first_order_id))
+    second_order = await shop_svc.get_order(db_session, uuid.UUID(second_order_id))
+    assert first_order is not None and second_order is not None
+    await shop_svc.set_class_collected(
+        db_session, second_order, collected=True, actor_id=manager.id
+    )
+    assert first_order.is_class_collected is False
+    assert second_order.is_class_collected is True
+
+    first_paid = await manager_client.patch(
+        f"/shop/orders/classes/{school_class.id}/payment",
+        json={"is_paid": True, "activity_id": str(first_activity.id)},
+    )
+    assert first_paid.status_code == 200
+    assert first_paid.json()["updated_orders"] == 1
+    await db_session.refresh(first_order)
+    await db_session.refresh(second_order)
+    assert first_order.is_paid is True
+    assert second_order.is_paid is False
+    second_paid = await manager_client.patch(
+        f"/shop/orders/classes/{school_class.id}/payment",
+        json={"is_paid": True, "activity_id": str(second_activity.id)},
+    )
+    assert second_paid.status_code == 200
+    await db_session.refresh(second_order)
+    assert second_order.is_paid is True
+
+
+async def test_direct_class_order_splits_items_across_activities(db_session) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    org = Org(name=f"活動-{uuid.uuid4().hex[:6]}")
+    first_activity = Activity(name="活動一", org=org, status=ActivityStatus.ACTIVE)
+    second_activity = Activity(name="活動二", org=org, status=ActivityStatus.ACTIVE)
+    db_session.add_all([org, first_activity, second_activity])
+    await db_session.flush()
+    first_product = await _make_active_product(
+        db_session,
+        creator,
+        category=await _make_category(db_session, creator, activity_id=first_activity.id),
+    )
+    second_product = await _make_active_product(
+        db_session,
+        creator,
+        category=await _make_category(db_session, creator, activity_id=second_activity.id),
+    )
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(
+            user_id=buyer.id,
+            items=[
+                OrderItemCreate(product_id=first_product.id, quantity=1, option_ids=[]),
+                OrderItemCreate(product_id=second_product.id, quantity=1, option_ids=[]),
+            ],
+        ),
+    )
+    assert len(orders) == 2
+    assert {order.activity_id for order in orders} == {first_activity.id, second_activity.id}
+    full_orders = [await shop_svc.get_order(db_session, order.id) for order in orders]
+    assert all(order is not None and len(order.items) == 1 for order in full_orders)
 
 
 async def test_product_cannot_be_deleted_while_used_by_promotion(
