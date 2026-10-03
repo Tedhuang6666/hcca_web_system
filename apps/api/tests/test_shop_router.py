@@ -1148,7 +1148,10 @@ async def test_council_can_confirm_whole_class_without_changing_cadre_notes(
     await shop_svc.set_class_collected(db_session, first, collected=True, actor_id=buyer.id)
 
     ac = authed_client_factory(manager)
-    response = await ac.patch(f"/shop/orders/classes/{sc.id}/payment", json={"is_paid": True})
+    response = await ac.patch(
+        f"/shop/orders/classes/{sc.id}/payment",
+        json={"is_paid": True, "activity_id": None},
+    )
     assert response.status_code == 200
     assert response.json()["updated_orders"] == 2
     assert first.is_paid is True and second.is_paid is True

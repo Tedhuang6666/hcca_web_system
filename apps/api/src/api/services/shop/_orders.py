@@ -848,6 +848,7 @@ async def set_current_registration_product(
             discount_amount=0,
             total_price=0,
             items=[],
+            applied_promotions=[],
         )
         session.add(order)
         await session.flush()

@@ -690,7 +690,7 @@ async def update_promotion(
         if activity_id is not None and await session.get(Activity, activity_id) is None:
             raise ValueError("找不到指定活動")
         promotion.activity_id = activity_id
-    apply_updates(promotion, payload)
+    apply_updates(promotion, ShopPromotionUpdate.model_validate(payload))
     _validate_discount(promotion.discount_type, promotion.discount_value)
     if promotion.starts_at and promotion.ends_at and promotion.starts_at >= promotion.ends_at:
         raise ValueError("優惠開始時間必須早於結束時間")
