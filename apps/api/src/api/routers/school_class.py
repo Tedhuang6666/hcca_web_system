@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any, require_permission
 from api.models.school_class import ClassCorrectionRequest, SchoolClass
 from api.models.user import User
 from api.routers._common import or_404
@@ -50,6 +50,7 @@ from api.schemas.school_class import (
 from api.services import class_correction as correction_svc
 from api.services import school_class as class_svc
 from api.services import school_class_import as class_import_svc
+from api.services.permission import get_user_permission_codes
 
 router = APIRouter(prefix="/classes", tags=["班級系統"])
 
@@ -328,8 +329,31 @@ async def delete_class(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> N
     "/{class_id}/members",
     response_model=list[ClassMemberOut],
     summary="列出班級成員（依學號區間推導）",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.CLASS_MANAGE,
+                PermissionCode.CLASS_VIEW_MEMBERS,
+                PermissionCode.CLASS_SHOP_COLLECT,
+            )
+        )
+    ],
 )
-async def list_members(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> list[ClassMemberOut]:
+async def list_members(
+    class_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> list[ClassMemberOut]:
+    if not current_user.is_superuser:
+        permission_codes = await get_user_permission_codes(session, current_user.id)
+        can_manage_classes = PermissionCode.CLASS_MANAGE.value in permission_codes
+        if not can_manage_classes:
+            cadre_class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+            if class_id not in cadre_class_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="僅可查看任職班級的成員名冊",
+                )
     sc = await _get_class_or_404(class_id, session)
     return await class_svc.list_class_members(session, sc)
 

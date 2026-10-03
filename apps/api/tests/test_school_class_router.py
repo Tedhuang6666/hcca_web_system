@@ -164,6 +164,47 @@ async def test_list_members_derives_from_ranges(
     assert "30005" in student_ids
 
 
+async def test_class_representative_can_read_own_members_but_not_other_classes(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., User],
+    db_session: AsyncSession,
+) -> None:
+    school_class = await _make_class(db_session, admin_user, start="31001", end="31020")
+    other_class = await _make_class(
+        db_session,
+        admin_user,
+        academic_year=116,
+        start="41001",
+        end="41020",
+    )
+    representative = await make_user(
+        email="class-representative-members@school.edu",
+        student_id="31005",
+    )
+    classmate = await make_user(
+        email="class-member-no-roster-access@school.edu", student_id="31006"
+    )
+    admin_client = authed_client_factory(admin_user)
+    assignment = await admin_client.post(
+        f"/classes/{school_class.id}/roles/class_representative/assign",
+        json={"user_id": str(representative.id)},
+    )
+    assert assignment.status_code == 201
+
+    representative_client = authed_client_factory(representative)
+    own_roster = await representative_client.get(f"/classes/{school_class.id}/members")
+    other_roster = await representative_client.get(f"/classes/{other_class.id}/members")
+    classmate_roster = await authed_client_factory(classmate).get(
+        f"/classes/{school_class.id}/members"
+    )
+
+    assert own_roster.status_code == 200
+    assert "31005" in {row["student_id"] for row in own_roster.json()}
+    assert other_roster.status_code == 403
+    assert classmate_roster.status_code == 403
+
+
 async def test_add_and_end_membership(
     authed_client_factory: Callable[[User], AsyncClient],
     admin_user: User,
