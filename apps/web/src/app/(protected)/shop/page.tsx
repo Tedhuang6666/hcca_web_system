@@ -956,18 +956,18 @@ export default function ShopPage() {
               const progressValue = Math.min(100, Math.round(Math.min(...progressParts) * 100));
               const requirementsMet = missingProducts.length === 0 && quantityShortfall === 0 && spendShortfall === 0;
               const progressLabel = !isLoggedIn
-                ? "登入並登記商品後即可查看。"
+                ? "登入並登記商品後即可查看"
                 : missingProducts.length > 0
                   ? `還需登記：${missingProducts.map((product) => product.name).join("、")}`
                   : quantityShortfall > 0
-                    ? `再登記 ${quantityShortfall} 件即可達到件數門檻。`
+                    ? `再登記 ${quantityShortfall} 件即可達到件數門檻！`
                     : spendShortfall > 0
-                      ? `目前 NT$${registration?.subtotal_price.toLocaleString() ?? 0}，再登記 NT$${spendShortfall.toLocaleString()} 即達門檻。`
+                      ? `目前 NT$${registration?.subtotal_price.toLocaleString() ?? 0}，再登記 NT$${spendShortfall.toLocaleString()} 即達門檻！`
                       : isApplied
-                        ? `已套用，折抵 NT$${registration?.discount_amount.toLocaleString() ?? 0}。`
+                        ? `已套用，折抵 NT$${registration?.discount_amount.toLocaleString() ?? 0}！`
                         : requirementsMet && registration
-                          ? `已達優惠條件，可折抵 NT$${estimatedDiscount.toLocaleString()}。`
-                          : "登記商品後即可查看進度。";
+                          ? `已達優惠條件，可以折抵 NT$${estimatedDiscount.toLocaleString()}！`
+                          : "登記商品後即可查看進度";
               const actionLabel = promotion.code
                 ? claimedPromotionIds.has(promotion.id) ? "已領取優惠券" : "領取優惠券"
                 : isApplied ? "已自動套用" : "查看優惠進度";
