@@ -7,10 +7,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 const TABS = [
   { section: "people", label: "人員與身分", description: "人員主檔、身分與歸屬" },
   { section: "defense", label: "使用者與功能處置", description: "封鎖、登入工作階段、功能旗標與長期防禦規則" },
-  { section: "lifecycle", label: "帳號停權與學籍", description: "凍結、歸檔與解凍" },
   { section: "organization", label: "組織、職位與權限", description: "組織架構、任期與授權" },
   { section: "classes", label: "班級與名冊", description: "班級、座號與班級幹部" },
-  { section: "import", label: "批次匯入", description: "從幹部通訊錄建立資料" },
 ] as const;
 
 export default function AdminWorkbenchTabs() {
@@ -22,22 +20,16 @@ export default function AdminWorkbenchTabs() {
     if (section === "people") return canManagePeople;
     if (section === "defense") return isAdmin;
     if (section === "organization") return isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members");
-    if (section === "lifecycle" || section === "import") return isAdmin || can("admin:all");
     return isAdmin || can("admin:all") || can("class:manage");
   });
-  const legacySection = pathname.startsWith("/admin/users")
-    ? "people"
-    : pathname.startsWith("/admin/user-lifecycle")
-      ? "lifecycle"
-      : pathname.startsWith("/admin/permissions")
-        ? "organization"
-        : pathname.startsWith("/admin/classes")
-          ? "classes"
-          : pathname.startsWith("/admin/cadre-import")
-            ? "import"
-            : "people";
+  const legacySection = pathname.startsWith("/admin/permissions")
+    ? "organization"
+    : pathname.startsWith("/admin/classes")
+      ? "classes"
+      : "people";
+  const requestedSection = searchParams.get("section");
   const activeSection = pathname === "/admin/people"
-    ? searchParams.get("section") ?? "people"
+    ? TABS.some(({ section }) => section === requestedSection) ? requestedSection : "people"
     : legacySection;
 
   return (

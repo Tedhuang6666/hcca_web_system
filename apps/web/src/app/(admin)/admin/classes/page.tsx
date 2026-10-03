@@ -74,29 +74,72 @@ function getErrorMessage(error: unknown, fallback: string) {
 function UserPicker({
   placeholder,
   onPick,
+  seatRoster = [],
 }: {
   placeholder: string;
   onPick: (user: UserSummary) => void;
+  seatRoster?: Array<{ seat_number: number; user: UserSummary }>;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
 
   useEffect(() => {
-    if (query.trim().length < 2) {
+    const keyword = query.trim();
+    if (keyword.length < 2) {
       setResults([]);
-      return;
+      setLoading(false);
+      setSearchError(false);
+      return undefined;
     }
+    setResults([]);
+    setLoading(false);
+    setSearchError(false);
+    let cancelled = false;
     const timer = window.setTimeout(() => {
       setLoading(true);
+      setSearchError(false);
       usersApi
-        .listForSearch(query.trim())
-        .then(setResults)
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+        .listForSearch(keyword)
+        .then((users) => {
+          if (!cancelled) setResults(users);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setResults([]);
+            setSearchError(true);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     }, 220);
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [query]);
+
+  const keyword = query.trim().toLocaleLowerCase();
+  const seatMatches = keyword
+    ? seatRoster.filter(({ seat_number, user }) =>
+      [String(seat_number), user.display_name, user.student_id ?? "", user.email]
+        .some((value) => value.toLocaleLowerCase().includes(keyword)),
+    )
+    : [];
+  const seatByUserId = new Map(seatRoster.map((entry) => [entry.user.id, entry.seat_number]));
+  const matchingUsers = new Map<string, UserSummary & { seat_number?: number }>();
+  for (const entry of seatMatches) {
+    matchingUsers.set(entry.user.id, { ...entry.user, seat_number: entry.seat_number });
+  }
+  for (const user of results) {
+    if (!matchingUsers.has(user.id)) {
+      matchingUsers.set(user.id, { ...user, seat_number: seatByUserId.get(user.id) });
+    }
+  }
+  const visibleUsers = Array.from(matchingUsers.values());
+  const showResults = Boolean(query.trim());
 
   return (
     <div className="relative">
@@ -108,19 +151,34 @@ function UserPicker({
           onChange={(event) => setQuery(event.target.value)}
           className="w-full bg-transparent text-sm outline-none"
           placeholder={placeholder}
+          aria-label={placeholder}
           style={{ color: "var(--text-primary)" }}
         />
       </div>
-      {(results.length > 0 || loading) && (
+      {showResults && (
         <div
-          className="absolute z-20 mt-1 w-full overflow-hidden rounded-md"
+          className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md"
           style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
           {loading && (
-            <div className="px-3 py-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            <div className="px-3 py-3 text-xs" role="status" style={{ color: "var(--text-muted)" }}>
               搜尋中…
             </div>
           )}
-          {results.map((user) => (
+          {searchError && (
+            <div className="px-3 py-3 text-xs" role="alert" style={{ color: "var(--danger)" }}>
+              {seatRoster.length ? "搜尋失敗；仍可從本班座號名冊選取。" : "搜尋失敗，請稍後再試。"}
+            </div>
+          )}
+          {!loading && !searchError && visibleUsers.length === 0 && (
+            <div className="px-3 py-3 text-xs" role="status" style={{ color: "var(--text-muted)" }}>
+              {keyword.length < 2
+                ? seatRoster.length
+                  ? "輸入座號，或輸入至少 2 個字搜尋學號、Email 或姓名。"
+                  : "請輸入至少 2 個字搜尋學號、Email 或姓名。"
+                : "找不到符合的帳號。"}
+            </div>
+          )}
+          {visibleUsers.map((user) => (
             <button
               key={user.id}
               type="button"
@@ -129,13 +187,16 @@ function UserPicker({
                 setQuery("");
                 setResults([]);
               }}
-              className="w-full px-3 py-2 text-left transition-colors hover:bg-black/5"
+              className="min-h-12 w-full px-3 py-2 text-left transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              aria-label={`選擇 ${user.display_name}${user.seat_number ? `，座號 ${user.seat_number}` : ""}`}
             >
               <span className="block text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                 {user.display_name}
               </span>
-              <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
-                {user.student_id ?? user.email}
+              <span className="block break-all text-xs" style={{ color: "var(--text-muted)" }}>
+                {[user.seat_number ? `座號 ${user.seat_number}` : "", user.student_id ? `學號 ${user.student_id}` : "", user.email]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </button>
           ))}
@@ -144,122 +205,6 @@ function UserPicker({
     </div>
   );
 }
-function RepresentativeSetupPanel({ classes }: { classes: SchoolClassListItem[] }) {
-  const activeClasses = useMemo(
-    () => classes.filter((item) => item.is_active),
-    [classes],
-  );
-  const [holders, setHolders] = useState<Record<string, string[]>>({});
-  const [loading, setLoading] = useState(true);
-  const [pickingClass, setPickingClass] = useState<SchoolClassListItem | null>(null);
-  const [savingClassId, setSavingClassId] = useState<string | null>(null);
-
-  const loadRepresentatives = useCallback(async () => {
-    if (!activeClasses.length) {
-      setHolders({});
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const roleLists = await Promise.all(activeClasses.map((item) => classApi.roles(item.id)));
-      setHolders(Object.fromEntries(roleLists.map((roles, index) => {
-        const representative = roles.find((role) => role.role_key === "class_representative");
-        return [activeClasses[index].id, representative?.holders.map((holder) => holder.display_name) ?? []];
-      })));
-    } catch (error) {
-      toast.error(getErrorMessage(error, "載入班級議員失敗"));
-    } finally {
-      setLoading(false);
-    }
-  }, [activeClasses]);
-
-  useEffect(() => {
-    void loadRepresentatives();
-  }, [loadRepresentatives]);
-
-  const assignRepresentative = async (user: UserSummary) => {
-    if (!pickingClass) return;
-    setSavingClassId(pickingClass.id);
-    try {
-      await classApi.assignRole(pickingClass.id, "class_representative", { user_id: user.id });
-      toast.success(`${classTitle(pickingClass)}已任命 ${user.display_name} 為議員`);
-      setPickingClass(null);
-      await loadRepresentatives();
-    } catch (error) {
-      toast.error(getErrorMessage(error, "任命議員失敗"));
-    } finally {
-      setSavingClassId(null);
-    }
-  };
-
-  if (!activeClasses.length) return null;
-
-  const assignedCount = Object.values(holders).filter((names) => names.length > 0).length;
-
-  return (
-    <section className="rounded-md p-5" style={{ border: "1px solid var(--border)" }}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-            班級議員快速設定
-          </h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            直接逐班任命議員；系統會同步班代、議員與議事權限。
-          </p>
-        </div>
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
-          style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
-          <BadgeCheck size={15} /> {loading ? "讀取中…" : `${assignedCount}/${activeClasses.length} 班已設定`}
-        </span>
-      </div>
-
-      {pickingClass && (
-        <div className="mt-4 rounded-md p-3" style={{ background: "var(--bg-elevated)" }}>
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-              為 {classTitle(pickingClass)} 任命議員
-            </p>
-            <button type="button" onClick={() => setPickingClass(null)} className="text-xs"
-              style={{ color: "var(--text-muted)" }}>
-              取消
-            </button>
-          </div>
-          <UserPicker placeholder="搜尋姓名、Email 或學號" onPick={assignRepresentative} />
-        </div>
-      )}
-
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {activeClasses.map((item) => {
-          const names = holders[item.id] ?? [];
-          const isSaving = savingClassId === item.id;
-          return (
-            <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md px-3 py-2.5"
-              style={{ border: "1px solid var(--border)" }}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                  {classTitle(item)}
-                </p>
-                <p className="truncate text-xs" style={{ color: names.length ? "var(--text-secondary)" : "var(--text-muted)" }}>
-                  {loading ? "讀取中…" : names.length ? names.join("、") : "尚未設定議員"}
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={() => setPickingClass(item)}
-                className="shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
-                style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
-                {isSaving ? "處理中…" : names.length ? "加任議員" : "任命議員"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
   const defaultYear = String(new Date().getFullYear() - 1911);
   const [mode, setMode] = useState<"single" | "bulk">("bulk");
@@ -1053,6 +998,7 @@ function ClassWorkspace({
   const [roles, setRoles] = useState<ClassRoleOut[]>([]);
   const [tab, setTab] = useState<TabKey>("overview");
   const [loading, setLoading] = useState(true);
+  const [configuringRole, setConfiguringRole] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1080,6 +1026,12 @@ function ClassWorkspace({
     () => roles.reduce((sum, role) => sum + role.holders.length, 0),
     [roles],
   );
+  const seatRoster = useMemo(
+    () => rosterEntries.flatMap((entry) => entry.user
+      ? [{ seat_number: entry.seat_number, user: entry.user }]
+      : []),
+    [rosterEntries],
+  );
 
   if (loading || !detail) {
     return (
@@ -1102,8 +1054,10 @@ function ClassWorkspace({
       await classApi.assignRole(classId, roleKey, { user_id: user.id });
       toast.success(`已任命 ${user.display_name}`);
       load();
+      return true;
     } catch (error) {
       toast.error(getErrorMessage(error, "任命失敗"));
+      return false;
     }
   };
 
@@ -1267,14 +1221,38 @@ function ClassWorkspace({
             </h2>
             <div className="mt-3 space-y-2">
               {roles.map((role) => (
-                <div key={role.role_key} className="flex items-center justify-between rounded-md px-3 py-2"
-                  style={{ border: "1px solid var(--border)" }}>
-                  <span className="text-sm" style={{ color: "var(--text-primary)" }}>
-                    {role.label}
-                  </span>
-                  <span className="text-xs" style={{ color: role.holders.length ? roleColor(role.role_key) : "var(--text-muted)" }}>
-                    {role.holders.length ? role.holders.map((h) => h.display_name).join("、") : "未任命"}
-                  </span>
+                <div key={role.role_key} className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2"
+                    style={{ border: "1px solid var(--border)" }}>
+                    <span className="text-sm" style={{ color: "var(--text-primary)" }}>
+                      {role.label}
+                    </span>
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                      <span className="break-words text-right text-xs" style={{ color: role.holders.length ? roleColor(role.role_key) : "var(--text-muted)" }}>
+                        {role.holders.length ? role.holders.map((holder) => holder.display_name).join("、") : "未任命"}
+                      </span>
+                      <button
+                        type="button"
+                        aria-expanded={configuringRole === role.role_key}
+                        onClick={() => setConfiguringRole((current) => current === role.role_key ? null : role.role_key)}
+                        className="min-h-10 shrink-0 rounded-md px-2.5 text-xs font-medium"
+                        style={{ border: "1px solid var(--border)", color: "var(--primary)" }}
+                      >
+                        {configuringRole === role.role_key ? "取消" : "設定"}
+                      </button>
+                    </div>
+                  </div>
+                  {configuringRole === role.role_key && (
+                    <div className="rounded-md p-3" style={{ background: "var(--bg-elevated)" }}>
+                      <UserPicker
+                        placeholder={`輸入座號，或搜尋學號、Email、姓名以設定${role.label}`}
+                        seatRoster={seatRoster}
+                        onPick={async (user) => {
+                          if (await assignRole(role.role_key, user)) setConfiguringRole(null);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1293,7 +1271,7 @@ function ClassWorkspace({
       )}
       {tab === "roles" && (
         <div key="roles" className="tab-panel-transition">
-          <RoleBoard roles={roles} onAssign={assignRole} />
+          <RoleBoard roles={roles} onAssign={async (roleKey, user) => { await assignRole(roleKey, user); }} />
         </div>
       )}
       {tab === "members" && (
@@ -1480,7 +1458,6 @@ function ClassManagementPanel() {
           <ClassCorrectionRequestsPanel />
         ) : (
         <>
-        <RepresentativeSetupPanel classes={classes} />
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
           <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
             <RosterFileImportPanel onImported={loadClasses} />
