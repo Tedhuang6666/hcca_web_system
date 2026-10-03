@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
-import { CircleAlert, CircleCheck, ClipboardList, Package } from "lucide-react";
+import { CircleAlert, CircleCheck, ClipboardList, Gift, Package } from "lucide-react";
 import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
@@ -13,6 +13,8 @@ import type {
   ProductOut,
   MyClassContext,
   OrderOut,
+  ShopPromotionPreviewOut,
+  ShopPromotionPublicOut,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -673,6 +675,12 @@ export default function ShopPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [registrationLoadError, setRegistrationLoadError] = useState(false);
   const [registration, setRegistration] = useState<OrderOut | null>(null);
+  const [availablePromotions, setAvailablePromotions] = useState<ShopPromotionPublicOut[]>([]);
+  const [couponCode, setCouponCode] = useState("");
+  const [promotionPreview, setPromotionPreview] = useState<ShopPromotionPreviewOut | null>(null);
+  const [promotionBusy, setPromotionBusy] = useState(false);
+  const [promotionFeedback, setPromotionFeedback] = useState("");
+  const [claimedPromotionIds, setClaimedPromotionIds] = useState<Set<string>>(() => new Set());
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
@@ -710,6 +718,9 @@ export default function ShopPage() {
 
   useEffect(() => {
     loadCatalog();
+    void shopApi.listAvailablePromotions()
+      .then(setAvailablePromotions)
+      .catch(() => setAvailablePromotions([]));
     void authApi.me()
       .then(async () => {
         setIsLoggedIn(true);
@@ -726,6 +737,16 @@ export default function ShopPage() {
       })
       .finally(() => setAuthLoading(false));
   }, [loadCatalog]);
+
+  useEffect(() => {
+    if (!isLoggedIn || authLoading || !registration) {
+      setPromotionPreview(null);
+      return;
+    }
+    void shopApi.previewCurrentPromotion(registration.promotion_code ?? null)
+      .then(setPromotionPreview)
+      .catch(() => setPromotionPreview(null));
+  }, [isLoggedIn, authLoading, registration]);
 
   useEffect(() => {
     const productId = new URLSearchParams(window.location.search).get("product");
@@ -754,6 +775,87 @@ export default function ShopPage() {
   const registrationLocked = Boolean(
     registration && (registration.is_paid || registration.is_class_collected),
   );
+
+  const inspectAndApplyPromotion = async (code: string | null) => {
+    if (!isLoggedIn || authLoading) {
+      setPromotionFeedback("登入後登記商品即可使用這項優惠。");
+      return;
+    }
+    if (!registration) {
+      setPromotionFeedback(code
+        ? "優惠碼已帶入；登記符合條件的商品後即可檢查並套用。"
+        : "先登記商品；符合條件時系統會自動套用優惠。 ");
+      return;
+    }
+    if (registrationLocked) {
+      setPromotionFeedback("目前登記已鎖定，如需更改優惠請聯繫班級幹部。");
+      return;
+    }
+    setPromotionBusy(true);
+    setPromotionFeedback("");
+    try {
+      const preview = await shopApi.previewCurrentPromotion(code);
+      setPromotionPreview(preview);
+      if (!preview.eligible) {
+        setPromotionFeedback(preview.reason ?? "目前尚未符合優惠條件。");
+        return;
+      }
+      const updated = await shopApi.applyCurrentPromotion(code);
+      setRegistration(updated);
+      setPromotionFeedback(preview.reason ?? "優惠已套用。");
+    } catch (error) {
+      const message = apiErrorMessage(error, "優惠套用失敗");
+      setPromotionFeedback(message);
+      toast.error(message);
+    } finally {
+      setPromotionBusy(false);
+    }
+  };
+
+  const handleRegistrationChange = async (order: OrderOut | null) => {
+    setRegistration(order);
+    const pendingCode = couponCode.trim();
+    if (!order || !pendingCode || order.promotion_code?.toUpperCase() === pendingCode.toUpperCase()) {
+      return;
+    }
+    try {
+      const preview = await shopApi.previewCurrentPromotion(pendingCode);
+      setPromotionPreview(preview);
+      if (preview.eligible) {
+        const updated = await shopApi.applyCurrentPromotion(pendingCode);
+        setRegistration(updated);
+        setPromotionFeedback(preview.reason ?? "優惠已套用。");
+      } else {
+        setPromotionFeedback(preview.reason ?? "商品已更新，優惠仍未達使用條件。");
+      }
+    } catch (error) {
+      setPromotionFeedback(apiErrorMessage(error, "優惠檢查失敗"));
+    }
+  };
+
+  const claimPromotion = (promotion: ShopPromotionPublicOut) => {
+    const code = promotion.code ?? "";
+    setCouponCode(code);
+    if (promotion.code) {
+      setClaimedPromotionIds((current) => new Set(current).add(promotion.id));
+      setPromotionFeedback(`已領取「${promotion.name}」，優惠碼 ${promotion.code} 已帶入。`);
+    } else {
+      setPromotionFeedback(`「${promotion.name}」符合條件時會自動折抵；可先查看目前進度。`);
+    }
+      void inspectAndApplyPromotion(promotion.code ?? null);
+  };
+
+  const openPromotionProduct = (productId: string) => {
+    const category = catalog.find((item) =>
+      item.products.some((product) => product.id === productId)
+      || item.series.some((series) => series.products.some((product) => product.id === productId)),
+    );
+    if (!category) return;
+    const series = category.series.find((item) => item.products.some((product) => product.id === productId));
+    setSelectedCategoryId(category.id);
+    setSelectedSeriesId(series?.id ?? null);
+    setOpenProduct(productId);
+  };
 
   const visibleSeries = selectedCategory?.series.filter(
     (series) => !selectedSeriesId || series.id === selectedSeriesId,
@@ -791,6 +893,138 @@ export default function ShopPage() {
             </p>
             <p>{myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}</p>
             {isLoggedIn && <ClassCorrectionRequest currentClass={myClass} />}
+          </div>
+        </section>
+      )}
+
+      {availablePromotions.length > 0 && (
+        <section className="shop-public-promotions" aria-labelledby="shop-promotions-title">
+          <div className="shop-public-promotions-heading">
+            <div>
+              <p className="shop-public-eyebrow"><Gift size={15} aria-hidden="true" /> 可使用優惠</p>
+              <h2 id="shop-promotions-title">登記商品，看看能省多少</h2>
+              <p>每項優惠都會列出適用品項與門檻；符合條件時顯示實際折抵金額。</p>
+            </div>
+            <label className="shop-public-coupon-entry">
+              <span>優惠碼</span>
+              <input
+                value={couponCode}
+                onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                placeholder="輸入或領取優惠碼"
+                autoCapitalize="characters"
+                aria-label="優惠碼"
+              />
+              <button
+                type="button"
+                onClick={() => void inspectAndApplyPromotion(couponCode.trim() || null)}
+                disabled={promotionBusy || !isLoggedIn}
+              >
+                {promotionBusy ? "檢查中…" : couponCode.trim() ? "檢查並套用" : "查看自動優惠"}
+              </button>
+            </label>
+          </div>
+          {promotionFeedback && <p className="shop-public-promotion-feedback" role="status" aria-live="polite">{promotionFeedback}</p>}
+          {promotionPreview?.reason && (
+            <p className="shop-public-promotion-preview" role="status">
+              {promotionPreview.promotion_name && <strong>{promotionPreview.promotion_name} · </strong>}
+              {promotionPreview.reason}
+            </p>
+          )}
+          <div className="shop-public-promotion-grid">
+            {availablePromotions.map((promotion) => {
+              const targetProducts = promotion.target_products ?? [];
+              const targetIds = new Set(targetProducts.map((product) => product.id));
+              const registeredProducts = new Set((registration?.items ?? []).map((item) => item.product_id));
+              const missingProducts = targetProducts.filter((product) => !registeredProducts.has(product.id));
+              const matchingItems = (registration?.items ?? []).filter((item) =>
+                targetIds.size === 0 || targetIds.has(item.product_id),
+              );
+              const matchingQuantity = matchingItems.reduce((sum, item) => sum + item.quantity, 0);
+              const matchingSubtotal = matchingItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+              const quantityShortfall = Math.max(0, promotion.min_quantity - matchingQuantity);
+              const spendShortfall = Math.max(0, promotion.min_order_price - (registration?.subtotal_price ?? 0));
+              const isApplied = registration?.promotion_id === promotion.id;
+              const estimatedBase = targetIds.size > 0 ? matchingSubtotal : registration?.subtotal_price ?? 0;
+              const estimatedDiscount = promotion.discount_type === "percentage"
+                ? Math.floor(estimatedBase * promotion.discount_value / 100)
+                : Math.min(estimatedBase, promotion.discount_value);
+              const progressParts = [
+                promotion.min_order_price > 0
+                  ? (registration?.subtotal_price ?? 0) / promotion.min_order_price
+                  : 1,
+                promotion.min_quantity > 1 ? matchingQuantity / promotion.min_quantity : 1,
+              ];
+              const progressValue = Math.min(100, Math.round(Math.min(...progressParts) * 100));
+              const requirementsMet = missingProducts.length === 0 && quantityShortfall === 0 && spendShortfall === 0;
+              const progressLabel = !isLoggedIn
+                ? "登入並登記商品後即可查看個人優惠進度。"
+                : missingProducts.length > 0
+                  ? `還需登記：${missingProducts.map((product) => product.name).join("、")}`
+                  : quantityShortfall > 0
+                    ? `再登記 ${quantityShortfall} 件即可達到件數門檻。`
+                    : spendShortfall > 0
+                      ? `目前 NT$${registration?.subtotal_price.toLocaleString() ?? 0}，再登記 NT$${spendShortfall.toLocaleString()} 即達門檻。`
+                      : isApplied
+                        ? `已套用，折抵 NT$${registration?.discount_amount.toLocaleString() ?? 0}。`
+                        : requirementsMet && registration
+                          ? `已達優惠條件，預估可折抵 NT$${estimatedDiscount.toLocaleString()}。`
+                          : "登記商品後即可查看進度。";
+              const actionLabel = promotion.code
+                ? claimedPromotionIds.has(promotion.id) ? "已領取優惠券" : "領取優惠券"
+                : isApplied ? "已自動套用" : "查看優惠進度";
+              return (
+                <article className="shop-public-promotion-card" key={promotion.id}>
+                  <div className="shop-public-promotion-card-top">
+                    <span className="shop-public-promotion-icon"><Gift size={17} aria-hidden="true" /></span>
+                    <span>{promotion.code ? "優惠券" : "自動優惠"}</span>
+                    {isApplied && <span className="shop-public-promotion-applied"><CircleCheck size={14} aria-hidden="true" />已套用</span>}
+                  </div>
+                  <h3>{promotion.name}</h3>
+                  <p className="shop-public-promotion-value">
+                    {promotion.discount_type === "percentage"
+                      ? `${promotion.discount_value}% 折扣`
+                      : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
+                  </p>
+                  {promotion.code && <p className="shop-public-promotion-code">{promotion.code}</p>}
+                  <div className="shop-public-promotion-conditions">
+                    {promotion.min_order_price > 0 && <span>消費滿 NT$${promotion.min_order_price.toLocaleString()}</span>}
+                    {promotion.min_quantity > 1 && <span>滿 {promotion.min_quantity} 件</span>}
+                    {targetProducts.length > 0 && (
+                      <span>折扣計指定品項：{targetProducts.map((product) => product.name).join(" + ")}</span>
+                    )}
+                    {promotion.min_order_price === 0 && promotion.min_quantity <= 1 && targetProducts.length === 0 && <span>無最低消費門檻</span>}
+                  </div>
+                  {promotion.min_order_price > 0 || promotion.min_quantity > 1 ? (
+                    <div className="shop-public-promotion-meter">
+                      <div role="meter" aria-label={`${promotion.name} 優惠進度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressValue}>
+                        <span style={{ width: `${progressValue}%` }} />
+                      </div>
+                      <p>{progressLabel}</p>
+                    </div>
+                  ) : <p className="shop-public-promotion-progress">{progressLabel}</p>}
+                  {promotion.description && <p className="shop-public-promotion-description">{promotion.description}</p>}
+                  {promotion.ends_at && (
+                    <p className="shop-public-promotion-description">
+                      優惠至 {new Date(promotion.ends_at).toLocaleString("zh-TW")}
+                    </p>
+                  )}
+                  <div className="shop-public-promotion-actions">
+                    <button
+                      type="button"
+                      onClick={() => claimPromotion(promotion)}
+                      disabled={promotionBusy || isApplied}
+                    >
+                      {actionLabel}
+                    </button>
+                    {missingProducts[0] && (
+                      <button type="button" className="shop-public-promotion-browse" onClick={() => openPromotionProduct(missingProducts[0].id)}>
+                        選購指定商品
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       )}
@@ -934,7 +1168,7 @@ export default function ShopPage() {
           registration={registration}
           registrationLocked={registrationLocked}
           onClose={closeProduct}
-          onRegistrationChange={setRegistration}
+          onRegistrationChange={handleRegistrationChange}
         />
       )}
     </div>

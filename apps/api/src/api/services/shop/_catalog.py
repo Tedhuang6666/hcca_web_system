@@ -20,6 +20,7 @@ from api.models.shop import (
     ProductStatus,
     ProductVariantGroup,
     ProductVariantOption,
+    ShopPromotion,
 )
 from api.schemas.shop import (
     CatalogCategoryOut,
@@ -359,6 +360,14 @@ async def deactivate_product(session: AsyncSession, product: Product) -> Product
 
 
 async def delete_product(session: AsyncSession, product: Product) -> None:
+    targeted_promotion_id = await session.scalar(
+        select(ShopPromotion.id)
+        .where(ShopPromotion.target_products.any(Product.id == product.id))
+        .limit(1)
+    )
+    if targeted_promotion_id is not None:
+        raise ValueError("此商品仍套用於優惠，請先從優惠的指定品項中移除後再刪除")
+
     has_order_history = await session.scalar(
         select(OrderItem.id).where(OrderItem.product_id == product.id).limit(1)
     )

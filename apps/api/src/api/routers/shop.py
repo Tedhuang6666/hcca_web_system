@@ -65,6 +65,10 @@ from api.schemas.shop import (
     ShopOrderCloseOut,
     ShopPromotionCreate,
     ShopPromotionOut,
+    ShopPromotionPreviewOut,
+    ShopPromotionPreviewRequest,
+    ShopPromotionProductTargetOut,
+    ShopPromotionPublicOut,
     ShopPromotionUpdate,
 )
 from api.services import activity as activity_svc
@@ -410,6 +414,21 @@ async def list_promotions(
     return [shop_svc.serialize_promotion(promotion) for promotion in promotions]
 
 
+@router.get(
+    "/promotions/available",
+    response_model=list[ShopPromotionPublicOut],
+    summary="列出目前帳號可使用的優惠",
+)
+async def list_available_promotions(
+    session: DbDep,
+    current_user: OptionalUser,
+) -> list[ShopPromotionPublicOut]:
+    promotions = await shop_svc.list_public_promotions(
+        session, user_id=current_user.id if current_user else None
+    )
+    return [shop_svc.serialize_public_promotion(promotion) for promotion in promotions]
+
+
 @router.post(
     "/promotions",
     response_model=ShopPromotionOut,
@@ -702,6 +721,83 @@ async def delete_variant_option(
 async def get_current_registration(session: DbDep, current_user: CurrentUser) -> OrderOut | None:
     order = await shop_svc.get_current_registration(session, current_user.id)
     return shop_svc.serialize_order(order) if order else None
+
+
+@router.post(
+    "/registrations/current/promotion/preview",
+    response_model=ShopPromotionPreviewOut,
+    summary="預覽目前商品登記的優惠",
+)
+async def preview_current_registration_promotion(
+    payload: ShopPromotionPreviewRequest,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> ShopPromotionPreviewOut:
+    order = await shop_svc.get_current_registration(session, current_user.id)
+    subtotal = order.subtotal_price if order else 0
+    product_subtotals: dict[uuid.UUID, int] = {}
+    product_quantities: dict[uuid.UUID, int] = {}
+    if order:
+        for item in order.items:
+            product_subtotals[item.product_id] = (
+                product_subtotals.get(item.product_id, 0) + item.quantity * item.unit_price
+            )
+            product_quantities[item.product_id] = (
+                product_quantities.get(item.product_id, 0) + item.quantity
+            )
+    result = await shop_svc.preview_promotion(
+        session,
+        user_id=current_user.id,
+        subtotal=subtotal,
+        code=payload.code,
+        product_subtotals=product_subtotals,
+        product_quantities=product_quantities,
+        current_promotion_id=order.promotion_id if order else None,
+    )
+    promotion = result.promotion
+    return ShopPromotionPreviewOut(
+        eligible=result.eligible,
+        promotion_name=promotion.name if promotion else None,
+        promotion_code=promotion.code if promotion else None,
+        reason_code=result.reason_code,
+        reason=result.reason,
+        subtotal_price=subtotal,
+        discount_amount=result.discount_amount,
+        total_price=max(0, subtotal - result.discount_amount),
+        min_order_price=promotion.min_order_price if promotion else None,
+        shortfall=result.shortfall,
+        discount_type=promotion.discount_type if promotion else None,
+        discount_value=promotion.discount_value if promotion else None,
+        min_quantity=promotion.min_quantity if promotion else None,
+        quantity_shortfall=result.quantity_shortfall,
+        target_products=[
+            ShopPromotionProductTargetOut(id=product.id, name=product.name)
+            for product in (promotion.target_products or [])
+        ]
+        if promotion
+        else [],
+    )
+
+
+@router.put(
+    "/registrations/current/promotion",
+    response_model=OrderOut,
+    summary="套用目前商品登記的優惠",
+)
+async def apply_current_registration_promotion(
+    payload: ShopPromotionPreviewRequest,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> OrderOut:
+    try:
+        order = await shop_svc.apply_registration_promotion(
+            session,
+            current_user,
+            code=payload.code,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    return shop_svc.serialize_order(order)
 
 
 @router.put(

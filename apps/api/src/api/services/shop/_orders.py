@@ -23,6 +23,7 @@ from api.models.shop import (
     ProductSeries,
     ProductStatus,
     ShopOrderClose,
+    ShopPromotion,
 )
 from api.models.user import User
 from api.schemas.shop import (
@@ -57,6 +58,67 @@ _PAYMENT_METHODS = {"cash_on_pickup", "bank_transfer"}
 
 class PurchaseLimitError(ValueError):
     """購買數量超過商品設定的每人上限。"""
+
+
+def _promotion_product_subtotals(items: list[OrderItem]) -> dict[uuid.UUID, int]:
+    totals: dict[uuid.UUID, int] = {}
+    for item in items:
+        totals[item.product_id] = totals.get(item.product_id, 0) + item.quantity * item.unit_price
+    return totals
+
+
+def _promotion_product_quantities(items: list[OrderItem]) -> dict[uuid.UUID, int]:
+    quantities: dict[uuid.UUID, int] = {}
+    for item in items:
+        quantities[item.product_id] = quantities.get(item.product_id, 0) + item.quantity
+    return quantities
+
+
+async def _sync_promotion_reservation(
+    session: AsyncSession,
+    *,
+    previous_id: uuid.UUID | None,
+    selected: ShopPromotion | None,
+) -> None:
+    selected_id = selected.id if selected is not None else None
+    if previous_id == selected_id:
+        return
+    if previous_id is not None:
+        previous = await session.scalar(
+            select(ShopPromotion).where(ShopPromotion.id == previous_id).with_for_update()
+        )
+        if previous is not None:
+            previous.used_count = max(0, previous.used_count - 1)
+    if selected is not None:
+        selected.used_count += 1
+
+
+async def _apply_order_promotion(
+    session: AsyncSession,
+    order: Order,
+    *,
+    code: str | None,
+) -> None:
+    product_subtotals = _promotion_product_subtotals(order.items)
+    product_quantities = _promotion_product_quantities(order.items)
+    result = await resolve_promotion(
+        session,
+        user_id=order.user_id,
+        subtotal=order.subtotal_price,
+        code=code,
+        product_subtotals=product_subtotals,
+        product_quantities=product_quantities,
+        current_promotion_id=order.promotion_id,
+    )
+    await _sync_promotion_reservation(
+        session,
+        previous_id=order.promotion_id,
+        selected=result.promotion,
+    )
+    order.promotion_id = result.promotion.id if result.promotion else None
+    order.promotion_code = result.promotion.code if result.promotion else None
+    order.discount_amount = result.discount_amount
+    order.total_price = max(0, order.subtotal_price - result.discount_amount)
 
 
 def _resolve_selected_options(product: Product, option_ids: list[uuid.UUID]) -> list[dict]:
@@ -321,9 +383,13 @@ async def _create_order_from_items(
     assisted_by_id: uuid.UUID | None = None,
     coupon_code: str | None = None,
     payment_method: str = "cash_on_pickup",
+    current_promotion_id: uuid.UUID | None = None,
+    reserve_promotion_usage: bool = True,
 ) -> Order:
     subtotal_price = 0
     specs: list[dict] = []
+    product_subtotals: dict[uuid.UUID, int] = {}
+    product_quantities: dict[uuid.UUID, int] = {}
     now = datetime.now(UTC)
 
     locked_product_ids = sorted({ci.product_id for ci in cart_items})
@@ -370,7 +436,10 @@ async def _create_order_from_items(
             if product.stock_quantity == 0:
                 product.status = ProductStatus.SOLD_OUT
 
-        subtotal_price += unit_price * cart_item.quantity
+        line_subtotal = unit_price * cart_item.quantity
+        subtotal_price += line_subtotal
+        product_subtotals[product.id] = product_subtotals.get(product.id, 0) + line_subtotal
+        product_quantities[product.id] = product_quantities.get(product.id, 0) + cart_item.quantity
         specs.append(
             {
                 "product_id": product.id,
@@ -385,9 +454,12 @@ async def _create_order_from_items(
         user_id=user_id,
         subtotal=subtotal_price,
         code=coupon_code,
+        product_subtotals=product_subtotals,
+        product_quantities=product_quantities,
+        current_promotion_id=current_promotion_id,
     )
     promotion = promotion_result.promotion
-    if promotion is not None:
+    if promotion is not None and reserve_promotion_usage:
         promotion.used_count += 1
     discount_amount = promotion_result.discount_amount
     total_price = max(0, subtotal_price - discount_amount)
@@ -402,6 +474,7 @@ async def _create_order_from_items(
         subtotal_price=subtotal_price,
         discount_amount=discount_amount,
         total_price=total_price,
+        promotion_id=promotion.id if promotion else None,
         promotion_code=promotion.code if promotion else None,
         payment_method=payment_method,
         notes=notes,
@@ -543,6 +616,23 @@ async def get_current_registration(
     return await get_order(session, order.id) if order else None
 
 
+async def apply_registration_promotion(
+    session: AsyncSession,
+    user: User,
+    *,
+    code: str | None,
+) -> Order:
+    order = await get_current_registration(session, user.id, lock=True)
+    if order is None or not order.items:
+        raise ValueError("請先登記商品，再套用優惠")
+    if order.is_paid or order.is_class_collected:
+        raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+    await _apply_order_promotion(session, order, code=code)
+    await receivable_svc.sync_shop_order(session, order)
+    await session.flush()
+    return order
+
+
 async def _assert_product_registration_open(
     session: AsyncSession,
     product: Product,
@@ -667,7 +757,6 @@ async def set_current_registration_product(
         await session.flush()
 
     old_subtotal = order.subtotal_price
-    old_discount = order.discount_amount
     existing_by_signature: dict[str, list[OrderItem]] = {}
     for item in existing_items:
         signature = _options_signature(item.selected_options or [])
@@ -709,12 +798,21 @@ async def set_current_registration_product(
         order.subtotal_price = 0
         order.discount_amount = 0
         order.total_price = 0
+        await _sync_promotion_reservation(
+            session,
+            previous_id=order.promotion_id,
+            selected=None,
+        )
+        order.promotion_id = None
+        order.promotion_code = None
         await receivable_svc.cancel_for_source(session, "shop_order", order.id)
     else:
         order.subtotal_price = subtotal
-        # Existing discounts remain attached to the registration, capped by its new subtotal.
-        order.discount_amount = min(old_discount, subtotal)
-        order.total_price = max(0, subtotal - order.discount_amount)
+        try:
+            await _apply_order_promotion(session, order, code=order.promotion_code)
+        except ValueError:
+            # A coupon can stop matching after a user changes the registered products.
+            await _apply_order_promotion(session, order, code=None)
         await receivable_svc.sync_shop_order(session, order)
 
     await session.flush()
@@ -910,6 +1008,7 @@ def serialize_order(order: Order) -> OrderOut:
         subtotal_price=order.subtotal_price,
         discount_amount=order.discount_amount,
         total_price=order.total_price,
+        promotion_id=order.promotion_id,
         promotion_code=order.promotion_code,
         payment_method=order.payment_method,
         notes=order.notes,
@@ -982,6 +1081,12 @@ async def cancel_order(
                 product.status = ProductStatus.ACTIVE
 
     order.status = OrderStatus.CANCELLED
+    await _sync_promotion_reservation(
+        session,
+        previous_id=order.promotion_id,
+        selected=None,
+    )
+    order.promotion_id = None
     if reason:
         order.notes = f"[取消原因] {reason}" + (f"\n{order.notes}" if order.notes else "")
     await receivable_svc.cancel_for_source(session, "shop_order", order.id)
@@ -1037,13 +1142,29 @@ async def replace_order_items(
         class_id=order.class_id,
         cart_items=temp_items,
         notes=data.notes,
+        coupon_code=order.promotion_code,
         assistance_scope=order.assistance_scope,
         assisted_by_id=order.assisted_by_id,
         payment_method=order.payment_method,
+        current_promotion_id=order.promotion_id,
+        reserve_promotion_usage=False,
+    )
+    new_promotion = None
+    if specs_order.promotion_id != order.promotion_id and specs_order.promotion_id is not None:
+        new_promotion = await session.scalar(
+            select(ShopPromotion)
+            .where(ShopPromotion.id == specs_order.promotion_id)
+            .with_for_update()
+        )
+    await _sync_promotion_reservation(
+        session,
+        previous_id=order.promotion_id,
+        selected=new_promotion,
     )
     order.subtotal_price = specs_order.subtotal_price
     order.discount_amount = specs_order.discount_amount
     order.total_price = specs_order.total_price
+    order.promotion_id = specs_order.promotion_id
     order.promotion_code = specs_order.promotion_code
     order.notes = data.notes
     temp_result = await session.execute(

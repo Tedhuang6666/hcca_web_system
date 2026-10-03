@@ -343,6 +343,7 @@ class OrderOut(BaseModel):
     subtotal_price: int = 0
     discount_amount: int = 0
     total_price: int
+    promotion_id: uuid.UUID | None = None
     promotion_code: str | None = None
     payment_method: str = "cash_on_pickup"
     notes: str | None = None
@@ -403,6 +404,8 @@ class ShopPromotionPreviewOut(BaseModel):
         "inactive",
         "usage_limit",
         "account_not_eligible",
+        "items_not_matched",
+        "quantity_not_met",
         "no_promotion",
     ]
     reason: str | None = None
@@ -413,6 +416,9 @@ class ShopPromotionPreviewOut(BaseModel):
     shortfall: int = 0
     discount_type: ShopDiscountType | None = None
     discount_value: int | None = None
+    min_quantity: int | None = None
+    quantity_shortfall: int = 0
+    target_products: list[ShopPromotionProductTargetOut] = Field(default_factory=list)
 
 
 class OrderCancelRequest(BaseModel):
@@ -445,10 +451,16 @@ class ShopPromotionCreate(BaseModel):
         max_length=500,
         description="可使用優惠的帳號 Email 或學號",
     )
-    code: str | None = Field(None, max_length=80, description="優惠碼；留空則指定帳號自動套用")
+    target_product_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=100,
+        description="需同時登記的商品組合；折扣僅套用在這些商品",
+    )
+    code: str | None = Field(None, max_length=80, description="優惠碼；留空時符合條件即自動套用")
     discount_type: ShopDiscountType
     discount_value: int = Field(..., gt=0)
     min_order_price: int = Field(0, ge=0)
+    min_quantity: int = Field(1, ge=1, le=100)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     max_uses: int | None = Field(None, ge=1)
@@ -459,10 +471,12 @@ class ShopPromotionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     target_email: str | None = Field(None, max_length=255)
     target_identifiers: list[str] | None = Field(None, max_length=500)
+    target_product_ids: list[uuid.UUID] | None = Field(None, max_length=100)
     code: str | None = Field(None, max_length=80)
     discount_type: ShopDiscountType | None = None
     discount_value: int | None = Field(None, gt=0)
     min_order_price: int | None = Field(None, ge=0)
+    min_quantity: int | None = Field(None, ge=1, le=100)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     max_uses: int | None = Field(None, ge=1)
@@ -475,6 +489,25 @@ class ShopPromotionTargetOut(BaseModel):
     student_id: str | None = None
 
 
+class ShopPromotionProductTargetOut(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class ShopPromotionPublicOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    code: str | None = None
+    discount_type: ShopDiscountType
+    discount_value: int
+    min_order_price: int
+    min_quantity: int
+    target_products: list[ShopPromotionProductTargetOut] = Field(default_factory=list)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    description: str | None = None
+
+
 class ShopPromotionOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -482,9 +515,11 @@ class ShopPromotionOut(BaseModel):
     target_user_id: uuid.UUID | None = None
     target_email: str | None = None
     target_users: list[ShopPromotionTargetOut] = Field(default_factory=list)
+    target_products: list[ShopPromotionProductTargetOut] = Field(default_factory=list)
     discount_type: ShopDiscountType
     discount_value: int
     min_order_price: int
+    min_quantity: int
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     max_uses: int | None = None

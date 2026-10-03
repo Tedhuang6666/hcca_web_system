@@ -688,6 +688,8 @@ export type {
   SeatsReplace,
   SecurityEventOut,
   SelectedOption,
+  ShopPromotionPreviewOut,
+  ShopPromotionPublicOut,
   SelfAnonymizeRequestOut,
   SelfExportRequestOut,
   SerialTemplateCreate,

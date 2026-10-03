@@ -103,12 +103,14 @@ export default function HomeContent({
   urgentAnnouncement,
   openSurveys,
   catalog,
+  shopUnavailable,
 }: {
   bundle: PublicSiteBundleOut | null;
   announcements: AnnouncementListItem[];
   urgentAnnouncement: AnnouncementOut | null;
   openSurveys: SurveyListItem[];
   catalog: CatalogCategoryOut[] | null;
+  shopUnavailable: boolean;
 }) {
   const openSurvey = openSurveys[0] ?? null;
   const latestAnnouncements = announcements
@@ -231,7 +233,7 @@ export default function HomeContent({
         </section>
       )}
 
-      <section className="public-home-shop" aria-labelledby="public-shop-title">
+      {!shopUnavailable && <section className="public-home-shop" aria-labelledby="public-shop-title">
         <div className="public-home-shop-heading">
           <div>
             <span className="public-home-shop-eyebrow"><ShoppingBag size={16} aria-hidden /> 商品訂購</span>
@@ -269,7 +271,7 @@ export default function HomeContent({
             })}
           </div>
         )}
-      </section>
+      </section>}
 
     </>
   );

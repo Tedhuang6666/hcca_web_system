@@ -436,6 +436,12 @@ async def test_cart_and_checkout_routes_are_removed(client) -> None:
 async def test_current_registration_requires_login(client) -> None:
     assert (await client.get("/shop/registrations/current")).status_code == 401
     assert (
+        await client.post("/shop/registrations/current/promotion/preview", json={"code": None})
+    ).status_code == 401
+    assert (
+        await client.put("/shop/registrations/current/promotion", json={"code": "SAVE50"})
+    ).status_code == 401
+    assert (
         await client.put(
             f"/shop/registrations/current/products/{uuid.uuid4()}",
             json={"variants": []},
@@ -556,6 +562,167 @@ async def test_registration_enforces_purchase_limit_and_sale_deadline(
     )
     assert closed.status_code == 409
     assert "已截止登記" in closed.json()["detail"]
+
+
+async def test_registration_automatically_applies_account_item_quantity_promotion(
+    db_session, client, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    other_buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    product = await _make_active_product(db_session, creator, price=100, stock=20)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+
+    created = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "指定帳號三件優惠",
+            "target_identifiers": [buyer.email],
+            "target_product_ids": [str(product.id)],
+            "min_quantity": 3,
+            "discount_type": "percentage",
+            "discount_value": 20,
+            "min_order_price": 0,
+        },
+    )
+    assert created.status_code == 201
+    promotion_id = created.json()["id"]
+
+    public_response = await client.get("/shop/promotions/available")
+    assert public_response.status_code == 200
+    assert public_response.json() == []
+    buyer_client = authed_client_factory(buyer)
+    buyer_promotions = await buyer_client.get("/shop/promotions/available")
+    assert buyer_promotions.status_code == 200
+    assert [row["id"] for row in buyer_promotions.json()] == [promotion_id]
+    assert "target_users" not in buyer_promotions.json()[0]
+    assert "email" not in str(buyer_promotions.json()[0])
+    assert (await authed_client_factory(other_buyer).get("/shop/promotions/available")).json() == []
+
+    two_items = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert two_items.status_code == 200
+    assert two_items.json()["discount_amount"] == 0
+    preview = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"code": None}
+    )
+    assert preview.status_code == 200
+    assert preview.json()["reason_code"] == "quantity_not_met"
+    assert preview.json()["quantity_shortfall"] == 1
+
+    three_items = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 3}]},
+    )
+    assert three_items.status_code == 200
+    assert three_items.json()["promotion_id"] == promotion_id
+    assert three_items.json()["discount_amount"] == 60
+    assert three_items.json()["total_price"] == 240
+
+    outsider_order = await authed_client_factory(other_buyer).put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 3}]},
+    )
+    assert outsider_order.status_code == 200
+    assert outsider_order.json()["discount_amount"] == 0
+
+
+async def test_public_coupon_requires_product_bundle_spend_and_quantity(
+    db_session, client, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    first = await _make_active_product(db_session, creator, price=100, stock=20)
+    second = await _make_active_product(db_session, creator, price=100, stock=20)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+    created = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "雙品滿件消費優惠",
+            "target_product_ids": [str(first.id), str(second.id)],
+            "code": "PAIR50",
+            "min_quantity": 2,
+            "min_order_price": 450,
+            "discount_type": "fixed",
+            "discount_value": 50,
+        },
+    )
+    assert created.status_code == 201
+    available = await client.get("/shop/promotions/available")
+    assert available.status_code == 200
+    assert available.json()[0]["code"] == "PAIR50"
+    assert len(available.json()[0]["target_products"]) == 2
+
+    buyer_client = authed_client_factory(buyer)
+    first_only = await buyer_client.put(
+        f"/shop/registrations/current/products/{first.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert first_only.status_code == 200
+    missing_item = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"code": "pair50"}
+    )
+    assert missing_item.status_code == 200
+    assert missing_item.json()["reason_code"] == "items_not_matched"
+
+    both_items = await buyer_client.put(
+        f"/shop/registrations/current/products/{second.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert both_items.status_code == 200
+    below_spend = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"code": "PAIR50"}
+    )
+    assert below_spend.json()["reason_code"] == "minimum_not_met"
+    assert below_spend.json()["shortfall"] == 50
+
+    enough_spend = await buyer_client.put(
+        f"/shop/registrations/current/products/{first.id}",
+        json={"variants": [{"option_ids": [], "quantity": 3}]},
+    )
+    assert enough_spend.status_code == 200
+    eligible = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"code": "pair50"}
+    )
+    assert eligible.json()["eligible"] is True
+    assert eligible.json()["discount_amount"] == 50
+    applied = await buyer_client.put(
+        "/shop/registrations/current/promotion", json={"code": "pair50"}
+    )
+    assert applied.status_code == 200
+    assert applied.json()["promotion_code"] == "PAIR50"
+    assert applied.json()["discount_amount"] == 50
+    assert applied.json()["total_price"] == 450
+
+
+async def test_product_cannot_be_deleted_while_used_by_promotion(
+    db_session, member_user, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    product = await _make_active_product(db_session, creator)
+    await _grant_permission(db_session, member_user, "shop:manage")
+    manager_client = authed_client_factory(member_user)
+    promotion = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "指定商品優惠",
+            "target_product_ids": [str(product.id)],
+            "discount_type": "fixed",
+            "discount_value": 10,
+            "min_order_price": 0,
+        },
+    )
+    assert promotion.status_code == 201
+
+    deleted = await manager_client.delete(f"/shop/products/{product.id}")
+    assert deleted.status_code == 409
+    assert "先從優惠" in deleted.json()["detail"]
 
 
 async def test_class_collection_locks_user_registration(db_session, authed_client_factory) -> None:

@@ -177,7 +177,7 @@ export async function fetchPublicShellData(): Promise<{
 }
 
 export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]> {
-  return (await getCachedPublicJson<ModuleStatusPublic[]>("/system/module-status")) ?? [];
+  return (await getCachedPublicJson<ModuleStatusPublic[]>("/system/module-status", true)) ?? [];
 }
 
 export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {

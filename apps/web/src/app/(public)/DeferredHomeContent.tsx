@@ -1,4 +1,8 @@
-import { fetchAnnouncements, fetchPublicJson } from "@/lib/serverFetch";
+import {
+  fetchAnnouncements,
+  fetchPublicJson,
+  fetchPublicModuleStatuses,
+} from "@/lib/serverFetch";
 import type {
   AnnouncementOut,
   CatalogCategoryOut,
@@ -16,10 +20,12 @@ export default async function DeferredHomeContent({
   urgentAnnouncement: AnnouncementOut | null;
   openSurveys: SurveyListItem[];
 }) {
-  const [announcements, catalog] = await Promise.all([
+  const [announcements, catalog, moduleStatuses] = await Promise.all([
     fetchAnnouncements(6),
     fetchPublicJson<CatalogCategoryOut[]>("/shop/catalog", { revalidate: 15 }),
+    fetchPublicModuleStatuses(),
   ]);
+  const shopUnavailable = moduleStatuses.some((module) => module.id === "shop" && module.on);
 
   return (
     <HomeContent
@@ -28,6 +34,7 @@ export default async function DeferredHomeContent({
       urgentAnnouncement={urgentAnnouncement}
       openSurveys={openSurveys}
       catalog={catalog}
+      shopUnavailable={shopUnavailable}
     />
   );
 }
