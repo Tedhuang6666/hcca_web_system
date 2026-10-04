@@ -17,7 +17,13 @@ import "../../public-design-system.css";
 import "../../(public)/public-footer.css";
 import "./shop-public.css";
 
-function PublicShopChrome({ children }: { children: React.ReactNode }) {
+function PublicShopChrome({
+  children,
+  showOperationsNavigation,
+}: {
+  children: React.ReactNode;
+  showOperationsNavigation: boolean;
+}) {
   return (
     <PublicModuleStatusProvider>
       <div className="public-site min-h-screen text-[var(--public-text)]">
@@ -28,6 +34,7 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
           跳到主要內容
         </a>
         <PublicSiteHeader />
+        {showOperationsNavigation && <ShopSectionNavigation />}
         <main id="main-content">
           <PageTransition>{children}</PageTransition>
         </main>
@@ -71,18 +78,35 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
-  const { isAdmin, permissions } = usePermissions();
+function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
   const canManage = isAdmin || permissions.has("admin:all") || permissions.has("shop:manage");
-  const canViewAll = isAdmin || permissions.has("admin:all") || permissions.has("shop:view_all") || permissions.has("shop:manage_orders") || permissions.has("shop:manage");
+  const canViewAll = isAdmin
+    || permissions.has("admin:all")
+    || permissions.has("shop:view_all")
+    || permissions.has("shop:manage_orders")
+    || permissions.has("shop:manage");
   const canCollectForClass = permissions.has("class:shop_collect");
-  const tabs: ModuleTab[] = [
-    { href: "/shop", label: "商品", icon: Store, end: true },
+
+  return [
+    { href: "/shop", label: "商品訂購", icon: Store, end: true },
     { href: "/shop/orders", label: "我的登記", icon: ClipboardList },
+    ...(canViewAll ? [{ href: "/shop/council-orders", label: "議員商品總覽", icon: BarChart2 }] : []),
     ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "班級收款", icon: ListChecks }] : []),
-    ...(canViewAll ? [{ href: "/shop/council-orders", label: "班聯管理", icon: BarChart2 }] : []),
     ...(canManage ? [{ href: "/shop/admin", label: "商品管理", icon: PackageSearch }] : []),
   ];
+}
+
+function ShopSectionNavigation() {
+  const { isAdmin, permissions } = usePermissions();
+  const tabs = getShopTabs(isAdmin, permissions);
+  if (tabs.length <= 2) return null;
+
+  return <ModuleTabs label="商品分頁" tabs={tabs} />;
+}
+
+function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
+  const { isAdmin, permissions } = usePermissions();
+  const tabs = getShopTabs(isAdmin, permissions);
 
   return (
     <ModuleBoundary id="shop" skeleton={<ListPageSkeleton />}>
@@ -95,7 +119,11 @@ function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   if (pathname === "/shop" || pathname === "/shop/cart") {
-    return <PublicShopChrome>{children}</PublicShopChrome>;
+    return (
+      <PublicShopChrome showOperationsNavigation={pathname === "/shop"}>
+        {children}
+      </PublicShopChrome>
+    );
   }
   return <ProtectedShopLayout>{children}</ProtectedShopLayout>;
 }
