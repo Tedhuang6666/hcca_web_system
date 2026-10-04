@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, CircleAlert, FileText, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, FileText, Paperclip, ReceiptText, ShieldCheck } from "lucide-react";
 
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
@@ -96,7 +96,7 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
         <p><strong>議員審理草案，尚未核定。</strong>{budget.review_submission.title}目前為「{budget.review_submission.status === "submitted" ? "待內部審核" : budget.review_submission.status === "returned" ? "退回補正" : "草案"}」；請以後續核准版本為準。</p>
       </aside>}
 
-      <aside className="public-budget-detail__privacy"><ShieldCheck size={18} aria-hidden="true" /><p><strong>公開資料不包含個人資訊。</strong>報帳人、內部憑證、帳戶與承辦資料都不會出現在這個頁面。</p></aside>
+      <aside className="public-budget-detail__privacy"><ShieldCheck size={18} aria-hidden="true" /><p><strong>核銷明細與已上傳憑證會公開。</strong>用途、品項、數量與單價可供查閱；登錄人、銀行帳戶與核銷備註不會出現在這個頁面。</p></aside>
 
       <section className="public-budget-detail__section" aria-labelledby="public-budget-lines-heading">
         <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">{isCouncilReview ? "本次送審明細" : "核准編列明細"}</h2><p>{isCouncilReview ? "金額只對應本次開放審理的草案。" : "金額依核准預算案的末層條目彙整。"}</p></div></div><span>{budget.allocations.length} 筆</span></header>
@@ -114,6 +114,33 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
           </tbody></table></div>
         <div className="public-budget-detail__cards">{groups.map((group) => <section key={group.id}><header><h3>{group.name}</h3><span>項目總額<strong>{formatAmount(group.total)}</strong></span></header>{group.rows.map(({ allocation, detail }) => <article key={allocation.id}><div><h4>{detail}</h4><strong>{formatAmount(allocation.amount)}</strong></div><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"}{allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? formatAmount(allocation.unit_price) : "＊"}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}</article>)}</section>)}</div>
       </section>
+
+      {!isCouncilReview && <section className="public-budget-detail__expenses" aria-labelledby="public-budget-expenses-heading">
+        <header>
+          <div><ReceiptText size={18} aria-hidden="true" /><div><h2 id="public-budget-expenses-heading">支出與憑證</h2><p>此核准預算的支出明細與附件憑證。</p></div></div>
+          <span>{budget.expenses.length} 筆支出</span>
+        </header>
+        {budget.expenses.length > 0 ? <div className="public-budget-detail__expense-list">
+          {budget.expenses.map((expense) => (
+            <article key={expense.id}>
+              <div className="public-budget-detail__expense-heading">
+                <div><time dateTime={expense.entry_date}>{expense.entry_date.replaceAll("-", "/")}</time><h3>{expense.purpose}</h3><p>{expense.allocation_name}</p></div>
+                <strong>{formatAmount(expense.total_amount)}</strong>
+              </div>
+              {expense.items.length > 0 && <ul aria-label={`${expense.purpose} 購買品項`}>
+                {expense.items.map((item) => <li key={item.id}>
+                  <span><strong>{item.name}</strong><small>{item.quantity} {item.unit} × {formatAmount(item.unit_price)}</small></span>
+                  <b>{formatAmount(item.amount)}</b>
+                </li>)}
+              </ul>}
+              {expense.evidence.length > 0 && <div className="public-budget-detail__expense-evidence" aria-label={`${expense.purpose} 憑證`}>
+                <span><Paperclip size={14} aria-hidden="true" />收據與憑證</span>
+                {expense.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer">{evidence.filename}</a>)}
+              </div>}
+            </article>
+          ))}
+        </div> : <p className="public-budget-detail__expenses-empty">目前尚未登錄支出。</p>}
+      </section>}
 
       {budget.submissions.length > 0 && <section className="public-budget-detail__approvals" aria-labelledby="public-budget-approvals-heading">
         <header><h2 id="public-budget-approvals-heading">{isCouncilReview ? "既有核准紀錄" : "核准紀錄"}</h2><p>初始預算與每一次追加案都會依審核時間保留。</p></header>

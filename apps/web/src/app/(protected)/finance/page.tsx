@@ -747,7 +747,7 @@ export default function FinancePage() {
     ? ["expense" as EntryType]
     : editingManualEntryId
       ? [entryType]
-      : availableEntryTypes;
+      : availableEntryTypes.filter((type) => type !== "expense");
   const roleQueues = [
     {
       id: "review" as const,
@@ -812,7 +812,7 @@ export default function FinancePage() {
   const expenseReady = expenseBasicsReady && expenseItemsReady && expensePaymentReady;
   const primaryNavigation = [
     { id: "workspace" as const, label: "財務總覽", icon: LayoutDashboard },
-    { id: "budget" as const, label: "預算管理", icon: PiggyBank },
+    { id: "budget" as const, label: "預算與核銷", icon: PiggyBank },
     { id: "claims" as const, label: "收支紀錄", icon: ReceiptText },
   ];
   const settingsNavigation = [
@@ -840,7 +840,7 @@ export default function FinancePage() {
       <header className="finance-header">
         <div className="finance-header__copy">
           <h1>財務總覽</h1>
-          <p>預算、收支紀錄與待處理事項集中在三個工作區。</p>
+          <p>核准預算可直接登錄核銷、上傳憑證並公開明細；舊制收支紀錄仍可查閱。</p>
         </div>
         {ledger && (
           <div className="finance-header__actions">
@@ -848,12 +848,9 @@ export default function FinancePage() {
             {canClaimExpense && (
               <button
                 className="btn btn-primary"
-                onClick={() => {
-                  setEntryType("expense");
-                  setActiveTab("entry");
-                }}
+                onClick={() => setActiveTab("budget")}
               >
-                <FilePlus2 size={16} aria-hidden="true" />新增支出
+                <FilePlus2 size={16} aria-hidden="true" />登錄核銷
               </button>
             )}
           </div>
@@ -944,8 +941,8 @@ export default function FinancePage() {
             <button className={activeTab === "review" ? "is-active" : ""} aria-pressed={activeTab === "review"} onClick={() => setActiveTab("review")}>
               <ClipboardCheck size={16} aria-hidden="true" />待確認<span>{pendingReviewClaims.length}</span>
             </button>
-            {canClaimExpense && <button className={activeTab === "entry" ? "is-active" : ""} aria-pressed={activeTab === "entry"} onClick={() => { setEntryType("expense"); setActiveTab("entry"); }}>
-              <FilePlus2 size={16} aria-hidden="true" />新增紀錄
+            {canClaimExpense && <button className={activeTab === "budget" ? "is-active" : ""} aria-pressed={activeTab === "budget"} onClick={() => setActiveTab("budget")}>
+              <FilePlus2 size={16} aria-hidden="true" />核准預算核銷
             </button>}
           </nav>}
           {activeTab === "workspace" && <section className="finance-workspace">
@@ -1000,7 +997,7 @@ export default function FinancePage() {
               </div>
               {canManage && <button className="btn btn-primary" onClick={() => setActiveTab("ledger")}>前往設定期間</button>}
             </section>
-          ) : availableEntryTypes.length > 0 ? (
+          ) : entryTypeOptions.length > 0 ? (
             <section className="finance-entry">
               <header className="finance-entry__header">
                 <div>
@@ -1236,7 +1233,7 @@ export default function FinancePage() {
             })}</div> : <div className="finance-workspace__empty"><ReceiptText size={18} aria-hidden="true" />目前沒有你可查閱的報帳案件。</div>}
           </section>}
 
-           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} currentUserId={currentUserId} />}
+           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} currentUserId={currentUserId} canRecordExpense={canClaimExpense || canBudget} />}
           </div>
         </div>
       )}

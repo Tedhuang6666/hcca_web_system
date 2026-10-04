@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Check,
   CheckCircle2,
   CircleAlert,
   Eye,
@@ -17,10 +16,12 @@ import {
   Plus,
   Save,
   Send,
+  Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
+import BudgetExpenseRegister from "@/components/finance/BudgetExpenseRegister";
 import { financeApi } from "@/lib/api";
 import type {
   FinanceBudget,
@@ -40,6 +41,7 @@ type Props = {
   canReview: boolean;
   canPublish: boolean;
   currentUserId: string;
+  canRecordExpense: boolean;
 };
 
 const statusLabel = {
@@ -59,6 +61,7 @@ export default function BudgetWorkspace({
   canReview,
   canPublish,
   currentUserId,
+  canRecordExpense,
 }: Props) {
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -79,6 +82,7 @@ export default function BudgetWorkspace({
   const [allocationUnit, setAllocationUnit] = useState("項");
   const [allocationUnitPrice, setAllocationUnitPrice] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
+  const [versionsOpen, setVersionsOpen] = useState(true);
   const [settlement, setSettlement] = useState<FinanceSettlement | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importTarget, setImportTarget] = useState<"new" | "replace" | "supplemental">("new");
@@ -143,6 +147,7 @@ export default function BudgetWorkspace({
   }, [detail]);
 
   const activeSubmission = detail?.submissions.find((item) => item.id === selectedSubmissionId)
+    || detail?.submissions.find((item) => item.kind === "initial" && item.status === "approved")
     || detail?.submissions.find((item) => item.status === "draft" || item.status === "returned")
     || detail?.submissions.at(-1);
 
@@ -229,6 +234,60 @@ export default function BudgetWorkspace({
       toast.success(kind === "initial" ? "初始預算草案已建立" : "追加預算草案已建立");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "建立預算案失敗");
+    }
+  };
+
+  const renameSubmission = async (submissionId: string, title: string) => {
+    const nextTitle = await prompt({
+      title: "編輯草案名稱",
+      inputLabel: "預算案名稱",
+      defaultValue: title,
+      required: true,
+      confirmLabel: "儲存名稱",
+    });
+    if (!nextTitle?.trim() || nextTitle.trim() === title) return;
+    try {
+      await financeApi.updateBudgetSubmission(submissionId, { title: nextTitle.trim() });
+      await refreshDetail();
+      toast.success("草案名稱已更新");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新草案名稱失敗");
+    }
+  };
+
+  const deleteSubmission = async (submissionId: string, title: string) => {
+    const confirmed = await confirm({
+      title: "刪除這份草案？",
+      description: `「${title}」及其尚未核准的預算明細會一併刪除。`,
+      confirmLabel: "刪除草案",
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await financeApi.deleteBudgetSubmission(submissionId);
+      setSelectedSubmissionId("");
+      await refreshDetail();
+      toast.success("草案已刪除");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "刪除草案失敗");
+    }
+  };
+
+  const deleteDraftAllocation = async (allocation: FinanceBudgetAllocation) => {
+    if (!activeSubmission) return;
+    const confirmed = await confirm({
+      title: "刪除這筆預算明細？",
+      description: "這筆尚未核准的配置會從草案移除。",
+      confirmLabel: "刪除明細",
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await financeApi.deleteBudgetDraftAllocation(activeSubmission.id, allocation.id);
+      await refreshDetail();
+      toast.success("預算明細已刪除");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "刪除預算明細失敗");
     }
   };
 
@@ -365,7 +424,7 @@ export default function BudgetWorkspace({
     const confirmed = await confirm({
       title: publishing ? "確認對外公開這份預算？" : "停止對外公開這份預算？",
       description: publishing
-        ? "公開後不需登入，任何取得網址的人都能查看已核准的預算明細、支出項目與審核紀錄。支出會顯示日期、用途、品項、金額、預算項目、付款方式與狀態；報帳人、憑證及內部備註不會公開。請確認用途與品項文字不含個人資料。"
+        ? "公開後不需登入，任何取得網址的人都能查看已核准預算、支出細項與憑證。支出會顯示日期、用途、品名、數量、單價與金額；登錄人、付款帳戶與核銷備註不會公開。請確認用途與品項文字不含個人資料。"
         : "停止後，公開網址將不再提供這份預算內容；內部預算與審核紀錄不受影響。",
       confirmLabel: publishing ? "確認公開" : "停止公開",
       danger: !publishing,
@@ -489,6 +548,9 @@ export default function BudgetWorkspace({
   const hasApprovedInitial = Boolean(
     detail?.submissions.some((item) => item.kind === "initial" && item.status === "approved"),
   );
+  useEffect(() => {
+    setVersionsOpen(!hasApprovedInitial);
+  }, [detail?.id, hasApprovedInitial]);
   const canOpenCouncilReview = Boolean(
     activeSubmission
     && ["draft", "submitted", "returned"].includes(activeSubmission.status),
@@ -499,25 +561,6 @@ export default function BudgetWorkspace({
   const importingIntoCurrent = Boolean(detail && importTarget !== "new");
   const importPeriodId = importingIntoCurrent ? detail!.period_id : periodId;
   const importName = importingIntoCurrent ? detail!.name : budgetName;
-  const workflowSteps = [
-    { label: "建立共同預算", done: Boolean(detail), active: !detail },
-    {
-      label: "完成部門編列",
-      done: Boolean(detail && detail.allocations.length > 0),
-      active: Boolean(detail && detail.allocations.length === 0),
-    },
-    {
-      label: "內部審核核准",
-      done: hasApprovedInitial,
-      active: Boolean(detail && detail.allocations.length > 0 && !hasApprovedInitial),
-    },
-    {
-      label: "開放對外檢視",
-      done: Boolean(detail?.is_public),
-      active: Boolean(hasApprovedInitial && !detail?.is_public),
-    },
-  ];
-
   return (
     <section
       className="finance-budget"
@@ -527,7 +570,7 @@ export default function BudgetWorkspace({
       <header className="finance-budget__header">
         <div>
           <h2 id="budget-heading">共同預算</h2>
-          <p>從部門編列、內部審核到對外公開，所有版本與追加案都留在同一個工作區。</p>
+          <p>核准預算可直接登錄支出、逐項列明購買內容並附上憑證；登錄後即納入決算。</p>
         </div>
         {detail && (
           <div className={`finance-budget__publication-status ${detail.is_public ? "is-public" : ""}`}>
@@ -536,15 +579,6 @@ export default function BudgetWorkspace({
           </div>
         )}
       </header>
-
-      <ol className="finance-budget__workflow" aria-label="預算編列與公開流程">
-        {workflowSteps.map((step, index) => (
-          <li key={step.label} className={step.done ? "is-done" : step.active ? "is-active" : ""}>
-            <span>{step.done ? <Check size={14} aria-label="已完成" /> : index + 1}</span>
-            <p>{step.label}</p>
-          </li>
-        ))}
-      </ol>
 
       <div className="finance-budget__toolbar">
         {budgets.length > 0 && (
@@ -608,8 +642,21 @@ export default function BudgetWorkspace({
             <div className="finance-budget__utilization"><span><b>整體執行率</b><strong>{utilization}%</strong></span><div aria-hidden="true"><i style={{ width: `${utilization}%` }} /></div></div>
           </section>
 
+          <BudgetExpenseRegister
+            budgetId={detail.id}
+            ledgerId={ledgerId}
+            allocations={detail.allocations}
+            submissions={detail.submissions}
+            nodes={detail.nodes}
+            expenses={detail.expenses}
+            orgs={orgs}
+            canRecord={canRecordExpense}
+            isPublic={detail.is_public}
+            onRecorded={refreshDetail}
+          />
+
           <section className="finance-budget__section" aria-labelledby="budget-ledger-heading">
-            <header><div><h3 id="budget-ledger-heading">預算執行表</h3><p>編列、核銷與餘額會隨完成核銷的案件更新。</p></div><span>{nodes.filter((node) => node.leaf).length} 個末層條目</span></header>
+            <header><div><h3 id="budget-ledger-heading">預算執行表</h3><p>編列、已登錄核銷金額與餘額會即時更新。</p></div><span>{nodes.filter((node) => node.leaf).length} 個末層條目</span></header>
             <div className="finance-budget__table" role="region" aria-label="預算執行表，可左右捲動" tabIndex={0}><table><thead><tr><th>預算條目</th><th>編列</th><th>已用</th><th>剩餘</th><th>執行率</th></tr></thead><tbody>{nodes.map((row) => {
               const node = detail.nodes.find((item) => item.id === row.id)!;
               const ratio = node.allocated_amount ? Math.min(100, Math.round(node.used_amount / node.allocated_amount * 100)) : 0;
@@ -627,15 +674,23 @@ export default function BudgetWorkspace({
             </div>
           </section>
 
-          <section className="finance-budget__section" aria-labelledby="budget-review-heading">
-            <header><div><h3 id="budget-review-heading">預算案與內部審核</h3><p>初始案核准後可建立追加案；每次送審與決定都保留紀錄。</p></div>{(canManage || canPropose) && <div className="finance-budget__new-submission"><label><span className="sr-only">預算案名稱</span><input className="input" value={submissionTitle} onChange={(event) => setSubmissionTitle(event.target.value)} placeholder="預算案名稱" /></label><button className="btn btn-secondary" onClick={() => void createSubmission(detail.submissions.length === 0 ? "initial" : "supplemental")}><Plus size={15} aria-hidden="true" />{detail.submissions.length === 0 ? "建立初始草案" : "建立追加草案"}</button></div>}</header>
+          <details
+            className="finance-budget__versions"
+            open={versionsOpen}
+            onToggle={(event) => setVersionsOpen(event.currentTarget.open)}
+          >
+            <summary><ListTree size={16} aria-hidden="true" />預算版本與草案編輯{activeSubmission && <span>{activeSubmission.status === "approved" ? "目前：已核准" : `目前：${statusLabel[activeSubmission.status]}`}</span>}</summary>
+            <section className="finance-budget__section" aria-labelledby="budget-review-heading">
+            <header><div><h3 id="budget-review-heading">預算版本與草案</h3><p>這裡管理預算本身；核准後的支出直接登錄，不再送支出審核。</p></div>{(canManage || canPropose) && <div className="finance-budget__new-submission"><label><span className="sr-only">預算案名稱</span><input className="input" value={submissionTitle} onChange={(event) => setSubmissionTitle(event.target.value)} placeholder="預算案名稱" /></label><button className="btn btn-secondary" onClick={() => void createSubmission(detail.submissions.length === 0 ? "initial" : "supplemental")}><Plus size={15} aria-hidden="true" />{detail.submissions.length === 0 ? "建立初始草案" : "建立追加草案"}</button></div>}</header>
 
             {detail.submissions.length > 0 ? <div className="finance-budget__submissions" role="group" aria-label="預算案版本">{detail.submissions.map((submission) => <button key={submission.id} type="button" aria-pressed={activeSubmission?.id === submission.id} className={activeSubmission?.id === submission.id ? "is-active" : ""} onClick={() => setSelectedSubmissionId(submission.id)}><span>{submission.kind === "initial" ? "初始預算" : "追加預算"}</span><strong>{submission.title}</strong><small className={`is-${submission.status}`}>{statusLabel[submission.status]}</small></button>)}</div> : <div className="finance-budget__inline-empty"><CircleAlert size={17} aria-hidden="true" />先建立初始預算草案，再開始編列。</div>}
+
+            {activeSubmission && (canManage || activeSubmission.created_by_id === currentUserId) && (activeSubmission.status === "draft" || activeSubmission.status === "returned") && <div className="finance-budget__draft-actions"><span>草案可直接修改或刪除。</span><div><button className="btn btn-secondary" onClick={() => void renameSubmission(activeSubmission.id, activeSubmission.title)}><Pencil size={14} aria-hidden="true" />編輯名稱</button><button className="btn btn-danger" onClick={() => void deleteSubmission(activeSubmission.id, activeSubmission.title)}><Trash2 size={14} aria-hidden="true" />刪除草案</button></div></div>}
 
             {activeSubmission && (canPropose || canManage) && (activeSubmission.status === "draft" || activeSubmission.status === "returned") && <div className="finance-budget__editor">
               <section><div className="finance-budget__editor-heading"><ListTree size={18} aria-hidden="true" /><div><h4>建立預算階層</h4><p>先建立分類，再把金額配置到最末層條目。</p></div></div><div className="finance-budget__node-form"><select className="input" aria-label="上層預算分類" value={nodeParentId} onChange={(event) => setNodeParentId(event.target.value)}><option value="">最上層分類</option>{nodes.map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select><input className="input" aria-label="新預算條目名稱" value={nodeName} onChange={(event) => setNodeName(event.target.value)} placeholder="例如：行政支出／文書費" /><button className="btn btn-secondary" onClick={() => void createNode()}>新增條目</button></div></section>
               <section><div className="finance-budget__editor-heading"><FileSpreadsheet size={18} aria-hidden="true" /><div><h4>配置部門額度</h4><p>選擇末層條目，填入提出部門與計價方式。</p></div></div><div className="finance-budget__allocation-form"><select className="input" aria-label="配置到預算條目" value={allocationNodeId} onChange={(event) => setAllocationNodeId(event.target.value)}><option value="">選擇末層條目</option>{nodes.filter((node) => node.leaf).map((node) => <option key={node.id} value={node.id}>{node.label}</option>)}</select><select className="input" aria-label="提出預算部門" value={allocationOrgId} onChange={(event) => setAllocationOrgId(event.target.value)}><option value="">提出部門</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</select><input className="input" aria-label="預算數量" type="number" min="0.01" step="0.01" value={allocationQuantity} onChange={(event) => setAllocationQuantity(event.target.value)} placeholder="數量" /><input className="input" aria-label="預算計價單位" value={allocationUnit} onChange={(event) => setAllocationUnit(event.target.value)} placeholder="單位" /><input className="input" aria-label="預算單價" type="number" min="1" value={allocationUnitPrice} onChange={(event) => setAllocationUnitPrice(event.target.value)} placeholder="單價" /><button className="btn btn-secondary" onClick={() => void createAllocation()}>加入明細</button></div></section>
-              <div className="finance-budget__submit"><span><CircleAlert size={16} aria-hidden="true" />送審後會鎖定目前草案，退回後才能繼續修改。</span><button className="btn btn-primary" disabled={pendingAction === "submit"} onClick={() => void submit()}><Send size={16} aria-hidden="true" />{pendingAction === "submit" ? "正在送審…" : "送內部審核"}</button></div>
+              <div className="finance-budget__submit"><span><CircleAlert size={16} aria-hidden="true" />初始預算或追加預算需核准後，才能登錄對應支出。</span><button className="btn btn-primary" disabled={pendingAction === "submit"} onClick={() => void submit()}><Send size={16} aria-hidden="true" />{pendingAction === "submit" ? "正在送審…" : "送預算審核"}</button></div>
             </div>}
 
             {activeSubmission?.status === "submitted" && canReview && <div className="finance-budget__review-bar"><span><CircleAlert size={17} aria-hidden="true" /><b>{activeSubmission.title}</b>正在等待你的審核決定</span><div><button className="btn btn-primary" disabled={pendingAction === "review"} onClick={() => void review("approved")}><CheckCircle2 size={16} aria-hidden="true" />{pendingAction === "review" ? "處理中…" : "核准預算案"}</button><button className="btn btn-secondary" disabled={pendingAction === "review"} onClick={() => void review("returned")}>退回補正</button><button className="btn btn-secondary" disabled={pendingAction === "review"} onClick={() => void review("rejected")}>否決</button></div></div>}
@@ -663,7 +718,7 @@ export default function BudgetWorkspace({
                       <td>{editing ? <input className="input" aria-label="編輯總額" type="number" min="1" value={calculatedAmount || ""} disabled={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0} onChange={(event) => setAllocationDraft({ ...allocationDraft, amount: event.target.value })} /> : <strong>NT${allocation.amount.toLocaleString()}</strong>}</td>
                       {rowIndex === 0 && <td rowSpan={group.rows.length} className="finance-budget__group-total"><strong>NT${group.total.toLocaleString()}</strong></td>}
                       <td>{editing ? <textarea className="input" aria-label="編輯備註" value={allocationDraft.note} onChange={(event) => setAllocationDraft({ ...allocationDraft, note: event.target.value })} /> : <div className="finance-budget__evidence-cell">{allocation.note && <p>{allocation.note}</p>}{allocation.evidence.length > 0 ? <span>{allocation.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><FileCheck2 size={13} aria-hidden="true" />{evidence.filename}</a>)}</span> : <small>尚未附內部憑證</small>}</div>}</td>
-                      <td><span className="finance-budget__row-actions">{editing ? <><button className="btn btn-primary" title="儲存" aria-label="儲存預算明細" onClick={() => void saveAllocation(allocation)}><Save size={15} aria-hidden="true" /></button><button className="btn btn-secondary" title="取消" aria-label="取消編輯預算明細" onClick={() => setEditingAllocationId(null)}><X size={15} aria-hidden="true" /></button></> : <>{canEdit && <button className="btn btn-secondary" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯</button>}{canAttach && <label className="btn btn-secondary finance-budget__evidence-upload"><Paperclip size={14} aria-hidden="true" />{uploadingEvidenceId === allocation.id ? "上傳中…" : "補憑證"}<input className="sr-only" type="file" multiple disabled={uploadingEvidenceId === allocation.id} accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => { void uploadAllocationEvidence(allocation, event.target.files); event.currentTarget.value = ""; }} /></label>}</>}</span></td>
+                      <td><span className="finance-budget__row-actions">{editing ? <><button className="btn btn-primary" title="儲存" aria-label="儲存預算明細" onClick={() => void saveAllocation(allocation)}><Save size={15} aria-hidden="true" /></button><button className="btn btn-secondary" title="取消" aria-label="取消編輯預算明細" onClick={() => setEditingAllocationId(null)}><X size={15} aria-hidden="true" /></button></> : <>{canEdit && <button className="btn btn-secondary" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯</button>}{canAttach && <label className="btn btn-secondary finance-budget__evidence-upload"><Paperclip size={14} aria-hidden="true" />{uploadingEvidenceId === allocation.id ? "上傳中…" : "補憑證"}<input className="sr-only" type="file" multiple disabled={uploadingEvidenceId === allocation.id} accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => { void uploadAllocationEvidence(allocation, event.target.files); event.currentTarget.value = ""; }} /></label>}{draftEditable && <button className="btn btn-danger" aria-label="刪除草案預算明細" onClick={() => void deleteDraftAllocation(allocation)}><Trash2 size={14} aria-hidden="true" />刪除</button>}</>}</span></td>
                     </tr>;
                   }))}</tbody>
                 </table>
@@ -678,17 +733,18 @@ export default function BudgetWorkspace({
                     const editing = editingAllocationId === allocation.id;
                     return <article key={allocation.id}>
                       <div><h4>{allocationDetail}</h4><strong>NT${allocation.amount.toLocaleString()}</strong></div>
-                      {editing ? <div className="finance-budget__card-edit"><label>數量<input className="input" type="number" min="0.01" step="0.01" value={allocationDraft.quantity} onChange={(event) => setAllocationDraft({ ...allocationDraft, quantity: event.target.value })} /></label><label>單位<input className="input" value={allocationDraft.unit} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit: event.target.value })} /></label><label>單價<input className="input" type="number" min="1" value={allocationDraft.unit_price} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit_price: event.target.value })} /></label><label>總額<input className="input" type="number" min="1" value={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0 ? Math.round(Number(allocationDraft.quantity) * Number(allocationDraft.unit_price)) : allocationDraft.amount} disabled={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0} onChange={(event) => setAllocationDraft({ ...allocationDraft, amount: event.target.value })} /></label><label className="is-wide">備註<textarea className="input" value={allocationDraft.note} onChange={(event) => setAllocationDraft({ ...allocationDraft, note: event.target.value })} /></label><footer><button className="btn btn-primary" onClick={() => void saveAllocation(allocation)}><Save size={14} aria-hidden="true" />儲存</button><button className="btn btn-secondary" onClick={() => setEditingAllocationId(null)}><X size={14} aria-hidden="true" />取消</button></footer></div> : <><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"}{allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "＊"}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}{allocation.evidence.length > 0 && <div className="finance-budget__card-evidence">{allocation.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><FileCheck2 size={14} aria-hidden="true" />{evidence.filename}</a>)}</div>}{(draftEditable || approvedEditable) && <footer><button className="btn btn-secondary" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯細項</button><label className="btn btn-secondary"><Paperclip size={14} aria-hidden="true" />補憑證<input className="sr-only" type="file" multiple disabled={uploadingEvidenceId === allocation.id} accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => { void uploadAllocationEvidence(allocation, event.target.files); event.currentTarget.value = ""; }} /></label></footer>}</>}
+                      {editing ? <div className="finance-budget__card-edit"><label>數量<input className="input" type="number" min="0.01" step="0.01" value={allocationDraft.quantity} onChange={(event) => setAllocationDraft({ ...allocationDraft, quantity: event.target.value })} /></label><label>單位<input className="input" value={allocationDraft.unit} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit: event.target.value })} /></label><label>單價<input className="input" type="number" min="1" value={allocationDraft.unit_price} onChange={(event) => setAllocationDraft({ ...allocationDraft, unit_price: event.target.value })} /></label><label>總額<input className="input" type="number" min="1" value={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0 ? Math.round(Number(allocationDraft.quantity) * Number(allocationDraft.unit_price)) : allocationDraft.amount} disabled={Number(allocationDraft.quantity) > 0 && Number(allocationDraft.unit_price) > 0} onChange={(event) => setAllocationDraft({ ...allocationDraft, amount: event.target.value })} /></label><label className="is-wide">備註<textarea className="input" value={allocationDraft.note} onChange={(event) => setAllocationDraft({ ...allocationDraft, note: event.target.value })} /></label><footer><button className="btn btn-primary" onClick={() => void saveAllocation(allocation)}><Save size={14} aria-hidden="true" />儲存</button><button className="btn btn-secondary" onClick={() => setEditingAllocationId(null)}><X size={14} aria-hidden="true" />取消</button></footer></div> : <><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"}{allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? `NT$${allocation.unit_price.toLocaleString()}` : "＊"}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}{allocation.evidence.length > 0 && <div className="finance-budget__card-evidence">{allocation.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><FileCheck2 size={14} aria-hidden="true" />{evidence.filename}</a>)}</div>}{(draftEditable || approvedEditable) && <footer><button className="btn btn-secondary" onClick={() => startAllocationEdit(allocation)}><Pencil size={14} aria-hidden="true" />編輯細項</button><label className="btn btn-secondary"><Paperclip size={14} aria-hidden="true" />補憑證<input className="sr-only" type="file" multiple disabled={uploadingEvidenceId === allocation.id} accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => { void uploadAllocationEvidence(allocation, event.target.files); event.currentTarget.value = ""; }} /></label>{draftEditable && <button className="btn btn-danger" onClick={() => void deleteDraftAllocation(allocation)}><Trash2 size={14} aria-hidden="true" />刪除細項</button>}</footer>}</>}
                     </article>;
                   })}
                 </section>)}
               </div>
             </>}
           </section>
+          </details>
 
           <section className={`finance-budget__publication ${detail.is_public ? "is-public" : ""}`}>
             <div className="finance-budget__publication-icon">{detail.is_public ? <Eye size={21} aria-hidden="true" /> : <Megaphone size={21} aria-hidden="true" />}</div>
-            <div><h3>{detail.is_public ? "這份預算已開放對外檢視" : "對外公布"}</h3><p>{detail.is_public ? "任何取得網址的人都能查看核准預算與審核紀錄；報帳人、憑證與內部資料不會公開。" : canOpenPublic ? "初始預算已核准。確認公開後，任何取得網址的人都能查看核准明細。" : "初始預算完成內部審核後，才會開放發布控制。"}</p></div>
+            <div><h3>{detail.is_public ? "這份預算已開放對外檢視" : "對外公布"}</h3><p>{detail.is_public ? "任何取得網址的人都能查看核准預算、支出品項與已上傳憑證；登錄人、銀行帳戶與核銷備註不會公開。" : canOpenPublic ? "初始預算已核准。公開後，核准明細、支出品項與憑證都能供外界查看。" : "初始預算完成核准後，才會開放發布控制。"}</p></div>
             {canPublish && (canOpenPublic || detail.is_public) && <div>{detail.is_public && <a className="btn btn-secondary" href={`/public/budgets/${detail.id}`} target="_blank" rel="noreferrer"><Eye size={16} aria-hidden="true" />預覽公開頁</a>}<button className="btn btn-primary" disabled={pendingAction === "publication"} onClick={() => void togglePublication()}>{detail.is_public ? <EyeOff size={16} aria-hidden="true" /> : <Megaphone size={16} aria-hidden="true" />}{pendingAction === "publication" ? "正在更新…" : detail.is_public ? "停止公開" : "確認並公開"}</button></div>}
           </section>
 
@@ -700,7 +756,7 @@ export default function BudgetWorkspace({
             </section>
           )}
 
-          {settlement && <section className="finance-budget__section" aria-labelledby="budget-settlement-heading"><header><div><h3 id="budget-settlement-heading">期末決算</h3><p>只統計已完成核銷的支出；尚有 {settlement.unsettled_claim_count} 件已過帳報帳等待憑證或完成核銷。</p></div><span>{settlement.period_name}</span></header><div className="finance-budget__settlement-totals"><p>核准預算<strong>NT${settlement.budgeted_total.toLocaleString()}</strong></p><p>決算支出<strong>NT${settlement.settled_total.toLocaleString()}</strong></p><p>差額<strong>NT${(settlement.budgeted_total - settlement.settled_total).toLocaleString()}</strong></p></div><div className="finance-budget__table" role="region" aria-label="期末決算明細，可左右捲動" tabIndex={0}><table><thead><tr><th>預算條目</th><th>核准</th><th>決算</th><th>差額</th></tr></thead><tbody>{settlement.lines.map((line) => <tr key={line.node_id}><td>{line.name}</td><td>NT${line.budgeted_amount.toLocaleString()}</td><td>NT${line.settled_amount.toLocaleString()}</td><td>NT${line.difference_amount.toLocaleString()}</td></tr>)}</tbody></table></div><div className="finance-budget__mobile-list finance-budget__mobile-list--settlement">{settlement.lines.map((line) => <article key={line.node_id}><header><strong>{line.name}</strong></header><dl><div><dt>核准</dt><dd>NT${line.budgeted_amount.toLocaleString()}</dd></div><div><dt>決算</dt><dd>NT${line.settled_amount.toLocaleString()}</dd></div><div><dt>差額</dt><dd>NT${line.difference_amount.toLocaleString()}</dd></div></dl></article>)}</div></section>}
+          {settlement && <section className="finance-budget__section" aria-labelledby="budget-settlement-heading"><header><div><h3 id="budget-settlement-heading">期末決算</h3><p>已登錄的支出會立即計入決算。{settlement.unsettled_claim_count > 0 ? `另有 ${settlement.unsettled_claim_count} 件舊制報帳尚未完成。` : ""}</p></div><span>{settlement.period_name}</span></header><div className="finance-budget__settlement-totals"><p>核准預算<strong>NT${settlement.budgeted_total.toLocaleString()}</strong></p><p>決算支出<strong>NT${settlement.settled_total.toLocaleString()}</strong></p><p>差額<strong>NT${(settlement.budgeted_total - settlement.settled_total).toLocaleString()}</strong></p></div><div className="finance-budget__table" role="region" aria-label="期末決算明細，可左右捲動" tabIndex={0}><table><thead><tr><th>預算條目</th><th>核准</th><th>決算</th><th>差額</th></tr></thead><tbody>{settlement.lines.map((line) => <tr key={line.node_id}><td>{line.name}</td><td>NT${line.budgeted_amount.toLocaleString()}</td><td>NT${line.settled_amount.toLocaleString()}</td><td>NT${line.difference_amount.toLocaleString()}</td></tr>)}</tbody></table></div><div className="finance-budget__mobile-list finance-budget__mobile-list--settlement">{settlement.lines.map((line) => <article key={line.node_id}><header><strong>{line.name}</strong></header><dl><div><dt>核准</dt><dd>NT${line.budgeted_amount.toLocaleString()}</dd></div><div><dt>決算</dt><dd>NT${line.settled_amount.toLocaleString()}</dd></div><div><dt>差額</dt><dd>NT${line.difference_amount.toLocaleString()}</dd></div></dl></article>)}</div></section>}
         </>
       )}
     </section>

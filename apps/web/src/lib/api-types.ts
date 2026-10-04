@@ -5011,6 +5011,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/budget-submissions/{submission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Budget Submission */
+        delete: operations["delete_budget_submission_finance_budget_submissions__submission_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Budget Submission */
+        patch: operations["update_budget_submission_finance_budget_submissions__submission_id__patch"];
+        trace?: never;
+    };
     "/finance/budget-submissions/{submission_id}/allocations": {
         parameters: {
             query?: never;
@@ -5038,7 +5056,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Budget Draft Allocation */
+        delete: operations["delete_budget_draft_allocation_finance_budget_submissions__submission_id__allocations__allocation_id__delete"];
         options?: never;
         head?: never;
         /** Update Budget Draft Allocation */
@@ -5122,6 +5141,40 @@ export interface paths {
         };
         /** Get Budget Detail */
         get: operations["get_budget_detail_finance_budgets__budget_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/budgets/{budget_id}/expenses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Budget Expense */
+        post: operations["create_budget_expense_finance_budgets__budget_id__expenses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/budgets/{budget_id}/expenses/{expense_id}/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Budget Expense Evidence */
+        get: operations["download_budget_expense_evidence_finance_budgets__budget_id__expenses__expense_id__evidence__evidence_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5671,6 +5724,23 @@ export interface paths {
         };
         /** Get Public Budget Detail */
         get: operations["get_public_budget_detail_finance_public_budgets__budget_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/public/budgets/{budget_id}/expenses/{expense_id}/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Public Budget Expense Evidence */
+        get: operations["download_public_budget_expense_evidence_finance_public_budgets__budget_id__expenses__expense_id__evidence__evidence_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13235,6 +13305,8 @@ export interface components {
         BudgetDetailOut: {
             /** Allocations */
             allocations: components["schemas"]["BudgetAllocationOut"][];
+            /** Expenses */
+            expenses?: components["schemas"]["FinanceBudgetExpenseOut"][];
             /**
              * Id
              * Format: uuid
@@ -13402,6 +13474,13 @@ export interface components {
          * @enum {string}
          */
         BudgetSubmissionStatus: "draft" | "submitted" | "approved" | "returned" | "rejected";
+        /** BudgetSubmissionUpdate */
+        BudgetSubmissionUpdate: {
+            /** Note */
+            note?: string | null;
+            /** Title */
+            title?: string | null;
+        };
         BusinessHours: {
             [key: string]: components["schemas"]["BusinessHoursInterval"][];
         };
@@ -18361,6 +18440,145 @@ export interface components {
          * @enum {string}
          */
         FinanceAccountType: "asset" | "liability" | "equity" | "revenue" | "expense";
+        /** FinanceBudgetExpenseCreate */
+        FinanceBudgetExpenseCreate: {
+            /**
+             * Allocation Id
+             * Format: uuid
+             */
+            allocation_id: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Evidence */
+            evidence?: components["schemas"]["FinanceBudgetExpenseEvidenceIn"][];
+            /** Items */
+            items: components["schemas"]["FinanceBudgetExpenseItemCreate"][];
+            /** Note */
+            note?: string | null;
+            /** Purpose */
+            purpose: string;
+        };
+        /** FinanceBudgetExpenseEvidenceIn */
+        FinanceBudgetExpenseEvidenceIn: {
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /** Storage Key */
+            storage_key: string;
+        };
+        /** FinanceBudgetExpenseEvidenceOut */
+        FinanceBudgetExpenseEvidenceOut: {
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Storage Key */
+            storage_key: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+            /** Url */
+            url: string;
+        };
+        /** FinanceBudgetExpenseItemCreate */
+        FinanceBudgetExpenseItemCreate: {
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number | string;
+            /**
+             * Tax Rate
+             * @default 0
+             */
+            tax_rate: number;
+            /**
+             * Unit
+             * @default 項
+             */
+            unit: string;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /** FinanceBudgetExpenseItemOut */
+        FinanceBudgetExpenseItemOut: {
+            /** Amount */
+            amount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: string;
+            /** Tax Rate */
+            tax_rate: number;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /** FinanceBudgetExpenseOut */
+        FinanceBudgetExpenseOut: {
+            /**
+             * Allocation Id
+             * Format: uuid
+             */
+            allocation_id: string;
+            /** Allocation Name */
+            allocation_name: string;
+            /**
+             * Allocation Node Id
+             * Format: uuid
+             */
+            allocation_node_id: string;
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Evidence */
+            evidence: components["schemas"]["FinanceBudgetExpenseEvidenceOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["FinanceBudgetExpenseItemOut"][];
+            /** Note */
+            note: string | null;
+            /** Purpose */
+            purpose: string;
+            /** Total Amount */
+            total_amount: number;
+        };
         /** FinanceEvidenceUploadOut */
         FinanceEvidenceUploadOut: {
             /** Content Type */
@@ -24123,6 +24341,8 @@ export interface components {
         PublicBudgetDetailOut: {
             /** Allocations */
             allocations: components["schemas"]["PublicBudgetAllocationOut"][];
+            /** Expenses */
+            expenses?: components["schemas"]["PublicBudgetExpenseOut"][];
             /**
              * Id
              * Format: uuid
@@ -24142,6 +24362,61 @@ export interface components {
              * @enum {string}
              */
             visibility: "approved" | "council_review";
+        };
+        /** PublicBudgetExpenseEvidenceOut */
+        PublicBudgetExpenseEvidenceOut: {
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Url */
+            url: string;
+        };
+        /** PublicBudgetExpenseItemOut */
+        PublicBudgetExpenseItemOut: {
+            /** Amount */
+            amount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: string;
+            /** Tax Rate */
+            tax_rate: number;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /** PublicBudgetExpenseOut */
+        PublicBudgetExpenseOut: {
+            /** Allocation Name */
+            allocation_name: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Evidence */
+            evidence: components["schemas"]["PublicBudgetExpenseEvidenceOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["PublicBudgetExpenseItemOut"][];
+            /** Purpose */
+            purpose: string;
+            /** Total Amount */
+            total_amount: number;
         };
         /** PublicBudgetListItem */
         PublicBudgetListItem: {
@@ -24198,6 +24473,8 @@ export interface components {
              * Format: date
              */
             entry_date: string;
+            /** Evidence */
+            evidence?: components["schemas"]["PublicBudgetExpenseEvidenceOut"][];
             /**
              * Id
              * Format: uuid
@@ -24209,10 +24486,22 @@ export interface components {
             /** Purpose */
             purpose: string;
             /**
+             * Quantity
+             * @default 1
+             */
+            quantity: string;
+            /**
              * Status
              * @enum {string}
              */
             status: "pending" | "awaiting_reimbursement" | "spent";
+            /**
+             * Unit
+             * @default 項
+             */
+            unit: string;
+            /** Unit Price */
+            unit_price?: number | null;
         };
         /** PublicFinanceTotalsOut */
         PublicFinanceTotalsOut: {
@@ -41163,6 +41452,70 @@ export interface operations {
             };
         };
     };
+    delete_budget_submission_finance_budget_submissions__submission_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_budget_submission_finance_budget_submissions__submission_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetSubmissionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetSubmissionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_budget_allocation_finance_budget_submissions__submission_id__allocations_post: {
         parameters: {
             query?: never;
@@ -41186,6 +41539,36 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BudgetAllocationOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_budget_draft_allocation_finance_budget_submissions__submission_id__allocations__allocation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+                allocation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -41388,6 +41771,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_budget_expense_finance_budgets__budget_id__expenses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinanceBudgetExpenseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceBudgetExpenseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_budget_expense_evidence_finance_budgets__budget_id__expenses__expense_id__evidence__evidence_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+                expense_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -42604,6 +43055,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicBudgetDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_public_budget_expense_evidence_finance_public_budgets__budget_id__expenses__expense_id__evidence__evidence_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+                expense_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

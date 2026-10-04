@@ -6,6 +6,7 @@ import type {
   FinanceBudget,
   FinanceBudgetAllocation,
   FinanceBudgetDetail,
+  FinanceBudgetExpenseOut,
   FinanceBudgetImportResult,
   FinanceBudgetSubmission,
   FinanceExpenseClaimItemOut,
@@ -21,7 +22,7 @@ import type {
   PeriodOut,
   TransferCreate,
 } from "@/lib/types";
-import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh, uploadWithProgress } from "./core";
+import { ApiError, BASE, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh, uploadWithProgress } from "./core";
 
 async function postForm<T>(path: string, form: FormData): Promise<T> {
   const doFetch = () => uploadWithProgress(`${BASE}${path}`, {
@@ -114,6 +115,10 @@ export const financeApi = {
     patch<FinanceBudget>(`/finance/budgets/${budgetId}/publication`, { is_public: isPublic }),
   createBudgetSubmission: (budgetId: string, body: { kind: 'initial' | 'supplemental'; title: string; note?: string }) =>
     post<FinanceBudgetSubmission>(`/finance/budgets/${budgetId}/submissions`, body),
+  updateBudgetSubmission: (submissionId: string, body: { title?: string; note?: string | null }) =>
+    patch<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}`, body),
+  deleteBudgetSubmission: (submissionId: string) =>
+    del<void>(`/finance/budget-submissions/${submissionId}`),
   createBudgetNode: (submissionId: string, body: { parent_id?: string | null; name: string; sort_order?: number }) =>
     post(`/finance/budget-submissions/${submissionId}/nodes`, body),
   createBudgetAllocation: (submissionId: string, body: {
@@ -128,6 +133,8 @@ export const financeApi = {
       `/finance/budget-submissions/${submissionId}/allocations/${allocationId}`,
       body,
     ),
+  deleteBudgetDraftAllocation: (submissionId: string, allocationId: string) =>
+    del<void>(`/finance/budget-submissions/${submissionId}/allocations/${allocationId}`),
   submitBudget: (submissionId: string) => post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/submit`, {}),
   reviewBudget: (submissionId: string, body: { status: 'approved' | 'returned' | 'rejected'; note?: string }) =>
     post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/review`, body),
@@ -147,6 +154,15 @@ export const financeApi = {
   ) => post<FinanceBudgetAllocation["evidence"][number]>(
     `/finance/budget-allocations/${allocationId}/evidence`, body,
   ),
+  createBudgetExpense: (budgetId: string, body: {
+    allocation_id: string; entry_date: string; purpose: string; note?: string;
+    items: Array<{
+      name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
+    }>;
+    evidence?: Array<{
+      storage_key: string; filename: string; content_type: string; file_size: number;
+    }>;
+  }) => post<FinanceBudgetExpenseOut>(`/finance/budgets/${budgetId}/expenses`, body),
   getSettlement: (ledgerId: string, periodId: string) =>
     get<FinanceSettlement>(`/finance/ledgers/${ledgerId}/periods/${periodId}/settlement`),
   reimburseAdvance: (entryId: string, body: { period_id: string; entry_date: string; fund_account_id: string; payment_status?: 'school_paid' | 'dues_paid'; note?: string }) =>

@@ -7,7 +7,7 @@ import {
   fetchPublicBudgetTotals,
   fetchPublicExpenses,
 } from "@/lib/publicSeoFetch";
-import type { PublicBudgetDetail, PublicBudgetListItem, PublicExpenseOut } from "@/lib/types";
+import type { PublicBudgetDetail, PublicBudgetListItem } from "@/lib/types";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -65,16 +65,6 @@ function budgetExecutionLines(
         remaining: node.remaining_amount,
       };
     });
-}
-
-function expenseStatusLabel(status: PublicExpenseOut["status"]) {
-  if (status === "spent") return "已支出";
-  if (status === "awaiting_reimbursement") return "待償還";
-  return "待確認";
-}
-
-function paymentMethodLabel(method: PublicExpenseOut["payment_method"]) {
-  return method === "advance" ? "代墊" : "直接付款";
 }
 
 function budgetHref(budget: PublicBudgetListItem) {
@@ -182,7 +172,7 @@ export default async function PublicBudgetsPage() {
             )}
           </div>
           <p className="public-finance__calculation-note">
-            已列帳支出包含完成覆核的報帳；待付款或待償還項目也會先計入預算執行額。
+            核准預算的支出登錄後即計入執行額與決算；舊制報帳仍依原紀錄狀態列帳。
           </p>
         </section>
       ) : (
@@ -197,7 +187,7 @@ export default async function PublicBudgetsPage() {
 
       <aside className="public-budget-index__notice" aria-label="公開資料範圍">
         <ShieldCheck size={18} aria-hidden="true" />
-        <p><strong>系統不提供個人資訊欄位。</strong>報帳人、憑證、銀行帳戶與內部備註不會出現在這裡；用途與品項名稱會依登錄內容公開。</p>
+        <p><strong>支出品項與憑證會公開。</strong>預算管理者開放預算後，任何人都能查看用途、品名、數量、單價與收據；登錄人、銀行帳戶與核銷備註不會出現在這裡。</p>
       </aside>
 
       <section className="public-finance__expenses" aria-labelledby="public-finance-expenses-heading">
@@ -211,7 +201,7 @@ export default async function PublicBudgetsPage() {
         {expenses.length > 0 ? (
           <div className="public-finance__expense-table" role="region" aria-label="最近支出紀錄，可左右捲動" tabIndex={0}>
             <table>
-              <thead><tr><th>日期</th><th>用途</th><th>預算項目</th><th>付款方式</th><th>金額</th><th>狀態</th></tr></thead>
+              <thead><tr><th>日期</th><th>用途與品項</th><th>預算項目</th><th>數量與單價</th><th>憑證</th><th>金額</th></tr></thead>
               <tbody>
                 {expenses.map((expense) => (
                   <tr key={expense.id}>
@@ -222,11 +212,9 @@ export default async function PublicBudgetsPage() {
                         {expense.budget_name}<small>{expense.budget_item}</small>
                       </Link>
                     </td>
-                    <td>{paymentMethodLabel(expense.payment_method)}</td>
+                    <td>{expense.quantity} {expense.unit}<small>{expense.unit_price ? formatAmount(expense.unit_price) : "單價未提供"}</small></td>
+                    <td>{expense.evidence?.length ? expense.evidence.map((item) => <a key={item.id} href={item.url} target="_blank" rel="noreferrer">查看 {item.filename}</a>) : "—"}</td>
                     <td className="public-finance__expense-amount">{formatAmount(expense.amount)}</td>
-                    <td><span className={`public-finance__status is-${expense.status}`}>
-                      {expenseStatusLabel(expense.status)}
-                    </span></td>
                   </tr>
                 ))}
               </tbody>
