@@ -24489,7 +24489,7 @@ export interface components {
              * Quantity
              * @default 1
              */
-            quantity: string;
+            quantity: number;
             /**
              * Status
              * @enum {string}

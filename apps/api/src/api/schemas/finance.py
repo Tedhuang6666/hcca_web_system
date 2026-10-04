@@ -494,7 +494,7 @@ class PublicExpenseOut(BaseModel):
     purpose: str
     item_name: str
     amount: int
-    quantity: Decimal = Decimal("1")
+    quantity: float = 1.0
     unit: str = "項"
     unit_price: int | None = None
     budget_name: str
