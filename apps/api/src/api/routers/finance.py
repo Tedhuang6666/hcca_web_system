@@ -376,7 +376,7 @@ async def import_budget(
     db: DbDep,
     user: CurrentUser,
     period_id: uuid.UUID = Form(...),
-    council_approved_on: date | None = Form(None),
+    council_approved_on: date = Form(...),
     name: str = Form(..., min_length=1, max_length=160),
     title: str | None = Form(None, max_length=160),
     proposing_org_id: uuid.UUID | None = Form(None),

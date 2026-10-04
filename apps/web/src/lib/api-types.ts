@@ -12998,8 +12998,11 @@ export interface components {
         Body_import_budget_finance_ledgers__ledger_id__budgets_import_post: {
             /** Budget Id */
             budget_id?: string | null;
-            /** Council Approved On */
-            council_approved_on?: string | null;
+            /**
+             * Council Approved On
+             * Format: date
+             */
+            council_approved_on: string;
             /** File */
             file: string;
             /** Name */

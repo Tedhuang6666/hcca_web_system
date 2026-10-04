@@ -45,6 +45,8 @@ type Props = {
   canRecordExpense: boolean;
   canRecordIncome: boolean;
   onRegisterIncome: (item: FinanceBudgetIncomeItem, periodId: string) => void;
+  canCreatePeriod: boolean;
+  onSetupPeriod: () => void;
 };
 
 const statusLabel = {
@@ -67,12 +69,15 @@ export default function BudgetWorkspace({
   canRecordExpense,
   canRecordIncome,
   onRegisterIncome,
+  canCreatePeriod,
+  onSetupPeriod,
 }: Props) {
   const confirm = useConfirm();
   const prompt = usePrompt();
   const [budgets, setBudgets] = useState<FinanceBudget[]>([]);
   const [detail, setDetail] = useState<FinanceBudgetDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [pendingAction, setPendingAction] = useState<
     "publication" | "council_review" | "submit" | "review" | null
   >(null);
@@ -101,6 +106,7 @@ export default function BudgetWorkspace({
 
   const load = useCallback(async (selectedId?: string) => {
     setIsLoading(true);
+    setLoadError("");
     try {
       const next = await financeApi.listBudgets(ledgerId);
       setBudgets(next);
@@ -112,6 +118,9 @@ export default function BudgetWorkspace({
         setDetail(await financeApi.getBudget(selected));
         if (selectedBudget) setPeriodId(selectedBudget.period_id);
       } else setDetail(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "無法載入預算");
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -159,6 +168,7 @@ export default function BudgetWorkspace({
     || detail?.submissions.find((item) => item.kind === "initial" && item.status === "approved")
     || detail?.submissions.find((item) => item.status === "draft" || item.status === "returned")
     || detail?.submissions.at(-1);
+  const approvedSubmission = detail?.submissions.filter((item) => item.status === "approved").at(-1);
 
   const refreshDetail = async () => {
     await load(detail?.id);
@@ -167,8 +177,8 @@ export default function BudgetWorkspace({
   const importBudget = async () => {
     const existingBudget = budgets.find((budget) => budget.period_id === periodId);
     const targetName = existingBudget?.name || budgetName.trim();
-    if (!periodId || !targetName || !importFile) {
-      return toast.error("請選擇期間、填寫預算名稱並選擇 xlsx 檔案");
+    if (!periodId || !targetName || !importFile || !councilApprovedOn) {
+      return toast.error("請選擇期間、填寫預算名稱與議會通過日期，並選擇 xlsx 檔案");
     }
     try {
       setIsImporting(true);
@@ -178,10 +188,11 @@ export default function BudgetWorkspace({
         name: targetName,
         proposing_org_id: allocationOrgId || undefined,
         budget_id: existingBudget?.id,
-        council_approved_on: councilApprovedOn || undefined,
+        council_approved_on: councilApprovedOn,
       });
       if (!existingBudget) setBudgetName("");
       setImportFile(null);
+      setCouncilApprovedOn("");
       setSelectedSubmissionId(result.submission.id);
       await load(result.budget.id);
       const skipped = result.skipped_rows.length > 0 ? `，略過 ${result.skipped_rows.length} 列` : "";
@@ -548,13 +559,13 @@ export default function BudgetWorkspace({
     >
       <header className="finance-budget__header">
         <div>
-          <h2 id="budget-heading">預算公開與核銷</h2>
-          <p>上傳已核定預算後立即公開；之後登錄用途、金額與憑證，品項明細可選填。</p>
+          <h2 id="budget-heading">預算與支出</h2>
+          <p>匯入議會通過的預算後，逐筆登記支出；預算與支出會顯示在公開頁面。</p>
         </div>
         {detail && (
           <div className={`finance-budget__publication-status ${detail.is_public ? "is-public" : ""}`}>
             {detail.is_public ? <Eye size={17} aria-hidden="true" /> : <EyeOff size={17} aria-hidden="true" />}
-            <span><strong>{detail.is_public ? "已對外公開" : "尚未公開"}</strong><small>{detail.is_public ? "任何取得網址者都可查看" : canOpenPublic ? "已符合公開條件" : "初始預算核准後才能公開"}</small></span>
+            <span><strong>{detail.is_public ? "已對外公開" : "尚未公開"}</strong><small>{approvedSubmission?.council_approved_on ? `議會通過：${approvedSubmission.council_approved_on.replaceAll("-", "/")}` : detail.is_public ? "任何取得網址者都可查看" : canOpenPublic ? "已符合公開條件" : "初始預算核准後才能公開"}</small></span>
           </div>
         )}
       </header>
@@ -577,20 +588,21 @@ export default function BudgetWorkspace({
             </select>
           </label>
         )}
-        {detail && canPublish && (canOpenPublic || detail.is_public) && (
+        {detail?.is_public && (
           <div className="finance-budget__publish-actions">
-            <button className="btn btn-secondary" disabled={pendingAction === "publication"} onClick={() => void togglePublication()}>
-              {detail.is_public ? <EyeOff size={16} aria-hidden="true" /> : <Megaphone size={16} aria-hidden="true" />}
-              {pendingAction === "publication" ? "正在更新…" : detail.is_public ? "停止公開" : "開放對外檢視"}
-            </button>
-            {detail.is_public && <a className="btn btn-primary" href={`/public/budgets/${detail.id}`} target="_blank" rel="noreferrer"><Eye size={16} aria-hidden="true" />預覽公開頁</a>}
+            <a className="btn btn-secondary" href={`/public/budgets/${detail.id}`} target="_blank" rel="noreferrer"><Eye size={16} aria-hidden="true" />查看公開頁面</a>
           </div>
         )}
       </div>
 
-      {canManage && (
+      {periods.length === 0 && <div className="finance-budget__empty" role="status">
+        <CircleAlert size={24} aria-hidden="true" />
+        <div><h3>先建立會計期間</h3><p>匯入預算需要一個所屬期間。{canCreatePeriod ? "建立一次後就能選檔匯入。" : "請財務管理者建立期間後再匯入。"}</p>{canCreatePeriod && <button className="btn btn-secondary" type="button" onClick={onSetupPeriod}>建立會計期間</button>}</div>
+      </div>}
+
+      {canManage && periods.length > 0 && (
         <details className="finance-budget__create" open={!detail}>
-          <summary><FileUp size={16} aria-hidden="true" />{detail ? "匯入另一份已核定預算" : "匯入已核定預算"}</summary>
+          <summary><FileUp size={16} aria-hidden="true" />{detail ? "匯入新版預算" : "匯入預算"}</summary>
           <div className="finance-budget__create-fields">
             <label>會計期間<select className="input" value={periodId} onChange={(event) => setPeriodId(event.target.value)}><option value="">選擇會計期間</option>{periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select></label>
             {existingBudgetForPeriod ? (
@@ -599,8 +611,8 @@ export default function BudgetWorkspace({
               <label>預算名稱<input className="input" value={budgetName} onChange={(event) => setBudgetName(event.target.value)} placeholder="例如：115 學年度上學期預算" /></label>
             )}
             <label className="btn btn-secondary finance-budget__file"><FileUp size={16} aria-hidden="true" /><span>{importFile ? importFile.name : "選擇 xlsx"}</span><input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => setImportFile(event.target.files?.[0] || null)} /></label>
-            <label className="finance-budget__approval-date">議會通過日期（選填）<input className="input" type="date" value={councilApprovedOn} onChange={(event) => setCouncilApprovedOn(event.target.value)} /></label>
-            <button className="btn btn-primary" disabled={isImporting || !importFile || !periodId || (!existingBudgetForPeriod && !budgetName.trim())} onClick={() => void importBudget()}><FileSpreadsheet size={16} aria-hidden="true" />{isImporting ? "正在匯入…" : "匯入並公開"}</button>
+            <label className="finance-budget__approval-date">議會通過日期<input className="input" type="date" required value={councilApprovedOn} onChange={(event) => setCouncilApprovedOn(event.target.value)} /></label>
+            <button className="btn btn-primary" disabled={isImporting || !importFile || !periodId || !councilApprovedOn || (!existingBudgetForPeriod && !budgetName.trim())} onClick={() => void importBudget()}><FileSpreadsheet size={16} aria-hidden="true" />{isImporting ? "正在匯入…" : "匯入並公開"}</button>
             <p className="finance-budget__import-note">預算檔會直接標記為已核定並公開；同一期間再匯入時會新增版本，不覆蓋原資料。</p>
           </div>
         </details>
@@ -611,10 +623,15 @@ export default function BudgetWorkspace({
           <span aria-hidden="true" />
           正在載入共同預算…
         </div>
+      ) : loadError && !detail ? (
+        <div className="finance-budget__empty" role="alert">
+          <CircleAlert size={24} aria-hidden="true" />
+          <div><h3>無法載入預算</h3><p>{loadError}</p><button className="btn btn-secondary" onClick={() => void load().catch(() => undefined)}>重試</button></div>
+        </div>
       ) : !detail ? (
-        <div className="finance-budget__empty">
+        periods.length === 0 ? null : <div className="finance-budget__empty">
           <ListTree size={24} aria-hidden="true" />
-          <div><h3>尚未建立共同預算</h3><p>財務管理者建立後，各部門即可在同一份草案中新增條目與編列額度。</p></div>
+          <div><h3>尚未匯入預算</h3><p>選擇預算檔並填寫議會通過日期，就能開始登記支出。</p></div>
         </div>
       ) : (
         <>
@@ -627,14 +644,14 @@ export default function BudgetWorkspace({
             <div className="finance-budget__utilization"><span><b>整體執行率</b><strong>{utilization}%</strong></span><div aria-hidden="true"><i style={{ width: `${utilization}%` }} /></div></div>
           </section>
 
-          {activeIncomeItems.length > 0 && <section className="finance-budget__income" aria-labelledby="budget-income-heading">
+          {activeIncomeItems.length > 0 && <details className="finance-budget__versions"><summary>查看預算收入項目</summary><section className="finance-budget__income" aria-labelledby="budget-income-heading">
             <header><div><h3 id="budget-income-heading">預算收入</h3><p>試算表中標成綠色的列會放在這裡，不會算成支出預算；按一下即可帶入收入登錄。</p></div><strong>NT${activeIncomeItems.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}</strong></header>
             <ul>{activeIncomeItems.map((item) => <li key={item.id}>
               <div><span>{item.category}</span><strong>{item.name}</strong>{item.note && <small>{item.note}</small>}</div>
               <b>NT${item.amount.toLocaleString()}</b>
               {canRecordIncome && <button className="btn btn-secondary" type="button" onClick={() => onRegisterIncome(item, detail.period_id)}>登錄這筆收入</button>}
             </li>)}</ul>
-          </section>}
+          </section></details>}
 
           <BudgetExpenseRegister
             budgetId={detail.id}
@@ -670,6 +687,8 @@ export default function BudgetWorkspace({
             </div>
           </section>
 
+          <details className="finance-budget__versions">
+            <summary>預算版本與其他設定</summary>
           <details
             className="finance-budget__versions"
             open={versionsOpen}
@@ -753,6 +772,7 @@ export default function BudgetWorkspace({
           )}
 
           {settlement && <section className="finance-budget__section" aria-labelledby="budget-settlement-heading"><header><div><h3 id="budget-settlement-heading">期末決算</h3><p>已登錄的支出會立即計入決算。{settlement.unsettled_claim_count > 0 ? `另有 ${settlement.unsettled_claim_count} 件舊制報帳尚未完成。` : ""}</p></div><span>{settlement.period_name}</span></header><div className="finance-budget__settlement-totals"><p>核准預算<strong>NT${settlement.budgeted_total.toLocaleString()}</strong></p><p>決算支出<strong>NT${settlement.settled_total.toLocaleString()}</strong></p><p>差額<strong>NT${(settlement.budgeted_total - settlement.settled_total).toLocaleString()}</strong></p></div><div className="finance-budget__table" role="region" aria-label="期末決算明細，可左右捲動" tabIndex={0}><table><thead><tr><th>預算條目</th><th>核准</th><th>決算</th><th>差額</th></tr></thead><tbody>{settlement.lines.map((line) => <tr key={line.node_id}><td>{line.name}</td><td>NT${line.budgeted_amount.toLocaleString()}</td><td>NT${line.settled_amount.toLocaleString()}</td><td>NT${line.difference_amount.toLocaleString()}</td></tr>)}</tbody></table></div><div className="finance-budget__mobile-list finance-budget__mobile-list--settlement">{settlement.lines.map((line) => <article key={line.node_id}><header><strong>{line.name}</strong></header><dl><div><dt>核准</dt><dd>NT${line.budgeted_amount.toLocaleString()}</dd></div><div><dt>決算</dt><dd>NT${line.settled_amount.toLocaleString()}</dd></div><div><dt>差額</dt><dd>NT${line.difference_amount.toLocaleString()}</dd></div></dl></article>)}</div></section>}
+          </details>
         </>
       )}
     </section>
