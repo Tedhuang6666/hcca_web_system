@@ -539,6 +539,50 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
         )
     ).status_code == 200
 
+    viewer = await make_user(email="finance-expense-viewer@school.edu")
+    await _grant_on_org(db_session, viewer, org, ["finance:view"])
+    viewer_client = authed_client_factory(viewer)
+    receipt = await creator.post(
+        f"/finance/ledgers/{ledger.id}/evidence",
+        files={"file": ("文具收據.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
+    )
+    assert receipt.status_code == 201
+    direct_expense_body = {
+        "allocation_id": allocation.json()["id"],
+        "entry_date": "2026-07-18",
+        "purpose": "文具採購",
+        "items": [
+            {"name": "原子筆", "unit_price": 20, "quantity": 3, "unit": "支"},
+            {"name": "筆記本", "unit_price": 10, "quantity": 2, "unit": "本"},
+        ],
+        "evidence": [receipt.json()],
+    }
+    direct_expense = await creator.post(
+        f"/finance/budgets/{budget.json()['id']}/expenses", json=direct_expense_body
+    )
+    assert direct_expense.status_code == 201
+    assert direct_expense.json()["total_amount"] == 80
+    assert len(direct_expense.json()["items"]) == 2
+    assert len(direct_expense.json()["evidence"]) == 1
+    public_receipt_before_publish = await client.get(
+        f"/finance/public/budgets/{budget.json()['id']}/expenses/"
+        f"{direct_expense.json()['id']}/evidence/{direct_expense.json()['evidence'][0]['id']}"
+    )
+    assert public_receipt_before_publish.status_code == 404
+    forbidden_expense = await viewer_client.post(
+        f"/finance/budgets/{budget.json()['id']}/expenses", json=direct_expense_body
+    )
+    assert forbidden_expense.status_code == 403
+    budget_detail = await creator.get(f"/finance/budgets/{budget.json()['id']}")
+    assert budget_detail.status_code == 200
+    assert budget_detail.json()["expenses"][0]["items"][0]["name"] == "原子筆"
+    assert (
+        next(item for item in budget_detail.json()["nodes"] if item["id"] == node.json()["id"])[
+            "used_amount"
+        ]
+        == 80
+    )
+
     income = await creator.post(
         f"/finance/ledgers/{ledger.id}/journals",
         json={
@@ -657,7 +701,7 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
 
     totals = await client.get(totals_path)
     assert totals.status_code == 200
-    assert totals.json() == {"income_total": 500, "expense_total": 400}
+    assert totals.json() == {"income_total": 500, "expense_total": 480}
     records = await client.get("/finance/public/expenses")
     assert records.status_code == 200
     record = next(item for item in records.json() if item["purpose"] == "活動海報印刷")
@@ -668,23 +712,43 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
         "purpose": "活動海報印刷",
         "item_name": "海報印刷",
         "amount": 240,
+        "quantity": 2.0,
+        "unit": "項",
+        "unit_price": 120,
         "budget_name": "公開活動預算",
         "budget_item": "活動印刷",
         "payment_method": "direct",
         "status": "spent",
+        "evidence": [],
     }
     statuses = {item["purpose"]: item["status"] for item in records.json()}
     assert statuses == {
         "活動文具支出": "pending",
         "活動茶點代墊": "awaiting_reimbursement",
         "活動海報印刷": "spent",
+        "文具採購": "spent",
     }
     for item in records.json():
         assert "created_by_id" not in item
         assert "advanced_by_id" not in item
         assert "source_url" not in item
-        assert "evidence" not in item
         assert "note" not in item
+    direct_public_item = next(item for item in records.json() if item["purpose"] == "文具採購")
+    assert direct_public_item["evidence"][0]["filename"] == "文具收據.pdf"
+    assert direct_public_item["evidence"][0]["url"].startswith(
+        f"/finance/public/budgets/{budget.json()['id']}/expenses/"
+    )
+    public_detail = await client.get(f"/finance/public/budgets/{budget.json()['id']}")
+    assert public_detail.status_code == 200
+    assert public_detail.json()["expenses"][0]["items"][0]["name"] == "原子筆"
+    public_receipt_url = public_detail.json()["expenses"][0]["evidence"][0]["url"]
+    public_receipt = await client.get(public_receipt_url)
+    assert public_receipt.status_code == 200
+    settlement = await reviewer_client.get(
+        f"/finance/ledgers/{ledger.id}/periods/{period.id}/settlement"
+    )
+    assert settlement.status_code == 200
+    assert settlement.json()["settled_total"] == 320
 
 
 async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
@@ -1014,3 +1078,69 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     assert public_detail.json()["allocations"][0]["amount"] == 6000
     assert "proposed_by_id" not in public_detail.json()["allocations"][0]
     assert "evidence" not in public_detail.json()["allocations"][0]
+
+
+async def test_budget_drafts_can_be_edited_and_deleted_by_their_creator(
+    db_session, member_user, make_user, authed_client_factory
+) -> None:
+    proposer = await make_user(email="budget-other-proposer@school.edu")
+    viewer = await make_user(email="budget-draft-viewer@school.edu")
+    org = await _grant_many(
+        db_session,
+        [member_user],
+        ["finance:view", "finance:budget", "finance:budget_propose"],
+    )
+    await _grant_on_org(db_session, proposer, org, ["finance:budget_propose"])
+    await _grant_on_org(db_session, viewer, org, ["finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    creator_client = authed_client_factory(member_user)
+    proposer_client = authed_client_factory(proposer)
+    viewer_client = authed_client_factory(viewer)
+
+    budget = await creator_client.post(
+        f"/finance/ledgers/{ledger.id}/budgets",
+        json={"period_id": str(period.id), "name": "可編輯草案測試"},
+    )
+    submission = await creator_client.post(
+        f"/finance/budgets/{budget.json()['id']}/submissions",
+        json={"kind": "initial", "title": "原始草案名稱"},
+    )
+    node = await creator_client.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/nodes",
+        json={"name": "行政支出"},
+    )
+    allocation = await creator_client.post(
+        f"/finance/budget-submissions/{submission.json()['id']}/allocations",
+        json={
+            "node_id": node.json()["id"],
+            "amount": 500,
+            "proposing_org_id": str(org.id),
+        },
+    )
+    submission_id = submission.json()["id"]
+    allocation_id = allocation.json()["id"]
+    title_update = await creator_client.patch(
+        f"/finance/budget-submissions/{submission_id}",
+        json={"title": "已修改草案名稱"},
+    )
+    assert title_update.status_code == 200
+    assert title_update.json()["title"] == "已修改草案名稱"
+    assert (
+        await proposer_client.patch(
+            f"/finance/budget-submissions/{submission_id}", json={"title": "越權修改"}
+        )
+    ).status_code == 403
+    assert (
+        await proposer_client.delete(
+            f"/finance/budget-submissions/{submission_id}/allocations/{allocation_id}"
+        )
+    ).status_code == 403
+    assert (
+        await viewer_client.delete(f"/finance/budget-submissions/{submission_id}")
+    ).status_code == 403
+    deleted_allocation = await creator_client.delete(
+        f"/finance/budget-submissions/{submission_id}/allocations/{allocation_id}"
+    )
+    assert deleted_allocation.status_code == 204
+    deleted_submission = await creator_client.delete(f"/finance/budget-submissions/{submission_id}")
+    assert deleted_submission.status_code == 204

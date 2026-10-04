@@ -26,6 +26,8 @@ from api.models.finance import (
     FinanceBudget,
     FinanceBudgetAllocation,
     FinanceBudgetAllocationEvidence,
+    FinanceBudgetExpense,
+    FinanceBudgetExpenseEvidence,
     FinanceBudgetSubmission,
     FinanceLedger,
     FiscalPeriod,
@@ -51,6 +53,7 @@ from api.schemas.finance import (
     BudgetReview,
     BudgetSubmissionCreate,
     BudgetSubmissionOut,
+    BudgetSubmissionUpdate,
     ChartAccountCreate,
     ChartAccountOut,
     ChartAccountUpdate,
@@ -59,6 +62,8 @@ from api.schemas.finance import (
     ExpenseProcurementUpdate,
     ExpenseReimbursementCreate,
     ExpenseReturnCreate,
+    FinanceBudgetExpenseCreate,
+    FinanceBudgetExpenseOut,
     FinanceEvidenceUploadOut,
     FinanceExpenseClaimItemOut,
     FinanceSettlementOut,
@@ -73,6 +78,7 @@ from api.schemas.finance import (
     PeriodOut,
     PublicBudgetAllocationOut,
     PublicBudgetDetailOut,
+    PublicBudgetExpenseOut,
     PublicBudgetListItem,
     PublicBudgetSubmissionOut,
     PublicExpenseOut,
@@ -428,6 +434,43 @@ async def get_budget_detail(budget_id: uuid.UUID, db: DbDep, user: CurrentUser) 
     return BudgetDetailOut.model_validate(detail)
 
 
+@router.post(
+    "/budgets/{budget_id}/expenses",
+    response_model=FinanceBudgetExpenseOut,
+    status_code=201,
+    dependencies=[
+        Depends(
+            require_budget_permission(
+                PermissionCode.FINANCE_EXPENSE_CLAIM,
+                PermissionCode.FINANCE_RECORD,
+                PermissionCode.FINANCE_BUDGET,
+            )
+        )
+    ],
+)
+async def create_budget_expense(
+    budget_id: uuid.UUID,
+    body: FinanceBudgetExpenseCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> FinanceBudgetExpenseOut:
+    expense = await service.create_budget_expense(db, budget_id, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_expense",
+        entity_id=str(expense.id),
+        action="finance.budget_expense_record",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"登錄預算核銷：{expense.purpose}／NT${expense.total_amount:,}",
+    )
+    await db.commit()
+    detail = await service.budget_detail(db, await service.get_budget(db, budget_id))
+    return FinanceBudgetExpenseOut.model_validate(
+        next(item for item in detail["expenses"] if item["id"] == expense.id)
+    )
+
+
 @router.patch(
     "/budgets/{budget_id}/publication",
     response_model=BudgetOut,
@@ -478,6 +521,68 @@ async def create_budget_submission(
     )
     await db.commit()
     return BudgetSubmissionOut.model_validate(submission)
+
+
+@router.patch(
+    "/budget-submissions/{submission_id}",
+    response_model=BudgetSubmissionOut,
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
+)
+async def update_budget_submission(
+    submission_id: uuid.UUID,
+    body: BudgetSubmissionUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> BudgetSubmissionOut:
+    submission = await db.get(FinanceBudgetSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    budget = await service.get_budget(db, submission.budget_id)
+    can_manage, _, _ = await _budget_role_flags(db, user, budget)
+    if not can_manage and submission.created_by_id != user.id:
+        raise HTTPException(403, "只能修改自己建立的草案")
+    submission = await service.update_budget_submission(db, submission_id, body)
+    await db.commit()
+    return BudgetSubmissionOut.model_validate(submission)
+
+
+@router.delete(
+    "/budget-submissions/{submission_id}",
+    status_code=204,
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
+)
+async def delete_budget_submission(submission_id: uuid.UUID, db: DbDep, user: CurrentUser) -> None:
+    submission = await db.get(FinanceBudgetSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    budget = await service.get_budget(db, submission.budget_id)
+    can_manage, _, _ = await _budget_role_flags(db, user, budget)
+    if not can_manage and submission.created_by_id != user.id:
+        raise HTTPException(403, "只能刪除自己建立的草案")
+    title = submission.title
+    await service.delete_budget_submission(db, submission_id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_submission",
+        entity_id=str(submission_id),
+        action="finance.budget_submission_delete",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"刪除預算草案：{title}",
+    )
+    await db.commit()
 
 
 @router.post(
@@ -621,6 +726,46 @@ async def update_budget_draft_allocation(
     )
     await db.commit()
     return BudgetAllocationOut.model_validate(allocation)
+
+
+@router.delete(
+    "/budget-submissions/{submission_id}/allocations/{allocation_id}",
+    status_code=204,
+    dependencies=[
+        Depends(
+            require_submission_permission(
+                PermissionCode.FINANCE_BUDGET_PROPOSE, PermissionCode.FINANCE_BUDGET
+            )
+        )
+    ],
+)
+async def delete_budget_draft_allocation(
+    submission_id: uuid.UUID,
+    allocation_id: uuid.UUID,
+    db: DbDep,
+    user: CurrentUser,
+) -> None:
+    allocation = await db.get(FinanceBudgetAllocation, allocation_id)
+    if not allocation or allocation.submission_id != submission_id:
+        raise HTTPException(404, "預算配置不存在")
+    submission = await db.get(FinanceBudgetSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "預算案不存在")
+    budget = await service.get_budget(db, submission.budget_id)
+    can_manage, _, _ = await _budget_role_flags(db, user, budget)
+    if not can_manage and allocation.proposed_by_id != user.id:
+        raise HTTPException(403, "只能刪除自己提出的預算配置")
+    await service.delete_budget_draft_allocation(db, submission_id, allocation_id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_allocation",
+        entity_id=str(allocation_id),
+        action="finance.budget_allocation_delete",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary="刪除草案預算明細",
+    )
+    await db.commit()
 
 
 @router.patch(
@@ -1358,6 +1503,111 @@ async def get_public_budget_detail(
             for item in detail["allocations"]
             if item["submission_id"] in visible_submission_ids
         ],
+        expenses=(
+            [PublicBudgetExpenseOut.model_validate(item) for item in detail["expenses"]]
+            if review_submission is None
+            else []
+        ),
+    )
+
+
+@router.get(
+    "/budgets/{budget_id}/expenses/{expense_id}/evidence/{evidence_id}",
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def download_budget_expense_evidence(
+    budget_id: uuid.UUID,
+    expense_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    db: DbDep,
+):
+    budget = await service.get_budget(db, budget_id)
+    expense = await db.get(FinanceBudgetExpense, expense_id)
+    evidence = await db.get(FinanceBudgetExpenseEvidence, evidence_id)
+    if (
+        not expense
+        or expense.budget_id != budget.id
+        or not evidence
+        or evidence.expense_id != expense.id
+    ):
+        raise HTTPException(404, "支出憑證不存在")
+    service.validate_evidence_key(evidence.storage_key, budget.ledger_id)
+    storage = get_storage()
+    local_path = storage.local_path(evidence.storage_key)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(404, "支出憑證檔案不存在")
+        return FileResponse(
+            local_path,
+            filename=evidence.filename,
+            media_type=evidence.content_type,
+            content_disposition_type="inline",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return RedirectResponse(
+        await storage.get_url(
+            evidence.storage_key, disposition="inline", download_name=evidence.filename
+        ),
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.get("/public/budgets/{budget_id}/expenses/{expense_id}/evidence/{evidence_id}")
+async def download_public_budget_expense_evidence(
+    budget_id: uuid.UUID,
+    expense_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    db: DbDep,
+):
+    budget = await db.get(FinanceBudget, budget_id)
+    expense = await db.get(FinanceBudgetExpense, expense_id)
+    evidence = await db.get(FinanceBudgetExpenseEvidence, evidence_id)
+    if (
+        not budget
+        or not budget.is_public
+        or not expense
+        or expense.budget_id != budget.id
+        or not evidence
+        or evidence.expense_id != expense.id
+    ):
+        raise HTTPException(404, "公開憑證不存在")
+    approved_initial = await db.scalar(
+        select(FinanceBudgetSubmission.id).where(
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.kind == "initial",
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not approved_initial:
+        raise HTTPException(404, "公開憑證不存在")
+    approved_allocation = await db.scalar(
+        select(FinanceBudgetAllocation.id)
+        .join(FinanceBudgetSubmission)
+        .where(
+            FinanceBudgetAllocation.id == expense.allocation_id,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not approved_allocation:
+        raise HTTPException(404, "公開憑證不存在")
+    service.validate_evidence_key(evidence.storage_key, budget.ledger_id)
+    storage = get_storage()
+    local_path = storage.local_path(evidence.storage_key)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(404, "公開憑證檔案不存在")
+        return FileResponse(
+            local_path,
+            filename=evidence.filename,
+            media_type=evidence.content_type,
+            content_disposition_type="inline",
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+    return RedirectResponse(
+        await storage.get_url(
+            evidence.storage_key, disposition="inline", download_name=evidence.filename
+        ),
+        headers={"Cache-Control": "public, max-age=300"},
     )
 
 

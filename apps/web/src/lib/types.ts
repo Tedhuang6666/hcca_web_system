@@ -76,6 +76,7 @@ export type {
   BudgetReview,
   BudgetSubmissionCreate,
   BudgetSubmissionOut,
+  BudgetSubmissionUpdate,
   BusinessHours,
   BusinessHoursInterval,
   CandidateCreate,
@@ -277,6 +278,12 @@ export type {
   FeatureFlagUpdate,
   FinanceAccountType,
   FinanceEvidenceUploadOut,
+  FinanceBudgetExpenseCreate,
+  FinanceBudgetExpenseEvidenceIn,
+  FinanceBudgetExpenseEvidenceOut,
+  FinanceBudgetExpenseItemCreate,
+  FinanceBudgetExpenseItemOut,
+  FinanceBudgetExpenseOut,
   FinanceSettlementLineOut,
   FinanceSettlementOut,
   FreezeRequest,
@@ -538,6 +545,9 @@ export type {
   PublicArticleViewCreate,
   PublicBudgetAllocationOut,
   PublicBudgetDetailOut,
+  PublicBudgetExpenseEvidenceOut,
+  PublicBudgetExpenseItemOut,
+  PublicBudgetExpenseOut,
   PublicExpenseOut,
   PublicFinanceTotalsOut,
   PublicBudgetSubmissionOut,
@@ -796,9 +806,11 @@ import type {
   DeliveryMethod,
   ExpenseClaimCreate,
   ExpenseClaimItemCreate,
+  FinanceBudgetExpenseOut,
   JournalOut,
   PositionCategory,
   PositionSummary,
+  PublicBudgetExpenseOut,
   RateLimitOverride,
   RecipientOut,
   RecipientType,
@@ -913,6 +925,7 @@ export type FinanceBudgetAllocationEvidence = {
 }
 export type FinanceBudgetDetail = FinanceBudget & {
   submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]
+  expenses: FinanceBudgetExpenseOut[]
 }
 export type FinanceBudgetImportResult = {
   budget: FinanceBudget
@@ -945,6 +958,7 @@ export type PublicBudgetDetail = {
   id: string; name: string; period_name: string; visibility: "approved" | "council_review"
   review_submission?: PublicBudgetSubmission | null; submissions: PublicBudgetSubmission[]
   nodes: FinanceBudgetNode[]; allocations: PublicBudgetAllocation[]
+  expenses: PublicBudgetExpenseOut[]
 }
 
 

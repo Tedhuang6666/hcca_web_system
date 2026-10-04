@@ -403,6 +403,65 @@ class FinanceBudgetAllocationEvidence(Base, TimestampMixin):
     )
 
 
+class FinanceBudgetExpense(Base, TimestampMixin):
+    """已核准預算下直接登錄的實際支出，不另建立覆核案件。"""
+
+    __tablename__ = "finance_budget_expenses"
+    __table_args__ = (Index("ix_finance_budget_expense_budget_date", "budget_id", "entry_date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    budget_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budgets.id", ondelete="CASCADE"), nullable=False
+    )
+    allocation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budget_allocations.id"), nullable=False
+    )
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    purpose: Mapped[str] = mapped_column(String(300), nullable=False)
+    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+
+
+class FinanceBudgetExpenseItem(Base, TimestampMixin):
+    __tablename__ = "finance_budget_expense_items"
+    __table_args__ = (Index("ix_finance_budget_expense_item_expense", "expense_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    expense_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_budget_expenses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    tax_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False, default="項")
+
+
+class FinanceBudgetExpenseEvidence(Base, TimestampMixin):
+    __tablename__ = "finance_budget_expense_evidence"
+    __table_args__ = (Index("ix_finance_budget_expense_evidence_expense", "expense_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    expense_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_budget_expenses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+
+
 class ExpenseClaimItemEvidence(Base, TimestampMixin):
     __tablename__ = "finance_expense_claim_item_evidence"
     __table_args__ = (Index("ix_finance_expense_claim_item_evidence_item", "item_id"),)

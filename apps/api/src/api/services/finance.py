@@ -27,6 +27,9 @@ from api.models.finance import (
     FinanceBudgetAllocation,
     FinanceBudgetAllocationEvidence,
     FinanceBudgetAllocationRevision,
+    FinanceBudgetExpense,
+    FinanceBudgetExpenseEvidence,
+    FinanceBudgetExpenseItem,
     FinanceBudgetNode,
     FinanceBudgetSubmission,
     FinanceLedger,
@@ -47,11 +50,13 @@ from api.schemas.finance import (
     BudgetNodeCreate,
     BudgetReview,
     BudgetSubmissionCreate,
+    BudgetSubmissionUpdate,
     ChartAccountUpdate,
     ExpenseBudgetUpdate,
     ExpenseClaimCreate,
     ExpenseProcurementUpdate,
     ExpenseReimbursementCreate,
+    FinanceBudgetExpenseCreate,
     JournalCreate,
     ManualJournalUpdate,
     TransferCreate,
@@ -412,6 +417,32 @@ async def _editable_submission(
     return submission
 
 
+async def update_budget_submission(
+    db: AsyncSession, submission_id: uuid.UUID, body: BudgetSubmissionUpdate
+) -> FinanceBudgetSubmission:
+    submission = await _editable_submission(db, submission_id)
+    values = body.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(422, "請至少修改預算案名稱或備註")
+    if "title" in values:
+        title = (values["title"] or "").strip()
+        if not title:
+            raise HTTPException(422, "預算案名稱不可空白")
+        values["title"] = title
+    for field, value in values.items():
+        setattr(submission, field, value)
+    await db.flush()
+    return submission
+
+
+async def delete_budget_submission(db: AsyncSession, submission_id: uuid.UUID) -> None:
+    submission = await _editable_submission(db, submission_id)
+    budget_id = submission.budget_id
+    db.delete(submission)
+    await db.flush()
+    await _refresh_budget_node_activity(db, budget_id)
+
+
 async def create_budget_node(
     db: AsyncSession, submission_id: uuid.UUID, body: BudgetNodeCreate
 ) -> FinanceBudgetNode:
@@ -537,6 +568,19 @@ async def update_budget_draft_allocation(
     allocation.note = body.note
     await db.flush()
     return allocation
+
+
+async def delete_budget_draft_allocation(
+    db: AsyncSession, submission_id: uuid.UUID, allocation_id: uuid.UUID
+) -> None:
+    submission = await _editable_submission(db, submission_id)
+    allocation = await db.get(FinanceBudgetAllocation, allocation_id)
+    if not allocation or allocation.submission_id != submission.id:
+        raise HTTPException(404, "預算配置不存在")
+    budget_id = submission.budget_id
+    db.delete(allocation)
+    await db.flush()
+    await _refresh_budget_node_activity(db, budget_id)
 
 
 async def submit_budget_submission(
@@ -667,6 +711,177 @@ async def add_budget_allocation_evidence(
     return evidence
 
 
+async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> list[dict]:
+    rows = (
+        await db.execute(
+            select(FinanceBudgetExpense, FinanceBudgetAllocation, FinanceBudgetNode)
+            .join(
+                FinanceBudgetAllocation,
+                FinanceBudgetAllocation.id == FinanceBudgetExpense.allocation_id,
+            )
+            .join(FinanceBudgetNode, FinanceBudgetNode.id == FinanceBudgetAllocation.node_id)
+            .where(FinanceBudgetExpense.budget_id == budget_id)
+            .order_by(
+                FinanceBudgetExpense.entry_date.desc(), FinanceBudgetExpense.created_at.desc()
+            )
+        )
+    ).all()
+    expense_ids = [expense.id for expense, _, _ in rows]
+    item_rows = (
+        list(
+            (
+                await db.execute(
+                    select(FinanceBudgetExpenseItem)
+                    .where(FinanceBudgetExpenseItem.expense_id.in_(expense_ids))
+                    .order_by(
+                        FinanceBudgetExpenseItem.sort_order,
+                        FinanceBudgetExpenseItem.created_at,
+                    )
+                )
+            ).scalars()
+        )
+        if expense_ids
+        else []
+    )
+    evidence_rows = (
+        list(
+            (
+                await db.execute(
+                    select(FinanceBudgetExpenseEvidence)
+                    .where(FinanceBudgetExpenseEvidence.expense_id.in_(expense_ids))
+                    .order_by(FinanceBudgetExpenseEvidence.created_at)
+                )
+            ).scalars()
+        )
+        if expense_ids
+        else []
+    )
+    items_by_expense: dict[uuid.UUID, list[FinanceBudgetExpenseItem]] = {}
+    for item in item_rows:
+        items_by_expense.setdefault(item.expense_id, []).append(item)
+    evidence_by_expense: dict[uuid.UUID, list[FinanceBudgetExpenseEvidence]] = {}
+    for evidence in evidence_rows:
+        evidence_by_expense.setdefault(evidence.expense_id, []).append(evidence)
+
+    return [
+        {
+            "id": expense.id,
+            "budget_id": expense.budget_id,
+            "allocation_id": allocation.id,
+            "allocation_node_id": node.id,
+            "allocation_name": node.name,
+            "entry_date": expense.entry_date,
+            "purpose": expense.purpose,
+            "total_amount": expense.total_amount,
+            "note": expense.note,
+            "items": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "unit_price": item.unit_price,
+                    "tax_rate": item.tax_rate,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "amount": _claim_item_total(item.unit_price, item.tax_rate, item.quantity),
+                }
+                for item in items_by_expense.get(expense.id, [])
+            ],
+            "evidence": [
+                {
+                    "id": evidence.id,
+                    "storage_key": evidence.storage_key,
+                    "filename": evidence.filename,
+                    "content_type": evidence.content_type,
+                    "file_size": evidence.file_size,
+                    "uploaded_at": evidence.created_at,
+                    "url": (
+                        f"/finance/budgets/{budget_id}/expenses/{expense.id}/evidence/{evidence.id}"
+                    ),
+                }
+                for evidence in evidence_by_expense.get(expense.id, [])
+            ],
+            "created_at": expense.created_at,
+        }
+        for expense, allocation, node in rows
+    ]
+
+
+async def create_budget_expense(
+    db: AsyncSession,
+    budget_id: uuid.UUID,
+    body: FinanceBudgetExpenseCreate,
+    user_id: uuid.UUID,
+) -> FinanceBudgetExpense:
+    budget = await get_budget(db, budget_id)
+    period = await db.get(FiscalPeriod, budget.period_id)
+    if not period or not period.starts_on <= body.entry_date <= period.ends_on:
+        raise HTTPException(400, "支出日期不在此預算的會計期間內")
+
+    approved_initial = await db.scalar(
+        select(FinanceBudgetSubmission.id).where(
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not approved_initial:
+        raise HTTPException(400, "請選擇已有核准初始預算的預算案")
+    allocation = await db.scalar(
+        select(FinanceBudgetAllocation)
+        .join(FinanceBudgetSubmission)
+        .where(
+            FinanceBudgetAllocation.id == body.allocation_id,
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not allocation:
+        raise HTTPException(400, "支出必須對應此預算中已核准的明細")
+
+    for evidence in body.evidence:
+        validate_evidence_key(evidence.storage_key, budget.ledger_id)
+
+    expense = FinanceBudgetExpense(
+        budget_id=budget.id,
+        allocation_id=allocation.id,
+        entry_date=body.entry_date,
+        purpose=body.purpose,
+        total_amount=sum(
+            _claim_item_total(item.unit_price, item.tax_rate, item.quantity) for item in body.items
+        ),
+        note=body.note,
+        recorded_by_id=user_id,
+    )
+    db.add(expense)
+    await db.flush()
+    db.add_all(
+        [
+            FinanceBudgetExpenseItem(
+                expense_id=expense.id,
+                sort_order=index,
+                name=item.name,
+                unit_price=item.unit_price,
+                tax_rate=item.tax_rate,
+                quantity=item.quantity,
+                unit=item.unit,
+            )
+            for index, item in enumerate(body.items)
+        ]
+    )
+    db.add_all(
+        [
+            FinanceBudgetExpenseEvidence(
+                expense_id=expense.id,
+                uploaded_by_id=user_id,
+                **evidence.model_dump(),
+            )
+            for evidence in body.evidence
+        ]
+    )
+    await db.flush()
+    return expense
+
+
 async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
     submissions = list(
         (
@@ -744,6 +959,27 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
         )
     ).all()
     used = {row[0]: int(row[1]) for row in used_rows if row[0] is not None}
+    direct_used_rows = (
+        await db.execute(
+            select(FinanceBudgetAllocation.node_id, func.sum(FinanceBudgetExpense.total_amount))
+            .join(
+                FinanceBudgetExpense,
+                FinanceBudgetExpense.allocation_id == FinanceBudgetAllocation.id,
+            )
+            .join(
+                FinanceBudgetSubmission,
+                FinanceBudgetSubmission.id == FinanceBudgetAllocation.submission_id,
+            )
+            .where(
+                FinanceBudgetExpense.budget_id == budget.id,
+                FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+            )
+            .group_by(FinanceBudgetAllocation.node_id)
+        )
+    ).all()
+    for node_id, amount in direct_used_rows:
+        used[node_id] = used.get(node_id, 0) + int(amount or 0)
+    expenses = await _budget_expense_details(db, budget.id)
     return {
         "id": budget.id,
         "ledger_id": budget.ledger_id,
@@ -779,6 +1015,7 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
             }
             for allocation in allocations
         ],
+        "expenses": expenses,
         "nodes": [
             {
                 "id": node.id,
@@ -878,7 +1115,7 @@ async def list_public_budgets(
 
 
 async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
-    """公開預算所屬、已過帳報帳項目；不回傳承辦人、憑證或內部備註。"""
+    """公開預算的逐項支出紀錄，不回傳承辦人或內部備註。"""
     approved_initial = exists().where(
         FinanceBudgetSubmission.budget_id == FinanceBudget.id,
         FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
@@ -905,7 +1142,7 @@ async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
         )
     ).all()
 
-    public_expenses = []
+    public_expenses: list[tuple[date, datetime, dict]] = []
     for item, entry, budget, node in rows:
         if entry.claim_status == ExpenseClaimStatus.COMPLETED:
             public_status = "spent"
@@ -917,20 +1154,116 @@ async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
         else:
             public_status = "pending"
         public_expenses.append(
-            {
-                "id": item.id,
-                "budget_id": budget.id,
-                "entry_date": entry.entry_date,
-                "purpose": re.sub(r"^報帳｜|（\d+ 項）$", "", entry.description),
-                "item_name": item.name,
-                "amount": _claim_item_total(item.unit_price, item.tax_rate, item.quantity),
-                "budget_name": budget.name,
-                "budget_item": node.name,
-                "payment_method": entry.payment_method,
-                "status": public_status,
-            }
+            (
+                entry.entry_date,
+                entry.created_at,
+                {
+                    "id": item.id,
+                    "budget_id": budget.id,
+                    "entry_date": entry.entry_date,
+                    "purpose": re.sub(r"^報帳｜|（\d+ 項）$", "", entry.description),
+                    "item_name": item.name,
+                    "amount": _claim_item_total(item.unit_price, item.tax_rate, item.quantity),
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "unit_price": item.unit_price,
+                    "budget_name": budget.name,
+                    "budget_item": node.name,
+                    "payment_method": entry.payment_method,
+                    "status": public_status,
+                    "evidence": [],
+                },
+            )
         )
-    return public_expenses
+
+    direct_rows = (
+        await db.execute(
+            select(
+                FinanceBudgetExpense,
+                FinanceBudgetExpenseItem,
+                FinanceBudget,
+                FinanceBudgetAllocation,
+                FinanceBudgetNode,
+            )
+            .join(
+                FinanceBudgetExpenseItem,
+                FinanceBudgetExpenseItem.expense_id == FinanceBudgetExpense.id,
+            )
+            .join(FinanceBudget, FinanceBudget.id == FinanceBudgetExpense.budget_id)
+            .join(
+                FinanceBudgetAllocation,
+                FinanceBudgetAllocation.id == FinanceBudgetExpense.allocation_id,
+            )
+            .join(FinanceBudgetNode, FinanceBudgetNode.id == FinanceBudgetAllocation.node_id)
+            .join(
+                FinanceBudgetSubmission,
+                FinanceBudgetSubmission.id == FinanceBudgetAllocation.submission_id,
+            )
+            .where(
+                FinanceBudget.is_public.is_(True),
+                FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+                approved_initial,
+            )
+            .order_by(
+                FinanceBudgetExpense.entry_date.desc(),
+                FinanceBudgetExpense.created_at.desc(),
+                FinanceBudgetExpenseItem.sort_order,
+            )
+            .limit(limit)
+        )
+    ).all()
+    direct_expense_ids = list({expense.id for expense, _, _, _, _ in direct_rows})
+    direct_evidence_rows = (
+        list(
+            (
+                await db.execute(
+                    select(FinanceBudgetExpenseEvidence)
+                    .where(FinanceBudgetExpenseEvidence.expense_id.in_(direct_expense_ids))
+                    .order_by(FinanceBudgetExpenseEvidence.created_at)
+                )
+            ).scalars()
+        )
+        if direct_expense_ids
+        else []
+    )
+    evidence_by_expense: dict[uuid.UUID, list[FinanceBudgetExpenseEvidence]] = {}
+    for evidence in direct_evidence_rows:
+        evidence_by_expense.setdefault(evidence.expense_id, []).append(evidence)
+    for expense, item, budget, _, node in direct_rows:
+        public_expenses.append(
+            (
+                expense.entry_date,
+                expense.created_at,
+                {
+                    "id": item.id,
+                    "budget_id": budget.id,
+                    "entry_date": expense.entry_date,
+                    "purpose": expense.purpose,
+                    "item_name": item.name,
+                    "amount": _claim_item_total(item.unit_price, item.tax_rate, item.quantity),
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "unit_price": item.unit_price,
+                    "budget_name": budget.name,
+                    "budget_item": node.name,
+                    "payment_method": ExpensePaymentMethod.DIRECT,
+                    "status": "spent",
+                    "evidence": [
+                        {
+                            "id": evidence.id,
+                            "filename": evidence.filename,
+                            "url": (
+                                f"/finance/public/budgets/{budget.id}/expenses/{expense.id}/"
+                                f"evidence/{evidence.id}"
+                            ),
+                        }
+                        for evidence in evidence_by_expense.get(expense.id, [])
+                    ],
+                },
+            )
+        )
+    public_expenses.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    return [row[2] for row in public_expenses[:limit]]
 
 
 async def public_budget_period_totals(db: AsyncSession, budget_id: uuid.UUID) -> dict:
@@ -986,7 +1319,15 @@ async def public_budget_period_totals(db: AsyncSession, budget_id: uuid.UUID) ->
             )
         )
     ).one()
-    return {"income_total": int(income), "expense_total": int(expenses)}
+    direct_expenses = await db.scalar(
+        select(func.coalesce(func.sum(FinanceBudgetExpense.total_amount), 0)).where(
+            FinanceBudgetExpense.budget_id == budget.id
+        )
+    )
+    return {
+        "income_total": int(income),
+        "expense_total": int(expenses) + int(direct_expenses or 0),
+    }
 
 
 async def public_budget_detail(
@@ -1028,7 +1369,14 @@ async def public_budget_detail(
     )
     if not approved_initial:
         raise HTTPException(404, "公開預算不存在")
-    return await budget_detail(db, budget), period, None
+    detail = await budget_detail(db, budget)
+    for expense in detail["expenses"]:
+        for evidence in expense["evidence"]:
+            evidence["url"] = (
+                f"/finance/public/budgets/{budget.id}/expenses/{expense['id']}/"
+                f"evidence/{evidence['id']}"
+            )
+    return detail, period, None
 
 
 async def settlement_report(db: AsyncSession, ledger_id: uuid.UUID, period_id: uuid.UUID) -> dict:
@@ -1077,6 +1425,26 @@ async def settlement_report(db: AsyncSession, ledger_id: uuid.UUID, period_id: u
         )
     ).all()
     settled = {row[0]: int(row[1]) for row in settled_rows if row[0] is not None}
+    direct_settled_rows = (
+        await db.execute(
+            select(FinanceBudgetAllocation.node_id, func.sum(FinanceBudgetExpense.total_amount))
+            .join(
+                FinanceBudgetExpense,
+                FinanceBudgetExpense.allocation_id == FinanceBudgetAllocation.id,
+            )
+            .join(
+                FinanceBudgetSubmission,
+                FinanceBudgetSubmission.id == FinanceBudgetAllocation.submission_id,
+            )
+            .where(
+                FinanceBudgetExpense.budget_id == budget.id,
+                FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+            )
+            .group_by(FinanceBudgetAllocation.node_id)
+        )
+    ).all()
+    for node_id, amount in direct_settled_rows:
+        settled[node_id] = settled.get(node_id, 0) + int(amount or 0)
     unsettled_claim_count = await db.scalar(
         select(func.count())
         .select_from(JournalEntry)

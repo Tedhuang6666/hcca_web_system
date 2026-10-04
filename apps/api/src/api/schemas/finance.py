@@ -222,10 +222,54 @@ class BudgetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
 
 
+class FinanceBudgetExpenseItemCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    unit_price: int = Field(gt=0, le=2_000_000_000)
+    tax_rate: int = Field(default=0, ge=0, le=100)
+    quantity: Decimal = Field(gt=0, le=100_000, max_digits=12, decimal_places=2)
+    unit: str = Field(default="項", min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def normalize_item(self) -> FinanceBudgetExpenseItemCreate:
+        self.name = self.name.strip()
+        self.unit = self.unit.strip()
+        if not self.name or not self.unit:
+            raise ValueError("請填寫品項名稱與單位")
+        return self
+
+
+class FinanceBudgetExpenseEvidenceIn(BaseModel):
+    storage_key: str = Field(min_length=1, max_length=500)
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=120)
+    file_size: int = Field(gt=0, le=20 * 1024 * 1024)
+
+
+class FinanceBudgetExpenseCreate(BaseModel):
+    allocation_id: uuid.UUID
+    entry_date: date
+    purpose: str = Field(min_length=1, max_length=300)
+    note: str | None = Field(default=None, max_length=2000)
+    items: list[FinanceBudgetExpenseItemCreate] = Field(min_length=1, max_length=100)
+    evidence: list[FinanceBudgetExpenseEvidenceIn] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def normalize_purpose(self) -> FinanceBudgetExpenseCreate:
+        self.purpose = self.purpose.strip()
+        if not self.purpose:
+            raise ValueError("請填寫支出用途")
+        return self
+
+
 class BudgetSubmissionCreate(BaseModel):
     kind: BudgetSubmissionKind = BudgetSubmissionKind.INITIAL
     title: str = Field(min_length=1, max_length=160)
     note: str | None = None
+
+
+class BudgetSubmissionUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class BudgetNodeCreate(BaseModel):
@@ -336,6 +380,37 @@ class FinanceExpenseClaimItemOut(BaseModel):
     evidence: list[FinanceExpenseClaimEvidenceOut]
 
 
+class FinanceBudgetExpenseItemOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    unit_price: int
+    tax_rate: int
+    quantity: Decimal
+    unit: str
+    amount: int
+
+
+class FinanceBudgetExpenseEvidenceOut(FinanceEvidenceUploadOut):
+    id: uuid.UUID
+    uploaded_at: datetime
+    url: str
+
+
+class FinanceBudgetExpenseOut(BaseModel):
+    id: uuid.UUID
+    budget_id: uuid.UUID
+    allocation_id: uuid.UUID
+    allocation_node_id: uuid.UUID
+    allocation_name: str
+    entry_date: date
+    purpose: str
+    total_amount: int
+    note: str | None
+    items: list[FinanceBudgetExpenseItemOut]
+    evidence: list[FinanceBudgetExpenseEvidenceOut]
+    created_at: datetime
+
+
 class BudgetOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -392,6 +467,7 @@ class BudgetDetailOut(BudgetOut):
     submissions: list[BudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[BudgetAllocationOut]
+    expenses: list[FinanceBudgetExpenseOut] = Field(default_factory=list)
 
 
 class BudgetImportOut(BaseModel):
@@ -418,10 +494,14 @@ class PublicExpenseOut(BaseModel):
     purpose: str
     item_name: str
     amount: int
+    quantity: Decimal = Decimal("1")
+    unit: str = "項"
+    unit_price: int | None = None
     budget_name: str
     budget_item: str
     payment_method: ExpensePaymentMethod
     status: Literal["pending", "awaiting_reimbursement", "spent"]
+    evidence: list[PublicBudgetExpenseEvidenceOut] = Field(default_factory=list)
 
 
 class PublicFinanceTotalsOut(BaseModel):
@@ -450,6 +530,32 @@ class PublicBudgetAllocationOut(BaseModel):
     note: str | None
 
 
+class PublicBudgetExpenseEvidenceOut(BaseModel):
+    id: uuid.UUID
+    filename: str
+    url: str
+
+
+class PublicBudgetExpenseItemOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    unit_price: int
+    tax_rate: int
+    quantity: Decimal
+    unit: str
+    amount: int
+
+
+class PublicBudgetExpenseOut(BaseModel):
+    id: uuid.UUID
+    entry_date: date
+    purpose: str
+    allocation_name: str
+    total_amount: int
+    items: list[PublicBudgetExpenseItemOut]
+    evidence: list[PublicBudgetExpenseEvidenceOut]
+
+
 class PublicBudgetDetailOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -459,6 +565,7 @@ class PublicBudgetDetailOut(BaseModel):
     submissions: list[PublicBudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[PublicBudgetAllocationOut]
+    expenses: list[PublicBudgetExpenseOut] = Field(default_factory=list)
 
 
 class FinanceSettlementLineOut(BaseModel):
