@@ -17564,6 +17564,29 @@ export interface components {
             /** Variable Definitions */
             variable_definitions?: components["schemas"]["EmailVariableDefinition"][] | null;
         };
+        /** EmailPreflightDuplicateOut */
+        EmailPreflightDuplicateOut: {
+            /** Email */
+            email: string;
+            /** Recipients */
+            recipients: components["schemas"]["EmailPreflightDuplicateRecipientOut"][];
+        };
+        /** EmailPreflightDuplicateRecipientOut */
+        EmailPreflightDuplicateRecipientOut: {
+            /** Name */
+            name: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "account" | "provided_data";
+            /** Student Id */
+            student_id?: string | null;
+            /** Variables */
+            variables?: {
+                [key: string]: string;
+            };
+        };
         /** EmailPreflightInput */
         EmailPreflightInput: {
             /** Attachment Ids */
@@ -17593,6 +17616,8 @@ export interface components {
             attachment_warnings: string[];
             /** Duplicate Emails */
             duplicate_emails: string[];
+            /** Duplicate Recipients */
+            duplicate_recipients?: components["schemas"]["EmailPreflightDuplicateOut"][];
             /** Estimated Batches */
             estimated_batches: number;
             /** Invalid Emails */

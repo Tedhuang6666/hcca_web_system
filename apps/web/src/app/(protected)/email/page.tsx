@@ -2299,7 +2299,54 @@ function ComposeInner() {
                 <p className="font-semibold">
                   預檢{preflightResult.valid ? "通過" : "未通過"} · 去重後 {preflightResult.unique_count} 人 · 預計 {preflightResult.estimated_batches} 批
                 </p>
-                {preflightResult.duplicate_emails.length > 0 && <p>重複地址：{preflightResult.duplicate_emails.length}</p>}
+                {preflightResult.duplicate_emails.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    <p>
+                      重複電子郵件地址：{preflightResult.duplicate_emails.length}
+                    </p>
+                    <div className="max-h-64 space-y-3 overflow-y-auto border-t pt-2">
+                      <p>同一地址只會寄送一次。請核對姓名與名單資料，再回到「收件資料」修正重複列。</p>
+                      <ul className="space-y-3">
+                        {(preflightResult.duplicate_recipients ??
+                          preflightResult.duplicate_emails.map((email) => ({ email, recipients: [] })))
+                          .map((group) => (
+                            <li key={group.email}>
+                              <p className="break-all font-semibold">{group.email}</p>
+                              {group.recipients.length > 0 ? (
+                                <ul className="mt-1 divide-y pl-2">
+                                  {group.recipients.map((recipient, index) => (
+                                    <li key={`${recipient.source}-${recipient.name ?? "unnamed"}-${index}`} className="py-1.5">
+                                      <p>
+                                        <span className="break-words font-medium">{recipient.name?.trim() || "未提供姓名"}</span>
+                                        <span style={{ color: "var(--text-muted)" }}>
+                                          {recipient.source === "account" ? " · 系統帳號" : " · 名單資料"}
+                                          {recipient.student_id ? ` · 學號 ${recipient.student_id}` : ""}
+                                        </span>
+                                      </p>
+                                      {Object.entries(recipient.variables ?? {}).length > 0 && (
+                                        <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-2 gap-y-1 pl-2">
+                                          {Object.entries(recipient.variables ?? {}).map(([key, value]) => (
+                                            <div key={key} className="contents">
+                                              <dt className="min-w-0 break-words" style={{ color: "var(--text-muted)" }}>{key}</dt>
+                                              <dd className="min-w-0 whitespace-pre-wrap break-words">{value || "（空白）"}</dd>
+                                            </div>
+                                          ))}
+                                        </dl>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                                  目前沒有可顯示的收件明細。
+                                </p>
+                              )}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
                 {preflightResult.suppressed_emails.length > 0 && <p>已排除退訂／退信：{preflightResult.suppressed_emails.length}</p>}
                 {preflightResult.missing_variables.length > 0 && <p style={{ color: "var(--danger)" }}>缺少必要欄位：{preflightResult.missing_variables.length}</p>}
               </div>
