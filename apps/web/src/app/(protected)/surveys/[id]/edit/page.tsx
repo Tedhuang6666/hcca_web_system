@@ -12,9 +12,10 @@ import UserPicker from "@/components/surveys/UserPicker";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
 import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdown";
+import SurveyQuestionTypePicker from "@/components/surveys/SurveyQuestionTypePicker";
 import {
-  DEFAULT_FOUR_FIELD_LABELS,
-  SurveyFourFieldLabelsEditor,
+  DEFAULT_MULTI_FIELD_LABELS,
+  SurveyMultiFieldEditor,
   SurveyGridColumnsEditor,
   SurveyGridRowsEditor,
 } from "@/components/surveys/SurveyQuestionFields";
@@ -25,9 +26,10 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "single", label: "單選" },
   { value: "single_grid", label: "單選方格（每列選一欄）" },
   { value: "multiple", label: "多選" },
-  { value: "multi_text", label: "四欄詳答" },
+  { value: "multi_text", label: "多欄詳答" },
   { value: "ranking", label: "拖拉排序" },
   { value: "rating", label: "評分" },
+  { value: "linear_scale", label: "線性刻度" },
   { value: "date", label: "日期" },
   { value: "section_text", label: "文字描述區塊" },
   { value: "page_break", label: "分頁" },
@@ -81,7 +83,7 @@ function QuestionRow({
   const [required, setRequired] = useState(q.is_required);
   const [options, setOptions] = useState<string[]>(q.options ?? []);
   const [gridColumns, setGridColumns] = useState<string[]>(q.grid_columns ?? []);
-  const [minValue, setMinValue] = useState(q.min_value ?? 1);
+  const [minValue, setMinValue] = useState(q.min_value ?? (q.question_type === "linear_scale" ? 0 : 1));
   const [maxValue, setMaxValue] = useState(q.max_value ?? 5);
   const [maxSelections, setMaxSelections] = useState(
     q.question_type === "multiple" ? (q.max_value ?? 0) : 0,
@@ -126,7 +128,8 @@ function QuestionRow({
   const isGrid = questionType === "single_grid";
   const isMultiText = questionType === "multi_text";
   const isChoice = questionType === "single" || isMultiple || isRanking;
-  const isRating = questionType === "rating";
+  const isRating = questionType === "rating" || questionType === "linear_scale";
+  const isLinearScale = questionType === "linear_scale";
   const isText = questionType === "text" || questionType === "textarea";
   const isImage = questionType === "image";
   const isVideo = questionType === "video";
@@ -198,9 +201,11 @@ function QuestionRow({
       || new Set(normalizedGridColumns).size !== normalizedGridColumns.length)) {
       validationError = "單選方格的列與欄標籤不可重複";
     }
-    if (isMultiText && opts.length !== 4) validationError = "四欄詳答需要設定 4 個欄位名稱";
+    if (isMultiText && (opts.length < 2 || opts.length > 20)) {
+      validationError = "多欄詳答需要設定 2 至 20 個欄位名稱";
+    }
     if (isMultiText && new Set(opts).size !== opts.length) {
-      validationError = "四欄詳答欄位名稱不可重複";
+      validationError = "多欄詳答欄位名稱不可重複";
     }
     if (isRanking && maxValue > opts.length) {
       validationError = "排序最多項數不可大於選項總數";
@@ -210,6 +215,9 @@ function QuestionRow({
     }
     if (isMultiple && maxSelections > opts.length) {
       validationError = "多選最多項數不可大於選項總數";
+    }
+    if (isRating && (minValue > maxValue || (isLinearScale && minValue === maxValue))) {
+      validationError = isLinearScale ? "最高刻度必須大於起始刻度" : "最高分數不可小於起始分數";
     }
     if (validationError) {
       setSaveStatus("error");
@@ -367,18 +375,16 @@ function QuestionRow({
         </div>
         <div>
           <Label>題型</Label>
-          <select value={questionType} onChange={event => {
-            const nextType = event.target.value as QuestionType;
+          <SurveyQuestionTypePicker value={questionType} options={QUESTION_TYPES} onChange={nextType => {
             setQuestionType(nextType);
             if (nextType === "single_grid") {
               if (options.length < 2) setOptions(["列 1", "列 2"]);
               if (gridColumns.length < 2) setGridColumns(["欄 1", "欄 2"]);
             } else if (nextType === "multi_text") {
-              setOptions([...DEFAULT_FOUR_FIELD_LABELS]);
+              setOptions([...DEFAULT_MULTI_FIELD_LABELS]);
             }
-          }} className="input">
-            {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
+            if (nextType === "linear_scale") setMinValue(0);
+          }} />
         </div>
       </div>
       <SurveyMarkdownField
@@ -415,7 +421,7 @@ function QuestionRow({
       )}
 
       {isMultiText && (
-        <SurveyFourFieldLabelsEditor labels={options} onChange={setOptions} />
+        <SurveyMultiFieldEditor labels={options} onChange={setOptions} />
       )}
 
       {isMultiple && (
@@ -492,14 +498,16 @@ function QuestionRow({
       {isRating && (
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label>起始分數（1–3）</Label>
-            <input type="number" min={1} max={3} value={minValue}
-              onChange={e => setMinValue(parseInt(e.target.value) || 1)} className="input" />
+            <Label>{isLinearScale ? "起始刻度" : "起始分數"}</Label>
+            <input type="number" min={0} max={100} value={minValue}
+              onChange={e => setMinValue(e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10))}
+              className="input" />
           </div>
           <div>
-            <Label>最大分數（1–100）</Label>
-            <input type="number" min={1} max={100} value={maxValue}
-              onChange={e => setMaxValue(parseInt(e.target.value) || 5)} className="input" />
+            <Label>{isLinearScale ? "最大刻度" : "最大分數"}</Label>
+            <input type="number" min={minValue + (isLinearScale ? 1 : 0)} max={100} value={maxValue}
+              onChange={e => setMaxValue(e.target.value === "" ? minValue + 1 : Number.parseInt(e.target.value, 10))}
+              className="input" />
           </div>
           <div>
             <Label>最低分敘述</Label>
@@ -664,6 +672,10 @@ export default function EditSurveyPage() {
   const [newRequired, setNewRequired] = useState(true);
   const [newOptions, setNewOptions] = useState<string[]>([]);
   const [newGridColumns, setNewGridColumns] = useState<string[]>([]);
+  const [newMinValue, setNewMinValue] = useState(1);
+  const [newMaxValue, setNewMaxValue] = useState(5);
+  const [newMinLabel, setNewMinLabel] = useState("");
+  const [newMaxLabel, setNewMaxLabel] = useState("");
   const [newOptionImageSets, setNewOptionImageSets] = useState<string[][]>([]);
   const [newImageUrl, setNewImageUrl] = useState("");
   // 開放對象
@@ -801,8 +813,15 @@ export default function EditSurveyPage() {
       || new Set(gridColumns).size !== gridColumns.length)) {
       toast.error("單選方格的列與欄標籤不可重複"); return;
     }
-    if (isMultiText && opts.length !== 4) { toast.error("四欄詳答需要設定 4 個欄位名稱"); return; }
-    if (isMultiText && new Set(opts).size !== opts.length) { toast.error("四欄詳答欄位名稱不可重複"); return; }
+    if (isMultiText && (opts.length < 2 || opts.length > 20)) {
+      toast.error("多欄詳答需要設定 2 至 20 個欄位名稱"); return;
+    }
+    if (isMultiText && new Set(opts).size !== opts.length) { toast.error("多欄詳答欄位名稱不可重複"); return; }
+    if ((newType === "rating" || newType === "linear_scale")
+      && (newMinValue > newMaxValue || (newType === "linear_scale" && newMinValue === newMaxValue))) {
+      toast.error(newType === "linear_scale" ? "最高刻度必須大於起始刻度" : "最高分數不可小於起始分數");
+      return;
+    }
     setBusy(true);
     try {
       const body: SurveyQuestionBody & { question_text: string; question_type: string } = {
@@ -820,11 +839,17 @@ export default function EditSurveyPage() {
         body.min_value = 1;
         body.max_value = opts.length;
       }
+      if (newType === "rating" || newType === "linear_scale") {
+        body.min_value = newMinValue;
+        body.max_value = newMaxValue;
+        body.min_label = newMinLabel;
+        body.max_label = newMaxLabel;
+      }
       const created = await surveysApi.addQuestion(survey.id, body);
       setActiveQuestionId(created.id);
       setNewText("");
       setNewDescription("");
-      setNewOptions(isMultiText ? [...DEFAULT_FOUR_FIELD_LABELS] : isGrid ? ["列 1", "列 2"] : []);
+      setNewOptions(isMultiText ? [...DEFAULT_MULTI_FIELD_LABELS] : isGrid ? ["列 1", "列 2"] : []);
       setNewGridColumns(isGrid ? ["欄 1", "欄 2"] : []);
       setNewOptionImageSets([]);
       setNewImageUrl("");
@@ -863,6 +888,8 @@ export default function EditSurveyPage() {
   const needsOptions = newType === "single" || newType === "multiple" || newType === "ranking";
   const newIsGrid = newType === "single_grid";
   const newIsMultiText = newType === "multi_text";
+  const newIsScale = newType === "rating" || newType === "linear_scale";
+  const newIsLinearScale = newType === "linear_scale";
   const newIsDisplay = DISPLAY_TYPES.has(newType);
 
   return (
@@ -1031,17 +1058,15 @@ export default function EditSurveyPage() {
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
           <div>
             <Label>題型</Label>
-            <select value={newType} onChange={e => {
-              const nextType = e.target.value as QuestionType;
+            <SurveyQuestionTypePicker value={newType} options={QUESTION_TYPES} onChange={nextType => {
               setNewType(nextType);
               setNewOptions(nextType === "multi_text"
-                ? [...DEFAULT_FOUR_FIELD_LABELS]
+                ? [...DEFAULT_MULTI_FIELD_LABELS]
                 : nextType === "single_grid" ? ["列 1", "列 2"] : []);
               setNewGridColumns(nextType === "single_grid" ? ["欄 1", "欄 2"] : []);
               setNewOptionImageSets([]);
-            }} className="input">
-              {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+              if (nextType === "linear_scale") setNewMinValue(0);
+            }} />
           </div>
           <div>
             <SurveyMarkdownField
@@ -1083,7 +1108,37 @@ export default function EditSurveyPage() {
           </>
         )}
         {newIsMultiText && (
-          <SurveyFourFieldLabelsEditor labels={newOptions} onChange={setNewOptions} />
+          <SurveyMultiFieldEditor labels={newOptions} onChange={setNewOptions} />
+        )}
+        {newIsScale && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label>{newIsLinearScale ? "起始刻度" : "起始分數"}</Label>
+              <input type="number" min={0} max={100} value={newMinValue}
+                onChange={event => setNewMinValue(
+                  event.target.value === "" ? 0 : Number.parseInt(event.target.value, 10),
+                )}
+                className="input" />
+            </div>
+            <div>
+              <Label>{newIsLinearScale ? "最大刻度" : "最大分數"}</Label>
+              <input type="number" min={newMinValue + (newIsLinearScale ? 1 : 0)} max={100} value={newMaxValue}
+                onChange={event => setNewMaxValue(
+                  event.target.value === "" ? newMinValue + 1 : Number.parseInt(event.target.value, 10),
+                )}
+                className="input" />
+            </div>
+            <div>
+              <Label>起始說明（選填）</Label>
+              <input value={newMinLabel} onChange={event => setNewMinLabel(event.target.value)}
+                placeholder="例：非常不滿意" className="input" />
+            </div>
+            <div>
+              <Label>最高說明（選填）</Label>
+              <input value={newMaxLabel} onChange={event => setNewMaxLabel(event.target.value)}
+                placeholder="例：非常滿意" className="input" />
+            </div>
+          </div>
         )}
         {(newType === "image" || !newIsDisplay) && (
           <SurveyImageField

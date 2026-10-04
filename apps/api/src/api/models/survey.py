@@ -46,9 +46,10 @@ class QuestionType(enum.StrEnum):
     SINGLE = "single"  # 單選
     SINGLE_GRID = "single_grid"  # 單選方格（每列選一欄）
     MULTIPLE = "multiple"  # 多選
-    MULTI_TEXT = "multi_text"  # 四欄詳答
+    MULTI_TEXT = "multi_text"  # 多欄詳答
     RANKING = "ranking"  # 拖拉排序（從選項中挑選並排序）
-    RATING = "rating"  # 評分（1–5 / 1–10）
+    RATING = "rating"  # 評分（自訂範圍）
+    LINEAR_SCALE = "linear_scale"  # 線性刻度
     DATE = "date"  # 日期輸入
     SECTION_TEXT = "section_text"  # 純文字描述區塊
     PAGE_BREAK = "page_break"  # 分頁
