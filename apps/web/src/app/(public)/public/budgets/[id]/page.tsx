@@ -5,6 +5,7 @@ import { ArrowLeft, Check, CircleAlert, FileText, Paperclip, ReceiptText, Shield
 
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
+import EvidencePreview from "@/components/finance/EvidencePreview";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -137,7 +138,7 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
               </ul>}
               {expense.evidence.length > 0 && <div className="public-budget-detail__expense-evidence" aria-label={`${expense.purpose} 憑證`}>
                 <span><Paperclip size={14} aria-hidden="true" />收據與憑證</span>
-                {expense.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer">{evidence.filename}</a>)}
+                {expense.evidence.map((evidence) => <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename} />)}
               </div>}
             </article>
           ))}

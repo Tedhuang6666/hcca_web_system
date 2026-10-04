@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, ChevronUp, FileCheck2, LoaderCircle } from "lucide-react";
 
 import { financeApi } from "@/lib/api";
+import EvidencePreview from "@/components/finance/EvidencePreview";
 import type { PublicExpenseClaimDetailOut, PublicExpenseOut } from "@/lib/types";
 
 type ExpenseGroup = {
@@ -147,9 +148,9 @@ export default function PublicExpenseTable({ expenses }: { expenses: PublicExpen
                       </button>
                     ) : (first.evidence ?? []).length > 0 ? (
                       (first.evidence ?? []).map((evidence) => (
-                        <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer">
+                        <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename}>
                           <FileCheck2 size={14} aria-hidden="true" />{evidence.filename}
-                        </a>
+                        </EvidencePreview>
                       ))
                     ) : "—"}
                   </td>
@@ -186,9 +187,9 @@ export default function PublicExpenseTable({ expenses }: { expenses: PublicExpen
                                   <strong>{item.name}</strong>
                                   <small>{item.budget_item} · {item.quantity} {item.unit} × {formatAmount(item.unit_price)}</small>
                                   {(item.evidence ?? []).map((evidence) => (
-                                    <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer">
+                                    <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename}>
                                       <FileCheck2 size={13} aria-hidden="true" />{evidence.filename}
-                                    </a>
+                                    </EvidencePreview>
                                   ))}
                                 </span>
                                 <b>{formatAmount(item.amount)}</b>
@@ -198,9 +199,9 @@ export default function PublicExpenseTable({ expenses }: { expenses: PublicExpen
                           {(detail.data.supplemental_evidence ?? []).length > 0 && (
                             <div className="public-finance__claim-extra-evidence">
                               {(detail.data.supplemental_evidence ?? []).map((evidence) => (
-                                <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer">
+                                <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename}>
                                   <FileCheck2 size={14} aria-hidden="true" />{evidence.filename}
-                                </a>
+                                </EvidencePreview>
                               ))}
                             </div>
                           )}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FileCheck2, Paperclip, Pencil, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
+import EvidencePreview from "@/components/finance/EvidencePreview";
 import type {
   FinanceBudgetAllocation,
   FinanceBudgetExpenseOut,
@@ -389,6 +390,16 @@ export default function BudgetExpenseRegister({
           </fieldset>
 
           <div className="finance-budget-expenses__attachments">
+            {editingExpenseId && expenses.find((expense) => expense.id === editingExpenseId)?.evidence.length ? (
+              <div className="finance-budget-expenses__existing-evidence">
+                <span>既有憑證會保留：</span>
+                {expenses.find((expense) => expense.id === editingExpenseId)?.evidence.map((evidence) => (
+                  <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename}>
+                    <FileCheck2 size={14} aria-hidden="true" />{evidence.filename}
+                  </EvidencePreview>
+                ))}
+              </div>
+            ) : null}
             <label className="btn btn-secondary">
               <Paperclip size={15} aria-hidden="true" />附上收據或憑證
               <input className="sr-only" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => { addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
@@ -441,7 +452,9 @@ export default function BudgetExpenseRegister({
               {expense.evidence.length > 0 && (
                 <div className="finance-budget-expenses__evidence">
                   {expense.evidence.map((evidence) => (
-                    <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><FileCheck2 size={14} aria-hidden="true" />{evidence.filename}</a>
+                    <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename}>
+                      <FileCheck2 size={14} aria-hidden="true" />{evidence.filename}
+                    </EvidencePreview>
                   ))}
                 </div>
               )}

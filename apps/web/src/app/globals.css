@@ -9883,11 +9883,56 @@ input[type="radio"]:checked {
 .finance-budget__evidence-cell { display: grid; min-width: 10rem; gap: 0.35rem; text-align: left; }
 .finance-budget__evidence-cell p { margin: 0; line-height: 1.45; }
 .finance-budget__evidence-cell > span { display: grid; gap: 0.25rem; }
-.finance-budget__evidence-cell a,
-.finance-budget__card-evidence a { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--primary-text); font-weight: 700; text-decoration: none; }
+.finance-budget__evidence-cell .finance-evidence-preview__trigger,
+.finance-budget__card-evidence .finance-evidence-preview__trigger { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--primary-text); font-weight: 700; text-decoration: none; }
 .finance-budget__evidence-cell small { color: var(--text-muted); }
 .finance-budget__row-actions { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; }
 .finance-budget__evidence-upload { cursor: pointer; }
+.finance-evidence-preview__trigger {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.45rem;
+  background: transparent;
+  color: var(--primary-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.finance-evidence-preview__trigger:hover { background: color-mix(in srgb, var(--primary-dim) 45%, transparent); }
+.finance-evidence-preview__trigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; }
+.finance-evidence-preview__trigger:disabled { cursor: not-allowed; opacity: 0.65; }
+.finance-evidence-preview { display: grid; min-width: 0; gap: 0.65rem; }
+.finance-evidence-preview__filename { margin: 0; color: var(--text-secondary); font-size: 0.85rem; overflow-wrap: anywhere; }
+.finance-evidence-preview__viewer {
+  position: relative;
+  height: min(76vh, 900px);
+  min-height: 55vh;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+.finance-evidence-preview__viewer iframe { display: block; width: 100%; height: 100%; min-height: inherit; border: 0; background: white; }
+.finance-evidence-preview__loading {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+  background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
 .finance-budget__allocation-cards { display: none; }
 .finance-budget__scroll-hint { display: none; }
 
@@ -10059,7 +10104,7 @@ input[type="radio"]:checked {
 .finance-budget-expenses__details small { color: var(--text-muted); font-size: 0.7rem; font-variant-numeric: tabular-nums; }
 .finance-budget-expenses__details strong { color: var(--text-secondary); font-size: 0.72rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .finance-budget-expenses__evidence { display: flex; flex-wrap: wrap; gap: 0.45rem 0.8rem; margin: 0.6rem 0 0 7.75rem; }
-.finance-budget-expenses__evidence a { display: inline-flex; min-height: 2.25rem; align-items: center; gap: 0.3rem; color: var(--primary-text); font-size: 0.7rem; font-weight: 700; text-decoration: underline; text-underline-offset: 0.18em; }
+.finance-budget-expenses__evidence .finance-evidence-preview__trigger { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--primary-text); font-size: 0.7rem; font-weight: 700; text-decoration: underline; text-underline-offset: 0.18em; }
 .finance-budget-expenses__empty { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1.1rem; color: var(--text-muted); font-size: 0.75rem; }
 .finance-budget-expenses__empty p { margin: 0; }
 
@@ -10367,8 +10412,8 @@ input[type="radio"]:checked {
 .public-budget-detail__expense-list li > b { color: var(--text-secondary); font-size: 0.72rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .public-budget-detail__expense-evidence { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.7rem; }
 .public-budget-detail__expense-evidence > span { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-muted); font-size: 0.66rem; }
-.public-budget-detail__expense-evidence a { border: 1px solid var(--public-border); border-radius: 999px; padding: 0.3rem 0.55rem; color: var(--public-accent-text); font-size: 0.66rem; font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
-.public-budget-detail__expense-evidence a:hover { text-decoration: underline; }
+.public-budget-detail__expense-evidence .finance-evidence-preview__trigger { border: 1px solid var(--public-border); border-radius: 999px; padding: 0.3rem 0.55rem; color: var(--public-accent-text); font-size: 0.66rem; font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
+.public-budget-detail__expense-evidence .finance-evidence-preview__trigger:hover { background: var(--public-soft); text-decoration: underline; }
 .public-budget-detail__expenses-empty { margin: 0; padding: 1rem 1.1rem; color: var(--text-muted); font-size: 0.74rem; }
 
 .public-budget-detail__table { overflow-x: auto; }
@@ -10498,8 +10543,10 @@ input[type="radio"]:checked {
 .public-finance__claim-detail li strong { color: var(--text-primary); font-size: 0.74rem; }
 .public-finance__claim-detail li small { color: var(--text-muted); font-size: 0.65rem; }
 .public-finance__claim-detail li b { color: var(--danger); font-size: 0.74rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.public-finance__claim-detail li a,
-.public-finance__claim-extra-evidence a { display: inline-flex; min-height: 2.2rem; align-items: center; gap: 0.3rem; color: var(--public-accent-text); font-size: 0.67rem; font-weight: 700; text-decoration: underline; text-underline-offset: 0.18em; }
+.public-finance__claim-detail li .finance-evidence-preview__trigger,
+.public-finance__claim-extra-evidence .finance-evidence-preview__trigger { display: inline-flex; min-height: 2.75rem; align-items: center; gap: 0.3rem; color: var(--public-accent-text); font-size: 0.67rem; font-weight: 700; text-decoration: underline; text-underline-offset: 0.18em; }
+.public-finance__claim-detail .finance-evidence-preview__trigger:hover,
+.public-finance__claim-extra-evidence .finance-evidence-preview__trigger:hover { background: var(--public-soft); }
 .public-finance__claim-extra-evidence { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0.8rem; }
 .public-finance__budget-list .public-budget-index__list { margin: 0; border: 0; }
 .public-finance__budget-list .public-budget-index__row h3 { margin: 0; font-size: 0.95rem; }
@@ -10517,6 +10564,7 @@ input[type="radio"]:checked {
   .public-budget-detail__expense-heading > strong { font-size: 0.82rem; }
   .public-finance__claim-detail > dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
   .public-finance__claim-detail dd { overflow-wrap: anywhere; }
+  .finance-evidence-preview__viewer { height: calc(100dvh - 10rem); min-height: 45vh; }
   .public-budget-detail__table { display: none; }
   .public-budget-detail__cards { display: grid; gap: 0.75rem; padding: 0.75rem; }
   .public-budget-detail__cards > section { overflow: hidden; border: 1px solid var(--public-border); border-radius: var(--radius-lg); background: var(--public-surface); }

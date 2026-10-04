@@ -24,6 +24,7 @@ import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
 import { financeApi, orgsApi, usersApi, type UserSummary } from "@/lib/api";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import BudgetWorkspace from "@/components/finance/BudgetWorkspace";
+import EvidencePreview from "@/components/finance/EvidencePreview";
 import type {
   ChartAccountOut,
   ExpenseProcurementStatus,
@@ -1354,7 +1355,7 @@ export default function FinancePage() {
                   <div>
                     <p className="finance-case-list__meta">{item.entry_date} · {item.payment_method === "advance" ? "個人代墊" : "班聯直接付款"}</p>
                     <h3>{item.description}</h3>
-                    <div className="finance-case-list__links">{item.evidence_url ? <a href={item.evidence_url} target="_blank" rel="noreferrer">查看憑證</a> : <span>未附憑證</span>}{item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">補充連結</a>}</div>
+                    <div className="finance-case-list__links">{item.evidence_url ? <EvidencePreview url={item.evidence_url} filename="報帳附件">查看憑證</EvidencePreview> : <span>未附憑證</span>}{item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">補充連結</a>}</div>
                   </div>
                   <div className="finance-case-list__next"><span>下一步</span><strong>{next.title}</strong><p>{next.detail}</p></div>
                 </div>
@@ -1406,7 +1407,7 @@ function FinanceCaseDetails({
       </div>
       {entry.source_type === "expense_claim" && <div className="mt-4">
         <h4 className="font-medium">報帳品項</h4>
-        {loading ? <p className="mt-2" style={{ color: "var(--text-muted)" }}>載入品項中…</p> : items && items.length > 0 ? <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">含稅小計</th><th className="px-3 py-2 text-left">憑證</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{item.name}<span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.budget_exception_note || ""}</span></td><td className="px-3 py-2 text-right tabular-nums">{item.quantity} {item.unit}</td><td className="px-3 py-2 text-right tabular-nums">NT${item.unit_price.toLocaleString()}</td><td className="px-3 py-2 text-right tabular-nums">NT${claimItemTotal(item).toLocaleString()}</td><td className="px-3 py-2">{item.evidence.length > 0 ? <span className="flex flex-wrap gap-2">{item.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer">{evidence.filename}</a>)}</span> : "未附"}</td></tr>)}</tbody></table></div> : <p className="mt-2" style={{ color: "var(--text-muted)" }}>沒有逐項報帳資料。</p>}
+        {loading ? <p className="mt-2" style={{ color: "var(--text-muted)" }}>載入品項中…</p> : items && items.length > 0 ? <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">含稅小計</th><th className="px-3 py-2 text-left">憑證</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{item.name}<span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.budget_exception_note || ""}</span></td><td className="px-3 py-2 text-right tabular-nums">{item.quantity} {item.unit}</td><td className="px-3 py-2 text-right tabular-nums">NT${item.unit_price.toLocaleString()}</td><td className="px-3 py-2 text-right tabular-nums">NT${claimItemTotal(item).toLocaleString()}</td><td className="px-3 py-2">{item.evidence.length > 0 ? <span className="flex flex-wrap gap-2">{item.evidence.map((evidence) => <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename} />)}</span> : "未附"}</td></tr>)}</tbody></table></div> : <p className="mt-2" style={{ color: "var(--text-muted)" }}>沒有逐項報帳資料。</p>}
       </div>}
     </div>
   );
