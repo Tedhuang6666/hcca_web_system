@@ -320,10 +320,12 @@ export default function CouncilOrdersPage() {
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>校慶商品</p>
           <h1 className="flex items-center gap-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            <BarChart2 size={22} /> 班聯訂購管理
+            <BarChart2 size={22} /> 議員商品總覽
           </h1>
+          <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
+            集中查看各活動的班級訂購、收款進度、商品數量與訂單明細。
+          </p>
         </div>
         <button type="button" onClick={() => { if (tab === "summary") loadSummary(); else if (tab === "quantities") loadQuantities(); else loadOrders(); }}
           className="btn btn-ghost" aria-label="重新整理">
