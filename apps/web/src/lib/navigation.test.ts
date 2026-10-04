@@ -97,6 +97,14 @@ describe("navigation visibility", () => {
     expect(defaultIds).not.toContain("modulesMaintenance");
   });
 
+  it("opens the combined short-link and QR code workspace for tool managers", () => {
+    expect(NAV_ITEMS.find((item) => item.id === "qrCode")).toMatchObject({
+      href: "/qr-code",
+      label: "經營工具",
+      perm: "qr_code:manage",
+    });
+  });
+
   it("resolves specialized navigation profiles without loading full navigation definitions", () => {
     expect(resolveNavigationProfile(new Set(["partner_map:business_manage"]), false)).toBe("vendor");
     expect(resolveNavigationProfile(new Set(["class:manage"]), false)).toBe("teacher");

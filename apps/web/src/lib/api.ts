@@ -62,3 +62,4 @@ export * from "./api/policies";
 export * from "./api/privacy-requests";
 export * from "./api/electronic-credentials";
 export * from "./api/raffles";
+export * from "./api/short-links";
