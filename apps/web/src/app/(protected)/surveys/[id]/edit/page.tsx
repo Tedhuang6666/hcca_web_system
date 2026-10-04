@@ -11,12 +11,21 @@ import { usePermissions } from "@/hooks/usePermissions";
 import UserPicker from "@/components/surveys/UserPicker";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
+import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdown";
+import {
+  DEFAULT_FOUR_FIELD_LABELS,
+  SurveyFourFieldLabelsEditor,
+  SurveyGridColumnsEditor,
+  SurveyGridRowsEditor,
+} from "@/components/surveys/SurveyQuestionFields";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text", label: "簡答（單行）" },
   { value: "textarea", label: "長答（多行）" },
   { value: "single", label: "單選" },
+  { value: "single_grid", label: "單選方格（每列選一欄）" },
   { value: "multiple", label: "多選" },
+  { value: "multi_text", label: "四欄詳答" },
   { value: "ranking", label: "拖拉排序" },
   { value: "rating", label: "評分" },
   { value: "date", label: "日期" },
@@ -67,9 +76,11 @@ function QuestionRow({
   onDrop: () => void;
 }) {
   const [text, setText] = useState(q.question_text);
+  const [description, setDescription] = useState(q.description ?? "");
   const [questionType, setQuestionType] = useState<QuestionType>(q.question_type);
   const [required, setRequired] = useState(q.is_required);
   const [options, setOptions] = useState<string[]>(q.options ?? []);
+  const [gridColumns, setGridColumns] = useState<string[]>(q.grid_columns ?? []);
   const [minValue, setMinValue] = useState(q.min_value ?? 1);
   const [maxValue, setMaxValue] = useState(q.max_value ?? 5);
   const [maxSelections, setMaxSelections] = useState(
@@ -112,6 +123,8 @@ function QuestionRow({
     });
   const isMultiple = questionType === "multiple";
   const isRanking = questionType === "ranking";
+  const isGrid = questionType === "single_grid";
+  const isMultiText = questionType === "multi_text";
   const isChoice = questionType === "single" || isMultiple || isRanking;
   const isRating = questionType === "rating";
   const isText = questionType === "text" || questionType === "textarea";
@@ -123,11 +136,14 @@ function QuestionRow({
     images: optionImageSets[index] ?? [],
   })).filter(({ option }) => Boolean(option));
   const parsedOptions = optionEntries.map(({ option }) => option);
+  const normalizedGridColumns = gridColumns.map(column => column.trim()).filter(Boolean);
   const draftFingerprint = useMemo(() => JSON.stringify({
     text,
+    description,
     questionType,
     required,
     options,
+    gridColumns,
     minValue,
     maxValue,
     maxSelections,
@@ -144,9 +160,11 @@ function QuestionRow({
     rules,
   }), [
     text,
+    description,
     questionType,
     required,
     options,
+    gridColumns,
     minValue,
     maxValue,
     maxSelections,
@@ -169,9 +187,21 @@ function QuestionRow({
 
   const save = async (manual = false) => {
     if (saving || busy) return;
-    const opts = isChoice ? parsedOptions : [];
+    const opts = isChoice || isGrid || isMultiText ? parsedOptions : [];
     let validationError = "";
     if (isChoice && opts.length < 2) validationError = "選擇題至少需 2 個選項";
+    if (isGrid && opts.length < 2) validationError = "單選方格至少需要 2 列";
+    if (isGrid && (normalizedGridColumns.length < 2 || normalizedGridColumns.length > 20)) {
+      validationError = "單選方格需要設定 2 至 20 欄";
+    }
+    if (isGrid && (new Set(opts).size !== opts.length
+      || new Set(normalizedGridColumns).size !== normalizedGridColumns.length)) {
+      validationError = "單選方格的列與欄標籤不可重複";
+    }
+    if (isMultiText && opts.length !== 4) validationError = "四欄詳答需要設定 4 個欄位名稱";
+    if (isMultiText && new Set(opts).size !== opts.length) {
+      validationError = "四欄詳答欄位名稱不可重複";
+    }
     if (isRanking && maxValue > opts.length) {
       validationError = "排序最多項數不可大於選項總數";
     }
@@ -192,16 +222,18 @@ function QuestionRow({
     setSaveError("");
     const body: SurveyQuestionBody = {
       question_text: text,
+      description: description || null,
       question_type: questionType,
       is_required: DISPLAY_TYPES.has(questionType) ? false : required,
     };
-    if (isChoice) {
+    if (isChoice || isGrid || isMultiText) {
       body.options = opts;
-      body.option_image_sets = optionEntries.map(({ images }) => images);
+      body.option_image_sets = isChoice ? optionEntries.map(({ images }) => images) : [];
     } else {
       body.options = [];
       body.option_image_sets = [];
     }
+    body.grid_columns = isGrid ? normalizedGridColumns : [];
     if (isMultiple) {
       const exclusive = exclusiveOpts.filter(o => opts.includes(o));
       const other = otherOpts.filter(o => opts.includes(o));
@@ -326,17 +358,36 @@ function QuestionRow({
       </div>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
         <div>
-          <Label>{isImage ? "圖片說明（選填）" : DISPLAY_TYPES.has(questionType) ? "區塊文字" : "題目文字"}</Label>
-          <textarea value={text} onChange={e => setText(e.target.value)} rows={2}
-            className="input resize-y" />
+          <SurveyMarkdownField
+            label={isImage ? "圖片說明（選填）" : DISPLAY_TYPES.has(questionType) ? "區塊文字" : "題目文字"}
+            value={text}
+            onChange={setText}
+            rows={2}
+          />
         </div>
         <div>
           <Label>題型</Label>
-          <select value={questionType} onChange={event => setQuestionType(event.target.value as QuestionType)} className="input">
+          <select value={questionType} onChange={event => {
+            const nextType = event.target.value as QuestionType;
+            setQuestionType(nextType);
+            if (nextType === "single_grid") {
+              if (options.length < 2) setOptions(["列 1", "列 2"]);
+              if (gridColumns.length < 2) setGridColumns(["欄 1", "欄 2"]);
+            } else if (nextType === "multi_text") {
+              setOptions([...DEFAULT_FOUR_FIELD_LABELS]);
+            }
+          }} className="input">
             {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
           </select>
         </div>
       </div>
+      <SurveyMarkdownField
+        label="題目描述（選填）"
+        value={description}
+        onChange={setDescription}
+        rows={2}
+        placeholder="補充這題的作答說明…"
+      />
 
       {!DISPLAY_TYPES.has(questionType) && (
         <label className="flex items-center gap-2 cursor-pointer">
@@ -354,6 +405,17 @@ function QuestionRow({
           onOptionsChange={setOptions}
           selectionStyle={isMultiple ? "multiple" : isRanking ? "ranking" : "single"}
         />
+      )}
+
+      {isGrid && (
+        <>
+          <SurveyGridRowsEditor rows={options} onChange={setOptions} />
+          <SurveyGridColumnsEditor columns={gridColumns} onChange={setGridColumns} />
+        </>
+      )}
+
+      {isMultiText && (
+        <SurveyFourFieldLabelsEditor labels={options} onChange={setOptions} />
       )}
 
       {isMultiple && (
@@ -598,8 +660,10 @@ export default function EditSurveyPage() {
   const [closesAt, setClosesAt] = useState("");
   const [newType, setNewType] = useState<QuestionType>("text");
   const [newText, setNewText] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [newRequired, setNewRequired] = useState(true);
   const [newOptions, setNewOptions] = useState<string[]>([]);
+  const [newGridColumns, setNewGridColumns] = useState<string[]>([]);
   const [newOptionImageSets, setNewOptionImageSets] = useState<string[][]>([]);
   const [newImageUrl, setNewImageUrl] = useState("");
   // 開放對象
@@ -717,6 +781,8 @@ export default function EditSurveyPage() {
   const addQuestion = async () => {
     if (!survey) return;
     const isImg = newType === "image";
+    const isGrid = newType === "single_grid";
+    const isMultiText = newType === "multi_text";
     const isChoice = newType === "single" || newType === "multiple" || newType === "ranking";
     if (!isImg && !newText.trim()) { toast.error("請輸入題目或區塊文字"); return; }
     if (isImg && !newImageUrl) { toast.error("圖片題型請先上傳圖片"); return; }
@@ -725,14 +791,27 @@ export default function EditSurveyPage() {
       images: newOptionImageSets[index] ?? [],
     })).filter(({ option }) => Boolean(option));
     const opts = optionEntries.map(({ option }) => option);
+    const gridColumns = newGridColumns.map(column => column.trim()).filter(Boolean);
     if (isChoice && opts.length < 2) { toast.error("選擇題至少需 2 個選項"); return; }
+    if (isGrid && opts.length < 2) { toast.error("單選方格至少需要 2 列"); return; }
+    if (isGrid && (opts.length > 50 || gridColumns.length < 2 || gridColumns.length > 20)) {
+      toast.error("單選方格需要設定 2 至 50 列、2 至 20 欄"); return;
+    }
+    if (isGrid && (new Set(opts).size !== opts.length
+      || new Set(gridColumns).size !== gridColumns.length)) {
+      toast.error("單選方格的列與欄標籤不可重複"); return;
+    }
+    if (isMultiText && opts.length !== 4) { toast.error("四欄詳答需要設定 4 個欄位名稱"); return; }
+    if (isMultiText && new Set(opts).size !== opts.length) { toast.error("四欄詳答欄位名稱不可重複"); return; }
     setBusy(true);
     try {
       const body: SurveyQuestionBody & { question_text: string; question_type: string } = {
         question_text: newText.trim() || "（圖片）",
+        description: newDescription.trim() || undefined,
         question_type: newType,
         is_required: DISPLAY_TYPES.has(newType) ? false : newRequired,
-        options: isChoice ? opts : [],
+        options: isChoice || isGrid || isMultiText ? opts : [],
+        grid_columns: isGrid ? gridColumns : [],
         option_image_sets: isChoice ? optionEntries.map(({ images }) => images) : [],
         image_url: isImg || !DISPLAY_TYPES.has(newType) ? newImageUrl || undefined : undefined,
         order_index: survey.questions.length,
@@ -744,7 +823,9 @@ export default function EditSurveyPage() {
       const created = await surveysApi.addQuestion(survey.id, body);
       setActiveQuestionId(created.id);
       setNewText("");
-      setNewOptions([]);
+      setNewDescription("");
+      setNewOptions(isMultiText ? [...DEFAULT_FOUR_FIELD_LABELS] : isGrid ? ["列 1", "列 2"] : []);
+      setNewGridColumns(isGrid ? ["欄 1", "欄 2"] : []);
       setNewOptionImageSets([]);
       setNewImageUrl("");
       toast.success("題目已新增");
@@ -780,6 +861,8 @@ export default function EditSurveyPage() {
   }
 
   const needsOptions = newType === "single" || newType === "multiple" || newType === "ranking";
+  const newIsGrid = newType === "single_grid";
+  const newIsMultiText = newType === "multi_text";
   const newIsDisplay = DISPLAY_TYPES.has(newType);
 
   return (
@@ -807,9 +890,12 @@ export default function EditSurveyPage() {
           <input value={title} onChange={e => setTitle(e.target.value)} className="input" />
         </div>
         <div>
-          <Label>描述說明</Label>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-            className="input resize-y" />
+          <SurveyMarkdownField
+            label="表單說明"
+            value={description}
+            onChange={setDescription}
+            rows={3}
+          />
         </div>
         <div>
           <Label>截止時間（選填）</Label>
@@ -946,19 +1032,34 @@ export default function EditSurveyPage() {
           <div>
             <Label>題型</Label>
             <select value={newType} onChange={e => {
-              setNewType(e.target.value as QuestionType);
-              setNewOptions([]);
+              const nextType = e.target.value as QuestionType;
+              setNewType(nextType);
+              setNewOptions(nextType === "multi_text"
+                ? [...DEFAULT_FOUR_FIELD_LABELS]
+                : nextType === "single_grid" ? ["列 1", "列 2"] : []);
+              setNewGridColumns(nextType === "single_grid" ? ["欄 1", "欄 2"] : []);
               setNewOptionImageSets([]);
             }} className="input">
               {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
           <div>
-            <Label>{newType === "image" ? "圖片說明（選填）" : newIsDisplay ? "區塊文字" : "題目文字"}</Label>
-            <textarea value={newText} onChange={e => setNewText(e.target.value)} rows={2}
-              className="input resize-y" placeholder={newIsDisplay ? "請輸入顯示內容…" : "請輸入題目…"} />
+            <SurveyMarkdownField
+              label={newType === "image" ? "圖片說明（選填）" : newIsDisplay ? "區塊文字" : "題目文字"}
+              value={newText}
+              onChange={setNewText}
+              rows={2}
+              placeholder={newIsDisplay ? "請輸入顯示內容…" : "請輸入題目…"}
+            />
           </div>
         </div>
+        <SurveyMarkdownField
+          label="題目描述（選填）"
+          value={newDescription}
+          onChange={setNewDescription}
+          rows={2}
+          placeholder="補充這題的作答說明…"
+        />
         {!newIsDisplay && (
           <label className="flex min-h-11 items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={newRequired} onChange={event => setNewRequired(event.target.checked)}
@@ -974,6 +1075,15 @@ export default function EditSurveyPage() {
             onOptionsChange={setNewOptions}
             selectionStyle={newType === "multiple" ? "multiple" : newType === "ranking" ? "ranking" : "single"}
           />
+        )}
+        {newIsGrid && (
+          <>
+            <SurveyGridRowsEditor rows={newOptions} onChange={setNewOptions} />
+            <SurveyGridColumnsEditor columns={newGridColumns} onChange={setNewGridColumns} />
+          </>
+        )}
+        {newIsMultiText && (
+          <SurveyFourFieldLabelsEditor labels={newOptions} onChange={setNewOptions} />
         )}
         {(newType === "image" || !newIsDisplay) && (
           <SurveyImageField

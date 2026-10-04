@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -118,9 +118,11 @@ class SurveyQuestionOut(BaseModel):
     survey_id: uuid.UUID
     order_index: int
     question_text: str
+    description: str | None = None
     question_type: QuestionType
     is_required: bool
     options: list[str] = Field(default_factory=list)
+    grid_columns: list[str] = Field(default_factory=list)
     option_image_sets: list[list[str]] = Field(default_factory=list)
     min_value: int | None
     max_value: int | None
@@ -149,6 +151,7 @@ class SurveyQuestionOut(BaseModel):
             "survey_id",
             "order_index",
             "question_text",
+            "description",
             "question_type",
             "is_required",
             "min_value",
@@ -163,6 +166,7 @@ class SurveyQuestionOut(BaseModel):
         )
         result: dict[str, Any] = {f: getattr(data, f, None) for f in fields}
         result["options"] = _parse_json_list(getattr(data, "options_json", None))
+        result["grid_columns"] = _parse_json_list(getattr(data, "grid_columns_json", None))
         result["option_image_sets"] = _parse_json_nested_list(
             getattr(data, "option_image_sets_json", None)
         )
@@ -174,11 +178,13 @@ class SurveyQuestionOut(BaseModel):
 class SurveyQuestionCreate(BaseModel):
     # 純顯示區塊（圖片、分頁等）可不填文字，由 _require_text_for_questions 驗證。
     question_text: str = Field("", max_length=1000)
+    description: str | None = Field(None, max_length=2000)
     question_type: QuestionType = QuestionType.TEXT
     is_required: bool = True
     options: list[str] = Field(
         default_factory=list, description="選項（SINGLE/MULTIPLE/RANKING 題型）"
     )
+    grid_columns: list[str] = Field(default_factory=list, max_length=20)
     option_image_sets: list[list[str]] = Field(
         default_factory=list, description="各選項的預覽圖片 URL，與 options 依序對應"
     )
@@ -205,6 +211,11 @@ class SurveyQuestionCreate(BaseModel):
     def validate_options(cls, v: list[str], info) -> list[str]:  # type: ignore[misc]
         return [o.strip() for o in v if o.strip()]
 
+    @field_validator("grid_columns")
+    @classmethod
+    def validate_grid_columns(cls, v: list[str]) -> list[str]:
+        return [column.strip() for column in v if column.strip()]
+
     @field_validator("option_image_sets")
     @classmethod
     def validate_option_image_sets(cls, v: list[list[str]]) -> list[list[str]]:
@@ -224,6 +235,22 @@ class SurveyQuestionCreate(BaseModel):
             raise ValueError("題目文字不可為空")
         if self.question_type == QuestionType.IMAGE and not self.image_url:
             raise ValueError("圖片題型需提供圖片")
+        if self.question_type == QuestionType.SINGLE_GRID:
+            if len(self.options) < 2:
+                raise ValueError("單選方格至少需要 2 列")
+            if len(self.grid_columns) < 2:
+                raise ValueError("單選方格至少需要 2 欄")
+            if len(self.options) > 50:
+                raise ValueError("單選方格最多 50 列")
+            if len(set(self.options)) != len(self.options):
+                raise ValueError("單選方格列標籤不可重複")
+            if len(set(self.grid_columns)) != len(self.grid_columns):
+                raise ValueError("單選方格欄標籤不可重複")
+        if self.question_type == QuestionType.MULTI_TEXT:
+            if len(self.options) != 4:
+                raise ValueError("四欄詳答必須設定 4 個欄位名稱")
+            if len(set(self.options)) != 4:
+                raise ValueError("四欄詳答欄位名稱不可重複")
         if (
             self.min_length is not None
             and self.max_length is not None
@@ -253,9 +280,11 @@ class SurveyQuestionCreate(BaseModel):
 
 class SurveyQuestionUpdate(BaseModel):
     question_text: str | None = Field(None, max_length=1000)
+    description: str | None = Field(None, max_length=2000)
     question_type: QuestionType | None = None
     is_required: bool | None = None
     options: list[str] | None = None
+    grid_columns: list[str] | None = Field(None, max_length=20)
     option_image_sets: list[list[str]] | None = None
     min_value: int | None = Field(None, ge=1, le=100)
     max_value: int | None = Field(None, ge=1, le=100)
@@ -269,6 +298,20 @@ class SurveyQuestionUpdate(BaseModel):
     condition: QuestionCondition | None = None
     option_config: OptionConfig | None = None
     order_index: int | None = Field(None, ge=0)
+
+    @field_validator("options")
+    @classmethod
+    def normalize_update_options(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        return [option.strip() for option in v if option.strip()]
+
+    @field_validator("grid_columns")
+    @classmethod
+    def normalize_update_grid_columns(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        return [column.strip() for column in v if column.strip()]
 
 
 class SurveyImageOut(BaseModel):
@@ -402,7 +445,7 @@ class SurveyUpdate(BaseModel):
 class AnswerSubmit(BaseModel):
     question_id: uuid.UUID
     answer_text: str | None = Field(None, max_length=5000)
-    answer_options: list[str] = Field(default_factory=list)
+    answer_options: list[Annotated[str, Field(max_length=5000)]] = Field(default_factory=list)
     other_text: str | None = Field(
         None, max_length=2000, description="多選題勾選「其他」時的補充文字"
     )
