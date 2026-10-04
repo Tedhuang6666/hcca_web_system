@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.models.shop import OrderStatus, ProductStatus, ShopDiscountType
 
@@ -482,6 +482,7 @@ class ShopPromotionCreate(BaseModel):
     ends_at: datetime | None = None
     max_uses: int | None = Field(None, ge=1)
     description: str | None = Field(None, max_length=500)
+    is_public: bool = True
 
 
 class ShopPromotionUpdate(BaseModel):
@@ -500,6 +501,14 @@ class ShopPromotionUpdate(BaseModel):
     max_uses: int | None = Field(None, ge=1)
     description: str | None = Field(None, max_length=500)
     is_active: bool | None = None
+    is_public: bool | None = None
+
+    @field_validator("is_public")
+    @classmethod
+    def reject_null_public_visibility(cls, value: bool | None) -> bool:
+        if value is None:
+            raise ValueError("優惠公開狀態不可為空")
+        return value
 
 
 class ShopPromotionTargetOut(BaseModel):
@@ -545,6 +554,7 @@ class ShopPromotionOut(BaseModel):
     max_uses: int | None = None
     used_count: int
     is_active: bool
+    is_public: bool
     description: str | None = None
     created_at: datetime
     updated_at: datetime

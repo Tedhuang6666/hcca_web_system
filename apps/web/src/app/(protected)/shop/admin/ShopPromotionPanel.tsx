@@ -20,6 +20,7 @@ type PromotionForm = {
   min_quantity: string;
   max_uses: string;
   description: string;
+  is_public: boolean;
 };
 
 const emptyForm: PromotionForm = {
@@ -34,6 +35,7 @@ const emptyForm: PromotionForm = {
   min_quantity: "1",
   max_uses: "",
   description: "",
+  is_public: true,
 };
 
 async function listAllActiveProducts() {
@@ -102,6 +104,7 @@ export default function ShopPromotionPanel() {
         min_quantity: Number(form.min_quantity) || 1,
         max_uses: form.max_uses ? Number(form.max_uses) : null,
         description: form.description.trim() || null,
+        is_public: form.is_public,
       };
       if (editingPromotionId) {
         await shopApi.updatePromotion(editingPromotionId, payload);
@@ -136,6 +139,7 @@ export default function ShopPromotionPanel() {
       min_quantity: String(promotion.min_quantity),
       max_uses: promotion.max_uses === null ? "" : String(promotion.max_uses),
       description: promotion.description ?? "",
+      is_public: promotion.is_public,
     });
     formSectionRef.current?.scrollIntoView({
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
@@ -270,6 +274,20 @@ export default function ShopPromotionPanel() {
             優惠碼（選填）
             <input className="input mt-1 w-full uppercase" value={form.code} onChange={(e) => update("code", e.target.value.toUpperCase())} placeholder="WELCOME10" autoCapitalize="characters" />
           </label>
+          <label className="flex min-h-11 items-start gap-2 text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
+            <input
+              className="mt-0.5"
+              type="checkbox"
+              checked={form.is_public}
+              onChange={(event) => update("is_public", event.target.checked)}
+            />
+            <span>
+              公開顯示優惠
+              <span className="mt-1 block text-[11px] font-normal" style={{ color: "var(--text-muted)" }}>
+                關閉後不會列在商品頁優惠清單；知道優惠碼的使用者仍可輸入使用。
+              </span>
+            </span>
+          </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             折扣類型
             <select className="input mt-1 w-full" value={form.discount_type} onChange={(e) => update("discount_type", e.target.value as ShopDiscountType)}>
@@ -353,6 +371,9 @@ export default function ShopPromotionPanel() {
                       <p className="font-medium" style={{ color: "var(--text-primary)" }}>{promotion.name}</p>
                       <span className="rounded-md px-2 py-1 text-[11px]" style={{ background: promotion.is_active ? "var(--success-dim)" : "var(--bg-elevated)", color: promotion.is_active ? "var(--success)" : "var(--text-muted)" }}>
                         {promotion.is_active ? "啟用中" : "已停用"}
+                      </span>
+                      <span className="rounded-md px-2 py-1 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                        {promotion.is_public ? "公開" : "隱藏"}
                       </span>
                     </div>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>

@@ -809,8 +809,14 @@ export default function ShopPage() {
   const [claimedPromotionIds, setClaimedPromotionIds] = useState<Set<string>>(() => new Set());
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
+  const [orderShortcutPortalReady, setOrderShortcutPortalReady] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOrderShortcutPortalReady(true);
+  }, []);
+
   const closeProduct = useCallback(() => {
     setOpenProduct(null);
   }, []);
@@ -1460,7 +1466,7 @@ export default function ShopPage() {
         </div>
       )}
 
-      {isLoggedIn && (
+      {isLoggedIn && orderShortcutPortalReady && createPortal(
         <Link
           href="/shop/orders"
           className="shop-public-order-shortcut"
@@ -1474,7 +1480,8 @@ export default function ShopPage() {
           {registrations.length > 0 && (
             <span className="shop-public-order-shortcut-count">{registrations.length}</span>
           )}
-        </Link>
+        </Link>,
+        document.body,
       )}
 
       {openProduct && (

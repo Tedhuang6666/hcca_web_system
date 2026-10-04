@@ -27834,6 +27834,11 @@ export interface components {
             discount_value: number;
             /** Ends At */
             ends_at?: string | null;
+            /**
+             * Is Public
+             * @default true
+             */
+            is_public: boolean;
             /** Max Uses */
             max_uses?: number | null;
             /**
@@ -27891,6 +27896,8 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
+            /** Is Public */
+            is_public: boolean;
             /** Max Uses */
             max_uses?: number | null;
             /** Min Order Price */
@@ -28035,6 +28042,8 @@ export interface components {
             ends_at?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Is Public */
+            is_public?: boolean | null;
             /** Max Uses */
             max_uses?: number | null;
             /** Min Order Price */

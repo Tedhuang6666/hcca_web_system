@@ -556,6 +556,7 @@ async def create_promotion(
         starts_at=data.starts_at,
         ends_at=data.ends_at,
         max_uses=data.max_uses,
+        is_public=data.is_public,
         description=data.description,
         created_by=created_by,
     )
@@ -587,6 +588,7 @@ async def list_public_promotions(
         or_(ShopPromotion.starts_at.is_(None), ShopPromotion.starts_at <= now),
         or_(ShopPromotion.ends_at.is_(None), ShopPromotion.ends_at >= now),
         or_(ShopPromotion.max_uses.is_(None), ShopPromotion.used_count < ShopPromotion.max_uses),
+        ShopPromotion.is_public.is_(True),
     ]
     if user_id is None:
         filters.append(
@@ -941,6 +943,7 @@ def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
         max_uses=promotion.max_uses,
         used_count=promotion.used_count,
         is_active=promotion.is_active,
+        is_public=promotion.is_public,
         description=promotion.description,
         created_at=promotion.created_at,
         updated_at=promotion.updated_at,
