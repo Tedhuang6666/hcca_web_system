@@ -16,11 +16,12 @@ from api.models.finance import (
     ExpenseClaimItem,
     ExpensePaymentStatus,
     ExpenseProcurementStatus,
+    FinanceLedger,
     FiscalPeriod,
     FundAccount,
 )
 from api.models.org import Org, Permission, Position, UserPosition
-from api.services.finance import initialize_ledger
+from api.services.finance import _parse_budget_workbook, initialize_ledger
 
 
 async def _grant(db_session, user, code: str) -> Org:
@@ -109,6 +110,27 @@ async def _make_ledger(db_session, org: Org | None = None):
         )
     )
     return ledger, period, fund, expense
+
+
+def test_budget_import_classifies_income_by_amount_cell_not_category_or_row() -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["項目", "細項", "數量", "單價", "總額(含稅)", "項目總額", "備註"])
+    sheet.append(["新生報到", "校商收入", "1式", "*", 21630, 20730, ""])
+    sheet["E2"].fill = PatternFill(fill_type="solid", fgColor="D9EAD3")
+    sheet.append([None, "午餐費", "9人", 100, 900, None, ""])
+    sheet.append(["聖誕傳情", "餅乾費用", "4000份", 30, 120000, 32000, ""])
+    sheet["F4"].fill = PatternFill(fill_type="solid", fgColor="D9EAD3")
+    sheet.append([None, "販售收入", "4000份", 40, 160000, None, ""])
+    sheet["E5"].fill = PatternFill(fill_type="solid", fgColor="D9EAD3")
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    expenses, income, skipped = _parse_budget_workbook(buffer.getvalue())
+
+    assert [row["detail"] for row in expenses] == ["午餐費", "餅乾費用"]
+    assert [row["name"] for row in income] == ["校商收入", "販售收入"]
+    assert skipped == []
 
 
 async def test_expense_claim_with_multiple_items_creates_pending_journal(
@@ -362,6 +384,8 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     sheet.append(["收入", None, None, None, None, None])
     sheet["A4"].fill = PatternFill(fill_type="solid", fgColor="FF92D050")
     sheet.append([None, "活動報名費", 1, 300, 300, "春季活動"])
+    sheet["E5"].fill = PatternFill(fill_type="solid", fgColor="D9EAD3")
+    sheet.append([None, "活動餐點", 1, 250, 250, "同一分類中的支出"])
     sheet.append(["行政雜支", "影印紙", 2, 100, 200, ""])
     file_buffer = BytesIO()
     workbook.save(file_buffer)
@@ -383,8 +407,10 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     )
 
     assert response.status_code == 201
-    assert response.json()["categories_created"] == 1
-    assert response.json()["allocations_created"] == 3
+    assert response.json()["budget"]["is_public"] is True
+    assert response.json()["submission"]["status"] == "approved"
+    assert response.json()["categories_created"] == 2
+    assert response.json()["allocations_created"] == 4
     assert response.json()["income_items_created"] == 1
     assert response.json()["skipped_rows"] == []
     detail = await authed_client_factory(member_user).get(
@@ -393,6 +419,7 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     assert detail.status_code == 200
     assert sorted(allocation["amount"] for allocation in detail.json()["allocations"]) == [
         200,
+        250,
         300,
         500,
     ]
@@ -411,7 +438,6 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
             "period_id": str(period.id),
             "name": "115 學年度預算",
             "budget_id": response.json()["budget"]["id"],
-            "replace_submission_id": response.json()["submission"]["id"],
         },
         files={
             "file": (
@@ -423,25 +449,23 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     )
     assert reimported.status_code == 201
     assert reimported.json()["budget"]["id"] == response.json()["budget"]["id"]
-    assert reimported.json()["submission"]["id"] == response.json()["submission"]["id"]
+    assert reimported.json()["submission"]["id"] != response.json()["submission"]["id"]
     detail_after_reimport = await authed_client_factory(member_user).get(
         f"/finance/budgets/{response.json()['budget']['id']}"
     )
-    assert [allocation["amount"] for allocation in detail_after_reimport.json()["allocations"]] == [
-        720
+    assert sorted(
+        allocation["amount"] for allocation in detail_after_reimport.json()["allocations"]
+    ) == [200, 250, 300, 500, 720]
+    assert [item["name"] for item in detail_after_reimport.json()["income_items"]] == [
+        "活動報名費"
     ]
-    assert detail_after_reimport.json()["income_items"] == []
-    assert "臨時支出" not in {node["name"] for node in detail_after_reimport.json()["nodes"]}
+    assert "臨時支出" in {node["name"] for node in detail_after_reimport.json()["nodes"]}
 
 
-async def test_budget_import_can_approve_with_date_and_requires_review_permission(
-    db_session, member_user, authed_client_factory, make_user
+async def test_budget_import_is_approved_without_review_permission(
+    db_session, member_user, authed_client_factory
 ) -> None:
     org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
-    approver = await make_user(email="budget-import-approver@school.edu")
-    await _grant_on_org(
-        db_session, approver, org, ["finance:budget", "finance:budget_review", "finance:view"]
-    )
     ledger, period, _, _ = await _make_ledger(db_session, org)
     workbook = Workbook()
     sheet = workbook.active
@@ -463,13 +487,84 @@ async def test_budget_import_can_approve_with_date_and_requires_review_permissio
         "council_approved_on": "2026-08-19",
     }
 
-    forbidden = await authed_client_factory(member_user).post(endpoint, data=form, files=upload)
-    assert forbidden.status_code == 403
-
-    approved = await authed_client_factory(approver).post(endpoint, data=form, files=upload)
+    approved = await authed_client_factory(member_user).post(endpoint, data=form, files=upload)
     assert approved.status_code == 201
     assert approved.json()["submission"]["status"] == "approved"
     assert approved.json()["submission"]["council_approved_on"] == "2026-08-19"
+
+
+async def test_budget_expense_without_items_is_visible_on_public_budget(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["項目", "細項", "數量", "單價", "總額(含稅)", "備註"])
+    sheet.append(["行政雜支", "文具費", "1式", "*", 2000, ""])
+    file_buffer = BytesIO()
+    workbook.save(file_buffer)
+    client = authed_client_factory(member_user)
+
+    imported = await client.post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data={"period_id": str(period.id), "name": "測試預算"},
+        files={
+            "file": (
+                "預算案.xlsx",
+                file_buffer.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert imported.status_code == 201
+    budget_id = imported.json()["budget"]["id"]
+    budget = await client.get(f"/finance/budgets/{budget_id}")
+    allocation_id = budget.json()["allocations"][0]["id"]
+
+    expense = await client.post(
+        f"/finance/budgets/{budget_id}/expenses",
+        json={
+            "allocation_id": allocation_id,
+            "entry_date": "2026-08-20",
+            "purpose": "文具補貨",
+            "total_amount": 950,
+            "items": [],
+        },
+    )
+    assert expense.status_code == 201
+    assert expense.json()["total_amount"] == 950
+    assert expense.json()["items"] == []
+
+    public = await client.get(f"/finance/public/budgets/{budget_id}")
+    assert public.status_code == 200
+    assert public.json()["expenses"][0]["purpose"] == "文具補貨"
+    assert public.json()["expenses"][0]["total_amount"] == 950
+    assert public.json()["expenses"][0]["items"] == []
+
+
+async def test_finance_test_reset_is_superuser_only_and_clears_finance_data(
+    db_session, member_user, authed_client_factory
+) -> None:
+    ledger, _, _, _ = await _make_ledger(db_session)
+    client = authed_client_factory(member_user)
+
+    forbidden = await client.delete("/finance/test-reset")
+    assert forbidden.status_code == 403
+    assert await db_session.scalar(
+        select(FinanceLedger.id).where(FinanceLedger.id == ledger.id)
+    ) == ledger.id
+
+    member_user.is_superuser = True
+    await db_session.flush()
+    cleared = await client.delete("/finance/test-reset")
+
+    assert cleared.status_code == 200
+    assert cleared.json()["records_deleted"] > 0
+    assert cleared.json()["evidence_files_failed"] == 0
+    assert await db_session.scalar(
+        select(FinanceLedger.id).where(FinanceLedger.id == ledger.id)
+    ) is None
 
 
 async def test_council_review_draft_has_a_public_page_without_internal_data(

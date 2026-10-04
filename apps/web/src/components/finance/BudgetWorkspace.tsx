@@ -90,11 +90,8 @@ export default function BudgetWorkspace({
   const [versionsOpen, setVersionsOpen] = useState(true);
   const [settlement, setSettlement] = useState<FinanceSettlement | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [councilApprovedOn, setCouncilApprovedOn] = useState(() => (
-    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date())
-  ));
+  const [councilApprovedOn, setCouncilApprovedOn] = useState("");
   const [quickExpenseAllocationId, setQuickExpenseAllocationId] = useState<string | null>(null);
-  const [importTarget, setImportTarget] = useState<"new" | "replace" | "supplemental">("new");
   const [isImporting, setIsImporting] = useState(false);
   const [editingAllocationId, setEditingAllocationId] = useState<string | null>(null);
   const [uploadingEvidenceId, setUploadingEvidenceId] = useState<string | null>(null);
@@ -110,8 +107,11 @@ export default function BudgetWorkspace({
       const selected = selectedId && next.some((budget) => budget.id === selectedId)
         ? selectedId
         : next[0]?.id;
-      if (selected) setDetail(await financeApi.getBudget(selected));
-      else setDetail(null);
+      if (selected) {
+        const selectedBudget = next.find((budget) => budget.id === selected);
+        setDetail(await financeApi.getBudget(selected));
+        if (selectedBudget) setPeriodId(selectedBudget.period_id);
+      } else setDetail(null);
     } finally {
       setIsLoading(false);
     }
@@ -160,76 +160,33 @@ export default function BudgetWorkspace({
     || detail?.submissions.find((item) => item.status === "draft" || item.status === "returned")
     || detail?.submissions.at(-1);
 
-  useEffect(() => {
-    if (!detail) {
-      setImportTarget("new");
-      return;
-    }
-    const editable = detail.submissions.some(
-      (item) => item.status === "draft" || item.status === "returned",
-    );
-    setImportTarget(editable ? "replace" : "supplemental");
-  }, [detail]);
-
   const refreshDetail = async () => {
     await load(detail?.id);
   };
 
-  const createBudget = async () => {
-    if (!periodId || !budgetName.trim()) return toast.error("請選擇期間並填寫預算名稱");
-    try {
-      const budget = await financeApi.createBudget(ledgerId, { period_id: periodId, name: budgetName.trim() });
-      setBudgetName("");
-      setDetail(await financeApi.getBudget(budget.id));
-      await load(budget.id);
-      toast.success("共同預算已建立，請建立初始預算案開始編列");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "建立預算失敗");
-    }
-  };
-
   const importBudget = async () => {
-    const importingIntoCurrent = Boolean(detail && importTarget !== "new");
-    const targetPeriodId = importingIntoCurrent ? detail!.period_id : periodId;
-    const targetName = importingIntoCurrent ? detail!.name : budgetName.trim();
-    if (!targetPeriodId || !targetName || !importFile) {
+    const existingBudget = budgets.find((budget) => budget.period_id === periodId);
+    const targetName = existingBudget?.name || budgetName.trim();
+    if (!periodId || !targetName || !importFile) {
       return toast.error("請選擇期間、填寫預算名稱並選擇 xlsx 檔案");
-    }
-    if (canReview && !councilApprovedOn) return toast.error("請填寫議會通過日期");
-    if (importTarget === "new" && budgets.some((budget) => budget.period_id === targetPeriodId)) {
-      return toast.error("這個會計期間已有共同預算，請改選「更新目前草案」或「建立追加草案」");
-    }
-    if (importTarget === "replace" && (!activeSubmission || !["draft", "returned"].includes(activeSubmission.status))) {
-      return toast.error("只有草案或退回補正的預算案可以重新匯入覆寫");
-    }
-    if (importTarget === "replace") {
-      const confirmed = await confirm({
-        title: "以檔案更新目前草案？",
-        description: "目前草案的預算明細與已附憑證會被這份檔案取代；分類階層會保留並自動對應相同名稱的項目。",
-        confirmLabel: "確認覆寫草案",
-        danger: true,
-      });
-      if (!confirmed) return;
     }
     try {
       setIsImporting(true);
       const result = await financeApi.importBudget(ledgerId, {
         file: importFile,
-        period_id: targetPeriodId,
+        period_id: periodId,
         name: targetName,
         proposing_org_id: allocationOrgId || undefined,
-        budget_id: importingIntoCurrent ? detail!.id : undefined,
-        replace_submission_id: importTarget === "replace" ? activeSubmission?.id : undefined,
-        council_approved_on: canReview ? councilApprovedOn : undefined,
+        budget_id: existingBudget?.id,
+        council_approved_on: councilApprovedOn || undefined,
       });
-      if (!importingIntoCurrent) setBudgetName("");
+      if (!existingBudget) setBudgetName("");
       setImportFile(null);
       setSelectedSubmissionId(result.submission.id);
       await load(result.budget.id);
       const skipped = result.skipped_rows.length > 0 ? `，略過 ${result.skipped_rows.length} 列` : "";
-      const approvalLabel = canReview ? "並核准" : "為草案";
       toast.success(
-        `已匯入${approvalLabel}：${result.allocations_created} 筆支出、`
+        `已匯入並公開：${result.allocations_created} 筆支出、`
         + `${result.income_items_created} 筆收入${skipped}`,
       );
     } catch (error) {
@@ -582,9 +539,7 @@ export default function BudgetWorkspace({
   const councilReviewHref = activeSubmission
     ? `/public/budgets/${detail?.id}?review_submission_id=${activeSubmission.id}`
     : "";
-  const importingIntoCurrent = Boolean(detail && importTarget !== "new");
-  const importPeriodId = importingIntoCurrent ? detail!.period_id : periodId;
-  const importName = importingIntoCurrent ? detail!.name : budgetName;
+  const existingBudgetForPeriod = budgets.find((budget) => budget.period_id === periodId);
   return (
     <section
       className="finance-budget"
@@ -593,8 +548,8 @@ export default function BudgetWorkspace({
     >
       <header className="finance-budget__header">
         <div>
-          <h2 id="budget-heading">共同預算</h2>
-          <p>核准預算可直接登錄支出、逐項列明購買內容並附上憑證；登錄後即納入決算。</p>
+          <h2 id="budget-heading">預算公開與核銷</h2>
+          <p>上傳已核定預算後立即公開；之後登錄用途、金額與憑證，品項明細可選填。</p>
         </div>
         {detail && (
           <div className={`finance-budget__publication-status ${detail.is_public ? "is-public" : ""}`}>
@@ -613,6 +568,8 @@ export default function BudgetWorkspace({
               value={detail?.id || ""}
               onChange={(event) => {
                 setSelectedSubmissionId("");
+                const selectedBudget = budgets.find((budget) => budget.id === event.target.value);
+                if (selectedBudget) setPeriodId(selectedBudget.period_id);
                 void financeApi.getBudget(event.target.value).then(setDetail);
               }}
             >
@@ -633,16 +590,18 @@ export default function BudgetWorkspace({
 
       {canManage && (
         <details className="finance-budget__create" open={!detail}>
-          <summary><Plus size={16} aria-hidden="true" />{detail ? "重新匯入或建立追加預算" : "建立或匯入共同預算"}</summary>
+          <summary><FileUp size={16} aria-hidden="true" />{detail ? "匯入另一份已核定預算" : "匯入已核定預算"}</summary>
           <div className="finance-budget__create-fields">
-            {detail && <fieldset className="finance-budget__import-target"><legend>匯入方式</legend><label><input type="radio" name="budget-import-target" value="replace" checked={importTarget === "replace"} disabled={!activeSubmission || !["draft", "returned"].includes(activeSubmission.status)} onChange={() => setImportTarget("replace")} />更新目前草案<span>取代目前草案的明細與憑證</span></label><label><input type="radio" name="budget-import-target" value="supplemental" checked={importTarget === "supplemental"} onChange={() => setImportTarget("supplemental")} />建立追加草案<span>保留既有版本，另建一份追加案</span></label><label><input type="radio" name="budget-import-target" value="new" checked={importTarget === "new"} onChange={() => setImportTarget("new")} />建立另一期間預算<span>僅適用於尚無共同預算的會計期間</span></label></fieldset>}
-            <label>會計期間<select className="input" value={importPeriodId} disabled={importingIntoCurrent} onChange={(event) => setPeriodId(event.target.value)}><option value="">選擇會計期間</option>{periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select></label>
-            <label>預算名稱<input className="input" value={importName} disabled={importingIntoCurrent} onChange={(event) => setBudgetName(event.target.value)} placeholder="例如：115 學年度共同預算" /></label>
-            {!importingIntoCurrent && <button className="btn btn-secondary" onClick={() => void createBudget()}><Plus size={16} aria-hidden="true" />空白建立</button>}
+            <label>會計期間<select className="input" value={periodId} onChange={(event) => setPeriodId(event.target.value)}><option value="">選擇會計期間</option>{periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select></label>
+            {existingBudgetForPeriod ? (
+              <p>將匯入「{existingBudgetForPeriod.name}」的新版本；既有預算與核銷紀錄會保留。</p>
+            ) : (
+              <label>預算名稱<input className="input" value={budgetName} onChange={(event) => setBudgetName(event.target.value)} placeholder="例如：115 學年度上學期預算" /></label>
+            )}
             <label className="btn btn-secondary finance-budget__file"><FileUp size={16} aria-hidden="true" /><span>{importFile ? importFile.name : "選擇 xlsx"}</span><input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => setImportFile(event.target.files?.[0] || null)} /></label>
-            {canReview && <label className="finance-budget__approval-date">議會通過日期<input className="input" type="date" required value={councilApprovedOn} onChange={(event) => setCouncilApprovedOn(event.target.value)} /></label>}
-            <button className="btn btn-primary" disabled={isImporting || !importFile} onClick={() => void importBudget()}><FileSpreadsheet size={16} aria-hidden="true" />{isImporting ? "正在匯入…" : canReview ? "匯入並核准" : importTarget === "replace" ? "覆寫草案並匯入" : importTarget === "supplemental" ? "匯入為追加草案" : "匯入並建立草案"}</button>
-            {canReview ? <p className="finance-budget__import-note">上傳後會直接標記已核准，支出可立即登錄。</p> : <p className="finance-budget__import-note">目前權限可建立草案；核准須由預算審核者處理。</p>}
+            <label className="finance-budget__approval-date">議會通過日期（選填）<input className="input" type="date" value={councilApprovedOn} onChange={(event) => setCouncilApprovedOn(event.target.value)} /></label>
+            <button className="btn btn-primary" disabled={isImporting || !importFile || !periodId || (!existingBudgetForPeriod && !budgetName.trim())} onClick={() => void importBudget()}><FileSpreadsheet size={16} aria-hidden="true" />{isImporting ? "正在匯入…" : "匯入並公開"}</button>
+            <p className="finance-budget__import-note">預算檔會直接標記為已核定並公開；同一期間再匯入時會新增版本，不覆蓋原資料。</p>
           </div>
         </details>
       )}

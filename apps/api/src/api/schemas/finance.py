@@ -249,8 +249,9 @@ class FinanceBudgetExpenseCreate(BaseModel):
     allocation_id: uuid.UUID
     entry_date: date
     purpose: str = Field(min_length=1, max_length=300)
+    total_amount: int | None = Field(default=None, gt=0, le=2_000_000_000)
     note: str | None = Field(default=None, max_length=2000)
-    items: list[FinanceBudgetExpenseItemCreate] = Field(min_length=1, max_length=100)
+    items: list[FinanceBudgetExpenseItemCreate] = Field(default_factory=list, max_length=100)
     evidence: list[FinanceBudgetExpenseEvidenceIn] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
@@ -258,6 +259,8 @@ class FinanceBudgetExpenseCreate(BaseModel):
         self.purpose = self.purpose.strip()
         if not self.purpose:
             raise ValueError("請填寫支出用途")
+        if not self.items and self.total_amount is None:
+            raise ValueError("請填寫支出總額，或新增至少一項細目")
         return self
 
 
@@ -353,6 +356,12 @@ class FinanceEvidenceUploadOut(BaseModel):
     filename: str
     content_type: str
     file_size: int
+
+
+class FinanceResetOut(BaseModel):
+    records_deleted: int
+    evidence_files_deleted: int
+    evidence_files_failed: int
 
 
 class FinanceExpenseClaimEvidenceOut(FinanceEvidenceUploadOut):

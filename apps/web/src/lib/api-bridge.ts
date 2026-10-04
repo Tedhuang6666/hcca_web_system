@@ -313,6 +313,7 @@ export type FinanceBudgetExpenseOut = components['schemas']['FinanceBudgetExpens
 export type FinanceEvidenceUploadOut = components['schemas']['FinanceEvidenceUploadOut']
 export type FinanceExpenseClaimEvidenceOut = components['schemas']['FinanceExpenseClaimEvidenceOut']
 export type FinanceExpenseClaimItemOut = components['schemas']['FinanceExpenseClaimItemOut']
+export type FinanceResetOut = components['schemas']['FinanceResetOut']
 export type FinanceSettlementLineOut = components['schemas']['FinanceSettlementLineOut']
 export type FinanceSettlementOut = components['schemas']['FinanceSettlementOut']
 export type FreezeRequest = components['schemas']['FreezeRequest']

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 import uuid
 from datetime import date
@@ -67,6 +68,7 @@ from api.schemas.finance import (
     FinanceBudgetExpenseOut,
     FinanceEvidenceUploadOut,
     FinanceExpenseClaimItemOut,
+    FinanceResetOut,
     FinanceSettlementOut,
     FundAccountCreate,
     FundAccountOut,
@@ -92,6 +94,7 @@ from api.services.permission import get_user_permission_codes_for_org
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/finance", tags=["財務總帳"])
+logger = logging.getLogger(__name__)
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 MAX_BUDGET_IMPORT_BYTES = 10 * 1024 * 1024
@@ -388,9 +391,6 @@ async def import_budget(
         raise HTTPException(413, "預算匯入檔不可超過 10 MB")
     if not file_bytes.startswith(b"PK\x03\x04"):
         raise HTTPException(422, "檔案不是有效的 xlsx 格式")
-    ledger = await service.get_ledger(db, ledger_id)
-    if council_approved_on is not None:
-        await _assert_ledger_permission(db, user, ledger, PermissionCode.FINANCE_BUDGET_REVIEW)
     try:
         (
             budget,
@@ -407,36 +407,25 @@ async def import_budget(
             title.strip() if title else None,
             file_bytes,
             user.id,
+            council_approved_on,
             proposing_org_id,
             budget_id,
             replace_submission_id,
         )
-        if council_approved_on is not None:
-            await service.submit_budget_submission(db, submission.id)
-            submission = await service.review_budget_submission(
-                db,
-                submission.id,
-                BudgetReview(
-                    status=BudgetSubmissionStatus.APPROVED,
-                    council_approved_on=council_approved_on,
-                ),
-                user.id,
-            )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    if council_approved_on is not None:
-        await audit_svc.record(
-            db,
-            entity_type="finance_budget_submission",
-            entity_id=str(submission.id),
-            action="finance.budget_import_approve",
-            actor_id=str(user.id),
-            actor_email=user.email,
-            summary=(
-                f"匯入並核准預算案：{submission.title}；議會通過日期 "
-                f"{council_approved_on.isoformat()}"
-            ),
-        )
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_submission",
+        entity_id=str(submission.id),
+        action="finance.budget_import_approve",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=(
+            f"匯入並公開已核定預算案：{submission.title}；議會通過日期 "
+            f"{council_approved_on.isoformat() if council_approved_on else '未填'}"
+        ),
+    )
     await db.commit()
     return BudgetImportOut(
         budget=BudgetOut.model_validate(budget),
@@ -445,6 +434,40 @@ async def import_budget(
         allocations_created=allocations,
         income_items_created=income_items,
         skipped_rows=skipped,
+    )
+
+
+@router.delete("/test-reset", response_model=FinanceResetOut)
+async def clear_all_finance_test_data(db: DbDep, user: CurrentUser) -> FinanceResetOut:
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="僅系統管理員可清除全部財務資料")
+
+    deleted_rows, storage_keys = await service.clear_all_finance_data(db)
+    await audit_svc.record(
+        db,
+        entity_type="finance_data",
+        entity_id="all",
+        action="finance.test_reset",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"測試用清除全部財務資料：刪除 {deleted_rows} 筆資料列",
+    )
+    await db.commit()
+
+    files_deleted = 0
+    files_failed = 0
+    storage = get_storage()
+    for storage_key in storage_keys:
+        try:
+            await storage.delete(storage_key)
+            files_deleted += 1
+        except Exception:
+            files_failed += 1
+            logger.exception("清除財務測試資料時無法刪除憑證檔")
+    return FinanceResetOut(
+        records_deleted=deleted_rows,
+        evidence_files_deleted=files_deleted,
+        evidence_files_failed=files_failed,
     )
 
 

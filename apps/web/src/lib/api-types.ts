@@ -5783,6 +5783,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/test-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Clear All Finance Test Data */
+        delete: operations["clear_all_finance_test_data_finance_test_reset_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -18488,11 +18505,13 @@ export interface components {
             /** Evidence */
             evidence?: components["schemas"]["FinanceBudgetExpenseEvidenceIn"][];
             /** Items */
-            items: components["schemas"]["FinanceBudgetExpenseItemCreate"][];
+            items?: components["schemas"]["FinanceBudgetExpenseItemCreate"][];
             /** Note */
             note?: string | null;
             /** Purpose */
             purpose: string;
+            /** Total Amount */
+            total_amount?: number | null;
         };
         /** FinanceBudgetExpenseEvidenceIn */
         FinanceBudgetExpenseEvidenceIn: {
@@ -18667,6 +18686,15 @@ export interface components {
             unit: string;
             /** Unit Price */
             unit_price: number;
+        };
+        /** FinanceResetOut */
+        FinanceResetOut: {
+            /** Evidence Files Deleted */
+            evidence_files_deleted: number;
+            /** Evidence Files Failed */
+            evidence_files_failed: number;
+            /** Records Deleted */
+            records_deleted: number;
         };
         /** FinanceSettlementLineOut */
         FinanceSettlementLineOut: {
@@ -43194,6 +43222,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_all_finance_test_data_finance_test_reset_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceResetOut"];
                 };
             };
         };
