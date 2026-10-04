@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from celery import current_app
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 _UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f-]{27,}\b", re.IGNORECASE)
 _NUMBER_RE = re.compile(r"\b\d+\b")
+_ASYNCPG_PREPARED_STATEMENT_RE = re.compile(
+    r"__asyncpg_(?:stmt_)?[A-Za-z0-9-]+__",
+    re.IGNORECASE,
+)
 _WHITESPACE_RE = re.compile(r"\s+")
 _CLIENT_TRANSIENT_QUERY_RE = re.compile(r"[?#][^\s\]]*")
 _CLIENT_TRANSIENT_ASSET_RE = re.compile(r"\b[a-f0-9]{16,}\b", re.IGNORECASE)
@@ -74,7 +78,11 @@ def sanitize_incident_details(value: Any, *, depth: int = 0) -> Any:
 
 def normalize_error_message(message: str) -> str:
     """Remove request-specific values before generating an incident fingerprint."""
-    normalized = _UUID_RE.sub("{uuid}", sanitize_incident_text(message, 1000))
+    normalized = _ASYNCPG_PREPARED_STATEMENT_RE.sub(
+        "__asyncpg_stmt_{name}__",
+        sanitize_incident_text(message, 1000),
+    )
+    normalized = _UUID_RE.sub("{uuid}", normalized)
     normalized = _NUMBER_RE.sub("{id}", normalized)
     return _WHITESPACE_RE.sub(" ", normalized).strip()[:500]
 
@@ -443,6 +451,33 @@ async def list_incidents(
     if status:
         stmt = stmt.where(SystemIncident.status == status)
     return list((await session.scalars(stmt)).all())
+
+
+async def count_incident_metrics(session: AsyncSession) -> dict[str, int]:
+    """Count all incidents for summary cards independently of the paged list."""
+    active_status = SystemIncident.status.in_(_ACTIVE_STATUSES)
+    row = (
+        await session.execute(
+            select(
+                func.count(SystemIncident.id).filter(active_status).label("active_issues"),
+                func.count(SystemIncident.id)
+                .filter(and_(active_status, SystemIncident.occurrence_count > 1))
+                .label("repeated_active_issues"),
+                func.count(SystemIncident.id)
+                .filter(SystemIncident.status == IncidentStatus.REGRESSION)
+                .label("regressions"),
+                func.count(SystemIncident.id)
+                .filter(SystemIncident.status == IncidentStatus.RESOLVED)
+                .label("resolved_issues"),
+            )
+        )
+    ).one()
+    return {
+        "active_issues": int(row.active_issues),
+        "repeated_active_issues": int(row.repeated_active_issues),
+        "regressions": int(row.regressions),
+        "resolved_issues": int(row.resolved_issues),
+    }
 
 
 async def get_incident(session: AsyncSession, incident_id: UUID) -> SystemIncident | None:
