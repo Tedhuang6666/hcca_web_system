@@ -43,6 +43,20 @@ function selectorKey(sel: RecipientSelector): string {
   });
 }
 
+function selectorForPicker(sel: RecipientSelector): RecipientSelector {
+  if (sel.include_all) return { ...EMPTY, include_all: true };
+  if (sel.include_school) return { ...EMPTY, include_school: true };
+  if ((sel.external_emails ?? []).length > 0) {
+    return { ...EMPTY, external_emails: sel.external_emails };
+  }
+  if ((sel.position_ids ?? []).length > 0) {
+    return { ...EMPTY, position_ids: sel.position_ids };
+  }
+  if ((sel.org_ids ?? []).length > 0) return { ...EMPTY, org_ids: sel.org_ids };
+  if ((sel.user_ids ?? []).length > 0) return { ...EMPTY, user_ids: sel.user_ids };
+  return EMPTY;
+}
+
 interface RecipientPickerProps {
   value?: RecipientSelector;
   onChange: (sel: RecipientSelector) => void;
@@ -64,9 +78,21 @@ export default function RecipientPicker({ value, onChange, disabled = false }: R
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const valueKey = value ? selectorKey(value) : "";
+  const synchronizedValueKeyRef = useRef<string | null>(null);
+  const pendingSyncKeyRef = useRef<string | null>(null);
+  const lastEmittedValueKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!value) return;
+    if (synchronizedValueKeyRef.current === valueKey) return;
+    synchronizedValueKeyRef.current = valueKey;
+    if (lastEmittedValueKeyRef.current === valueKey) {
+      lastEmittedValueKeyRef.current = null;
+      return;
+    }
+
+    // 外部套用名單時，先同步內部控制項，避免用舊模式回寫覆蓋新值。
+    pendingSyncKeyRef.current = selectorKey(selectorForPicker(value));
     if (value.include_all) {
       setMode("all");
       setAllScope("everyone");
@@ -116,7 +142,13 @@ export default function RecipientPicker({ value, onChange, disabled = false }: R
     } else {
       sel = { ...EMPTY, include_school: true };
     }
-    if (valueKey && selectorKey(sel) === valueKey) return;
+    const nextValueKey = selectorKey(sel);
+    if (pendingSyncKeyRef.current !== null) {
+      if (pendingSyncKeyRef.current === nextValueKey) pendingSyncKeyRef.current = null;
+      return;
+    }
+    if (nextValueKey === valueKey || lastEmittedValueKeyRef.current === nextValueKey) return;
+    lastEmittedValueKeyRef.current = nextValueKey;
     onChangeRef.current(sel);
   }, [mode, allScope, selectedUsers, externalEmailsText, selectedPos, selectedOrgs, valueKey]);
 

@@ -2275,10 +2275,11 @@ function ComposeInner() {
               />
             ) : (
               <div
+                role={previewError ? "alert" : "status"}
                 className="flex h-[520px] items-center justify-center text-sm"
                 style={{ color: "var(--text-muted)" }}
               >
-                {previewError || "填寫主旨後即可預覽"}
+                {previewError || (subject.trim() ? "正在產生預覽…" : "填寫主旨後即可預覽")}
               </div>
             )}
           </section>
