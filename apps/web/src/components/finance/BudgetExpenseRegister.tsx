@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileCheck2, Paperclip, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
+import { FileCheck2, Paperclip, Pencil, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
 import type {
@@ -71,7 +71,9 @@ export default function BudgetExpenseRegister({
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [allocationId, setAllocationId] = useState("");
+  const [departmentOrgId, setDepartmentOrgId] = useState("");
   const [requestedNodeId, setRequestedNodeId] = useState<string | null>(null);
   const [entryDate, setEntryDate] = useState(taiwanToday);
   const [purpose, setPurpose] = useState("");
@@ -117,6 +119,7 @@ export default function BudgetExpenseRegister({
     }
     setRequestedNodeId(requested);
     setAllocationId(matching.length === 1 ? matching[0].allocation.id : "");
+    if (matching.length === 1) setDepartmentOrgId(matching[0].allocation.proposing_org_id);
     setPurpose(matching[0].purpose);
     setIsOpen(true);
     onQuickRegistrationHandled();
@@ -134,7 +137,9 @@ export default function BudgetExpenseRegister({
     : Number(totalAmount) || 0;
 
   const resetForm = () => {
+    setEditingExpenseId(null);
     setAllocationId("");
+    setDepartmentOrgId("");
     setRequestedNodeId(null);
     setEntryDate(taiwanToday());
     setPurpose("");
@@ -148,7 +153,10 @@ export default function BudgetExpenseRegister({
   const addFiles = (selected: FileList | null) => {
     if (!selected?.length) return;
     const nextFiles = Array.from(selected);
-    if (files.length + nextFiles.length > 20) {
+    const existingEvidenceCount = editingExpenseId
+      ? expenses.find((expense) => expense.id === editingExpenseId)?.evidence.length || 0
+      : 0;
+    if (files.length + existingEvidenceCount + nextFiles.length > 20) {
       toast.error("一筆核銷最多附上 20 份憑證");
       return;
     }
@@ -159,9 +167,39 @@ export default function BudgetExpenseRegister({
     setFiles((current) => [...current, ...nextFiles]);
   };
 
+  const editExpense = (expense: FinanceBudgetExpenseOut) => {
+    setEditingExpenseId(expense.id);
+    setAllocationId(expense.allocation_id);
+    setDepartmentOrgId(expense.department_org_id);
+    setRequestedNodeId(null);
+    setEntryDate(expense.entry_date);
+    setPurpose(expense.purpose);
+    setNote(expense.note || "");
+    setItems(expense.items.length > 0 ? expense.items.map((item) => ({
+      name: item.name,
+      unit_price: String(item.unit_price),
+      tax_rate: String(item.tax_rate),
+      quantity: String(item.quantity),
+      unit: item.unit,
+    })) : [emptyItem()]);
+    setHasItemDetails(expense.items.length > 0);
+    setTotalAmount(String(expense.total_amount));
+    setFiles([]);
+    setIsOpen(true);
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  };
+
+  const cancelExpenseEdit = () => {
+    resetForm();
+    setIsOpen(false);
+  };
+
   const saveExpense = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!allocationId) return toast.error("請選擇一筆已核准的預算明細");
+    if (!departmentOrgId) return toast.error("請選擇支出部門");
     if (!purpose.trim()) return toast.error("請填寫支出用途");
     if (hasItemDetails && items.some(
       (item) => !item.name.trim() || !item.unit.trim() || itemAmount(item) <= 0,
@@ -174,6 +212,7 @@ export default function BudgetExpenseRegister({
 
     setIsSaving(true);
     const savedAllocationId = allocationId;
+    const savedDepartmentOrgId = departmentOrgId;
     const savedNodeId = requestedNodeId
       || approvedAllocations.find(({ allocation }) => allocation.id === allocationId)?.allocation.node_id
       || null;
@@ -192,8 +231,9 @@ export default function BudgetExpenseRegister({
           };
         }),
       );
-      await financeApi.createBudgetExpense(budgetId, {
+      const body = {
         allocation_id: allocationId,
+        department_org_id: departmentOrgId,
         entry_date: entryDate,
         purpose: purpose.trim(),
         ...(!hasItemDetails ? { total_amount: Number(totalAmount) } : {}),
@@ -206,16 +246,27 @@ export default function BudgetExpenseRegister({
           unit: item.unit.trim(),
         })) : [],
         evidence,
-      });
+      };
+      if (editingExpenseId) {
+        await financeApi.updateBudgetExpense(budgetId, editingExpenseId, body);
+      } else {
+        await financeApi.createBudgetExpense(budgetId, body);
+      }
+      const wasEditing = Boolean(editingExpenseId);
       resetForm();
-      setRequestedNodeId(savedNodeId);
-      setAllocationId(savedAllocationId);
-      setPurpose(savedPurpose);
-      setIsOpen(true);
+      if (wasEditing) {
+        setIsOpen(false);
+      } else {
+        setRequestedNodeId(savedNodeId);
+        setAllocationId(savedAllocationId);
+        setDepartmentOrgId(savedDepartmentOrgId);
+        setPurpose(savedPurpose);
+        setIsOpen(true);
+      }
       await onRecorded();
-      toast.success("支出已登記");
+      toast.success(wasEditing ? "支出已更新" : "支出已登記");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "登記支出失敗");
+      toast.error(error instanceof Error ? error.message : editingExpenseId ? "更新支出失敗" : "登記支出失敗");
     } finally {
       setIsSaving(false);
     }
@@ -225,13 +276,13 @@ export default function BudgetExpenseRegister({
     <section className="finance-budget__section finance-budget-expenses" aria-labelledby="budget-expenses-heading">
       <header>
         <div>
-          <h3 id="budget-expenses-heading">登記支出</h3>
+          <h3 id="budget-expenses-heading">{editingExpenseId ? "編輯已登記支出" : "登記支出"}</h3>
           <p>從執行表選定預算後，填寫日期、用途與金額；一次採購可登錄多項品目，同筆預算也能分次核銷。</p>
         </div>
         {canRecord && approvedAllocations.length > 0 && (
-          <button className="btn btn-primary" type="button" onClick={() => setIsOpen((value) => !value)}>
+          <button className="btn btn-primary" type="button" onClick={() => editingExpenseId ? cancelExpenseEdit() : setIsOpen((value) => !value)}>
             {isOpen ? <X size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
-            {isOpen ? "收起表單" : "登記支出"}
+            {editingExpenseId ? "取消修改" : isOpen ? "收起表單" : "登記支出"}
           </button>
         )}
       </header>
@@ -245,12 +296,24 @@ export default function BudgetExpenseRegister({
             </label>
             <label>
               對應預算明細
-              <select className="input" required value={allocationId} onChange={(event) => setAllocationId(event.target.value)}>
+              <select className="input" required value={allocationId} onChange={(event) => {
+                const selected = approvedAllocations.find(({ allocation }) => allocation.id === event.target.value);
+                setAllocationId(event.target.value);
+                setDepartmentOrgId(selected?.allocation.proposing_org_id || "");
+              }}>
                 <option value="">選擇預算項目</option>
                 {visibleAllocations.map(({ allocation, label }) => (
                   <option key={allocation.id} value={allocation.id}>{label}</option>
                 ))}
               </select>
+            </label>
+            <label>
+              支出部門
+              <select className="input" required value={departmentOrgId} onChange={(event) => setDepartmentOrgId(event.target.value)}>
+                <option value="">選擇提出部門</option>
+                {orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+              </select>
+              <small>預設沿用預算明細部門，可依實際支出改選。</small>
             </label>
             {requestedNodeId && (
               <button
@@ -259,6 +322,7 @@ export default function BudgetExpenseRegister({
                 onClick={() => {
                   setRequestedNodeId(null);
                   setAllocationId("");
+                  setDepartmentOrgId("");
                 }}
               >
                 改選其他預算項目
@@ -344,7 +408,7 @@ export default function BudgetExpenseRegister({
           <footer>
             <span>支出合計<strong aria-live="polite">NT${total.toLocaleString()}</strong></span>
             <button className="btn btn-primary" type="submit" disabled={isSaving}>
-              <Save size={16} aria-hidden="true" />{isSaving ? "正在儲存…" : "儲存支出"}
+              <Save size={16} aria-hidden="true" />{isSaving ? "正在儲存…" : editingExpenseId ? "更新支出" : "儲存支出"}
             </button>
           </footer>
           <p className="finance-budget-expenses__visibility">
@@ -359,9 +423,10 @@ export default function BudgetExpenseRegister({
             <li key={expense.id}>
               <div className="finance-budget-expenses__record">
                 <time dateTime={expense.entry_date}>{expense.entry_date.replaceAll("-", "/")}</time>
-                <div><strong>{expense.purpose}</strong><small>{expense.allocation_name}</small></div>
+                <div><strong>{expense.purpose}</strong><small>{expense.allocation_name} · 支出部門：{expense.department_name}</small></div>
                 <b>NT${expense.total_amount.toLocaleString()}</b>
               </div>
+              {canRecord && <div className="finance-budget-expenses__actions"><button className="btn btn-secondary" type="button" onClick={() => editExpense(expense)}><Pencil size={14} aria-hidden="true" />編輯支出</button></div>}
               {expense.items.length > 0 && (
                 <ul className="finance-budget-expenses__details">
                   {expense.items.map((item) => (

@@ -434,6 +434,9 @@ class FinanceBudgetExpense(Base, TimestampMixin):
     allocation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("finance_budget_allocations.id"), nullable=False
     )
+    department_org_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orgs.id"), nullable=False
+    )
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
     purpose: Mapped[str] = mapped_column(String(300), nullable=False)
     total_amount: Mapped[int] = mapped_column(Integer, nullable=False)

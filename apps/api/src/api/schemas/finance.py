@@ -222,6 +222,17 @@ class BudgetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
 
 
+class BudgetUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+
+    @model_validator(mode="after")
+    def normalize_name(self) -> BudgetUpdate:
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("請填寫預算名稱")
+        return self
+
+
 class FinanceBudgetExpenseItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     unit_price: int = Field(gt=0, le=2_000_000_000)
@@ -247,6 +258,7 @@ class FinanceBudgetExpenseEvidenceIn(BaseModel):
 
 class FinanceBudgetExpenseCreate(BaseModel):
     allocation_id: uuid.UUID
+    department_org_id: uuid.UUID | None = None
     entry_date: date
     purpose: str = Field(min_length=1, max_length=300)
     total_amount: int | None = Field(default=None, gt=0, le=2_000_000_000)
@@ -262,6 +274,10 @@ class FinanceBudgetExpenseCreate(BaseModel):
         if not self.items and self.total_amount is None:
             raise ValueError("請填寫支出總額，或新增至少一項細目")
         return self
+
+
+class FinanceBudgetExpenseUpdate(FinanceBudgetExpenseCreate):
+    """完整更新一筆支出；未提供部門時沿用所選預算明細的提出部門。"""
 
 
 class BudgetSubmissionCreate(BaseModel):
@@ -320,6 +336,7 @@ class BudgetAllocationUpdate(BaseModel):
     unit: str | None = Field(default=None, min_length=1, max_length=32)
     unit_price: int | None = Field(default=None, gt=0, le=2_000_000_000)
     note: str | None = Field(default=None, max_length=2000)
+    proposing_org_id: uuid.UUID | None = None
     reason: str = Field(min_length=1, max_length=500)
 
 
@@ -414,6 +431,8 @@ class FinanceBudgetExpenseOut(BaseModel):
     id: uuid.UUID
     budget_id: uuid.UUID
     allocation_id: uuid.UUID
+    department_org_id: uuid.UUID
+    department_name: str
     allocation_node_id: uuid.UUID
     allocation_name: str
     entry_date: date

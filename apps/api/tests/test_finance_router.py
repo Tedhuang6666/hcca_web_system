@@ -530,9 +530,11 @@ async def test_budget_import_is_approved_without_review_permission(
 
 
 async def test_budget_expense_without_items_is_visible_on_public_budget(
-    db_session, member_user, authed_client_factory
+    db_session, member_user, make_user, client, authed_client_factory
 ) -> None:
     org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    viewer = await make_user(email="budget-expense-viewer@school.edu")
+    await _grant_on_org(db_session, viewer, org, ["finance:view"])
     ledger, period, _, _ = await _make_ledger(db_session, org)
     workbook = Workbook()
     sheet = workbook.active
@@ -575,12 +577,49 @@ async def test_budget_expense_without_items_is_visible_on_public_budget(
     assert expense.status_code == 201
     assert expense.json()["total_amount"] == 950
     assert expense.json()["items"] == []
+    assert expense.json()["department_org_id"] == str(org.id)
+    assert expense.json()["department_name"] == org.name
+
+    other_department = Org(name="活動部")
+    db_session.add(other_department)
+    await db_session.flush()
+    update_path = f"/finance/budgets/{budget_id}/expenses/{expense.json()['id']}"
+    update_body = {
+        "allocation_id": allocation_id,
+        "department_org_id": str(other_department.id),
+        "entry_date": "2026-08-21",
+        "purpose": "文具與紙張補貨",
+        "note": "已補上第二張收據",
+        "items": [
+            {
+                "name": "影印紙",
+                "unit_price": 1500,
+                "tax_rate": 5,
+                "quantity": 2,
+                "unit": "箱",
+            }
+        ],
+    }
+    assert (await client.patch(update_path, json=update_body)).status_code == 401
+    assert (
+        await authed_client_factory(viewer).patch(update_path, json=update_body)
+    ).status_code == 403
+
+    updated = await authed_client_factory(member_user).patch(update_path, json=update_body)
+    assert updated.status_code == 200
+    assert updated.json()["entry_date"] == "2026-08-21"
+    assert updated.json()["purpose"] == "文具與紙張補貨"
+    assert updated.json()["total_amount"] == 3150
+    assert updated.json()["note"] == "已補上第二張收據"
+    assert updated.json()["department_org_id"] == str(other_department.id)
+    assert updated.json()["department_name"] == other_department.name
+    assert updated.json()["items"][0]["name"] == "影印紙"
 
     public = await client.get(f"/finance/public/budgets/{budget_id}")
     assert public.status_code == 200
-    assert public.json()["expenses"][0]["purpose"] == "文具補貨"
-    assert public.json()["expenses"][0]["total_amount"] == 950
-    assert public.json()["expenses"][0]["items"] == []
+    assert public.json()["expenses"][0]["purpose"] == "文具與紙張補貨"
+    assert public.json()["expenses"][0]["total_amount"] == 3150
+    assert public.json()["expenses"][0]["items"][0]["name"] == "影印紙"
 
 
 async def test_finance_test_reset_is_superuser_only_and_clears_finance_data(
@@ -1265,6 +1304,15 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     leaf_detail = next(item for item in detail.json()["nodes"] if item["id"] == leaf.json()["id"])
     assert leaf_detail["allocated_amount"] == 5000
     assert detail.json()["allocations"][0]["evidence"][0]["note"] == "廠商估價單"
+
+    other_department = Org(name="行政部")
+    db_session.add(other_department)
+    await db_session.flush()
+    forbidden_department_update = await viewer_client.patch(
+        f"/finance/budget-allocations/{allocation.json()['id']}",
+        json={"proposing_org_id": str(other_department.id), "reason": "不應允許"},
+    )
+    assert forbidden_department_update.status_code == 403
     revised = await creator.patch(
         f"/finance/budget-allocations/{allocation.json()['id']}",
         json={
@@ -1272,12 +1320,14 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
             "unit": "件",
             "unit_price": 200,
             "amount": 6000,
+            "proposing_org_id": str(other_department.id),
             "note": "依核准數量修正",
             "reason": "議決增列五件",
         },
     )
     assert revised.status_code == 200
     assert revised.json()["amount"] == 6000
+    assert revised.json()["proposing_org_id"] == str(other_department.id)
     published = await reviewer_client.patch(
         f"/finance/budgets/{budget.json()['id']}/publication",
         json={"is_public": True},
@@ -1316,6 +1366,16 @@ async def test_budget_drafts_can_be_edited_and_deleted_by_their_creator(
         f"/finance/ledgers/{ledger.id}/budgets",
         json={"period_id": str(period.id), "name": "可編輯草案測試"},
     )
+    renamed_budget = await creator_client.patch(
+        f"/finance/budgets/{budget.json()['id']}", json={"name": "已編輯共同預算"}
+    )
+    assert renamed_budget.status_code == 200
+    assert renamed_budget.json()["name"] == "已編輯共同預算"
+    assert (
+        await viewer_client.patch(
+            f"/finance/budgets/{budget.json()['id']}", json={"name": "無權修改"}
+        )
+    ).status_code == 403
     submission = await creator_client.post(
         f"/finance/budgets/{budget.json()['id']}/submissions",
         json={"kind": "initial", "title": "原始草案名稱"},
