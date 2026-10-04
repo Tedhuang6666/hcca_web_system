@@ -169,7 +169,7 @@ export function requiresAuthentication(pathname: string): boolean {
 }
 
 export function isBareRoute(pathname: string): boolean {
-  if (pathname === "/shop" || pathname === "/shop/cart") return true;
+  if (pathname === "/shop" || pathname === "/shop/cart" || matchesPrefix(pathname, ["/shop/orders"])) return true;
   return BARE_ROUTE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 

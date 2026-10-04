@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import ModuleBoundary from "@/components/ModuleBoundary";
-import ModuleTabs, { type ModuleTab } from "@/components/layout/ModuleTabs";
+import type { ModuleTab } from "@/components/layout/ModuleTabs";
 import PageTransition from "@/components/layout/PageTransition";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
 import { usePermissions } from "@/hooks/usePermissions";
-import { BarChart2, ClipboardList, ListChecks, PackageSearch, Store } from "lucide-react";
+import { BarChart2, ListChecks, PackageSearch } from "lucide-react";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 
@@ -17,13 +17,7 @@ import "../../public-design-system.css";
 import "../../(public)/public-footer.css";
 import "./shop-public.css";
 
-function PublicShopChrome({
-  children,
-  showCustomerNavigation,
-}: {
-  children: React.ReactNode;
-  showCustomerNavigation: boolean;
-}) {
+function PublicShopChrome({ children }: { children: React.ReactNode }) {
   return (
     <PublicModuleStatusProvider>
       <div className="public-site min-h-screen text-[var(--public-text)]">
@@ -34,7 +28,6 @@ function PublicShopChrome({
           跳到主要內容
         </a>
         <PublicSiteHeader />
-        {showCustomerNavigation && <ShopSectionNavigation />}
         <main id="main-content">
           <PageTransition>{children}</PageTransition>
         </main>
@@ -88,8 +81,6 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
   const canCollectForClass = permissions.has("class:shop_collect");
 
   return [
-    { href: "/shop", label: "商品目錄", icon: Store, end: true },
-    { href: "/shop/orders", label: "我的登記", icon: ClipboardList },
     ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "收款與代訂", icon: ListChecks }] : []),
     ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校訂單總覽", icon: BarChart2 }] : []),
     ...(canManage ? [{ href: "/shop/admin", label: "商品與活動設定", icon: PackageSearch }] : []),
@@ -104,11 +95,7 @@ type ShopNavigationGroup = {
 function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
   return [
     {
-      label: "同學訂購",
-      tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
-    },
-    {
-      label: "議員工作台",
+      label: "議員",
       tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
     },
     {
@@ -161,15 +148,6 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
   );
 }
 
-function ShopSectionNavigation() {
-  const tabs: ModuleTab[] = [
-    { href: "/shop", label: "商品目錄", icon: Store, end: true },
-    { href: "/shop/orders", label: "我的登記", icon: ClipboardList },
-  ];
-
-  return <ModuleTabs label="商品導覽" tabs={tabs} />;
-}
-
 function ShopWorkspaceDenied({ section }: { section: "class" | "oversight" | "manage" }) {
   const message = section === "class"
     ? "這個工作區提供給負責班級收款與代訂的人員。"
@@ -215,7 +193,7 @@ function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <ModuleBoundary id="shop" skeleton={<ListPageSkeleton />}>
-      <ShopWorkspaceNavigation groups={groups} />
+      {groups.length > 0 && <ShopWorkspaceNavigation groups={groups} />}
       {waitingForPermissions ? (
         <ListPageSkeleton />
       ) : requiredSection && !hasWorkspaceAccess ? (
@@ -229,9 +207,10 @@ function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
 
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (pathname === "/shop" || pathname === "/shop/cart") {
+  if (pathname === "/shop" || pathname === "/shop/cart"
+    || pathname === "/shop/orders" || pathname.startsWith("/shop/orders/")) {
     return (
-      <PublicShopChrome showCustomerNavigation={pathname === "/shop"}>
+      <PublicShopChrome>
         {children}
       </PublicShopChrome>
     );

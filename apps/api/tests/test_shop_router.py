@@ -1317,6 +1317,72 @@ async def test_create_class_order_by_cadre_succeeds(db_session, authed_client_fa
     assert orders[0]["assisted_by_id"] == str(cadre.id)
 
 
+async def test_cadre_can_register_multiple_products_in_one_request(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session, start="11501", end="11540")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    student = await _bare_user(db_session, student_id="11520")
+    first = await _make_active_product(db_session, cadre, price=15)
+    second = await _make_active_product(db_session, cadre, price=25)
+
+    response = await authed_client_factory(cadre).post(
+        "/shop/orders/class",
+        json={
+            "user_id": str(student.id),
+            "items": [
+                {"product_id": str(first.id), "quantity": 2},
+                {"product_id": str(second.id), "quantity": 3},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    orders = response.json()
+    assert len(orders) == 1
+    assert orders[0]["total_price"] == 105
+    assert {item["product_id"]: item["quantity"] for item in orders[0]["items"]} == {
+        str(first.id): 2,
+        str(second.id): 3,
+    }
+
+
+async def test_cadre_multi_product_request_splits_activities(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session, start="11501", end="11540")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    student = await _bare_user(db_session, student_id="11520")
+    general = await _make_active_product(db_session, cadre, price=15)
+    org = Org(name=f"shop-{uuid.uuid4().hex[:6]}")
+    activity = Activity(name="活動商品", org=org, status=ActivityStatus.ACTIVE)
+    db_session.add_all([org, activity])
+    await db_session.flush()
+    event_category = await _make_category(db_session, cadre, activity_id=activity.id)
+    event_product = await _make_active_product(db_session, cadre, price=25, category=event_category)
+
+    response = await authed_client_factory(cadre).post(
+        "/shop/orders/class",
+        json={
+            "user_id": str(student.id),
+            "items": [
+                {"product_id": str(general.id), "quantity": 2},
+                {"product_id": str(event_product.id), "quantity": 3},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    orders = response.json()
+    assert len(orders) == 2
+    assert {order["items"][0]["product_id"]: order["total_price"] for order in orders} == {
+        str(general.id): 30,
+        str(event_product.id): 75,
+    }
+
+
 # ── 後台統計 ──────────────────────────────────────────────────────────────────
 
 

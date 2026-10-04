@@ -1483,7 +1483,7 @@ export default function ShopAdminPage() {
             按主題管理單一商品或系列商品，再設定商品規格與變體
           </p>
         </div>
-        <Link href="/shop/orders" className="btn btn-ghost">訂單記錄</Link>
+        <Link href="/shop/council-orders" className="btn btn-ghost">全校訂單總覽</Link>
       </div>
 
       <div className="flex gap-0.5 p-1 rounded-xl w-fit"
