@@ -3,7 +3,15 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
-import { CircleAlert, CircleCheck, ClipboardList, Gift, Package } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  ClipboardList,
+  Gift,
+  Package,
+} from "lucide-react";
 import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
@@ -53,6 +61,98 @@ function registrationVariantKey(options: readonly { option_id: string }[]) {
   return options.map((option) => option.option_id).sort().join(",");
 }
 
+function promotionRequirementsMet(
+  promotion: ShopPromotionPublicOut,
+  registration: OrderOut | null,
+) {
+  if (!registration) return false;
+
+  const targets = promotion.target_products ?? [];
+  const targetIds = new Set(targets.map((product) => product.id));
+  const registeredProducts = new Set(registration.items.map((item) => item.product_id));
+  const matchingQuantity = registration.items.reduce((total, item) => (
+    targetIds.size === 0 || targetIds.has(item.product_id) ? total + item.quantity : total
+  ), 0);
+
+  return targets.every((product) => registeredProducts.has(product.id))
+    && matchingQuantity >= promotion.min_quantity
+    && registration.subtotal_price >= promotion.min_order_price;
+}
+
+function flyProductIntoOrder() {
+  if (
+    typeof window === "undefined"
+    || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) return;
+
+  window.requestAnimationFrame(() => {
+    const source = document.querySelector<HTMLElement>("[data-product-flight-source]");
+    const orderLink = document.querySelector<HTMLElement>("[data-order-flight-target]");
+    const registrationSummary = document.querySelector<HTMLElement>("[data-registration-flight-target]");
+    if (!source) return;
+
+    const linkBounds = orderLink?.getBoundingClientRect();
+    const orderLinkIsVisible = linkBounds
+      && linkBounds.bottom > 0
+      && linkBounds.top < window.innerHeight
+      && linkBounds.right > 0
+      && linkBounds.left < window.innerWidth;
+    const target = orderLinkIsVisible ? orderLink : registrationSummary ?? orderLink;
+    if (!target) return;
+
+    const sourceBounds = source.getBoundingClientRect();
+    const targetBounds = target.getBoundingClientRect();
+    const flyer = source.cloneNode(true) as HTMLElement;
+    const sourceStyle = window.getComputedStyle(source);
+    flyer.setAttribute("aria-hidden", "true");
+    flyer.removeAttribute("data-product-flight-source");
+    flyer.removeAttribute("id");
+    flyer.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+    Object.assign(flyer.style, {
+      position: "fixed",
+      top: `${sourceBounds.top}px`,
+      left: `${sourceBounds.left}px`,
+      width: `${sourceBounds.width}px`,
+      height: `${sourceBounds.height}px`,
+      minWidth: "0",
+      minHeight: "0",
+      maxWidth: "none",
+      margin: "0",
+      borderRadius: sourceStyle.borderRadius,
+      objectFit: sourceStyle.objectFit || "contain",
+      transformOrigin: "center",
+      pointerEvents: "none",
+      zIndex: "10001",
+    });
+    document.body.append(flyer);
+
+    if (typeof flyer.animate !== "function") {
+      flyer.remove();
+      return;
+    }
+
+    const deltaX = targetBounds.left + targetBounds.width / 2
+      - sourceBounds.left - sourceBounds.width / 2;
+    const deltaY = targetBounds.top + targetBounds.height / 2
+      - sourceBounds.top - sourceBounds.height / 2;
+    const animation = flyer.animate([
+      { transform: "translate3d(0, 0, 0) scale(1)", opacity: 1 },
+      {
+        transform: `translate3d(${deltaX * 0.48}px, ${deltaY * 0.48 - 28}px, 0) scale(0.72) rotate(-5deg)`,
+        opacity: 0.95,
+        offset: 0.52,
+      },
+      { transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(0.18)`, opacity: 0.2 },
+    ], {
+      duration: 560,
+      easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+      fill: "forwards",
+    });
+    animation.addEventListener("finish", () => flyer.remove(), { once: true });
+    animation.addEventListener("cancel", () => flyer.remove(), { once: true });
+  });
+}
+
 const GENERAL_ACTIVITY_SCOPE = "__general__";
 
 function activityScopeKey(activityId: string | null | undefined) {
@@ -87,6 +187,7 @@ function ProductModal({
   registrationLocked,
   onClose,
   onRegistrationChange,
+  onProductAdded,
 }: {
   productId: string;
   classClosed: boolean;
@@ -98,6 +199,7 @@ function ProductModal({
   registrationLocked: boolean;
   onClose: () => void;
   onRegistrationChange: (activityId: string | null, order: OrderOut | null) => void;
+  onProductAdded: () => void;
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -291,6 +393,7 @@ function ProductModal({
         activityId,
         updated?.status === "cancelled" ? null : updated,
       );
+      if (quantity > 0 && !wasRegistered) onProductAdded();
       if (key === selectedOptionIds.join(",")) setQty(quantity > 0 ? quantity : 1);
       setRegistrationUpdateMessage(quantity > 0
         ? wasRegistered ? `已立即更新為 ${quantity} 件。` : `已登記 ${quantity} 件。`
@@ -340,11 +443,12 @@ function ProductModal({
           {product && displayMedia ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
+              data-product-flight-source
               src={uploadUrl(displayMedia.image_url)}
               alt={`${product.name}・${displayLabel}`}
             />
           ) : (
-            <div className="shop-product-dialog-placeholder">
+            <div className="shop-product-dialog-placeholder" data-product-flight-source>
               <Package size={48} strokeWidth={1.2} aria-hidden="true" />
             </div>
           )}
@@ -553,7 +657,7 @@ function ProductModal({
               ) : null}
               <div className="shop-product-dialog-actions">
                 {isLoggedIn && selectedRegistrationQuantity > 0 ? (
-                  <div className="shop-product-registration-summary">
+                  <div className="shop-product-registration-summary" data-registration-flight-target>
                     <strong>已登記 {selectedRegistrationQuantity} 件</strong>
                     <span>NT${(unitPrice * selectedRegistrationQuantity).toLocaleString()}</span>
                   </div>
@@ -668,6 +772,10 @@ function ProductCard({
             截止 {new Date(product.sale_end).toLocaleString("zh-TW")}
           </p>
         )}
+        <span className="shop-public-product-action">
+          {disabled ? statusLabel : "選擇商品"}
+          {!disabled && <ArrowUpRight size={16} aria-hidden="true" />}
+        </span>
       </div>
     </button>
   );
@@ -692,6 +800,12 @@ export default function ShopPage() {
   const [promotionPreview, setPromotionPreview] = useState<ShopPromotionPreviewOut | null>(null);
   const [promotionBusy, setPromotionBusy] = useState(false);
   const [promotionFeedback, setPromotionFeedback] = useState("");
+  const [promotionCelebration, setPromotionCelebration] = useState<{
+    promotionIds: string[];
+    token: number;
+  } | null>(null);
+  const promotionCelebrationToken = useRef(0);
+  const promotionCelebrationTimer = useRef<number | null>(null);
   const [claimedPromotionIds, setClaimedPromotionIds] = useState<Set<string>>(() => new Set());
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
@@ -700,6 +814,25 @@ export default function ShopPage() {
   const closeProduct = useCallback(() => {
     setOpenProduct(null);
   }, []);
+
+  useEffect(() => () => {
+    if (promotionCelebrationTimer.current !== null) {
+      window.clearTimeout(promotionCelebrationTimer.current);
+    }
+  }, []);
+
+  const celebratePromotionThresholds = (promotionIds: string[]) => {
+    if (promotionIds.length === 0) return;
+    if (promotionCelebrationTimer.current !== null) {
+      window.clearTimeout(promotionCelebrationTimer.current);
+    }
+    const token = ++promotionCelebrationToken.current;
+    setPromotionCelebration({ promotionIds, token });
+    promotionCelebrationTimer.current = window.setTimeout(() => {
+      setPromotionCelebration((current) => current?.token === token ? null : current);
+      promotionCelebrationTimer.current = null;
+    }, 1200);
+  };
 
   const loadCatalog = useCallback(() => {
     if (!cacheHas(catalogCacheKey)) setLoading(true);
@@ -811,11 +944,16 @@ export default function ShopPage() {
   const selectedCategory =
     catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
 
+  useEffect(() => {
+    if (!catalog.length) return;
+    const category = catalog.find((item) => item.id === selectedCategoryId) ?? catalog[0];
+    setSelectedPromotionScope(activityScopeKey(category.activity_id));
+  }, [catalog, selectedCategoryId]);
+
   const selectedCategoryActivityId = selectedCategory?.activity_id ?? null;
   const selectedCategoryRegistration = registrations.find(
     (order) => order.activity_id === selectedCategoryActivityId,
   ) ?? null;
-  const registeredCount = selectedCategoryRegistration?.items.reduce((count, item) => count + item.quantity, 0) ?? 0;
   const registeredByProduct = new Map<string, number>();
   for (const item of selectedCategoryRegistration?.items ?? []) {
     registeredByProduct.set(
@@ -875,6 +1013,17 @@ export default function ShopPage() {
   };
 
   const handleRegistrationChange = async (activityId: string | null, order: OrderOut | null) => {
+    if (order) {
+      const previousOrder = registrations.find((existing) => existing.activity_id === activityId) ?? null;
+      const newlyQualifiedPromotions = availablePromotions
+        .filter((promotion) => (promotion.activity_id ?? null) === activityId)
+        .filter((promotion) => (
+          !promotionRequirementsMet(promotion, previousOrder)
+          && promotionRequirementsMet(promotion, order)
+        ))
+        .map((promotion) => promotion.id);
+      celebratePromotionThresholds(newlyQualifiedPromotions);
+    }
     setRegistrations((current) => [
       ...current.filter((existing) => existing.activity_id !== activityId),
       ...(order ? [order] : []),
@@ -938,20 +1087,17 @@ export default function ShopPage() {
   const visibleSeries = selectedCategory?.series.filter(
     (series) => !selectedSeriesId || series.id === selectedSeriesId,
   ) ?? [];
+  const visibleProductCount = (
+    (selectedSeriesId ? 0 : selectedCategory?.products.length ?? 0)
+    + visibleSeries.reduce((count, series) => count + series.products.length, 0)
+  );
 
   return (
     <div className="shop-public-page">
       <header className="shop-public-hero">
         <div>
           <h1>商品預購</h1>
-        </div>
-        <div className="shop-public-hero-actions">
-          <Link
-            href="/shop/orders"
-            className="shop-public-order-link">
-            <ClipboardList size={16} aria-hidden="true" />
-            我的登記{registeredCount > 0 ? `（${registeredCount} 件）` : ""}
-          </Link>
+          <p className="shop-public-hero-copy">先選活動，再查看商品與這次登記進度。</p>
         </div>
       </header>
 
@@ -975,12 +1121,29 @@ export default function ShopPage() {
         </section>
       )}
 
-      {availablePromotions.length > 0 && (
-        <section className="shop-public-promotions" aria-labelledby="shop-promotions-title">
+      <details className="shop-public-promotions">
+        <summary className="shop-public-promotion-toggle" aria-controls="shop-promotion-content">
+          <span className="shop-public-promotion-toggle-label">
+            <Gift size={17} aria-hidden="true" />
+            <div>
+              <strong>優惠碼與優惠</strong>
+              <span>
+                {availablePromotions.length > 0
+                  ? `目前有 ${availablePromotions.length} 項公開優惠，也可輸入已知優惠碼。`
+                  : "輸入已知優惠碼，查看彩蛋優惠。"}
+              </span>
+            </div>
+          </span>
+          <span className="shop-public-promotion-toggle-action">
+            {availablePromotions.length > 0 ? "查看" : "輸入"}
+            <ChevronDown size={17} aria-hidden="true" />
+          </span>
+        </summary>
+        <div id="shop-promotion-content" className="shop-public-promotions-content">
           <div className="shop-public-promotions-heading">
             <div>
-              <p className="shop-public-eyebrow"><Gift size={15} aria-hidden="true" /> 優惠專區</p>
-              <h2 id="shop-promotions-title">Nothing beats HCHS Student Association merch!</h2>
+              <h2 id="shop-promotions-title">輸入優惠碼</h2>
+              <p>輸入你取得的優惠碼，或查看目前公開的優惠。</p>
             </div>
             <div className="shop-public-promotion-controls">
               <label className="shop-public-activity-entry">
@@ -1024,8 +1187,13 @@ export default function ShopPage() {
               {promotionPreview.reason}
             </p>
           )}
-          <div className="shop-public-promotion-grid">
-            {availablePromotions.map((promotion) => {
+          {availablePromotions.length === 0 ? (
+            <p className="shop-public-promotion-empty">
+              目前沒有公開優惠；如果你有優惠碼，仍可在上方輸入使用。
+            </p>
+          ) : (
+            <div className="shop-public-promotion-grid">
+              {availablePromotions.map((promotion) => {
               const promotionRegistration = registrations.find(
                 (order) => order.activity_id === (promotion.activity_id ?? null),
               ) ?? null;
@@ -1075,10 +1243,18 @@ export default function ShopPage() {
               const actionLabel = promotion.code
                 ? claimedPromotionIds.has(promotion.id) ? "已領取優惠券" : "領取優惠券"
                 : isApplied ? "已自動套用" : "查看優惠進度";
+              const celebrationToken = promotionCelebration?.promotionIds.includes(promotion.id)
+                ? promotionCelebration.token
+                : null;
               return (
                 <article className="shop-public-promotion-card" key={promotion.id}>
                   <div className="shop-public-promotion-card-top">
-                    <span className="shop-public-promotion-icon"><Gift size={17} aria-hidden="true" /></span>
+                    <span
+                      key={celebrationToken ?? "idle"}
+                      className={`shop-public-promotion-icon${celebrationToken ? " shop-public-promotion-icon--celebrating" : ""}`}
+                      aria-hidden="true">
+                      <Gift size={17} />
+                    </span>
                     <span>{promotion.code ? "優惠券" : "優惠自動套用"}</span>
                     {isApplied && <span className="shop-public-promotion-applied"><CircleCheck size={14} aria-hidden="true" />已套用</span>}
                   </div>
@@ -1130,9 +1306,18 @@ export default function ShopPage() {
                   </div>
                 </article>
               );
-            })}
-          </div>
-        </section>
+              })}
+            </div>
+          )}
+        </div>
+      </details>
+      {promotionCelebration && (
+        <span key={promotionCelebration.token} className="sr-only" role="status" aria-live="polite">
+          {availablePromotions
+            .filter((promotion) => promotionCelebration.promotionIds.includes(promotion.id))
+            .map((promotion) => promotion.name)
+            .join("、")} 已達優惠使用門檻
+        </span>
       )}
 
       {loadError && (
@@ -1152,49 +1337,60 @@ export default function ShopPage() {
         </div>
       ) : selectedCategory && (
         <div>
-          <nav className="shop-public-category-nav" aria-label="商品分類">
-            {catalog.map((category) => {
-              const isSelected = category.id === selectedCategory.id;
-              const productCount = category.products.length
-                + category.series.reduce((sum, series) => sum + series.products.length, 0);
-              return (
-                <button
-                  key={category.id}
-                  onClick={() => {
-                    setSelectedCategoryId(category.id);
-                    setSelectedSeriesId(null);
-                  }}
-                  aria-pressed={isSelected}
-                  className="shop-public-category-tab">
-                  {category.name}
-                  <span className="shop-public-category-count">{productCount}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
+            <div className="shop-public-activity-heading">
+              <h2 id="shop-activity-title">選擇活動</h2>
+              <p>商品登記會依活動分開</p>
+            </div>
+            <nav className="shop-public-category-nav" aria-label="選擇商品活動">
+              {catalog.map((category) => {
+                const isSelected = category.id === selectedCategory.id;
+                const productCount = category.products.length
+                  + category.series.reduce((sum, series) => sum + series.products.length, 0);
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => {
+                      setSelectedCategoryId(category.id);
+                      setSelectedSeriesId(null);
+                      setSelectedPromotionScope(activityScopeKey(category.activity_id));
+                    }}
+                    aria-pressed={isSelected}
+                    className="shop-public-category-tab">
+                    {category.name}
+                    <span className="shop-public-category-count">{productCount} 件</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </section>
 
           <section className="shop-public-catalog">
             <header className="shop-public-category-heading">
               <h2>{selectedCategory.name}</h2>
+              <p>{visibleProductCount} 件商品</p>
             </header>
             {selectedCategory.series.length > 0 && (
-              <div className="shop-public-series-filter" aria-label="篩選商品系列">
-                <button
-                  onClick={() => setSelectedSeriesId(null)}
-                  aria-pressed={!selectedSeriesId}>
-                  全部商品
-                </button>
-                {selectedCategory.series.map((series) => {
-                  const isSelected = selectedSeriesId === series.id;
-                  return (
-                    <button
-                      key={series.id}
-                      onClick={() => setSelectedSeriesId(series.id)}
-                      aria-pressed={isSelected}>
-                      {series.name} <span>({series.products.length})</span>
-                    </button>
-                  );
-                })}
+              <div className="shop-public-series-filter-wrap">
+                <span>商品系列</span>
+                <div className="shop-public-series-filter" aria-label="篩選商品系列">
+                  <button
+                    onClick={() => setSelectedSeriesId(null)}
+                    aria-pressed={!selectedSeriesId}>
+                    全部商品
+                  </button>
+                  {selectedCategory.series.map((series) => {
+                    const isSelected = selectedSeriesId === series.id;
+                    return (
+                      <button
+                        key={series.id}
+                        onClick={() => setSelectedSeriesId(series.id)}
+                        aria-pressed={isSelected}>
+                        {series.name} <span>({series.products.length})</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
             {closeStatus[selectedCategory.id]?.is_closed && (
@@ -1219,7 +1415,7 @@ export default function ShopPage() {
                       <h3>單一商品</h3>
                     </div>
                   </div>
-                  <div className="shop-public-product-grid">
+                  <div className={`shop-public-product-grid${selectedCategory.products.length === 1 ? " shop-public-product-grid--featured" : ""}`}>
                     {selectedCategory.products.map((product) => (
                       <ProductCard
                         key={product.id}
@@ -1245,7 +1441,7 @@ export default function ShopPage() {
                   {series.products.length === 0 ? (
                     <p className="text-sm" style={{ color: "var(--public-secondary)" }}>這個系列暫時沒有商品</p>
                   ) : (
-                    <div className="shop-public-product-grid">
+                    <div className={`shop-public-product-grid${series.products.length === 1 ? " shop-public-product-grid--featured" : ""}`}>
                       {series.products.map((product) => (
                         <ProductCard
                           key={product.id}
@@ -1264,6 +1460,23 @@ export default function ShopPage() {
         </div>
       )}
 
+      {isLoggedIn && (
+        <Link
+          href="/shop/orders"
+          className="shop-public-order-shortcut"
+          data-order-flight-target
+          aria-label={registrations.length > 0
+            ? `開啟我的訂單，共 ${registrations.length} 筆登記`
+            : "開啟我的訂單"}
+        >
+          <ClipboardList size={19} aria-hidden="true" />
+          <span>我的訂單</span>
+          {registrations.length > 0 && (
+            <span className="shop-public-order-shortcut-count">{registrations.length}</span>
+          )}
+        </Link>
+      )}
+
       {openProduct && (
         <ProductModal
           productId={openProduct}
@@ -1276,6 +1489,7 @@ export default function ShopPage() {
           registrationLocked={registrationLocked}
           onClose={closeProduct}
           onRegistrationChange={handleRegistrationChange}
+          onProductAdded={flyProductIntoOrder}
         />
       )}
     </div>
