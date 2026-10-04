@@ -2828,84 +2828,44 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .btn-danger-ghost:hover:not(:disabled) { background: var(--danger-dim); }
 
-/* 共用下載按鈕沿用平台按鈕語言，以細線回報真實下載進度。 */
-.animated-download-button,
-.animated-download-button.btn,
-.animated-download-button.btn-sm,
-.animated-download-button.btn-lg {
+/* 下載狀態附加在呼叫端的按鈕樣式上，避免改掉各頁既有尺寸與層級。 */
+.animated-download-button {
   --download-accent: var(--primary);
   position: relative;
   box-sizing: border-box;
   display: inline-flex;
-  min-width: 6.25rem;
   max-width: 100%;
-  min-height: 2.75rem;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
   overflow: hidden;
+  appearance: none;
+  white-space: nowrap;
+}
+
+.animated-download-button--default {
+  min-height: 2.25rem;
+  padding: 0 0.8rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 0 0.8rem;
-  appearance: none;
   background: var(--bg-surface);
   color: var(--text-secondary);
-  box-shadow: none;
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.2;
-  letter-spacing: 0;
-  white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--transition), border-color var(--transition), color var(--transition);
 }
 
-.animated-download-button.btn-primary {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-fg);
-}
-
-.animated-download-button.btn-primary:hover:not(:disabled) {
-  border-color: var(--primary-hover);
-  background: var(--primary-hover);
-}
-
-.animated-download-button.btn-secondary {
-  border-color: var(--primary);
-  background: transparent;
-  color: var(--primary);
-}
-
-.animated-download-button.btn-secondary:hover:not(:disabled) {
-  background: var(--primary-dim);
-  color: var(--primary);
-}
-
 .animated-download-button.btn-danger {
-  border-color: var(--danger);
-  background: var(--danger);
-  color: #fff;
+  --download-accent: var(--danger);
 }
 
-.animated-download-button:hover:not(:disabled) {
+.animated-download-button--default:hover:not(:disabled) {
   border-color: var(--border-strong);
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: none;
-  transform: none;
-}
-
-.animated-download-button.btn-primary:hover:not(:disabled),
-.animated-download-button.btn-danger:hover:not(:disabled) {
-  color: #fff;
-}
-
-.animated-download-button.btn-danger:hover:not(:disabled) {
-  border-color: var(--danger);
-  background: var(--danger);
-  filter: brightness(0.9);
 }
 
 .animated-download-button:focus-visible {
@@ -2913,26 +2873,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   outline-offset: 2px;
 }
 
-.animated-download-button.animated-download-button::after { content: none; }
-
-.animated-download-button:active:not(:disabled) { transform: none; }
-.animated-download-button:disabled { cursor: wait; }
-
-.animated-download-button.animated-download-button[data-download-state] {
-  width: auto;
-  min-width: 6.25rem;
-  min-height: 2.75rem !important;
-  height: auto !important;
-  padding: 0 0.8rem;
-  border-radius: var(--radius-md);
-  box-shadow: none;
-}
-
 .animated-download__icon {
   display: inline-grid;
   flex: 0 0 auto;
   place-items: center;
-  color: var(--text-muted);
+  color: currentColor;
 }
 
 .animated-download-button[data-download-state="complete"] .animated-download__icon {
@@ -2992,16 +2937,22 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   animation: animated-download-progress-travel 900ms ease-in-out infinite;
 }
 
-.animated-download-button.animated-download-button--icon-only {
-  width: 2.75rem;
-  min-width: 2.75rem;
+.animated-download-button--icon-only {
+  width: 2.25rem;
+  min-width: 2.25rem;
   padding: 0 0.45rem;
 }
 
-.animated-download-button.animated-download-button--icon-only[data-download-state] {
+.animated-download-button--icon-only.btn-sm {
+  width: 1.875rem;
+  min-width: 1.875rem;
+  padding: 0;
+}
+
+.animated-download-button--icon-only.btn-lg {
   width: 2.75rem;
   min-width: 2.75rem;
-  padding: 0 0.45rem;
+  padding: 0;
 }
 
 .animated-download-button--icon-only .animated-download__progress {

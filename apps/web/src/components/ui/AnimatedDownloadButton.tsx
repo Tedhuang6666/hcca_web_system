@@ -201,12 +201,13 @@ export default function AnimatedDownloadButton({
   const isIndeterminate = progress === null && state !== "error";
   const StatusIcon = state === "complete" ? Check : state === "error" ? RotateCcw : Download;
   const progressValue = progress === null ? undefined : Math.round(progress * 100);
+  const hasCallerStyles = Boolean(className?.trim());
 
   return (
     <button
       {...buttonProps}
       type="button"
-      className={`animated-download-button${iconOnly ? " animated-download-button--icon-only" : ""}${className ? ` ${className}` : ""}`}
+      className={`animated-download-button${hasCallerStyles ? "" : " animated-download-button--default"}${iconOnly ? " animated-download-button--icon-only" : ""}${hasCallerStyles ? ` ${className}` : ""}`}
       data-download-state={state}
       disabled={disabled || isBusy}
       aria-label={ariaLabel}
