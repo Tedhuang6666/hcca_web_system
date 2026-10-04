@@ -125,6 +125,12 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/finance/public/expenses", "GET"),
     # 憑證僅隨已公開且核准的預算支出公開。
     ("/finance/public/budgets/{budget_id}/expenses/{expense_id}/evidence/{evidence_id}", "GET"),
+    # 請款明細與附件僅隨已公開預算中的已核准請款公開。
+    ("/finance/public/budgets/{budget_id}/expense-claims/{entry_id}", "GET"),
+    (
+        "/finance/public/budgets/{budget_id}/expense-claims/{entry_id}/evidence/{evidence_id}",
+        "GET",
+    ),
     # 陳情（民眾可匿名提交）
     ("/petitions", "POST"),
     ("/petitions/lookup", "GET"),
