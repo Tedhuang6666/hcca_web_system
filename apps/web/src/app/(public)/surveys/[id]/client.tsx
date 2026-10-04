@@ -185,6 +185,48 @@ function displayResponseAnswer(
   return values.length ? values.join("、") : answer.answer_text || "—";
 }
 
+type GroupedTextAnswer = { label: string; answers: string[] };
+
+function groupMultiTextAnswers(labels: string[], answers: string[]): GroupedTextAnswer[] {
+  const uniqueLabels = [...new Set(labels)];
+  const groups = new Map<string, string[]>();
+  for (const label of uniqueLabels) groups.set(label, []);
+  const ungrouped: string[] = [];
+  const labelsByLength = [...uniqueLabels].sort((a, b) => b.length - a.length);
+
+  for (const answer of answers) {
+    let currentLabel: string | undefined;
+    let currentLines: string[] = [];
+    const flush = () => {
+      if (!currentLines.length) return;
+      const value = currentLines.join("\n");
+      if (!value.trim()) return;
+      if (currentLabel !== undefined) groups.get(currentLabel)?.push(value);
+      else ungrouped.push(value);
+    };
+
+    for (const line of answer.split("\n")) {
+      const label = labelsByLength.find(option => line.startsWith(`${option}：`));
+      if (label) {
+        flush();
+        currentLabel = label;
+        currentLines = [line.slice(label.length + 1)];
+      } else {
+        currentLines.push(line);
+      }
+    }
+    flush();
+  }
+
+  const grouped = uniqueLabels.flatMap(label => {
+    const values = groups.get(label) ?? [];
+    return values.length > 0 ? [{ label, answers: values }] : [];
+  });
+  return ungrouped.length > 0
+    ? [...grouped, { label: "其他回答（未識別欄位）", answers: ungrouped }]
+    : grouped;
+}
+
 function questionValidationError(question: SurveyQuestionOut, answer: AnswerValue | undefined): string | null {
   if (question.is_required && !hasAnswerContent(answer, question)) return "此題為必填，請完成填答。";
   if (question.is_required && question.question_type === "single_grid") {
@@ -1127,7 +1169,18 @@ function StatsView({
         </div>
       )}
 
-      {view === "charts" && (stats.questions ?? []).map(qs => (
+      {view === "charts" && (stats.questions ?? []).map(qs => {
+        const question = questionsById.get(qs.question_id);
+        const textAnswers = qs.text_answers ?? [];
+        const isMultiText = question?.question_type === "multi_text";
+        const groupedTextAnswers = isMultiText
+          ? groupMultiTextAnswers(question.options ?? [], textAnswers)
+          : [];
+        const textAnswerCount = isMultiText
+          ? groupedTextAnswers.reduce((count, group) => count + group.answers.length, 0)
+          : textAnswers.length;
+
+        return (
         <div key={qs.question_id} className="card p-5 space-y-3">
           <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             {qs.question_text}
@@ -1197,27 +1250,53 @@ function StatsView({
           )}
 
           {/* 文字回答 */}
-          {(qs.text_answers ?? []).length > 0 && (
+          {textAnswers.length > 0 && (
             <div>
               <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
-                文字回答（{(qs.text_answers ?? []).length} 則）
+                {isMultiText ? `依選項整理（${textAnswerCount} 則）` : `文字回答（${textAnswerCount} 則）`}
               </p>
-              <ul
+              <div
                 className="space-y-1.5 overflow-y-auto pr-1"
                 style={{ maxHeight: "12rem" }}
-                aria-label="文字回答列表">
-                {(qs.text_answers ?? []).map((ans, i) => (
-                  <li key={i}
-                    className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words"
-                    style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
-                    {ans}
-                  </li>
-                ))}
-              </ul>
+                role="region"
+                tabIndex={0}
+                aria-label={isMultiText
+                  ? `${qs.question_text}依選項整理的文字回答`
+                  : `${qs.question_text}的文字回答列表`}>
+                {isMultiText && groupedTextAnswers.length > 0
+                  ? groupedTextAnswers.map(group => (
+                    <section key={group.label} className="space-y-1.5">
+                      <h3 className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                        {group.label}：
+                      </h3>
+                      <ul className="space-y-1.5" aria-label={`${group.label}的回答`}>
+                        {group.answers.map((answer, index) => (
+                          <li key={`${group.label}-${index}`}
+                            className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words"
+                            style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                            {answer}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))
+                  : (
+                    <ul className="space-y-1.5" aria-label="文字回答列表">
+                      {textAnswers.map((answer, index) => (
+                        <li key={index}
+                          className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words"
+                          style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                          {answer}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+              </div>
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {view === "responses" && (
         responses.length === 0 ? (
