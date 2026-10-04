@@ -1116,10 +1116,14 @@ async def list_public_budgets(
 
 async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
     """公開預算的逐項支出紀錄，不回傳承辦人或內部備註。"""
-    approved_initial = exists().where(
-        FinanceBudgetSubmission.budget_id == FinanceBudget.id,
-        FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
-        FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+    approved_initial = (
+        exists()
+        .where(
+            FinanceBudgetSubmission.budget_id == FinanceBudget.id,
+            FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+        .correlate(FinanceBudget)
     )
     rows = (
         await db.execute(
