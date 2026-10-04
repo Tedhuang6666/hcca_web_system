@@ -5,6 +5,7 @@ import { BarChart2, Lock, LockOpen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
+import { usePermissions } from "@/hooks/usePermissions";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import type {
   CatalogCategoryOut,
@@ -45,6 +46,12 @@ function CloseBadge({ status, partial = false }: { status: CloseStatusItem | und
 // ── 主頁面 ───────────────────────────────────────────────────────────────────
 
 export default function CouncilOrdersPage() {
+  const { isAdmin, permissions } = usePermissions();
+  const hasAdminPermission = isAdmin || permissions.has("admin:all");
+  const canConfirmClassPayment = hasAdminPermission
+    || permissions.has("shop:manage")
+    || permissions.has("shop:manage_orders");
+  const canManageOrderClosures = canConfirmClassPayment || permissions.has("shop:view_all");
   const [tab, setTab] = useState<Tab>("summary");
   const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
 
@@ -321,10 +328,10 @@ export default function CouncilOrdersPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            <BarChart2 size={22} /> 議員商品總覽
+            <BarChart2 size={22} /> 班聯商品統籌
           </h1>
           <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-            集中查看各活動的班級訂購、收款進度、商品數量與訂單明細。
+            統籌全校各班訂購、收款進度、商品數量、結單與訂單明細。
           </p>
         </div>
         <button type="button" onClick={() => { if (tab === "summary") loadSummary(); else if (tab === "quantities") loadQuantities(); else loadOrders(); }}
@@ -447,7 +454,7 @@ export default function CouncilOrdersPage() {
             </div>
           )}
 
-          {groupBy === "class" && summary && summary.rows.length > 0 && catalog.length > 0 && (
+          {canManageOrderClosures && groupBy === "class" && summary && summary.rows.length > 0 && catalog.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
               {activityGroups.map((group) => (
                 <div key={group.key} className="flex flex-wrap items-center gap-1.5 rounded-md px-2 py-1"
@@ -478,7 +485,7 @@ export default function CouncilOrdersPage() {
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "總金額", "已繳", "未繳", ...(groupBy === "class" ? activityGroups.map((group) => group.label + "結單") : []), ...(groupBy === "class" ? ["活動收款與結單"] : [])].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "總金額", "已繳", "未繳", ...(groupBy === "class" ? activityGroups.map((group) => group.label + "結單") : []), ...(groupBy === "class" && canManageOrderClosures ? ["班聯操作"] : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
                     </tr>
@@ -502,7 +509,7 @@ export default function CouncilOrdersPage() {
                             />
                           </td>
                         );})}
-                        {groupBy === "class" && <td className="px-4 py-3">
+                        {groupBy === "class" && canManageOrderClosures && <td className="px-4 py-3">
                           <div className="flex min-w-56 flex-col gap-2">
                             {activityGroups.map((group) => {
                               const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
@@ -515,18 +522,20 @@ export default function CouncilOrdersPage() {
                                   style={{ borderColor: "var(--border)" }}>
                                   <span className="w-full text-[11px]" style={{ color: "var(--text-muted)" }}>{group.label}</span>
                                   {row.key !== "none" && <>
-                                    <button type="button" disabled={paymentBusy === paymentKey}
-                                      onClick={() => updateClassPayment(row, group, true)}
-                                      className="rounded px-2 py-1 text-xs disabled:opacity-50"
-                                      style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
-                                      確認已繳
-                                    </button>
-                                    <button type="button" disabled={paymentBusy === paymentKey}
-                                      onClick={() => updateClassPayment(row, group, false)}
-                                      className="rounded px-2 py-1 text-xs disabled:opacity-50"
-                                      style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                                      撤銷
-                                    </button>
+                                    {canConfirmClassPayment && <>
+                                      <button type="button" disabled={paymentBusy === paymentKey}
+                                        onClick={() => updateClassPayment(row, group, true)}
+                                        className="rounded px-2 py-1 text-xs disabled:opacity-50"
+                                        style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
+                                        確認已繳
+                                      </button>
+                                      <button type="button" disabled={paymentBusy === paymentKey}
+                                        onClick={() => updateClassPayment(row, group, false)}
+                                        className="rounded px-2 py-1 text-xs disabled:opacity-50"
+                                        style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                                        撤銷
+                                      </button>
+                                    </>}
                                   </>}
                                   {group.categories.length > 0 && row.key !== "none" && (
                                     <button type="button" disabled={isBusy}
