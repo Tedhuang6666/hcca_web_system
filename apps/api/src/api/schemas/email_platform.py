@@ -157,11 +157,24 @@ class EmailPreflightInput(BaseModel):
     attachment_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
+class EmailPreflightDuplicateRecipientOut(BaseModel):
+    source: Literal["account", "provided_data"]
+    name: str | None
+    student_id: str | None = None
+    variables: dict[str, str] = Field(default_factory=dict)
+
+
+class EmailPreflightDuplicateOut(BaseModel):
+    email: str
+    recipients: list[EmailPreflightDuplicateRecipientOut]
+
+
 class EmailPreflightOut(BaseModel):
     valid: bool
     resolved_count: int
     unique_count: int
     duplicate_emails: list[str]
+    duplicate_recipients: list[EmailPreflightDuplicateOut] = Field(default_factory=list)
     invalid_emails: list[str]
     suppressed_emails: list[str]
     missing_names: list[str]

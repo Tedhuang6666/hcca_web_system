@@ -38,6 +38,8 @@ from api.models.email_message import (
 )
 from api.models.user import User
 from api.schemas.email_platform import (
+    EmailPreflightDuplicateOut,
+    EmailPreflightDuplicateRecipientOut,
     EmailPreflightInput,
     EmailPreflightOut,
     EmailRecipientListPayload,
@@ -254,6 +256,33 @@ async def run_preflight(
     for email in normalized:
         counts[email] = counts.get(email, 0) + 1
     duplicates = sorted(email for email, count in counts.items() if count > 1)
+    duplicate_recipients_by_email: dict[str, list[EmailPreflightDuplicateRecipientOut]] = {
+        email: [] for email in duplicates
+    }
+    for user, email in zip(users, resolved_emails, strict=False):
+        normalized_email = _normalize_email(email)
+        if normalized_email in duplicate_recipients_by_email:
+            duplicate_recipients_by_email[normalized_email].append(
+                EmailPreflightDuplicateRecipientOut(
+                    source="account",
+                    name=user.display_name,
+                    student_id=user.student_id,
+                )
+            )
+    for row in payload.recipient_variables:
+        normalized_email = _normalize_email(str(row.email))
+        if normalized_email in duplicate_recipients_by_email:
+            duplicate_recipients_by_email[normalized_email].append(
+                EmailPreflightDuplicateRecipientOut(
+                    source="provided_data",
+                    name=row.name,
+                    variables=row.variables,
+                )
+            )
+    duplicate_recipients = [
+        EmailPreflightDuplicateOut(email=email, recipients=duplicate_recipients_by_email[email])
+        for email in duplicates
+    ]
     unique = sorted(counts)
     suppressed = set(
         (
@@ -338,6 +367,7 @@ async def run_preflight(
         resolved_count=len(normalized),
         unique_count=unique_allowed,
         duplicate_emails=duplicates,
+        duplicate_recipients=duplicate_recipients,
         invalid_emails=[],
         suppressed_emails=sorted(suppressed),
         missing_names=sorted(set(missing_names)),

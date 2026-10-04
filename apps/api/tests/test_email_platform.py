@@ -129,6 +129,58 @@ async def test_preflight_excludes_suppressed_recipient(
 
 
 @pytest.mark.asyncio
+async def test_preflight_lists_duplicate_recipient_details(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    sender = await _superuser(db_session)
+    recipient = User(
+        email=f"duplicate-{uuid.uuid4().hex[:8]}@school.edu",
+        display_name="系統帳號姓名",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(recipient)
+    await db_session.flush()
+    _override_user(sender)
+
+    response = await client.post(
+        "/email/preflight",
+        json={
+            "recipient_spec": {"user_ids": [str(recipient.id)]},
+            "recipient_variables": [
+                {
+                    "email": recipient.email,
+                    "name": "名單中的姓名",
+                    "variables": {"學系": "中文系", "職務": "代表"},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["duplicate_emails"] == [recipient.email]
+    assert response.json()["duplicate_recipients"] == [
+        {
+            "email": recipient.email,
+            "recipients": [
+                {
+                    "source": "account",
+                    "name": "系統帳號姓名",
+                    "student_id": None,
+                    "variables": {},
+                },
+                {
+                    "source": "provided_data",
+                    "name": "名單中的姓名",
+                    "student_id": None,
+                    "variables": {"學系": "中文系", "職務": "代表"},
+                },
+            ],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_preflight_applies_conditional_variables_before_required_check(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
