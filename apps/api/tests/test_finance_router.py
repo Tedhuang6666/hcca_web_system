@@ -542,6 +542,7 @@ async def test_budget_expense_without_items_is_visible_on_public_budget(
     sheet.append(["行政雜支", "文具費", "1式", "*", 2000, ""])
     file_buffer = BytesIO()
     workbook.save(file_buffer)
+    anonymous_client = client
     client = authed_client_factory(member_user)
 
     imported = await client.post(
@@ -600,7 +601,7 @@ async def test_budget_expense_without_items_is_visible_on_public_budget(
             }
         ],
     }
-    assert (await client.patch(update_path, json=update_body)).status_code == 401
+    assert (await anonymous_client.patch(update_path, json=update_body)).status_code == 401
     assert (
         await authed_client_factory(viewer).patch(update_path, json=update_body)
     ).status_code == 403
