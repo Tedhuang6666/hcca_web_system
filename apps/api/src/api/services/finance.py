@@ -233,8 +233,9 @@ def _import_quantity(value: object) -> tuple[Decimal, str]:
 
 def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], list[str]]:
     from io import BytesIO
-    from xml.etree import ElementTree
 
+    from defusedxml import ElementTree
+    from defusedxml.common import DefusedXmlException
     from openpyxl import load_workbook
 
     try:
@@ -263,7 +264,7 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], l
                         if definition is not None
                         else None
                     )
-        except ElementTree.ParseError:
+        except (ElementTree.ParseError, DefusedXmlException):
             theme_colors = []
 
     def is_green_fill(cell: object) -> bool:
