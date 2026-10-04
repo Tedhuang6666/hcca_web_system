@@ -96,6 +96,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/line/open", "GET"),
     ("/line/webhook", "POST"),
     ("/email/resend/webhook", "POST"),
+    # 短網址解析供匿名訪客跳轉至已管理的公開內容。
+    ("/short-links/resolve/{slug}", "GET"),
     # 公開資訊（法規、公文、公告等刻意對外公開）
     ("/documents", "GET"),
     ("/documents/{doc_id}", "GET"),
