@@ -54,18 +54,15 @@ export async function fetchPublicPetition(id: string): Promise<PetitionPublicOut
   return fetchPublicJson<PetitionPublicOut>(`/petitions/public/${encodeURIComponent(id)}`);
 }
 
-export async function fetchPublicBudgets(): Promise<PublicBudgetListItem[]> {
-  return (await fetchCachedPublicJson<PublicBudgetListItem[]>(
-    "/finance/public/budgets",
-    { revalidate: 15 },
-  )) ?? [];
+export async function fetchPublicBudgets(): Promise<PublicFetchResult<PublicBudgetListItem[]>> {
+  // 公開狀態可能剛更新；直接讀取，並保留失敗狀態，避免舊快取或 API 錯誤被當成空清單。
+  return fetchPublicJsonResult<PublicBudgetListItem[]>("/finance/public/budgets");
 }
 
-export async function fetchPublicExpenses(limit = 10): Promise<PublicExpenseOut[]> {
-  return (await fetchCachedPublicJson<PublicExpenseOut[]>(
-    `/finance/public/expenses?limit=${limit}`,
-    { revalidate: 15 },
-  )) ?? [];
+export async function fetchPublicExpenses(
+  limit = 10,
+): Promise<PublicFetchResult<PublicExpenseOut[]>> {
+  return fetchPublicJsonResult<PublicExpenseOut[]>(`/finance/public/expenses?limit=${limit}`);
 }
 
 export async function fetchPublicBudgetTotals(
