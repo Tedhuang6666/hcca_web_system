@@ -29,6 +29,7 @@ import type {
   ExpensePaymentStatus,
   FinanceExpenseClaimItemCreate,
   FinanceExpenseClaimItemOut,
+  FinanceBudgetIncomeItem,
   FinanceJournalOut,
   FundAccountOut,
   LedgerOut,
@@ -88,7 +89,7 @@ const emptyClaimItem = (): FinanceExpenseClaimItemCreate => ({
   unit: "項",
   budget_exception_note: "尚未編列預算",
 });
-const today = new Date().toISOString().slice(0, 10);
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 
 type ExpenseClaimDraft = {
   periodId: string;
@@ -347,6 +348,24 @@ export default function FinancePage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "建立會計期間失敗");
     }
+  };
+
+  const registerBudgetIncome = (item: FinanceBudgetIncomeItem, targetPeriodId: string) => {
+    const period = periods.find((candidate) => candidate.id === targetPeriodId);
+    if (!period || period.is_closed) return toast.error("這筆收入所屬期間已關閉，無法登錄");
+    const entryDay = today < period.starts_on
+      ? period.starts_on
+      : today > period.ends_on
+        ? period.ends_on
+        : today;
+    setPeriodId(targetPeriodId);
+    setEntryType("income");
+    setEntryAmount(String(item.amount));
+    setEntryDate(entryDay);
+    setEntryDescription(`${item.category}｜${item.name}`);
+    setEditingManualEntryId(null);
+    setActiveTab("entry");
+    toast.info("已帶入預算收入，確認保管點與收入科目後即可送出");
   };
 
   const createEntry = async () => {
@@ -1233,7 +1252,7 @@ export default function FinancePage() {
             })}</div> : <div className="finance-workspace__empty"><ReceiptText size={18} aria-hidden="true" />目前沒有你可查閱的報帳案件。</div>}
           </section>}
 
-           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} currentUserId={currentUserId} canRecordExpense={canClaimExpense || canBudget} />}
+           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} currentUserId={currentUserId} canRecordExpense={canClaimExpense || canBudget} canRecordIncome={canRecord} onRegisterIncome={registerBudgetIncome} />}
           </div>
         </div>
       )}

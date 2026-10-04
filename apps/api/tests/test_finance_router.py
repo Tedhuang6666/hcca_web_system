@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from io import BytesIO
 
 from openpyxl import Workbook
+from openpyxl.styles import PatternFill
 from sqlalchemy import select
 
 from api.core.clock import local_today
@@ -358,6 +359,10 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     sheet.append(["項目", "細項", "數量", "單價", "總額(含稅)", "備註"])
     sheet.append(["行政雜支", "文具購買", 2, 150, 300, ""])
     sheet.append([None, "臨時支出", 1, "*", 500, "核准後補憑證"])
+    sheet.append(["收入", None, None, None, None, None])
+    sheet["A4"].fill = PatternFill(fill_type="solid", fgColor="FF92D050")
+    sheet.append([None, "活動報名費", 1, 300, 300, "春季活動"])
+    sheet.append(["行政雜支", "影印紙", 2, 100, 200, ""])
     file_buffer = BytesIO()
     workbook.save(file_buffer)
 
@@ -379,13 +384,20 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
 
     assert response.status_code == 201
     assert response.json()["categories_created"] == 1
-    assert response.json()["allocations_created"] == 2
+    assert response.json()["allocations_created"] == 3
+    assert response.json()["income_items_created"] == 1
     assert response.json()["skipped_rows"] == []
     detail = await authed_client_factory(member_user).get(
         f"/finance/budgets/{response.json()['budget']['id']}"
     )
     assert detail.status_code == 200
-    assert sorted(allocation["amount"] for allocation in detail.json()["allocations"]) == [300, 500]
+    assert sorted(allocation["amount"] for allocation in detail.json()["allocations"]) == [
+        200,
+        300,
+        500,
+    ]
+    assert [item["name"] for item in detail.json()["income_items"]] == ["活動報名費"]
+    assert detail.json()["income_items"][0]["category"] == "收入"
 
     replacement = Workbook()
     replacement_sheet = replacement.active
@@ -418,7 +430,46 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     assert [allocation["amount"] for allocation in detail_after_reimport.json()["allocations"]] == [
         720
     ]
+    assert detail_after_reimport.json()["income_items"] == []
     assert "臨時支出" not in {node["name"] for node in detail_after_reimport.json()["nodes"]}
+
+
+async def test_budget_import_can_approve_with_date_and_requires_review_permission(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    approver = await make_user(email="budget-import-approver@school.edu")
+    await _grant_on_org(
+        db_session, approver, org, ["finance:budget", "finance:budget_review", "finance:view"]
+    )
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["項目", "細項", "數量", "單價", "總額(含稅)", "備註"])
+    sheet.append(["行政雜支", "文具", 1, 200, 200, ""])
+    file_buffer = BytesIO()
+    workbook.save(file_buffer)
+    upload = {
+        "file": (
+            "預算案.xlsx",
+            file_buffer.getvalue(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+    endpoint = f"/finance/ledgers/{ledger.id}/budgets/import"
+    form = {
+        "period_id": str(period.id),
+        "name": "115 學年度預算",
+        "council_approved_on": "2026-08-19",
+    }
+
+    forbidden = await authed_client_factory(member_user).post(endpoint, data=form, files=upload)
+    assert forbidden.status_code == 403
+
+    approved = await authed_client_factory(approver).post(endpoint, data=form, files=upload)
+    assert approved.status_code == 201
+    assert approved.json()["submission"]["status"] == "approved"
+    assert approved.json()["submission"]["council_approved_on"] == "2026-08-19"
 
 
 async def test_council_review_draft_has_a_public_page_without_internal_data(
@@ -535,7 +586,7 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
     assert (
         await reviewer_client.post(
             f"/finance/budget-submissions/{submission.json()['id']}/review",
-            json={"status": "approved"},
+            json={"status": "approved", "council_approved_on": "2026-08-19"},
         )
     ).status_code == 200
 
@@ -807,7 +858,7 @@ async def test_expense_workflow_tracks_review_procurement_payment_and_budget(
     assert (
         await reviewer_client.post(
             f"/finance/budget-submissions/{submission.json()['id']}/review",
-            json={"status": "approved"},
+            json={"status": "approved", "council_approved_on": "2026-08-19"},
         )
     ).status_code == 200
 
@@ -1042,7 +1093,7 @@ async def test_shared_budget_submission_tracks_hierarchy_and_internal_review(
     assert submitted.json()["status"] == "submitted"
     approved = await creator.post(
         f"/finance/budget-submissions/{submission.json()['id']}/review",
-        json={"status": "approved"},
+        json={"status": "approved", "council_approved_on": "2026-08-19"},
     )
     assert approved.json()["status"] == "approved"
     detail = await creator.get(f"/finance/budgets/{budget.json()['id']}")

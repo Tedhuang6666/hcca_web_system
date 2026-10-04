@@ -323,6 +323,7 @@ class BudgetAllocationUpdate(BaseModel):
 class BudgetReview(BaseModel):
     status: BudgetSubmissionStatus
     note: str | None = Field(None, max_length=500)
+    council_approved_on: date | None = None
 
     @model_validator(mode="after")
     def review_status_valid(self) -> BudgetReview:
@@ -332,6 +333,10 @@ class BudgetReview(BaseModel):
             BudgetSubmissionStatus.REJECTED,
         }:
             raise ValueError("審核結果必須是核准、退回或否決")
+        if self.status == BudgetSubmissionStatus.APPROVED and self.council_approved_on is None:
+            raise ValueError("核准預算案時必須填寫議會通過日期")
+        if self.status != BudgetSubmissionStatus.APPROVED and self.council_approved_on is not None:
+            raise ValueError("只有核准預算案能填寫議會通過日期")
         return self
 
 
@@ -433,7 +438,19 @@ class BudgetSubmissionOut(BaseModel):
     reviewed_by_id: uuid.UUID | None
     reviewed_at: datetime | None
     review_note: str | None
+    council_approved_on: date | None
     is_council_review_public: bool
+
+
+class BudgetIncomeItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    submission_id: uuid.UUID
+    category: str
+    name: str
+    amount: int
+    note: str | None
+    source_row_number: int
 
 
 class BudgetNodeOut(BaseModel):
@@ -467,6 +484,7 @@ class BudgetDetailOut(BudgetOut):
     submissions: list[BudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[BudgetAllocationOut]
+    income_items: list[BudgetIncomeItemOut] = Field(default_factory=list)
     expenses: list[FinanceBudgetExpenseOut] = Field(default_factory=list)
 
 
@@ -475,6 +493,7 @@ class BudgetImportOut(BaseModel):
     submission: BudgetSubmissionOut
     categories_created: int
     allocations_created: int
+    income_items_created: int
     skipped_rows: list[str]
 
 
@@ -515,6 +534,7 @@ class PublicBudgetSubmissionOut(BaseModel):
     status: BudgetSubmissionStatus
     title: str
     reviewed_at: datetime | None
+    council_approved_on: date | None
     review_note: str | None
 
 

@@ -148,7 +148,7 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
           {budget.submissions.map((submission) => (
             <li key={submission.id}>
               <span><Check size={14} aria-hidden="true" /></span>
-              <div><h3>{submission.title}</h3><p>{submission.review_note || "已完成內部審核。"}</p>{submission.reviewed_at && <time dateTime={submission.reviewed_at}>{new Intl.DateTimeFormat("zh-TW", { dateStyle: "long" }).format(new Date(submission.reviewed_at))}</time>}</div>
+              <div><h3>{submission.title}</h3>{submission.council_approved_on && <p>議會通過日期：{new Intl.DateTimeFormat("zh-TW", { dateStyle: "long" }).format(new Date(`${submission.council_approved_on}T00:00:00`))}</p>}<p>{submission.review_note || "已完成內部審核。"}</p>{submission.reviewed_at && <time dateTime={submission.reviewed_at}>{new Intl.DateTimeFormat("zh-TW", { dateStyle: "long" }).format(new Date(submission.reviewed_at))}</time>}</div>
             </li>
           ))}
         </ol>

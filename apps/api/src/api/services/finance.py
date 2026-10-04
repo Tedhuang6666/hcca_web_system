@@ -30,6 +30,7 @@ from api.models.finance import (
     FinanceBudgetExpense,
     FinanceBudgetExpenseEvidence,
     FinanceBudgetExpenseItem,
+    FinanceBudgetIncomeItem,
     FinanceBudgetNode,
     FinanceBudgetSubmission,
     FinanceLedger,
@@ -210,8 +211,9 @@ def _import_quantity(value: object) -> tuple[Decimal, str]:
     return quantity, match.group(2).strip()[:32] or "項"
 
 
-def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[str]]:
+def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], list[str]]:
     from io import BytesIO
+    from xml.etree import ElementTree
 
     from openpyxl import load_workbook
 
@@ -220,16 +222,71 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[str]]:
     except Exception as exc:
         raise ValueError("無法讀取 xlsx 預算檔，請確認檔案未損壞") from exc
 
+    loaded_theme = workbook.loaded_theme
     try:
-        rows = list(workbook.active.iter_rows(values_only=True))
+        rows = list(workbook.active.iter_rows(values_only=False))
     finally:
         workbook.close()
+
+    theme_colors: list[str | None] = []
+    if loaded_theme:
+        try:
+            theme = ElementTree.fromstring(loaded_theme)
+            color_scheme = theme.find(
+                ".//{http://schemas.openxmlformats.org/drawingml/2006/main}clrScheme"
+            )
+            if color_scheme is not None:
+                for color in color_scheme:
+                    definition = next(iter(color), None)
+                    theme_colors.append(
+                        (definition.attrib.get("val") or definition.attrib.get("lastClr"))
+                        if definition is not None
+                        else None
+                    )
+        except ElementTree.ParseError:
+            theme_colors = []
+
+    def is_green_fill(cell: object) -> bool:
+        fill = getattr(cell, "fill", None)
+        if fill is None or fill.fill_type != "solid":
+            return False
+        color = fill.fgColor
+        rgb = None
+        if color.type == "rgb" and color.rgb:
+            rgb = color.rgb[-6:]
+        elif color.type == "indexed" and color.indexed is not None:
+            from openpyxl.styles.colors import COLOR_INDEX
+
+            if 0 <= color.indexed < len(COLOR_INDEX):
+                rgb = COLOR_INDEX[color.indexed][-6:]
+        elif (
+            color.type == "theme"
+            and color.theme is not None
+            and 0 <= color.theme < len(theme_colors)
+        ):
+            rgb = theme_colors[color.theme]
+        if not rgb or len(rgb) != 6:
+            return False
+        try:
+            red, green, blue = (int(rgb[index : index + 2], 16) for index in (0, 2, 4))
+        except ValueError:
+            return False
+        tint = color.tint or 0
+        if tint:
+            channels = [red, green, blue]
+            for index, channel in enumerate(channels):
+                normalized = channel / 255
+                channels[index] = round(
+                    255 * (normalized * (1 + tint) if tint < 0 else normalized * (1 - tint) + tint)
+                )
+            red, green, blue = channels
+        return green >= 70 and green - red >= 12 and green - blue >= 8
 
     header_index = None
     columns: dict[str, int] = {}
     for index, row in enumerate(rows[:30]):
         normalized = {
-            _import_text(value).replace(" ", ""): column for column, value in enumerate(row)
+            _import_text(cell.value).replace(" ", ""): column for column, cell in enumerate(row)
         }
         if "項目" in normalized and "細項" in normalized:
             header_index = index
@@ -245,35 +302,53 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[str]]:
     amount_column = columns.get("總額(含稅)", columns.get("總額", 5))
     note_column = columns.get("備註", 7)
     imported: list[dict] = []
+    imported_income: list[dict] = []
     skipped: list[str] = []
     current_category = ""
+    current_category_is_income = False
     for row_number, row in enumerate(rows[header_index + 1 :], header_index + 2):
-        category = _import_text(row[category_column] if category_column < len(row) else None)
-        detail = _import_text(row[detail_column] if detail_column < len(row) else None)
+        category_cell = row[category_column] if category_column < len(row) else None
+        detail_cell = row[detail_column] if detail_column < len(row) else None
+        category = _import_text(category_cell.value if category_cell else None)
+        detail = _import_text(detail_cell.value if detail_cell else None)
+        row_is_income = any(is_green_fill(cell) for cell in row)
         if category:
             current_category = category
+            current_category_is_income = row_is_income
         if not detail:
             continue
         category = category or current_category or "未分類"
+        is_income = row_is_income or current_category_is_income
         quantity, unit = _import_quantity(
-            row[quantity_column] if quantity_column < len(row) else None
+            row[quantity_column].value if quantity_column < len(row) else None
         )
         unit_price = _import_amount(
-            row[unit_price_column] if unit_price_column < len(row) else None
+            row[unit_price_column].value if unit_price_column < len(row) else None
         )
-        amount = _import_amount(row[amount_column] if amount_column < len(row) else None)
+        amount = _import_amount(row[amount_column].value if amount_column < len(row) else None)
         if amount is None and unit_price is not None:
             amount = int((quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         if amount is None:
             skipped.append(f"第 {row_number} 列「{detail}」沒有可用總額")
             continue
-        note = _import_text(row[note_column] if note_column < len(row) else None)
+        note = _import_text(row[note_column].value if note_column < len(row) else None)
+        if is_income:
+            imported_income.append(
+                {
+                    "category": category[:160],
+                    "name": detail[:160],
+                    "amount": amount,
+                    "note": note or None,
+                    "source_row_number": row_number,
+                }
+            )
+            continue
         if unit_price is not None:
             calculated = int((quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
             if calculated != amount:
                 note = "；".join(filter(None, [note, "單價與總額不一致，保留試算表總額"]))
                 unit_price = None
-        elif _import_text(row[unit_price_column] if unit_price_column < len(row) else None):
+        elif _import_text(row[unit_price_column].value if unit_price_column < len(row) else None):
             note = "；".join(filter(None, [note, "原始單價未提供，以試算表總額匯入"]))
         imported.append(
             {
@@ -287,9 +362,9 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[str]]:
                 "row_number": row_number,
             }
         )
-    if not imported:
+    if not imported and not imported_income:
         raise ValueError("預算表沒有可匯入的明細")
-    return imported, skipped
+    return imported, imported_income, skipped
 
 
 async def import_budget_from_xlsx(
@@ -303,8 +378,8 @@ async def import_budget_from_xlsx(
     proposing_org_id: uuid.UUID | None = None,
     budget_id: uuid.UUID | None = None,
     replace_submission_id: uuid.UUID | None = None,
-) -> tuple[FinanceBudget, FinanceBudgetSubmission, int, int, list[str]]:
-    rows, skipped = await asyncio.to_thread(_parse_budget_workbook, file_bytes)
+) -> tuple[FinanceBudget, FinanceBudgetSubmission, int, int, int, list[str]]:
+    rows, income_rows, skipped = await asyncio.to_thread(_parse_budget_workbook, file_bytes)
     ledger = await get_ledger(db, ledger_id)
     org_id = proposing_org_id or ledger.org_id
     if not await db.get(Org, org_id):
@@ -331,6 +406,11 @@ async def import_budget_from_xlsx(
             await db.execute(
                 delete(FinanceBudgetAllocation).where(
                     FinanceBudgetAllocation.submission_id == submission.id
+                )
+            )
+            await db.execute(
+                delete(FinanceBudgetIncomeItem).where(
+                    FinanceBudgetIncomeItem.submission_id == submission.id
                 )
             )
         else:
@@ -382,8 +462,9 @@ async def import_budget_from_xlsx(
             ),
             user_id,
         )
+    db.add_all(FinanceBudgetIncomeItem(submission_id=submission.id, **row) for row in income_rows)
     await _refresh_budget_node_activity(db, budget.id)
-    return budget, submission, len(categories), len(rows), skipped
+    return budget, submission, len(categories), len(rows), len(income_rows), skipped
 
 
 async def create_budget_submission(
@@ -592,8 +673,13 @@ async def submit_budget_submission(
         .select_from(FinanceBudgetAllocation)
         .where(FinanceBudgetAllocation.submission_id == submission.id)
     )
-    if not count:
-        raise HTTPException(400, "預算案至少需要一筆最末層配置")
+    income_count = await db.scalar(
+        select(func.count())
+        .select_from(FinanceBudgetIncomeItem)
+        .where(FinanceBudgetIncomeItem.submission_id == submission.id)
+    )
+    if not count and not income_count:
+        raise HTTPException(400, "預算案至少需要一筆收入或支出明細")
     submission.status = BudgetSubmissionStatus.SUBMITTED
     submission.submitted_at = datetime.now(UTC)
     await db.flush()
@@ -612,6 +698,7 @@ async def review_budget_submission(
     submission.review_note = body.note
     submission.reviewed_by_id = reviewer_id
     submission.reviewed_at = datetime.now(UTC)
+    submission.council_approved_on = body.council_approved_on
     if body.status in {BudgetSubmissionStatus.APPROVED, BudgetSubmissionStatus.REJECTED}:
         submission.is_council_review_public = False
     await db.flush()
@@ -910,6 +997,19 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
             )
         ).scalars()
     )
+    income_items = list(
+        (
+            await db.execute(
+                select(FinanceBudgetIncomeItem)
+                .join(FinanceBudgetSubmission)
+                .where(FinanceBudgetSubmission.budget_id == budget.id)
+                .order_by(
+                    FinanceBudgetIncomeItem.submission_id,
+                    FinanceBudgetIncomeItem.source_row_number,
+                )
+            )
+        ).scalars()
+    )
     allocation_ids = [allocation.id for allocation in allocations]
     evidence_rows = (
         list(
@@ -1015,6 +1115,7 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
             }
             for allocation in allocations
         ],
+        "income_items": income_items,
         "expenses": expenses,
         "nodes": [
             {

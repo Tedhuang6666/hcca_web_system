@@ -9658,6 +9658,9 @@ input[type="radio"]:checked {
 }
 
 .finance-budget__create-fields > label:not(.btn) { display: grid; gap: 0.3rem; color: var(--text-muted); font-size: 0.68rem; font-weight: 700; }
+.finance-budget__approval-date { min-width: 10rem; }
+.finance-budget__approval-date input { min-height: 2.7rem; }
+.finance-budget__import-note { grid-column: 1 / -1; margin: 0; color: var(--text-muted); font-size: 0.72rem; line-height: 1.5; }
 .finance-budget__file { max-width: 12rem; cursor: pointer; }
 .finance-budget__file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .finance-budget__import-target { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin: 0; padding: 0; border: 0; }
@@ -9711,6 +9714,34 @@ input[type="radio"]:checked {
 .finance-budget__utilization strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .finance-budget__utilization > div { height: 0.45rem; margin-top: 0.5rem; overflow: hidden; border-radius: 999px; background: var(--bg-active); }
 .finance-budget__utilization i { display: block; height: 100%; border-radius: inherit; background: var(--success); }
+
+.finance-budget__income {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--success) 32%, var(--border));
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--success-dim) 34%, var(--bg-surface));
+}
+
+.finance-budget__income > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.8rem 1.2rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--success) 20%, var(--border));
+}
+
+.finance-budget__income h3 { margin: 0; color: var(--success); font-size: 0.92rem; }
+.finance-budget__income header p { max-width: 65ch; margin: 0.25rem 0 0; color: var(--text-muted); font-size: 0.73rem; line-height: 1.5; }
+.finance-budget__income header > strong { flex: 0 0 auto; color: var(--success); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.finance-budget__income ul { display: grid; gap: 0.55rem; margin: 0; padding: 0.75rem; list-style: none; }
+.finance-budget__income li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.7rem 0.8rem; background: var(--bg-surface); }
+.finance-budget__income li > div { display: grid; justify-items: start; gap: 0.12rem; min-width: 0; }
+.finance-budget__income li > div > span { color: var(--success); font-size: 0.66rem; font-weight: 750; }
+.finance-budget__income li > div > strong { color: var(--text-primary); font-size: 0.78rem; }
+.finance-budget__income li > div > small { color: var(--text-muted); font-size: 0.68rem; }
+.finance-budget__income li > b { color: var(--text-primary); font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.finance-budget__income li > .btn { min-height: 2.5rem; }
 
 .finance-budget__section {
   overflow: hidden;
@@ -9813,6 +9844,8 @@ input[type="radio"]:checked {
 .finance-budget__review-bar > span { display: flex; align-items: center; gap: 0.45rem; color: var(--text-secondary); font-size: 0.7rem; }
 .finance-budget__review-bar { border-bottom: 1px solid var(--border); background: var(--info-dim); }
 .finance-budget__review-bar > div { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.finance-budget__review-bar > label { display: grid; gap: 0.25rem; color: var(--text-secondary); font-size: 0.68rem; font-weight: 700; }
+.finance-budget__review-bar > label input { min-height: 2.5rem; }
 
 .finance-budget__table--allocations { border-top: 1px solid var(--border); }
 .finance-budget__table--allocations table { min-width: 76rem; }
@@ -9928,6 +9961,9 @@ input[type="radio"]:checked {
   .finance-budget__node-form,
   .finance-budget__allocation-form { grid-template-columns: 1fr; }
   .finance-budget__new-submission { display: grid; width: 100%; }
+  .finance-budget__income > header { align-items: start; }
+  .finance-budget__income li { grid-template-columns: minmax(0, 1fr) auto; }
+  .finance-budget__income li > .btn { grid-column: 1 / -1; width: 100%; justify-content: center; }
   .finance-budget__publication,
   .finance-budget__council-review { grid-template-columns: auto minmax(0, 1fr); }
   .finance-budget__publication > div:last-child,

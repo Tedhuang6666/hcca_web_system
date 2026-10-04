@@ -314,9 +314,27 @@ class FinanceBudgetSubmission(Base, TimestampMixin):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    council_approved_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_council_review_public: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+
+
+class FinanceBudgetIncomeItem(Base, TimestampMixin):
+    __tablename__ = "finance_budget_income_items"
+    __table_args__ = (Index("ix_finance_budget_income_submission", "submission_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    submission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_budget_submissions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    category: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class FinanceBudgetNode(Base, TimestampMixin):
