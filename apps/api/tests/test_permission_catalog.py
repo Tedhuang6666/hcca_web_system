@@ -18,6 +18,16 @@ def test_permission_catalog_contains_every_defined_code_once() -> None:
     assert validate_permission_codes(catalog_codes) == []
 
 
+def test_qr_code_permission_covers_the_combined_marketing_tools_workspace() -> None:
+    permission = next(
+        item for item in ALL_PERMISSION_CODES if item["code"] == PermissionCode.QR_CODE_MANAGE
+    )
+
+    assert permission["label"] == "經營工具"
+    assert "短網址" in permission["desc"]
+    assert "QR Code" in permission["desc"]
+
+
 def test_specialized_modules_have_separate_permission_nodes() -> None:
     codes = {str(code) for code in PermissionCode}
 

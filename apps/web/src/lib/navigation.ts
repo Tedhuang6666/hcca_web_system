@@ -113,8 +113,8 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: "qrCode",
     href: "/qr-code",
-    iconKey: "settings",
-    label: "QR Code 產生器",
+    iconKey: "link",
+    label: "經營工具",
     perm: "qr_code:manage",
   },
   {

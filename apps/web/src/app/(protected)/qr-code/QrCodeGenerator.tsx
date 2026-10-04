@@ -175,17 +175,16 @@ function AccessDenied() {
     <main className="qr-tool-page">
       <section className="qr-access-denied" aria-labelledby="qr-access-title">
         <span className="qr-access-icon" aria-hidden="true"><LockKeyhole size={23} /></span>
-        <p className="qr-kicker">後台工具</p>
-        <h1 id="qr-access-title">沒有 QR Code 工具權限</h1>
+        <h1 id="qr-access-title">沒有經營工具權限</h1>
         <p>
-          這個產生器只開放給被指派 <code>qr_code:manage</code> 的職位。請洽系統管理員加入對應權限組。
+          這個工具只開放給被指派 <code>qr_code:manage</code> 的職位。請洽系統管理員加入對應權限組。
         </p>
       </section>
     </main>
   );
 }
 
-export default function QrCodeGenerator() {
+export default function QrCodeGenerator({ initialContent }: { initialContent?: string }) {
   const { can } = usePermissions();
   const [hydrated, setHydrated] = useState(false);
   const [content, setContent] = useState(DEFAULT_CONTENT);
@@ -194,6 +193,9 @@ export default function QrCodeGenerator() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    if (initialContent?.trim()) setContent(initialContent.trim());
+  }, [initialContent]);
   useEffect(() => {
     let active = true;
 
@@ -337,9 +339,8 @@ export default function QrCodeGenerator() {
           <div>
             <div className="qr-tool-title-row">
               <span className="qr-tool-title-icon" aria-hidden="true"><QrCode size={22} /></span>
-              <p className="qr-kicker">後台工具</p>
+              <h1>做一張值得被分享的 QR Code</h1>
             </div>
-            <h1>做一張值得被分享的 QR Code</h1>
             <p className="qr-tool-lede">把網址或文字調整成適合公告、海報與現場投影的版本，所有設定會即時反映在右側預覽。</p>
           </div>
           <div className="qr-privacy-note"><ShieldCheck size={17} aria-hidden="true" /><span>內容只在本機產生，不會上傳</span></div>
@@ -349,7 +350,6 @@ export default function QrCodeGenerator() {
           <section className="qr-preview-panel" aria-labelledby="qr-preview-title">
             <div className="qr-panel-heading">
               <div>
-                <p className="qr-section-label">即時預覽</p>
                 <h2 id="qr-preview-title">掃描看看成品</h2>
               </div>
               {preview && !("error" in preview) && (
@@ -398,7 +398,6 @@ export default function QrCodeGenerator() {
           <section className="qr-settings-panel" aria-labelledby="qr-settings-title">
             <div className="qr-panel-heading">
               <div>
-                <p className="qr-section-label">設定</p>
                 <h2 id="qr-settings-title">調整你的 QR Code</h2>
               </div>
               <button type="button" className="qr-icon-button" onClick={reset} aria-label="恢復預設設定" title="恢復預設設定">

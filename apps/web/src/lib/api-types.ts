@@ -10729,6 +10729,58 @@ export interface paths {
         patch: operations["update_variant_option_shop_variant_options__option_id__patch"];
         trace?: never;
     };
+    "/short-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Short Links */
+        get: operations["list_short_links_short_links_get"];
+        put?: never;
+        /** Create Short Link */
+        post: operations["create_short_link_short_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/short-links/resolve/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 解析公開短網址 */
+        get: operations["resolve_short_link_short_links_resolve__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/short-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Short Link */
+        patch: operations["update_short_link_short_links__link_id__patch"];
+        trace?: never;
+    };
     "/site/admin/files": {
         parameters: {
             query?: never;
@@ -28541,6 +28593,64 @@ export interface components {
             target_identifiers?: string[] | null;
             /** Target Product Ids */
             target_product_ids?: string[] | null;
+        };
+        /** ShortLinkCreate */
+        ShortLinkCreate: {
+            /** Slug */
+            slug: string;
+            /**
+             * Target Url
+             * Format: uri
+             */
+            target_url: string;
+            /** Title */
+            title?: string | null;
+        };
+        /** ShortLinkOut */
+        ShortLinkOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Slug */
+            slug: string;
+            /**
+             * Target Url
+             * Format: uri
+             */
+            target_url: string;
+            /** Title */
+            title: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ShortLinkResolveOut */
+        ShortLinkResolveOut: {
+            /**
+             * Target Url
+             * Format: uri
+             */
+            target_url: string;
+        };
+        /** ShortLinkUpdate */
+        ShortLinkUpdate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Target Url */
+            target_url?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** StatusOut */
         StatusOut: {
@@ -54535,6 +54645,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductVariantOptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_short_links_short_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortLinkOut"][];
+                };
+            };
+        };
+    };
+    create_short_link_short_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShortLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_short_link_short_links_resolve__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortLinkResolveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_short_link_short_links__link_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShortLinkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortLinkOut"];
                 };
             };
             /** @description Validation Error */

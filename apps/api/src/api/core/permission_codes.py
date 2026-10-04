@@ -888,8 +888,8 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
         "group": "工具",
         "code": PermissionCode.QR_CODE_MANAGE,
-        "label": "QR Code 產生器",
-        "desc": "使用後台 QR Code 產生器，調整樣式並匯出圖片",
+        "label": "經營工具",
+        "desc": "管理班聯短網址並使用 QR Code 產生器",
     },
 ]
 
