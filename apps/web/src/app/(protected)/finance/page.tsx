@@ -141,7 +141,7 @@ export default function FinancePage() {
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [loadingEntryDetails, setLoadingEntryDetails] = useState<string | null>(null);
   const [periodId, setPeriodId] = useState("");
-  const [activeTab, setActiveTab] = useState<FinanceTab>(canBudget ? "budget" : "workspace");
+  const [activeTab, setActiveTab] = useState<FinanceTab>("budget");
   const [isPeriodSetupOpen, setIsPeriodSetupOpen] = useState(false);
   const [entryType, setEntryType] = useState<EntryType>("expense");
   const [fundId, setFundId] = useState("");
@@ -401,6 +401,7 @@ export default function FinancePage() {
       setIsPeriodSetupOpen(false);
       toast.success("會計期間已建立");
       await load(ledger.id);
+      setActiveTab("budget");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "建立會計期間失敗");
     }
@@ -886,9 +887,9 @@ export default function FinancePage() {
   const expensePaymentReady = paymentMethod === "direct" || Boolean(advancedById);
   const expenseReady = expenseBasicsReady && expenseItemsReady && expensePaymentReady;
   const primaryNavigation = [
-    { id: "workspace" as const, label: "財務總覽", icon: LayoutDashboard },
-    { id: "budget" as const, label: "預算與核銷", icon: PiggyBank },
-    { id: "claims" as const, label: "收支紀錄", icon: ReceiptText },
+    { id: "budget" as const, label: "預算與支出", icon: PiggyBank },
+    { id: "workspace" as const, label: "其他財務作業", icon: LayoutDashboard },
+    { id: "claims" as const, label: "舊制收支紀錄", icon: ReceiptText },
   ];
   const settingsNavigation = [
     { id: "ledger" as const, label: "帳本與期間", icon: BookOpenText },
@@ -914,8 +915,8 @@ export default function FinancePage() {
     <main className="finance-page">
       <header className="finance-header">
         <div className="finance-header__copy">
-          <h1>財務總覽</h1>
-          <p>核准預算可直接登錄核銷、上傳憑證並公開明細；舊制收支紀錄仍可查閱。</p>
+          <h1>預算與支出</h1>
+          <p>匯入預算並填寫議會通過日期，再按預算項目登記支出。</p>
         </div>
         {ledger && (
           <div className="finance-header__actions">
@@ -925,7 +926,7 @@ export default function FinancePage() {
                 className="btn btn-primary"
                 onClick={() => setActiveTab("budget")}
               >
-                <FilePlus2 size={16} aria-hidden="true" />登錄核銷
+                <FilePlus2 size={16} aria-hidden="true" />登記支出
               </button>
             )}
           </div>
@@ -1322,7 +1323,7 @@ export default function FinancePage() {
             })}</div> : <div className="finance-workspace__empty"><ReceiptText size={18} aria-hidden="true" />目前沒有你可查閱的報帳案件。</div>}
           </section>}
 
-           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} currentUserId={currentUserId} canRecordExpense={canClaimExpense || canBudget} canRecordIncome={canRecord} onRegisterIncome={registerBudgetIncome} />}
+           {activeTab === "budget" && <BudgetWorkspace ledgerId={ledger.id} periods={periods} orgs={orgs} canManage={canBudget} canPropose={canBudgetPropose} canReview={canBudgetReview} canPublish={canBudget || canBudgetReview} currentUserId={currentUserId} canRecordExpense={canClaimExpense || canBudget} canRecordIncome={canRecord} onRegisterIncome={registerBudgetIncome} canCreatePeriod={canManage} onSetupPeriod={() => { setActiveTab("ledger"); setIsPeriodSetupOpen(true); }} />}
           </div>
         </div>
       )}

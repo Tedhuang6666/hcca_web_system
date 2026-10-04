@@ -69,7 +69,7 @@ export default function BudgetExpenseRegister({
   isPublic,
   onRecorded,
 }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [allocationId, setAllocationId] = useState("");
   const [entryDate, setEntryDate] = useState(taiwanToday);
@@ -193,11 +193,11 @@ export default function BudgetExpenseRegister({
         evidence,
       });
       resetForm();
-      setIsOpen(false);
+      setIsOpen(true);
       await onRecorded();
-      toast.success("支出與憑證已登錄");
+      toast.success("支出已登記");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "登錄支出失敗");
+      toast.error(error instanceof Error ? error.message : "登記支出失敗");
     } finally {
       setIsSaving(false);
     }
@@ -207,18 +207,18 @@ export default function BudgetExpenseRegister({
     <section className="finance-budget__section finance-budget-expenses" aria-labelledby="budget-expenses-heading">
       <header>
         <div>
-          <h3 id="budget-expenses-heading">核銷紀錄</h3>
-          <p>選預算、填用途與金額，再附上核銷憑證；品項明細可不填。</p>
+          <h3 id="budget-expenses-heading">登記支出</h3>
+          <p>選擇預算項目，填寫日期、用途與金額。收據和品項明細可補充。</p>
         </div>
         {canRecord && approvedAllocations.length > 0 && (
           <button className="btn btn-primary" type="button" onClick={() => setIsOpen((value) => !value)}>
             {isOpen ? <X size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
-            {isOpen ? "取消" : "登錄支出"}
+            {isOpen ? "收起表單" : "登記支出"}
           </button>
         )}
       </header>
 
-      {isOpen && (
+      {isOpen && canRecord && approvedAllocations.length > 0 && (
         <form ref={formRef} className="finance-budget-expenses__form" onSubmit={(event) => void saveExpense(event)}>
           <div className="finance-budget-expenses__fields">
             <label>
@@ -228,7 +228,7 @@ export default function BudgetExpenseRegister({
             <label>
               對應預算明細
               <select className="input" required value={allocationId} onChange={(event) => setAllocationId(event.target.value)}>
-                <option value="">選擇核准項目</option>
+                <option value="">選擇預算項目</option>
                 {approvedAllocations.map(({ allocation, label }) => (
                   <option key={allocation.id} value={allocation.id}>{label}</option>
                 ))}
@@ -314,11 +314,11 @@ export default function BudgetExpenseRegister({
           <footer>
             <span>支出合計<strong aria-live="polite">NT${total.toLocaleString()}</strong></span>
             <button className="btn btn-primary" type="submit" disabled={isSaving}>
-              <Save size={16} aria-hidden="true" />{isSaving ? "正在登錄…" : "儲存核銷"}
+              <Save size={16} aria-hidden="true" />{isSaving ? "正在儲存…" : "儲存支出"}
             </button>
           </footer>
           <p className="finance-budget-expenses__visibility">
-            {isPublic ? "這份預算已公開；登錄後的用途、金額與憑證會同步公開，品項明細會依填寫內容顯示。" : "預算公開後，這筆用途、金額與憑證會一併公開。"}
+            {isPublic ? "儲存後，支出的用途、金額與憑證會顯示在公開頁面。" : "預算公開後，這筆支出會一併顯示。"}
           </p>
         </form>
       )}
@@ -358,7 +358,7 @@ export default function BudgetExpenseRegister({
       ) : (
         <div className="finance-budget-expenses__empty">
           <ReceiptText size={18} aria-hidden="true" />
-          <p>{approvedAllocations.length > 0 ? "這份預算還沒有核銷紀錄。" : "核准預算後，可直接在這裡登錄支出與憑證。"}</p>
+          <p>{approvedAllocations.length > 0 ? "這份預算還沒有支出紀錄。" : "匯入預算後，就能在這裡登記支出。"}</p>
         </div>
       )}
     </section>

@@ -76,6 +76,7 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
     rows: Array<{ allocation: (typeof budget.allocations)[number]; detail: string }>;
   }>()).values());
   const total = budget.allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
+  const councilApprovedOn = budget.submissions.at(-1)?.council_approved_on;
 
   return (
     <div className="public-budget-detail">
@@ -86,7 +87,8 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
           <h1>{budget.name}</h1>
           <p>{isCouncilReview
             ? "這份草案正提供議員審理，內容仍可能調整，不能視為核定預算。"
-            : "這是完成內部審核後的核准版本；後續追加預算與核准紀錄也會保留在同一頁。"}</p>
+            : "查看議會通過的預算與逐筆支出紀錄。"}</p>
+          {!isCouncilReview && councilApprovedOn && <p>議會通過日期：{councilApprovedOn.replaceAll("-", "/")}</p>}
         </div>
         <div className="public-budget-detail__total"><span>{isCouncilReview ? "審理草案總額" : "核准預算總額"}</span><strong>{formatAmount(total)}</strong><small>{budget.allocations.length} 筆編列明細</small></div>
       </header>

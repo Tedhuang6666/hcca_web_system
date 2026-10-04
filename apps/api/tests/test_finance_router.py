@@ -396,6 +396,7 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
             "period_id": str(period.id),
             "name": "115 學年度預算",
             "title": "預算案匯入",
+            "council_approved_on": "2026-08-19",
         },
         files={
             "file": (
@@ -438,6 +439,7 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
             "period_id": str(period.id),
             "name": "115 學年度預算",
             "budget_id": response.json()["budget"]["id"],
+            "council_approved_on": "2026-08-20",
         },
         files={
             "file": (
@@ -456,9 +458,7 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
     assert sorted(
         allocation["amount"] for allocation in detail_after_reimport.json()["allocations"]
     ) == [200, 250, 300, 500, 720]
-    assert [item["name"] for item in detail_after_reimport.json()["income_items"]] == [
-        "活動報名費"
-    ]
+    assert [item["name"] for item in detail_after_reimport.json()["income_items"]] == ["活動報名費"]
     assert "臨時支出" in {node["name"] for node in detail_after_reimport.json()["nodes"]}
 
 
@@ -487,6 +487,11 @@ async def test_budget_import_is_approved_without_review_permission(
         "council_approved_on": "2026-08-19",
     }
 
+    missing_date = await authed_client_factory(member_user).post(
+        endpoint, data={"period_id": str(period.id), "name": "115 學年度預算"}, files=upload
+    )
+    assert missing_date.status_code == 422
+
     approved = await authed_client_factory(member_user).post(endpoint, data=form, files=upload)
     assert approved.status_code == 201
     assert approved.json()["submission"]["status"] == "approved"
@@ -508,7 +513,11 @@ async def test_budget_expense_without_items_is_visible_on_public_budget(
 
     imported = await client.post(
         f"/finance/ledgers/{ledger.id}/budgets/import",
-        data={"period_id": str(period.id), "name": "測試預算"},
+        data={
+            "period_id": str(period.id),
+            "name": "測試預算",
+            "council_approved_on": "2026-08-19",
+        },
         files={
             "file": (
                 "預算案.xlsx",
@@ -551,9 +560,10 @@ async def test_finance_test_reset_is_superuser_only_and_clears_finance_data(
 
     forbidden = await client.delete("/finance/test-reset")
     assert forbidden.status_code == 403
-    assert await db_session.scalar(
-        select(FinanceLedger.id).where(FinanceLedger.id == ledger.id)
-    ) == ledger.id
+    assert (
+        await db_session.scalar(select(FinanceLedger.id).where(FinanceLedger.id == ledger.id))
+        == ledger.id
+    )
 
     member_user.is_superuser = True
     await db_session.flush()
@@ -562,9 +572,10 @@ async def test_finance_test_reset_is_superuser_only_and_clears_finance_data(
     assert cleared.status_code == 200
     assert cleared.json()["records_deleted"] > 0
     assert cleared.json()["evidence_files_failed"] == 0
-    assert await db_session.scalar(
-        select(FinanceLedger.id).where(FinanceLedger.id == ledger.id)
-    ) is None
+    assert (
+        await db_session.scalar(select(FinanceLedger.id).where(FinanceLedger.id == ledger.id))
+        is None
+    )
 
 
 async def test_council_review_draft_has_a_public_page_without_internal_data(
