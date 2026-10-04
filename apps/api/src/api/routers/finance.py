@@ -104,6 +104,14 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 MAX_BUDGET_IMPORT_BYTES = 10 * 1024 * 1024
 
 
+def _inline_evidence_headers(cache_control: str) -> dict[str, str]:
+    return {
+        "Cache-Control": cache_control,
+        "Content-Security-Policy": "frame-ancestors 'self'",
+        "X-Frame-Options": "SAMEORIGIN",
+    }
+
+
 def _journal_out(data: dict) -> JournalOut:
     if data["evidence_url"]:
         data["evidence_url"] = f"/finance/journals/{data['id']}/evidence"
@@ -1509,11 +1517,11 @@ async def download_evidence(entry_id: uuid.UUID, db: DbDep, _: CurrentUser):
             filename=local_path.name,
             media_type=mimetypes.guess_type(local_path.name)[0] or "application/octet-stream",
             content_disposition_type="inline",
-            headers={"Cache-Control": "private, no-store"},
+            headers=_inline_evidence_headers("private, no-store"),
         )
     return RedirectResponse(
         await storage.get_url(entry.evidence_url, disposition="inline"),
-        headers={"Cache-Control": "private, no-store"},
+        headers=_inline_evidence_headers("private, no-store"),
     )
 
 
@@ -1707,13 +1715,13 @@ async def download_budget_expense_evidence(
             filename=evidence.filename,
             media_type=evidence.content_type,
             content_disposition_type="inline",
-            headers={"Cache-Control": "private, no-store"},
+            headers=_inline_evidence_headers("private, no-store"),
         )
     return RedirectResponse(
         await storage.get_url(
             evidence.storage_key, disposition="inline", download_name=evidence.filename
         ),
-        headers={"Cache-Control": "private, no-store"},
+        headers=_inline_evidence_headers("private, no-store"),
     )
 
 
@@ -1766,13 +1774,13 @@ async def download_public_budget_expense_evidence(
             filename=evidence.filename,
             media_type=evidence.content_type,
             content_disposition_type="inline",
-            headers={"Cache-Control": "public, max-age=300"},
+            headers=_inline_evidence_headers("public, max-age=300"),
         )
     return RedirectResponse(
         await storage.get_url(
             evidence.storage_key, disposition="inline", download_name=evidence.filename
         ),
-        headers={"Cache-Control": "public, max-age=300"},
+        headers=_inline_evidence_headers("public, max-age=300"),
     )
 
 
@@ -1844,11 +1852,11 @@ async def download_public_expense_claim_evidence(
             filename=filename,
             media_type=content_type,
             content_disposition_type="inline",
-            headers={"Cache-Control": "public, max-age=300"},
+            headers=_inline_evidence_headers("public, max-age=300"),
         )
     return RedirectResponse(
         await storage.get_url(storage_key, disposition="inline", download_name=filename),
-        headers={"Cache-Control": "public, max-age=300"},
+        headers=_inline_evidence_headers("public, max-age=300"),
     )
 
 
@@ -1878,13 +1886,13 @@ async def download_budget_evidence(evidence_id: uuid.UUID, db: DbDep, user: Curr
             filename=evidence.filename,
             media_type=evidence.content_type,
             content_disposition_type="inline",
-            headers={"Cache-Control": "private, no-store"},
+            headers=_inline_evidence_headers("private, no-store"),
         )
     return RedirectResponse(
         await storage.get_url(
             evidence.storage_key, disposition="inline", download_name=evidence.filename
         ),
-        headers={"Cache-Control": "private, no-store"},
+        headers=_inline_evidence_headers("private, no-store"),
     )
 
 
@@ -1922,11 +1930,11 @@ async def download_item_evidence(evidence_id: uuid.UUID, db: DbDep, user: Curren
             filename=evidence.filename,
             media_type=evidence.content_type or mimetypes.guess_type(evidence.filename)[0],
             content_disposition_type="inline",
-            headers={"Cache-Control": "private, no-store"},
+            headers=_inline_evidence_headers("private, no-store"),
         )
     return RedirectResponse(
         await storage.get_url(
             evidence.storage_key, disposition="inline", download_name=evidence.filename
         ),
-        headers={"Cache-Control": "private, no-store"},
+        headers=_inline_evidence_headers("private, no-store"),
     )

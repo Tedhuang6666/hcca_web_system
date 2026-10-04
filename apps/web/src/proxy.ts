@@ -187,7 +187,7 @@ function buildCsp(nonce: string): string {
     "font-src 'self' https://fonts.gstatic.com data:",
     `img-src 'self' ${httpsSources} data: blob: https://tiles.openfreemap.org https://server.arcgisonline.com https://*.tile.openstreetmap.org https://*.googleusercontent.com https://hcca.buckets.hct.works`,
     `connect-src ${connectSources}`,
-    `frame-src 'self' https://accounts.google.com blob: ${httpsSources}`,
+    `frame-src 'self' https://accounts.google.com https://hcca.buckets.hct.works blob: ${httpsSources}`,
     `worker-src 'self' blob: ${httpsSources}`,
     `manifest-src 'self' ${httpsSources}`,
   ].join("; ");
