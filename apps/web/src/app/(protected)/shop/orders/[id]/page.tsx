@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { authApi, seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
@@ -19,6 +19,9 @@ type SeatingItem = {
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const fromClass = useSearchParams().get("from") === "class";
+  const backHref = fromClass ? "/shop/class-orders" : "/shop/orders";
+  const backLabel = fromClass ? "返回議員工作台" : "返回我的登記";
   const [order, setOrder] = useState<OrderOut | null>(null);
   const [assignments, setAssignments] = useState<SeatBookingOut[]>([]);
   const [seatingItems, setSeatingItems] = useState<SeatingItem[]>([]);
@@ -144,8 +147,8 @@ export default function OrderDetailPage() {
     return (
       <div className="shop-order-detail-page">
         <p>找不到這筆登記。</p>
-        <Link href="/shop/orders" className="shop-order-detail-back">
-          <ArrowLeft size={16} aria-hidden="true" />返回我的登記
+        <Link href={backHref} className="shop-order-detail-back">
+          <ArrowLeft size={16} aria-hidden="true" />{backLabel}
         </Link>
       </div>
     );
@@ -168,8 +171,8 @@ export default function OrderDetailPage() {
 
   return (
     <div className="shop-order-detail-page">
-      <Link href="/shop/orders" className="shop-order-detail-back">
-        <ArrowLeft size={16} aria-hidden="true" />返回我的登記
+      <Link href={backHref} className="shop-order-detail-back">
+        <ArrowLeft size={16} aria-hidden="true" />{backLabel}
       </Link>
 
       <header className="shop-order-detail-hero">

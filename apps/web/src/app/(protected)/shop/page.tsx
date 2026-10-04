@@ -565,7 +565,7 @@ function ProductModal({
                   </p>
                 ) : product.max_quantity_per_user === 1 ? (
                   <p className="text-sm" style={{ color: "var(--public-secondary)" }}>
-                    每人限購 1 件{selectedRegistrationQuantity > 0 ? " · 已登記" : ""}
+                    每人限購 1 件
                   </p>
                 ) : (
                   <div className="shop-product-quantity">
@@ -584,61 +584,9 @@ function ProductModal({
                 )}
               </div>
 
-              {registeredItems.length > 0 && (
-                <div className="shop-product-dialog-section">
-                  <label>已登記規格</label>
-                  <div className="space-y-2">
-                    {registeredItems.map((item) => {
-                      const optionIds = item.selected_options.map((option) => option.option_id).sort();
-                      const optionLabel = item.selected_options.length
-                        ? item.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")
-                        : "標準品項";
-                      return (
-                        <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 truncate text-left"
-                            onClick={() => {
-                              setPicked(Object.fromEntries(
-                                item.selected_options.map((option) => [option.group_id, option.option_id]),
-                              ));
-                              setQty(item.quantity);
-                              setSelectedMediaIndex(null);
-                              setRegistrationUpdateMessage("");
-                            }}>
-                            {optionLabel}
-                          </button>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void setVariantQuantity(optionIds, item.quantity - 1)}
-                              disabled={!canEdit || loading}
-                              aria-label={`減少${optionLabel}數量`}
-                              className="btn btn-ghost h-11 w-11 p-0">−</button>
-                            <span className="w-5 text-center tabular-nums">{item.quantity}</span>
-                            <button
-                              type="button"
-                              onClick={() => void setVariantQuantity(optionIds, item.quantity + 1)}
-                              disabled={!canEdit || loading || registeredQuantity >= maxSelectableQuantity}
-                              aria-label={`增加${optionLabel}數量`}
-                              className="btn btn-ghost h-11 w-11 p-0">＋</button>
-                            <button
-                              type="button"
-                              onClick={() => void setVariantQuantity(optionIds, 0)}
-                              disabled={!canEdit || loading}
-                              className="min-h-11 min-w-11 px-2 text-xs"
-                              style={{ color: "var(--text-muted)" }}>移除</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {selectedRegistrationQuantity > 0 || registrationUpdateMessage ? (
+              {registrationUpdateMessage ? (
                 <p className="shop-product-registration-status" role="status" aria-live="polite">
-                  {registrationUpdateMessage || `已登記 ${selectedRegistrationQuantity} 件，調整數量會立即更新。`}
+                  {registrationUpdateMessage}
                 </p>
               ) : null}
 
@@ -657,10 +605,13 @@ function ProductModal({
               ) : null}
               <div className="shop-product-dialog-actions">
                 {isLoggedIn && selectedRegistrationQuantity > 0 ? (
-                  <div className="shop-product-registration-summary" data-registration-flight-target>
-                    <strong>已登記 {selectedRegistrationQuantity} 件</strong>
-                    <span>NT${(unitPrice * selectedRegistrationQuantity).toLocaleString()}</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void setVariantQuantity(selectedOptionIds, 0)}
+                    disabled={!canEdit || loading}
+                    className="shop-product-remove">
+                    移除這項登記
+                  </button>
                 ) : isLoggedIn ? (
                   <button
                     type="button"
@@ -1472,11 +1423,11 @@ export default function ShopPage() {
           className="shop-public-order-shortcut"
           data-order-flight-target
           aria-label={registrations.length > 0
-            ? `開啟我的訂單，共 ${registrations.length} 筆登記`
-            : "開啟我的訂單"}
+            ? `開啟我的登記，共 ${registrations.length} 筆登記`
+            : "開啟我的登記"}
         >
           <ClipboardList size={19} aria-hidden="true" />
-          <span>我的訂單</span>
+          <span>我的登記</span>
           {registrations.length > 0 && (
             <span className="shop-public-order-shortcut-count">{registrations.length}</span>
           )}

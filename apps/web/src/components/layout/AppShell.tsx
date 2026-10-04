@@ -271,6 +271,11 @@ function SessionGate({
     );
   }
 
+  // 個人商品登記使用公開商品頁的版型，但仍需先確認登入狀態。
+  if (isBareRoute(pathname)) {
+    return <>{children}</>;
+  }
+
   return (
     <ModuleStatusProvider authenticated={isLoggedIn} pollEnabled={isLoggedIn}>
       <AppShellContent
@@ -419,7 +424,7 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
 
-  if (isBareRoute(pathname)) {
+  if (isBareRoute(pathname) && !requiresAuthentication(pathname)) {
     return <>{children}</>;
   }
 

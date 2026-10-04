@@ -677,42 +677,20 @@ export default function ClassOrdersPage() {
         });
         toast.success("訂單已修改");
       } else {
-        const submissions: Array<{
-          user_id: string;
-          notes: string;
-          items: AssistedItemDraft[];
-        }> = [];
-        for (const draft of draftsToSubmit) {
-          const byActivity = new Map<string, AssistedItemDraft[]>();
-          for (const item of draft.items) {
-            const key = item.activity_id ?? "none";
-            const activityItems = byActivity.get(key) ?? [];
-            activityItems.push(item);
-            byActivity.set(key, activityItems);
-          }
-          for (const items of byActivity.values()) {
-            submissions.push({
-              user_id: draft.student_id,
-              notes: draft.notes,
-              items,
-            });
-          }
-        }
-
         const completedItemIds = new Set<string>();
         let failedRequest: unknown = null;
-        for (const submission of submissions) {
+        for (const draft of draftsToSubmit) {
           try {
             await shopApi.createClassOrder({
-              user_id: submission.user_id,
-              items: submission.items.map((item) => ({
+              user_id: draft.student_id,
+              items: draft.items.map((item) => ({
                 product_id: item.product_id,
                 quantity: item.quantity,
                 option_ids: item.option_ids,
               })),
-              notes: submission.notes || null,
+              notes: draft.notes || null,
             });
-            submission.items.forEach((item) => completedItemIds.add(item.id));
+            draft.items.forEach((item) => completedItemIds.add(item.id));
           } catch (error) {
             failedRequest = error;
             break;
@@ -734,15 +712,14 @@ export default function ClassOrdersPage() {
           setAssistedItems([]);
           setFormOpen(true);
           await load();
-          const completedCount = submissions.filter((submission) =>
-            submission.items.every((item) => completedItemIds.has(item.id))).length;
+          const completedCount = draftsToSubmit.length - remainingDrafts.length;
           toast.error(completedCount > 0
-            ? `已送出 ${completedCount} 筆活動訂單；其餘 ${remainingDrafts.length} 位同學的草稿已保留，修正後可再送出。${apiErrorMessage(failedRequest, "送出中斷")}`
+            ? `已完成 ${completedCount} 位同學；其餘 ${remainingDrafts.length} 位同學的草稿已保留，修正後可再送出。${apiErrorMessage(failedRequest, "送出中斷")}`
             : `尚未送出的資料已保留在登記清單。${apiErrorMessage(failedRequest, "送出失敗")}`);
           return;
         }
 
-        toast.success(`已完成 ${draftsToSubmit.length} 位同學、${submissions.length} 筆活動代訂`);
+        toast.success(`已完成 ${draftsToSubmit.length} 位同學、${draftsToSubmit.reduce((count, draft) => count + draft.items.length, 0)} 項商品登記`);
         setAssistedOrderDrafts([]);
       }
       setEditOrder(null);
@@ -884,7 +861,7 @@ export default function ClassOrdersPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
               {editOrder ? <Edit2 size={15} /> : <Plus size={15} />}
-              {editOrder ? `修改訂單 ${editOrder.serial_number}` : "幫同學下單"}
+              {editOrder ? `修改訂單 ${editOrder.serial_number}` : "代同學登記商品"}
             </h2>
             <button type="button" onClick={() => {
               if (!editOrder && (assistedItems.length > 0 || orderProductId)) {
@@ -907,7 +884,7 @@ export default function ClassOrdersPage() {
           <p className="mb-3 text-xs" style={{ color: "var(--text-muted)" }}>
             {editOrder
               ? "此訂單限修改原活動的商品。"
-              : "可連續登記一位或多位同學，每位可加入多項商品；送出時依活動自動分單。"}
+              : "選擇同學與商品後，按「加入商品」繼續選下一項；確認清單後可一次送出多項商品。不同活動會自動分成訂單。"}
           </p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <label className="grid gap-1 text-sm">
@@ -959,7 +936,7 @@ export default function ClassOrdersPage() {
                 <button type="button" onClick={addCurrentProduct}
                   disabled={!currentItemReady || creating}
                   className="btn btn-ghost min-h-11 w-full disabled:opacity-50">
-                  <Plus size={14} /> 加入商品
+                  <Plus size={14} /> 加入商品，繼續選購
                 </button>
                 {!editOrder && (
                   <button type="button" onClick={queueCurrentDraft}
@@ -1463,7 +1440,7 @@ export default function ClassOrdersPage() {
                   <article key={order.id} className="rounded-md p-3" style={{ border: "1px solid var(--border)" }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <Link href={`/shop/orders/${order.id}`} className="block truncate text-xs font-mono font-medium hover:underline" style={{ color: "var(--primary)" }}>
+                        <Link href={`/shop/orders/${order.id}?from=class`} className="block truncate text-xs font-mono font-medium hover:underline" style={{ color: "var(--primary)" }}>
                           {order.serial_number}
                         </Link>
                         <p className="mt-1 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{order.user_name ?? "未具名訂購人"}</p>
@@ -1539,7 +1516,7 @@ export default function ClassOrdersPage() {
                           </button>
                         </td>
                         <td className="px-4 py-3">
-                          <Link href={`/shop/orders/${order.id}`} className="text-xs font-mono hover:underline" style={{ color: "var(--primary)" }}>
+                          <Link href={`/shop/orders/${order.id}?from=class`} className="text-xs font-mono hover:underline" style={{ color: "var(--primary)" }}>
                             {order.serial_number}
                           </Link>
                         </td>

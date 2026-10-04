@@ -1308,6 +1308,20 @@
   opacity: 0.55;
 }
 
+.shop-product-remove {
+  min-height: 2.75rem;
+  flex: 1;
+  color: var(--public-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.shop-product-remove:focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: 2px;
+}
+
 .shop-product-dialog-actions--split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1476,144 +1490,18 @@
   letter-spacing: -0.025em;
 }
 
-.shop-orders-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.shop-orders-export {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--bg-surface);
-  padding: 0.55rem 0.8rem;
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 650;
-  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
-}
-
-.shop-orders-export:hover,
-.shop-orders-export:focus-visible {
-  border-color: var(--primary);
-  background: var(--primary-dim);
-  color: var(--primary-text);
-}
-
-.shop-orders-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 0.9rem;
-  background: var(--bg-surface);
-  padding: 0.3rem;
-}
-
-.shop-orders-tabs button {
-  min-height: 2.5rem;
-  border: 1px solid transparent;
-  border-radius: 0.65rem;
-  background: transparent;
-  padding: 0.45rem 0.9rem;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  font-weight: 650;
-  transition: background-color var(--transition), color var(--transition), border-color var(--transition);
-}
-
-.shop-orders-tabs button[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
-  background: var(--primary-dim);
-  color: var(--primary-text);
-}
-
-.shop-orders-tabs button:focus-visible,
-.shop-orders-export:focus-visible,
 .shop-order-details:focus-visible,
 .shop-order-edit:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
 
-.shop-orders-stats {
+.shop-orders-error {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin-top: 1.25rem;
-  border-block: 1px solid var(--border);
-}
-
-.shop-orders-stat {
-  min-width: 0;
-  padding: 0.85rem 1rem;
-}
-
-.shop-orders-stat + .shop-orders-stat {
-  border-left: 1px solid var(--border);
-}
-
-.shop-orders-stat p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.shop-orders-stat strong {
-  display: block;
-  overflow-wrap: anywhere;
-  margin-top: 0.3rem;
-  color: var(--primary-text);
-  font-size: clamp(1rem, 2vw, 1.25rem);
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
-}
-
-.shop-orders-ranking {
-  margin-top: 1.25rem;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 0.9rem;
-  background: var(--bg-surface);
-}
-
-.shop-orders-ranking header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0.8rem 1rem;
-}
-
-.shop-orders-ranking h2 {
-  margin: 0;
+  justify-items: start;
+  gap: 0.75rem;
+  padding: 1rem 0;
   color: var(--text-primary);
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.shop-orders-ranking > div {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-}
-
-.shop-orders-ranking article {
-  padding: 0.9rem 1rem;
-}
-
-.shop-orders-ranking article + article {
-  border-left: 1px solid var(--border);
-}
-
-.shop-orders-ranking article p {
-  margin: 0.3rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.72rem;
 }
 
 .shop-orders-list {
@@ -1681,12 +1569,6 @@
   color: var(--text-secondary);
   font-size: 0.72rem;
   line-height: 1.45;
-}
-
-.shop-order-row-user {
-  margin-top: 0.4rem;
-  color: var(--text-muted);
-  font-size: 0.72rem;
 }
 
 .shop-order-row-side {
@@ -1932,31 +1814,6 @@
     align-items: flex-start;
   }
 
-  .shop-orders-tools {
-    justify-content: flex-end;
-  }
-
-  .shop-orders-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .shop-orders-stat:nth-child(odd) {
-    border-left: 0;
-  }
-
-  .shop-orders-stat:nth-child(n + 3) {
-    border-top: 1px solid var(--border);
-  }
-
-  .shop-orders-stat:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-
-  .shop-orders-ranking article + article {
-    border-top: 1px solid var(--border);
-    border-left: 0;
-  }
-
   .shop-order-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.85rem;
@@ -1974,22 +1831,6 @@
 
   .shop-orders-header {
     flex-direction: column;
-  }
-
-  .shop-orders-tools {
-    width: 100%;
-  }
-
-  .shop-orders-export {
-    flex: 1;
-  }
-
-  .shop-orders-tabs {
-    width: 100%;
-  }
-
-  .shop-orders-tabs button {
-    flex: 1;
   }
 
   .shop-order-detail-hero {
@@ -2045,39 +1886,31 @@
   line-height: 1.5;
 }
 
-.shop-product-registration-summary {
-  display: grid;
-  flex: 1;
-  gap: 0.2rem;
-  color: var(--public-text);
-  font-size: 0.84rem;
-}
-
-.shop-product-registration-summary strong {
-  font-weight: 750;
-}
-
-.shop-product-registration-summary span {
-  color: var(--public-secondary);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 859px) {
   .shop-product-dialog-overlay {
+    align-items: start;
     padding: max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right))
       max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+    overscroll-behavior: contain;
   }
 
   .shop-product-dialog {
+    display: block;
     width: min(100%, 42rem);
-    height: 100%;
-    max-height: 100%;
-    grid-template-rows: minmax(0, min(40dvh, 27rem)) minmax(0, 1fr);
+    height: auto;
+    max-height: none;
+    margin: auto;
+    overflow: visible;
+  }
+
+  .shop-product-dialog-media {
+    height: min(42dvh, 27rem);
+    border-radius: 1rem 1rem 0 0;
   }
 
   .shop-product-dialog-content {
     gap: 1rem;
+    overflow: visible;
     padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
   }
 
@@ -2107,6 +1940,7 @@
   }
 
   .shop-product-dialog-actions {
+    position: static;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
 }
