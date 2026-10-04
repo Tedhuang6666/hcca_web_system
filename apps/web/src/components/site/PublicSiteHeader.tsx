@@ -12,8 +12,6 @@ import ImportantAnnouncementBanner, {
 } from "@/components/site/ImportantAnnouncementBanner";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
-import { usePermissions } from "@/hooks/usePermissions";
-import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { BRANDING } from "@/lib/branding";
 import {
   PUBLIC_NAV_GROUP_META,
@@ -51,10 +49,8 @@ function PublicSiteHeaderContent({
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [liveBannerReady, setLiveBannerReady] = useState(false);
   const [serviceQuery, setServiceQuery] = useState("");
-  const [cachedShopManagement, setCachedShopManagement] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { statuses } = usePublicModuleStatus();
-  const { isAdmin, permissions, isReady } = usePermissions();
   const pathname = usePathname();
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const menuRef = useRef<HTMLDetailsElement>(null);
@@ -195,31 +191,9 @@ function PublicSiteHeaderContent({
     + filteredNavPages.length;
   const systemHref = isLoggedIn ? "/dashboard" : "/login?next=%2Fdashboard";
   const systemLabel = isLoggedIn ? "前往平台" : "登入平台";
-  const canManageShop = cachedShopManagement || isAdmin || permissions.has("admin:all") || permissions.has("shop:manage");
-  const isShopPublicPage = pathname === "/shop" || pathname === "/shop/cart";
 
   useEffect(() => {
     setIsLoggedIn(Boolean(window.localStorage.getItem("user_id")));
-  }, []);
-
-  useEffect(() => {
-    const syncShopManagement = () => {
-      let cachedPermissions: string[] = [];
-      try {
-        cachedPermissions = JSON.parse(window.sessionStorage.getItem("permissions") || "[]") as string[];
-      } catch {
-        cachedPermissions = [];
-      }
-      setCachedShopManagement(
-        window.sessionStorage.getItem("is_superuser") === "true"
-        || window.sessionStorage.getItem("is_owner") === "true"
-        || cachedPermissions.includes("admin:all")
-        || cachedPermissions.includes("shop:manage"),
-      );
-    };
-    syncShopManagement();
-    window.addEventListener(AUTH_CACHE_EVENT, syncShopManagement);
-    return () => window.removeEventListener(AUTH_CACHE_EVENT, syncShopManagement);
   }, []);
 
   useEffect(() => {
@@ -405,11 +379,6 @@ function PublicSiteHeaderContent({
           )}
         </nav>
         <div className="public-header-actions">
-          {isShopPublicPage && (isReady || cachedShopManagement) && canManageShop && (
-            <Link href="/shop/admin" className="public-shop-admin-link">
-              管理
-            </Link>
-          )}
           <button
             type="button"
             onClick={(event) => {

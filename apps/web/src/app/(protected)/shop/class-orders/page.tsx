@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckSquare, Edit2, Lock, LockOpen, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckSquare, Edit2, ListChecks, Lock, LockOpen, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
@@ -841,19 +841,22 @@ export default function ClassOrdersPage() {
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班級商品收款</h1>
+          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>議員工作台</h1>
           <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
-            按活動核對應收與已收款項，也能替同學一次登記多項商品。
+            替本班同學快速登記班聯商品，再集中核對應收與收款狀態。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={openCreate} className="btn min-h-11" style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
             <Plus size={15} /> {assistedOrderDrafts.length ? `繼續登記 · 待送出 ${assistedOrderDrafts.length} 位` : "幫同學下單"}
           </button>
+          <button type="button" onClick={() => scrollToSection("activity-collection-heading")} className="btn btn-secondary min-h-11">
+            <ListChecks size={15} /> 查看收款進度
+          </button>
           <button type="button" onClick={load} className="btn btn-ghost min-h-11" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
           </button>
-          <Link href="/shop" className="btn btn-ghost min-h-11">商品訂購</Link>
+          <Link href="/shop" className="btn btn-ghost min-h-11">商品目錄</Link>
         </div>
       </header>
 
@@ -1275,7 +1278,7 @@ export default function ClassOrdersPage() {
       <section aria-labelledby="product-collection-heading" className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <h2 id="product-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>商品收款明細</h2>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>收款紀錄代表班代已向同學收款；整班繳款由班聯會確認。</p>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>收款紀錄代表議員已向同學收款；整班繳款由班聯會確認。</p>
         </div>
         {loading && productSummary.product_rows.length === 0 ? (
           <p className="rounded-lg px-4 py-8 text-center text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>

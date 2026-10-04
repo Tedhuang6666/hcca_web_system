@@ -239,7 +239,11 @@ async def test_list_class_roles_includes_default_bindings(
     role_keys = {row["role_key"] for row in roles}
     assert "class_leader" in role_keys
     assert role_keys.isdisjoint({"lunch_manager", "treasurer", "discipline", "general_affairs"})
+    leader = next(row for row in roles if row["role_key"] == "class_leader")
+    vice_leader = next(row for row in roles if row["role_key"] == "vice_leader")
     representative = next(row for row in roles if row["role_key"] == "class_representative")
+    assert "class:shop_collect" not in leader["permission_codes"]
+    assert "class:shop_collect" not in vice_leader["permission_codes"]
     assert "class:shop_collect" in representative["permission_codes"]
 
 

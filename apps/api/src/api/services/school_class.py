@@ -61,12 +61,12 @@ from api.services.permission import active_tenure_filter
 CLASS_ROLE_DEFINITIONS: dict[str, tuple[str, list[str], int]] = {
     ClassRoleKey.CLASS_LEADER: (
         "班長",
-        ["class:view_members", "class:shop_collect", "class:meal_collect", "class:meal_pickup"],
+        ["class:view_members", "class:meal_collect", "class:meal_pickup"],
         80,
     ),
     ClassRoleKey.VICE_LEADER: (
         "副班長",
-        ["class:view_members", "class:shop_collect", "class:meal_collect", "class:meal_pickup"],
+        ["class:view_members", "class:meal_collect", "class:meal_pickup"],
         70,
     ),
     ClassRoleKey.CLASS_REPRESENTATIVE: (

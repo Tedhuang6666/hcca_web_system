@@ -4,21 +4,94 @@
   padding: clamp(2.25rem, 6vw, 5.5rem) 1rem clamp(4rem, 8vw, 7rem);
 }
 
-.public-shop-admin-link {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  padding-inline: 0.25rem;
-  color: var(--public-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-decoration: none;
-  transition: color var(--transition);
+.shop-workspace-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.public-shop-admin-link:hover,
-.public-shop-admin-link:focus-visible {
-  color: var(--public-accent-text);
+.shop-workspace-group {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  padding: 0.35rem 0.45rem;
+}
+
+.shop-workspace-label {
+  flex: 0 0 auto;
+  padding-inline: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.shop-workspace-links {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.shop-workspace-tab {
+  display: inline-flex;
+  min-height: 2.7rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-lg) - 0.25rem);
+  padding: 0 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.shop-workspace-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.shop-workspace-tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.shop-workspace-tab.is-active {
+  border-color: color-mix(in srgb, var(--primary) 36%, var(--border));
+  background: color-mix(in srgb, var(--primary-dim) 76%, var(--bg-elevated));
+  color: var(--primary-text);
+}
+
+@media (max-width: 640px) {
+  .shop-workspace-group {
+    flex: 1 1 100%;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .shop-workspace-label {
+    padding-top: 0.1rem;
+  }
+
+  .shop-workspace-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  }
+
+  .shop-workspace-tab {
+    min-width: 0;
+    padding-inline: 0.45rem;
+  }
 }
 
 .shop-public-hero {

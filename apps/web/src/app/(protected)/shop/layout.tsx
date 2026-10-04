@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import ModuleBoundary from "@/components/ModuleBoundary";
 import ModuleTabs, { type ModuleTab } from "@/components/layout/ModuleTabs";
 import PageTransition from "@/components/layout/PageTransition";
@@ -19,10 +19,10 @@ import "./shop-public.css";
 
 function PublicShopChrome({
   children,
-  showOperationsNavigation,
+  showCustomerNavigation,
 }: {
   children: React.ReactNode;
-  showOperationsNavigation: boolean;
+  showCustomerNavigation: boolean;
 }) {
   return (
     <PublicModuleStatusProvider>
@@ -34,7 +34,7 @@ function PublicShopChrome({
           跳到主要內容
         </a>
         <PublicSiteHeader />
-        {showOperationsNavigation && <ShopSectionNavigation />}
+        {showCustomerNavigation && <ShopSectionNavigation />}
         <main id="main-content">
           <PageTransition>{children}</PageTransition>
         </main>
@@ -88,30 +88,141 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
   const canCollectForClass = permissions.has("class:shop_collect");
 
   return [
-    { href: "/shop", label: "商品訂購", icon: Store, end: true },
+    { href: "/shop", label: "商品目錄", icon: Store, end: true },
     { href: "/shop/orders", label: "我的登記", icon: ClipboardList },
-    ...(canViewAll ? [{ href: "/shop/council-orders", label: "議員商品總覽", icon: BarChart2 }] : []),
-    ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "班級收款", icon: ListChecks }] : []),
-    ...(canManage ? [{ href: "/shop/admin", label: "商品管理", icon: PackageSearch }] : []),
+    ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "收款與代訂", icon: ListChecks }] : []),
+    ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校訂單總覽", icon: BarChart2 }] : []),
+    ...(canManage ? [{ href: "/shop/admin", label: "商品與活動設定", icon: PackageSearch }] : []),
   ];
 }
 
-function ShopSectionNavigation() {
-  const { isAdmin, permissions } = usePermissions();
-  const tabs = getShopTabs(isAdmin, permissions);
-  if (tabs.length <= 2) return null;
+type ShopNavigationGroup = {
+  label: string;
+  tabs: ModuleTab[];
+};
 
-  return <ModuleTabs label="商品分頁" tabs={tabs} />;
+function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
+  return [
+    {
+      label: "同學訂購",
+      tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
+    },
+    {
+      label: "議員工作台",
+      tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
+    },
+    {
+      label: "班聯統籌",
+      tabs: tabs.filter((tab) => tab.href === "/shop/council-orders" || tab.href === "/shop/admin"),
+    },
+  ].filter((group) => group.tabs.length > 0);
+}
+
+function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  return (
+    <nav
+      aria-label="商品工作區"
+      className="shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4"
+    >
+      {groups.map((group) => (
+        <section key={group.label} className="shop-workspace-group" aria-label={`${group.label}功能`}>
+          <h2 className="shop-workspace-label">{group.label}</h2>
+          <div className="shop-workspace-links">
+            {group.tabs.map((tab) => {
+              const [tabPath, tabQuery] = tab.href.split("?", 2);
+              const tabParams = new URLSearchParams(tabQuery ?? "");
+              const queryMatches = [...tabParams.entries()].every(
+                ([key, value]) => searchParams.get(key) === value,
+              );
+              const active = tab.end
+                ? pathname === tabPath && searchParams.toString() === ""
+                : (pathname === tabPath || pathname.startsWith(`${tabPath}/`)) && queryMatches;
+              const Icon = tab.icon;
+
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`shop-workspace-tab${active ? " is-active" : ""}`}
+                >
+                  <Icon size={15} aria-hidden={true} />
+                  <span>{tab.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </nav>
+  );
+}
+
+function ShopSectionNavigation() {
+  const tabs: ModuleTab[] = [
+    { href: "/shop", label: "商品目錄", icon: Store, end: true },
+    { href: "/shop/orders", label: "我的登記", icon: ClipboardList },
+  ];
+
+  return <ModuleTabs label="商品導覽" tabs={tabs} />;
+}
+
+function ShopWorkspaceDenied({ section }: { section: "class" | "oversight" | "manage" }) {
+  const message = section === "class"
+    ? "這個工作區提供給負責班級收款與代訂的人員。"
+    : section === "oversight"
+      ? "這個工作區提供給負責統籌全校訂單的班聯人員。"
+      : "這個工作區提供給負責商品與活動設定的班聯人員。";
+
+  return (
+    <main className="mx-auto my-8 max-w-xl px-4" role="alert">
+      <section className="rounded-lg p-6" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+          目前帳號無法進入這個工作區
+        </h1>
+        <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>{message}</p>
+        <Link href="/shop" className="btn btn-secondary mt-4 min-h-11">
+          回到商品目錄
+        </Link>
+      </section>
+    </main>
+  );
 }
 
 function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
-  const { isAdmin, permissions } = usePermissions();
+  const pathname = usePathname();
+  const { isAdmin, isReady, permissions } = usePermissions();
   const tabs = getShopTabs(isAdmin, permissions);
+  const groups = groupShopTabs(tabs);
+  const requiredSection = pathname.startsWith("/shop/class-orders")
+    ? "class"
+    : pathname.startsWith("/shop/council-orders")
+      ? "oversight"
+      : pathname.startsWith("/shop/admin")
+        ? "manage"
+        : null;
+  const hasWorkspaceAccess = isAdmin
+    || permissions.has("admin:all")
+    || (requiredSection === "class" && permissions.has("class:shop_collect"))
+    || (requiredSection === "oversight" && [
+      "shop:view_all", "shop:manage_orders", "shop:manage",
+    ].some((permission) => permissions.has(permission)))
+    || (requiredSection === "manage" && permissions.has("shop:manage"));
+  const waitingForPermissions = requiredSection !== null && !isReady;
 
   return (
     <ModuleBoundary id="shop" skeleton={<ListPageSkeleton />}>
-      <ModuleTabs label="商品分頁" tabs={tabs} />
-      {children}
+      <ShopWorkspaceNavigation groups={groups} />
+      {waitingForPermissions ? (
+        <ListPageSkeleton />
+      ) : requiredSection && !hasWorkspaceAccess ? (
+        <ShopWorkspaceDenied section={requiredSection} />
+      ) : (
+        children
+      )}
     </ModuleBoundary>
   );
 }
@@ -120,7 +231,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   if (pathname === "/shop" || pathname === "/shop/cart") {
     return (
-      <PublicShopChrome showOperationsNavigation={pathname === "/shop"}>
+      <PublicShopChrome showCustomerNavigation={pathname === "/shop"}>
         {children}
       </PublicShopChrome>
     );

@@ -3,8 +3,10 @@
 import Link from "next/link";
 import {
   Barcode,
+  BarChart3,
   FileText,
   GraduationCap,
+  type LucideIcon,
   MessageSquare,
   Store,
   Ticket,
@@ -13,7 +15,19 @@ import {
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const TOOLS = [
+type BackofficeWorkspace = "representative" | "council";
+
+type BackofficeTool = {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  desc: string;
+  perms?: string[];
+  prefixes?: string[];
+  workspace?: BackofficeWorkspace;
+};
+
+const TOOLS: BackofficeTool[] = [
   {
     href: "/admin/people",
     icon: Users,
@@ -45,16 +59,26 @@ const TOOLS = [
   {
     href: "/shop/admin",
     icon: Store,
-    label: "商品後台",
-    desc: "商品、庫存、訂單與停售管理",
-    prefixes: ["shop:"],
+    label: "商品與活動設定",
+    desc: "商品目錄、活動與訂購設定",
+    perms: ["shop:manage"],
+    workspace: "council",
+  },
+  {
+    href: "/shop/council-orders",
+    icon: BarChart3,
+    label: "全校訂單與收款",
+    desc: "統籌各班訂購、收款進度與結單狀態",
+    perms: ["shop:view_all", "shop:manage_orders", "shop:manage"],
+    workspace: "council",
   },
   {
     href: "/shop/class-orders",
     icon: Ticket,
-    label: "班級訂單",
-    desc: "班級代收、統計與訂單彙整",
+    label: "議員收款與代訂",
+    desc: "替本班同學登記商品並追蹤收款",
     perms: ["class:shop_collect"],
+    workspace: "representative",
   },
   {
     href: "/partner-map/admin",
@@ -88,6 +112,36 @@ export default function BackofficePage() {
     || tool.perms?.some(can)
     || tool.prefixes?.some(hasPrefix)
   ));
+  const workspaces: { id: BackofficeWorkspace; label: string; description: string }[] = [
+    {
+      id: "representative",
+      label: "議員工作台",
+      description: "處理本班同學的商品登記與收款。",
+    },
+    {
+      id: "council",
+      label: "班聯統籌",
+      description: "管理全校商品與各班訂購進度。",
+    },
+  ];
+  const renderTools = (tools: BackofficeTool[]) => tools.map((tool) => {
+    const Icon = tool.icon;
+    return (
+      <Link
+        key={tool.href}
+        href={tool.href}
+        className="rounded-md border p-4 transition-colors hover:bg-[var(--bg-hover)]"
+        style={{ borderColor: "var(--border)", textDecoration: "none" }}
+      >
+        <Icon size={18} aria-hidden={true} style={{ color: "var(--info)" }} />
+        <h3 className="mt-3 text-sm font-semibold">{tool.label}</h3>
+        <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
+          {tool.desc}
+        </p>
+      </Link>
+    );
+  });
+  const otherTools = visibleTools.filter((tool) => !tool.workspace);
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
@@ -103,25 +157,27 @@ export default function BackofficePage() {
           目前沒有可管理的模組。
         </section>
       ) : (
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTools.map((tool) => {
-            const Icon = tool.icon;
+        <div className="space-y-7">
+          {workspaces.map((workspace) => {
+            const tools = visibleTools.filter((tool) => tool.workspace === workspace.id);
+            if (tools.length === 0) return null;
             return (
-              <Link
-                key={tool.href}
-                href={tool.href}
-                className="rounded-md border p-4 transition-colors hover:bg-[var(--bg-hover)]"
-                style={{ borderColor: "var(--border)", textDecoration: "none" }}
-              >
-                <Icon size={18} aria-hidden={true} style={{ color: "var(--info)" }} />
-                <h2 className="mt-3 text-sm font-semibold">{tool.label}</h2>
-                <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-                  {tool.desc}
-                </p>
-              </Link>
+              <section key={workspace.id} aria-labelledby={`backoffice-${workspace.id}`}>
+                <header className="mb-3">
+                  <h2 id={`backoffice-${workspace.id}`} className="text-base font-semibold">{workspace.label}</h2>
+                  <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{workspace.description}</p>
+                </header>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{renderTools(tools)}</div>
+              </section>
             );
           })}
-        </section>
+          {otherTools.length > 0 && (
+            <section aria-labelledby="backoffice-other">
+              <h2 id="backoffice-other" className="mb-3 text-base font-semibold">其他模組</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{renderTools(otherTools)}</div>
+            </section>
+          )}
+        </div>
       )}
     </main>
   );
