@@ -147,3 +147,4 @@ output/playwright/
 coverage/
 playwright-report/
 test-results/
+.impeccable/
