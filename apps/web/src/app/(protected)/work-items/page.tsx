@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   CheckCircle2, Circle, Clock, ExternalLink, Loader2, Plus, RefreshCw,
 } from "lucide-react";
@@ -130,7 +131,7 @@ export default function WorkItemsPage() {
               同步 Google Tasks
             </button>
           ) : gtStatus !== null ? (
-            <a
+            <Link
               href="/settings/integrations"
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium"
               style={{
@@ -142,7 +143,7 @@ export default function WorkItemsPage() {
             >
               <ExternalLink size={13} aria-hidden={true} />
               連結 Google Tasks
-            </a>
+            </Link>
           ) : null}
 
           <button
