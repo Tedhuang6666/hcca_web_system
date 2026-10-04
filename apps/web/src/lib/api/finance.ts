@@ -21,6 +21,7 @@ import type {
   LedgerOut,
   PeriodCreate,
   PeriodOut,
+  PublicExpenseClaimDetailOut,
   TransferCreate,
 } from "@/lib/types";
 import { ApiError, BASE, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh, uploadWithProgress } from "./core";
@@ -54,6 +55,7 @@ export const financeApi = {
     return response.json();
   },
   getLedger: (id: string) => get<LedgerOut>(`/finance/ledgers/${id}`),
+  listLedgers: () => get<LedgerOut[]>("/finance/ledgers"),
   createLedger: (body: { org_id: string; name: string }) => post<LedgerOut>("/finance/ledgers", body),
   listAccounts: (ledgerId: string) => get<ChartAccountOut[]>(`/finance/ledgers/${ledgerId}/accounts`),
   createAccount: (ledgerId: string, body: ChartAccountCreate) =>
@@ -167,6 +169,10 @@ export const financeApi = {
       storage_key: string; filename: string; content_type: string; file_size: number;
     }>;
   }) => post<FinanceBudgetExpenseOut>(`/finance/budgets/${budgetId}/expenses`, body),
+  getPublicExpenseClaim: (budgetId: string, entryId: string) =>
+    get<PublicExpenseClaimDetailOut>(
+      `/finance/public/budgets/${budgetId}/expense-claims/${entryId}`,
+    ),
   clearAllTestData: () => del<FinanceResetOut>("/finance/test-reset"),
   getSettlement: (ledgerId: string, periodId: string) =>
     get<FinanceSettlement>(`/finance/ledgers/${ledgerId}/periods/${periodId}/settlement`),

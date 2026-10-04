@@ -5462,7 +5462,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Ledgers */
+        get: operations["list_ledgers_finance_ledgers_get"];
         put?: never;
         /** Create Ledger */
         post: operations["create_ledger_finance_ledgers_post"];
@@ -5724,6 +5725,40 @@ export interface paths {
         };
         /** Get Public Budget Detail */
         get: operations["get_public_budget_detail_finance_public_budgets__budget_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/public/budgets/{budget_id}/expense-claims/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Expense Claim Detail */
+        get: operations["get_public_expense_claim_detail_finance_public_budgets__budget_id__expense_claims__entry_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/public/budgets/{budget_id}/expense-claims/{entry_id}/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Public Expense Claim Evidence */
+        get: operations["download_public_expense_claim_evidence_finance_public_budgets__budget_id__expense_claims__entry_id__evidence__evidence_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -24546,6 +24581,70 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** PublicExpenseClaimDetailOut */
+        PublicExpenseClaimDetailOut: {
+            /**
+             * Budget Id
+             * Format: uuid
+             */
+            budget_id: string;
+            /** Budget Name */
+            budget_name: string;
+            /** Department Name */
+            department_name: string | null;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["PublicExpenseClaimItemOut"][];
+            /** Paid At */
+            paid_at: string | null;
+            payment_method: components["schemas"]["ExpensePaymentMethod"];
+            /** Purpose */
+            purpose: string;
+            /**
+             * Reported At
+             * Format: date-time
+             */
+            reported_at: string;
+            /** Reporter Name */
+            reporter_name: string;
+            /** Supplemental Evidence */
+            supplemental_evidence?: components["schemas"]["PublicBudgetExpenseEvidenceOut"][];
+            /** Total Amount */
+            total_amount: number;
+        };
+        /** PublicExpenseClaimItemOut */
+        PublicExpenseClaimItemOut: {
+            /** Amount */
+            amount: number;
+            /** Budget Item */
+            budget_item: string;
+            /** Evidence */
+            evidence?: components["schemas"]["PublicBudgetExpenseEvidenceOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: string;
+            /** Tax Rate */
+            tax_rate: number;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: number;
+        };
         /** PublicExpenseOut */
         PublicExpenseOut: {
             /** Amount */
@@ -24559,6 +24658,8 @@ export interface components {
             budget_item: string;
             /** Budget Name */
             budget_name: string;
+            /** Claim Id */
+            claim_id?: string | null;
             /**
              * Entry Date
              * Format: date
@@ -42483,6 +42584,26 @@ export interface operations {
             };
         };
     };
+    list_ledgers_finance_ledgers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerOut"][];
+                };
+            };
+        };
+    };
     create_ledger_finance_ledgers_post: {
         parameters: {
             query?: never;
@@ -43158,6 +43279,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicBudgetDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_expense_claim_detail_finance_public_budgets__budget_id__expense_claims__entry_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicExpenseClaimDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_public_expense_claim_evidence_finance_public_budgets__budget_id__expense_claims__entry_id__evidence__evidence_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+                entry_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

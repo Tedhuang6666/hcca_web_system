@@ -126,6 +126,7 @@ export default function FinancePage() {
   const canBudgetReview = can("finance:budget_review");
   const canCompleteClaim = canReview || canClaimExpense;
   const [ledger, setLedger] = useState<LedgerOut | null>(null);
+  const [availableLedgers, setAvailableLedgers] = useState<LedgerOut[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [orgId, setOrgId] = useState("");
   const [ledgerName, setLedgerName] = useState("班聯會財務帳本");
@@ -176,7 +177,7 @@ export default function FinancePage() {
     ends_on: `${new Date().getFullYear()}-12-31`,
   });
 
-  const load = useCallback(async (id: string) => {
+  const load = useCallback(async (id: string): Promise<boolean> => {
     try {
       const [info, nextAccounts, nextFunds, nextPeriods, nextJournals] = await Promise.all([
         financeApi.getLedger(id),
@@ -186,6 +187,10 @@ export default function FinancePage() {
         financeApi.listJournals(id),
       ]);
       setLedger(info);
+      setOrgId(info.org_id);
+      setAvailableLedgers((current) => (
+        current.some((item) => item.id === info.id) ? current : [...current, info]
+      ));
       setAccounts(nextAccounts);
       setFunds(nextFunds);
       setPeriods(nextPeriods);
@@ -197,15 +202,34 @@ export default function FinancePage() {
       setIsPeriodSetupOpen(nextPeriods.length === 0);
       if (nextPeriods.length === 0) setActiveTab("ledger");
       localStorage.setItem("finance.ledger_id", id);
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "載入財務帳本失敗");
+      return false;
     }
   }, []);
 
   useEffect(() => {
-    const id = localStorage.getItem("finance.ledger_id");
-    if (id) void load(id).finally(() => setIsBooting(false));
-    else setIsBooting(false);
+    let cancelled = false;
+    const restoreLedger = async () => {
+      const storedId = localStorage.getItem("finance.ledger_id");
+      try {
+        const ledgers = await financeApi.listLedgers();
+        if (cancelled) return;
+        setAvailableLedgers(ledgers);
+        const storedLedger = ledgers.find((item) => item.id === storedId);
+        if (storedId && !storedLedger) localStorage.removeItem("finance.ledger_id");
+        const selected = storedLedger || (ledgers.length === 1 ? ledgers[0] : undefined);
+        if (selected) await load(selected.id);
+      } catch (error) {
+        if (storedId) await load(storedId);
+        else toast.error(error instanceof Error ? error.message : "無法載入可用帳本");
+      } finally {
+        if (!cancelled) setIsBooting(false);
+      }
+    };
+    void restoreLedger();
+    return () => { cancelled = true; };
   }, [load]);
 
   useEffect(() => {
@@ -331,12 +355,17 @@ export default function FinancePage() {
 
   const initialize = async () => {
     if (!orgId) return toast.error("請選擇要使用的組織");
+    const existing = availableLedgers.find((item) => item.org_id === orgId);
+    if (existing) {
+      if (await load(existing.id)) toast.success("已開啟此組織的既有帳本");
+      return;
+    }
     try {
       const created = await financeApi.createLedger({
         org_id: orgId,
         name: ledgerName.trim() || "班聯會財務帳本",
       });
-      await load(created.id);
+      if (!await load(created.id)) return;
       toast.success("帳本已建立，請先新增會計期間，再登錄期初餘額或日常收支");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "建立帳本失敗");
@@ -360,6 +389,8 @@ export default function FinancePage() {
       void clearEvidenceDraft();
       localStorage.removeItem("finance.ledger_id");
       setLedger(null);
+      setAvailableLedgers([]);
+      setOrgId("");
       setAccounts([]);
       setFunds([]);
       setPeriods([]);
@@ -603,6 +634,7 @@ export default function FinancePage() {
 
   const changeLedger = () => {
     localStorage.removeItem("finance.ledger_id");
+    setOrgId(ledger?.org_id || "");
     setLedger(null);
     setAccounts([]);
     setFunds([]);
@@ -871,6 +903,7 @@ export default function FinancePage() {
   const recentClaims = expenseClaims.slice(0, 3);
   const nonClaimEntries = journals.filter((entry) => entry.source_type !== "expense_claim");
   const isSettingsTab = ["ledger", "funds", "accounts"].includes(activeTab);
+  const selectedOrgLedger = availableLedgers.find((item) => item.org_id === orgId);
   const isExpenseWorkspace = ["entry", "review", "claims"].includes(activeTab);
   const activePrimaryTab = isSettingsTab
     ? null
@@ -926,7 +959,7 @@ export default function FinancePage() {
                 className="btn btn-primary"
                 onClick={() => setActiveTab("budget")}
               >
-                <FilePlus2 size={16} aria-hidden="true" />登記支出
+                <PiggyBank size={16} aria-hidden="true" />前往預算執行表
               </button>
             )}
           </div>
@@ -943,6 +976,23 @@ export default function FinancePage() {
             </div>
           </div>
           <div className="finance-onboarding__form">
+            {availableLedgers.length > 0 && (
+              <section className="finance-onboarding__ledgers" aria-labelledby="finance-ledger-list-heading">
+                <div>
+                  <h3 id="finance-ledger-list-heading">可開啟的既有帳本</h3>
+                  <p>已依你的財務權限找出帳本，選取後會直接開啟。</p>
+                </div>
+                {availableLedgers.map((item) => {
+                  const org = orgs.find((candidate) => candidate.id === item.org_id);
+                  return (
+                    <button key={item.id} type="button" onClick={() => void load(item.id)}>
+                      <span><strong>{item.name}</strong><small>{org?.name || "組織帳本"}</small></span>
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </section>
+            )}
             <label>
               <span>管理組織</span>
               <select className="input" value={orgId} onChange={(event) => setOrgId(event.target.value)}>
@@ -963,7 +1013,7 @@ export default function FinancePage() {
               />
             </label>
             <button className="btn btn-primary" disabled={!orgId} onClick={() => void initialize()}>
-              開啟財務工作區 <ArrowRight size={16} aria-hidden="true" />
+              {selectedOrgLedger ? "開啟此組織帳本" : "建立財務帳本"} <ArrowRight size={16} aria-hidden="true" />
             </button>
           </div>
         </section>
@@ -1130,24 +1180,24 @@ export default function FinancePage() {
                   {entryType === "expense" && <section className="finance-entry__section" aria-labelledby="finance-entry-items">
                     <div className="finance-entry__section-heading">
                       <span>2</span>
-                      <div><h3 id="finance-entry-items">購買品項</h3><p>每一列都會獨立保留數量、稅額與憑證，方便後續核銷。</p></div>
+                      <div><h3 id="finance-entry-items">購買品項</h3><p>同一張收據可分列登錄多項用品，例如清潔劑、垃圾袋與抹布。</p></div>
                     </div>
                     <div className="finance-entry-items__table">
                       <table>
                         <thead><tr><th>品項</th><th>未稅單價</th><th>稅率</th><th>數量</th><th>單位</th><th>含稅小計</th><th aria-label="移除品項" /></tr></thead>
-                        <tbody>{claimItems.map((item, index) => <tr key={index}><td><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td><input aria-label={`第 ${index + 1} 項未稅單價`} className="input" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td><input aria-label={`第 ${index + 1} 項稅率`} className="input" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></td><td><input aria-label={`第 ${index + 1} 項數量`} className="input" type="number" min="0.01" step="0.01" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td><input aria-label={`第 ${index + 1} 項單位`} className="input" value={item.unit || ""} onChange={(event) => updateClaimItem(index, { unit: event.target.value })} placeholder="項" /></td><td><strong>NT${claimItemTotal(item).toLocaleString()}</strong></td><td><button className="finance-entry__remove" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody>
+                        <tbody>{claimItems.map((item, index) => <tr key={index}><td><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：清潔劑" /></td><td><input aria-label={`第 ${index + 1} 項未稅單價`} className="input" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td><input aria-label={`第 ${index + 1} 項稅率`} className="input" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></td><td><input aria-label={`第 ${index + 1} 項數量`} className="input" type="number" min="0.01" step="0.01" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td><input aria-label={`第 ${index + 1} 項單位`} className="input" value={item.unit || ""} onChange={(event) => updateClaimItem(index, { unit: event.target.value })} placeholder="項" /></td><td><strong>NT${claimItemTotal(item).toLocaleString()}</strong></td><td><button type="button" className="finance-entry__remove" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody>
                       </table>
                     </div>
                     <div className="finance-entry-items__mobile">
                       {claimItems.map((item, index) => <article key={index}>
                         <header><strong>品項 {index + 1}</strong><span>NT${claimItemTotal(item).toLocaleString()}</span></header>
-                        <label>品項名稱<input className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></label>
+                        <label>品項名稱<input className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：清潔劑" /></label>
                         <div><label>未稅單價<input className="input" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></label><label>數量<input className="input" type="number" min="0.01" step="0.01" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></label></div>
                         <div><label>單位<input className="input" value={item.unit || ""} onChange={(event) => updateClaimItem(index, { unit: event.target.value })} placeholder="項" /></label><label>稅率（%）<input className="input" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></label></div>
-                        <button className="finance-entry__remove" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除此品項</button>
+                        <button type="button" className="finance-entry__remove" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除此品項</button>
                       </article>)}
                     </div>
-                    <div className="finance-entry__section-footer"><button className="btn btn-secondary" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增一個品項</button>{expenseDraftSavedAt && <span>草稿已自動暫存</span>}</div>
+                    <div className="finance-entry__section-footer"><button type="button" className="btn btn-secondary" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增一個品項</button>{expenseDraftSavedAt && <span>草稿已自動暫存</span>}</div>
                   </section>}
 
                   {entryType === "expense" && <section className="finance-entry__section" aria-labelledby="finance-entry-payment">

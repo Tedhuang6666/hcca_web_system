@@ -517,6 +517,7 @@ class PublicBudgetListItem(BaseModel):
 
 class PublicExpenseOut(BaseModel):
     id: uuid.UUID
+    claim_id: uuid.UUID | None = None
     budget_id: uuid.UUID
     entry_date: date
     purpose: str
@@ -530,6 +531,34 @@ class PublicExpenseOut(BaseModel):
     payment_method: ExpensePaymentMethod
     status: Literal["pending", "awaiting_reimbursement", "spent"]
     evidence: list[PublicBudgetExpenseEvidenceOut] = Field(default_factory=list)
+
+
+class PublicExpenseClaimItemOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    unit_price: int
+    tax_rate: int
+    quantity: Decimal
+    unit: str
+    budget_item: str
+    amount: int
+    evidence: list[PublicBudgetExpenseEvidenceOut] = Field(default_factory=list)
+
+
+class PublicExpenseClaimDetailOut(BaseModel):
+    id: uuid.UUID
+    budget_id: uuid.UUID
+    budget_name: str
+    entry_date: date
+    purpose: str
+    department_name: str | None
+    reporter_name: str
+    reported_at: datetime
+    paid_at: datetime | None
+    payment_method: ExpensePaymentMethod
+    total_amount: int
+    items: list[PublicExpenseClaimItemOut]
+    supplemental_evidence: list[PublicBudgetExpenseEvidenceOut] = Field(default_factory=list)
 
 
 class PublicFinanceTotalsOut(BaseModel):

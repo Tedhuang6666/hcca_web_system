@@ -112,6 +112,21 @@ async def _make_ledger(db_session, org: Org | None = None):
     return ledger, period, fund, expense
 
 
+async def test_list_ledgers_only_returns_ledgers_the_user_can_view(
+    db_session, member_user, client, authed_client_factory
+) -> None:
+    org = await _grant(db_session, member_user, "finance:view")
+    visible_ledger, _, _, _ = await _make_ledger(db_session, org)
+    hidden_ledger, _, _, _ = await _make_ledger(db_session)
+
+    assert (await client.get("/finance/ledgers")).status_code == 401
+    response = await authed_client_factory(member_user).get("/finance/ledgers")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [str(visible_ledger.id)]
+    assert str(hidden_ledger.id) not in {item["id"] for item in response.json()}
+
+
 def test_budget_import_classifies_income_by_amount_cell_not_category_or_row() -> None:
     workbook = Workbook()
     sheet = workbook.active
@@ -123,13 +138,18 @@ def test_budget_import_classifies_income_by_amount_cell_not_category_or_row() ->
     sheet["F4"].fill = PatternFill(fill_type="solid", fgColor="D9EAD3")
     sheet.append([None, "販售收入", "4000份", 40, 160000, None, ""])
     sheet["E5"].fill = PatternFill(fill_type="solid", fgColor="D9EAD3")
+    sheet.append(["行政雜支", "臨時支出", "1式", "*", 500, None, ""])
     buffer = BytesIO()
     workbook.save(buffer)
 
     expenses, income, skipped = _parse_budget_workbook(buffer.getvalue())
 
-    assert [row["detail"] for row in expenses] == ["午餐費", "餅乾費用"]
+    assert [row["detail"] for row in expenses] == ["午餐費", "餅乾費用", "臨時支出"]
     assert [row["name"] for row in income] == ["校商收入", "販售收入"]
+    total_only = expenses[-1]
+    assert total_only["amount"] == 500
+    assert total_only["unit_price"] is None
+    assert total_only["note"] is None
     assert skipped == []
 
 
@@ -424,6 +444,17 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
         300,
         500,
     ]
+    imported_without_unit_price = next(
+        node for node in detail.json()["nodes"] if node["name"] == "臨時支出"
+    )
+    imported_total_allocation = next(
+        item
+        for item in detail.json()["allocations"]
+        if item["node_id"] == imported_without_unit_price["id"]
+    )
+    assert imported_total_allocation["amount"] == 500
+    assert imported_total_allocation["note"] == "核准後補憑證"
+    assert "原始單價未提供" not in imported_total_allocation["note"]
     assert [item["name"] for item in detail.json()["income_items"]] == ["活動報名費"]
     assert detail.json()["income_items"][0]["category"] == "收入"
 
@@ -767,6 +798,7 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
             "fund_account_id": str(fund_account_id),
             "expense_account_id": str(expense.id),
             "description": "活動海報印刷",
+            "proposing_org_id": str(org.id),
             "source_url": "https://private.example/source",
             "note": "內部備註不公開",
             "items": [
@@ -775,20 +807,23 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
                     "unit_price": 120,
                     "quantity": 2,
                     "budget_node_id": node.json()["id"],
-                    "evidence": [
-                        {
-                            "storage_key": f"finance/evidence/{ledger.id}/{'b' * 32}.pdf",
-                            "filename": "private-receipt.pdf",
-                            "content_type": "application/pdf",
-                            "file_size": 100,
-                        }
-                    ],
-                }
+                    "evidence": [receipt.json()],
+                },
+                {
+                    "name": "膠帶",
+                    "unit_price": 50,
+                    "quantity": 1,
+                    "budget_node_id": node.json()["id"],
+                },
             ],
         },
     )
     assert claim.status_code == 201
     entry_id = claim.json()["id"]
+    unpublished_claim_detail = await client.get(
+        f"/finance/public/budgets/{budget.json()['id']}/expense-claims/{entry_id}"
+    )
+    assert unpublished_claim_detail.status_code == 404
     assert (await reviewer_client.post(f"/finance/journals/{entry_id}/post")).status_code == 200
     assert (
         await reviewer_client.patch(f"/finance/journals/{entry_id}/budget", json={"included": True})
@@ -858,12 +893,14 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
 
     totals = await client.get(totals_path)
     assert totals.status_code == 200
-    assert totals.json() == {"income_total": 500, "expense_total": 480}
+    assert totals.json() == {"income_total": 500, "expense_total": 530}
     records = await client.get("/finance/public/expenses")
     assert records.status_code == 200
     record = next(item for item in records.json() if item["purpose"] == "活動海報印刷")
+    assert record["claim_id"] == entry_id
     assert record == {
         "id": record["id"],
+        "claim_id": entry_id,
         "budget_id": budget.json()["id"],
         "entry_date": "2026-07-19",
         "purpose": "活動海報印刷",
@@ -878,6 +915,27 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
         "status": "spent",
         "evidence": [],
     }
+    claim_detail = await client.get(
+        f"/finance/public/budgets/{budget.json()['id']}/expense-claims/{entry_id}"
+    )
+    assert claim_detail.status_code == 200
+    claim_detail_body = claim_detail.json()
+    assert claim_detail_body["department_name"] == org.name
+    assert claim_detail_body["reporter_name"] == member_user.display_name
+    assert claim_detail_body["entry_date"] == "2026-07-19"
+    assert claim_detail_body["reported_at"]
+    assert claim_detail_body["paid_at"]
+    assert claim_detail_body["total_amount"] == 290
+    assert {item["name"] for item in claim_detail_body["items"]} == {"海報印刷", "膠帶"}
+    claim_receipt_item = next(
+        item for item in claim_detail_body["items"] if item["name"] == "海報印刷"
+    )
+    assert claim_receipt_item["evidence"][0]["filename"] == "文具收據.pdf"
+    claim_evidence_url = claim_receipt_item["evidence"][0]["url"]
+    assert (await client.get(claim_evidence_url)).status_code == 200
+    assert "created_by_id" not in claim_detail_body
+    assert "source_url" not in claim_detail_body
+    assert "note" not in claim_detail_body
     statuses = {item["purpose"]: item["status"] for item in records.json()}
     assert statuses == {
         "活動文具支出": "pending",
@@ -905,7 +963,7 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
         f"/finance/ledgers/{ledger.id}/periods/{period.id}/settlement"
     )
     assert settlement.status_code == 200
-    assert settlement.json()["settled_total"] == 320
+    assert settlement.json()["settled_total"] == 370
 
 
 async def test_expense_workflow_tracks_review_procurement_payment_and_budget(

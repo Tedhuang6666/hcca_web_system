@@ -30,6 +30,7 @@ from api.models.finance import (
     FinanceBudgetAllocationEvidence,
     FinanceBudgetExpense,
     FinanceBudgetExpenseEvidence,
+    FinanceBudgetNode,
     FinanceBudgetSubmission,
     FinanceLedger,
     FiscalPeriod,
@@ -84,6 +85,7 @@ from api.schemas.finance import (
     PublicBudgetExpenseOut,
     PublicBudgetListItem,
     PublicBudgetSubmissionOut,
+    PublicExpenseClaimDetailOut,
     PublicExpenseOut,
     PublicFinanceTotalsOut,
     TransferCreate,
@@ -282,6 +284,20 @@ async def create_ledger(body: LedgerCreate, db: DbDep, user: CurrentUser) -> Led
     ledger = await service.initialize_ledger(db, body.org_id, body.name)
     await db.commit()
     return LedgerOut.model_validate(ledger)
+
+
+@router.get("/ledgers", response_model=list[LedgerOut])
+async def list_ledgers(db: DbDep, user: CurrentUser) -> list[LedgerOut]:
+    ledgers = await service.list_ledgers(db)
+    if user.is_superuser:
+        return [LedgerOut.model_validate(ledger) for ledger in ledgers]
+
+    visible: list[LedgerOut] = []
+    for ledger in ledgers:
+        codes = await get_user_permission_codes_for_org(db, user.id, ledger.org_id)
+        if str(PermissionCode.FINANCE_VIEW) in codes:
+            visible.append(LedgerOut.model_validate(ledger))
+    return visible
 
 
 @router.get(
@@ -1502,6 +1518,18 @@ async def list_public_expenses(
     ]
 
 
+@router.get(
+    "/public/budgets/{budget_id}/expense-claims/{entry_id}",
+    response_model=PublicExpenseClaimDetailOut,
+)
+async def get_public_expense_claim_detail(
+    budget_id: uuid.UUID, entry_id: uuid.UUID, db: DbDep
+) -> PublicExpenseClaimDetailOut:
+    return PublicExpenseClaimDetailOut.model_validate(
+        await service.public_expense_claim_detail(db, budget_id, entry_id)
+    )
+
+
 @router.get("/public/budgets/{budget_id}/totals", response_model=PublicFinanceTotalsOut)
 async def get_public_budget_period_totals(
     budget_id: uuid.UUID, db: DbDep
@@ -1663,6 +1691,82 @@ async def download_public_budget_expense_evidence(
         await storage.get_url(
             evidence.storage_key, disposition="inline", download_name=evidence.filename
         ),
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@router.get("/public/budgets/{budget_id}/expense-claims/{entry_id}/evidence/{evidence_id}")
+async def download_public_expense_claim_evidence(
+    budget_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    db: DbDep,
+):
+    claim_detail = await service.public_expense_claim_detail(db, budget_id, entry_id)
+    visible_evidence_ids = {
+        evidence["id"] for item in claim_detail["items"] for evidence in item["evidence"]
+    }
+    if evidence_id == entry_id:
+        if not claim_detail["supplemental_evidence"]:
+            raise HTTPException(404, "公開憑證不存在")
+    elif evidence_id not in visible_evidence_ids:
+        raise HTTPException(404, "公開憑證不存在")
+
+    entry = await db.get(JournalEntry, entry_id)
+    budget = await db.get(FinanceBudget, budget_id)
+    if not entry or not budget:
+        raise HTTPException(404, "公開憑證不存在")
+
+    evidence = await db.get(ExpenseClaimItemEvidence, evidence_id)
+    if evidence:
+        item = await db.get(ExpenseClaimItem, evidence.item_id)
+        node = await db.get(FinanceBudgetNode, item.budget_node_id) if item else None
+        approved_allocation = (
+            await db.scalar(
+                select(FinanceBudgetAllocation.id)
+                .join(FinanceBudgetSubmission)
+                .where(
+                    FinanceBudgetAllocation.node_id == node.id,
+                    FinanceBudgetSubmission.budget_id == budget.id,
+                    FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+                )
+            )
+            if node
+            else None
+        )
+        if (
+            not item
+            or item.journal_entry_id != entry.id
+            or not node
+            or node.budget_id != budget.id
+            or not approved_allocation
+        ):
+            raise HTTPException(404, "公開憑證不存在")
+        storage_key = evidence.storage_key
+        filename = evidence.filename
+        content_type = evidence.content_type
+    elif evidence_id == entry.id and entry.evidence_url:
+        storage_key = entry.evidence_url
+        filename = "報帳附件"
+        content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    else:
+        raise HTTPException(404, "公開憑證不存在")
+
+    service.validate_evidence_key(storage_key, budget.ledger_id)
+    storage = get_storage()
+    local_path = storage.local_path(storage_key)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(404, "公開憑證檔案不存在")
+        return FileResponse(
+            local_path,
+            filename=filename,
+            media_type=content_type,
+            content_disposition_type="inline",
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+    return RedirectResponse(
+        await storage.get_url(storage_key, disposition="inline", download_name=filename),
         headers={"Cache-Control": "public, max-age=300"},
     )
 
