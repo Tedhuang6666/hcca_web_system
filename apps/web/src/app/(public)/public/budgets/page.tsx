@@ -78,10 +78,14 @@ function budgetHref(budget: PublicBudgetListItem) {
 }
 
 export default async function PublicBudgetsPage() {
-  const [budgets, expenses] = await Promise.all([
+  const [budgetResult, expenseResult] = await Promise.all([
     fetchPublicBudgets(),
     fetchPublicExpenses(10),
   ]);
+  const budgets = budgetResult.data ?? [];
+  const expenses = expenseResult.data ?? [];
+  const budgetLoadFailed = budgetResult.data === null;
+  const expenseLoadFailed = expenseResult.data === null;
   const approvedBudgets = budgets.filter((budget) => budget.visibility === "approved");
   const currentPeriod = approvedBudgets[0]?.period_name;
   const currentBudgets = approvedBudgets.filter((budget) => budget.period_name === currentPeriod);
@@ -113,13 +117,21 @@ export default async function PublicBudgetsPage() {
           <h1>財務總覽</h1>
           <p>預算、支出與餘額放在同一頁。金額依已核准且公開的預算與支出紀錄彙整。</p>
         </div>
-        <span>
+        {!budgetLoadFailed && <span>
           <Landmark size={20} aria-hidden="true" />
           {budgets.length} 份可檢視預算
-        </span>
+        </span>}
       </header>
 
-      {currentPeriod ? (
+      {budgetLoadFailed ? (
+        <section className="public-budget-index__empty" role="status">
+          <Landmark size={24} aria-hidden="true" />
+          <div>
+            <h2>目前無法讀取公開預算資料</h2>
+            <p>請稍後重新整理；目前無法確認是否有已公開預算。</p>
+          </div>
+        </section>
+      ) : currentPeriod ? (
         <section className="public-finance__overview" aria-labelledby="public-finance-overview-heading">
           <header className="public-finance__section-heading">
             <div>
@@ -209,9 +221,14 @@ export default async function PublicBudgetsPage() {
             <span>最近登錄</span>
             <h2 id="public-finance-expenses-heading">支出紀錄</h2>
           </div>
-          <span>最近 {expenses.length} 筆</span>
+          {!expenseLoadFailed && <span>最近 {expenses.length} 筆</span>}
         </header>
-        {expenses.length > 0 ? (
+        {expenseLoadFailed ? (
+          <div className="public-finance__empty-expenses" role="status">
+            <ReceiptText size={20} aria-hidden="true" />
+            <p>支出紀錄暫時無法載入，請稍後重新整理。</p>
+          </div>
+        ) : expenses.length > 0 ? (
           <PublicExpenseTable expenses={expenses} />
         ) : (
           <div className="public-finance__empty-expenses">
@@ -221,7 +238,7 @@ export default async function PublicBudgetsPage() {
         )}
       </section>
 
-      <section className="public-finance__budget-list" aria-labelledby="public-finance-budget-list-heading">
+      {!budgetLoadFailed && <section className="public-finance__budget-list" aria-labelledby="public-finance-budget-list-heading">
         <header className="public-finance__section-heading">
           <div>
             <span>明細與審理進度</span>
@@ -250,7 +267,7 @@ export default async function PublicBudgetsPage() {
         ) : (
           <p className="public-finance__empty-budgets">目前沒有可檢視的預算案。</p>
         )}
-      </section>
+      </section>}
     </div>
   );
 }
