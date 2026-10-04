@@ -44,7 +44,9 @@ class QuestionType(enum.StrEnum):
     TEXT = "text"  # 簡答（單行文字）
     TEXTAREA = "textarea"  # 長答（多行文字）
     SINGLE = "single"  # 單選
+    SINGLE_GRID = "single_grid"  # 單選方格（每列選一欄）
     MULTIPLE = "multiple"  # 多選
+    MULTI_TEXT = "multi_text"  # 四欄詳答
     RANKING = "ranking"  # 拖拉排序（從選項中挑選並排序）
     RATING = "rating"  # 評分（1–5 / 1–10）
     DATE = "date"  # 日期輸入
@@ -173,6 +175,7 @@ class SurveyQuestion(Base, TimestampMixin):
     )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     question_type: Mapped[QuestionType] = mapped_column(
         Enum(QuestionType, name="questiontype", values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
@@ -181,6 +184,8 @@ class SurveyQuestion(Base, TimestampMixin):
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # 選項 JSON（SINGLE/MULTIPLE/RANKING 題型）
     options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 單選方格的欄位標籤；列標籤沿用 options_json。
+    grid_columns_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 選項預覽圖片 URL 陣列，與 options_json 依序對應
     option_image_sets_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 選項額外設定 JSON：{"exclusive": ["以上皆非"], "other": ["其他"]}

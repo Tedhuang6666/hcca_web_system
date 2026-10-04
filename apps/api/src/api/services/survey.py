@@ -454,6 +454,23 @@ def _serialize_option_config(cfg, options: list[str] | None) -> str | None:
     return json.dumps({"exclusive": exclusive, "other": other}, ensure_ascii=False)
 
 
+def _validate_question_configuration(
+    question_type: QuestionType, options: list[str], grid_columns: list[str]
+) -> None:
+    if question_type == QuestionType.SINGLE_GRID:
+        if len(options) < 2 or len(options) > 50:
+            raise ValueError("單選方格需要 2 至 50 列")
+        if len(grid_columns) < 2 or len(grid_columns) > 20:
+            raise ValueError("單選方格需要 2 至 20 欄")
+        if len(set(options)) != len(options) or len(set(grid_columns)) != len(grid_columns):
+            raise ValueError("單選方格的列與欄標籤不可重複")
+    if question_type == QuestionType.MULTI_TEXT:
+        if len(options) != 4:
+            raise ValueError("四欄詳答必須設定 4 個欄位名稱")
+        if len(set(options)) != 4:
+            raise ValueError("四欄詳答欄位名稱不可重複")
+
+
 def _load_option_config(raw: str | None) -> dict[str, list[str]]:
     if not raw:
         return {"exclusive": [], "other": []}
@@ -472,12 +489,17 @@ async def add_question(
 ) -> SurveyQuestion:
     if survey.status not in _EDITABLE_STATUSES:
         raise ValueError("已截止或封存的問卷無法新增題目")
+    _validate_question_configuration(data.question_type, data.options, data.grid_columns)
     question = SurveyQuestion(
         survey_id=survey.id,
         question_text=data.question_text,
+        description=data.description,
         question_type=data.question_type,
         is_required=False if data.question_type in DISPLAY_QUESTION_TYPES else data.is_required,
         options_json=json.dumps(data.options, ensure_ascii=False) if data.options else None,
+        grid_columns_json=(
+            json.dumps(data.grid_columns, ensure_ascii=False) if data.grid_columns else None
+        ),
         option_image_sets_json=(
             json.dumps(data.option_image_sets, ensure_ascii=False)
             if data.option_image_sets
@@ -510,7 +532,15 @@ async def update_question(
     # exclude_unset：只更新呼叫端明確提供的欄位（含明確設為 null 以清除設定）
     fields = data.model_dump(exclude_unset=True)
     next_question_type = fields.get("question_type", question.question_type)
+    if next_question_type is None:
+        raise ValueError("題型不可為空")
     next_options = fields.get("options", _load_str_list(question.options_json))
+    if next_options is None:
+        next_options = []
+    next_grid_columns = fields.get("grid_columns", _load_str_list(question.grid_columns_json))
+    if next_grid_columns is None:
+        next_grid_columns = []
+    _validate_question_configuration(next_question_type, next_options, next_grid_columns)
     next_max_value = fields.get("max_value", question.max_value)
     if (
         next_question_type == QuestionType.MULTIPLE
@@ -521,6 +551,9 @@ async def update_question(
     if "options" in fields:
         opts = fields.pop("options")
         question.options_json = json.dumps(opts, ensure_ascii=False) if opts else None
+    if "grid_columns" in fields:
+        columns = fields.pop("grid_columns")
+        question.grid_columns_json = json.dumps(columns, ensure_ascii=False) if columns else None
     if "option_image_sets" in fields:
         image_sets = fields.pop("option_image_sets")
         question.option_image_sets_json = (
@@ -706,7 +739,13 @@ async def _validate_submission(
         if not _evaluate_condition(q.condition_json, answers_by_q):
             continue
         answer = answers_by_q.get(q.id)
-        has_answer = bool(answer and ((answer.answer_text or "").strip() or answer.answer_options))
+        has_answer = bool(
+            answer
+            and (
+                (answer.answer_text or "").strip()
+                or any((value or "").strip() for value in answer.answer_options)
+            )
+        )
         if q.is_required and not has_answer:
             raise ValueError(f"題目「{q.question_text[:30]}」為必填")
 
@@ -722,7 +761,31 @@ async def _validate_submission(
         ans = answers_by_q.get(q.id)
         if ans is None:
             continue
-        if q.question_type == QuestionType.MULTIPLE:
+        if q.question_type == QuestionType.SINGLE_GRID:
+            rows = _load_str_list(q.options_json)
+            columns = _load_str_list(q.grid_columns_json)
+            selected = [value.strip() for value in (ans.answer_options or [])]
+            if not any(selected) and not q.is_required:
+                ans.answer_options = []
+                continue
+            if len(selected) != len(rows):
+                raise ValueError(f"題目「{q.question_text[:30]}」每一列都需要一個欄位答案")
+            if any(value and value not in columns for value in selected):
+                raise ValueError(f"題目「{q.question_text[:30]}」包含無效的欄位答案")
+            if q.is_required and any(not value for value in selected):
+                raise ValueError(f"題目「{q.question_text[:30]}」每一列都必須作答")
+            ans.answer_options = selected
+        elif q.question_type == QuestionType.MULTI_TEXT:
+            values = [value.strip() for value in (ans.answer_options or [])]
+            if not any(values) and not q.is_required:
+                ans.answer_options = []
+                continue
+            if len(values) != 4:
+                raise ValueError(f"題目「{q.question_text[:30]}」需要提供 4 個欄位的答案")
+            if q.is_required and any(not value for value in values):
+                raise ValueError(f"題目「{q.question_text[:30]}」的 4 個欄位都必須作答")
+            ans.answer_options = values
+        elif q.question_type == QuestionType.MULTIPLE:
             cfg = _load_option_config(q.option_config_json)
             chosen = list(ans.answer_options or [])
             excl_chosen = [o for o in chosen if o in cfg["exclusive"]]
@@ -761,8 +824,16 @@ async def _store_answers(
         q = questions.get(ans.question_id)
         if q is None or q.question_type in DISPLAY_QUESTION_TYPES:
             continue
+        if (
+            not q.is_required
+            and q.question_type in (QuestionType.SINGLE_GRID, QuestionType.MULTI_TEXT)
+            and not any((value or "").strip() for value in (ans.answer_options or []))
+        ):
+            continue
         answer = SurveyAnswer(response_id=response.id, question_id=ans.question_id)
-        if q.question_type == QuestionType.MULTIPLE:
+        if q.question_type in (QuestionType.SINGLE_GRID, QuestionType.MULTI_TEXT):
+            answer.answer_json = json.dumps(ans.answer_options, ensure_ascii=False)
+        elif q.question_type == QuestionType.MULTIPLE:
             answer.answer_json = json.dumps(ans.answer_options, ensure_ascii=False)
             cfg = _load_option_config(q.option_config_json)
             if cfg["other"] and any(o in cfg["other"] for o in ans.answer_options):
@@ -916,7 +987,50 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
             total_responses=len(answers),
         )
 
-        if q.question_type in (QuestionType.SINGLE, QuestionType.MULTIPLE):
+        if q.question_type == QuestionType.SINGLE_GRID:
+            rows = _load_str_list(q.options_json)
+            columns = _load_str_list(q.grid_columns_json)
+            counts: dict[str, int] = {}
+            for answer in answers:
+                if not answer.answer_json:
+                    continue
+                try:
+                    selected = json.loads(answer.answer_json)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(selected, list):
+                    continue
+                for row, column in zip(rows, selected, strict=False):
+                    if column in columns:
+                        label = f"{row}：{column}"
+                        counts[label] = counts.get(label, 0) + 1
+            qs.option_counts = counts
+            qs.suggested_chart = "bar"
+            qs.available_charts = ["bar", "list"]
+
+        elif q.question_type == QuestionType.MULTI_TEXT:
+            labels = _load_str_list(q.options_json)
+            qs.text_answers = []
+            for answer in answers:
+                if not answer.answer_json:
+                    continue
+                try:
+                    values = json.loads(answer.answer_json)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(values, list):
+                    continue
+                text = "\n".join(
+                    f"{label}：{value}"
+                    for label, value in zip(labels, values, strict=False)
+                    if isinstance(value, str) and value.strip()
+                )
+                if text:
+                    qs.text_answers.append(text)
+            qs.suggested_chart = "list"
+            qs.available_charts = ["list"]
+
+        elif q.question_type in (QuestionType.SINGLE, QuestionType.MULTIPLE):
             counts: dict[str, int] = {}
             respondents: dict[str, list[SurveyRespondentSummary]] = {}
             for a in answers:
@@ -1037,7 +1151,7 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
 # ── 試算表匯出 ────────────────────────────────────────────────────────────────
 
 
-def _answer_display(answer: SurveyAnswer | None) -> str:
+def _answer_display(answer: SurveyAnswer | None, question: SurveyQuestion | None = None) -> str:
     """把單一答案轉成試算表儲存格的文字。"""
     if answer is None:
         return ""
@@ -1045,7 +1159,22 @@ def _answer_display(answer: SurveyAnswer | None) -> str:
         try:
             opts = json.loads(answer.answer_json)
             if isinstance(opts, list):
-                text = "、".join(str(o) for o in opts)
+                if question and question.question_type == QuestionType.MULTI_TEXT:
+                    labels = _load_str_list(question.options_json)
+                    text = "\n".join(
+                        f"{label}：{value}"
+                        for label, value in zip(labels, opts, strict=False)
+                        if isinstance(value, str) and value.strip()
+                    )
+                elif question and question.question_type == QuestionType.SINGLE_GRID:
+                    rows = _load_str_list(question.options_json)
+                    text = "\n".join(
+                        f"{row}：{column}"
+                        for row, column in zip(rows, opts, strict=False)
+                        if isinstance(column, str) and column
+                    )
+                else:
+                    text = "、".join(str(o) for o in opts)
                 if answer.other_text:
                     text += f"（其他：{answer.other_text}）"
                 return _spreadsheet_safe_text(text)
@@ -1116,7 +1245,7 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
             "提交時間": resp.submitted_at.strftime("%Y-%m-%d %H:%M") if resp.submitted_at else "",
         }
         for q in questions:
-            row[col_labels[q.id]] = _answer_display(answers_by_q.get(q.id))
+            row[col_labels[q.id]] = _answer_display(answers_by_q.get(q.id), q)
         detail_rows.append(row)
     detail_columns = ["#", "提交時間", *col_labels.values()]
 
@@ -1266,7 +1395,7 @@ def render_response_copy_email(
 
         question_number += 1
         answer = answers_by_q.get(q.id)
-        value = _answer_display(answers_by_q.get(q.id)) or "—"
+        value = _answer_display(answers_by_q.get(q.id), q) or "—"
         options = _load_str_list(q.options_json)
         try:
             raw_image_sets = json.loads(q.option_image_sets_json or "[]")
@@ -1295,7 +1424,7 @@ def render_response_copy_email(
             f"{html.escape(q.question_text)}</p>"
             f"{image_markup(q.image_url, q.question_text)}"
         )
-        if options:
+        if options and q.question_type not in (QuestionType.SINGLE_GRID, QuestionType.MULTI_TEXT):
             blocks.append(
                 '<div style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e2e8f0;">'
             )

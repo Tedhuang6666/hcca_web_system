@@ -7,9 +7,11 @@ import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, err
 
 export type SurveyQuestionBody = {
   question_text?: string;
+  description?: string | null;
   question_type?: string;
   is_required?: boolean;
   options?: string[];
+  grid_columns?: string[];
   option_image_sets?: string[][];
   min_value?: number;
   max_value?: number | null;

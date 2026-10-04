@@ -25444,7 +25444,7 @@ export interface components {
          * QuestionType
          * @enum {string}
          */
-        QuestionType: "text" | "textarea" | "single" | "multiple" | "ranking" | "rating" | "date" | "section_text" | "page_break" | "image" | "video";
+        QuestionType: "text" | "textarea" | "single" | "single_grid" | "multiple" | "multi_text" | "ranking" | "rating" | "date" | "section_text" | "page_break" | "image" | "video";
         /** QueueDepth */
         QueueDepth: {
             /** Name */
@@ -28702,6 +28702,10 @@ export interface components {
         SurveyQuestionCreate: {
             /** @description 顯示條件（選填） */
             condition?: components["schemas"]["QuestionCondition"] | null;
+            /** Description */
+            description?: string | null;
+            /** Grid Columns */
+            grid_columns?: string[];
             /**
              * Image Url
              * @description 附加圖片（可與題目合併或單獨顯示）
@@ -28774,6 +28778,10 @@ export interface components {
         /** SurveyQuestionOut */
         SurveyQuestionOut: {
             condition?: components["schemas"]["QuestionCondition"] | null;
+            /** Description */
+            description?: string | null;
+            /** Grid Columns */
+            grid_columns?: string[];
             /**
              * Id
              * Format: uuid
@@ -28817,6 +28825,10 @@ export interface components {
         /** SurveyQuestionUpdate */
         SurveyQuestionUpdate: {
             condition?: components["schemas"]["QuestionCondition"] | null;
+            /** Description */
+            description?: string | null;
+            /** Grid Columns */
+            grid_columns?: string[] | null;
             /** Image Url */
             image_url?: string | null;
             /** Is Required */

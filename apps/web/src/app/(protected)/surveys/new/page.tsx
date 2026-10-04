@@ -12,6 +12,13 @@ import UserPicker from "@/components/surveys/UserPicker";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
+import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdown";
+import {
+  DEFAULT_FOUR_FIELD_LABELS,
+  SurveyFourFieldLabelsEditor,
+  SurveyGridColumnsEditor,
+  SurveyGridRowsEditor,
+} from "@/components/surveys/SurveyQuestionFields";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "section_text", label: "文字描述區塊" },
@@ -21,7 +28,9 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text",     label: "簡答（單行）" },
   { value: "textarea", label: "長答（多行）" },
   { value: "single",   label: "單選" },
+  { value: "single_grid", label: "單選方格（每列選一欄）" },
   { value: "multiple", label: "多選" },
+  { value: "multi_text", label: "四欄詳答" },
   { value: "rating",   label: "評分（1–5）" },
   { value: "date",     label: "日期" },
 ];
@@ -50,9 +59,11 @@ type CondRule = { question_id: string; operator: string; value: string; connecto
 interface DraftQuestion {
   id: string;
   question_text: string;
+  description: string;
   question_type: QuestionType;
   is_required: boolean;
   options: string[];
+  grid_columns: string[];
   option_image_sets: string[][];
   min_value: number;
   max_value: number;
@@ -204,7 +215,8 @@ export default function NewSurveyPage() {
   // 題目列表
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [newQ, setNewQ] = useState<Partial<DraftQuestion>>({
-    question_text: "", question_type: "text", is_required: true, options: [], option_image_sets: [], min_value: 1, max_value: 5,
+    question_text: "", description: "", question_type: "text", is_required: true, options: [],
+    grid_columns: [], option_image_sets: [], min_value: 1, max_value: 5,
     placeholder: "", image_url: "", min_length: "", max_length: "", validation_rule: "", min_label: "", max_label: "",
   });
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -263,14 +275,18 @@ export default function NewSurveyPage() {
     setOrgId(draft.orgId ?? localStorage.getItem("org_id") ?? "");
     setQuestions((draft.questions ?? []).map(q => ({
       ...q,
+      description: q.description ?? "",
+      grid_columns: q.grid_columns ?? [],
       option_image_sets: q.option_image_sets ?? [],
       rules: q.rules ?? [],
     })));
     setNewQ(draft.newQ ?? {
       question_text: "",
+      description: "",
       question_type: "text",
       is_required: true,
       options: [],
+      grid_columns: [],
       option_image_sets: [],
       min_value: 1,
       max_value: 5,
@@ -297,7 +313,9 @@ export default function NewSurveyPage() {
       && !draft.closesAt
       && (draft.questions ?? []).length === 0
       && !(draft.newQ.question_text ?? "").trim()
+      && !(draft.newQ.description ?? "").trim()
       && !(draft.newQ.options ?? []).some((option) => option.trim())
+      && !(draft.newQ.grid_columns ?? []).some((column) => column.trim())
       && !(draft.newQ.option_image_sets ?? []).some((images) => images.length > 0)
     ), []),
   });
@@ -305,15 +323,33 @@ export default function NewSurveyPage() {
   const addQuestion = () => {
     const qType = newQ.question_type ?? "text";
     const isImg = qType === "image";
+    const isGrid = qType === "single_grid";
+    const isMultiText = qType === "multi_text";
     if (isImg && !newQ.image_url) { toast.error("圖片題型請先上傳圖片"); return; }
     if (!isImg && !newQ.question_text?.trim()) { toast.error("請輸入題目或區塊文字"); return; }
     const needsOptions = qType === "single" || qType === "multiple";
+    const usesOptionLabels = needsOptions || isGrid || isMultiText;
+    const labels = (newQ.options ?? []).map(option => option.trim()).filter(Boolean);
+    const gridColumns = (newQ.grid_columns ?? []).map(column => column.trim()).filter(Boolean);
     const optionEntries = (newQ.options ?? []).map((option, index) => ({
       option: option.trim(),
       images: newQ.option_image_sets?.[index] ?? [],
     })).filter(({ option }) => Boolean(option));
-    if (needsOptions && optionEntries.length < 2) {
-      toast.error("選擇題至少需要 2 個選項"); return;
+    if ((needsOptions || isGrid) && labels.length < 2) {
+      toast.error(isGrid ? "單選方格至少需要 2 列" : "選擇題至少需要 2 個選項"); return;
+    }
+    if (isGrid && (labels.length > 50 || gridColumns.length < 2 || gridColumns.length > 20)) {
+      toast.error("單選方格需要設定 2 至 50 列、2 至 20 欄"); return;
+    }
+    if (isGrid && (new Set(labels).size !== labels.length
+      || new Set(gridColumns).size !== gridColumns.length)) {
+      toast.error("單選方格的列與欄標籤不可重複"); return;
+    }
+    if (isMultiText && labels.length !== 4) {
+      toast.error("四欄詳答需要填寫 4 個欄位名稱"); return;
+    }
+    if (isMultiText && new Set(labels).size !== labels.length) {
+      toast.error("四欄詳答欄位名稱不可重複"); return;
     }
     if (qType === "multiple" && (newQ.max_value ?? 0) > optionEntries.length) {
       toast.error("多選最多項數不可大於選項總數"); return;
@@ -322,10 +358,12 @@ export default function NewSurveyPage() {
     setQuestions(prev => {
       const draftQuestion: Omit<DraftQuestion, "id" | "order_index"> = {
         question_text: newQ.question_text?.trim() ?? "",
+        description: newQ.description?.trim() ?? "",
         question_type: qType,
         is_required: isDisplayType(qType) ? false : (newQ.is_required ?? true),
-        options: optionEntries.map(({ option }) => option),
-        option_image_sets: optionEntries.map(({ images }) => images),
+        options: usesOptionLabels ? labels : [],
+        grid_columns: isGrid ? gridColumns : [],
+        option_image_sets: needsOptions ? optionEntries.map(({ images }) => images) : [],
         min_value: newQ.min_value ?? 1,
         max_value: qType === "multiple" ? (newQ.max_value ?? 0) : (newQ.max_value ?? 5),
         placeholder: newQ.placeholder ?? "",
@@ -347,9 +385,11 @@ export default function NewSurveyPage() {
     // 保留上一題的題型與必填設定，方便連續新增同類型題目
     setNewQ({
       question_text: "",
+      description: "",
       question_type: qType,
       is_required: newQ.is_required ?? true,
-      options: [],
+      options: isMultiText ? [...DEFAULT_FOUR_FIELD_LABELS] : [],
+      grid_columns: isGrid ? ["欄 1", "欄 2"] : [],
       option_image_sets: [],
       min_value: newQ.min_value ?? 1,
       max_value: qType === "multiple" ? (newQ.max_value ?? 0) : (newQ.max_value ?? 5),
@@ -372,7 +412,9 @@ export default function NewSurveyPage() {
   const editQuestion = (question: DraftQuestion) => {
     setNewQ({
       ...question,
+      description: question.description ?? "",
       options: [...question.options],
+      grid_columns: [...(question.grid_columns ?? [])],
       option_image_sets: question.option_image_sets.map((images) => [...images]),
       rules: question.rules.map((rule) => ({ ...rule })),
     });
@@ -435,9 +477,11 @@ export default function NewSurveyPage() {
         const isText = q.question_type === "text" || q.question_type === "textarea";
         const created = await surveysApi.addQuestion(survey.id, {
           question_text: q.question_text,
+          description: q.description || undefined,
           question_type: q.question_type,
           is_required: q.is_required,
           options: q.options,
+          grid_columns: q.grid_columns,
           option_image_sets: q.option_image_sets,
           min_value: q.question_type === "rating" ? q.min_value : undefined,
           max_value: q.question_type === "rating"
@@ -488,8 +532,11 @@ export default function NewSurveyPage() {
     setActiveStep((step) => Math.min(step + 1, SURVEY_STEPS.length - 1));
   };
 
-  const needsOptions = newQ.question_type === "single" || newQ.question_type === "multiple";
+  const needsOptions = newQ.question_type === "single"
+    || newQ.question_type === "multiple";
   const isRating = newQ.question_type === "rating";
+  const isGrid = newQ.question_type === "single_grid";
+  const isMultiText = newQ.question_type === "multi_text";
   const isDisplay = isDisplayType(newQ.question_type);
   const isImage = newQ.question_type === "image";
   const isVideo = newQ.question_type === "video";
@@ -541,9 +588,13 @@ export default function NewSurveyPage() {
                 placeholder="請輸入問卷標題…" className="input" />
             </div>
             <div>
-              <Label>描述說明</Label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)}
-                rows={2} placeholder="問卷目的或填答說明…" className="input resize-y" />
+              <SurveyMarkdownField
+                label="表單說明"
+                value={description}
+                onChange={setDescription}
+                rows={3}
+                placeholder="問卷目的或填答說明…"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -770,13 +821,12 @@ export default function NewSurveyPage() {
             </h3>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
               <div>
-                <Label>{textLabel}</Label>
-                <textarea
-                  value={newQ.question_text}
-                  onChange={e => setNewQ(p => ({ ...p, question_text: e.target.value }))}
+                <SurveyMarkdownField
+                  label={textLabel}
+                  value={newQ.question_text ?? ""}
+                  onChange={question_text => setNewQ(p => ({ ...p, question_text }))}
                   rows={2}
                   placeholder={isImage ? "圖片下方的說明文字…" : isDisplay ? "請輸入要顯示給填答者的內容…" : "請輸入題目…"}
-                  className="input resize-y"
                 />
               </div>
               <div>
@@ -788,7 +838,10 @@ export default function NewSurveyPage() {
                       ...p,
                       question_type,
                       is_required: isDisplayType(question_type) ? false : p.is_required,
-                      options: [],
+                      options: question_type === "multi_text"
+                        ? [...DEFAULT_FOUR_FIELD_LABELS]
+                        : question_type === "single_grid" ? ["列 1", "列 2"] : [],
+                      grid_columns: question_type === "single_grid" ? ["欄 1", "欄 2"] : [],
                       option_image_sets: [],
                       max_value: question_type === "multiple" ? 0 : p.max_value,
                     }));
@@ -798,6 +851,13 @@ export default function NewSurveyPage() {
                 </select>
               </div>
             </div>
+            <SurveyMarkdownField
+              label="題目描述（選填）"
+              value={newQ.description ?? ""}
+              onChange={description => setNewQ(p => ({ ...p, description }))}
+              rows={2}
+              placeholder="補充這題的作答說明…"
+            />
             {!isDisplay && (
               <label className="flex min-h-11 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={newQ.is_required ?? true}
@@ -879,6 +939,26 @@ export default function NewSurveyPage() {
                 onChange={option_image_sets => setNewQ(p => ({ ...p, option_image_sets }))}
                 onOptionsChange={options => setNewQ(p => ({ ...p, options }))}
                 selectionStyle={newQ.question_type === "multiple" ? "multiple" : "single"}
+              />
+            )}
+
+            {isGrid && (
+              <>
+                <SurveyGridRowsEditor
+                  rows={newQ.options ?? []}
+                  onChange={options => setNewQ(p => ({ ...p, options }))}
+                />
+                <SurveyGridColumnsEditor
+                  columns={newQ.grid_columns ?? []}
+                  onChange={grid_columns => setNewQ(p => ({ ...p, grid_columns }))}
+                />
+              </>
+            )}
+
+            {isMultiText && (
+              <SurveyFourFieldLabelsEditor
+                labels={newQ.options ?? []}
+                onChange={options => setNewQ(p => ({ ...p, options }))}
               />
             )}
 

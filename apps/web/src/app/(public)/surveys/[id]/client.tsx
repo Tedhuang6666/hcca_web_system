@@ -30,6 +30,7 @@ import type {
   ConditionRule,
   SurveyOut,
   SurveyQuestionOut,
+  SurveyAnswerOut,
   SurveyResponseAdminItem,
   SurveyResponseOut,
   SurveyRespondentSummary,
@@ -43,6 +44,7 @@ import { recordRecent } from "@/lib/recents";
 import SurveyImageViewer from "@/components/surveys/SurveyImageViewer";
 import Combobox from "@/components/ui/Combobox";
 import type { ComboboxOption } from "@/components/ui/Combobox";
+import { SurveyMarkdown } from "@/components/surveys/SurveyMarkdown";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
 
@@ -114,7 +116,14 @@ function emptyAnswers(questions: SurveyQuestionOut[]): AnswerMap {
   return Object.fromEntries(
     questions
       .filter(question => !DISPLAY_TYPES.has(question.question_type))
-      .map(question => [question.id, { text: "", options: [] }]),
+      .map(question => [question.id, {
+        text: "",
+        options: question.question_type === "multi_text"
+          ? Array(4).fill("") as string[]
+          : question.question_type === "single_grid"
+            ? Array(question.options?.length ?? 0).fill("") as string[]
+            : [],
+      }]),
   );
 }
 
@@ -125,7 +134,9 @@ function answersFromResponse(survey: SurveyOut, response: SurveyResponseOut): An
     if (!answers[answer.question_id]) continue;
     const question = questionsById.get(answer.question_id);
     answers[answer.question_id] = {
-      text: question?.question_type === "single" ? "" : (answer.answer_text ?? ""),
+      text: question?.question_type === "single"
+        || question?.question_type === "single_grid"
+        || question?.question_type === "multi_text" ? "" : (answer.answer_text ?? ""),
       options: question?.question_type === "single"
         ? (answer.answer_text ? [answer.answer_text] : [])
         : (answer.answer_options ?? []),
@@ -141,15 +152,52 @@ function responseTimeLabel(response: SurveyResponseOut): string {
   });
 }
 
-function hasAnswerContent(answer: AnswerValue | undefined): boolean {
+function hasAnswerContent(
+  answer: AnswerValue | undefined,
+  question?: SurveyQuestionOut,
+): boolean {
+  if (question?.question_type === "multi_text" || question?.question_type === "single_grid") {
+    return Boolean(answer?.options.some(value => value.trim()));
+  }
   return Boolean(
     answer?.text.trim()
     || answer?.options.length,
   );
 }
 
+function displayResponseAnswer(
+  question: SurveyQuestionOut | undefined,
+  answer: SurveyAnswerOut,
+): string {
+  const values = answer.answer_options ?? [];
+  if (question?.question_type === "multi_text") {
+    return (question.options ?? [])
+      .map((label, index) => values[index]?.trim() ? `${label}：${values[index]}` : "")
+      .filter(Boolean)
+      .join("\n") || answer.answer_text || "—";
+  }
+  if (question?.question_type === "single_grid") {
+    return (question.options ?? [])
+      .map((row, index) => values[index] ? `${row}：${values[index]}` : "")
+      .filter(Boolean)
+      .join("\n") || answer.answer_text || "—";
+  }
+  return values.length ? values.join("、") : answer.answer_text || "—";
+}
+
 function questionValidationError(question: SurveyQuestionOut, answer: AnswerValue | undefined): string | null {
-  if (question.is_required && !hasAnswerContent(answer)) return "此題為必填，請完成填答。";
+  if (question.is_required && !hasAnswerContent(answer, question)) return "此題為必填，請完成填答。";
+  if (question.is_required && question.question_type === "single_grid") {
+    const rowCount = question.options?.length ?? 0;
+    if (answer?.options.length !== rowCount || answer.options.some(value => !value.trim())) {
+      return "請為每一列選擇一個欄位。";
+    }
+  }
+  if (question.is_required && question.question_type === "multi_text") {
+    if (answer?.options.length !== 4 || answer.options.some(value => !value.trim())) {
+      return "請填寫全部四個欄位。";
+    }
+  }
   if (question.question_type === "multiple" && question.max_value != null) {
     if ((answer?.options.length ?? 0) > question.max_value) {
       return `最多可選 ${question.max_value} 個選項。`;
@@ -355,6 +403,7 @@ function QuestionInput({
     placeholder,
   } = question;
   const options = rawOptions ?? [];
+  const gridColumns = question.grid_columns ?? [];
   const imageSets = (
     question as SurveyQuestionOut & { option_image_sets?: string[][] }
   ).option_image_sets ?? [];
@@ -381,9 +430,7 @@ function QuestionInput({
 
   if (type === "section_text") {
     return (
-      <p className="text-sm whitespace-pre-wrap leading-7" style={{ color: "var(--text-secondary)" }}>
-        {question.question_text}
-      </p>
+      <SurveyMarkdown markdown={question.question_text} className="text-sm" />
     );
   }
   if (type === "page_break") {
@@ -402,8 +449,8 @@ function QuestionInput({
             className="max-h-80 w-full rounded-lg object-contain" />
         )}
         {question.question_text && (
-          <figcaption className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>
-            {question.question_text}
+          <figcaption className="text-sm" style={{ color: "var(--text-muted)" }}>
+            <SurveyMarkdown markdown={question.question_text} />
           </figcaption>
         )}
       </figure>
@@ -412,9 +459,7 @@ function QuestionInput({
   if (type === "video") {
     return (
       <div className="space-y-2">
-        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>
-          {question.question_text}
-        </p>
+        <SurveyMarkdown markdown={question.question_text} className="text-sm" />
         {placeholder && (
           <a href={placeholder} target="_blank" rel="noreferrer" className="btn btn-ghost inline-flex text-xs">
             開啟影片
@@ -490,6 +535,85 @@ function QuestionInput({
             </label>
             {optionPreview(opt, index, (optionIndex) => onChange({ ...value, options: [options[optionIndex]] }))}
           </div>
+        ))}
+      </div>
+    );
+  }
+  if (type === "single_grid") {
+    const selectColumn = (rowIndex: number, column: string) => {
+      const next = Array.from({ length: options.length }, (_, index) => value.options[index] ?? "");
+      next[rowIndex] = column;
+      onChange({ ...value, options: next });
+    };
+    return (
+      <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid var(--border)" }}>
+        <table className="survey-single-grid min-w-[32rem] w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th scope="col" className="sticky left-0 z-10 min-w-32 px-3 py-2 text-left"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                列
+              </th>
+              {gridColumns.map((column, columnIndex) => (
+                <th key={columnIndex} scope="col" className="min-w-24 px-3 py-2 text-center font-medium"
+                  style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {options.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                <th scope="row" className="sticky left-0 z-10 px-3 py-2 text-left font-medium"
+                  style={{ background: "var(--bg-surface)", color: "var(--text-primary)" }}>
+                  {row}
+                </th>
+                {gridColumns.map((column, columnIndex) => (
+                  <td key={columnIndex} className="px-3 py-1 text-center"
+                    style={{ background: "var(--bg-surface)" }}>
+                    <label className="flex min-h-11 cursor-pointer items-center justify-center">
+                      <input
+                        type="radio"
+                        name={`${question.id}-row-${rowIndex}`}
+                        aria-label={`${row}：${column}`}
+                        checked={value.options[rowIndex] === column}
+                        onChange={() => selectColumn(rowIndex, column)}
+                        disabled={disabled}
+                        className="h-4 w-4 accent-sky-400"
+                      />
+                    </label>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (type === "multi_text") {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {options.slice(0, 4).map((label, index) => (
+          <label key={index} className="space-y-1.5">
+            <span className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              {label}
+            </span>
+            <textarea
+              rows={3}
+              value={value.options[index] ?? ""}
+              onChange={event => {
+                const next = Array.from({ length: 4 }, (_, i) => value.options[i] ?? "");
+                next[index] = event.target.value;
+                onChange({ ...value, options: next });
+              }}
+              readOnly={disabled}
+              maxLength={5000}
+              placeholder={`請輸入${label}相關內容…`}
+              className="input min-h-20 resize-y"
+            />
+          </label>
         ))}
       </div>
     );
@@ -1153,9 +1277,7 @@ function StatsView({
                       ) : (
                         r.answers.map(a => {
                           const label = questionLabels.get(a.question_id) ?? "題目";
-                          const val = (a.answer_options ?? []).length
-                            ? (a.answer_options ?? []).join("、")
-                            : (a.answer_text || "—");
+                          const val = displayResponseAnswer(questionsById.get(a.question_id), a);
                           return (
                             <div key={a.id} className="pt-2 text-xs">
                               <span style={{ color: "var(--text-muted)" }}>{label}</span>
@@ -1264,7 +1386,7 @@ export default function SurveyDetailClient({
     isEmpty: useCallback((draft: AnswerMap) => (
       Object.values(draft).every(ans =>
         !(ans.text ?? "").trim()
-        && (ans.options ?? []).length === 0
+        && !(ans.options ?? []).some(value => value.trim())
         && !(ans.other_text ?? "").trim()
       )
     ), []),
@@ -1489,7 +1611,7 @@ export default function SurveyDetailClient({
   );
   const questionCount = responseQuestions.length;
   const answeredQuestionCount = responseQuestions.filter(
-    (question) => hasAnswerContent(answers[question.id]),
+    (question) => hasAnswerContent(answers[question.id], question),
   ).length;
   const responseProgress = questionCount > 0 ? answeredQuestionCount / questionCount : 0;
 
@@ -1560,9 +1682,10 @@ export default function SurveyDetailClient({
           <h2 id="survey-description-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             問卷說明
           </h2>
-          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-            {survey.description}
-          </p>
+          <SurveyMarkdown
+            markdown={survey.description}
+            className="mt-2 break-words text-sm"
+          />
         </section>
       )}
 
@@ -1752,7 +1875,7 @@ export default function SurveyDetailClient({
           {survey.questions.map((q) => {
             if (displayedHiddenIds.has(q.id)) return null;
             const isDisplay = DISPLAY_TYPES.has(q.question_type);
-            const isAnswered = hasAnswerContent(answers[q.id]);
+            const isAnswered = hasAnswerContent(answers[q.id], q);
             const validationError = validationErrors[q.id];
             return (
             <div
@@ -1771,27 +1894,31 @@ export default function SurveyDetailClient({
                   <span className="text-xs font-bold mt-0.5 flex-shrink-0"
                     style={{ color: "var(--primary)" }}>Q{numberMap.get(q.id)}</span>
                 )}
-                <div className="flex-1">
-                  <p className={isDisplay ? "sr-only" : "text-sm font-medium"} style={{ color: "var(--text-primary)" }}>
-                    {q.question_text}
-                    {q.is_required && (
-                      <span
-                        className="ml-2 inline-flex rounded px-1.5 py-0.5 align-middle text-xs font-semibold"
-                        style={{ background: "var(--danger-dim)", color: "var(--danger)" }}
-                      >
-                        必填
-                      </span>
-                    )}
-                    {q.question_type === "multiple" && q.max_value != null && (
-                      <span
-                        className="ml-2 inline-flex rounded px-1.5 py-0.5 align-middle text-xs font-semibold"
-                        style={{ background: "var(--info-dim)", color: "var(--info)" }}
-                      >
-                        最多選 {q.max_value} 項
-                      </span>
-                    )}
-                    {!isDisplay && isAnswered && <span className="survey-question-recorded">已回覆</span>}
-                  </p>
+                <div className="min-w-0 flex-1" style={{ color: "var(--text-primary)" }}>
+                  <SurveyMarkdown
+                    markdown={q.question_text}
+                    className={isDisplay ? "sr-only" : "text-sm font-medium"}
+                  />
+                  {!isDisplay && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      {q.is_required && (
+                        <span className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold"
+                          style={{ background: "var(--danger-dim)", color: "var(--danger)" }}>
+                          必填
+                        </span>
+                      )}
+                      {q.question_type === "multiple" && q.max_value != null && (
+                        <span className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold"
+                          style={{ background: "var(--info-dim)", color: "var(--info)" }}>
+                          最多選 {q.max_value} 項
+                        </span>
+                      )}
+                      {isAnswered && <span className="survey-question-recorded">已回覆</span>}
+                    </div>
+                  )}
+                  {q.description && (
+                    <SurveyMarkdown markdown={q.description} className="mt-2 text-sm" />
+                  )}
                 </div>
               </div>
               {q.image_url && q.question_type !== "image" && (
