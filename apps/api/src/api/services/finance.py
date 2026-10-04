@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import case, delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.database import Base
 from api.models.finance import (
     BudgetSubmissionKind,
     BudgetSubmissionStatus,
@@ -98,6 +99,25 @@ def validate_evidence_key(evidence_key: str | None, ledger_id: uuid.UUID) -> Non
 def _claim_item_total(unit_price: int, tax_rate: int, quantity: Decimal | float) -> int:
     total = Decimal(unit_price) * (Decimal(100 + tax_rate) / Decimal(100)) * Decimal(quantity)
     return int(total.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+async def clear_all_finance_data(db: AsyncSession) -> tuple[int, list[str]]:
+    evidence_models = (
+        FinanceBudgetAllocationEvidence,
+        FinanceBudgetExpenseEvidence,
+        ExpenseClaimItemEvidence,
+    )
+    storage_keys: list[str] = []
+    for model in evidence_models:
+        storage_keys.extend((await db.scalars(select(model.storage_key))).all())
+
+    deleted_rows = 0
+    for table in reversed(Base.metadata.sorted_tables):
+        if not table.name.startswith("finance_"):
+            continue
+        result = await db.execute(delete(table))
+        deleted_rows += max(result.rowcount or 0, 0)
+    return deleted_rows, list(dict.fromkeys(storage_keys))
 
 
 async def initialize_ledger(db: AsyncSession, org_id: uuid.UUID, name: str) -> FinanceLedger:
@@ -305,33 +325,31 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], l
     imported_income: list[dict] = []
     skipped: list[str] = []
     current_category = ""
-    current_category_is_income = False
     for row_number, row in enumerate(rows[header_index + 1 :], header_index + 2):
         category_cell = row[category_column] if category_column < len(row) else None
         detail_cell = row[detail_column] if detail_column < len(row) else None
         category = _import_text(category_cell.value if category_cell else None)
         detail = _import_text(detail_cell.value if detail_cell else None)
-        row_is_income = any(is_green_fill(cell) for cell in row)
         if category:
             current_category = category
-            current_category_is_income = row_is_income
         if not detail:
             continue
         category = category or current_category or "未分類"
-        is_income = row_is_income or current_category_is_income
         quantity, unit = _import_quantity(
             row[quantity_column].value if quantity_column < len(row) else None
         )
         unit_price = _import_amount(
             row[unit_price_column].value if unit_price_column < len(row) else None
         )
-        amount = _import_amount(row[amount_column].value if amount_column < len(row) else None)
+        amount_cell = row[amount_column] if amount_column < len(row) else None
+        amount = _import_amount(amount_cell.value if amount_cell else None)
         if amount is None and unit_price is not None:
             amount = int((quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         if amount is None:
             skipped.append(f"第 {row_number} 列「{detail}」沒有可用總額")
             continue
         note = _import_text(row[note_column].value if note_column < len(row) else None)
+        is_income = is_green_fill(amount_cell)
         if is_income:
             imported_income.append(
                 {
@@ -375,6 +393,7 @@ async def import_budget_from_xlsx(
     title: str | None,
     file_bytes: bytes,
     user_id: uuid.UUID,
+    council_approved_on: date | None,
     proposing_org_id: uuid.UUID | None = None,
     budget_id: uuid.UUID | None = None,
     replace_submission_id: uuid.UUID | None = None,
@@ -464,6 +483,10 @@ async def import_budget_from_xlsx(
         )
     db.add_all(FinanceBudgetIncomeItem(submission_id=submission.id, **row) for row in income_rows)
     await _refresh_budget_node_activity(db, budget.id)
+    budget.is_public = True
+    submission.status = BudgetSubmissionStatus.APPROVED
+    submission.review_note = "依已核定預算表直接匯入公開，未在系統內重複審核。"
+    submission.council_approved_on = council_approved_on
     return budget, submission, len(categories), len(rows), len(income_rows), skipped
 
 
@@ -933,8 +956,13 @@ async def create_budget_expense(
         allocation_id=allocation.id,
         entry_date=body.entry_date,
         purpose=body.purpose,
-        total_amount=sum(
-            _claim_item_total(item.unit_price, item.tax_rate, item.quantity) for item in body.items
+        total_amount=(
+            sum(
+                _claim_item_total(item.unit_price, item.tax_rate, item.quantity)
+                for item in body.items
+            )
+            if body.items
+            else body.total_amount or 0
         ),
         note=body.note,
         recorded_by_id=user_id,

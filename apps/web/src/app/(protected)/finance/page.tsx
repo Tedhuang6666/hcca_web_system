@@ -14,12 +14,13 @@ import {
   ReceiptText,
   Settings2,
   ShieldCheck,
+  Trash2,
   WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { usePermissions } from "@/hooks/usePermissions";
-import { usePrompt } from "@/components/ui/ConfirmDialog";
+import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
 import { financeApi, orgsApi, usersApi, type UserSummary } from "@/lib/api";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import BudgetWorkspace from "@/components/finance/BudgetWorkspace";
@@ -111,6 +112,7 @@ function claimItemTotal(item: FinanceExpenseClaimItemCreate): number {
 
 export default function FinancePage() {
   const { can } = usePermissions();
+  const confirm = useConfirm();
   const prompt = usePrompt();
   const canRecord = can("finance:record");
   const canClaimExpense = canRecord || can("finance:expense_claim");
@@ -133,11 +135,13 @@ export default function FinancePage() {
   const [journals, setJournals] = useState<FinanceJournalOut[]>([]);
   const [isBooting, setIsBooting] = useState(true);
   const [currentUserId, setCurrentUserId] = useState("");
+  const [isSuperuser, setIsSuperuser] = useState(false);
+  const [isClearingFinanceData, setIsClearingFinanceData] = useState(false);
   const [claimDetails, setClaimDetails] = useState<Record<string, FinanceExpenseClaimItemOut[]>>({});
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [loadingEntryDetails, setLoadingEntryDetails] = useState<string | null>(null);
   const [periodId, setPeriodId] = useState("");
-  const [activeTab, setActiveTab] = useState<FinanceTab>("workspace");
+  const [activeTab, setActiveTab] = useState<FinanceTab>(canBudget ? "budget" : "workspace");
   const [isPeriodSetupOpen, setIsPeriodSetupOpen] = useState(false);
   const [entryType, setEntryType] = useState<EntryType>("expense");
   const [fundId, setFundId] = useState("");
@@ -214,6 +218,7 @@ export default function FinancePage() {
     void usersApi.me().then((user) => {
       setAdvancedById(user.id);
       setCurrentUserId(user.id);
+      setIsSuperuser(user.is_superuser);
     }).catch(() => {});
   }, []);
 
@@ -335,6 +340,57 @@ export default function FinancePage() {
       toast.success("帳本已建立，請先新增會計期間，再登錄期初餘額或日常收支");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "建立帳本失敗");
+    }
+  };
+
+  const clearAllTestData = async () => {
+    if (!isSuperuser || isClearingFinanceData) return;
+    const accepted = await confirm({
+      title: "清除所有財務資料？",
+      description: "這會刪除所有組織帳本、預算、收支紀錄與已關聯的憑證檔，無法復原。",
+      confirmLabel: "清除所有資料",
+      danger: true,
+    });
+    if (!accepted) return;
+
+    setIsClearingFinanceData(true);
+    try {
+      const result = await financeApi.clearAllTestData();
+      clearExpenseDraft();
+      void clearEvidenceDraft();
+      localStorage.removeItem("finance.ledger_id");
+      setLedger(null);
+      setAccounts([]);
+      setFunds([]);
+      setPeriods([]);
+      setJournals([]);
+      setPeriodId("");
+      setFundId("");
+      setCounterAccountId("");
+      setFromId("");
+      setToId("");
+      setEntryAmount("");
+      setEntryDescription("");
+      setClaimNote("");
+      setClaimItems([emptyClaimItem()]);
+      setEvidenceUrl("");
+      setEvidenceFile(null);
+      setItemEvidenceFiles([]);
+      setClaimDetails({});
+      setExpandedEntryId(null);
+      setLoadingEntryDetails(null);
+      setEditingEntryId(null);
+      setEditingManualEntryId(null);
+      setExistingEvidenceKey(null);
+      if (result.evidence_files_failed > 0) {
+        toast.error(`資料已清除，但 ${result.evidence_files_failed} 份憑證檔未能刪除。`);
+      } else {
+        toast.success(`已清除 ${result.records_deleted.toLocaleString()} 筆財務資料。`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "清除財務資料失敗");
+    } finally {
+      setIsClearingFinanceData(false);
     }
   };
 
@@ -947,6 +1003,20 @@ export default function FinancePage() {
                       <span>{label}</span>
                     </button>
                   ))}
+                  {isSuperuser && (
+                    <section className="grid gap-2 border-t pt-3" aria-label="測試資料清除" style={{ borderColor: "var(--border)" }}>
+                      <p className="m-0 text-xs" style={{ color: "var(--text-muted)" }}>測試工具：清除所有帳本與收支資料。</p>
+                      <button
+                        className="btn btn-danger w-full justify-center"
+                        type="button"
+                        disabled={isClearingFinanceData}
+                        onClick={() => void clearAllTestData()}
+                      >
+                        <Trash2 size={15} aria-hidden="true" />
+                        {isClearingFinanceData ? "正在清除…" : "清除所有財務資料"}
+                      </button>
+                    </section>
+                  )}
                 </div>
               </details>
             </div>

@@ -8,6 +8,7 @@ import type {
   FinanceBudgetDetail,
   FinanceBudgetExpenseOut,
   FinanceBudgetImportResult,
+  FinanceResetOut,
   FinanceBudgetSubmission,
   FinanceExpenseClaimItemOut,
   ExpenseBudgetUpdate,
@@ -158,14 +159,15 @@ export const financeApi = {
     `/finance/budget-allocations/${allocationId}/evidence`, body,
   ),
   createBudgetExpense: (budgetId: string, body: {
-    allocation_id: string; entry_date: string; purpose: string; note?: string;
-    items: Array<{
+    allocation_id: string; entry_date: string; purpose: string; total_amount?: number; note?: string;
+    items?: Array<{
       name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
     }>;
     evidence?: Array<{
       storage_key: string; filename: string; content_type: string; file_size: number;
     }>;
   }) => post<FinanceBudgetExpenseOut>(`/finance/budgets/${budgetId}/expenses`, body),
+  clearAllTestData: () => del<FinanceResetOut>("/finance/test-reset"),
   getSettlement: (ledgerId: string, periodId: string) =>
     get<FinanceSettlement>(`/finance/ledgers/${ledgerId}/periods/${periodId}/settlement`),
   reimburseAdvance: (entryId: string, body: { period_id: string; entry_date: string; fund_account_id: string; payment_status?: 'school_paid' | 'dues_paid'; note?: string }) =>

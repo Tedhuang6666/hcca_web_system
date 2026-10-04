@@ -284,6 +284,7 @@ export type {
   FinanceBudgetExpenseItemCreate,
   FinanceBudgetExpenseItemOut,
   FinanceBudgetExpenseOut,
+  FinanceResetOut,
   FinanceSettlementLineOut,
   FinanceSettlementOut,
   FreezeRequest,

@@ -76,6 +76,8 @@ export default function BudgetExpenseRegister({
   const [purpose, setPurpose] = useState("");
   const [note, setNote] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([emptyItem()]);
+  const [hasItemDetails, setHasItemDetails] = useState(false);
+  const [totalAmount, setTotalAmount] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -120,7 +122,9 @@ export default function BudgetExpenseRegister({
     });
   }, [approvedAllocations, onQuickRegistrationHandled, quickAllocationId]);
 
-  const total = items.reduce((sum, item) => sum + itemAmount(item), 0);
+  const total = hasItemDetails
+    ? items.reduce((sum, item) => sum + itemAmount(item), 0)
+    : Number(totalAmount) || 0;
 
   const resetForm = () => {
     setAllocationId("");
@@ -128,6 +132,8 @@ export default function BudgetExpenseRegister({
     setPurpose("");
     setNote("");
     setItems([emptyItem()]);
+    setHasItemDetails(false);
+    setTotalAmount("");
     setFiles([]);
   };
 
@@ -149,8 +155,13 @@ export default function BudgetExpenseRegister({
     event.preventDefault();
     if (!allocationId) return toast.error("請選擇一筆已核准的預算明細");
     if (!purpose.trim()) return toast.error("請填寫支出用途");
-    if (items.some((item) => !item.name.trim() || !item.unit.trim() || itemAmount(item) <= 0)) {
+    if (hasItemDetails && items.some(
+      (item) => !item.name.trim() || !item.unit.trim() || itemAmount(item) <= 0,
+    )) {
       return toast.error("請確認每個品項都有名稱、數量、單位與單價");
+    }
+    if (!hasItemDetails && (!Number.isInteger(Number(totalAmount)) || Number(totalAmount) <= 0)) {
+      return toast.error("請輸入大於 0 的支出總額");
     }
 
     setIsSaving(true);
@@ -170,14 +181,15 @@ export default function BudgetExpenseRegister({
         allocation_id: allocationId,
         entry_date: entryDate,
         purpose: purpose.trim(),
+        ...(!hasItemDetails ? { total_amount: Number(totalAmount) } : {}),
         note: note.trim() || undefined,
-        items: items.map((item) => ({
+        items: hasItemDetails ? items.map((item) => ({
           name: item.name.trim(),
           unit_price: Number(item.unit_price),
           tax_rate: Number(item.tax_rate || 0),
           quantity: Number(item.quantity),
           unit: item.unit.trim(),
-        })),
+        })) : [],
         evidence,
       });
       resetForm();
@@ -196,7 +208,7 @@ export default function BudgetExpenseRegister({
       <header>
         <div>
           <h3 id="budget-expenses-heading">核銷紀錄</h3>
-          <p>選一筆核准明細，填用途、品項和憑證；登錄後直接計入決算。</p>
+          <p>選預算、填用途與金額，再附上核銷憑證；品項明細可不填。</p>
         </div>
         {canRecord && approvedAllocations.length > 0 && (
           <button className="btn btn-primary" type="button" onClick={() => setIsOpen((value) => !value)}>
@@ -229,38 +241,57 @@ export default function BudgetExpenseRegister({
           </div>
 
           <fieldset className="finance-budget-expenses__items">
-            <legend>購買品項</legend>
-            {items.map((item, index) => (
-              <div className="finance-budget-expenses__item" key={index}>
-                <label className="finance-budget-expenses__item-name">
-                  品項
-                  <input className="input" required maxLength={200} value={item.name} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, name: event.target.value } : row))} placeholder="例如：原子筆" />
-                </label>
+            <legend>支出金額與品項</legend>
+            {!hasItemDetails ? (
+              <div className="finance-budget-expenses__fields">
                 <label>
-                  數量
-                  <input className="input" type="number" min="0.01" step="0.01" required value={item.quantity} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row))} />
+                  支出總額
+                  <input className="input" type="number" min="1" step="1" required value={totalAmount} onChange={(event) => setTotalAmount(event.target.value)} placeholder="NT$" />
                 </label>
-                <label>
-                  單位
-                  <input className="input" required maxLength={32} value={item.unit} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, unit: event.target.value } : row))} />
-                </label>
-                <label>
-                  單價
-                  <input className="input" type="number" min="1" step="1" required value={item.unit_price} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, unit_price: event.target.value } : row))} placeholder="NT$" />
-                </label>
-                <label>
-                  稅率 %
-                  <input className="input" type="number" min="0" max="100" step="1" value={item.tax_rate} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, tax_rate: event.target.value } : row))} />
-                </label>
-                <strong className="finance-budget-expenses__item-total">NT${itemAmount(item).toLocaleString()}</strong>
-                <button className="finance-budget-expenses__remove" type="button" disabled={items.length === 1} aria-label={`移除第 ${index + 1} 個品項`} onClick={() => setItems((current) => current.filter((_, rowIndex) => rowIndex !== index))}>
-                  <Trash2 size={16} aria-hidden="true" />
+                <button className="btn btn-secondary" type="button" onClick={() => setHasItemDetails(true)}>
+                  <Plus size={15} aria-hidden="true" />新增品項明細（選填）
                 </button>
               </div>
-            ))}
-            <button className="btn btn-secondary" type="button" onClick={() => setItems((current) => [...current, emptyItem()])}>
-              <Plus size={15} aria-hidden="true" />新增品項
-            </button>
+            ) : (
+              <>
+                {items.map((item, index) => (
+                  <div className="finance-budget-expenses__item" key={index}>
+                    <label className="finance-budget-expenses__item-name">
+                      品項
+                      <input className="input" required maxLength={200} value={item.name} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, name: event.target.value } : row))} placeholder="例如：原子筆" />
+                    </label>
+                    <label>
+                      數量
+                      <input className="input" type="number" min="0.01" step="0.01" required value={item.quantity} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row))} />
+                    </label>
+                    <label>
+                      單位
+                      <input className="input" required maxLength={32} value={item.unit} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, unit: event.target.value } : row))} />
+                    </label>
+                    <label>
+                      單價
+                      <input className="input" type="number" min="1" step="1" required value={item.unit_price} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, unit_price: event.target.value } : row))} placeholder="NT$" />
+                    </label>
+                    <label>
+                      稅率 %
+                      <input className="input" type="number" min="0" max="100" step="1" value={item.tax_rate} onChange={(event) => setItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, tax_rate: event.target.value } : row))} />
+                    </label>
+                    <strong className="finance-budget-expenses__item-total">NT${itemAmount(item).toLocaleString()}</strong>
+                    <button className="finance-budget-expenses__remove" type="button" disabled={items.length === 1} aria-label={`移除第 ${index + 1} 個品項`} onClick={() => setItems((current) => current.filter((_, rowIndex) => rowIndex !== index))}>
+                      <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn btn-secondary" type="button" onClick={() => setItems((current) => [...current, emptyItem()])}>
+                    <Plus size={15} aria-hidden="true" />新增品項
+                  </button>
+                  <button className="btn btn-secondary" type="button" onClick={() => setHasItemDetails(false)}>
+                    改填總額
+                  </button>
+                </div>
+              </>
+            )}
           </fieldset>
 
           <div className="finance-budget-expenses__attachments">
@@ -287,7 +318,7 @@ export default function BudgetExpenseRegister({
             </button>
           </footer>
           <p className="finance-budget-expenses__visibility">
-            {isPublic ? "這份預算已公開；登錄後的用途、品項與憑證會同步公開。" : "預算公開後，這筆用途、品項與憑證會一併公開。"}
+            {isPublic ? "這份預算已公開；登錄後的用途、金額與憑證會同步公開，品項明細會依填寫內容顯示。" : "預算公開後，這筆用途、金額與憑證會一併公開。"}
           </p>
         </form>
       )}
@@ -301,15 +332,17 @@ export default function BudgetExpenseRegister({
                 <div><strong>{expense.purpose}</strong><small>{expense.allocation_name}</small></div>
                 <b>NT${expense.total_amount.toLocaleString()}</b>
               </div>
-              <ul className="finance-budget-expenses__details">
-                {expense.items.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <small>{item.quantity} {item.unit} × NT${item.unit_price.toLocaleString()}</small>
-                    <strong>NT${item.amount.toLocaleString()}</strong>
-                  </li>
-                ))}
-              </ul>
+              {expense.items.length > 0 && (
+                <ul className="finance-budget-expenses__details">
+                  {expense.items.map((item) => (
+                    <li key={item.id}>
+                      <span>{item.name}</span>
+                      <small>{item.quantity} {item.unit} × NT${item.unit_price.toLocaleString()}</small>
+                      <strong>NT${item.amount.toLocaleString()}</strong>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {expense.evidence.length > 0 && (
                 <div className="finance-budget-expenses__evidence">
                   {expense.evidence.map((evidence) => (
