@@ -750,6 +750,69 @@ async def test_public_coupon_requires_product_bundle_spend_and_quantity(
     assert "使用紀錄" in cannot_delete_used.json()["detail"]
 
 
+async def test_hidden_coupon_is_omitted_from_public_list_but_can_be_redeemed(
+    db_session, client, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    outsider = await _bare_user(db_session)
+    product = await _make_active_product(db_session, creator, price=100, stock=10)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+    created = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "隱藏彩蛋優惠",
+            "code": "EASTER20",
+            "discount_type": "percentage",
+            "discount_value": 20,
+            "is_public": False,
+        },
+    )
+    assert created.status_code == 201
+    promotion_id = created.json()["id"]
+    assert created.json()["is_public"] is False
+    assert (await client.get("/shop/promotions/available")).json() == []
+
+    forbidden = await authed_client_factory(outsider).patch(
+        f"/shop/promotions/{promotion_id}", json={"is_public": True}
+    )
+    assert forbidden.status_code == 403
+
+    buyer_client = authed_client_factory(buyer)
+    registered = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert registered.status_code == 200
+    preview = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"code": "EASTER20"}
+    )
+    assert preview.status_code == 200
+    assert preview.json()["eligible"] is True
+    assert preview.json()["discount_amount"] == 20
+    applied = await buyer_client.put(
+        "/shop/registrations/current/promotion", json={"code": "EASTER20"}
+    )
+    assert applied.status_code == 200
+    assert applied.json()["promotion_code"] == "EASTER20"
+    assert applied.json()["discount_amount"] == 20
+
+    null_visibility = await manager_client.patch(
+        f"/shop/promotions/{promotion_id}", json={"is_public": None}
+    )
+    assert null_visibility.status_code == 422
+
+    published = await manager_client.patch(
+        f"/shop/promotions/{promotion_id}", json={"is_public": True}
+    )
+    assert published.status_code == 200
+    assert published.json()["is_public"] is True
+    available = await buyer_client.get("/shop/promotions/available")
+    assert [row["id"] for row in available.json()] == [promotion_id]
+
+
 async def test_activity_orders_keep_separate_and_stack_scoped_coupon_with_automatic_discount(
     db_session, authed_client_factory
 ) -> None:

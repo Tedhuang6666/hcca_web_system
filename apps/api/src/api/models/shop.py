@@ -622,6 +622,9 @@ class ShopPromotion(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True
     )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
