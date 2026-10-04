@@ -61,6 +61,7 @@ type Incident = {
 type ErrorsData = {
   new_issues: number;
   regressions: number | null;
+  repeated_active_issues?: number | null;
   resolved_issues?: number;
   auto_resolve_after_hours?: number | null;
   incidents?: Incident[];
@@ -157,6 +158,7 @@ function normalizeTabData(tab: Tab, value: ErrorsData | RealUsersData | Performa
       ...raw,
       new_issues: raw.new_issues ?? 0,
       regressions: raw.regressions ?? 0,
+      repeated_active_issues: raw.repeated_active_issues ?? raw.regressions ?? 0,
       resolved_issues: raw.resolved_issues ?? 0,
       auto_resolve_after_hours: raw.auto_resolve_after_hours ?? null,
       incidents: asArray<Incident>(raw.incidents),
@@ -356,6 +358,7 @@ function incidentTone(status: IncidentStatus) {
 
 function ErrorsPanel({ data }: { data: ErrorsData }) {
   const incidents = data.incidents ?? [];
+  const repeatedActiveIssues = data.repeated_active_issues ?? data.regressions ?? 0;
   const autoResolveDetail = data.auto_resolve_after_hours
     ? `連續 ${data.auto_resolve_after_hours} 小時未再發生會自動結案`
     : "自動結案目前已停用";
@@ -363,7 +366,7 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
   return <div className="space-y-6">
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <SummaryMetric label="進行中議題" value={data.new_issues} detail={autoResolveDetail} tone={data.new_issues ? "var(--error)" : "var(--success)"} />
-      <SummaryMetric label="再次發生" value={data.regressions ?? 0} detail="結案後重新出現的同一錯誤" tone={data.regressions ? "var(--warning)" : "var(--success)"} />
+      <SummaryMetric label="再次發生" value={repeatedActiveIssues} detail="仍在處理且累計出現超過 1 次的議題" tone={repeatedActiveIssues ? "var(--warning)" : "var(--success)"} />
       <SummaryMetric label="Sentry" value={data.sentry?.configured ? "已連線" : "未設定"} detail={data.sentry?.error ?? "錯誤資料仍會寫入本機事故庫"} />
       <SummaryMetric label="慢查詢來源" value="即時" detail={data.slow_query_source ?? "query audit"} />
     </section>
@@ -374,6 +377,9 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
           <h2 className="text-base font-semibold">可追蹤事故</h2>
           <p className="mt-1 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>
             每筆會保留出現次數、版本、追蹤 ID 與事件歷程；已解除且持續未再發生的議題會自動結案。
+          </p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            上方統計涵蓋全部紀錄；下方依最近更新排序，最多顯示 200 筆。
           </p>
         </div>
         <AnimatedDownloadButton

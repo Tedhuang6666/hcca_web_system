@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import OperationalError
@@ -18,6 +19,16 @@ logger = logging.getLogger(__name__)
 _TASK_DB_CONNECT_MAX_ATTEMPTS = 5
 _TASK_DB_CONNECT_RETRY_BASE_SECONDS = 1.0
 
+
+def _pgbouncer_connect_args() -> dict[str, object]:
+    """Avoid asyncpg prepared-statement name collisions through transaction pooling."""
+    return {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
+    }
+
+
 # --- 非同步 Engine ---
 # 預設：app 端自管 QueuePool。
 # DB_USE_PGBOUNCER=true（走 PgBouncer transaction pooling）時：
@@ -27,10 +38,7 @@ _TASK_DB_CONNECT_RETRY_BASE_SECONDS = 1.0
 _engine_kwargs: dict = {"echo": settings.SQL_ECHO, "pool_pre_ping": True}
 if settings.DB_USE_PGBOUNCER:
     _engine_kwargs["poolclass"] = NullPool
-    _engine_kwargs["connect_args"] = {
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-    }
+    _engine_kwargs["connect_args"] = _pgbouncer_connect_args()
 else:
     _engine_kwargs.update(
         pool_size=settings.DB_POOL_SIZE,
@@ -68,10 +76,7 @@ async def task_session() -> AsyncIterator[AsyncSession]:
     for attempt in range(1, _TASK_DB_CONNECT_MAX_ATTEMPTS + 1):
         task_engine_kwargs: dict = {"poolclass": NullPool}
         if settings.DB_USE_PGBOUNCER:
-            task_engine_kwargs["connect_args"] = {
-                "statement_cache_size": 0,
-                "prepared_statement_cache_size": 0,
-            }
+            task_engine_kwargs["connect_args"] = _pgbouncer_connect_args()
         task_engine = create_async_engine(str(settings.DATABASE_URL), **task_engine_kwargs)
         factory = async_sessionmaker(
             task_engine,

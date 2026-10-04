@@ -3,16 +3,19 @@ from __future__ import annotations
 import csv
 from datetime import UTC, datetime, timedelta
 from io import StringIO
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.system_incident import IncidentSeverity, IncidentStatus
+from api.models.system_incident import IncidentSeverity, IncidentStatus, SystemIncident
 from api.services.incident import (
     auto_resolve_stale_incidents,
+    count_incident_metrics,
     create_error_fingerprint,
     export_incidents_csv,
     list_incident_events,
     normalize_client_incident_message,
+    normalize_error_message,
     upsert_incident,
 )
 
@@ -82,6 +85,102 @@ async def test_resolved_incident_reopens_as_regression(
     events = await list_incident_events(db_session, incident.id)
     assert events[0].event_type == "regressed"
     assert events[0].details["error_id"] == "error-2"
+
+
+async def test_incident_metrics_count_all_rows_and_active_repeats(
+    db_session: AsyncSession,
+) -> None:
+    now = datetime.now(UTC)
+    incidents = [
+        SystemIncident(
+            id=uuid4(),
+            error_id=f"metric-error-{index}",
+            fingerprint=f"metric-fingerprint-{index}",
+            severity=IncidentSeverity.P2,
+            status=IncidentStatus.OPEN,
+            service="api",
+            environment="test",
+            title=f"Issue {index}",
+            summary=None,
+            first_seen_at=now,
+            last_seen_at=now,
+            occurrence_count=2 if index < 8 else 1,
+        )
+        for index in range(205)
+    ]
+    incidents.extend(
+        [
+            SystemIncident(
+                id=uuid4(),
+                error_id="metric-resolved",
+                fingerprint="metric-resolved",
+                severity=IncidentSeverity.P2,
+                status=IncidentStatus.RESOLVED,
+                service="api",
+                environment="test",
+                title="Resolved issue",
+                summary=None,
+                first_seen_at=now,
+                last_seen_at=now,
+                occurrence_count=4,
+            ),
+            SystemIncident(
+                id=uuid4(),
+                error_id="metric-regression",
+                fingerprint="metric-regression",
+                severity=IncidentSeverity.P2,
+                status=IncidentStatus.REGRESSION,
+                service="api",
+                environment="test",
+                title="Regressed issue",
+                summary=None,
+                first_seen_at=now,
+                last_seen_at=now,
+                occurrence_count=2,
+            ),
+            SystemIncident(
+                id=uuid4(),
+                error_id="metric-ignored",
+                fingerprint="metric-ignored",
+                severity=IncidentSeverity.P2,
+                status=IncidentStatus.IGNORED,
+                service="api",
+                environment="test",
+                title="Ignored issue",
+                summary=None,
+                first_seen_at=now,
+                last_seen_at=now,
+                occurrence_count=5,
+            ),
+        ]
+    )
+    db_session.add_all(incidents)
+    await db_session.flush()
+
+    assert await count_incident_metrics(db_session) == {
+        "active_issues": 206,
+        "repeated_active_issues": 9,
+        "regressions": 1,
+        "resolved_issues": 1,
+    }
+
+
+def test_asyncpg_statement_sequence_is_normalized_for_issue_grouping() -> None:
+    first = 'prepared statement "__asyncpg_stmt_35__" already exists'
+    second = 'prepared statement "__asyncpg_stmt_206__" already exists'
+
+    assert normalize_error_message(first) == normalize_error_message(second)
+    assert create_error_fingerprint(
+        service="api",
+        exception_type="ProgrammingError",
+        path="/health",
+        message=first,
+    ) == create_error_fingerprint(
+        service="api",
+        exception_type="ProgrammingError",
+        path="/health",
+        message=second,
+    )
 
 
 async def test_export_incidents_csv_contains_event_timeline(

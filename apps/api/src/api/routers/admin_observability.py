@@ -14,7 +14,12 @@ from api.core.metrics import get_celery_stats, get_redis_stats
 from api.core.query_audit import get_slow_queries
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
-from api.services.incident import export_incidents_csv, incident_summary, list_incidents
+from api.services.incident import (
+    count_incident_metrics,
+    export_incidents_csv,
+    incident_summary,
+    list_incidents,
+)
 from api.services.observability import (
     client_route_analytics,
     collect_crux_daily,
@@ -72,14 +77,14 @@ async def errors(
 ) -> dict[str, Any]:
     recent = await get_recent_errors(top=50)
     incidents = await list_incidents(session, limit=200)
+    incident_metrics = await count_incident_metrics(session)
     slow_queries = get_slow_queries(top=50)
     sentry = (await provider_snapshot()).get("sentry", {})
-    active_statuses = {"open", "investigating", "mitigated", "monitoring", "regression"}
-    active_issues = sum(incident.status in active_statuses for incident in incidents)
     return {
-        "new_issues": active_issues,
-        "regressions": sum(incident.status == "regression" for incident in incidents),
-        "resolved_issues": sum(incident.status == "resolved" for incident in incidents),
+        "new_issues": incident_metrics["active_issues"],
+        "repeated_active_issues": incident_metrics["repeated_active_issues"],
+        "regressions": incident_metrics["regressions"],
+        "resolved_issues": incident_metrics["resolved_issues"],
         "auto_resolve_after_hours": (
             settings.INCIDENT_AUTO_RESOLVE_AFTER_HOURS
             if settings.INCIDENT_AUTO_RESOLVE_ENABLED

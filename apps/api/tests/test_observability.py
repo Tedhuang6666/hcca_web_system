@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import UTC, datetime
+from uuid import uuid4
 
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -24,6 +26,7 @@ from api.core.prometheus_metrics import (
 from api.core.sentry import _before_send
 from api.core.structured_logging import reset_request_id, set_request_id
 from api.models.observability import PageSpeedRun
+from api.models.system_incident import IncidentSeverity, IncidentStatus, SystemIncident
 from api.services.observability import (
     _merge_rum_urls,
     _read_sitemap,
@@ -428,3 +431,50 @@ async def test_error_report_export_returns_csv(admin_user, authed_client_factory
     assert response.headers["content-type"].startswith("text/csv")
     assert 'attachment; filename="incident_report_' in response.headers["content-disposition"]
     assert response.text.startswith("\ufeffincident_id,error_id,status")
+
+
+async def test_error_summary_counts_all_incidents_beyond_list_limit(
+    admin_user,
+    authed_client_factory,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [
+            SystemIncident(
+                id=uuid4(),
+                error_id=f"summary-error-{index}",
+                fingerprint=f"summary-fingerprint-{index}",
+                severity=IncidentSeverity.P2,
+                status=IncidentStatus.OPEN,
+                service="api",
+                environment="test",
+                title=f"Issue {index}",
+                summary=None,
+                first_seen_at=now,
+                last_seen_at=now,
+                occurrence_count=2 if index < 3 else 1,
+            )
+            for index in range(205)
+        ]
+    )
+    await db_session.flush()
+
+    async def no_recent_errors(**_):
+        return []
+
+    async def no_provider_snapshot():
+        return {"sentry": {}}
+
+    monkeypatch.setattr("api.routers.admin_observability.get_recent_errors", no_recent_errors)
+    monkeypatch.setattr("api.routers.admin_observability.get_slow_queries", lambda **_: [])
+    monkeypatch.setattr("api.routers.admin_observability.provider_snapshot", no_provider_snapshot)
+
+    client = authed_client_factory(admin_user)
+    response = await client.get("/admin/system/observability/errors")
+
+    assert response.status_code == 200
+    assert response.json()["new_issues"] == 205
+    assert response.json()["repeated_active_issues"] == 3
+    assert len(response.json()["incidents"]) == 200
