@@ -119,7 +119,7 @@ function emptyAnswers(questions: SurveyQuestionOut[]): AnswerMap {
       .map(question => [question.id, {
         text: "",
         options: question.question_type === "multi_text"
-          ? Array(4).fill("") as string[]
+          ? Array(question.options?.length ?? 0).fill("") as string[]
           : question.question_type === "single_grid"
             ? Array(question.options?.length ?? 0).fill("") as string[]
             : [],
@@ -194,8 +194,9 @@ function questionValidationError(question: SurveyQuestionOut, answer: AnswerValu
     }
   }
   if (question.is_required && question.question_type === "multi_text") {
-    if (answer?.options.length !== 4 || answer.options.some(value => !value.trim())) {
-      return "請填寫全部四個欄位。";
+    const fieldCount = question.options?.length ?? 0;
+    if (answer?.options.length !== fieldCount || answer.options.some(value => !value.trim())) {
+      return `請填寫全部 ${fieldCount} 個欄位。`;
     }
   }
   if (question.question_type === "multiple" && question.max_value != null) {
@@ -407,7 +408,7 @@ function QuestionInput({
   const imageSets = (
     question as SurveyQuestionOut & { option_image_sets?: string[][] }
   ).option_image_sets ?? [];
-  const minV = min_value ?? 1;
+  const minV = min_value ?? (type === "linear_scale" ? 0 : 1);
   const maxV = max_value ?? 5;
   const optionGallery = options.flatMap((option, optionIndex) => (
     (imageSets[optionIndex] ?? []).map((image) => ({ image, optionLabel: option, optionIndex }))
@@ -595,7 +596,7 @@ function QuestionInput({
   if (type === "multi_text") {
     return (
       <div className="grid gap-3 sm:grid-cols-2">
-        {options.slice(0, 4).map((label, index) => (
+        {options.map((label, index) => (
           <label key={index} className="space-y-1.5">
             <span className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
               {label}
@@ -604,7 +605,7 @@ function QuestionInput({
               rows={3}
               value={value.options[index] ?? ""}
               onChange={event => {
-                const next = Array.from({ length: 4 }, (_, i) => value.options[i] ?? "");
+                const next = Array.from({ length: options.length }, (_, i) => value.options[i] ?? "");
                 next[index] = event.target.value;
                 onChange({ ...value, options: next });
               }}
@@ -731,27 +732,40 @@ function QuestionInput({
       />
     );
   }
-  if (type === "rating") {
-    const current = parseInt(value.text) || 0;
+  if (type === "rating" || type === "linear_scale") {
+    const current = value.text.trim() ? Number.parseInt(value.text, 10) : null;
     return (
-      <div className="flex flex-wrap gap-2">
-        {Array.from({ length: maxV - minV + 1 }, (_, i) => i + minV).map(n => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onChange({ ...value, text: String(n) })}
-            disabled={disabled}
-            className="w-10 h-10 rounded-xl text-sm font-semibold transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-            style={current === n
-              ? { background: "var(--primary)", color: "white", border: "none" }
-              : { background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-            {n}
-          </button>
-        ))}
-        <span className="self-center text-xs ml-2" style={{ color: "var(--text-muted)" }}>
-          {minV}（{question.min_label || "最低"}） → {maxV}（{question.max_label || "最高"}）
-        </span>
-      </div>
+      <fieldset className="space-y-2">
+        <legend className="sr-only">{type === "linear_scale" ? "線性刻度" : "評分"}</legend>
+        <div className="flex flex-wrap gap-2" role="radiogroup"
+          aria-label={`${type === "linear_scale" ? "線性刻度" : "評分"} ${minV} 到 ${maxV}`}>
+          {Array.from({ length: Math.max(0, maxV - minV + 1) }, (_, i) => i + minV).map(n => (
+            <label key={n} className="cursor-pointer">
+              <input
+                type="radio"
+                name={question.id}
+                value={n}
+                checked={current === n}
+                onChange={() => onChange({ ...value, text: String(n) })}
+                disabled={disabled}
+                className="peer sr-only"
+                aria-label={`${n}`}
+              />
+              <span
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm font-semibold transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--border-focus)]"
+                style={current === n
+                  ? { background: "var(--primary)", color: "white", border: "none" }
+                  : { background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+                {n}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="flex justify-between gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
+          <span>{minV}{question.min_label ? ` · ${question.min_label}` : ""}</span>
+          <span className="text-right">{maxV}{question.max_label ? ` · ${question.max_label}` : ""}</span>
+        </div>
+      </fieldset>
     );
   }
   return null;

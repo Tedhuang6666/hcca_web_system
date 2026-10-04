@@ -13,9 +13,10 @@ import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/com
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
 import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdown";
+import SurveyQuestionTypePicker from "@/components/surveys/SurveyQuestionTypePicker";
 import {
-  DEFAULT_FOUR_FIELD_LABELS,
-  SurveyFourFieldLabelsEditor,
+  DEFAULT_MULTI_FIELD_LABELS,
+  SurveyMultiFieldEditor,
   SurveyGridColumnsEditor,
   SurveyGridRowsEditor,
 } from "@/components/surveys/SurveyQuestionFields";
@@ -30,8 +31,9 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "single",   label: "單選" },
   { value: "single_grid", label: "單選方格（每列選一欄）" },
   { value: "multiple", label: "多選" },
-  { value: "multi_text", label: "四欄詳答" },
-  { value: "rating",   label: "評分（1–5）" },
+  { value: "multi_text", label: "多欄詳答" },
+  { value: "rating",   label: "評分" },
+  { value: "linear_scale", label: "線性刻度" },
   { value: "date",     label: "日期" },
 ];
 
@@ -325,6 +327,8 @@ export default function NewSurveyPage() {
     const isImg = qType === "image";
     const isGrid = qType === "single_grid";
     const isMultiText = qType === "multi_text";
+    const isRating = qType === "rating";
+    const isLinearScale = qType === "linear_scale";
     if (isImg && !newQ.image_url) { toast.error("圖片題型請先上傳圖片"); return; }
     if (!isImg && !newQ.question_text?.trim()) { toast.error("請輸入題目或區塊文字"); return; }
     const needsOptions = qType === "single" || qType === "multiple";
@@ -345,11 +349,16 @@ export default function NewSurveyPage() {
       || new Set(gridColumns).size !== gridColumns.length)) {
       toast.error("單選方格的列與欄標籤不可重複"); return;
     }
-    if (isMultiText && labels.length !== 4) {
-      toast.error("四欄詳答需要填寫 4 個欄位名稱"); return;
+    if (isMultiText && (labels.length < 2 || labels.length > 20)) {
+      toast.error("多欄詳答需要設定 2 至 20 個欄位名稱"); return;
     }
     if (isMultiText && new Set(labels).size !== labels.length) {
-      toast.error("四欄詳答欄位名稱不可重複"); return;
+      toast.error("多欄詳答欄位名稱不可重複"); return;
+    }
+    if ((isRating || isLinearScale)
+      && ((newQ.min_value ?? 1) > (newQ.max_value ?? 5)
+        || (isLinearScale && (newQ.min_value ?? 0) === (newQ.max_value ?? 5)))) {
+      toast.error(isLinearScale ? "最高刻度必須大於起始刻度" : "最高分數不可小於起始分數"); return;
     }
     if (qType === "multiple" && (newQ.max_value ?? 0) > optionEntries.length) {
       toast.error("多選最多項數不可大於選項總數"); return;
@@ -388,7 +397,7 @@ export default function NewSurveyPage() {
       description: "",
       question_type: qType,
       is_required: newQ.is_required ?? true,
-      options: isMultiText ? [...DEFAULT_FOUR_FIELD_LABELS] : [],
+      options: isMultiText ? [...DEFAULT_MULTI_FIELD_LABELS] : [],
       grid_columns: isGrid ? ["欄 1", "欄 2"] : [],
       option_image_sets: [],
       min_value: newQ.min_value ?? 1,
@@ -483,8 +492,10 @@ export default function NewSurveyPage() {
           options: q.options,
           grid_columns: q.grid_columns,
           option_image_sets: q.option_image_sets,
-          min_value: q.question_type === "rating" ? q.min_value : undefined,
-          max_value: q.question_type === "rating"
+          min_value: q.question_type === "rating" || q.question_type === "linear_scale"
+            ? q.min_value
+            : undefined,
+          max_value: q.question_type === "rating" || q.question_type === "linear_scale"
             ? q.max_value
             : q.question_type === "multiple" && q.max_value > 0
               ? q.max_value
@@ -494,8 +505,12 @@ export default function NewSurveyPage() {
           min_length: isText && q.min_length ? parseInt(q.min_length) : undefined,
           max_length: isText && q.max_length ? parseInt(q.max_length) : undefined,
           validation_rule: isText && q.validation_rule ? q.validation_rule : undefined,
-          min_label: q.question_type === "rating" && q.min_label ? q.min_label : undefined,
-          max_label: q.question_type === "rating" && q.max_label ? q.max_label : undefined,
+          min_label: (q.question_type === "rating" || q.question_type === "linear_scale") && q.min_label
+            ? q.min_label
+            : undefined,
+          max_label: (q.question_type === "rating" || q.question_type === "linear_scale") && q.max_label
+            ? q.max_label
+            : undefined,
           order_index: q.order_index,
         });
         idMap[q.id] = created.id;
@@ -535,6 +550,7 @@ export default function NewSurveyPage() {
   const needsOptions = newQ.question_type === "single"
     || newQ.question_type === "multiple";
   const isRating = newQ.question_type === "rating";
+  const isLinearScale = newQ.question_type === "linear_scale";
   const isGrid = newQ.question_type === "single_grid";
   const isMultiText = newQ.question_type === "multi_text";
   const isDisplay = isDisplayType(newQ.question_type);
@@ -831,24 +847,21 @@ export default function NewSurveyPage() {
               </div>
               <div>
                 <Label>題型</Label>
-                <select value={newQ.question_type}
-                  onChange={e => {
-                    const question_type = e.target.value as QuestionType;
+                <SurveyQuestionTypePicker value={newQ.question_type ?? "text"} options={QUESTION_TYPES}
+                  onChange={question_type => {
                     setNewQ(p => ({
                       ...p,
                       question_type,
                       is_required: isDisplayType(question_type) ? false : p.is_required,
                       options: question_type === "multi_text"
-                        ? [...DEFAULT_FOUR_FIELD_LABELS]
+                        ? [...DEFAULT_MULTI_FIELD_LABELS]
                         : question_type === "single_grid" ? ["列 1", "列 2"] : [],
                       grid_columns: question_type === "single_grid" ? ["欄 1", "欄 2"] : [],
                       option_image_sets: [],
                       max_value: question_type === "multiple" ? 0 : p.max_value,
+                      min_value: question_type === "linear_scale" ? 0 : p.min_value,
                     }));
-                  }}
-                  className="input">
-                  {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                  }} />
               </div>
             </div>
             <SurveyMarkdownField
@@ -898,31 +911,37 @@ export default function NewSurveyPage() {
             )}
 
             {/* 評分範圍與端點敘述 */}
-            {isRating && (
+            {(isRating || isLinearScale) && (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>起始分數（1–3）</Label>
-                    <input type="number" min={1} max={3} value={newQ.min_value}
-                      onChange={e => setNewQ(p => ({ ...p, min_value: parseInt(e.target.value) || 1 }))}
+                    <Label>{isLinearScale ? "起始刻度" : "起始分數"}</Label>
+                    <input type="number" min={0} max={100} value={newQ.min_value}
+                      onChange={e => setNewQ(p => ({
+                        ...p,
+                        min_value: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10),
+                      }))}
                       className="input" />
                   </div>
                   <div>
-                    <Label>最大分數（1–100）</Label>
-                    <input type="number" min={1} max={100} value={newQ.max_value}
-                      onChange={e => setNewQ(p => ({ ...p, max_value: parseInt(e.target.value) || 5 }))}
+                    <Label>{isLinearScale ? "最大刻度" : "最大分數"}</Label>
+                    <input type="number" min={(newQ.min_value ?? 0) + (isLinearScale ? 1 : 0)} max={100} value={newQ.max_value}
+                      onChange={e => setNewQ(p => ({
+                        ...p,
+                        max_value: e.target.value === "" ? (p.min_value ?? 0) + 1 : Number.parseInt(e.target.value, 10),
+                      }))}
                       className="input" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>最低分敘述（選填）</Label>
+                    <Label>{isLinearScale ? "起始刻度說明（選填）" : "最低分敘述（選填）"}</Label>
                     <input value={newQ.min_label ?? ""}
                       onChange={e => setNewQ(p => ({ ...p, min_label: e.target.value }))}
                       placeholder="例：非常不滿意" className="input" />
                   </div>
                   <div>
-                    <Label>最高分敘述（選填）</Label>
+                    <Label>{isLinearScale ? "最高刻度說明（選填）" : "最高分敘述（選填）"}</Label>
                     <input value={newQ.max_label ?? ""}
                       onChange={e => setNewQ(p => ({ ...p, max_label: e.target.value }))}
                       placeholder="例：非常滿意" className="input" />
@@ -956,7 +975,7 @@ export default function NewSurveyPage() {
             )}
 
             {isMultiText && (
-              <SurveyFourFieldLabelsEditor
+              <SurveyMultiFieldEditor
                 labels={newQ.options ?? []}
                 onChange={options => setNewQ(p => ({ ...p, options }))}
               />

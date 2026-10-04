@@ -465,10 +465,10 @@ def _validate_question_configuration(
         if len(set(options)) != len(options) or len(set(grid_columns)) != len(grid_columns):
             raise ValueError("單選方格的列與欄標籤不可重複")
     if question_type == QuestionType.MULTI_TEXT:
-        if len(options) != 4:
-            raise ValueError("四欄詳答必須設定 4 個欄位名稱")
-        if len(set(options)) != 4:
-            raise ValueError("四欄詳答欄位名稱不可重複")
+        if len(options) < 2 or len(options) > 20:
+            raise ValueError("多欄詳答需要設定 2 至 20 個欄位名稱")
+        if len(set(options)) != len(options):
+            raise ValueError("多欄詳答欄位名稱不可重複")
 
 
 def _load_option_config(raw: str | None) -> dict[str, list[str]]:
@@ -541,7 +541,33 @@ async def update_question(
     if next_grid_columns is None:
         next_grid_columns = []
     _validate_question_configuration(next_question_type, next_options, next_grid_columns)
+    next_min_value = fields.get(
+        "min_value",
+        None if next_question_type != question.question_type else question.min_value,
+    )
     next_max_value = fields.get("max_value", question.max_value)
+    if next_question_type in (QuestionType.RATING, QuestionType.LINEAR_SCALE):
+        minimum = (
+            next_min_value
+            if next_min_value is not None
+            else (0 if next_question_type == QuestionType.LINEAR_SCALE else 1)
+        )
+        maximum = next_max_value if next_max_value is not None else 5
+        if minimum > maximum or (
+            next_question_type == QuestionType.LINEAR_SCALE and minimum == maximum
+        ):
+            raise ValueError(
+                "最高刻度必須大於起始刻度"
+                if next_question_type == QuestionType.LINEAR_SCALE
+                else "最高分數不可小於起始分數"
+            )
+    elif next_question_type == QuestionType.RANKING:
+        if next_min_value is not None and next_min_value < 1:
+            raise ValueError("排序最少項數不可小於 1")
+        if next_max_value is not None and next_max_value < 1:
+            raise ValueError("排序最多項數不可小於 1")
+    elif next_question_type == QuestionType.MULTIPLE and next_max_value == 0:
+        raise ValueError("多選最多項數不可設定為 0")
     if (
         next_question_type == QuestionType.MULTIPLE
         and next_max_value is not None
@@ -777,13 +803,16 @@ async def _validate_submission(
             ans.answer_options = selected
         elif q.question_type == QuestionType.MULTI_TEXT:
             values = [value.strip() for value in (ans.answer_options or [])]
+            expected_count = len(_load_str_list(q.options_json))
             if not any(values) and not q.is_required:
                 ans.answer_options = []
                 continue
-            if len(values) != 4:
-                raise ValueError(f"題目「{q.question_text[:30]}」需要提供 4 個欄位的答案")
+            if len(values) != expected_count:
+                raise ValueError(
+                    f"題目「{q.question_text[:30]}」需要提供 {expected_count} 個欄位的答案"
+                )
             if q.is_required and any(not value for value in values):
-                raise ValueError(f"題目「{q.question_text[:30]}」的 4 個欄位都必須作答")
+                raise ValueError(f"題目「{q.question_text[:30]}」的所有欄位都必須作答")
             ans.answer_options = values
         elif q.question_type == QuestionType.MULTIPLE:
             cfg = _load_option_config(q.option_config_json)
@@ -811,6 +840,23 @@ async def _validate_submission(
                 raise ValueError(f"題目「{q.question_text[:30]}」至少需排序 {min_n} 個項目")
             if len(unique) > max_n:
                 raise ValueError(f"題目「{q.question_text[:30]}」最多只能排序 {max_n} 個項目")
+        elif q.question_type in (QuestionType.RATING, QuestionType.LINEAR_SCALE):
+            raw_value = (ans.answer_text or "").strip()
+            if not raw_value:
+                continue
+            try:
+                value = int(raw_value)
+            except ValueError as exc:
+                raise ValueError(f"題目「{q.question_text[:30]}」請輸入有效分數") from exc
+            minimum = (
+                q.min_value
+                if q.min_value is not None
+                else (0 if q.question_type == QuestionType.LINEAR_SCALE else 1)
+            )
+            maximum = q.max_value if q.max_value is not None else 5
+            if value < minimum or value > maximum:
+                raise ValueError(f"題目「{q.question_text[:30]}」分數需介於 {minimum} 至 {maximum}")
+            ans.answer_text = str(value)
     return questions
 
 
@@ -1122,11 +1168,31 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
             qs.average_rating = sum(values) / len(values) if values else None
             qs.option_counts = {
                 str(n): sum(1 for value in values if int(value) == n)
-                for n in range(q.min_value or 1, (q.max_value or 5) + 1)
+                for n in range(
+                    q.min_value if q.min_value is not None else 1,
+                    (q.max_value if q.max_value is not None else 5) + 1,
+                )
             }
             qs.option_respondents = respondents
             qs.suggested_chart = "bar"
             qs.available_charts = ["bar", "pie"]
+
+        elif q.question_type == QuestionType.LINEAR_SCALE:
+            values = []
+            for answer in answers:
+                try:
+                    values.append(float(answer.answer_text or ""))
+                except (ValueError, TypeError):
+                    continue
+            qs.average_rating = sum(values) / len(values) if values else None
+            minimum = q.min_value if q.min_value is not None else 0
+            maximum = q.max_value if q.max_value is not None else 5
+            qs.option_counts = {
+                str(value): sum(1 for answer in values if int(answer) == value)
+                for value in range(minimum, maximum + 1)
+            }
+            qs.suggested_chart = "bar"
+            qs.available_charts = ["bar", "list"]
 
         elif q.question_type == QuestionType.DATE:
             qs.text_answers = [a.answer_text for a in answers if a.answer_text]

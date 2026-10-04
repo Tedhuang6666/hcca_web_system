@@ -25570,7 +25570,7 @@ export interface components {
          * QuestionType
          * @enum {string}
          */
-        QuestionType: "text" | "textarea" | "single" | "single_grid" | "multiple" | "multi_text" | "ranking" | "rating" | "date" | "section_text" | "page_break" | "image" | "video";
+        QuestionType: "text" | "textarea" | "single" | "single_grid" | "multiple" | "multi_text" | "ranking" | "rating" | "linear_scale" | "date" | "section_text" | "page_break" | "image" | "video";
         /** QueueDepth */
         QueueDepth: {
             /** Name */

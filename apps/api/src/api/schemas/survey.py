@@ -189,8 +189,8 @@ class SurveyQuestionCreate(BaseModel):
         default_factory=list, description="各選項的預覽圖片 URL，與 options 依序對應"
     )
     # 評分題：起始/最大分數；排序題：最少/最多必選項數；多選題：最多可選項數
-    min_value: int | None = Field(None, ge=1, le=100, description="評分起始值或排序最少項數")
-    max_value: int | None = Field(None, ge=1, le=100, description="評分最大值或排序最多項數")
+    min_value: int | None = Field(None, ge=0, le=100, description="評分起始值或排序最少項數")
+    max_value: int | None = Field(None, ge=0, le=100, description="評分最大值或排序最多項數")
     placeholder: str | None = Field(None, max_length=300)
     image_url: str | None = Field(
         None, max_length=500, description="附加圖片（可與題目合併或單獨顯示）"
@@ -247,10 +247,10 @@ class SurveyQuestionCreate(BaseModel):
             if len(set(self.grid_columns)) != len(self.grid_columns):
                 raise ValueError("單選方格欄標籤不可重複")
         if self.question_type == QuestionType.MULTI_TEXT:
-            if len(self.options) != 4:
-                raise ValueError("四欄詳答必須設定 4 個欄位名稱")
-            if len(set(self.options)) != 4:
-                raise ValueError("四欄詳答欄位名稱不可重複")
+            if len(self.options) < 2 or len(self.options) > 20:
+                raise ValueError("多欄詳答需要設定 2 至 20 個欄位名稱")
+            if len(set(self.options)) != len(self.options):
+                raise ValueError("多欄詳答欄位名稱不可重複")
         if (
             self.min_length is not None
             and self.max_length is not None
@@ -263,6 +263,21 @@ class SurveyQuestionCreate(BaseModel):
             and self.min_value > self.max_value
         ):
             raise ValueError("起始值不可大於最大值")
+        if self.question_type == QuestionType.LINEAR_SCALE:
+            minimum = self.min_value if self.min_value is not None else 0
+            maximum = self.max_value if self.max_value is not None else 5
+            if minimum >= maximum:
+                raise ValueError("線性刻度的最高值必須大於起始值")
+        elif self.question_type == QuestionType.RATING:
+            if (
+                self.min_value is not None
+                and self.max_value is not None
+                and self.min_value > self.max_value
+            ):
+                raise ValueError("起始分數不可大於最高分數")
+        elif self.question_type in (QuestionType.RANKING, QuestionType.MULTIPLE):
+            if self.min_value == 0 or self.max_value == 0:
+                raise ValueError("排序或選項數量不可設定為 0")
         if self.question_type == QuestionType.RANKING:
             if len(self.options) < 2:
                 raise ValueError("排序題至少需要 2 個選項")
@@ -286,8 +301,8 @@ class SurveyQuestionUpdate(BaseModel):
     options: list[str] | None = None
     grid_columns: list[str] | None = Field(None, max_length=20)
     option_image_sets: list[list[str]] | None = None
-    min_value: int | None = Field(None, ge=1, le=100)
-    max_value: int | None = Field(None, ge=1, le=100)
+    min_value: int | None = Field(None, ge=0, le=100)
+    max_value: int | None = Field(None, ge=0, le=100)
     placeholder: str | None = None
     image_url: str | None = Field(None, max_length=500)
     min_length: int | None = Field(None, ge=0, le=10000)
