@@ -115,6 +115,8 @@ export const financeApi = {
     return postForm<FinanceBudgetImportResult>(`/finance/ledgers/${ledgerId}/budgets/import`, form);
   },
   getBudget: (budgetId: string) => get<FinanceBudgetDetail>(`/finance/budgets/${budgetId}`),
+  renameBudget: (budgetId: string, body: { name: string }) =>
+    patch<FinanceBudget>(`/finance/budgets/${budgetId}`, body),
   updateBudgetPublication: (budgetId: string, isPublic: boolean) =>
     patch<FinanceBudget>(`/finance/budgets/${budgetId}/publication`, { is_public: isPublic }),
   createBudgetSubmission: (budgetId: string, body: { kind: 'initial' | 'supplemental'; title: string; note?: string }) =>
@@ -151,7 +153,7 @@ export const financeApi = {
     ),
   updateBudgetAllocation: (allocationId: string, body: {
     node_id?: string; amount?: number; quantity?: number; unit?: string;
-    unit_price?: number; note?: string | null; reason: string;
+    unit_price?: number; note?: string | null; proposing_org_id?: string; reason: string;
   }) =>
     patch<FinanceBudgetAllocation>(`/finance/budget-allocations/${allocationId}`, body),
   addBudgetAllocationEvidence: (
@@ -161,7 +163,8 @@ export const financeApi = {
     `/finance/budget-allocations/${allocationId}/evidence`, body,
   ),
   createBudgetExpense: (budgetId: string, body: {
-    allocation_id: string; entry_date: string; purpose: string; total_amount?: number; note?: string;
+    allocation_id: string; department_org_id?: string; entry_date: string;
+    purpose: string; total_amount?: number; note?: string;
     items?: Array<{
       name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
     }>;
@@ -169,6 +172,19 @@ export const financeApi = {
       storage_key: string; filename: string; content_type: string; file_size: number;
     }>;
   }) => post<FinanceBudgetExpenseOut>(`/finance/budgets/${budgetId}/expenses`, body),
+  updateBudgetExpense: (budgetId: string, expenseId: string, body: {
+    allocation_id: string; department_org_id: string; entry_date: string;
+    purpose: string; total_amount?: number; note?: string | null;
+    items?: Array<{
+      name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
+    }>;
+    evidence?: Array<{
+      storage_key: string; filename: string; content_type: string; file_size: number;
+    }>;
+  }) => patch<FinanceBudgetExpenseOut>(
+    `/finance/budgets/${budgetId}/expenses/${expenseId}`,
+    body,
+  ),
   getPublicExpenseClaim: (budgetId: string, entryId: string) =>
     get<PublicExpenseClaimDetailOut>(
       `/finance/public/budgets/${budgetId}/expense-claims/${entryId}`,

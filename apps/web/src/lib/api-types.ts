@@ -5146,7 +5146,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Budget Name */
+        patch: operations["update_budget_name_finance_budgets__budget_id__patch"];
         trace?: never;
     };
     "/finance/budgets/{budget_id}/expenses": {
@@ -5164,6 +5165,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/finance/budgets/{budget_id}/expenses/{expense_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Budget Expense */
+        patch: operations["update_budget_expense_finance_budgets__budget_id__expenses__expense_id__patch"];
         trace?: never;
     };
     "/finance/budgets/{budget_id}/expenses/{expense_id}/evidence/{evidence_id}": {
@@ -13386,6 +13404,8 @@ export interface components {
             node_id?: string | null;
             /** Note */
             note?: string | null;
+            /** Proposing Org Id */
+            proposing_org_id?: string | null;
             /** Quantity */
             quantity?: number | string | null;
             /** Reason */
@@ -13620,6 +13640,11 @@ export interface components {
             note?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /** BudgetUpdate */
+        BudgetUpdate: {
+            /** Name */
+            name: string;
         };
         BusinessHours: {
             [key: string]: components["schemas"]["BusinessHoursInterval"][];
@@ -18612,6 +18637,8 @@ export interface components {
              * Format: uuid
              */
             allocation_id: string;
+            /** Department Org Id */
+            department_org_id?: string | null;
             /**
              * Entry Date
              * Format: date
@@ -18725,6 +18752,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Department Name */
+            department_name: string;
+            /**
+             * Department Org Id
+             * Format: uuid
+             */
+            department_org_id: string;
             /**
              * Entry Date
              * Format: date
@@ -18745,6 +18779,34 @@ export interface components {
             purpose: string;
             /** Total Amount */
             total_amount: number;
+        };
+        /**
+         * FinanceBudgetExpenseUpdate
+         * @description 完整更新一筆支出；未提供部門時沿用所選預算明細的提出部門。
+         */
+        FinanceBudgetExpenseUpdate: {
+            /**
+             * Allocation Id
+             * Format: uuid
+             */
+            allocation_id: string;
+            /** Department Org Id */
+            department_org_id?: string | null;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Evidence */
+            evidence?: components["schemas"]["FinanceBudgetExpenseEvidenceIn"][];
+            /** Items */
+            items?: components["schemas"]["FinanceBudgetExpenseItemCreate"][];
+            /** Note */
+            note?: string | null;
+            /** Purpose */
+            purpose: string;
+            /** Total Amount */
+            total_amount?: number | null;
         };
         /** FinanceEvidenceUploadOut */
         FinanceEvidenceUploadOut: {
@@ -42098,6 +42160,41 @@ export interface operations {
             };
         };
     };
+    update_budget_name_finance_budgets__budget_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_budget_expense_finance_budgets__budget_id__expenses_post: {
         parameters: {
             query?: never;
@@ -42115,6 +42212,42 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceBudgetExpenseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_budget_expense_finance_budgets__budget_id__expenses__expense_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+                expense_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinanceBudgetExpenseUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

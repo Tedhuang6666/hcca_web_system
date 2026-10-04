@@ -57,6 +57,7 @@ from api.schemas.finance import (
     BudgetSubmissionCreate,
     BudgetSubmissionOut,
     BudgetSubmissionUpdate,
+    BudgetUpdate,
     ChartAccountCreate,
     ChartAccountOut,
     ChartAccountUpdate,
@@ -67,6 +68,7 @@ from api.schemas.finance import (
     ExpenseReturnCreate,
     FinanceBudgetExpenseCreate,
     FinanceBudgetExpenseOut,
+    FinanceBudgetExpenseUpdate,
     FinanceEvidenceUploadOut,
     FinanceExpenseClaimItemOut,
     FinanceResetOut,
@@ -504,6 +506,31 @@ async def get_budget_detail(budget_id: uuid.UUID, db: DbDep, user: CurrentUser) 
     return BudgetDetailOut.model_validate(detail)
 
 
+@router.patch(
+    "/budgets/{budget_id}",
+    response_model=BudgetOut,
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def update_budget_name(
+    budget_id: uuid.UUID, body: BudgetUpdate, db: DbDep, user: CurrentUser
+) -> BudgetOut:
+    existing = await service.get_budget(db, budget_id)
+    previous_name = existing.name
+    budget = await service.update_budget_name(db, budget_id, body)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget",
+        entity_id=str(budget.id),
+        action="finance.budget_update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={"previous_name": previous_name, "next_name": budget.name},
+        summary=f"修改預算名稱：{budget.name}",
+    )
+    await db.commit()
+    return BudgetOut.model_validate(budget)
+
+
 @router.post(
     "/budgets/{budget_id}/expenses",
     response_model=FinanceBudgetExpenseOut,
@@ -539,6 +566,60 @@ async def create_budget_expense(
     return FinanceBudgetExpenseOut.model_validate(
         next(item for item in detail["expenses"] if item["id"] == expense.id)
     )
+
+
+@router.patch(
+    "/budgets/{budget_id}/expenses/{expense_id}",
+    response_model=FinanceBudgetExpenseOut,
+    dependencies=[
+        Depends(
+            require_budget_permission(
+                PermissionCode.FINANCE_EXPENSE_CLAIM,
+                PermissionCode.FINANCE_RECORD,
+                PermissionCode.FINANCE_BUDGET,
+            )
+        )
+    ],
+)
+async def update_budget_expense(
+    budget_id: uuid.UUID,
+    expense_id: uuid.UUID,
+    body: FinanceBudgetExpenseUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> FinanceBudgetExpenseOut:
+    existing = await db.get(FinanceBudgetExpense, expense_id)
+    if not existing or existing.budget_id != budget_id:
+        raise HTTPException(404, "預算支出不存在")
+    before_detail = await service.budget_detail(db, await service.get_budget(db, budget_id))
+    before_data = next(item for item in before_detail["expenses"] if item["id"] == existing.id)
+    previous = FinanceBudgetExpenseOut.model_validate(before_data).model_dump(
+        mode="json", exclude={"evidence", "created_at"}
+    )
+    expense = await service.update_budget_expense(db, budget_id, expense_id, body, user.id)
+    after_detail = await service.budget_detail(db, await service.get_budget(db, budget_id))
+    after_data = next(item for item in after_detail["expenses"] if item["id"] == expense.id)
+    next_snapshot = FinanceBudgetExpenseOut.model_validate(after_data).model_dump(
+        mode="json", exclude={"evidence", "created_at"}
+    )
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_expense",
+        entity_id=str(expense.id),
+        action="finance.budget_expense_update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={
+            "previous": previous,
+            "next": next_snapshot,
+        },
+        summary=(
+            f"修改預算支出：{previous['purpose']} NT${previous['total_amount']:,} → "
+            f"{expense.purpose} NT${expense.total_amount:,}"
+        ),
+    )
+    await db.commit()
+    return FinanceBudgetExpenseOut.model_validate(after_data)
 
 
 @router.patch(

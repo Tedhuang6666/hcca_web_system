@@ -53,12 +53,14 @@ from api.schemas.finance import (
     BudgetReview,
     BudgetSubmissionCreate,
     BudgetSubmissionUpdate,
+    BudgetUpdate,
     ChartAccountUpdate,
     ExpenseBudgetUpdate,
     ExpenseClaimCreate,
     ExpenseProcurementUpdate,
     ExpenseReimbursementCreate,
     FinanceBudgetExpenseCreate,
+    FinanceBudgetExpenseUpdate,
     JournalCreate,
     ManualJournalUpdate,
     TransferCreate,
@@ -185,6 +187,15 @@ async def create_budget(
         raise HTTPException(409, "此會計期間已有共同預算")
     budget = FinanceBudget(ledger_id=ledger_id, **body.model_dump())
     db.add(budget)
+    await db.flush()
+    return budget
+
+
+async def update_budget_name(
+    db: AsyncSession, budget_id: uuid.UUID, body: BudgetUpdate
+) -> FinanceBudget:
+    budget = await get_budget(db, budget_id)
+    budget.name = body.name
     await db.flush()
     return budget
 
@@ -754,7 +765,13 @@ async def update_budget_allocation(
     if child:
         raise HTTPException(400, "只有最末層預算條目可以配置金額")
 
+    proposing_org_id = body.proposing_org_id or allocation.proposing_org_id
+    if not await db.get(Org, proposing_org_id):
+        raise HTTPException(400, "提出部門不存在")
+
     changed_fields = body.model_dump(exclude_unset=True, exclude={"reason"})
+    if "proposing_org_id" in changed_fields and changed_fields["proposing_org_id"] is None:
+        raise HTTPException(422, "請選擇提出部門")
     quantity_details_changed = bool({"quantity", "unit", "unit_price"} & changed_fields.keys())
     if quantity_details_changed:
         quantity = changed_fields.get("quantity", allocation.quantity)
@@ -779,11 +796,18 @@ async def update_budget_allocation(
         "unit_price": allocation.unit_price,
         "amount": allocation.amount,
         "note": allocation.note,
+        "proposing_org_id": str(allocation.proposing_org_id),
     }
     next_details = {**previous_details}
     for field, value in changed_fields.items():
         setattr(allocation, field, value)
-        next_details[field] = float(value) if isinstance(value, Decimal) else value
+        next_details[field] = (
+            str(value)
+            if isinstance(value, uuid.UUID)
+            else float(value)
+            if isinstance(value, Decimal)
+            else value
+        )
     next_details["node_id"] = str(next_details["node_id"])
     db.add(
         FinanceBudgetAllocationRevision(
@@ -827,19 +851,27 @@ async def add_budget_allocation_evidence(
 async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> list[dict]:
     rows = (
         await db.execute(
-            select(FinanceBudgetExpense, FinanceBudgetAllocation, FinanceBudgetNode)
+            select(FinanceBudgetExpense, FinanceBudgetAllocation, FinanceBudgetNode, Org)
             .join(
                 FinanceBudgetAllocation,
                 FinanceBudgetAllocation.id == FinanceBudgetExpense.allocation_id,
             )
             .join(FinanceBudgetNode, FinanceBudgetNode.id == FinanceBudgetAllocation.node_id)
+            .join(
+                Org,
+                Org.id
+                == func.coalesce(
+                    FinanceBudgetExpense.department_org_id,
+                    FinanceBudgetAllocation.proposing_org_id,
+                ),
+            )
             .where(FinanceBudgetExpense.budget_id == budget_id)
             .order_by(
                 FinanceBudgetExpense.entry_date.desc(), FinanceBudgetExpense.created_at.desc()
             )
         )
     ).all()
-    expense_ids = [expense.id for expense, _, _ in rows]
+    expense_ids = [expense.id for expense, _, _, _ in rows]
     item_rows = (
         list(
             (
@@ -881,6 +913,8 @@ async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> lis
             "id": expense.id,
             "budget_id": expense.budget_id,
             "allocation_id": allocation.id,
+            "department_org_id": expense.department_org_id,
+            "department_name": department.name,
             "allocation_node_id": node.id,
             "allocation_name": node.name,
             "entry_date": expense.entry_date,
@@ -915,7 +949,7 @@ async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> lis
             ],
             "created_at": expense.created_at,
         }
-        for expense, allocation, node in rows
+        for expense, allocation, node, department in rows
     ]
 
 
@@ -951,12 +985,17 @@ async def create_budget_expense(
     if not allocation:
         raise HTTPException(400, "支出必須對應此預算中已核准的明細")
 
+    department_org_id = body.department_org_id or allocation.proposing_org_id
+    if not await db.get(Org, department_org_id):
+        raise HTTPException(400, "提出部門不存在")
+
     for evidence in body.evidence:
         validate_evidence_key(evidence.storage_key, budget.ledger_id)
 
     expense = FinanceBudgetExpense(
         budget_id=budget.id,
         allocation_id=allocation.id,
+        department_org_id=department_org_id,
         entry_date=body.entry_date,
         purpose=body.purpose,
         total_amount=(
@@ -972,6 +1011,82 @@ async def create_budget_expense(
     )
     db.add(expense)
     await db.flush()
+    db.add_all(
+        [
+            FinanceBudgetExpenseItem(
+                expense_id=expense.id,
+                sort_order=index,
+                name=item.name,
+                unit_price=item.unit_price,
+                tax_rate=item.tax_rate,
+                quantity=item.quantity,
+                unit=item.unit,
+            )
+            for index, item in enumerate(body.items)
+        ]
+    )
+    db.add_all(
+        [
+            FinanceBudgetExpenseEvidence(
+                expense_id=expense.id,
+                uploaded_by_id=user_id,
+                **evidence.model_dump(),
+            )
+            for evidence in body.evidence
+        ]
+    )
+    await db.flush()
+    return expense
+
+
+async def update_budget_expense(
+    db: AsyncSession,
+    budget_id: uuid.UUID,
+    expense_id: uuid.UUID,
+    body: FinanceBudgetExpenseUpdate,
+    user_id: uuid.UUID,
+) -> FinanceBudgetExpense:
+    budget = await get_budget(db, budget_id)
+    expense = await db.get(FinanceBudgetExpense, expense_id)
+    if not expense or expense.budget_id != budget.id:
+        raise HTTPException(404, "預算支出不存在")
+
+    period = await db.get(FiscalPeriod, budget.period_id)
+    if not period or not period.starts_on <= body.entry_date <= period.ends_on:
+        raise HTTPException(400, "支出日期不在此預算的會計期間內")
+
+    allocation = await db.scalar(
+        select(FinanceBudgetAllocation)
+        .join(FinanceBudgetSubmission)
+        .where(
+            FinanceBudgetAllocation.id == body.allocation_id,
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not allocation:
+        raise HTTPException(400, "支出必須對應此預算中已核准的明細")
+
+    department_org_id = body.department_org_id or allocation.proposing_org_id
+    if not await db.get(Org, department_org_id):
+        raise HTTPException(400, "提出部門不存在")
+    for evidence in body.evidence:
+        validate_evidence_key(evidence.storage_key, budget.ledger_id)
+
+    expense.allocation_id = allocation.id
+    expense.department_org_id = department_org_id
+    expense.entry_date = body.entry_date
+    expense.purpose = body.purpose
+    expense.total_amount = (
+        sum(_claim_item_total(item.unit_price, item.tax_rate, item.quantity) for item in body.items)
+        if body.items
+        else body.total_amount or 0
+    )
+    expense.note = body.note
+
+    await db.execute(
+        delete(FinanceBudgetExpenseItem).where(FinanceBudgetExpenseItem.expense_id == expense.id)
+    )
     db.add_all(
         [
             FinanceBudgetExpenseItem(
