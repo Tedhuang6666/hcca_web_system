@@ -907,6 +907,7 @@ export type FinanceBudgetSubmission = {
   id: string; budget_id: string; kind: BudgetSubmissionKind; status: BudgetSubmissionStatus
   title: string; note?: string | null; created_by_id: string; submitted_at?: string | null
   reviewed_by_id?: string | null; reviewed_at?: string | null; review_note?: string | null
+  council_approved_on?: string | null
   is_council_review_public: boolean
 }
 export type FinanceBudgetNode = {
@@ -923,8 +924,13 @@ export type FinanceBudgetAllocationEvidence = {
   id: string; storage_key: string; filename: string; content_type: string; file_size: number
   note?: string | null; uploaded_at: string; url: string
 }
+export type FinanceBudgetIncomeItem = {
+  id: string; submission_id: string; category: string; name: string; amount: number
+  note?: string | null; source_row_number: number
+}
 export type FinanceBudgetDetail = FinanceBudget & {
   submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]
+  income_items: FinanceBudgetIncomeItem[]
   expenses: FinanceBudgetExpenseOut[]
 }
 export type FinanceBudgetImportResult = {
@@ -932,6 +938,7 @@ export type FinanceBudgetImportResult = {
   submission: FinanceBudgetSubmission
   categories_created: number
   allocations_created: number
+  income_items_created: number
   skipped_rows: string[]
 }
 export type FinanceSettlementLine = {
@@ -948,7 +955,7 @@ export type PublicBudgetListItem = {
 }
 export type PublicBudgetSubmission = {
   id: string; kind: BudgetSubmissionKind; status: BudgetSubmissionStatus; title: string
-  reviewed_at?: string | null; review_note?: string | null
+  reviewed_at?: string | null; council_approved_on?: string | null; review_note?: string | null
 }
 export type PublicBudgetAllocation = {
   id: string; node_id: string; amount: number; quantity?: number | null; unit?: string | null

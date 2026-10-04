@@ -98,7 +98,7 @@ export const financeApi = {
     post<FinanceBudget>(`/finance/ledgers/${ledgerId}/budgets`, body),
   importBudget: (ledgerId: string, body: {
     file: File; period_id: string; name: string; title?: string; proposing_org_id?: string;
-    budget_id?: string; replace_submission_id?: string;
+    budget_id?: string; replace_submission_id?: string; council_approved_on?: string;
   }) => {
     const form = new FormData();
     form.append("file", body.file);
@@ -108,6 +108,7 @@ export const financeApi = {
     if (body.proposing_org_id) form.append("proposing_org_id", body.proposing_org_id);
     if (body.budget_id) form.append("budget_id", body.budget_id);
     if (body.replace_submission_id) form.append("replace_submission_id", body.replace_submission_id);
+    if (body.council_approved_on) form.append("council_approved_on", body.council_approved_on);
     return postForm<FinanceBudgetImportResult>(`/finance/ledgers/${ledgerId}/budgets/import`, form);
   },
   getBudget: (budgetId: string) => get<FinanceBudgetDetail>(`/finance/budgets/${budgetId}`),
@@ -136,7 +137,9 @@ export const financeApi = {
   deleteBudgetDraftAllocation: (submissionId: string, allocationId: string) =>
     del<void>(`/finance/budget-submissions/${submissionId}/allocations/${allocationId}`),
   submitBudget: (submissionId: string) => post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/submit`, {}),
-  reviewBudget: (submissionId: string, body: { status: 'approved' | 'returned' | 'rejected'; note?: string }) =>
+  reviewBudget: (submissionId: string, body: {
+    status: 'approved' | 'returned' | 'rejected'; note?: string; council_approved_on?: string;
+  }) =>
     post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/review`, body),
   updateCouncilReviewPublication: (submissionId: string, isPublic: boolean) =>
     patch<FinanceBudgetSubmission>(

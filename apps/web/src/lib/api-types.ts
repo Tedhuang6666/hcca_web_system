@@ -12981,6 +12981,8 @@ export interface components {
         Body_import_budget_finance_ledgers__ledger_id__budgets_import_post: {
             /** Budget Id */
             budget_id?: string | null;
+            /** Council Approved On */
+            council_approved_on?: string | null;
             /** File */
             file: string;
             /** Name */
@@ -13312,6 +13314,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Income Items */
+            income_items?: components["schemas"]["BudgetIncomeItemOut"][];
             /** Is Public */
             is_public: boolean;
             /**
@@ -13338,9 +13342,34 @@ export interface components {
             budget: components["schemas"]["BudgetOut"];
             /** Categories Created */
             categories_created: number;
+            /** Income Items Created */
+            income_items_created: number;
             /** Skipped Rows */
             skipped_rows: string[];
             submission: components["schemas"]["BudgetSubmissionOut"];
+        };
+        /** BudgetIncomeItemOut */
+        BudgetIncomeItemOut: {
+            /** Amount */
+            amount: number;
+            /** Category */
+            category: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Note */
+            note: string | null;
+            /** Source Row Number */
+            source_row_number: number;
+            /**
+             * Submission Id
+             * Format: uuid
+             */
+            submission_id: string;
         };
         /** BudgetNodeCreate */
         BudgetNodeCreate: {
@@ -13417,6 +13446,8 @@ export interface components {
         };
         /** BudgetReview */
         BudgetReview: {
+            /** Council Approved On */
+            council_approved_on?: string | null;
             /** Note */
             note?: string | null;
             status: components["schemas"]["BudgetSubmissionStatus"];
@@ -13442,6 +13473,8 @@ export interface components {
              * Format: uuid
              */
             budget_id: string;
+            /** Council Approved On */
+            council_approved_on: string | null;
             /**
              * Created By Id
              * Format: uuid
@@ -24441,6 +24474,8 @@ export interface components {
         };
         /** PublicBudgetSubmissionOut */
         PublicBudgetSubmissionOut: {
+            /** Council Approved On */
+            council_approved_on: string | null;
             /**
              * Id
              * Format: uuid

@@ -77,6 +77,7 @@ export type BudgetCouncilReviewPublicationUpdate = components['schemas']['Budget
 export type BudgetCreate = components['schemas']['BudgetCreate']
 export type BudgetDetailOut = components['schemas']['BudgetDetailOut']
 export type BudgetImportOut = components['schemas']['BudgetImportOut']
+export type BudgetIncomeItemOut = components['schemas']['BudgetIncomeItemOut']
 export type BudgetNodeCreate = components['schemas']['BudgetNodeCreate']
 export type BudgetNodeOut = components['schemas']['BudgetNodeOut']
 export type BudgetOut = components['schemas']['BudgetOut']

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileCheck2, Paperclip, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
@@ -21,6 +21,8 @@ type Props = {
   expenses: FinanceBudgetExpenseOut[];
   orgs: OrgRead[];
   canRecord: boolean;
+  quickAllocationId: string | null;
+  onQuickRegistrationHandled: () => void;
   isPublic: boolean;
   onRecorded: () => Promise<void>;
 };
@@ -62,6 +64,8 @@ export default function BudgetExpenseRegister({
   expenses,
   orgs,
   canRecord,
+  quickAllocationId,
+  onQuickRegistrationHandled,
   isPublic,
   onRecorded,
 }: Props) {
@@ -73,6 +77,7 @@ export default function BudgetExpenseRegister({
   const [note, setNote] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([emptyItem()]);
   const [files, setFiles] = useState<File[]>([]);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const approvedAllocations = useMemo(() => {
     const approvedSubmissionIds = new Set(
@@ -82,14 +87,38 @@ export default function BudgetExpenseRegister({
     return allocations
       .filter((allocation) => approvedSubmissionIds.has(allocation.submission_id))
       .map((allocation) => {
-        const node = nodeById.get(allocation.node_id);
+        const path: string[] = [];
+        let node = nodeById.get(allocation.node_id);
+        while (node) {
+          path.unshift(node.name);
+          node = node.parent_id ? nodeById.get(node.parent_id) : undefined;
+        }
         const org = orgs.find((item) => item.id === allocation.proposing_org_id);
         return {
           allocation,
-          label: `${node?.name || "預算明細"}${org ? `・${org.name}` : ""}・NT$${allocation.amount.toLocaleString()}`,
+          purpose: path.join("／") || "預算明細",
+          label: `${path.join(" ＞ ") || "預算明細"}${org ? `・${org.name}` : ""}・NT$${allocation.amount.toLocaleString()}`,
         };
       });
   }, [allocations, nodes, orgs, submissions]);
+
+  useEffect(() => {
+    if (!quickAllocationId) return;
+    const selected = approvedAllocations.find(
+      ({ allocation }) => allocation.id === quickAllocationId,
+    );
+    if (!selected) {
+      onQuickRegistrationHandled();
+      return;
+    }
+    setAllocationId(quickAllocationId);
+    setPurpose(selected.purpose);
+    setIsOpen(true);
+    onQuickRegistrationHandled();
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, [approvedAllocations, onQuickRegistrationHandled, quickAllocationId]);
 
   const total = items.reduce((sum, item) => sum + itemAmount(item), 0);
 
@@ -178,7 +207,7 @@ export default function BudgetExpenseRegister({
       </header>
 
       {isOpen && (
-        <form className="finance-budget-expenses__form" onSubmit={(event) => void saveExpense(event)}>
+        <form ref={formRef} className="finance-budget-expenses__form" onSubmit={(event) => void saveExpense(event)}>
           <div className="finance-budget-expenses__fields">
             <label>
               支出日期

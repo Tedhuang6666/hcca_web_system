@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import uuid
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -372,6 +373,7 @@ async def import_budget(
     db: DbDep,
     user: CurrentUser,
     period_id: uuid.UUID = Form(...),
+    council_approved_on: date | None = Form(None),
     name: str = Form(..., min_length=1, max_length=160),
     title: str | None = Form(None, max_length=160),
     proposing_org_id: uuid.UUID | None = Form(None),
@@ -386,12 +388,16 @@ async def import_budget(
         raise HTTPException(413, "預算匯入檔不可超過 10 MB")
     if not file_bytes.startswith(b"PK\x03\x04"):
         raise HTTPException(422, "檔案不是有效的 xlsx 格式")
+    ledger = await service.get_ledger(db, ledger_id)
+    if council_approved_on is not None:
+        await _assert_ledger_permission(db, user, ledger, PermissionCode.FINANCE_BUDGET_REVIEW)
     try:
         (
             budget,
             submission,
             categories,
             allocations,
+            income_items,
             skipped,
         ) = await service.import_budget_from_xlsx(
             db,
@@ -405,14 +411,39 @@ async def import_budget(
             budget_id,
             replace_submission_id,
         )
+        if council_approved_on is not None:
+            await service.submit_budget_submission(db, submission.id)
+            submission = await service.review_budget_submission(
+                db,
+                submission.id,
+                BudgetReview(
+                    status=BudgetSubmissionStatus.APPROVED,
+                    council_approved_on=council_approved_on,
+                ),
+                user.id,
+            )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    if council_approved_on is not None:
+        await audit_svc.record(
+            db,
+            entity_type="finance_budget_submission",
+            entity_id=str(submission.id),
+            action="finance.budget_import_approve",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            summary=(
+                f"匯入並核准預算案：{submission.title}；議會通過日期 "
+                f"{council_approved_on.isoformat()}"
+            ),
+        )
     await db.commit()
     return BudgetImportOut(
         budget=BudgetOut.model_validate(budget),
         submission=BudgetSubmissionOut.model_validate(submission),
         categories_created=categories,
         allocations_created=allocations,
+        income_items_created=income_items,
         skipped_rows=skipped,
     )
 
@@ -1481,6 +1512,7 @@ async def get_public_budget_detail(
                 status=review_submission.status,
                 title=review_submission.title,
                 reviewed_at=review_submission.reviewed_at,
+                council_approved_on=review_submission.council_approved_on,
                 review_note=review_submission.review_note,
             )
             if review_submission
@@ -1493,6 +1525,7 @@ async def get_public_budget_detail(
                 status=item.status,
                 title=item.title,
                 reviewed_at=item.reviewed_at,
+                council_approved_on=item.council_approved_on,
                 review_note=item.review_note,
             )
             for item in approved_submissions
