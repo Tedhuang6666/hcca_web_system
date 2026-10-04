@@ -549,6 +549,8 @@ export type {
   PublicBudgetExpenseEvidenceOut,
   PublicBudgetExpenseItemOut,
   PublicBudgetExpenseOut,
+  PublicExpenseClaimDetailOut,
+  PublicExpenseClaimItemOut,
   PublicExpenseOut,
   PublicFinanceTotalsOut,
   PublicBudgetSubmissionOut,

@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { ArrowRight, ClipboardCheck, Landmark, ReceiptText, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 
+import PublicExpenseTable from "@/components/finance/PublicExpenseTable";
 import {
   fetchPublicBudget,
   fetchPublicBudgets,
@@ -19,21 +20,18 @@ export const metadata = pageMetadata({
 
 type BudgetExecutionLine = {
   id: string;
-  budgetId: string;
   budgetName: string;
   name: string;
   allocated: number;
   spent: number;
   remaining: number;
+  depth: number;
+  isGroup: boolean;
+  isBudgetStart: boolean;
 };
 
 function formatAmount(value: number) {
   return `NT$${value.toLocaleString("zh-TW")}`;
-}
-
-function formatDate(value: string) {
-  const [year, month, day] = value.split("-");
-  return `${year}/${month}/${day}`;
 }
 
 function budgetExecutionLines(
@@ -41,29 +39,35 @@ function budgetExecutionLines(
   summary: PublicBudgetListItem,
 ): BudgetExecutionLine[] {
   const nodes = new Map(budget.nodes.map((node) => [node.id, node]));
-  const parentIds = new Set(
-    budget.nodes.flatMap((node) => (node.parent_id ? [node.parent_id] : [])),
-  );
+  const parentIds = new Set(budget.nodes.flatMap((node) => (
+    node.parent_id ? [node.parent_id] : []
+  )));
+  let isBudgetStart = true;
 
   return budget.nodes
-    .filter((node) => !parentIds.has(node.id))
-    .filter((node) => node.allocated_amount > 0 || node.used_amount > 0)
+    .filter((node) => (
+      node.allocated_amount > 0 || node.used_amount > 0 || parentIds.has(node.id)
+    ))
     .map((node) => {
-      const path: string[] = [];
-      let current: (typeof budget.nodes)[number] | undefined = node;
+      let depth = 0;
+      let current = node.parent_id ? nodes.get(node.parent_id) : undefined;
       while (current) {
-        path.unshift(current.name);
+        depth += 1;
         current = current.parent_id ? nodes.get(current.parent_id) : undefined;
       }
-      return {
+      const line = {
         id: `${summary.id}-${node.id}`,
-        budgetId: summary.id,
         budgetName: summary.name,
-        name: path.join(" ＞ "),
+        name: node.name,
         allocated: node.allocated_amount,
         spent: node.used_amount,
         remaining: node.remaining_amount,
+        depth,
+        isGroup: parentIds.has(node.id),
+        isBudgetStart,
       };
+      isBudgetStart = false;
+      return line;
     });
 }
 
@@ -89,8 +93,14 @@ export default async function PublicBudgetsPage() {
     const summary = currentBudgets[index];
     return detail && summary ? budgetExecutionLines(detail, summary) : [];
   });
-  const budgetTotal = executionLines.reduce((total, line) => total + line.allocated, 0);
-  const spentTotal = executionLines.reduce((total, line) => total + line.spent, 0);
+  const budgetTotal = executionLines.reduce(
+    (total, line) => total + (line.isGroup ? 0 : line.allocated),
+    0,
+  );
+  const spentTotal = executionLines.reduce(
+    (total, line) => total + (line.isGroup ? 0 : line.spent),
+    0,
+  );
   const remainingTotal = budgetTotal - spentTotal;
   const incomeTotal = budgetTotals.reduce((total, row) => total + (row?.income_total ?? 0), 0);
   const expenseTotal = budgetTotals.reduce((total, row) => total + (row?.expense_total ?? 0), 0);
@@ -134,42 +144,45 @@ export default async function PublicBudgetsPage() {
           </div>
           <div className="public-finance__cash-flow" aria-label="本期間收入與支出總額">
             <span>本期收支總額</span>
-            <p>收入<strong>{formatAmount(incomeTotal)}</strong></p>
-            <p>支出<strong>{formatAmount(expenseTotal)}</strong></p>
+            <p className="is-income">收入<strong>{formatAmount(incomeTotal)}</strong></p>
+            <p className="is-expense">支出<strong>{formatAmount(expenseTotal)}</strong></p>
           </div>
-          <div className="public-finance__lines" aria-label="預算項目執行情況">
+          <div className="public-finance__lines" role="region" aria-label="預算執行表，可左右捲動" tabIndex={0}>
+            <table>
+              <thead><tr><th scope="col">預算條目</th><th scope="col">編列</th><th scope="col">已用</th><th scope="col">剩餘</th><th scope="col">執行率</th></tr></thead>
+              <tbody>
             {executionLines.map((line) => {
               const ratio = line.allocated > 0
                 ? Math.round((line.spent / line.allocated) * 100)
                 : 0;
               const barWidth = Math.min(Math.max(ratio, 0), 100);
               return (
-                <article key={line.id}>
-                  <div className="public-finance__line-label">
-                    <span>
-                      <strong>{line.name}</strong>
-                      <small>{line.budgetName}</small>
-                    </span>
-                    <b>{ratio}%</b>
-                  </div>
-                  <span
-                    className="public-finance__progress"
-                    role="img"
-                    aria-label={`${line.name} 執行率 ${ratio}%`}
-                  >
-                    <i style={{ width: `${barWidth}%` }} />
-                  </span>
-                  <dl>
-                    <div><dt>預算</dt><dd>{formatAmount(line.allocated)}</dd></div>
-                    <div><dt>已列帳</dt><dd>{formatAmount(line.spent)}</dd></div>
-                    <div><dt>剩餘</dt><dd>{formatAmount(line.remaining)}</dd></div>
-                  </dl>
-                </article>
+                <tr key={line.id} className={`${line.isGroup ? "is-group" : ""} ${ratio > 100 ? "is-over-budget" : ""}`}>
+                  <th scope="row" style={{ paddingLeft: `${0.85 + line.depth * 1.25}rem` }}>
+                    <strong>{line.name}</strong>
+                    {line.isBudgetStart && <small>{line.budgetName}</small>}
+                  </th>
+                  <td>{line.isGroup ? "—" : formatAmount(line.allocated)}</td>
+                  <td className="is-expense">{line.isGroup ? "—" : formatAmount(line.spent)}</td>
+                  <td>{line.isGroup ? "—" : formatAmount(line.remaining)}</td>
+                  <td>
+                    {line.isGroup ? "—" : (
+                      <span className="public-finance__execution-rate">
+                        <span className="public-finance__progress" role="img" aria-label={`${line.name} 執行率 ${ratio}%`}>
+                          <i style={{ width: `${barWidth}%` }} />
+                        </span>
+                        <b>{ratio}%</b>
+                      </span>
+                    )}
+                  </td>
+                </tr>
               );
             })}
             {executionLines.length === 0 && (
-              <p className="public-finance__empty-line">這個期間尚未公開預算明細。</p>
+              <tr><td className="public-finance__empty-line" colSpan={5}>這個期間尚未公開預算明細。</td></tr>
             )}
+              </tbody>
+            </table>
           </div>
           <p className="public-finance__calculation-note">
             核准預算的支出登錄後即計入執行額與決算；舊制報帳仍依原紀錄狀態列帳。
@@ -187,7 +200,7 @@ export default async function PublicBudgetsPage() {
 
       <aside className="public-budget-index__notice" aria-label="公開資料範圍">
         <ShieldCheck size={18} aria-hidden="true" />
-        <p><strong>支出品項與憑證會公開。</strong>預算管理者開放預算後，任何人都能查看用途、品名、數量、單價與收據；登錄人、銀行帳戶與核銷備註不會出現在這裡。</p>
+        <p><strong>已完成報帳的部門、報帳人與憑證會公開。</strong>任何人都能查看支出用途、品項、核銷時間與憑證；銀行帳戶與內部備註不會出現在這裡。</p>
       </aside>
 
       <section className="public-finance__expenses" aria-labelledby="public-finance-expenses-heading">
@@ -199,27 +212,7 @@ export default async function PublicBudgetsPage() {
           <span>最近 {expenses.length} 筆</span>
         </header>
         {expenses.length > 0 ? (
-          <div className="public-finance__expense-table" role="region" aria-label="最近支出紀錄，可左右捲動" tabIndex={0}>
-            <table>
-              <thead><tr><th>日期</th><th>用途與品項</th><th>預算項目</th><th>數量與單價</th><th>憑證</th><th>金額</th></tr></thead>
-              <tbody>
-                {expenses.map((expense) => (
-                  <tr key={expense.id}>
-                    <td><time dateTime={expense.entry_date}>{formatDate(expense.entry_date)}</time></td>
-                    <td><strong>{expense.purpose}</strong><small>{expense.item_name}</small></td>
-                    <td>
-                      <Link href={`/public/budgets/${expense.budget_id}`}>
-                        {expense.budget_name}<small>{expense.budget_item}</small>
-                      </Link>
-                    </td>
-                    <td>{expense.quantity} {expense.unit}<small>{expense.unit_price ? formatAmount(expense.unit_price) : "單價未提供"}</small></td>
-                    <td>{expense.evidence?.length ? expense.evidence.map((item) => <a key={item.id} href={item.url} target="_blank" rel="noreferrer">查看 {item.filename}</a>) : "—"}</td>
-                    <td className="public-finance__expense-amount">{formatAmount(expense.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PublicExpenseTable expenses={expenses} />
         ) : (
           <div className="public-finance__empty-expenses">
             <ReceiptText size={20} aria-hidden="true" />

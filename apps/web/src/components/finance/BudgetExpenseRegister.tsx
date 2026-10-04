@@ -21,7 +21,7 @@ type Props = {
   expenses: FinanceBudgetExpenseOut[];
   orgs: OrgRead[];
   canRecord: boolean;
-  quickAllocationId: string | null;
+  quickNodeId: string | null;
   onQuickRegistrationHandled: () => void;
   isPublic: boolean;
   onRecorded: () => Promise<void>;
@@ -64,19 +64,20 @@ export default function BudgetExpenseRegister({
   expenses,
   orgs,
   canRecord,
-  quickAllocationId,
+  quickNodeId,
   onQuickRegistrationHandled,
   isPublic,
   onRecorded,
 }: Props) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [allocationId, setAllocationId] = useState("");
+  const [requestedNodeId, setRequestedNodeId] = useState<string | null>(null);
   const [entryDate, setEntryDate] = useState(taiwanToday);
   const [purpose, setPurpose] = useState("");
   const [note, setNote] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([emptyItem()]);
-  const [hasItemDetails, setHasItemDetails] = useState(false);
+  const [hasItemDetails, setHasItemDetails] = useState(true);
   const [totalAmount, setTotalAmount] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
@@ -105,22 +106,28 @@ export default function BudgetExpenseRegister({
   }, [allocations, nodes, orgs, submissions]);
 
   useEffect(() => {
-    if (!quickAllocationId) return;
-    const selected = approvedAllocations.find(
-      ({ allocation }) => allocation.id === quickAllocationId,
-    );
-    if (!selected) {
+    if (!quickNodeId) return;
+    const requested = quickNodeId;
+    const matching = requested
+      ? approvedAllocations.filter(({ allocation }) => allocation.node_id === requested)
+      : [];
+    if (!matching.length) {
       onQuickRegistrationHandled();
       return;
     }
-    setAllocationId(quickAllocationId);
-    setPurpose(selected.purpose);
+    setRequestedNodeId(requested);
+    setAllocationId(matching.length === 1 ? matching[0].allocation.id : "");
+    setPurpose(matching[0].purpose);
     setIsOpen(true);
     onQuickRegistrationHandled();
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
-  }, [approvedAllocations, onQuickRegistrationHandled, quickAllocationId]);
+  }, [approvedAllocations, onQuickRegistrationHandled, quickNodeId]);
+
+  const visibleAllocations = requestedNodeId
+    ? approvedAllocations.filter(({ allocation }) => allocation.node_id === requestedNodeId)
+    : approvedAllocations;
 
   const total = hasItemDetails
     ? items.reduce((sum, item) => sum + itemAmount(item), 0)
@@ -128,11 +135,12 @@ export default function BudgetExpenseRegister({
 
   const resetForm = () => {
     setAllocationId("");
+    setRequestedNodeId(null);
     setEntryDate(taiwanToday());
     setPurpose("");
     setNote("");
     setItems([emptyItem()]);
-    setHasItemDetails(false);
+    setHasItemDetails(true);
     setTotalAmount("");
     setFiles([]);
   };
@@ -165,6 +173,13 @@ export default function BudgetExpenseRegister({
     }
 
     setIsSaving(true);
+    const savedAllocationId = allocationId;
+    const savedNodeId = requestedNodeId
+      || approvedAllocations.find(({ allocation }) => allocation.id === allocationId)?.allocation.node_id
+      || null;
+    const savedPurpose = approvedAllocations.find(
+      ({ allocation }) => allocation.id === allocationId,
+    )?.purpose || purpose;
     try {
       const evidence = await Promise.all(
         files.map(async (file) => {
@@ -193,6 +208,9 @@ export default function BudgetExpenseRegister({
         evidence,
       });
       resetForm();
+      setRequestedNodeId(savedNodeId);
+      setAllocationId(savedAllocationId);
+      setPurpose(savedPurpose);
       setIsOpen(true);
       await onRecorded();
       toast.success("支出已登記");
@@ -208,7 +226,7 @@ export default function BudgetExpenseRegister({
       <header>
         <div>
           <h3 id="budget-expenses-heading">登記支出</h3>
-          <p>選擇預算項目，填寫日期、用途與金額。收據和品項明細可補充。</p>
+          <p>從執行表選定預算後，填寫日期、用途與金額；一次採購可登錄多項品目，同筆預算也能分次核銷。</p>
         </div>
         {canRecord && approvedAllocations.length > 0 && (
           <button className="btn btn-primary" type="button" onClick={() => setIsOpen((value) => !value)}>
@@ -229,11 +247,23 @@ export default function BudgetExpenseRegister({
               對應預算明細
               <select className="input" required value={allocationId} onChange={(event) => setAllocationId(event.target.value)}>
                 <option value="">選擇預算項目</option>
-                {approvedAllocations.map(({ allocation, label }) => (
+                {visibleAllocations.map(({ allocation, label }) => (
                   <option key={allocation.id} value={allocation.id}>{label}</option>
                 ))}
               </select>
             </label>
+            {requestedNodeId && (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => {
+                  setRequestedNodeId(null);
+                  setAllocationId("");
+                }}
+              >
+                改選其他預算項目
+              </button>
+            )}
             <label className="finance-budget-expenses__purpose">
               支出用途
               <input className="input" required maxLength={300} value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="例如：辦公用品採購" />
@@ -346,9 +376,7 @@ export default function BudgetExpenseRegister({
               {expense.evidence.length > 0 && (
                 <div className="finance-budget-expenses__evidence">
                   {expense.evidence.map((evidence) => (
-                    <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer">
-                      <FileCheck2 size={14} aria-hidden="true" />{evidence.filename}
-                    </a>
+                    <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><FileCheck2 size={14} aria-hidden="true" />{evidence.filename}</a>
                   ))}
                 </div>
               )}

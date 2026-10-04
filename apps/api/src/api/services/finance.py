@@ -152,6 +152,10 @@ async def initialize_ledger(db: AsyncSession, org_id: uuid.UUID, name: str) -> F
     return ledger
 
 
+async def list_ledgers(db: AsyncSession) -> list[FinanceLedger]:
+    return list((await db.scalars(select(FinanceLedger).order_by(FinanceLedger.name))).all())
+
+
 async def get_ledger(db: AsyncSession, ledger_id: uuid.UUID) -> FinanceLedger:
     ledger = await db.get(FinanceLedger, ledger_id)
     if not ledger:
@@ -367,8 +371,6 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], l
             if calculated != amount:
                 note = "；".join(filter(None, [note, "單價與總額不一致，保留試算表總額"]))
                 unit_price = None
-        elif _import_text(row[unit_price_column].value if unit_price_column < len(row) else None):
-            note = "；".join(filter(None, [note, "原始單價未提供，以試算表總額匯入"]))
         imported.append(
             {
                 "category": category[:160],
@@ -1293,6 +1295,7 @@ async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
                 entry.created_at,
                 {
                     "id": item.id,
+                    "claim_id": entry.id,
                     "budget_id": budget.id,
                     "entry_date": entry.entry_date,
                     "purpose": re.sub(r"^報帳｜|（\d+ 項）$", "", entry.description),
@@ -1398,6 +1401,144 @@ async def list_public_expenses(db: AsyncSession, limit: int = 10) -> list[dict]:
         )
     public_expenses.sort(key=lambda row: (row[0], row[1]), reverse=True)
     return [row[2] for row in public_expenses[:limit]]
+
+
+async def public_expense_claim_detail(
+    db: AsyncSession, budget_id: uuid.UUID, entry_id: uuid.UUID
+) -> dict:
+    budget = await db.get(FinanceBudget, budget_id)
+    if not budget or not budget.is_public:
+        raise HTTPException(404, "公開支出不存在")
+
+    approved_initial = await db.scalar(
+        select(FinanceBudgetSubmission.id).where(
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    if not approved_initial:
+        raise HTTPException(404, "公開支出不存在")
+
+    entry = await db.scalar(
+        select(JournalEntry).where(
+            JournalEntry.id == entry_id,
+            JournalEntry.ledger_id == budget.ledger_id,
+            JournalEntry.source_type == "expense_claim",
+            JournalEntry.status == JournalStatus.POSTED,
+            JournalEntry.claim_status == ExpenseClaimStatus.COMPLETED,
+            JournalEntry.budget_included.is_(True),
+        )
+    )
+    if not entry:
+        raise HTTPException(404, "公開支出不存在")
+
+    item_rows = (
+        await db.execute(
+            select(ExpenseClaimItem, FinanceBudgetNode)
+            .join(FinanceBudgetNode, FinanceBudgetNode.id == ExpenseClaimItem.budget_node_id)
+            .where(
+                ExpenseClaimItem.journal_entry_id == entry.id,
+                FinanceBudgetNode.budget_id == budget.id,
+                FinanceBudgetNode.is_active.is_(True),
+            )
+            .order_by(ExpenseClaimItem.created_at, ExpenseClaimItem.id)
+        )
+    ).all()
+    if not item_rows:
+        raise HTTPException(404, "公開支出不存在")
+
+    item_node_ids = {node.id for _, node in item_rows}
+    approved_node_ids = set(
+        (
+            await db.execute(
+                select(FinanceBudgetAllocation.node_id)
+                .join(FinanceBudgetSubmission)
+                .where(
+                    FinanceBudgetAllocation.node_id.in_(item_node_ids),
+                    FinanceBudgetSubmission.budget_id == budget.id,
+                    FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+                )
+            )
+        ).scalars()
+    )
+    item_rows = [(item, node) for item, node in item_rows if node.id in approved_node_ids]
+    if not item_rows:
+        raise HTTPException(404, "公開支出不存在")
+
+    item_ids = [item.id for item, _ in item_rows]
+    evidence_rows = list(
+        (
+            await db.execute(
+                select(ExpenseClaimItemEvidence)
+                .where(ExpenseClaimItemEvidence.item_id.in_(item_ids))
+                .order_by(ExpenseClaimItemEvidence.created_at, ExpenseClaimItemEvidence.id)
+            )
+        ).scalars()
+    )
+    evidence_by_item: dict[uuid.UUID, list[ExpenseClaimItemEvidence]] = {}
+    for evidence in evidence_rows:
+        evidence_by_item.setdefault(evidence.item_id, []).append(evidence)
+
+    reporter_name = await db.scalar(select(User.display_name).where(User.id == entry.created_by_id))
+    department_name = (
+        await db.scalar(select(Org.name).where(Org.id == entry.proposing_org_id))
+        if entry.proposing_org_id
+        else None
+    )
+    items = [
+        {
+            "id": item.id,
+            "name": item.name,
+            "unit_price": item.unit_price,
+            "tax_rate": item.tax_rate,
+            "quantity": item.quantity,
+            "unit": item.unit,
+            "budget_item": node.name,
+            "amount": _claim_item_total(item.unit_price, item.tax_rate, item.quantity),
+            "evidence": [
+                {
+                    "id": evidence.id,
+                    "filename": evidence.filename,
+                    "url": (
+                        f"/finance/public/budgets/{budget.id}/expense-claims/{entry.id}/"
+                        f"evidence/{evidence.id}"
+                    ),
+                }
+                for evidence in evidence_by_item.get(item.id, [])
+            ],
+        }
+        for item, node in item_rows
+    ]
+    supplemental_evidence = (
+        [
+            {
+                "id": entry.id,
+                "filename": "報帳附件",
+                "url": (
+                    f"/finance/public/budgets/{budget.id}/expense-claims/{entry.id}/"
+                    f"evidence/{entry.id}"
+                ),
+            }
+        ]
+        if entry.evidence_url
+        else []
+    )
+    return {
+        "id": entry.id,
+        "budget_id": budget.id,
+        "budget_name": budget.name,
+        "entry_date": entry.entry_date,
+        "purpose": re.sub(r"^報帳｜|（\d+ 項）$", "", entry.description),
+        "department_name": department_name,
+        "reporter_name": reporter_name or "已停用使用者",
+        "reported_at": entry.created_at,
+        "paid_at": entry.payment_at,
+        "payment_method": entry.payment_method,
+        "total_amount": sum(item["amount"] for item in items),
+        "items": items,
+        "supplemental_evidence": supplemental_evidence,
+    }
 
 
 async def public_budget_period_totals(db: AsyncSession, budget_id: uuid.UUID) -> dict:
