@@ -860,7 +860,7 @@ export default function ShopPage() {
     for (const category of catalog) {
       if (!category.activity_id) continue;
       const names = namesById.get(category.activity_id) ?? new Set<string>();
-      names.add(category.name);
+      names.add(category.activity_name ?? category.name);
       namesById.set(category.activity_id, names);
     }
     for (const promotion of availablePromotions) {
@@ -1056,6 +1056,13 @@ export default function ShopPage() {
           <h1>商品預購</h1>
           <p className="shop-public-hero-copy">先選活動，再查看商品與這次登記進度。</p>
         </div>
+        {isLoggedIn && (
+          <Link href="/shop/orders" className="shop-public-order-link">
+            <ClipboardList size={19} aria-hidden="true" />
+            我的訂單
+            {registrations.length > 0 && <span className="shop-public-order-link-count">{registrations.length} 筆</span>}
+          </Link>
+        )}
       </header>
 
       {myClass && (
@@ -1423,11 +1430,11 @@ export default function ShopPage() {
           className="shop-public-order-shortcut"
           data-order-flight-target
           aria-label={registrations.length > 0
-            ? `開啟我的登記，共 ${registrations.length} 筆登記`
-            : "開啟我的登記"}
+            ? `開啟我的訂單，共 ${registrations.length} 筆訂單`
+            : "開啟我的訂單"}
         >
           <ClipboardList size={19} aria-hidden="true" />
-          <span>我的登記</span>
+          <span>我的訂單</span>
           {registrations.length > 0 && (
             <span className="shop-public-order-shortcut-count">{registrations.length}</span>
           )}

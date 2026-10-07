@@ -21,7 +21,7 @@ export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const fromClass = useSearchParams().get("from") === "class";
   const backHref = fromClass ? "/shop/class-orders" : "/shop/orders";
-  const backLabel = fromClass ? "返回議員工作台" : "返回我的登記";
+  const backLabel = fromClass ? "返回班代收款" : "返回我的訂單";
   const [order, setOrder] = useState<OrderOut | null>(null);
   const [assignments, setAssignments] = useState<SeatBookingOut[]>([]);
   const [seatingItems, setSeatingItems] = useState<SeatingItem[]>([]);
@@ -177,8 +177,8 @@ export default function OrderDetailPage() {
 
       <header className="shop-order-detail-hero">
         <div>
-          <h1>登記詳情</h1>
-          <p className="shop-order-detail-serial">{order.serial_number}</p>
+          <h1>{order.activity_name ?? (order.activity_id ? "活動訂單" : "一般商品訂單")}</h1>
+          <p className="shop-order-detail-serial">訂單 {order.serial_number}</p>
           <div className="mt-2"><OrderStatusBadge status={order.status} /></div>
           <p className="shop-order-detail-created">
             登記時間：{new Date(order.created_at).toLocaleString("zh-TW")}

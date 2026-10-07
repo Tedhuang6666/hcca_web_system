@@ -141,7 +141,20 @@
 }
 
 .shop-public-order-link {
-  padding-inline: 0.25rem;
+  width: fit-content;
+  border: 2px solid var(--public-accent);
+  border-radius: 0.7rem;
+  background: var(--public-accent);
+  padding: 0.7rem 1.1rem;
+  color: var(--primary-fg);
+  box-shadow: 0 0.25rem 0.75rem rgb(0 0 0 / 0.12);
+}
+
+.shop-public-order-link-count {
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.13);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .shop-public-cart-link {
@@ -153,10 +166,16 @@
 
 .shop-public-order-link:hover,
 .shop-public-order-link:focus-visible {
-  color: var(--public-accent-text);
+  background: var(--public-accent-strong);
+  color: var(--primary-fg);
+  outline: 2px solid var(--public-focus);
+  outline-offset: 2px;
 }
 
 .shop-public-order-shortcut {
+  --public-accent: var(--primary);
+  --public-accent-strong: var(--primary-hover);
+  --public-focus: var(--border-focus);
   position: fixed;
   z-index: 40;
   right: max(1rem, env(safe-area-inset-right));
@@ -165,7 +184,7 @@
   min-height: 3.1rem;
   align-items: center;
   gap: 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--public-accent) 75%, white);
+  border: 2px solid var(--primary-fg);
   border-radius: 999px;
   background: var(--public-accent);
   padding: 0.65rem 1rem;
@@ -1517,6 +1536,58 @@
 
 .shop-order-list-rows {
   border-top: 1px solid var(--border);
+}
+
+.shop-order-activity-list {
+  display: grid;
+  gap: 2rem;
+}
+
+.shop-order-activity-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding: 0.75rem 0 0.85rem;
+}
+
+.shop-order-activity-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.18rem;
+  font-weight: 750;
+}
+
+.shop-order-activity-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.shop-order-activity-heading strong {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-order-activity-amounts {
+  display: grid;
+  gap: 0.2rem;
+  text-align: right;
+}
+
+.shop-order-activity-amounts span {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-order-row-items {
+  margin: 0.55rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 
 .shop-order-row {

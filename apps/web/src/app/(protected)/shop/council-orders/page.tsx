@@ -114,7 +114,7 @@ export default function CouncilOrdersPage() {
       };
       group.categories.push(category);
       group.label = category.activity_id
-        ? [...new Set([...group.label.split("、").filter(Boolean), category.name])].join("、")
+        ? [...new Set([...group.label.split("、").filter(Boolean), category.activity_name ?? category.name])].join("、")
         : group.label;
       groups.set(key, group);
     }
