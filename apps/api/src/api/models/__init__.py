@@ -68,7 +68,10 @@ from api.models.election import (  # noqa: F401
     VoteEvent,
     VoteEventKind,
 )
-from api.models.electronic_credential import ElectronicCredentialAuthorization  # noqa: F401
+from api.models.electronic_credential import (  # noqa: F401
+    ElectronicCredentialAuthorization,
+    ElectronicCredentialSettings,
+)
 from api.models.email_message import (  # noqa: F401
     EmailAttachment,
     EmailAttachmentMode,

@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
-from api.models.electronic_credential import ElectronicCredentialAuthorization
+from api.models.electronic_credential import (
+    DEFAULT_STUDENT_ID_PREFIXES,
+    ElectronicCredentialAuthorization,
+    ElectronicCredentialSettings,
+)
 from api.models.user import User
 from api.schemas.electronic_credential import (
     ElectronicCredentialAuthorizationBulkCreate,
@@ -17,6 +22,8 @@ from api.schemas.electronic_credential import (
     ElectronicCredentialAuthorizationOut,
     ElectronicCredentialAuthorizationUpdate,
     ElectronicCredentialOut,
+    ElectronicCredentialSettingsOut,
+    ElectronicCredentialSettingsUpdate,
 )
 
 
@@ -24,8 +31,23 @@ def _normalized_email_set(values: list[str] | set[str]) -> set[str]:
     return {value.strip().lower() for value in values if value.strip()}
 
 
+def _matches_student_credential(
+    user: User, email_local_part: str, student_id_prefixes: Sequence[str] | None
+) -> bool:
+    student_id = (user.student_id or "").strip()
+    return bool(
+        student_id
+        and student_id.isdigit()
+        and student_id_prefixes
+        and any(student_id.startswith(prefix) for prefix in student_id_prefixes)
+        and email_local_part == f"g0{student_id}"
+    )
+
+
 def identity_for_user(
-    user: User, special_identity_label: str | None = None
+    user: User,
+    special_identity_label: str | None = None,
+    student_id_prefixes: Sequence[str] | None = None,
 ) -> tuple[str, str] | None:
     """回傳電子證件身份別與顯示標籤；不符合資格時回傳 None。"""
     normalized_email = user.email.strip().lower()
@@ -39,8 +61,15 @@ def identity_for_user(
         if value.strip()
     }
     if domain in campus_domains:
-        is_student = bool(user.student_id) or normalized_email.startswith("g0")
-        return ("student", "校內學生") if is_student else ("teacher", "校內師長")
+        local_part = normalized_email.partition("@")[0]
+        is_student_account = bool(user.student_id) or local_part.startswith("g0")
+        if is_student_account:
+            return (
+                ("student", "校內學生")
+                if _matches_student_credential(user, local_part, student_id_prefixes)
+                else None
+            )
+        return "teacher", "校內師長"
 
     authorized_emails = (
         _normalized_email_set(settings.LOGIN_EMAIL_ALLOWLIST)
@@ -69,7 +98,14 @@ async def get_my_credential(db: AsyncSession, user: User) -> ElectronicCredentia
     if not user.is_active:
         return None
     authorization = await _get_active_authorization(db, user.email)
-    identity = identity_for_user(user, authorization.identity_label if authorization else None)
+    credential_settings = await db.get(ElectronicCredentialSettings, 1)
+    identity = identity_for_user(
+        user,
+        authorization.identity_label if authorization else None,
+        credential_settings.student_id_prefixes
+        if credential_settings
+        else DEFAULT_STUDENT_ID_PREFIXES,
+    )
     if identity is None:
         return None
     return ElectronicCredentialOut(
@@ -79,6 +115,39 @@ async def get_my_credential(db: AsyncSession, user: User) -> ElectronicCredentia
         identity_kind=identity[0],
         identity_label=identity[1],
         status_label="目前有效",
+    )
+
+
+async def get_settings(db: AsyncSession) -> ElectronicCredentialSettingsOut:
+    settings_row = await db.get(ElectronicCredentialSettings, 1)
+    return ElectronicCredentialSettingsOut(
+        student_id_prefixes=(
+            list(settings_row.student_id_prefixes)
+            if settings_row
+            else list(DEFAULT_STUDENT_ID_PREFIXES)
+        )
+    )
+
+
+async def update_settings(
+    db: AsyncSession,
+    data: ElectronicCredentialSettingsUpdate,
+    actor_id: uuid.UUID,
+) -> ElectronicCredentialSettingsOut:
+    fields = data.model_dump(exclude_unset=True)
+    settings_row = await db.get(ElectronicCredentialSettings, 1)
+    if settings_row is None:
+        settings_row = ElectronicCredentialSettings(
+            id=1, student_id_prefixes=list(DEFAULT_STUDENT_ID_PREFIXES)
+        )
+        db.add(settings_row)
+
+    for key, value in fields.items():
+        setattr(settings_row, key, value)
+    settings_row.updated_by = actor_id
+    await db.flush()
+    return ElectronicCredentialSettingsOut(
+        student_id_prefixes=list(settings_row.student_id_prefixes)
     )
 
 

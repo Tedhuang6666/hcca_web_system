@@ -1,9 +1,9 @@
 """電子證件回應 Schema。"""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class ElectronicCredentialOut(BaseModel):
@@ -17,6 +17,27 @@ class ElectronicCredentialOut(BaseModel):
     identity_kind: Literal["student", "teacher", "authorized"]
     identity_label: str
     status_label: str
+
+
+class ElectronicCredentialSettingsUpdate(BaseModel):
+    """管理可使用學生電子證件的學號前三碼。"""
+
+    student_id_prefixes: list[Annotated[str, Field(pattern=r"^\d{3}$")]] = Field(
+        min_length=0, max_length=30
+    )
+
+    @field_validator("student_id_prefixes")
+    @classmethod
+    def prefixes_must_be_unique(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("學號前三碼不可重複")
+        return value
+
+
+class ElectronicCredentialSettingsOut(BaseModel):
+    """電子證件學生學號資格設定。"""
+
+    student_id_prefixes: list[str]
 
 
 class ElectronicCredentialAuthorizationCreate(BaseModel):

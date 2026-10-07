@@ -18,7 +18,10 @@ from api.schemas.electronic_credential import (
     ElectronicCredentialAuthorizationOut,
     ElectronicCredentialAuthorizationUpdate,
     ElectronicCredentialOut,
+    ElectronicCredentialSettingsOut,
+    ElectronicCredentialSettingsUpdate,
 )
+from api.services import audit as audit_svc
 from api.services import electronic_credential as credential_svc
 
 router = APIRouter(prefix="/electronic-credentials", tags=["電子證件"])
@@ -45,9 +48,42 @@ async def get_my_electronic_credential(
     if credential is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="電子證件僅提供校內帳號或經特別授權的個人帳號。",
+            detail="電子證件僅提供符合屆別學號規則的校內學生、校內師長或經特別授權的個人帳號。",
         )
     return credential
+
+
+@router.get(
+    "/admin/settings",
+    response_model=ElectronicCredentialSettingsOut,
+    summary="取得電子證件資格設定",
+)
+async def admin_get_settings(db: DbDep, _: ManagerUser) -> ElectronicCredentialSettingsOut:
+    return await credential_svc.get_settings(db)
+
+
+@router.patch(
+    "/admin/settings",
+    response_model=ElectronicCredentialSettingsOut,
+    summary="更新電子證件學生資格設定",
+)
+async def admin_update_settings(
+    body: ElectronicCredentialSettingsUpdate,
+    db: DbDep,
+    manager: ManagerUser,
+) -> ElectronicCredentialSettingsOut:
+    settings = await credential_svc.update_settings(db, body, manager.id)
+    await audit_svc.record(
+        db,
+        entity_type="electronic_credential_settings",
+        entity_id="1",
+        action="electronic_credential.settings_update",
+        actor_id=str(manager.id),
+        actor_email=manager.email,
+        meta=body.model_dump(mode="json"),
+        summary="更新電子證件學生資格設定",
+    )
+    return settings
 
 
 @router.get(
