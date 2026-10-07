@@ -12,7 +12,7 @@ MAX_PREVIEW_PDF_SIZE = 50 * 1024 * 1024
 
 
 class PetitionPreviewError(RuntimeError):
-    """Office 附件無法轉成站內預覽 PDF。"""
+    """Office 附件無法轉成PDF預覽。"""
 
 
 class PetitionPreviewUnavailable(PetitionPreviewError):
