@@ -206,6 +206,7 @@ async def list_announcements(
             Announcement.id,
             Announcement.title,
             Announcement.is_urgent,
+            Announcement.urgent_until,
             Announcement.is_published,
             Announcement.published_at,
             Announcement.org_id,

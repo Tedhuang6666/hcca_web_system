@@ -7,6 +7,7 @@ import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useFetch } from "@/hooks/useFetch";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { isAnnouncementExpired } from "@/lib/announcement-expiration";
 
 const AUDIENCE_LABEL: Record<string, string> = {
   all: "全體",
@@ -16,6 +17,13 @@ const AUDIENCE_LABEL: Record<string, string> = {
 };
 
 function StatusBadge({ item }: { item: AnnouncementListItem }) {
+  if (isAnnouncementExpired(item)) {
+    return (
+      <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+        已過期
+      </span>
+    );
+  }
   if (item.is_urgent) {
     return (
       <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
@@ -109,40 +117,45 @@ export default function AnnouncementsClient({
         </div>
       ) : (
         <div className="space-y-3">
-          {sorted.map((item) => (
-            <Link
-              key={item.id}
-              href={`/announcements/${item.id}`}
-              className="card card-hover block p-5"
-              style={{ textDecoration: "none" }}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <StatusBadge item={item} />
-                    {item.audience_type !== "all" && (
-                      <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
-                        {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
+          {sorted.map((item) => {
+            const expired = isAnnouncementExpired(item);
+            return (
+              <Link
+                key={item.id}
+                href={`/announcements/${item.id}`}
+                className={`card card-hover block p-5${expired ? " announcement-expired" : ""}`}
+                style={{ textDecoration: "none" }}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <StatusBadge item={item} />
+                      {item.audience_type !== "all" && (
+                        <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+                          {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
+                        </span>
+                      )}
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        {item.published_at
+                          ? new Date(item.published_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")
+                          : new Date(item.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
                       </span>
-                    )}
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      {item.published_at
-                        ? new Date(item.published_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")
-                        : new Date(item.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
-                    </span>
+                    </div>
+                    <h2 className={`text-base font-semibold leading-snug${expired ? " text-[var(--text-muted)]" : ""}`}>
+                      {item.title}
+                    </h2>
+                    <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                      公告人：{item.author_name || "未命名"}
+                    </p>
                   </div>
-                  <h2 className="text-base font-semibold leading-snug">{item.title}</h2>
-                  <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                    公告人：{item.author_name || "未命名"}
-                  </p>
+                  {canManage && (
+                    <span className="btn btn-sm btn-ghost self-start">
+                      管理
+                    </span>
+                  )}
                 </div>
-                {canManage && (
-                  <span className="btn btn-sm btn-ghost self-start">
-                    管理
-                  </span>
-                )}
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

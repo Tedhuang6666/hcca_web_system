@@ -125,6 +125,7 @@ class AnnouncementListItem(BaseModel):
     id: uuid.UUID
     title: str
     is_urgent: bool
+    urgent_until: datetime | None
     is_published: bool
     published_at: datetime | None
     org_id: uuid.UUID | None
