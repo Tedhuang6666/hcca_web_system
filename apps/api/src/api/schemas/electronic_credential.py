@@ -22,7 +22,7 @@ class ElectronicCredentialOut(BaseModel):
 class ElectronicCredentialSettingsUpdate(BaseModel):
     """管理可使用學生電子證件的學號前三碼。"""
 
-    student_id_prefixes: list[Annotated[str, Field(pattern=r"^\d{3}$")]] = Field(
+    student_id_prefixes: list[Annotated[str, Field(pattern=r"^[0-9]{3}$")]] = Field(
         min_length=0, max_length=30
     )
 
