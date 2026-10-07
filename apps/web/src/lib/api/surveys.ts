@@ -47,7 +47,7 @@ export const surveysApi = {
     const qs = q.toString();
     return get<SurveyListItem[]>(`/surveys${qs ? `?${qs}` : ""}`);
   },
-  /** 公開問卷列表（未登入可用，僅回傳 is_public 且開放/已截止的問卷） */
+  /** 公開問卷列表（未登入可用，僅回傳 is_public、is_listed 且開放/已截止的問卷） */
   listPublic: (params?: { status?: string }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
@@ -56,9 +56,9 @@ export const surveysApi = {
   },
   get: (id: string) => get<SurveyOut>(`/surveys/${pathSegment(id)}`),
   getPublic: (id: string) => get<SurveyOut>(`/surveys/public/${pathSegment(id)}`),
-  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
+  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; activity_id?: string | null; is_public?: boolean; is_listed?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
     post<SurveyOut>("/surveys", body),
-  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
+  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; activity_id?: string | null; is_public?: boolean; is_listed?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
     patch<SurveyOut>(`/surveys/${pathSegment(id)}`, body),
   open: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/open`),
   close: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/close`),

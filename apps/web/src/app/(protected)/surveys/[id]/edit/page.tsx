@@ -679,7 +679,7 @@ export default function EditSurveyPage() {
   const [newOptionImageSets, setNewOptionImageSets] = useState<string[][]>([]);
   const [newImageUrl, setNewImageUrl] = useState("");
   // 開放對象
-  const [isPublic, setIsPublic] = useState(false);
+  const [accessMode, setAccessMode] = useState<"members" | "link" | "public">("members");
   const [allowedDomains, setAllowedDomains] = useState("");
   const [allowedUsers, setAllowedUsers] = useState<UserSummary[]>([]);
   const [allowedOrgIds, setAllowedOrgIds] = useState<string[]>([]);
@@ -699,7 +699,7 @@ export default function EditSurveyPage() {
         setAnnouncementTitle(s.announcement_title ?? "");
         setShowAnnouncementPopup(Boolean(s.show_announcement_popup));
         setClosesAt(s.closes_at ? s.closes_at.slice(0, 16) : "");
-        setIsPublic(s.is_public);
+        setAccessMode(!s.is_public ? "members" : s.is_listed ? "public" : "link");
         setAllowedDomains((s.allowed_domains ?? []).join("\n"));
         setAllowedOrgIds(s.allowed_org_ids ?? []);
         if ((s.allowed_user_ids?.length ?? 0) > 0) {
@@ -728,12 +728,13 @@ export default function EditSurveyPage() {
         announcement_title: announcementTitle.trim() || null,
         show_announcement_popup: showAnnouncementPopup,
         closes_at: closesAt || undefined,
-        is_public: isPublic,
-        allowed_org_ids: isPublic ? [] : allowedOrgIds,
-        allowed_user_ids: isPublic ? [] : allowedUsers.map(u => u.id),
-        allowed_domains: isPublic
-          ? []
-          : allowedDomains.split("\n").map(s => s.trim()).filter(Boolean),
+        is_public: accessMode !== "members",
+        is_listed: accessMode !== "link",
+        allowed_org_ids: accessMode === "members" ? allowedOrgIds : [],
+        allowed_user_ids: accessMode === "members" ? allowedUsers.map(u => u.id) : [],
+        allowed_domains: accessMode === "members"
+          ? allowedDomains.split("\n").map(s => s.trim()).filter(Boolean)
+          : [],
       });
       toast.success("基本資料已更新");
       load();
@@ -971,17 +972,36 @@ export default function EditSurveyPage() {
         {/* 開放對象 */}
         <div className="rounded-xl p-3 space-y-2.5" style={{ background: "var(--bg-elevated)" }}>
           <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>開放對象</p>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)}
-              className="accent-sky-400" />
-            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              開放未登入者也可填答（公開問卷）
-            </span>
-          </label>
-          {!isPublic && (
+          <div>
+            <label htmlFor="survey-access-mode"
+              className="text-xs font-medium block mb-1.5"
+              style={{ color: "var(--text-secondary)" }}>
+              問卷的填答方式
+            </label>
+            <select
+              id="survey-access-mode"
+              value={accessMode}
+              onChange={e => setAccessMode(e.target.value as "members" | "link" | "public")}
+              aria-describedby="survey-access-description"
+              className="input"
+            >
+              <option value="members">登入後填答</option>
+              <option value="link">僅限連結填答（不公開）</option>
+              <option value="public">公開填答（列入公開列表）</option>
+            </select>
+            <p id="survey-access-description" className="text-xs mt-1.5"
+              style={{ color: "var(--text-muted)" }}>
+              {accessMode === "link"
+                ? "問卷不會出現在公開列表；持有填答連結的人可直接開啟並填答。"
+                : accessMode === "public"
+                  ? "所有人都能在公開問卷列表找到並填答。"
+                  : "需要登入後填答；可指定使用者、組織或校務信箱網域。"}
+            </p>
+          </div>
+          {accessMode === "members" && (
             <>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                需登入才能填答。下列限制全部留空＝任何登入者皆可；填寫後僅符合任一條件者可填。
+                限制全部留空時，任何登入者皆可填答；設定限制後，符合任一條件者可填。
               </p>
               <div>
                 <Label>限定 email 網域（一行一個，例：hchs.hc.edu.tw 即限本校）</Label>

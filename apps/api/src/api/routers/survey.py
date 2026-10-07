@@ -175,7 +175,7 @@ async def list_public_surveys(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[Survey]:
-    """列出公開問卷（僅 is_public 且開放/已截止）；草稿與封存不會出現。"""
+    """列出已開放且允許匿名填答、並設為公開顯示的問卷。"""
     if status_filter not in (None, SurveyStatus.OPEN, SurveyStatus.CLOSED):
         status_filter = None
     return await survey_svc.list_surveys(
@@ -199,6 +199,13 @@ async def get_public_survey(survey_id: str, session: DbDep) -> Survey:
     survey = await _survey_or_404(survey_id, session)
     if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
+    if not survey.is_listed:
+        try:
+            is_link_id = uuid.UUID(survey_id) == survey.id
+        except ValueError:
+            is_link_id = False
+        if not is_link_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
     if not survey.is_public:
         try:
             await survey_svc.check_survey_access(session, survey, None)

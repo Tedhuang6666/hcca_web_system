@@ -80,12 +80,18 @@ interface DraftQuestion {
   order_index: number;
 }
 
+type SurveyAccessMode = "members" | "link" | "public";
+
 type SurveyDraft = {
   title: string;
   description: string;
   announcement: string;
   announcementTitle: string;
   showAnnouncementPopup: boolean;
+  accessMode: SurveyAccessMode;
+  allowedDomains: string;
+  allowedUsers: UserSummary[];
+  allowedOrgIds: string[];
   isAnonymous: boolean;
   allowMultiple: boolean;
   closesAt: string;
@@ -209,7 +215,7 @@ export default function NewSurveyPage() {
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
 
   // 填答對象
-  const [isPublic, setIsPublic] = useState(false);
+  const [accessMode, setAccessMode] = useState<SurveyAccessMode>("members");
   const [allowedDomains, setAllowedDomains] = useState("");
   const [allowedUsers, setAllowedUsers] = useState<UserSummary[]>([]);
   const [allowedOrgIds, setAllowedOrgIds] = useState<string[]>([]);
@@ -246,6 +252,10 @@ export default function NewSurveyPage() {
     announcement,
     announcementTitle,
     showAnnouncementPopup,
+    accessMode,
+    allowedDomains,
+    allowedUsers,
+    allowedOrgIds,
     isAnonymous,
     allowMultiple,
     closesAt,
@@ -255,7 +265,11 @@ export default function NewSurveyPage() {
   }), [
     announcement,
     announcementTitle,
+    accessMode,
     allowMultiple,
+    allowedDomains,
+    allowedOrgIds,
+    allowedUsers,
     closesAt,
     description,
     isAnonymous,
@@ -271,6 +285,10 @@ export default function NewSurveyPage() {
     setAnnouncement(draft.announcement ?? "");
     setAnnouncementTitle(draft.announcementTitle ?? "");
     setShowAnnouncementPopup(Boolean(draft.showAnnouncementPopup));
+    setAccessMode(draft.accessMode ?? "members");
+    setAllowedDomains(draft.allowedDomains ?? "");
+    setAllowedUsers(draft.allowedUsers ?? []);
+    setAllowedOrgIds(draft.allowedOrgIds ?? []);
     setIsAnonymous(Boolean(draft.isAnonymous));
     setAllowMultiple(Boolean(draft.allowMultiple));
     setClosesAt(draft.closesAt ?? "");
@@ -465,6 +483,7 @@ export default function NewSurveyPage() {
     setSaving(true);
     try {
       const splitLines = (s: string) => s.split("\n").map(x => x.trim()).filter(Boolean);
+      const allowsAnonymous = accessMode !== "members";
       const survey = await surveysApi.create({
         title: title.trim(),
         description: description.trim() || undefined,
@@ -475,10 +494,11 @@ export default function NewSurveyPage() {
         allow_multiple: allowMultiple,
         closes_at: closesAt || undefined,
         org_id: orgId,
-        is_public: isPublic,
-        allowed_org_ids: isPublic ? [] : allowedOrgIds,
-        allowed_user_ids: isPublic ? [] : allowedUsers.map(u => u.id),
-        allowed_domains: isPublic ? [] : splitLines(allowedDomains),
+        is_public: allowsAnonymous,
+        is_listed: accessMode !== "link",
+        allowed_org_ids: allowsAnonymous ? [] : allowedOrgIds,
+        allowed_user_ids: allowsAnonymous ? [] : allowedUsers.map(u => u.id),
+        allowed_domains: allowsAnonymous ? [] : splitLines(allowedDomains),
       });
       // 第一輪：依序新增題目，建立「暫存 id → 真實 id」對應
       const idMap: Record<string, string> = {};
@@ -683,17 +703,36 @@ export default function NewSurveyPage() {
             <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
               填答對象
             </h3>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)}
-                className="accent-sky-400" />
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                開放未登入者也可填答（公開問卷）
-              </span>
-            </label>
-            {!isPublic && (
+            <div>
+              <label htmlFor="survey-access-mode"
+                className="text-xs font-medium block mb-1.5"
+                style={{ color: "var(--text-secondary)" }}>
+                問卷的填答方式
+              </label>
+              <select
+                id="survey-access-mode"
+                value={accessMode}
+                onChange={e => setAccessMode(e.target.value as SurveyAccessMode)}
+                aria-describedby="survey-access-description"
+                className="input"
+              >
+                <option value="members">登入後填答</option>
+                <option value="link">僅限連結填答（不公開）</option>
+                <option value="public">公開填答（列入公開列表）</option>
+              </select>
+              <p id="survey-access-description" className="text-xs mt-1.5"
+                style={{ color: "var(--text-muted)" }}>
+                {accessMode === "link"
+                  ? "問卷不會出現在公開列表；持有填答連結的人可直接開啟並填答。"
+                  : accessMode === "public"
+                    ? "所有人都能在公開問卷列表找到並填答。"
+                    : "需要登入後填答；可指定使用者、組織或校務信箱網域。"}
+              </p>
+            </div>
+            {accessMode === "members" && (
               <>
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  需登入才能填答。下列限制全部留空＝任何登入者皆可；填寫後僅符合任一條件者可填。
+                  限制全部留空時，任何登入者皆可填答；設定限制後，符合任一條件者可填。
                 </p>
                 <div>
                   <Label>限定 email 網域（一行一個，例：hchs.hc.edu.tw 即限本校）</Label>

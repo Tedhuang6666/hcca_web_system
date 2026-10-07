@@ -11215,7 +11215,7 @@ export interface paths {
         };
         /**
          * 公開列出問卷（未登入）
-         * @description 列出公開問卷（僅 is_public 且開放/已截止）；草稿與封存不會出現。
+         * @description 列出已開放且允許匿名填答、並設為公開顯示的問卷。
          */
         get: operations["list_public_surveys_surveys_public_get"];
         put?: never;
@@ -28834,6 +28834,11 @@ export interface components {
              */
             is_anonymous: boolean;
             /**
+             * Is Listed
+             * @default true
+             */
+            is_listed: boolean;
+            /**
              * Is Public
              * @default false
              */
@@ -28941,6 +28946,11 @@ export interface components {
             id: string;
             /** Is Anonymous */
             is_anonymous: boolean;
+            /**
+             * Is Listed
+             * @default true
+             */
+            is_listed: boolean;
             /**
              * Is Public
              * @default false
@@ -29275,6 +29285,11 @@ export interface components {
             closes_at?: string | null;
             /** Description */
             description?: string | null;
+            /**
+             * Is Listed
+             * @default true
+             */
+            is_listed: boolean;
             /** Is Public */
             is_public?: boolean | null;
             /** Opens At */

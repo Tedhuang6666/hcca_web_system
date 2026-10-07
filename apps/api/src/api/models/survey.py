@@ -108,6 +108,10 @@ class Survey(Base, TimestampMixin):
     is_public: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # 是否出現在未登入可瀏覽的公開問卷列表；不影響持連結者直接填答。
+    is_listed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     # 限制名單（JSON 陣列字串）；三者皆空代表「任何登入者皆可填」
     allowed_org_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     allowed_user_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
