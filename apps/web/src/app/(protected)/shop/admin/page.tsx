@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type {
+  ActivityOut,
   SchoolClassListItem,
   ProductCategoryOut,
   ProductSeriesOut,
@@ -18,6 +19,13 @@ import type {
   OrderSummaryOut,
 } from "@/lib/types";
 import ShopPromotionPanel from "./ShopPromotionPanel";
+
+const ACTIVITY_STATUS_LABEL: Record<string, string> = {
+  draft: "草稿",
+  active: "進行中",
+  ended: "已結束",
+  archived: "已封存",
+};
 
 // ── 共用小元件 ────────────────────────────────────────────────────────────────
 
@@ -110,9 +118,31 @@ function EntityModal({
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
+  const [activityId, setActivityId] = useState(
+    initial && "activity_id" in initial ? initial.activity_id ?? "" : "",
+  );
+  const [activities, setActivities] = useState<ActivityOut[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(kind === "category");
+  const [activitiesLoadError, setActivitiesLoadError] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const label = kind === "category" ? "主題" : "系列";
+
+  useEffect(() => {
+    if (kind !== "category") return;
+    let cancelled = false;
+    void shopApi.listActivities()
+      .then((rows) => {
+        if (!cancelled) setActivities(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setActivitiesLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setActivitiesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [kind]);
 
   return (
     <Modal title={`${editing ? "編輯" : "新增"}${label}`} onClose={onClose} size="md">
@@ -124,6 +154,34 @@ function EntityModal({
         <Field label="描述（選填）">
           <input value={description} onChange={(e) => setDescription(e.target.value)} className="input w-full" />
         </Field>
+        {kind === "category" && (
+          <Field label="所屬活動">
+            <select
+              value={activityId}
+              onChange={(e) => setActivityId(e.target.value)}
+              className="input w-full"
+              disabled={activitiesLoading || activitiesLoadError}
+            >
+              <option value="">一般商品（不分活動）</option>
+              {activityId && !activities.some((activity) => activity.id === activityId) && (
+                <option value={activityId}>目前所屬活動</option>
+              )}
+              {activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                  {activity.name}（{ACTIVITY_STATUS_LABEL[activity.status] ?? activity.status}）
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              選擇活動後，後續預購會列入該活動訂單；未指定時會列入一般商品訂單。已建立的訂單不會自動拆分。
+            </p>
+            {activitiesLoadError && (
+              <p role="alert" className="mt-1 text-xs" style={{ color: "var(--danger)" }}>
+                無法載入活動清單，請重新開啟此視窗再試一次。
+              </p>
+            )}
+          </Field>
+        )}
         <Field label="圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
@@ -138,7 +196,7 @@ function EntityModal({
         </div>
         <div className="flex gap-3 pt-1">
           <button
-            disabled={busy}
+            disabled={busy || (kind === "category" && activitiesLoading)}
             onClick={async () => {
               if (!name.trim()) { toast.error("請輸入名稱"); return; }
               setBusy(true);
@@ -151,9 +209,10 @@ function EntityModal({
                   is_active: isActive,
                 };
                 if (kind === "category") {
-                  if (editing) await shopApi.updateCategory(initial!.id, body);
+                  const categoryBody = { ...body, activity_id: activityId || null };
+                  if (editing) await shopApi.updateCategory(initial!.id, categoryBody);
                   else {
-                    await shopApi.createCategory(body);
+                    await shopApi.createCategory(categoryBody);
                   }
                 } else {
                   await shopApi.updateSeries(initial!.id, body);

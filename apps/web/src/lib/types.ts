@@ -3,6 +3,7 @@ import type { ClassRosterSummary } from "./api-bridge";
 
 export type {
   AccessBlockStatus,
+  ActivityOut,
   AddSinglePosition,
   AdminAssignRequest,
   AdminDashboardStats,
