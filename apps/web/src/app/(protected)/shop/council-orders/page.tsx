@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
+import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart2, Lock, LockOpen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -75,6 +78,7 @@ export default function CouncilOrdersPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [closeStatus, setCloseStatus] = useState<Record<string, Record<string, CloseStatusItem>>>({});
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [closeBusy, setCloseBusy] = useState<string | null>(null);
   const [paymentBusy, setPaymentBusy] = useState<string | null>(null);
 
@@ -123,6 +127,7 @@ export default function CouncilOrdersPage() {
 
   const loadSummary = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params: Parameters<typeof shopApi.orderSummary>[0] = { group_by: groupBy, ...dateParams };
       if (activityId !== "all" && activityId !== "__general__") params.activity_id = activityId;
@@ -152,7 +157,7 @@ export default function CouncilOrdersPage() {
         setCloseStatus(statusMap);
       }
     } catch (e) {
-      toast.error(apiErrorMessage(e, "載入失敗"));
+      setLoadError(apiErrorMessage(e, "載入失敗，請重新整理後再試。"));
     } finally {
       setLoading(false);
     }
@@ -160,6 +165,7 @@ export default function CouncilOrdersPage() {
 
   const loadQuantities = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params: Parameters<typeof shopApi.orderQuantities>[0] = { ...dateParams };
       if (activityId !== "all" && activityId !== "__general__") params!.activity_id = activityId;
@@ -172,7 +178,7 @@ export default function CouncilOrdersPage() {
       const data = await shopApi.orderQuantities(params);
       setQuantities(data);
     } catch (e) {
-      toast.error(apiErrorMessage(e, "載入失敗"));
+      setLoadError(apiErrorMessage(e, "載入失敗，請重新整理後再試。"));
     } finally {
       setLoading(false);
     }
@@ -180,6 +186,7 @@ export default function CouncilOrdersPage() {
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params: Record<string, string> = { my_only: "false", limit: "500" };
       if (activityId !== "all" && activityId !== "__general__") params.activity_id = activityId;
@@ -192,10 +199,15 @@ export default function CouncilOrdersPage() {
       if (search.trim()) params.search = search.trim();
       if (dateParams.date_from) params.date_from = dateParams.date_from;
       if (dateParams.date_to) params.date_to = dateParams.date_to;
-      const data = await shopApi.listOrders(params);
+      const data: OrderListItem[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const page = await shopApi.listOrders({ ...params, offset: String(offset) });
+        data.push(...page);
+        if (page.length < 500) break;
+      }
       setOrders(data);
     } catch (e) {
-      toast.error(apiErrorMessage(e, "載入失敗"));
+      setLoadError(apiErrorMessage(e, "載入失敗，請重新整理後再試。"));
     } finally {
       setLoading(false);
     }
@@ -324,7 +336,7 @@ export default function CouncilOrdersPage() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-7xl space-y-5 px-4 py-5">
+    <main className="shop-council-page mx-auto max-w-7xl space-y-5 px-4 py-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -340,9 +352,16 @@ export default function CouncilOrdersPage() {
         </button>
       </header>
 
+      <nav className="shop-task-switch" aria-label="班聯統籌工作">
+        {([["summary", "班級繳款"], ["quantities", "商品總量"], ["orders", "查找訂單"]] as const).map(([key, label]) => (
+          <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>
+        ))}
+      </nav>
+
       {/* 篩選列 */}
-      <section className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <details className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <summary className="min-h-11 cursor-pointer font-medium">篩選活動、班級與收款狀態{[grade, classId, categoryId, productId, isPaid, statusFilter, dateFrom, dateTo, search].filter(Boolean).length > 0 || activityId !== "all" ? "（已套用篩選）" : "（目前全部）"}</summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {tab === "summary" && <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>統計方式</span>
             <select className="input" value={groupBy} onChange={(e) => setGroupBy(e.target.value as "class" | "grade" | "user")}>
@@ -421,21 +440,10 @@ export default function CouncilOrdersPage() {
             <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder="輸入編號或姓名" />
           </label>}
         </div>
-      </section>
+      </details>
 
-      {/* Tab 切換 */}
-      <div className="flex gap-1 rounded-lg p-1" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)", width: "fit-content" }}>
-        {([ ["summary", "班級彙總"], ["quantities", "商品數量"], ["orders", "訂單明細"] ] as [Tab, string][]).map(([t, label]) => (
-          <button key={t} type="button" onClick={() => setTab(t)}
-            className="rounded-md px-4 py-2 text-sm font-medium transition-colors"
-            style={tab === t
-              ? { background: "var(--card-bg)", color: "var(--primary)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }
-              : { color: "var(--text-muted)" }}>
-            {label}
-          </button>
-        ))}
-      </div>
-
+      {loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
+      <div hidden={Boolean(loadError)}>
       {/* Tab 1：班級彙總 */}
       {tab === "summary" && (
         <section>
@@ -482,7 +490,7 @@ export default function CouncilOrdersPage() {
               <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的資料</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-sm">
+                <table className="shop-mobile-table w-full min-w-[720px] text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
                       {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "總金額", "已繳", "未繳", ...(groupBy === "class" ? activityGroups.map((group) => group.label + "結單") : []), ...(groupBy === "class" && canManageOrderClosures ? ["班聯操作"] : [])].map((h, i) => (
@@ -494,15 +502,15 @@ export default function CouncilOrdersPage() {
                     {summary.rows.map((row, idx) => (
                       <tr key={row.key} style={idx < summary.rows.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                         <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{row.order_count}</td>
-                        <td className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "#16a34a" }}>{money(row.paid_amount)}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "#ef4444" }}>{money(row.unpaid_amount)}</td>
+                        <td data-label="訂單數" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{row.order_count}</td>
+                        <td data-label="應繳" className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
+                        <td data-label="班聯已確認" className="px-4 py-3 text-xs" style={{ color: "var(--success)" }}>{money(row.paid_amount)}</td>
+                        <td data-label="待繳" className="px-4 py-3 text-xs" style={{ color: "var(--danger)" }}>{money(row.unpaid_amount)}</td>
                         {groupBy === "class" && activityGroups.map((group) => {
                           const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
                           const closedCount = statuses.filter((item) => item?.is_closed).length;
                           return (
-                          <td key={group.key} className="px-4 py-3">
+                          <td key={group.key} data-label={group.label} className="px-4 py-3">
                             <CloseBadge
                               status={statuses.find((item) => item?.is_closed)}
                               partial={closedCount > 0 && closedCount < group.categories.length}
@@ -579,52 +587,7 @@ export default function CouncilOrdersPage() {
             ) : !quantities.length ? (
               <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的資料</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["商品", "系列", "規格組合", "訂購數", "已繳數"].map((h) => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quantities.map((row, idx) => (
-                      <tr key={`${row.product_id}:${row.variant_key}`}
-                        style={idx < quantities.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-                        <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{row.product_name}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{row.series_name}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{row.variant_key}</td>
-                        <td className="px-4 py-3">
-                          <span className="font-bold text-lg" style={{ color: "var(--primary)" }}>{row.qty_total}</span>
-                          <span className="ml-1 text-xs" style={{ color: "var(--text-muted)" }}>件</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-medium" style={{ color: "#16a34a" }}>{row.qty_paid}</span>
-                          <span className="ml-1 text-xs" style={{ color: "var(--text-muted)" }}>件</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot style={{ borderTop: "2px solid var(--border)" }}>
-                    <tr>
-                      <td colSpan={3} className="px-4 py-3 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>合計</td>
-                      <td className="px-4 py-3">
-                        <span className="font-bold" style={{ color: "var(--primary)" }}>
-                          {quantities.reduce((sum, r) => sum + r.qty_total, 0)}
-                        </span>
-                        <span className="ml-1 text-xs" style={{ color: "var(--text-muted)" }}>件</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-bold" style={{ color: "#16a34a" }}>
-                          {quantities.reduce((sum, r) => sum + r.qty_paid, 0)}
-                        </span>
-                        <span className="ml-1 text-xs" style={{ color: "var(--text-muted)" }}>件</span>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <ProductQuantitySummary rows={quantities} />
             )}
           </div>
         </section>
@@ -641,7 +604,7 @@ export default function CouncilOrdersPage() {
                 <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的訂單</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[700px] text-sm">
+                  <table className="shop-mobile-table w-full min-w-[700px] text-sm">
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border)" }}>
                         {["訂單編號", "學生", "班級", "狀態", "金額", "繳費", "建立時間"].map((h) => (
@@ -653,17 +616,14 @@ export default function CouncilOrdersPage() {
                       {orders.map((order, idx) => (
                         <tr key={order.id} style={idx < orders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                           <td className="px-4 py-3">
-                            <span className="font-mono text-xs" style={{ color: "var(--primary)" }}>{order.serial_number}</span>
+                            <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary)" }}>{order.serial_number}</Link>
                           </td>
-                          <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
-                          <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.class_label ?? "-"}</td>
+                          <td data-label="學生" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
+                          <td data-label="班級" className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.class_label ?? "-"}</td>
                           <td className="px-4 py-3">
-                            <span className="rounded-full px-2 py-0.5 text-xs"
-                              style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
-                              {order.status}
-                            </span>
+                            <OrderStatusBadge status={order.status} />
                           </td>
-                          <td className="px-4 py-3 text-xs font-medium">{money(order.total_price)}</td>
+                          <td data-label="金額" className="px-4 py-3 text-xs font-medium">{money(order.total_price)}</td>
                           <td className="px-4 py-3">
                             <span className="rounded-full px-2 py-0.5 text-xs"
                               style={order.is_paid
@@ -686,6 +646,7 @@ export default function CouncilOrdersPage() {
         </section>
       )}
 
+      </div>
       {/* 結單確認 Modal */}
       {closeTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

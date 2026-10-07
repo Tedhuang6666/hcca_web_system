@@ -8,6 +8,7 @@ import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { useWS } from "@/hooks/useWS";
+import { summarizeOrderItems } from "@/lib/shop-order-items";
 
 function CollectionStatus({ order }: { order: OrderListItem }) {
   if (!order.class_id) {
@@ -85,6 +86,10 @@ export default function OrdersPage() {
     activityGroups.set(key, group);
   }
 
+  const activeOrders = orders.filter((order) => !["cancelled", "refunded"].includes(order.status));
+  const outstanding = activeOrders.reduce((sum, order) => sum
+    + (!order.is_paid && !(order.class_id && order.is_class_collected) ? order.total_price : 0), 0);
+
   return (
     <div className="shop-orders-page">
       <header className="shop-orders-header">
@@ -95,6 +100,18 @@ export default function OrdersPage() {
           <h1>我的訂單</h1>
         </div>
       </header>
+
+      {!loading && !loadError && activeOrders.length > 0 && (
+        <section className="shop-order-next-step" aria-label="下一步">
+          <div>
+            <h2>{outstanding > 0 ? `待繳 NT$${outstanding.toLocaleString("zh-TW")}` : "目前沒有待繳款項"}</h2>
+            <p>{outstanding > 0
+              ? "已登記的商品會保留在下方；班級訂單請向班代繳款，其他訂單請查看付款方式。"
+              : "款項已登記，請依活動通知領取商品。班聯確認進度可在訂單內查看。"}</p>
+          </div>
+          <Link href="/shop" className="shop-order-details">繼續選購 <ArrowRight size={15} aria-hidden="true" /></Link>
+        </section>
+      )}
 
       <section className="shop-orders-list" aria-labelledby="shop-orders-list-title">
         <h2 id="shop-orders-list-title">依活動查看訂單</h2>
@@ -132,6 +149,11 @@ export default function OrdersPage() {
                     )}
                   </div>
                 </div>
+                <p className="shop-activity-products">{summarizeOrderItems(group.orders
+                  .filter((order) => !["cancelled", "refunded"].includes(order.status))
+                  .flatMap((order) => order.items ?? [])) || "此活動沒有有效訂購商品"}</p>
+                <details className="shop-order-history">
+                  <summary>查看 {group.orders.length} 筆訂單與收款紀錄</summary>
                 <div className="shop-order-list-rows" role="list" aria-label={`${group.label}訂單列表`}>
                   {group.orders.map((order) => (
                     <article key={order.id} className="shop-order-row" role="listitem">
@@ -153,7 +175,7 @@ export default function OrdersPage() {
                         </div>
                         <p className="shop-order-row-items">
                           {order.items?.length
-                            ? order.items.map((item) => `${item.product_name ?? "商品"} × ${item.quantity}`).join("、")
+                            ? summarizeOrderItems(order.items)
                             : "商品明細請查看訂單"}
                         </p>
                       </div>
@@ -168,6 +190,7 @@ export default function OrdersPage() {
                     </article>
                   ))}
                 </div>
+                </details>
               </section>
             ))}
           </div>
