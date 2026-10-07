@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import html
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 from sqlalchemy import or_, select
@@ -1622,7 +1625,57 @@ def render_regulation_print_html(reg: Regulation) -> str:
 </html>"""
 
 
-def render_petition_print_html(case_obj: PetitionCase) -> str:
+def _petition_attachment_html(
+    attachment_names: Sequence[tuple[int, str, str]],
+    image_attachments: Sequence[tuple[int, str, bytes]],
+) -> str:
+    if not attachment_names:
+        return ""
+
+    rows = "".join(
+        f"<li><strong>附件 {number}：{_esc(name)}</strong><span>{_esc(kind)}</span></li>"
+        for number, name, kind in attachment_names
+    )
+    image_pages = []
+    for number, name, image_bytes in image_attachments:
+        from PIL import Image, ImageOps
+
+        try:
+            with Image.open(BytesIO(image_bytes)) as source:
+                if source.width * source.height > 40_000_000:
+                    raise ValueError("圖片尺寸過大，無法列印")
+                image = ImageOps.exif_transpose(source)
+                image.thumbnail((1800, 2400))
+                image = image.convert(
+                    "RGBA" if "A" in image.getbands() or "transparency" in image.info else "RGB"
+                )
+                output = BytesIO()
+                image.save(output, format="PNG", optimize=True)
+        except OSError as exc:
+            raise ValueError("圖片附件無法讀取") from exc
+        data_uri = base64.b64encode(output.getvalue()).decode("ascii")
+        image_pages.append(
+            '<figure class="attachment-image">'
+            f"<figcaption>附件 {number}：{_esc(name)}</figcaption>"
+            f'<img src="data:image/png;base64,{data_uri}" alt="附件 {number}：{_esc(name)}">'
+            "</figure>"
+        )
+
+    return (
+        '<section class="attachment-overview">'
+        f"<h2>附件（共 {len(attachment_names)} 份）</h2>"
+        f"<ul>{rows}</ul>"
+        "</section>"
+        f"{''.join(image_pages)}"
+    )
+
+
+def render_petition_print_html(
+    case_obj: PetitionCase,
+    *,
+    attachment_names: Sequence[tuple[int, str, str]] = (),
+    image_attachments: Sequence[tuple[int, str, bytes]] = (),
+) -> str:
     """Render a petition intake detail sheet in the campus-office format."""
 
     def print_datetime(value: object | None) -> str:
@@ -1650,6 +1703,7 @@ def render_petition_print_html(case_obj: PetitionCase) -> str:
     org_name = getattr(getattr(case_obj, "current_org", None), "name", None) or "未設定"
     type_name = getattr(getattr(case_obj, "type", None), "name", None) or "未分類"
     generated_at = print_datetime(dt.datetime.now(TAIPEI))
+    attachments_html = _petition_attachment_html(attachment_names, image_attachments)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-TW">
@@ -1814,6 +1868,15 @@ def render_petition_print_html(case_obj: PetitionCase) -> str:
       text-align: right;
     }}
     .handler-line {{ margin: 0 0 1mm; }}
+    .attachment-overview {{ break-before: page; page-break-before: always; }}
+    .attachment-overview h2 {{ margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 1px solid #111; font-size: 15pt; font-weight: 400; }}
+    .attachment-overview ul {{ margin: 0; padding: 0; list-style: none; }}
+    .attachment-overview li {{ display: flex; justify-content: space-between; gap: 5mm; padding: 3mm; border: 1px solid #999; }}
+    .attachment-overview li + li {{ border-top: 0; }}
+    .attachment-overview li span {{ flex: 0 0 auto; color: #555; font-size: 10pt; }}
+    .attachment-image {{ break-before: page; page-break-before: always; margin: 0; text-align: center; }}
+    .attachment-image figcaption {{ margin: 0 0 4mm; text-align: left; font-size: 13pt; }}
+    .attachment-image img {{ display: block; max-width: 100%; max-height: 235mm; margin: 0 auto; object-fit: contain; }}
   </style>
 </head>
 <body>
@@ -1829,6 +1892,39 @@ def render_petition_print_html(case_obj: PetitionCase) -> str:
     <p class="last-updated">最後更新：{_esc(print_updated_at(case_obj.updated_at))}</p>
     <p class="handler-line">陳情承辦人：{_esc(assigned_name)}</p>
     <p class="handler-line">聯絡信箱：<a href="mailto:{_esc(contact_email)}">{_esc(contact_email)}</a></p>
+    {attachments_html}
+  </main>
+</body>
+</html>"""
+
+
+def render_petition_attachment_cover_html(
+    case_number: str,
+    attachment_number: int,
+    filename: str,
+) -> str:
+    """Render a labeled cover page before a document attachment in a case PDF."""
+    return f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    {_font_faces()}
+    @page {{ size: A4 portrait; margin: 18mm; }}
+    body {{ margin: 0; color: #111; font-family: "OfficialKai", serif; font-size: 14pt; }}
+    main {{ display: flex; min-height: 245mm; flex-direction: column; justify-content: center; }}
+    p {{ margin: 0 0 8mm; text-align: center; }}
+    h1 {{ margin: 0 0 12mm; text-align: center; font-size: 26pt; font-weight: 400; }}
+    .filename {{ padding: 8mm; border: 1px solid #111; overflow-wrap: anywhere; }}
+    .case {{ margin-top: 10mm; color: #555; font-size: 11pt; }}
+  </style>
+</head>
+<body>
+  <main>
+    <p>附件 {attachment_number}</p>
+    <h1>陳情案件附件</h1>
+    <div class="filename">{_esc(filename)}</div>
+    <p class="case">案件編號：{_esc(case_number)}</p>
   </main>
 </body>
 </html>"""

@@ -19,7 +19,6 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1233,12 +1232,25 @@ async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Pet
 )
 async def print_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Response:
     """產生供承辦列印給學校處室的案件詳情 PDF。"""
-    from api.services.official_print import render_petition_print_html, render_print_pdf
-
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
-    html_content = render_petition_print_html(case_obj)
-    pdf_bytes = await run_in_threadpool(render_print_pdf, html_content)
+    include_internal, _ = await _assert_case_access(session, case_obj, user)
+    from api.services.petition_preview import PetitionPreviewError, PetitionPreviewUnavailable
+    from api.services.petition_print import render_petition_case_pdf
+
+    try:
+        pdf_bytes = await render_petition_case_pdf(case_obj, include_internal=include_internal)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在") from exc
+    except PetitionPreviewUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    except (PetitionPreviewError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc) or "附件無法列印",
+        ) from exc
+
     filename = f"陳情案件_{case_obj.case_number}_案件詳情.pdf"
     return Response(
         content=pdf_bytes,

@@ -1191,18 +1191,63 @@ async def test_account_reply_attachment_is_added_to_notification_email(
 
 
 async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(
-    db_session, authed_client_factory
+    db_session, authed_client_factory, tmp_path, monkeypatch
 ) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+    from pypdf import PageObject, PdfReader
+
+    from api.core import config as config_module
+    from api.services.official_print import render_print_pdf
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
     org, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
     case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
 
-    handler_response = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}/print")
+    image_buffer = BytesIO()
+    Image.new("RGB", (8, 8), color=(30, 100, 180)).save(image_buffer, format="PNG")
+    attachment_pdf = render_print_pdf("<!doctype html><html><body>陳情附件文件內容</body></html>")
+    handler_client = authed_client_factory(handler)
+    uploaded_pdf = await handler_client.post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("補充資料.pdf", attachment_pdf, "application/pdf")},
+        data={"visibility": "public"},
+    )
+    uploaded_image = await handler_client.post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("現場照片.png", image_buffer.getvalue(), "image/png")},
+        data={"visibility": "public"},
+    )
+    assert uploaded_pdf.status_code == 201
+    assert uploaded_image.status_code == 201
+
+    handler_response = await handler_client.get(f"/petitions/{case_obj.id}/print")
     assert handler_response.status_code == 200
     assert handler_response.headers["content-type"] == "application/pdf"
     assert handler_response.content.startswith(b"%PDF")
+    reader = PdfReader(BytesIO(handler_response.content))
+    printed_text = "".join(page.extract_text() or "" for page in reader.pages)
+
+    def page_has_image(page: PageObject) -> bool:
+        resources = page.get("/Resources")
+        if resources is None:
+            return False
+        xobjects = resources.get_object().get("/XObject")
+        if xobjects is None:
+            return False
+        return any(
+            xobject.get_object().get("/Subtype") == "/Image"
+            for xobject in xobjects.get_object().values()
+        )
+
+    assert "附件 1：補充資料.pdf" in printed_text
+    assert "附件 2：現場照片.png" in printed_text
+    assert "陳情附件文件內容" in printed_text
+    assert any(page_has_image(page) for page in reader.pages)
 
     owner_response = await authed_client_factory(owner).get(f"/petitions/{case_obj.id}/print")
     assert owner_response.status_code == 403

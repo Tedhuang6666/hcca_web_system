@@ -6,9 +6,11 @@ from types import SimpleNamespace
 from urllib.parse import quote
 
 import pytest
-from pypdf import PdfReader
+from PIL import Image
+from pypdf import PageObject, PdfReader
 
-from api.services import official_print
+from api.models.petition import PetitionAttachmentVisibility
+from api.services import official_print, petition_print
 from api.services.official_print import (
     _BUNDLED_KAI_FONT,
     _BUNDLED_LISHU_FONT,
@@ -143,6 +145,109 @@ def test_render_petition_print_html_uses_intake_detail_layout() -> None:
     assert ".print-time" in html and ".last-updated" in html
     assert "正式回覆" not in html
     assert "處理時間軸" not in html
+
+
+@pytest.mark.asyncio
+async def test_petition_print_embeds_images_and_appends_labeled_documents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_buffer = BytesIO()
+    Image.new("RGB", (8, 8), color=(30, 100, 180)).save(image_buffer, format="PNG")
+    image_bytes = image_buffer.getvalue()
+    pdf_attachment = render_print_pdf("<!doctype html><html><body>PDF 附件原文內容</body></html>")
+    office_attachment = render_print_pdf(
+        "<!doctype html><html><body>Office 附件轉檔內容</body></html>"
+    )
+
+    class TestStorage:
+        async def read_bytes(self, storage_key: str) -> bytes:
+            return {
+                "petitions/1150001/photo.png": image_bytes,
+                "petitions/1150001/document.pdf": pdf_attachment,
+                "petitions/1150001/form.docx": b"office source",
+                "petitions/1150001/internal.pdf": pdf_attachment,
+            }[storage_key]
+
+    async def convert_office(_content: bytes, _filename: str) -> bytes:
+        return office_attachment
+
+    monkeypatch.setattr(petition_print, "get_storage", lambda: TestStorage())
+    monkeypatch.setattr(petition_print, "convert_office_attachment_to_pdf", convert_office)
+
+    def attachment(
+        *,
+        filename: str,
+        storage_key: str,
+        content_type: str,
+        visibility: PetitionAttachmentVisibility = PetitionAttachmentVisibility.PUBLIC,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            display_name=None,
+            filename=filename,
+            storage_key=storage_key,
+            content_type=content_type,
+            visibility=visibility,
+        )
+
+    case_obj = SimpleNamespace(
+        case_number="1150001",
+        title="附件列印測試",
+        content="包含圖片與文件附件。",
+        type=SimpleNamespace(name="建議"),
+        current_org=SimpleNamespace(name="班聯會"),
+        assigned_to=SimpleNamespace(display_name="承辦人"),
+        updated_at=None,
+        attachments=[
+            attachment(
+                filename="現場照片.png",
+                storage_key="petitions/1150001/photo.png",
+                content_type="image/png",
+            ),
+            attachment(
+                filename="補充資料.pdf",
+                storage_key="petitions/1150001/document.pdf",
+                content_type="application/pdf",
+            ),
+            attachment(
+                filename="說明表.docx",
+                storage_key="petitions/1150001/form.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+            attachment(
+                filename="內部附件.pdf",
+                storage_key="petitions/1150001/internal.pdf",
+                content_type="application/pdf",
+                visibility=PetitionAttachmentVisibility.INTERNAL,
+            ),
+        ],
+    )
+
+    pdf_bytes = await petition_print.render_petition_case_pdf(case_obj, include_internal=False)
+    reader = PdfReader(BytesIO(pdf_bytes))
+    text = "".join(page.extract_text() or "" for page in reader.pages)
+
+    def page_has_image(page: PageObject) -> bool:
+        resources = page.get("/Resources")
+        if resources is None:
+            return False
+        xobjects = resources.get_object().get("/XObject")
+        if xobjects is None:
+            return False
+        return any(
+            xobject.get_object().get("/Subtype") == "/Image"
+            for xobject in xobjects.get_object().values()
+        )
+
+    contains_image = any(page_has_image(page) for page in reader.pages)
+
+    assert pdf_bytes.startswith(b"%PDF")
+    assert "附件 1：現場照片.png" in text
+    assert "附件 2：補充資料.pdf" in text
+    assert "附件 3：說明表.docx" in text
+    assert "PDF 附件原文內容" in text
+    assert "Office 附件轉檔內容" in text
+    assert "內部附件.pdf" not in text
+    assert contains_image
 
 
 @pytest.mark.asyncio
