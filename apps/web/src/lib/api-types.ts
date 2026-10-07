@@ -10139,6 +10139,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出可供商品分類使用的活動 */
+        get: operations["list_shop_activities_shop_activities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/catalog": {
         parameters: {
             query?: never;
@@ -12150,6 +12167,42 @@ export interface components {
              */
             reason: string;
         };
+        /** ActivityOut */
+        ActivityOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Ends At */
+            ends_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Org Id */
+            org_id: string | null;
+            /** Starts At */
+            starts_at: string | null;
+            status: components["schemas"]["ActivityStatus"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ActivityStatus
+         * @enum {string}
+         */
+        ActivityStatus: "draft" | "active" | "ended" | "archived";
         /** AddSinglePosition */
         AddSinglePosition: {
             /** End Date */
@@ -53248,6 +53301,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shop_activities_shop_activities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"][];
                 };
             };
         };

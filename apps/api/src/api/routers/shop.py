@@ -31,6 +31,7 @@ from api.models.shop import (
 )
 from api.models.user import User
 from api.routers._common import or_404
+from api.schemas.activity import ActivityOut
 from api.schemas.shop import (
     CatalogCategoryOut,
     ClassCollectionUpdate,
@@ -253,6 +254,17 @@ async def list_categories(
     )
 
 
+@router.get("/activities", response_model=list[ActivityOut], summary="列出可供商品分類使用的活動")
+async def list_shop_activities(session: DbDep, current_user: CurrentUser) -> list[ActivityOut]:
+    if await _has_shop_manage(session, current_user):
+        activities = await activity_svc.list_activities(session, active_only=True)
+    else:
+        activities = await activity_svc.list_user_convener_activities(
+            session, current_user.id, active_only=True
+        )
+    return [ActivityOut.model_validate(activity) for activity in activities]
+
+
 @router.post(
     "/categories",
     response_model=ProductCategoryOut,
@@ -275,6 +287,8 @@ async def update_category(
 ) -> ProductCategory:
     category = await _get_category_or_404(category_id, session)
     await _require_shop_manager(session, current_user, category.activity_id)
+    if "activity_id" in payload.model_fields_set:
+        await _require_shop_manager(session, current_user, payload.activity_id)
     return await shop_svc.update_category(session, category, data=payload)
 
 

@@ -12,6 +12,8 @@ import type { components } from './api-types'
 
 // prettier-ignore-start
 export type AccessBlockStatus = components['schemas']['AccessBlockStatus']
+export type ActivityOut = components['schemas']['ActivityOut']
+export type ActivityStatus = components['schemas']['ActivityStatus']
 export type AddSinglePosition = components['schemas']['AddSinglePosition']
 export type AdminAssignRequest = components['schemas']['AdminAssignRequest']
 export type AdminDashboardStats = components['schemas']['AdminDashboardStats']
@@ -861,6 +863,7 @@ export type api__schemas__seating__AssignmentOut = components['schemas']['api__s
 
 // ── 別名（types.ts 使用不同名稱）────────────────────────────────────────────
 // prettier-ignore-start
+export type Activity = components['schemas']['ActivityOut']
 export type AmendmentComparisonRow = components['schemas']['AmendmentComparisonRowOut']
 export type DefenseRule = components['schemas']['DefenseRuleOut']
 export type NotificationPreferences = components['schemas']['NotificationPreferencesOut']

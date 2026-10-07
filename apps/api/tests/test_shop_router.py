@@ -454,6 +454,115 @@ async def test_current_registration_requires_login(client) -> None:
     ).status_code == 401
 
 
+async def test_shop_activity_options_only_include_accessible_active_activities(
+    client, db_session, member_user, authed_client_factory
+) -> None:
+    first = Activity(name="校商預購", status=ActivityStatus.ACTIVE)
+    second = Activity(name="五校聯合聖誕傳情", status=ActivityStatus.ACTIVE)
+    archived = Activity(name="已封存活動", status=ActivityStatus.ARCHIVED)
+    db_session.add_all([first, second, archived])
+    await db_session.flush()
+
+    assert (await client.get("/shop/activities")).status_code == 401
+    member_client = authed_client_factory(member_user)
+    assert (await member_client.get("/shop/activities")).json() == []
+
+    db_session.add(
+        ActivityConvener(
+            activity_id=first.id,
+            user_id=member_user.id,
+            start_date=date.today() - timedelta(days=1),
+        )
+    )
+    await db_session.flush()
+    own_activities = await member_client.get("/shop/activities")
+    assert own_activities.status_code == 200
+    assert [row["id"] for row in own_activities.json()] == [str(first.id)]
+
+    await _grant_permission(db_session, member_user, "shop:manage")
+    manager_activities = await member_client.get("/shop/activities")
+    assert manager_activities.status_code == 200
+    assert {row["id"] for row in manager_activities.json()} == {
+        str(first.id),
+        str(second.id),
+    }
+
+
+async def test_category_activity_update_checks_both_activity_scopes(
+    db_session, member_user, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    first = Activity(name="校商預購", status=ActivityStatus.ACTIVE)
+    second = Activity(name="五校聯合聖誕傳情", status=ActivityStatus.ACTIVE)
+    db_session.add_all([first, second])
+    await db_session.flush()
+    db_session.add(
+        ActivityConvener(
+            activity_id=first.id,
+            user_id=member_user.id,
+            start_date=date.today() - timedelta(days=1),
+        )
+    )
+    category = await _make_category(db_session, creator, activity_id=first.id)
+    await db_session.flush()
+    category_client = authed_client_factory(member_user)
+
+    move_to_other_activity = await category_client.patch(
+        f"/shop/categories/{category.id}", json={"activity_id": str(second.id)}
+    )
+    assert move_to_other_activity.status_code == 403
+    move_to_general = await category_client.patch(
+        f"/shop/categories/{category.id}", json={"activity_id": None}
+    )
+    assert move_to_general.status_code == 403
+
+
+async def test_assigning_categories_to_activities_splits_preorders(
+    db_session, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session, student_id="11510")
+    manager = await _bare_user(db_session)
+    first = Activity(name="校商預購", status=ActivityStatus.ACTIVE)
+    second = Activity(name="五校聯合聖誕傳情", status=ActivityStatus.ACTIVE)
+    db_session.add_all([first, second])
+    await db_session.flush()
+
+    first_category = await _make_category(db_session, creator, name="校商商品")
+    second_category = await _make_category(db_session, creator, name="傳情卡")
+    first_product = await _make_active_product(db_session, creator, category=first_category)
+    second_product = await _make_active_product(db_session, creator, category=second_category)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+
+    for category, activity in ((first_category, first), (second_category, second)):
+        updated = await manager_client.patch(
+            f"/shop/categories/{category.id}", json={"activity_id": str(activity.id)}
+        )
+        assert updated.status_code == 200
+        assert updated.json()["activity_id"] == str(activity.id)
+
+    buyer_client = authed_client_factory(buyer)
+    first_order = await buyer_client.put(
+        f"/shop/registrations/current/products/{first_product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    second_order = await buyer_client.put(
+        f"/shop/registrations/current/products/{second_product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert first_order.status_code == second_order.status_code == 200
+    assert first_order.json()["id"] != second_order.json()["id"]
+    assert first_order.json()["activity_id"] == str(first.id)
+    assert second_order.json()["activity_id"] == str(second.id)
+
+    registrations = await buyer_client.get("/shop/registrations")
+    assert {row["activity_id"] for row in registrations.json()} == {
+        str(first.id),
+        str(second.id),
+    }
+
+
 async def test_current_registration_is_scoped_to_authenticated_user(
     db_session, authed_client_factory
 ) -> None:
