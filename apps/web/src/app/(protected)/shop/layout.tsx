@@ -9,7 +9,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
 import { usePermissions } from "@/hooks/usePermissions";
-import { BarChart2, ListChecks, PackageSearch } from "lucide-react";
+import { BarChart2, ListChecks, PackageSearch, ShoppingBag, ClipboardList } from "lucide-react";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 
@@ -18,6 +18,7 @@ import "../../(public)/public-footer.css";
 import "./shop-public.css";
 
 function PublicShopChrome({ children }: { children: React.ReactNode }) {
+  const { isAdmin, permissions } = usePermissions();
   return (
     <PublicModuleStatusProvider>
       <div className="public-site min-h-screen text-[var(--public-text)]">
@@ -28,6 +29,7 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
           跳到主要內容
         </a>
         <PublicSiteHeader />
+        <ShopWorkspaceNavigation groups={groupShopTabs(getShopTabs(isAdmin, permissions))} />
         <main id="main-content">
           <PageTransition>{children}</PageTransition>
         </main>
@@ -78,9 +80,11 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
     || permissions.has("shop:view_all")
     || permissions.has("shop:manage_orders")
     || permissions.has("shop:manage");
-  const canCollectForClass = permissions.has("class:shop_collect");
+  const canCollectForClass = isAdmin || permissions.has("admin:all") || permissions.has("class:shop_collect");
 
   return [
+    { href: "/shop", label: "自己訂購", icon: ShoppingBag, end: true },
+    { href: "/shop/orders", label: "我的訂單", icon: ClipboardList },
     ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "收款與代訂", icon: ListChecks }] : []),
     ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校訂單總覽", icon: BarChart2 }] : []),
     ...(canManage ? [{ href: "/shop/admin", label: "商品與活動設定", icon: PackageSearch }] : []),
@@ -95,6 +99,10 @@ type ShopNavigationGroup = {
 function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
   return [
     {
+      label: "學生自購",
+      tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
+    },
+    {
       label: "班代",
       tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
     },
@@ -108,12 +116,32 @@ function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
 function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const activeGroup = groups.find((group) => group.tabs.some((tab) =>
+    tab.href === "/shop" ? pathname === "/shop" : pathname.startsWith(tab.href),
+  ));
 
   return (
     <nav
       aria-label="商品工作區"
       className="shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4"
     >
+      <div className="shop-role-navigation">
+        <div className="shop-role-links">
+          {groups.map((group) => (
+            <Link key={group.label} href={group.tabs[0].href}
+              aria-current={group === activeGroup ? "location" : undefined}>
+              {group.label === "班代" ? "班代代購" : group.label}
+            </Link>
+          ))}
+        </div>
+        {activeGroup && activeGroup.tabs.length > 1 && (
+          <div className="shop-role-shortcuts">
+            {activeGroup.tabs.map((tab) => (
+              <Link key={tab.href} href={tab.href} aria-current={pathname === tab.href ? "page" : undefined}>{tab.label}</Link>
+            ))}
+          </div>
+        )}
+      </div>
       {groups.map((group) => (
         <section key={group.label} className="shop-workspace-group" aria-label={`${group.label}功能`}>
           <h2 className="shop-workspace-label">{group.label}</h2>

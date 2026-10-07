@@ -24,6 +24,8 @@ from api.schemas.school_class import (
 )
 from api.schemas.shop import (
     CartItemCreate,
+    ClassOrderUpsert,
+    OrderItemCreate,
     ProductCategoryCreate,
     ProductCreate,
     ProductSeriesCreate,
@@ -34,6 +36,57 @@ from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 
 # ── 測試輔助 ──────────────────────────────────────────────────────────────────
+
+
+async def test_assisted_order_merges_identical_variants_and_preserves_stock(db_session):
+    buyer = await _make_user(db_session)
+    product = await _make_product(db_session, stock=5)
+    options = [group.options[0].id for group in product.variant_groups]
+    different = [product.variant_groups[0].options[1].id, options[1]]
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(
+            user_id=buyer.id,
+            items=[
+                OrderItemCreate(product_id=product.id, quantity=1, option_ids=options),
+                OrderItemCreate(product_id=product.id, quantity=2, option_ids=options[::-1]),
+                OrderItemCreate(product_id=product.id, quantity=2, option_ids=different),
+            ],
+        ),
+    )
+    order = await shop_svc.get_order(db_session, orders[0].id)
+    assert len(order.items) == 2
+    assert sorted(item.quantity for item in order.items) == [2, 3]
+    assert order.total_price == 500
+    assert product.stock_quantity == 0
+    assert order.is_class_collected is False
+    assert order.is_paid is False
+
+
+async def test_assisted_edit_merges_duplicate_items(db_session):
+    buyer = await _make_user(db_session)
+    product = await _make_product(db_session, stock=10)
+    options = [group.options[0].id for group in product.variant_groups]
+    item = OrderItemCreate(product_id=product.id, quantity=1, option_ids=options)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(user_id=buyer.id, items=[item]),
+    )
+    order = await shop_svc.get_order(db_session, orders[0].id)
+    await shop_svc.replace_order_items(
+        db_session,
+        order,
+        data=ClassOrderUpsert(user_id=buyer.id, items=[item, item]),
+    )
+    await db_session.refresh(order, ["items"])
+    assert len(order.items) == 1
+    assert order.items[0].quantity == 2
+    assert order.total_price == 200
+    assert product.stock_quantity == 8
 
 
 async def _make_user(db: AsyncSession, *, student_id: str | None = None) -> User:

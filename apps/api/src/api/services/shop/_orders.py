@@ -542,20 +542,22 @@ async def _create_order_from_items(
 async def _order_items_to_cart_items(
     session: AsyncSession, items: list[OrderItemCreate]
 ) -> list[CartItem]:
-    cart_items: list[CartItem] = []
+    by_variant: dict[tuple[uuid.UUID, str], CartItem] = {}
     for item in items:
         product = await get_product(session, item.product_id)
         if product is None:
             raise ValueError("找不到此商品")
         selected = _resolve_selected_options(product, item.option_ids)
-        cart_items.append(
-            CartItem(
+        key = (item.product_id, _options_signature(selected))
+        if key in by_variant:
+            by_variant[key].quantity += item.quantity
+        else:
+            by_variant[key] = CartItem(
                 product_id=item.product_id,
                 quantity=item.quantity,
                 selected_options=selected,
             )
-        )
-    return cart_items
+    return list(by_variant.values())
 
 
 async def create_direct_order(
