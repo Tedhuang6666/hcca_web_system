@@ -88,7 +88,7 @@ function PetitionAttachmentRow({
             aria-expanded={isOpen}
             onClick={() => setIsOpen((value) => !value)}
           >
-            {isOpen ? "收起預覽" : "站內預覽"}
+            {isOpen ? "收起預覽" : "查看附件"}
           </button>
           <AnimatedDownloadButton
             className="btn btn-ghost min-h-9 px-3 text-sm"
@@ -102,7 +102,7 @@ function PetitionAttachmentRow({
         <div className="border-t p-3" style={{ borderColor: "var(--border)", background: "var(--bg-hover)" }}>
           {loading ? (
             <p className="p-6 text-center text-sm" style={{ color: "var(--text-muted)" }} aria-live="polite">
-              正在準備站內預覽…
+              正在準備查看附件…
             </p>
           ) : previewError ? (
             <p className="p-4 text-sm" role="alert" style={{ color: "var(--danger)" }}>{previewError}</p>
