@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
@@ -1217,6 +1218,9 @@ export default function ShopAdminPage() {
   const { can } = usePermissions();
 
   const [tab, setTab] = useState<"catalog" | "stats" | "promotions">("catalog");
+  const [clearOrdersOpen, setClearOrdersOpen] = useState(false);
+  const [clearingOrders, setClearingOrders] = useState(false);
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   const allowed = can("shop:manage");
 
   // 一層一層的選取狀態
@@ -1232,6 +1236,24 @@ export default function ShopAdminPage() {
   const [directProducts, setDirectProducts] = useState<ProductOut[]>([]);
   const [allProducts, setAllProducts] = useState<ProductOut[]>([]);
   const [product, setProduct] = useState<ProductOut | null>(null);
+
+  const clearAllOrders = async () => {
+    setClearingOrders(true);
+    try {
+      const result = await shopApi.clearAllOrders();
+      setClearOrdersOpen(false);
+      setStatsRefreshKey((current) => current + 1);
+      if (result.deleted_order_count > 0) {
+        toast.success(`已清除 ${result.deleted_order_count} 筆訂單，並回補庫存與優惠使用次數`);
+      } else {
+        toast.info("目前沒有商品訂單資料");
+      }
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "清除商品訂購資料失敗"));
+    } finally {
+      setClearingOrders(false);
+    }
+  };
 
   const copyOrderLink = async (id: string) => {
     const url = new URL("/shop", window.location.origin);
@@ -1486,21 +1508,30 @@ export default function ShopAdminPage() {
         <Link href="/shop/council-orders" className="btn btn-ghost">全校訂單總覽</Link>
       </div>
 
-      <div className="flex gap-0.5 p-1 rounded-xl w-fit"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-        {([["catalog", "商品目錄"], ["stats", "訂購統計"], ["promotions", "優惠設定"]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
-            className="min-h-11 px-4 py-1.5 rounded-lg text-xs font-medium"
-            style={tab === k
-              ? { background: "var(--primary-dim)", color: "var(--primary)" }
-              : { color: "var(--text-muted)" }}>
-            {label}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-0.5 p-1 rounded-xl w-fit"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+          {([["catalog", "商品目錄"], ["stats", "訂購統計"], ["promotions", "優惠設定"]] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setTab(k)}
+              className="min-h-11 px-4 py-1.5 rounded-lg text-xs font-medium"
+              style={tab === k
+                ? { background: "var(--primary-dim)", color: "var(--primary)" }
+                : { color: "var(--text-muted)" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {tab === "stats" && (
+          <button type="button" onClick={() => setClearOrdersOpen(true)}
+            className="btn btn-ghost min-h-11 px-3 text-sm"
+            style={{ color: "var(--danger)", border: "1px solid var(--border)" }}>
+            <Trash2 size={15} /> 清除所有商品訂購資料
           </button>
-        ))}
+        )}
       </div>
 
       {tab === "stats" ? (
-        <StatsView />
+        <StatsView key={statsRefreshKey} />
       ) : tab === "promotions" ? (
         <ShopPromotionPanel />
       ) : (
@@ -1611,6 +1642,33 @@ export default function ShopAdminPage() {
             </section>
           </div>
         </div>
+      )}
+
+      {clearOrdersOpen && (
+        <Modal title="清除所有商品訂購資料？" onClose={() => {
+          if (!clearingOrders) setClearOrdersOpen(false);
+        }} size="md">
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-lg p-3"
+              style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" style={{ color: "var(--danger)" }} />
+              <div className="space-y-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                <p>這會永久刪除所有使用者、所有活動與所有狀態的商品訂單，包含已收款的訂單。</p>
+                <p>系統會同步清除訂單明細、商品應收款與尚未寄出的確認通知，並回補訂單占用的庫存及優惠使用次數。</p>
+                <p>商品目錄、購物車和稽核紀錄會保留。此動作無法復原。</p>
+              </div>
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setClearOrdersOpen(false)} disabled={clearingOrders}
+                className="btn btn-ghost min-h-11 px-4 disabled:opacity-50">取消</button>
+              <button type="button" onClick={() => void clearAllOrders()} disabled={clearingOrders}
+                className="btn min-h-11 px-4 disabled:opacity-50"
+                style={{ background: "#b83a30", color: "#fff", border: "none" }}>
+                {clearingOrders ? "清除中…" : "確認清除所有訂單"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {mobileDetailOpen && cat && (

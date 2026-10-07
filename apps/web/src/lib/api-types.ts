@@ -10255,7 +10255,11 @@ export interface paths {
         get: operations["list_orders_shop_orders_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 清除全部商品訂購資料
+         * @description 僅限商品管理者。刪除所有商品訂單與訂單明細，清除相關應收款及尚未寄出的確認通知，並回補仍占用的有限庫存與優惠使用次數；商品目錄和稽核紀錄保留。
+         */
+        delete: operations["clear_all_order_data_shop_orders_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -28451,6 +28455,11 @@ export interface components {
             notes: string | null;
             /** Reopened At */
             reopened_at: string | null;
+        };
+        /** ShopOrdersClearOut */
+        ShopOrdersClearOut: {
+            /** Deleted Order Count */
+            deleted_order_count: number;
         };
         /** ShopPromotionCreate */
         ShopPromotionCreate: {
@@ -53579,6 +53588,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_all_order_data_shop_orders_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOrdersClearOut"];
                 };
             };
         };

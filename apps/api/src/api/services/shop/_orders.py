@@ -6,12 +6,15 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
 from api.core.config import settings
+from api.models.activity_link import ActivityLink, ActivityLinkKind
+from api.models.outbox import OutboxEvent, OutboxStatus
+from api.models.receivable import Receivable, ReceivableSource
 from api.models.shop import (
     Cart,
     CartItem,
@@ -582,6 +585,66 @@ async def create_direct_order(
         await receivable_svc.sync_shop_order(session, order)
         orders.append(order)
     return orders
+
+
+async def clear_all_orders(session: AsyncSession) -> int:
+    """清除商品訂單及其衍生資料，並回補訂單占用的庫存與優惠次數。"""
+    order_ids = list((await session.scalars(select(Order.id))).all())
+    if not order_ids:
+        return 0
+
+    active_quantities = await session.execute(
+        select(OrderItem.product_id, func.sum(OrderItem.quantity))
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(
+            Order.id.in_(order_ids),
+            Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+        )
+        .group_by(OrderItem.product_id)
+    )
+    for product_id, quantity in active_quantities:
+        product = await session.get(Product, product_id, with_for_update=True)
+        if product is None or product.is_unlimited:
+            continue
+        product.stock_quantity += int(quantity or 0)
+        if product.status == ProductStatus.SOLD_OUT and product.stock_quantity > 0:
+            product.status = ProductStatus.ACTIVE
+
+    promotion_usage = await session.execute(
+        select(ShopOrderPromotion.promotion_id, func.count())
+        .where(ShopOrderPromotion.order_id.in_(order_ids))
+        .group_by(ShopOrderPromotion.promotion_id)
+    )
+    for promotion_id, usage_count in promotion_usage:
+        promotion = await session.get(ShopPromotion, promotion_id, with_for_update=True)
+        if promotion is not None:
+            promotion.used_count = max(0, promotion.used_count - int(usage_count))
+
+    order_id_strings = {str(order_id) for order_id in order_ids}
+    pending_confirmations = await session.scalars(
+        select(OutboxEvent).where(
+            OutboxEvent.event_type == "shop.order_confirmed",
+            OutboxEvent.status == OutboxStatus.PENDING,
+        )
+    )
+    for event in pending_confirmations:
+        if (event.payload or {}).get("order_id") in order_id_strings:
+            await session.delete(event)
+
+    await session.execute(
+        delete(Receivable).where(
+            Receivable.source_type == ReceivableSource.SHOP_ORDER.value,
+            Receivable.source_id.in_(order_ids),
+        )
+    )
+    await session.execute(
+        delete(ActivityLink).where(
+            ActivityLink.target_type == ActivityLinkKind.SHOP_ORDER.value,
+            ActivityLink.target_id.in_(order_ids),
+        )
+    )
+    await session.execute(delete(Order).where(Order.id.in_(order_ids)))
+    return len(order_ids)
 
 
 async def checkout(
