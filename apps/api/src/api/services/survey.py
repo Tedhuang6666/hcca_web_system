@@ -139,6 +139,7 @@ async def list_surveys(
                 Survey.created_by,
                 Survey.created_at,
                 Survey.is_public,
+                Survey.is_listed,
                 Survey.allowed_org_ids_json,
                 Survey.allowed_user_ids_json,
                 Survey.allowed_domains_json,
@@ -153,9 +154,10 @@ async def list_surveys(
     if activity_id:
         q = q.where(Survey.activity_id == activity_id)
     if public_only:
-        # 公開列表：僅顯示標記為公開且已開放/已截止的問卷（不含草稿、封存）
+        # 公開列表：僅顯示允許匿名填答、設定公開顯示且已開放/已截止的問卷。
         q = q.where(
             Survey.is_public == True,  # noqa: E712
+            Survey.is_listed == True,  # noqa: E712
             Survey.status.in_([SurveyStatus.OPEN, SurveyStatus.CLOSED]),
         )
     if status:
@@ -189,6 +191,7 @@ async def create_survey(
         activity_id=data.activity_id,
         created_by=created_by,
         is_public=data.is_public,
+        is_listed=data.is_listed,
         allowed_org_ids_json=_dump_str_list(data.allowed_org_ids),
         allowed_user_ids_json=_dump_str_list(data.allowed_user_ids),
         allowed_domains_json=_dump_str_list(data.allowed_domains),
@@ -253,7 +256,10 @@ async def sync_announcement(
     was_published = announcement.is_published
     announcement.title = (survey.announcement_title or survey.title).strip() or survey.title
     announcement.content = _announcement_content(message)
-    announcement.is_published = survey.status in {SurveyStatus.OPEN, SurveyStatus.CLOSED}
+    announcement.is_published = survey.is_listed and survey.status in {
+        SurveyStatus.OPEN,
+        SurveyStatus.CLOSED,
+    }
     announcement.is_urgent = announcement.is_published and survey.show_announcement_popup
     announcement.urgent_until = survey.closes_at if announcement.is_urgent else None
     announcement.link_url = f"/surveys/{quote(survey.title, safe='')}"

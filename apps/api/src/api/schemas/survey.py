@@ -358,6 +358,7 @@ class SurveyOut(BaseModel):
     questions: list[SurveyQuestionOut] = []
     response_count: int = 0
     is_public: bool = False
+    is_listed: bool = True
     allowed_org_ids: list[str] = Field(default_factory=list)
     allowed_user_ids: list[str] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
@@ -387,6 +388,7 @@ class SurveyOut(BaseModel):
             "updated_at",
             "questions",
             "is_public",
+            "is_listed",
             "announcement",
             "announcement_title",
             "show_announcement_popup",
@@ -417,9 +419,10 @@ class SurveyListItem(BaseModel):
 
 
 class SurveyAudience(BaseModel):
-    """填答對象設定（公開與否、限制名單）。"""
+    """填答與公開列表設定。"""
 
     is_public: bool = False
+    is_listed: bool = True
     allowed_org_ids: list[uuid.UUID] = Field(default_factory=list)
     allowed_user_ids: list[uuid.UUID] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
@@ -445,6 +448,7 @@ class SurveyUpdate(BaseModel):
     opens_at: datetime | None = None
     closes_at: datetime | None = None
     is_public: bool | None = None
+    is_listed: bool = True
     allowed_org_ids: list[uuid.UUID] | None = None
     allowed_user_ids: list[uuid.UUID] | None = None
     allowed_domains: list[str] | None = None

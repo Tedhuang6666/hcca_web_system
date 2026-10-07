@@ -814,11 +814,15 @@ function QuestionInput({
 }
 
 /* ── 分享問卷（複製連結 + QR code） ───────────────────────────────────────── */
-function ShareModal({ title, onClose }: { title: string; onClose: () => void }) {
+function ShareModal({ surveyId, title, onClose }: {
+  surveyId: string;
+  title: string;
+  onClose: () => void;
+}) {
   const [qr, setQr] = useState("");
   const shareUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/surveys/${title}`
+      ? `${window.location.origin}/surveys/${encodeURIComponent(surveyId)}`
       : "";
 
   useEffect(() => {
@@ -1552,7 +1556,7 @@ export default function SurveyDetailClient({
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${encodeURIComponent(survey.title)}` });
+    if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${survey.id}` });
   }, [survey]);
 
   const showValidationErrors = (errors: Record<string, string>) => {
@@ -2085,7 +2089,7 @@ export default function SurveyDetailClient({
       )}
 
       {shareOpen && (
-        <ShareModal title={survey.title} onClose={() => setShareOpen(false)} />
+        <ShareModal surveyId={survey.id} title={survey.title} onClose={() => setShareOpen(false)} />
       )}
     </div>
   );

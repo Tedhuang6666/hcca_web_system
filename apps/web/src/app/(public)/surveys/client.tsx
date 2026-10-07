@@ -41,7 +41,7 @@ export default function SurveysClient({
   const { can } = usePermissions();
   const canManage = can("survey:manage");
 
-  // 未登入者改用公開問卷列表（僅 is_public 且開放/已截止的問卷）
+  // 未登入者改用公開問卷列表（僅公開顯示且開放/已截止的問卷）
   const [surveys, loading] = useFetch(
     () => {
       const params = tab === "open" ? { status: "open" } : {};

@@ -172,6 +172,65 @@ async def test_update_survey_changes_title(
     assert response.json()["title"] == "新標題"
 
 
+async def test_link_only_survey_is_hidden_but_available_by_link(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    member_ac = authed_client_factory(member_user)
+    title = "僅限連結問卷"
+    created = await admin_ac.post(
+        "/surveys",
+        json={
+            "title": title,
+            "org_id": str(org.id),
+            "is_public": True,
+            "is_listed": False,
+            "announcement": "這則公告在問卷改為僅限連結後不應公開。",
+        },
+    )
+    assert created.status_code == 201
+    survey_id = created.json()["id"]
+    announcement_id = uuid.UUID(created.json()["announcement_id"])
+    question = await admin_ac.post(
+        f"/surveys/{survey_id}/questions",
+        json={"question_text": "你的意見？", "question_type": "text"},
+    )
+    assert question.status_code == 201
+    listed = await admin_ac.patch(f"/surveys/{survey_id}", json={"is_listed": True})
+    assert listed.status_code == 200
+    assert (await admin_ac.post(f"/surveys/{survey_id}/open")).status_code == 200
+
+    updated = await admin_ac.patch(f"/surveys/{survey_id}", json={"is_listed": False})
+    assert updated.status_code == 200
+    assert updated.json()["is_public"] is True
+    assert updated.json()["is_listed"] is False
+
+    public_list = await client.get("/surveys/public")
+    assert survey_id not in {item["id"] for item in public_list.json()}
+    by_link = await client.get(f"/surveys/public/{survey_id}")
+    assert by_link.status_code == 200
+    by_title = await client.get(f"/surveys/public/{quote(title, safe='')}")
+    assert by_title.status_code == 404
+
+    submitted = await client.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question.json()["id"], "answer_text": "連結填答"}]},
+    )
+    assert submitted.status_code == 201
+
+    announcement = await db_session.get(Announcement, announcement_id)
+    assert announcement is not None
+    assert announcement.is_published is False
+
+    forbidden_update = await member_ac.patch(f"/surveys/{survey_id}", json={"is_listed": True})
+    assert forbidden_update.status_code == 403
+
+
 async def test_add_question_then_open_survey(
     authed_client_factory: Callable[[User], AsyncClient], admin_user: User, db_session: AsyncSession
 ) -> None:
