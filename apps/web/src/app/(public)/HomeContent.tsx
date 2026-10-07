@@ -13,6 +13,7 @@ import {
 import LiveElectionCard from "@/components/site/LiveElectionCard";
 import PublicSpotlightLink from "@/components/site/PublicSpotlightLink";
 import { uploadUrl } from "@/lib/config";
+import { isAnnouncementExpired } from "@/lib/announcement-expiration";
 import { publicPageHref } from "@/lib/publicNav";
 import type {
   AnnouncementListItem,
@@ -113,8 +114,11 @@ export default function HomeContent({
   shopUnavailable: boolean;
 }) {
   const openSurvey = openSurveys[0] ?? null;
+  const visibleUrgentAnnouncement = urgentAnnouncement && !isAnnouncementExpired(urgentAnnouncement)
+    ? urgentAnnouncement
+    : null;
   const latestAnnouncements = announcements
-    .filter((item) => item.id !== urgentAnnouncement?.id)
+    .filter((item) => item.id !== visibleUrgentAnnouncement?.id && !isAnnouncementExpired(item))
     .slice(0, 2);
   const recentlyUpdatedPages = [...(bundle?.nav_pages ?? [])]
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
@@ -140,10 +144,10 @@ export default function HomeContent({
     })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const activityItems = [
-    urgentAnnouncement && {
-      href: urgentAnnouncement.link_url?.trim() || `/news/${urgentAnnouncement.id}`,
+    visibleUrgentAnnouncement && {
+      href: visibleUrgentAnnouncement.link_url?.trim() || `/news/${visibleUrgentAnnouncement.id}`,
       label: "重要公告",
-      title: urgentAnnouncement.title,
+      title: visibleUrgentAnnouncement.title,
       detail: "請優先查看",
       icon: Megaphone,
       priority: true,

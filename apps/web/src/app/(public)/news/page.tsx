@@ -7,6 +7,7 @@ import {
   fetchPublicBundle,
 } from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
+import { isAnnouncementExpired } from "@/lib/announcement-expiration";
 
 export const metadata = pageMetadata({
   title: "最新公告",
@@ -37,30 +38,37 @@ export default async function NewsPage() {
           <h1 className="text-3xl font-bold">最新公告</h1>
         </header>
         <div className="space-y-3">
-          {sorted.map((item) => (
-            <Link
-              key={item.id}
-              href={`/news/${item.id}`}
-              className="card card-hover block p-5 no-underline"
-            >
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                {item.is_urgent && (
-                  <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
-                    重要
-                  </span>
-                )}
-                <time dateTime={item.published_at ?? item.created_at}>
-                  {new Date(item.published_at ?? item.created_at).toLocaleDateString("zh-TW")}
-                </time>
-              </div>
-              <h2 className="mt-2 text-lg font-semibold leading-snug text-[var(--text-primary)]">
-                {item.title}
-              </h2>
-              <p className="mt-2 text-sm text-[var(--text-muted)]">
-                公告人：{item.author_name || "未命名"}
-              </p>
-            </Link>
-          ))}
+          {sorted.map((item) => {
+            const expired = isAnnouncementExpired(item);
+            return (
+              <Link
+                key={item.id}
+                href={`/news/${item.id}`}
+                className={`card card-hover block p-5 no-underline${expired ? " announcement-expired" : ""}`}
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                  {expired ? (
+                    <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+                      已過期
+                    </span>
+                  ) : item.is_urgent && (
+                    <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
+                      重要
+                    </span>
+                  )}
+                  <time dateTime={item.published_at ?? item.created_at}>
+                    {new Date(item.published_at ?? item.created_at).toLocaleDateString("zh-TW")}
+                  </time>
+                </div>
+                <h2 className={`mt-2 text-lg font-semibold leading-snug${expired ? " text-[var(--text-muted)]" : " text-[var(--text-primary)]"}`}>
+                  {item.title}
+                </h2>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
+                  公告人：{item.author_name || "未命名"}
+                </p>
+              </Link>
+            );
+          })}
           {sorted.length === 0 && (
             <div className="card p-10 text-center text-sm text-[var(--text-muted)]">
               目前沒有公開公告

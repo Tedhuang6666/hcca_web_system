@@ -2732,6 +2732,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   animation: surface-sheen 760ms ease;
 }
 
+.announcement-expired {
+  background: color-mix(in srgb, var(--bg-surface) 78%, var(--bg-elevated));
+  border-color: var(--border);
+}
+
 /* ── 按鈕 ─────────────────────────────────────────────────────────────── */
 .btn {
   position: relative;

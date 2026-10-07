@@ -12364,6 +12364,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Urgent Until */
+            urgent_until: string | null;
         };
         /** AnnouncementMediaOut */
         AnnouncementMediaOut: {

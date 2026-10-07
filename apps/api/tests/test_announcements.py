@@ -146,6 +146,33 @@ async def test_list_announcements_only_returns_published(
 
 
 @pytest.mark.asyncio
+async def test_list_public_announcement_includes_urgent_deadline(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    author = await _seed_user_with_codes(db_session, "ann-urgent-deadline@school.edu", [])
+    deadline = datetime(2025, 1, 1, tzinfo=UTC)
+    db_session.add(
+        Announcement(
+            title="已到期的重要公告",
+            content={},
+            author_id=author.id,
+            is_published=True,
+            is_urgent=True,
+            urgent_until=deadline,
+            audience_type="all",
+        )
+    )
+    await db_session.flush()
+
+    resp = await client.get("/announcements")
+
+    assert resp.status_code == 200
+    item = resp.json()[0]
+    assert item["title"] == "已到期的重要公告"
+    assert datetime.fromisoformat(item["urgent_until"]) == deadline
+
+
+@pytest.mark.asyncio
 async def test_get_published_announcement_without_login_is_public(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
