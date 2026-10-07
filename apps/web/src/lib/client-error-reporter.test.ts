@@ -46,7 +46,8 @@ describe("client error reporter", () => {
       image.dispatchEvent(new Event("error"));
     }
 
-    for (const token of ["first", "second"]) {
+    for (const [index, token] of ["first", "second"].entries()) {
+      if (index === 1) window.history.pushState({}, "", "/dashboard");
       const event = new Event("securitypolicyviolation");
       Object.defineProperties(event, {
         effectiveDirective: { value: "connect-src" },
@@ -60,7 +61,9 @@ describe("client error reporter", () => {
     const cspPayload = JSON.parse(String(fetchMock.mock.calls[1][1].body));
     expect(resourcePayload.message).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png");
     expect(cspPayload.message).toBe("CSP violated connect-src: https://hcca.tw");
+    expect(cspPayload.pathname).toBe("/");
     uninstall();
+    window.history.replaceState({}, "", "/");
   });
 
   it("filters browser extension, optional telemetry, and abort noise", () => {
