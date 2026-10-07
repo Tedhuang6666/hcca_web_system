@@ -150,14 +150,13 @@ def test_render_petition_print_html_uses_intake_detail_layout() -> None:
 @pytest.mark.asyncio
 async def test_petition_print_embeds_images_and_appends_labeled_documents(
     monkeypatch: pytest.MonkeyPatch,
+    render_pdf_with_project_font,
 ) -> None:
     image_buffer = BytesIO()
     Image.new("RGB", (8, 8), color=(30, 100, 180)).save(image_buffer, format="PNG")
     image_bytes = image_buffer.getvalue()
-    pdf_attachment = render_print_pdf("<!doctype html><html><body>PDF 附件原文內容</body></html>")
-    office_attachment = render_print_pdf(
-        "<!doctype html><html><body>Office 附件轉檔內容</body></html>"
-    )
+    pdf_attachment = render_pdf_with_project_font("PDF 附件原文內容")
+    office_attachment = render_pdf_with_project_font("Office 附件轉檔內容")
 
     class TestStorage:
         async def read_bytes(self, storage_key: str) -> bytes:

@@ -1191,7 +1191,11 @@ async def test_account_reply_attachment_is_added_to_notification_email(
 
 
 async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(
-    db_session, authed_client_factory, tmp_path, monkeypatch
+    db_session,
+    authed_client_factory,
+    tmp_path,
+    monkeypatch,
+    render_pdf_with_project_font,
 ) -> None:
     from io import BytesIO
 
@@ -1199,7 +1203,6 @@ async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(
     from pypdf import PageObject, PdfReader
 
     from api.core import config as config_module
-    from api.services.official_print import render_print_pdf
 
     monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
     org, petition_type = await _make_org_and_type(db_session)
@@ -1210,7 +1213,7 @@ async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(
 
     image_buffer = BytesIO()
     Image.new("RGB", (8, 8), color=(30, 100, 180)).save(image_buffer, format="PNG")
-    attachment_pdf = render_print_pdf("<!doctype html><html><body>陳情附件文件內容</body></html>")
+    attachment_pdf = render_pdf_with_project_font("陳情附件文件內容")
     handler_client = authed_client_factory(handler)
     uploaded_pdf = await handler_client.post(
         f"/petitions/{case_obj.id}/attachments",

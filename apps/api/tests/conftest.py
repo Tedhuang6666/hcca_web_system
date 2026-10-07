@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import html
 import os
 import uuid
 
@@ -35,6 +36,7 @@ import secrets  # noqa: E402
 from collections.abc import AsyncGenerator, Callable  # noqa: E402
 from typing import Any  # noqa: E402
 
+import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -51,6 +53,24 @@ from api.core.database import Base, get_db  # noqa: E402
 from api.core.security import create_access_token  # noqa: E402
 from api.main import app  # noqa: E402
 from api.models.user import User  # noqa: E402
+
+
+@pytest.fixture
+def render_pdf_with_project_font() -> Callable[[str], bytes]:
+    """Render deterministic CJK PDF fixtures with the bundled project font."""
+    from api.services.official_print import _font_faces, render_print_pdf
+
+    def render(text: str) -> bytes:
+        content = html.escape(text)
+        markup = f"""<!doctype html><html lang="zh-TW">
+<head><meta charset="UTF-8"><style>
+{_font_faces()}
+body {{ font-family: "OfficialKai", serif; }}
+</style></head>
+<body>{content}</body></html>"""
+        return render_print_pdf(markup)
+
+    return render
 
 
 @pytest_asyncio.fixture(autouse=True)
