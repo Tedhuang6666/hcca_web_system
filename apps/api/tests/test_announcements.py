@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
@@ -147,8 +148,10 @@ async def test_list_announcements_only_returns_published(
 
 @pytest.mark.asyncio
 async def test_list_public_announcement_includes_urgent_deadline(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr("api.routers.announcements.cache_get", AsyncMock(return_value=None))
+    monkeypatch.setattr("api.routers.announcements.cache_set", AsyncMock())
     author = await _seed_user_with_codes(db_session, "ann-urgent-deadline@school.edu", [])
     deadline = datetime(2025, 1, 1, tzinfo=UTC)
     db_session.add(

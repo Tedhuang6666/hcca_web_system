@@ -96,9 +96,9 @@
     "fflate": "^0.4.9",
     "js-yaml": "^4.3.0",
     "postcss": "^8.5.18",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   },
   "allowScripts": {
-    "sharp@0.35.4": true
+    "sharp@0.35.5": true
   }
 }
