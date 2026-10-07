@@ -472,6 +472,7 @@ async def build_catalog_tree(
     q = (
         select(ProductCategory)
         .options(
+            selectinload(ProductCategory.activity),
             selectinload(ProductCategory.series)
             .selectinload(ProductSeries.products)
             .selectinload(Product.variant_groups),
@@ -545,6 +546,7 @@ async def build_catalog_tree(
                 id=category.id,
                 name=category.name,
                 activity_id=category.activity_id,
+                activity_name=category.activity.name if category.activity else None,
                 image_url=category.image_url,
                 sort_order=category.sort_order,
                 products=category_products,

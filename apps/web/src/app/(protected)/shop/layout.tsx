@@ -53,7 +53,7 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
             <nav className="public-footer-links" aria-label="頁尾導覽">
               <span className="public-footer-label">快速連結</span>
               <Link href="/shop">商品訂購</Link>
-              <Link href="/shop/orders">我的登記</Link>
+              <Link href="/shop/orders">我的訂單</Link>
               <Link href="/public">公開資料庫</Link>
             </nav>
             <nav className="public-footer-links" aria-label="法律與無障礙資訊">
@@ -95,7 +95,7 @@ type ShopNavigationGroup = {
 function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
   return [
     {
-      label: "議員",
+      label: "班代",
       tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
     },
     {

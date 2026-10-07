@@ -197,7 +197,7 @@ export default function ShopPromotionPanel() {
     const scope = category.activity_id ?? GENERAL_ACTIVITY_SCOPE;
     if (category.activity_id) {
       const names = activityNames.get(category.activity_id) ?? new Set<string>();
-      names.add(category.name);
+      names.add(category.activity_name ?? category.name);
       activityNames.set(category.activity_id, names);
     }
     for (const product of category.products) productScopes.set(product.id, scope);

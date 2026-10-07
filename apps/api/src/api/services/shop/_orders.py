@@ -921,6 +921,7 @@ async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
     result = await session.execute(
         select(Order)
         .options(
+            selectinload(Order.activity),
             selectinload(Order.items)
             .selectinload(OrderItem.product)
             .selectinload(Product.category),
@@ -959,6 +960,7 @@ async def list_orders(
     q = (
         select(Order)
         .options(
+            selectinload(Order.activity),
             selectinload(Order.school_class),
             selectinload(Order.user),
             selectinload(Order.items)
@@ -1104,11 +1106,13 @@ def serialize_order_item(item: OrderItem) -> OrderItemOut:
 
 
 def serialize_order(order: Order) -> OrderOut:
+    activity = order.__dict__.get("activity")
     return OrderOut(
         id=order.id,
         serial_number=order.serial_number,
         user_id=order.user_id,
         activity_id=_order_activity_id(order),
+        activity_name=activity.name if activity else None,
         status=order.status,
         subtotal_price=order.subtotal_price,
         discount_amount=order.discount_amount,
@@ -1141,12 +1145,14 @@ def serialize_order(order: Order) -> OrderOut:
 
 
 def serialize_order_list_item(order: Order) -> OrderListItem:
+    activity = order.__dict__.get("activity")
     return OrderListItem(
         id=order.id,
         serial_number=order.serial_number,
         user_id=order.user_id,
         user_name=order.user.display_name if order.user else None,
         activity_id=_order_activity_id(order),
+        activity_name=activity.name if activity else None,
         status=order.status,
         subtotal_price=order.subtotal_price,
         discount_amount=order.discount_amount,
@@ -1160,6 +1166,7 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         is_paid=order.is_paid,
         is_class_collected=order.is_class_collected,
         created_at=order.created_at,
+        items=[serialize_order_item(item) for item in order.items],
     )
 
 

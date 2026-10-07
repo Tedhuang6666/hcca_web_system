@@ -839,6 +839,9 @@ async def test_activity_orders_keep_separate_and_stack_scoped_coupon_with_automa
     other_product = await _make_active_product(
         db_session, creator, price=100, category=other_category
     )
+    catalog = await authed_client_factory(buyer).get("/shop/catalog")
+    assert catalog.status_code == 200
+    assert {row["activity_name"] for row in catalog.json()} == {"校慶預購", "社團活動"}
     await _grant_permission(db_session, manager, "shop:manage")
     manager_client = authed_client_factory(manager)
     auto = await manager_client.post(
@@ -916,6 +919,21 @@ async def test_activity_orders_keep_separate_and_stack_scoped_coupon_with_automa
     assert {row["activity_id"] for row in registrations.json()} == {
         str(first_activity.id),
         str(second_activity.id),
+    }
+    by_activity = {row["activity_name"]: row for row in registrations.json()}
+    assert {item["product_id"]: item["quantity"] for item in by_activity["校慶預購"]["items"]} == {
+        str(cards.id): 4,
+        str(hats.id): 2,
+    }
+    listed = await buyer_client.get("/shop/orders", params={"my_only": "true"})
+    assert listed.status_code == 200
+    assert {row["activity_name"] for row in listed.json()} == {"校慶預購", "社團活動"}
+    listed_by_activity = {row["activity_name"]: row for row in listed.json()}
+    assert {
+        item["product_id"]: item["quantity"] for item in listed_by_activity["校慶預購"]["items"]
+    } == {
+        str(cards.id): 4,
+        str(hats.id): 2,
     }
     first_order_id = applied.json()["id"]
     second_order_id = other_order.json()["id"]

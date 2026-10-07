@@ -13811,6 +13811,8 @@ export interface components {
         CatalogCategoryOut: {
             /** Activity Id */
             activity_id?: string | null;
+            /** Activity Name */
+            activity_name?: string | null;
             /**
              * Id
              * Format: uuid
@@ -20880,6 +20882,8 @@ export interface components {
         OrderListItem: {
             /** Activity Id */
             activity_id?: string | null;
+            /** Activity Name */
+            activity_name?: string | null;
             /**
              * Assistance Scope
              * @default self
@@ -20916,6 +20920,8 @@ export interface components {
              * @default false
              */
             is_paid: boolean;
+            /** Items */
+            items?: components["schemas"]["OrderItemOut"][];
             /**
              * Payment Method
              * @default cash_on_pickup
@@ -20945,6 +20951,8 @@ export interface components {
         OrderOut: {
             /** Activity Id */
             activity_id?: string | null;
+            /** Activity Name */
+            activity_name?: string | null;
             /** Applied Promotions */
             applied_promotions?: components["schemas"]["OrderPromotionOut"][];
             /**

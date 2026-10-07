@@ -243,6 +243,7 @@ class CatalogCategoryOut(BaseModel):
     id: uuid.UUID
     name: str
     activity_id: uuid.UUID | None = None
+    activity_name: str | None = None
     image_url: str | None = None
     sort_order: int = 0
     products: list[CatalogProductOut] = []
@@ -346,6 +347,7 @@ class OrderOut(BaseModel):
     serial_number: str
     user_id: uuid.UUID
     activity_id: uuid.UUID | None = None
+    activity_name: str | None = None
     status: OrderStatus
     subtotal_price: int = 0
     discount_amount: int = 0
@@ -374,6 +376,7 @@ class OrderListItem(BaseModel):
     user_id: uuid.UUID
     user_name: str | None = None
     activity_id: uuid.UUID | None = None
+    activity_name: str | None = None
     status: OrderStatus
     subtotal_price: int = 0
     discount_amount: int = 0
@@ -387,6 +390,7 @@ class OrderListItem(BaseModel):
     is_paid: bool = False
     is_class_collected: bool = False
     created_at: datetime
+    items: list[OrderItemOut] = Field(default_factory=list)
 
 
 class CheckoutRequest(BaseModel):
