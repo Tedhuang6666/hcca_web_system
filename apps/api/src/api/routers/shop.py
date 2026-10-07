@@ -64,6 +64,7 @@ from api.schemas.shop import (
     ShopClassSummaryOut,
     ShopOrderCloseCreate,
     ShopOrderCloseOut,
+    ShopOrdersClearOut,
     ShopPromotionCreate,
     ShopPromotionOut,
     ShopPromotionPreviewOut,
@@ -1028,6 +1029,31 @@ async def create_class_order(
         await _broadcast_shop_order(full or order)
         await _queue_order_confirmation(session, target, full or order)
     return result
+
+
+@router.delete(
+    "/orders",
+    response_model=ShopOrdersClearOut,
+    summary="清除全部商品訂購資料",
+    description=(
+        "僅限商品管理者。刪除所有商品訂單與訂單明細，清除相關應收款及尚未寄出的確認通知，"
+        "並回補仍占用的有限庫存與優惠使用次數；商品目錄和稽核紀錄保留。"
+    ),
+    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+)
+async def clear_all_order_data(session: DbDep, current_user: CurrentUser) -> ShopOrdersClearOut:
+    deleted_order_count = await shop_svc.clear_all_orders(session)
+    await audit_svc.record(
+        session,
+        entity_type="shop_order_data",
+        entity_id="all",
+        action="shop.orders_clear_all",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"deleted_order_count": deleted_order_count},
+        summary=f"清除全部商品訂購資料（{deleted_order_count} 筆訂單）",
+    )
+    return ShopOrdersClearOut(deleted_order_count=deleted_order_count)
 
 
 @router.get(

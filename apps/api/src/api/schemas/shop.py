@@ -585,6 +585,10 @@ class OrderSummaryOut(BaseModel):
     unpaid_amount: int = 0
 
 
+class ShopOrdersClearOut(BaseModel):
+    deleted_order_count: int
+
+
 class ShopClassProductSummaryRow(BaseModel):
     product_id: uuid.UUID
     product_name: str
@@ -682,6 +686,7 @@ __all__ = [
     "ClassPaymentOut",
     "OrderSummaryOut",
     "OrderSummaryRow",
+    "ShopOrdersClearOut",
     "ProductCategoryCreate",
     "ProductCategoryOut",
     "ProductCategoryUpdate",

@@ -9,11 +9,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.org import Org, Permission, Position, UserPosition
-from api.models.shop import Order, OrderItem, OrderStatus, ProductCategory
+from api.models.outbox import OutboxEvent
+from api.models.receivable import Receivable, ReceivableSource
+from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory
 from api.models.user import User
 from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
 from api.schemas.shop import (
@@ -1399,6 +1402,94 @@ async def test_cadre_multi_product_request_splits_activities(
         str(general.id): 30,
         str(event_product.id): 75,
     }
+
+
+async def test_clear_all_order_data_requires_shop_manager(
+    member_user, authed_client_factory
+) -> None:
+    response = await authed_client_factory(member_user).delete("/shop/orders")
+
+    assert response.status_code == 403
+
+
+async def test_clear_all_order_data_requires_authentication(client) -> None:
+    response = await client.delete("/shop/orders")
+
+    assert response.status_code == 401
+
+
+async def test_clear_all_order_data_removes_orders_and_restores_derived_data(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    school_class = await _make_class(db_session, start="11501", end="11540")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, school_class, user_id=cadre.id)
+    student = await _bare_user(db_session, student_id="11520")
+    first = await _make_active_product(db_session, cadre, price=15, stock=20)
+    second = await _make_active_product(db_session, cadre, price=25, stock=30)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=student.id,
+        class_id=school_class.id,
+        data=ClassOrderUpsert(
+            user_id=student.id,
+            items=[
+                OrderItemCreate(product_id=first.id, quantity=2),
+                OrderItemCreate(product_id=second.id, quantity=3),
+            ],
+        ),
+        assisted_by_id=cadre.id,
+    )
+    db_session.add(
+        OutboxEvent(
+            event_type="shop.order_confirmed",
+            payload={"order_id": str(orders[0].id)},
+            created_at=datetime.now(UTC),
+        )
+    )
+    db_session.add(
+        Receivable(
+            source_type=ReceivableSource.MANUAL.value,
+            user_id=student.id,
+            title="保留的非商品應收款",
+            amount=100,
+        )
+    )
+    await db_session.flush()
+
+    response = await authed_client_factory(member_user).delete("/shop/orders")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted_order_count": 1}
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
+    assert await db_session.scalar(select(func.count()).select_from(OrderItem)) == 0
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(Receivable)
+            .where(Receivable.source_type == ReceivableSource.SHOP_ORDER.value)
+        )
+        == 0
+    )
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(Receivable)
+            .where(Receivable.source_type == ReceivableSource.MANUAL.value)
+        )
+        == 1
+    )
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.event_type == "shop.order_confirmed")
+        )
+        == 0
+    )
+    assert (await db_session.get(Product, first.id)).stock_quantity == 20
+    assert (await db_session.get(Product, second.id)).stock_quantity == 30
 
 
 # ── 後台統計 ──────────────────────────────────────────────────────────────────

@@ -701,6 +701,7 @@ export type {
   ShopDiscountType,
   ShopOrderCloseCreate,
   ShopOrderCloseOut,
+  ShopOrdersClearOut,
   ShopPromotionCreate,
   ShopPromotionOut,
   ShopPromotionPreviewOut,

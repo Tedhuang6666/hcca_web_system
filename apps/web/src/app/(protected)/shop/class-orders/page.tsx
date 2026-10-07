@@ -971,7 +971,7 @@ export default function ClassOrdersPage() {
               ? "此訂單限修改原活動的商品。"
               : composerActivityKey
                 ? `目前代訂 ${activityRows.find((row) => (row.activity_id ?? "none") === composerActivityKey)?.label ?? "所選活動"}；同一活動的商品會合成一筆訂單。`
-                : "選擇同學與商品後，按「加入商品」繼續選下一項；確認清單後可一次送出多項商品。不同活動會自動分成訂單。"}
+                : "規格直接點選；把多項商品加入清單後可一次送出，不同活動會自動分成訂單。"}
           </p>
           {!editOrder && composerActivityKey && (
             <button type="button" className="btn btn-ghost mb-3 min-h-11 px-3 text-xs"
@@ -1002,18 +1002,49 @@ export default function ClassOrdersPage() {
                 ))}
               </select>
             </label>
-            {productDetail?.variant_groups.map((group) => (
-              <label key={group.id} className="grid gap-1 text-sm">
-                <span style={{ color: "var(--text-muted)" }}>{group.name}</span>
-                <select className="input min-h-11" value={optionIds[group.id] ?? ""}
-                  onChange={(e) => setOptionIds((cur) => ({ ...cur, [group.id]: e.target.value }))}>
-                  <option value="">選擇{group.name}</option>
-                  {group.options.filter((o) => o.is_active).map((o) => (
-                    <option key={o.id} value={o.id}>{o.value}{o.price_delta ? ` (+${o.price_delta})` : ""}</option>
-                  ))}
-                </select>
-              </label>
-            ))}
+            {productDetail?.variant_groups.map((group) => {
+              const options = group.options.filter((option) => option.is_active);
+              return (
+                <fieldset key={group.id} className="grid min-w-0 gap-1 text-sm">
+                  <legend className="mb-1" style={{ color: "var(--text-muted)" }}>{group.name}</legend>
+                  {options.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {options.map((option) => {
+                        const selected = optionIds[group.id] === option.id;
+                        return (
+                          <label key={option.id} className="cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`variant-${productDetail.id}-${group.id}`}
+                              value={option.id}
+                              checked={selected}
+                              onChange={() => setOptionIds((current) => ({ ...current, [group.id]: option.id }))}
+                              className="peer sr-only"
+                            />
+                            <span
+                              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
+                              style={selected
+                                ? { border: "1px solid var(--border-strong)", background: "var(--primary-dim)", color: "var(--primary)" }
+                                : { border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                              {option.value}
+                              {option.price_delta !== 0 && (
+                                <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                                  {option.price_delta > 0 ? "+" : "−"}{money(Math.abs(option.price_delta))}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs" role="status" style={{ color: "var(--text-muted)" }}>
+                      目前沒有可選規格，請通知商品管理者。
+                    </p>
+                  )}
+                </fieldset>
+              );
+            })}
             <label className="grid gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>數量</span>
               <input className="input min-h-11" type="number" min={1} max={100} value={quantity}
@@ -1028,7 +1059,7 @@ export default function ClassOrdersPage() {
                 <button type="button" onClick={addCurrentProduct}
                   disabled={!currentItemReady || creating}
                   className="btn btn-ghost min-h-11 w-full disabled:opacity-50">
-                  <Plus size={14} /> 加入商品，繼續選購
+                  <Plus size={14} /> 加入本次訂購清單
                 </button>
                 {!editOrder && (
                   <button type="button" onClick={queueCurrentDraft}
