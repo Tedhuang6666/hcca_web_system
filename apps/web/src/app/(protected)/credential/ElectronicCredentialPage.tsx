@@ -36,7 +36,7 @@ function CredentialPageIntro({ denied = false }: { denied?: boolean }) {
         <h1>電子證件</h1>
         <p>
           {denied
-            ? "電子證件只提供學校帳號或已連結學校 Email 的帳號使用。"
+            ? "電子證件提供符合目前屆別學號規則的校內學生、校內師長與特別授權帳號使用。"
             : "前往特約店家兌換時，出示這張證件即可完成身分核驗。"}
         </p>
       </div>
@@ -63,7 +63,8 @@ function AccessDenied({ onRetry }: { onRetry: () => void }) {
         <p className="credential-page__kicker credential-denied__kicker">ACCESS UNAVAILABLE</p>
         <h2 id="credential-denied-title">這個帳號目前無法顯示電子證件</h2>
         <p className="credential-denied__message">
-          請使用學校帳號登入，或將目前帳號與學校 Email 連結；完成後再重新確認帳號資格。
+          學生帳號需使用符合目前屆別設定的校內 Email 與學號；若你是校內師長或已獲特別授權，
+          請確認登入帳號或洽平台管理者。
         </p>
 
         <div className="credential-denied__guidance" aria-label="可用的處理方式">
@@ -71,14 +72,14 @@ function AccessDenied({ onRetry }: { onRetry: () => void }) {
             <LogIn size={20} aria-hidden="true" />
             <div>
               <strong>使用學校帳號登入</strong>
-              <span>以學校核發的 Email 登入平台。</span>
+              <span>以校內 Email 登入；學生帳號還需符合目前屆別學號設定。</span>
             </div>
           </div>
           <div>
             <Link2 size={20} aria-hidden="true" />
             <div>
-              <strong>將學校 Email 連結至目前帳號</strong>
-              <span>到帳號設定完成 Email 驗證後即可使用。</span>
+              <strong>確認帳號與學號資格</strong>
+              <span>若校內 Email 正確但仍無法使用，請洽平台管理者確認屆別設定。</span>
             </div>
           </div>
         </div>

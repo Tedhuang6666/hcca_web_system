@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Save,
   Search,
   ShieldCheck,
   UserRound,
@@ -47,6 +48,17 @@ function parseEmails(value: string): string[] {
   ];
 }
 
+function parseStudentIdPrefixes(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(/[\s,;，；、]+/)
+        .map((prefix) => prefix.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export default function CredentialAuthorizationPanel() {
   const [authorizations, setAuthorizations] = useState<ElectronicCredentialAuthorizationOut[]>([]);
   const [form, setForm] = useState<AuthorizationForm>(emptyForm);
@@ -55,6 +67,10 @@ export default function CredentialAuthorizationPanel() {
   const [includeInactive, setIncludeInactive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [studentIdPrefixes, setStudentIdPrefixes] = useState(["310", "410", "510"]);
+  const [studentIdPrefixesDraft, setStudentIdPrefixesDraft] = useState("310, 410, 510");
   const [userSearch, setUserSearch] = useState("");
   const [userOptions, setUserOptions] = useState<UserSummary[]>([]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -71,9 +87,27 @@ export default function CredentialAuthorizationPanel() {
     }
   }, [includeInactive]);
 
+  const loadSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      const settings = await electronicCredentialsApi.adminGetSettings();
+      const prefixes = settings.student_id_prefixes;
+      setStudentIdPrefixes(prefixes);
+      setStudentIdPrefixesDraft(prefixes.join(", "));
+    } catch (error) {
+      toast.error(getErrorMessage(error, "載入學生證件資格設定失敗"));
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
 
   useEffect(() => {
     if (!userMenuOpen || bulkMode) return;
@@ -188,11 +222,100 @@ export default function CredentialAuthorizationPanel() {
     }
   };
 
+  const saveStudentIdPrefixes = async () => {
+    const prefixes = parseStudentIdPrefixes(studentIdPrefixesDraft);
+    if (!prefixes.every((prefix) => /^\d{3}$/.test(prefix))) {
+      toast.error("每個學號前三碼都必須是三位數字");
+      return;
+    }
+
+    setSettingsSaving(true);
+    try {
+      const settings = await electronicCredentialsApi.adminUpdateSettings({
+        student_id_prefixes: prefixes,
+      });
+      setStudentIdPrefixes(settings.student_id_prefixes);
+      setStudentIdPrefixesDraft(settings.student_id_prefixes.join(", "));
+      toast.success(
+        settings.student_id_prefixes.length
+          ? `學生證件資格已更新：${settings.student_id_prefixes.join("、")}`
+          : "已停用一般學生證件資格",
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error, "更新學生證件資格設定失敗"));
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const studentIdPrefixDraftValues = parseStudentIdPrefixes(studentIdPrefixesDraft);
+  const studentIdPrefixesValid =
+    studentIdPrefixDraftValues.length <= 30 &&
+    studentIdPrefixDraftValues.every((prefix) => /^\d{3}$/.test(prefix));
+  const studentIdPrefixesChanged =
+    JSON.stringify([...studentIdPrefixDraftValues].sort()) !==
+    JSON.stringify([...studentIdPrefixes].sort());
   const activeCount = authorizations.filter((authorization) => authorization.is_active).length;
 
   return (
     <section id="credentials-panel" role="tabpanel" aria-label="特殊身分管理" className="grid gap-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
       <div className="space-y-4">
+        <section className="card p-5" aria-labelledby="student-credential-settings-title">
+          <div className="mb-4 flex items-start gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+              <ShieldCheck size={18} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 id="student-credential-settings-title" className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                學生證件資格
+              </h2>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                學生須符合學號前三碼；校務信箱師長不需學號，也可使用校內電子證件。
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="grid gap-1">
+              <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                允許的學號前三碼
+              </span>
+              <textarea
+                className="input min-h-11 resize-y"
+                rows={2}
+                value={studentIdPrefixesDraft}
+                placeholder="310, 410, 510"
+                disabled={settingsLoading || settingsSaving}
+                aria-invalid={!studentIdPrefixesValid}
+                aria-describedby="student-credential-prefixes-help"
+                onChange={(event) => setStudentIdPrefixesDraft(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-primary min-h-11"
+              disabled={
+                settingsLoading || settingsSaving || !studentIdPrefixesValid || !studentIdPrefixesChanged
+              }
+              onClick={() => void saveStudentIdPrefixes()}
+            >
+              <Save size={15} aria-hidden="true" />
+              {settingsSaving ? "儲存中…" : "儲存資格設定"}
+            </button>
+          </div>
+          <p
+            id="student-credential-prefixes-help"
+            className="mt-2 text-[11px] leading-5"
+            style={{ color: "var(--text-muted)" }}
+          >
+            可用逗號分隔多個前三碼。學生信箱須是 g0 加完整學號，例如 g0410xxx；空白時只停用一般學生證件資格。
+          </p>
+          {!studentIdPrefixesValid && (
+            <p className="mt-1 text-xs text-red-600" role="alert">
+              最多可設定 30 組；每組學號前三碼都必須是三位數字。
+            </p>
+          )}
+        </section>
+
         <section className="card p-5">
           <div className="mb-5 flex items-start gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>

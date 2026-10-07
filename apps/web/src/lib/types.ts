@@ -228,6 +228,8 @@ export type {
   ElectronicCredentialAuthorizationOut,
   ElectronicCredentialAuthorizationUpdate,
   ElectronicCredentialOut,
+  ElectronicCredentialSettingsOut,
+  ElectronicCredentialSettingsUpdate,
   EmailAnalyticsOut,
   EmailAttachmentOut,
   EmailBlock,

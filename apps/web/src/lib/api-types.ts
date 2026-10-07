@@ -4352,6 +4352,24 @@ export interface paths {
         patch: operations["admin_update_authorization_electronic_credentials_admin_authorizations__authorization_id__patch"];
         trace?: never;
     };
+    "/electronic-credentials/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得電子證件資格設定 */
+        get: operations["admin_get_settings_electronic_credentials_admin_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新電子證件學生資格設定 */
+        patch: operations["admin_update_settings_electronic_credentials_admin_settings_patch"];
+        trace?: never;
+    };
     "/electronic-credentials/me": {
         parameters: {
             query?: never;
@@ -17012,6 +17030,22 @@ export interface components {
             status_label: string;
             /** Student Id */
             student_id?: string | null;
+        };
+        /**
+         * ElectronicCredentialSettingsOut
+         * @description 電子證件學生學號資格設定。
+         */
+        ElectronicCredentialSettingsOut: {
+            /** Student Id Prefixes */
+            student_id_prefixes: string[];
+        };
+        /**
+         * ElectronicCredentialSettingsUpdate
+         * @description 管理可使用學生電子證件的學號前三碼。
+         */
+        ElectronicCredentialSettingsUpdate: {
+            /** Student Id Prefixes */
+            student_id_prefixes: string[];
         };
         /** EmailAnalyticsOut */
         EmailAnalyticsOut: {
@@ -40343,6 +40377,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ElectronicCredentialAuthorizationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_get_settings_electronic_credentials_admin_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElectronicCredentialSettingsOut"];
+                };
+            };
+        };
+    };
+    admin_update_settings_electronic_credentials_admin_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ElectronicCredentialSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElectronicCredentialSettingsOut"];
                 };
             };
             /** @description Validation Error */
