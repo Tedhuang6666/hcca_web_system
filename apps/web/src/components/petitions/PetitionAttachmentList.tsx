@@ -43,7 +43,7 @@ function PetitionAttachmentRow({
     })
       .then(async (response) => {
         if (!response.ok) {
-          let message = `預覽失敗（HTTP ${response.status}）`;
+          let message = `附件預覽失敗（HTTP ${response.status}）`;
           try {
             const data = await response.json() as { detail?: string };
             if (data.detail) message = data.detail;
@@ -88,7 +88,7 @@ function PetitionAttachmentRow({
             aria-expanded={isOpen}
             onClick={() => setIsOpen((value) => !value)}
           >
-            {isOpen ? "收起預覽" : "查看附件"}
+            {isOpen ? "收起附件" : "查看附件"}
           </button>
           <AnimatedDownloadButton
             className="btn btn-ghost min-h-9 px-3 text-sm"
