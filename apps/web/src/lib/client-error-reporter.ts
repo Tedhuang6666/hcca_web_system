@@ -266,6 +266,25 @@ function normalizedTransientResourceUrl(url: string | null): string {
 export function installGlobalClientErrorReporter(): () => void {
   if (typeof window === "undefined") return () => undefined;
 
+  const recentCspReports = new Map<string, number>();
+  const shouldReportCspViolation = (fingerprint: string): boolean => {
+    const now = Date.now();
+    const lastReportedAt = recentCspReports.get(fingerprint) ?? 0;
+    if (now - lastReportedAt < 30_000) return false;
+
+    recentCspReports.delete(fingerprint);
+    recentCspReports.set(fingerprint, now);
+    for (const [key, timestamp] of recentCspReports) {
+      if (now - timestamp >= 30_000) recentCspReports.delete(key);
+    }
+    while (recentCspReports.size > MAX_RECENT_REPORTS) {
+      const oldestKey = recentCspReports.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      recentCspReports.delete(oldestKey);
+    }
+    return true;
+  };
+
   const onError = (event: ErrorEvent) => {
     const target = event.target;
     const details = errorDetails(event.error ?? event.message);
@@ -294,10 +313,12 @@ export function installGlobalClientErrorReporter(): () => void {
     const directive = event.effectiveDirective || "resource";
     const source = cspSourceIdentity(blockedUri);
     const state = event.disposition === "enforce" ? "blocked" : "violated";
+    const dedupeKey = `${directive}:${source}`;
+    if (!shouldReportCspViolation(dedupeKey)) return;
     reportClientError({
       message: `CSP ${state} ${directive}: ${source}`,
       scope: "securitypolicyviolation",
-      dedupeKey: `${directive}:${source}`,
+      dedupeKey,
     });
   };
 
