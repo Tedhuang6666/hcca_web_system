@@ -621,7 +621,6 @@ export default function PublicSiteAdminPage() {
   });
   const markdownFileRef = useRef<HTMLInputElement>(null);
   const [categoryDraft, setCategoryDraft] = useState({
-    slug: "",
     title: "",
     description: "",
     sort_order: 0,
@@ -1074,13 +1073,21 @@ export default function PublicSiteAdminPage() {
   };
 
   const createCategory = async () => {
+    const title = categoryDraft.title.trim();
+    if (!title) {
+      toast.error("請輸入分類名稱");
+      return;
+    }
+
     try {
       await siteApi.createLinkCategory({
         ...categoryDraft,
-        description: categoryDraft.description || null,
+        slug: `category-${crypto.randomUUID()}`,
+        title,
+        description: categoryDraft.description.trim() || null,
       });
-      toast.success("連結類別已新增");
-      setCategoryDraft({ slug: "", title: "", description: "", sort_order: 0, is_active: true });
+      toast.success("分類已新增");
+      setCategoryDraft({ title: "", description: "", sort_order: 0, is_active: true });
       await load();
     } catch (error) {
       displayError(error, "新增類別失敗");
@@ -2030,13 +2037,13 @@ export default function PublicSiteAdminPage() {
       {tab === "links" && (
         <section key="links" className="tab-panel-transition grid min-w-0 gap-4 lg:grid-cols-2">
           <div className="card min-w-0 space-y-4 p-5">
-            <h2 className="font-semibold">新增連結類別</h2>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Slug"><TextInput value={categoryDraft.slug} onChange={(e) => setCategoryDraft({ ...categoryDraft, slug: e.target.value })} /></Field>
-              <Field label="名稱"><TextInput value={categoryDraft.title} onChange={(e) => setCategoryDraft({ ...categoryDraft, title: e.target.value })} /></Field>
-            </div>
+            <h2 className="font-semibold">新增連結分類</h2>
+            <Field label="分類名稱"><TextInput value={categoryDraft.title} onChange={(e) => setCategoryDraft({ ...categoryDraft, title: e.target.value })} /></Field>
+            <p className="text-xs leading-5 text-[var(--text-muted)]">
+              分類名稱會顯示在公開連結頁，可把多個連結放在同一分類下。
+            </p>
             <Field label="說明"><TextInput value={categoryDraft.description} onChange={(e) => setCategoryDraft({ ...categoryDraft, description: e.target.value })} /></Field>
-            <button type="button" onClick={createCategory} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增類別</button>
+            <button type="button" onClick={createCategory} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增分類</button>
             <div className="space-y-2">
               {categories.map((category) => (
                 <div key={category.id} className="flex flex-col gap-2 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:justify-between" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
