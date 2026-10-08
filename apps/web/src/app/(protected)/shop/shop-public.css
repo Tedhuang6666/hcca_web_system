@@ -27,39 +27,11 @@
   background: var(--primary-dim);
 }
 
-.shop-task-switch button:focus-visible,
-.shop-student-options label:focus-within {
+.shop-task-switch button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-.shop-student-picker { min-width: 0; margin-block: 0.5rem; }
-.shop-student-picker legend { margin-bottom: 0.75rem; font-weight: 600; }
-.shop-student-picker legend span { display: block; font-weight: 400; font-size: 0.875rem; color: var(--text-secondary); }
-.shop-student-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  max-height: 18rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  padding: 0.25rem;
-}
-.shop-student-options label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 48px;
-  padding: 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-}
-.shop-student-options label:has(:checked) { background: var(--primary-dim); border-color: var(--primary); }
-.shop-student-options input { width: 1.125rem; height: 1.125rem; accent-color: var(--primary); }
-.shop-student-options span { color: var(--text-secondary); font-size: 0.8rem; }
-.shop-student-options strong { min-width: 0; overflow-wrap: anywhere; font-size: 0.875rem; }
 .shop-composer-actions { padding-block: 0.75rem; background: var(--card-bg); }
 .shop-class-orders-page [hidden] { display: none; }
 .shop-council-page button, .shop-council-page .input { min-height: 44px; }
@@ -110,7 +82,6 @@
   .shop-role-shortcuts { display: flex; gap: 1rem; }
   .shop-role-shortcuts a { display: inline-flex; align-items: center; min-height: 44px; color: var(--text-secondary); font-size: 0.8rem; }
   .shop-role-shortcuts a[aria-current] { color: var(--primary-text); text-decoration: underline; text-underline-offset: 0.3em; }
-  .shop-student-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shop-task-switch button { font-size: 0.8rem; }
   .shop-class-orders-page .input, .shop-council-page .input { font-size: 16px; }
 }
