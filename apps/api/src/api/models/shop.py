@@ -55,6 +55,7 @@ class OrderStatus(enum.StrEnum):
 class ShopDiscountType(enum.StrEnum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
+    PRICE_OVERRIDE = "price_override"
 
 
 # ── 分類階層：主題 → 系列 ──────────────────────────────────────────────────────
@@ -588,6 +589,32 @@ shop_promotion_products = Table(
 Index("ix_shop_promotion_products_product_id", shop_promotion_products.c.product_id)
 
 
+class ShopPromotionProductPrice(Base):
+    """優惠指定商品的優惠後單價。"""
+
+    __tablename__ = "shop_promotion_product_prices"
+    __table_args__ = (
+        CheckConstraint("unit_price >= 0", name="ck_shop_promotion_product_prices_nonnegative"),
+        Index("ix_shop_promotion_product_prices_product_id", "product_id"),
+    )
+
+    promotion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    promotion: Mapped[ShopPromotion] = relationship(
+        "ShopPromotion", back_populates="product_price_overrides"
+    )
+
+
 class ShopPromotion(Base, TimestampMixin):
     """校商優惠：可依帳號、金額與商品組合自動套用，或建立優惠碼。"""
 
@@ -638,6 +665,13 @@ class ShopPromotion(Base, TimestampMixin):
     target_products: Mapped[list[Product]] = relationship(
         "Product", secondary=shop_promotion_products, lazy="selectin"
     )
+    product_price_overrides: Mapped[list[ShopPromotionProductPrice]] = relationship(
+        "ShopPromotionProductPrice",
+        back_populates="promotion",
+        cascade="all, delete-orphan",
+        order_by="ShopPromotionProductPrice.product_id",
+        lazy="selectin",
+    )
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
 
 
@@ -658,4 +692,5 @@ __all__ = [
     "ShopOrderClose",
     "ShopOrderPromotion",
     "ShopPromotion",
+    "ShopPromotionProductPrice",
 ]

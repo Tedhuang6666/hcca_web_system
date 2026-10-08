@@ -28475,7 +28475,7 @@ export interface components {
          * ShopDiscountType
          * @enum {string}
          */
-        ShopDiscountType: "percentage" | "fixed";
+        ShopDiscountType: "percentage" | "fixed" | "price_override";
         /** ShopOrderCloseCreate */
         ShopOrderCloseCreate: {
             /** Class Id */
@@ -28531,7 +28531,10 @@ export interface components {
             /** Description */
             description?: string | null;
             discount_type: components["schemas"]["ShopDiscountType"];
-            /** Discount Value */
+            /**
+             * Discount Value
+             * @description 百分比或固定金額折扣；指定商品價格時填 0
+             */
             discount_value: number;
             /** Ends At */
             ends_at?: string | null;
@@ -28554,6 +28557,11 @@ export interface components {
             min_quantity: number;
             /** Name */
             name: string;
+            /**
+             * Product Price Overrides
+             * @description 指定商品價格優惠的商品與優惠後單價
+             */
+            product_price_overrides?: components["schemas"]["ShopPromotionProductPriceCreate"][];
             /** Starts At */
             starts_at?: string | null;
             /**
@@ -28568,7 +28576,7 @@ export interface components {
             target_identifiers?: string[];
             /**
              * Target Product Ids
-             * @description 需同時登記的商品組合；折扣僅套用在這些商品
+             * @description 優惠適用商品；一般折扣要求同時登記，指定商品價格則可任選
              */
             target_product_ids?: string[];
         };
@@ -28607,6 +28615,8 @@ export interface components {
             min_quantity: number;
             /** Name */
             name: string;
+            /** Product Price Overrides */
+            product_price_overrides?: components["schemas"]["ShopPromotionProductPriceOut"][];
             /** Starts At */
             starts_at?: string | null;
             /** Target Email */
@@ -28638,6 +28648,8 @@ export interface components {
             min_order_price?: number | null;
             /** Min Quantity */
             min_quantity?: number | null;
+            /** Product Price Overrides */
+            product_price_overrides?: components["schemas"]["ShopPromotionProductPriceOut"][];
             /** Promotion Code */
             promotion_code?: string | null;
             /** Promotion Name */
@@ -28679,6 +28691,31 @@ export interface components {
              */
             code?: string | null;
         };
+        /** ShopPromotionProductPriceCreate */
+        ShopPromotionProductPriceCreate: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Unit Price
+             * @description 優惠後單價（新台幣）
+             */
+            unit_price: number;
+        };
+        /** ShopPromotionProductPriceOut */
+        ShopPromotionProductPriceOut: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /** Unit Price */
+            unit_price: number;
+        };
         /** ShopPromotionProductTargetOut */
         ShopPromotionProductTargetOut: {
             /**
@@ -28713,6 +28750,8 @@ export interface components {
             min_quantity: number;
             /** Name */
             name: string;
+            /** Product Price Overrides */
+            product_price_overrides?: components["schemas"]["ShopPromotionProductPriceOut"][];
             /** Starts At */
             starts_at?: string | null;
             /** Target Products */
@@ -28753,6 +28792,11 @@ export interface components {
             min_quantity?: number | null;
             /** Name */
             name?: string | null;
+            /**
+             * Product Price Overrides
+             * @description 指定商品價格優惠的商品與優惠後單價
+             */
+            product_price_overrides?: components["schemas"]["ShopPromotionProductPriceCreate"][] | null;
             /** Starts At */
             starts_at?: string | null;
             /** Target Email */

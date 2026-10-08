@@ -829,6 +829,9 @@ async def preview_current_registration_promotion(
         ]
         if promotion
         else [],
+        product_price_overrides=shop_svc.serialize_product_price_overrides(promotion)
+        if promotion
+        else [],
     )
 
 

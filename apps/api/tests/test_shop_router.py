@@ -925,6 +925,84 @@ async def test_hidden_coupon_is_omitted_from_public_list_but_can_be_redeemed(
     assert [row["id"] for row in available.json()] == [promotion_id]
 
 
+async def test_coupon_applies_configured_prices_to_multiple_products(
+    db_session, client, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    first = await _make_active_product(db_session, creator, price=50, stock=10)
+    second = await _make_active_product(db_session, creator, price=80, stock=10)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+
+    incomplete = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "雙品優惠價",
+            "code": "PAIRPRICE",
+            "discount_type": "price_override",
+            "discount_value": 0,
+            "target_product_ids": [str(first.id), str(second.id)],
+            "product_price_overrides": [{"product_id": str(first.id), "unit_price": 40}],
+        },
+    )
+    assert incomplete.status_code == 422
+    assert "設定優惠後單價" in incomplete.json()["detail"]
+
+    created = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "雙品優惠價",
+            "code": "PAIRPRICE",
+            "discount_type": "price_override",
+            "discount_value": 0,
+            "target_product_ids": [str(first.id), str(second.id)],
+            "product_price_overrides": [
+                {"product_id": str(first.id), "unit_price": 40},
+                {"product_id": str(second.id), "unit_price": 60},
+            ],
+            "is_public": False,
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["is_public"] is False
+    assert {row["unit_price"] for row in created.json()["product_price_overrides"]} == {40, 60}
+    assert (await client.get("/shop/promotions/available")).json() == []
+
+    buyer_client = authed_client_factory(buyer)
+    registered = await buyer_client.put(
+        f"/shop/registrations/current/products/{first.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert registered.status_code == 200
+    preview = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"code": "PAIRPRICE"}
+    )
+    assert preview.status_code == 200
+    assert preview.json()["eligible"] is True
+    assert preview.json()["discount_amount"] == 10
+    assert preview.json()["total_price"] == 40
+    assert len(preview.json()["product_price_overrides"]) == 2
+
+    applied = await buyer_client.put(
+        "/shop/registrations/current/promotion", json={"code": "PAIRPRICE"}
+    )
+    assert applied.status_code == 200
+    assert applied.json()["subtotal_price"] == 50
+    assert applied.json()["discount_amount"] == 10
+    assert applied.json()["total_price"] == 40
+
+    added_second_product = await buyer_client.put(
+        f"/shop/registrations/current/products/{second.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert added_second_product.status_code == 200
+    assert added_second_product.json()["subtotal_price"] == 130
+    assert added_second_product.json()["discount_amount"] == 30
+    assert added_second_product.json()["total_price"] == 100
+
+
 async def test_activity_orders_keep_separate_and_stack_scoped_coupon_with_automatic_discount(
     db_session, authed_client_factory
 ) -> None:
