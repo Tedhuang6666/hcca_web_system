@@ -1418,14 +1418,19 @@
 }
 
 .shop-product-dialog-actions .shop-product-submit {
+  display: inline-flex;
   min-height: 2.9rem;
   flex: 1;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 999px;
   background: var(--public-accent);
   color: var(--primary-fg);
   font-size: 0.88rem;
   font-weight: 750;
+  text-align: center;
+  text-decoration: none;
 }
 
 .shop-product-dialog-actions .shop-product-submit:hover:not(:disabled),
