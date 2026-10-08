@@ -26,7 +26,7 @@ export async function generateMetadata(
   const { id } = await params;
   const item = await fetchAnnouncement(id);
   const title = item?.title ?? "公告";
-  const description = excerpt(markdownFromContent(item?.content), "校園自治平台公告。");
+  const description = excerpt(markdownFromContent(item?.content), "竹嶺班聯數位整合平台公告。");
   const path = `/announcements/${encodeURIComponent(id)}`;
 
   return pageMetadata({ title, description, path, imagePath: contentOgImagePath(path) });
@@ -52,7 +52,7 @@ export default async function AnnouncementDetailPage({
             "@type": "NewsArticle",
             "@id": canonical,
             headline: item.title,
-            description: excerpt(markdownFromContent(item.content), "校園自治平台公告。"),
+            description: excerpt(markdownFromContent(item.content), "竹嶺班聯數位整合平台公告。"),
             articleSection: item.is_urgent ? "重要公告" : "公告",
             datePublished: published,
             dateModified: item.updated_at,

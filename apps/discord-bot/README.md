@@ -1,6 +1,6 @@
 # HCCA Discord Bot
 
-Discord Bot 是獨立服務，只透過 HTTPS internal API 與校園自治平台連線，不直接存取
+Discord Bot 是獨立服務，只透過 HTTPS internal API 與竹嶺班聯數位整合平台連線，不直接存取
 PostgreSQL、Redis，也不需要和 API 位於同一台主機。
 
 ## API 主機

@@ -76,7 +76,7 @@ export default async function Image() {
             {BRANDING.slogan}
           </div>
           <div style={{ fontSize: 28, color: "#cbd5e1", lineHeight: 1.45 }}>
-            {`${BRANDING.schoolName}公文、法規、公告與校園自治服務整合平台`}
+            {`${BRANDING.schoolName}公文、法規、公告與班聯會服務整合平台`}
           </div>
         </div>
       </div>

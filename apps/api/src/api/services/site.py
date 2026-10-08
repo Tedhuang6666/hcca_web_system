@@ -41,7 +41,7 @@ DEFAULT_SETTINGS = {
     "site_logo_url": None,
     "site_logo_alt": None,
     "hero_title": "新竹高中班聯會",
-    "hero_subtitle": "連結學生、整理公共資訊，讓校園自治被更多人看見。",
+    "hero_subtitle": "連結學生、整理公共資訊，讓學生自治被更多人看見。",
     "hero_image_url": None,
     "hero_image_alt": None,
     "about_title": "關於班聯會",

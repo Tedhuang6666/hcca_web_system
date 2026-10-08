@@ -40,7 +40,7 @@ export const DOCUMENT_TEMPLATE_PRESETS: readonly DocumentTemplatePreset[] = [
   },
   {
     id: "announcement-campus-affair",
-    name: "公告｜校園自治事項",
+    name: "公告｜學生自治事項",
     description: "適用於活動、選務、制度或其他需要公開周知的事項。",
     category: "announcement",
     values: {

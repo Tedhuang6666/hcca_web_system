@@ -33,7 +33,6 @@ export const metadata: Metadata = {
     BRANDING.orgShortName,
     BRANDING.acronym,
     BRANDING.schoolName,
-    "校園自治",
     "學生自治",
     "班聯會",
   ],

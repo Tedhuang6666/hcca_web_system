@@ -54,7 +54,7 @@ function BlockedContent() {
         <header className="flex items-center gap-3">
           <BrandEmblem size={42} priority />
           <div>
-            <div className="text-sm font-semibold">校園自治平台</div>
+            <div className="text-sm font-semibold">竹嶺班聯數位整合平台</div>
             <div className="text-xs text-[var(--text-muted)]">Access Restricted</div>
           </div>
         </header>
