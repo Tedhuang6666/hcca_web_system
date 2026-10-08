@@ -113,8 +113,6 @@ async function listAllClassOrders(params: ClassOrderQuery = {}): Promise<OrderLi
 
 export default function ClassOrdersPage() {
   const [workspace, setWorkspace] = useState<"order" | "collect" | "details">("order");
-  const [studentIds, setStudentIds] = useState<string[]>([]);
-  const [studentSearch, setStudentSearch] = useState("");
   const [seatFilter, setSeatFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [seatSearch, setSeatSearch] = useState("");
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -340,7 +338,8 @@ export default function ClassOrdersPage() {
   const assistedTotal = assistedItems.reduce((total, item) => total + item.quantity * item.unit_price, 0)
     + (currentItemReady && orderProductId ? quantity * currentUnitPrice : 0);
   const currentDraftItemCount = assistedItems.length + (currentItemReady ? 1 : 0);
-  const recipientIds = editOrder ? [studentId].filter(Boolean) : studentIds;
+  const recipientIds = [studentId].filter(Boolean);
+  const selectedStudent = members.find((member) => member.id === studentId);
   const pendingDraftStudentCount = new Set([
     ...assistedOrderDrafts.map((draft) => draft.student_id),
     ...(currentDraftItemCount > 0 ? recipientIds : []),
@@ -348,7 +347,7 @@ export default function ClassOrdersPage() {
   const pendingDraftSubtotal = assistedOrderDrafts.reduce((total, draft) => total
     + draft.items.reduce((amount, item) => amount + item.quantity * item.unit_price, 0), 0)
     + assistedTotal * recipientIds.length;
-  const hasCurrentComposerInput = Boolean(studentId || studentIds.length || notes.trim() || assistedItems.length > 0 || orderProductId);
+  const hasCurrentComposerInput = Boolean(studentId || notes.trim() || assistedItems.length > 0 || orderProductId);
   const hasIncompleteCurrentItem = Boolean(orderProductId && !currentItemReady);
   const canQueueCurrentDraft = Boolean(
     !editOrder && recipientIds.length && currentDraftItemCount > 0 && !hasIncompleteCurrentItem,
@@ -499,7 +498,6 @@ export default function ClassOrdersPage() {
     }
     openCreate();
     setStudentId(memberId);
-    setStudentIds([memberId]);
     setComposerActivityKey(activeLedgerKey);
   };
 
@@ -549,6 +547,7 @@ export default function ClassOrdersPage() {
   };
 
   const addCurrentProduct = () => {
+    if (!studentId) { toast.error("請先選擇同班學生"); return; }
     if (!orderProductId || !productDetail) {
       toast.error("請先選擇商品，並等商品資料載入完成");
       return;
@@ -636,7 +635,7 @@ export default function ClassOrdersPage() {
   };
 
   const queueCurrentDraft = () => {
-    if (!recipientIds.length) { toast.error("請先勾選同班學生"); return; }
+    if (!studentId) { toast.error("請先選擇同班學生"); return; }
     if (hasIncompleteCurrentItem) { toast.error("請先完成商品規格"); return; }
     const items = currentComposerItems();
     if (!items.length) { toast.error("請先加入至少一項商品"); return; }
@@ -646,14 +645,13 @@ export default function ClassOrdersPage() {
       return;
     }
     setAssistedOrderDrafts(drafts);
-    setStudentIds([]);
     setStudentId("");
     setOrderProductId("");
     setQuantity(1);
     setOptionIds({});
     setNotes("");
     setAssistedItems([]);
-    toast.success(`已加入 ${recipientIds.length} 位同學的待送出清單`);
+    toast.success(`已將${selectedStudent?.display_name ?? "這位同學"}的商品加入待送出清單，可繼續登記下一位`);
   };
 
   const loadAssistedDraft = (draft: AssistedOrderDraft) => {
@@ -664,7 +662,6 @@ export default function ClassOrdersPage() {
     setAssistedOrderDrafts((drafts) => drafts.filter((item) => item.id !== draft.id));
     setEditOrder(null);
     setStudentId(draft.student_id);
-    setStudentIds([draft.student_id]);
     setOrderProductId("");
     setQuantity(1);
     setOptionIds({});
@@ -777,7 +774,7 @@ export default function ClassOrdersPage() {
     }
     const currentItems = currentComposerItems();
     if (currentItems.length > 0 && !recipientIds.length) {
-      toast.error("請先勾選同班學生");
+      toast.error("請先選擇同班學生");
       return;
     }
     if (editOrder && !studentId) { toast.error("找不到訂單的學生資料"); return; }
@@ -837,7 +834,6 @@ export default function ClassOrdersPage() {
           setAssistedOrderDrafts(remainingDrafts);
           setEditOrder(null);
           setStudentId("");
-          setStudentIds([]);
           setOrderProductId("");
           setQuantity(1);
           setOptionIds({});
@@ -859,7 +855,6 @@ export default function ClassOrdersPage() {
       }
       setEditOrder(null);
       setStudentId("");
-      setStudentIds([]);
       setOrderProductId("");
       setQuantity(1);
       setOptionIds({});
@@ -1019,7 +1014,6 @@ export default function ClassOrdersPage() {
               setFormOpen(false);
               setEditOrder(null);
               setStudentId("");
-              setStudentIds([]);
               setOrderProductId("");
               setQuantity(1);
               setOptionIds({});
@@ -1035,15 +1029,39 @@ export default function ClassOrdersPage() {
               ? "此訂單限修改原活動的商品。"
               : composerActivityKey
                 ? `目前代訂 ${activityRows.find((row) => (row.activity_id ?? "none") === composerActivityKey)?.label ?? "所選活動"}；同一活動的商品會合成一筆訂單。`
-                : "先選商品與規格，再勾選同學。每位同學各自建立訂單，相同商品與規格自動合併；不同活動分開計算。"}
+                : "先選一位同學，再逐項加入商品、規格與數量，確認清單後一次送出。相同規格自動合併，不同活動分開計算。"}
           </p>
           {!editOrder && composerActivityKey && (
             <button type="button" className="btn btn-ghost mb-3 min-h-11 px-3 text-xs"
               disabled={assistedItems.length > 0 || Boolean(orderProductId)}
               onClick={() => setComposerActivityKey(null)}>改看全部活動商品</button>
           )}
-          <fieldset disabled={creating || catalogFailed} className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <legend className="sr-only">商品、規格與訂購同學</legend>
+          <label className="mb-5 grid max-w-lg gap-1 text-sm">
+            <span className="font-semibold">同班學生</span>
+            {editOrder ? (
+              <input className="input min-h-11" readOnly value={selectedStudent?.display_name ?? "訂購同學"} />
+            ) : (
+              <select className="input min-h-11" value={studentId}
+                disabled={creating || membersLoading || membersLoadFailed || currentDraftItemCount > 0 || Boolean(orderProductId)}
+                onChange={(event) => setStudentId(event.target.value)} aria-describedby="student-selection-hint">
+                <option value="">{membersLoading ? "載入名冊中…" : "選擇座號或姓名"}</option>
+                {[...members].sort((a, b) => (a.seat_number ?? 1000) - (b.seat_number ?? 1000)).map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.seat_number == null ? "未編座號" : `${member.seat_number} 號`} · {member.display_name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+          {!editOrder && (
+            <p id="student-selection-hint" className="mb-4 text-sm" style={{ color: "var(--text-secondary)" }}>
+              {currentDraftItemCount > 0 || orderProductId
+                ? "商品會登記在這位同學名下；完成後可送出，或加入待送出清單再登記下一位。"
+                : studentId ? `正在替${selectedStudent?.display_name ?? "這位同學"}選購，可加入多項商品。` : "選好同學後，即可建立這位同學的商品清單。"}
+            </p>
+          )}
+          <fieldset disabled={creating || catalogFailed || !studentId || membersLoading || membersLoadFailed} className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <legend className="sr-only">加入商品與規格</legend>
             <label className="grid gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>商品</span>
               <select className="input min-h-11" value={orderProductId} onChange={(e) => setOrderProductId(e.target.value)}>
@@ -1101,76 +1119,20 @@ export default function ClassOrdersPage() {
               <input className="input min-h-11" type="number" min={1} max={100} value={quantity}
                 onChange={(e) => setQuantity(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
             </label>
-            {editOrder ? (
-              <label className="grid gap-1 text-sm">
-                <span>同班學生</span>
-                <input className="input min-h-11" readOnly value={members.find((member) => member.id === studentId)?.display_name ?? "訂購同學"} />
-              </label>
-            ) : (
-              <fieldset className="shop-student-picker sm:col-span-2 xl:col-span-3" disabled={creating || membersLoading || membersLoadFailed}>
-                <legend>替哪些同學訂購？ <span>已選 {studentIds.length} 位 · 每人 {quantity} 件目前所選商品</span></legend>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input className="input min-h-11 min-w-0 flex-1" aria-label="搜尋代購同學" placeholder="找座號或姓名"
-                    value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} />
-                  <button type="button" className="btn btn-ghost min-h-11" onClick={() => setStudentIds([])}>清除勾選</button>
-                </div>
-                <div className="shop-student-options">
-                  {members.filter((member) => `${member.seat_number ?? ""} ${member.display_name}`.includes(studentSearch.trim()))
-                    .sort((a, b) => (a.seat_number ?? 1000) - (b.seat_number ?? 1000))
-                    .map((member) => (
-                      <label key={member.id}>
-                        <input type="checkbox" checked={studentIds.includes(member.id)}
-                          onChange={(event) => setStudentIds((ids) => event.target.checked
-                            ? [...ids, member.id] : ids.filter((id) => id !== member.id))} />
-                        <span>{member.seat_number == null ? "—" : `${member.seat_number} 號`}</span>
-                        <strong>{member.display_name}</strong>
-                      </label>
-                    ))}
-                </div>
-                {!membersLoading && members.length > 0 && !members.some((member) => `${member.seat_number ?? ""} ${member.display_name}`.includes(studentSearch.trim())) && (
-                  <p role="status">找不到同學，請試試座號或其他姓名。</p>
-                )}
-              </fieldset>
-            )}
-            <label className="grid gap-1 text-sm">
-              <span style={{ color: "var(--text-muted)" }}>備註</span>
-              <input className="input min-h-11" value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} placeholder="尺寸確認等" />
-            </label>
-            <div className="shop-composer-actions sm:col-span-2 xl:col-span-3">
-              <div className="grid w-full gap-2 sm:grid-cols-3">
-                <button type="button" onClick={addCurrentProduct}
-                  disabled={!currentItemReady || creating}
-                  className="btn btn-ghost min-h-11 w-full disabled:opacity-50">
-                  <Plus size={14} /> 再加另一項商品
-                </button>
-                {!editOrder && (
-                  <button type="button" onClick={queueCurrentDraft}
-                    disabled={!canQueueCurrentDraft || creating}
-                    className="btn btn-ghost min-h-11 w-full disabled:opacity-50">
-                    加入待送出，繼續選商品
-                  </button>
-                )}
-                <button type="button" onClick={submitOrder}
-                  disabled={creating || membersLoading || membersLoadFailed || !myClassId || (editOrder
-                    ? currentDraftItemCount === 0 || !studentId
-                    : pendingDraftStudentCount === 0
-                      || hasIncompleteCurrentItem
-                      || (currentDraftItemCount > 0 && !recipientIds.length))}
-                  className="btn min-h-11 w-full disabled:opacity-50"
-                  style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-                  {creating ? "處理中..." : editOrder
-                    ? `儲存修改 · 小計 ${money(assistedTotal)}`
-                    : `送出 ${pendingDraftStudentCount} 位 · 小計 ${money(pendingDraftSubtotal)}`}
-                </button>
-              </div>
+            <div className="flex items-end sm:col-span-2 xl:col-span-3">
+              <button type="button" onClick={addCurrentProduct}
+                disabled={!currentItemReady || creating}
+                className="btn btn-ghost min-h-11 w-full disabled:opacity-50 sm:w-auto">
+                <Plus size={14} /> 加入清單，繼續選商品
+              </button>
             </div>
           </fieldset>
           {(assistedItems.length > 0 || (orderProductId && currentItemReady)) && (
             <div className="mt-4 rounded-md" style={{ border: "1px solid var(--border)" }}>
-              <div className="flex items-center justify-between gap-3 px-3 py-2"
+              <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
                 style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
                 <h3 className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-                  {editOrder ? "訂單商品" : `所選 ${studentIds.length} 位同學，每人訂購`}
+                  {selectedStudent?.display_name ?? "這位同學"}的商品清單
                 </h3>
                 <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
                   {currentComposerItems().length} 項 · 商品小計 {money(assistedTotal)}
@@ -1179,16 +1141,16 @@ export default function ClassOrdersPage() {
               <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {currentComposerItems().map((item) => (
                   <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
-                    <div className="min-w-0 flex-1">
+                    <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                       <p className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.product_name}</p>
                       <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
                         {activityLabel(item.activity_id)} · {item.option_label || "標準規格"} · {money(item.unit_price)} / 件
                       </p>
                     </div>
                     <label className="flex items-center gap-2 text-xs">
-                      每人數量
+                      數量
                       <input className="input min-h-11 w-20 text-center tabular-nums" type="number" min={1} max={100}
-                        disabled={creating} value={item.quantity} aria-label={`${item.product_name}每人數量`}
+                        disabled={creating} value={item.quantity} aria-label={`${item.product_name}數量`}
                         onChange={(event) => updateComposerItem(item, Math.max(1, Math.min(100, Number(event.target.value) || 1)))} />
                     </label>
                     <strong className="text-right text-sm tabular-nums">{money(item.quantity * item.unit_price)}</strong>
@@ -1200,6 +1162,34 @@ export default function ClassOrdersPage() {
               </ul>
             </div>
           )}
+          <label className="mt-4 grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>備註</span>
+            <input className="input min-h-11" disabled={creating || !studentId} value={notes} maxLength={500}
+              onChange={(event) => setNotes(event.target.value)} placeholder="尺寸確認等" />
+          </label>
+          <div className="shop-composer-actions mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            {!editOrder && (
+              <button type="button" onClick={queueCurrentDraft}
+                disabled={!canQueueCurrentDraft || creating || catalogFailed}
+                className="btn btn-ghost min-h-11 disabled:opacity-50">
+                加入待送出，登記下一位
+              </button>
+            )}
+            <button type="button" onClick={submitOrder}
+              disabled={creating || catalogFailed || membersLoading || membersLoadFailed || !myClassId || (editOrder
+                ? currentDraftItemCount === 0 || !studentId
+                : pendingDraftStudentCount === 0
+                  || hasIncompleteCurrentItem
+                  || (currentDraftItemCount > 0 && !studentId))}
+              className="btn min-h-11 whitespace-normal disabled:opacity-50"
+              style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+              {creating ? "處理中..." : editOrder
+                ? `儲存修改 · 小計 ${money(assistedTotal)}`
+                : assistedOrderDrafts.length > 0
+                  ? `送出待送出清單（${pendingDraftStudentCount} 位）· 小計 ${money(pendingDraftSubtotal)}`
+                  : `送出${selectedStudent ? `${selectedStudent.display_name}的` : ""}訂單 · 小計 ${money(assistedTotal)}`}
+            </button>
+          </div>
           {!editOrder && assistedOrderDraftRows.length > 0 && (
             <section aria-labelledby="assisted-drafts-heading" className="mt-4 overflow-hidden rounded-md"
               style={{ border: "1px solid var(--border)" }}>

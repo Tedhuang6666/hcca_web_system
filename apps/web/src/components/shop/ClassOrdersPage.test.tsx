@@ -18,8 +18,14 @@ beforeEach(() => {
   api.classSummary.mockResolvedValue({ product_rows: [] });
   api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: null, series: [], products: [
     { id: "product", name: "紀念袋", status: "active", price: 100 },
+    { id: "shirt", name: "紀念衫", status: "active", price: 200 },
   ] }]);
-  api.getProduct.mockResolvedValue({ id: "product", name: "紀念袋", price: 100, variant_groups: [] });
+  api.getProduct.mockImplementation(async (id: string) => id === "shirt"
+    ? { id, name: "紀念衫", price: 200, variant_groups: [{ id: "size", name: "尺寸", options: [
+      { id: "medium", value: "M", is_active: true, price_delta: 0 },
+      { id: "large", value: "L", is_active: true, price_delta: 20 },
+    ] }] }
+    : { id, name: "紀念袋", price: 100, variant_groups: [] });
   api.getCloseStatus.mockResolvedValue({ statuses: {} });
   api.myClass.mockResolvedValue({ id: "class" });
   api.members.mockResolvedValue([
@@ -29,43 +35,77 @@ beforeEach(() => {
   api.createClassOrder.mockResolvedValue([]);
 });
 
-async function chooseProduct() {
-  fireEvent.change(await screen.findByLabelText("商品"), { target: { value: "product" } });
-  await waitFor(() => expect(screen.getByRole("button", { name: /再加另一項商品/ })).toBeEnabled());
+async function chooseStudent(id = "a") {
+  await screen.findByRole("option", { name: "1 號 · 示範甲" });
+  fireEvent.change(screen.getByRole("combobox", { name: "同班學生" }), { target: { value: id } });
+}
+
+async function chooseProduct(id = "product") {
+  fireEvent.change(await screen.findByLabelText("商品"), { target: { value: id } });
+  if (id === "shirt") fireEvent.click(await screen.findByRole("radio", { name: "M" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled());
 }
 
 describe("班代工作流程", () => {
-  it("submits one merged order per selected classmate and retains only failed recipients", async () => {
+  it("builds a multi-product order for one student with merged quantities and the chosen variant", async () => {
+    render(<ClassOrdersPage />);
+    expect(screen.getByRole("combobox", { name: "商品" })).toBeDisabled();
+    await chooseStudent();
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+    expect(screen.getByRole("combobox", { name: "同班學生" })).toHaveValue("a");
+    expect(screen.getByRole("combobox", { name: "同班學生" })).toBeDisabled();
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+    await chooseProduct("shirt");
+    fireEvent.click(screen.getByRole("radio", { name: /L/ }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^數量$/ }), { target: { value: "2" } });
+    expect(screen.getByRole("spinbutton", { name: "紀念袋數量" })).toHaveValue(2);
+    expect(screen.getByRole("heading", { name: "示範甲的商品清單" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "送出示範甲的訂單 · 小計 NT$640" }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(1));
+    expect(api.createClassOrder.mock.calls[0][0]).toEqual({
+      user_id: "a", notes: null, items: [
+        { product_id: "product", quantity: 2, option_ids: [] },
+        { product_id: "shirt", quantity: 2, option_ids: ["large"] },
+      ],
+    });
+  });
+
+  it("queues one student's products before selecting the next and retries only failed drafts", async () => {
     api.createClassOrder.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error("中斷")).mockResolvedValueOnce([]);
     render(<ClassOrdersPage />);
-    await screen.findByLabelText(/1 號.*示範甲/);
+    await chooseStudent();
     await chooseProduct();
-    fireEvent.click(screen.getByRole("button", { name: /再加另一項商品/ }));
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
     await chooseProduct();
-    fireEvent.click(screen.getByLabelText(/1 號.*示範甲/));
-    fireEvent.click(screen.getByLabelText(/2 號.*示範乙/));
-    fireEvent.click(screen.getByRole("button", { name: /^送出 2 位/ }));
+    fireEvent.click(screen.getByRole("button", { name: "加入待送出，登記下一位" }));
+    expect(screen.getByRole("combobox", { name: "同班學生" })).toHaveValue("");
+    await chooseStudent("b");
+    await chooseProduct("shirt");
+    fireEvent.click(screen.getByRole("button", { name: /^送出待送出清單（2 位）/ }));
     await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(2));
     expect(api.createClassOrder.mock.calls[0][0]).toMatchObject({
       user_id: "a", items: [{ product_id: "product", quantity: 2, option_ids: [] }],
     });
-    const retry = await screen.findByRole("button", { name: /^送出 1 位/ });
+    const retry = await screen.findByRole("button", { name: /^送出待送出清單（1 位）/ });
     await waitFor(() => expect(retry).toBeEnabled());
     fireEvent.click(retry);
     await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(3));
-    expect(api.createClassOrder.mock.calls[2][0].user_id).toBe("b");
+    expect(api.createClassOrder.mock.calls[2][0]).toMatchObject({
+      user_id: "b", items: [{ product_id: "shirt", quantity: 1, option_ids: ["medium"] }],
+    });
   });
 
   it("preserves the current draft when switching to collection and back", async () => {
     render(<ClassOrdersPage />);
-    await screen.findByLabelText(/1 號.*示範甲/);
+    await chooseStudent();
     await chooseProduct();
-    fireEvent.click(screen.getByLabelText(/1 號.*示範甲/));
     fireEvent.click(screen.getByRole("button", { name: "班內收款" }));
     expect(screen.queryByRole("combobox", { name: "商品" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "幫同學訂購" }));
-    expect(screen.getByLabelText(/1 號.*示範甲/)).toBeChecked();
-    expect(screen.getByRole("button", { name: /^送出 1 位/ })).toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "同班學生" })).toHaveValue("a");
+    expect(screen.getByRole("button", { name: /^送出示範甲的訂單/ })).toBeEnabled();
   });
 
   it("does not count cancelled orders or another activity when collecting by seat", async () => {
@@ -76,7 +116,7 @@ describe("班代工作流程", () => {
     ]);
     api.setClassCollected.mockResolvedValue({});
     render(<ClassOrdersPage />);
-    await screen.findByLabelText(/1 號.*示範甲/);
+    await screen.findByRole("option", { name: "1 號 · 示範甲" });
     fireEvent.click(screen.getByRole("button", { name: "班內收款" }));
     fireEvent.change(screen.getByLabelText("活動", { selector: "select" }), { target: { value: "none" } });
     fireEvent.click(screen.getAllByRole("button", { name: "設為已收" }).find((button) => !button.hasAttribute("disabled"))!);
