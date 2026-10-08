@@ -183,7 +183,7 @@ def test_announcement_template_allows_empty_basis() -> None:
         org_id=uuid.uuid4(),
         name="公告範本",
         category=DocumentCategory.ANNOUNCEMENT,
-        subject="公告本會辦理校園自治事項，請查照。",
+        subject="公告本會辦理學生自治事項，請查照。",
         basis=None,
     )
 

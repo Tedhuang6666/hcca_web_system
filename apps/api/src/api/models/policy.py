@@ -79,7 +79,7 @@ class PolicyDocument(Base, TimestampMixin):
     """semver，例如 "1.0.0"。"""
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    """顯示用標題。例如「校園自治平台隱私政策 v1.0」。"""
+    """顯示用標題。例如「竹嶺班聯數位整合平台隱私政策 v1.0」。"""
 
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
     """完整政策內容，markdown。"""

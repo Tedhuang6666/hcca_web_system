@@ -41,7 +41,7 @@ test("login page exposes OAuth entry points", async ({ page }) => {
   expect(inlineScriptsWithoutNonce).toBe(0);
 
   await expect(
-    page.getByRole("heading", { name: /登入|校園自治|歡迎回來/ }).first(),
+    page.getByRole("heading", { name: /登入|學生自治|歡迎回來/ }).first(),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: /Google/ })).toHaveAttribute(
     "href",

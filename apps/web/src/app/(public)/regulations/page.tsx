@@ -4,7 +4,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "法規查詢",
-  description: "查詢校園自治現行法規、條文沿革與穩定引用連結。",
+  description: "查詢學生自治現行法規、條文沿革與穩定引用連結。",
   path: "/regulations",
   type: "website",
 });

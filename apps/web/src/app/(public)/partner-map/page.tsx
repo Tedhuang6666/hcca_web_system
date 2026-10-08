@@ -4,7 +4,7 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "合作商家地圖",
-  description: "探索校園自治平台合作商家與學生優惠資訊。",
+  description: "探索竹嶺班聯數位整合平台合作商家與學生優惠資訊。",
   path: "/partner-map",
   type: "website",
 });

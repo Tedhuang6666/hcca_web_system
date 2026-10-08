@@ -89,7 +89,7 @@ export default function AnnouncementsClient({
         <div>
           <h1 className="text-xl font-semibold">公告檢視</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            瀏覽學生自治平台的公開消息與緊急通知
+            瀏覽竹嶺班聯數位整合平台的公開消息與緊急通知
           </p>
         </div>
         <div className="flex items-center gap-2">
