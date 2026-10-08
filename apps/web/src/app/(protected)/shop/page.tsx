@@ -73,8 +73,11 @@ function promotionRequirementsMet(
   const matchingQuantity = registration.items.reduce((total, item) => (
     targetIds.size === 0 || targetIds.has(item.product_id) ? total + item.quantity : total
   ), 0);
+  const productRequirementMet = promotion.discount_type === "price_override"
+    ? targets.some((product) => registeredProducts.has(product.id))
+    : targets.every((product) => registeredProducts.has(product.id));
 
-  return targets.every((product) => registeredProducts.has(product.id))
+  return productRequirementMet
     && matchingQuantity >= promotion.min_quantity
     && registration.subtotal_price >= promotion.min_order_price;
 }
@@ -879,6 +882,17 @@ export default function ShopPage() {
     return options;
   }, [catalog, availablePromotions]);
 
+  const catalogProductPrices = useMemo(() => {
+    const prices = new Map<string, number>();
+    for (const category of catalog) {
+      for (const product of category.products) prices.set(product.id, product.price);
+      for (const series of category.series) {
+        for (const product of series.products) prices.set(product.id, product.price);
+      }
+    }
+    return prices;
+  }, [catalog]);
+
   useEffect(() => {
     if (!activityOptions.some((option) => option.id === selectedPromotionScope)) {
       setSelectedPromotionScope(activityOptions[0]?.id ?? GENERAL_ACTIVITY_SCOPE);
@@ -1149,6 +1163,13 @@ export default function ShopPage() {
             <p className="shop-public-promotion-preview" role="status">
               {promotionPreview.promotion_name && <strong>{promotionPreview.promotion_name} · </strong>}
               {promotionPreview.reason}
+              {promotionPreview.product_price_overrides?.length ? (
+                <span>
+                  {" "}指定商品優惠單價：{promotionPreview.product_price_overrides
+                    .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
+                    .join("、")}
+                </span>
+              ) : null}
             </p>
           )}
           {availablePromotions.length === 0 ? (
@@ -1167,7 +1188,10 @@ export default function ShopPage() {
               const targetProducts = promotion.target_products ?? [];
               const targetIds = new Set(targetProducts.map((product) => product.id));
               const registeredProducts = new Set((promotionRegistration?.items ?? []).map((item) => item.product_id));
-              const missingProducts = targetProducts.filter((product) => !registeredProducts.has(product.id));
+              const hasMatchingProduct = targetProducts.some((product) => registeredProducts.has(product.id));
+              const missingProducts = promotion.discount_type === "price_override"
+                ? hasMatchingProduct ? [] : targetProducts
+                : targetProducts.filter((product) => !registeredProducts.has(product.id));
               const matchingItems = (promotionRegistration?.items ?? []).filter((item) =>
                 targetIds.size === 0 || targetIds.has(item.product_id),
               );
@@ -1180,9 +1204,18 @@ export default function ShopPage() {
               )?.discount_amount;
               const isApplied = appliedDiscount != null || promotionRegistration?.promotion_id === promotion.id;
               const estimatedBase = targetIds.size > 0 ? matchingSubtotal : promotionRegistration?.subtotal_price ?? 0;
-              const estimatedDiscount = promotion.discount_type === "percentage"
-                ? Math.floor(estimatedBase * promotion.discount_value / 100)
-                : Math.min(estimatedBase, promotion.discount_value);
+              const estimatedDiscount = promotion.discount_type === "price_override"
+                ? (promotion.product_price_overrides ?? []).reduce((total, price) => {
+                  const productBasePrice = catalogProductPrices.get(price.product_id);
+                  if (productBasePrice === undefined) return total;
+                  const quantity = matchingItems
+                    .filter((item) => item.product_id === price.product_id)
+                    .reduce((sum, item) => sum + item.quantity, 0);
+                  return total + Math.max(0, productBasePrice - price.unit_price) * quantity;
+                }, 0)
+                : promotion.discount_type === "percentage"
+                  ? Math.floor(estimatedBase * promotion.discount_value / 100)
+                  : Math.min(estimatedBase, promotion.discount_value);
               const progressParts = [
                 promotion.min_order_price > 0
                   ? (promotionRegistration?.subtotal_price ?? 0) / promotion.min_order_price
@@ -1202,7 +1235,9 @@ export default function ShopPage() {
                       : isApplied
                         ? `已套用，折抵 NT$${(appliedDiscount ?? promotionRegistration?.discount_amount ?? 0).toLocaleString()}！`
                         : requirementsMet && promotionRegistration
-                          ? `已達優惠條件，可以折抵 NT$${estimatedDiscount.toLocaleString()}！`
+                          ? promotion.discount_type === "price_override"
+                            ? "已達優惠條件，可套用指定商品優惠價。"
+                            : `已達優惠條件，可以折抵 NT$${estimatedDiscount.toLocaleString()}！`
                           : "登記商品後即可查看進度";
               const actionLabel = promotion.code
                 ? claimedPromotionIds.has(promotion.id) ? "已領取優惠券" : "領取優惠券"
@@ -1225,9 +1260,13 @@ export default function ShopPage() {
                   <h3>{promotion.name}</h3>
                   <p className="shop-public-promotion-description">適用活動：{promotionScope}</p>
                   <p className="shop-public-promotion-value">
-                    {promotion.discount_type === "percentage"
-                      ? `${promotion.discount_value}% 折扣`
-                      : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
+                    {promotion.discount_type === "price_override"
+                      ? `指定商品優惠價：${(promotion.product_price_overrides ?? [])
+                        .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
+                        .join("、")}`
+                      : promotion.discount_type === "percentage"
+                        ? `${promotion.discount_value}% 折扣`
+                        : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
                   </p>
                   {promotion.code && <p className="shop-public-promotion-code">{promotion.code}</p>}
                   <div className="shop-public-promotion-conditions">
@@ -1236,7 +1275,7 @@ export default function ShopPage() {
                     )}
                     {promotion.min_quantity > 1 && <span>滿 {promotion.min_quantity} 件</span>}
                     {targetProducts.length > 0 && (
-                      <span>折扣計指定品項：{targetProducts.map((product) => product.name).join(" + ")}</span>
+                      <span>{promotion.discount_type === "price_override" ? "任一指定品項：" : "折扣計指定品項："}{targetProducts.map((product) => product.name).join(" + ")}</span>
                     )}
                     {promotion.min_order_price === 0 && promotion.min_quantity <= 1 && targetProducts.length === 0 && <span>無最低消費門檻</span>}
                   </div>

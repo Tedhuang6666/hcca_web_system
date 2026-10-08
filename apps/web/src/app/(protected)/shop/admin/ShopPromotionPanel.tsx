@@ -13,6 +13,7 @@ type PromotionForm = {
   name: string;
   target_identifiers: string;
   target_product_ids: string[];
+  product_prices: Record<string, string>;
   code: string;
   discount_type: ShopDiscountType;
   discount_value: string;
@@ -28,6 +29,7 @@ const emptyForm: PromotionForm = {
   name: "",
   target_identifiers: "",
   target_product_ids: [],
+  product_prices: {},
   code: "",
   discount_type: "percentage",
   discount_value: "10",
@@ -90,6 +92,27 @@ export default function ShopPromotionPanel() {
       toast.error("請輸入優惠名稱");
       return;
     }
+    const productPriceOverrides: { product_id: string; unit_price: number }[] = [];
+    if (form.discount_type === "price_override") {
+      if (form.target_product_ids.length === 0) {
+        toast.error("請至少選擇一項適用商品");
+        return;
+      }
+      for (const productId of form.target_product_ids) {
+        const rawPrice = form.product_prices[productId]?.trim() ?? "";
+        const unitPrice = Number(rawPrice);
+        const product = products.find((row) => row.id === productId);
+        if (!rawPrice || !Number.isSafeInteger(unitPrice) || unitPrice < 0) {
+          toast.error(`請為「${product?.name ?? "每項適用商品"}」輸入有效的優惠後單價`);
+          return;
+        }
+        if (product && unitPrice >= product.price) {
+          toast.error(`「${product.name}」的優惠後單價須低於目前單價 NT$${product.price.toLocaleString()}`);
+          return;
+        }
+        productPriceOverrides.push({ product_id: productId, unit_price: unitPrice });
+      }
+    }
     setSaving(true);
     try {
       const payload = {
@@ -97,9 +120,10 @@ export default function ShopPromotionPanel() {
         name: form.name.trim(),
         target_identifiers: targetIdentifiers,
         target_product_ids: form.target_product_ids,
+        product_price_overrides: productPriceOverrides,
         code: form.code.trim().toUpperCase() || null,
         discount_type: form.discount_type,
-        discount_value: Number(form.discount_value),
+        discount_value: form.discount_type === "price_override" ? 0 : Number(form.discount_value),
         min_order_price: Number(form.min_order_price) || 0,
         min_quantity: Number(form.min_quantity) || 1,
         max_uses: form.max_uses ? Number(form.max_uses) : null,
@@ -132,6 +156,12 @@ export default function ShopPromotionPanel() {
         .map((user) => user.student_id || user.email)
         .join("\n"),
       target_product_ids: (promotion.target_products ?? []).map((product) => product.id),
+      product_prices: Object.fromEntries(
+        (promotion.product_price_overrides ?? []).map((price) => [
+          price.product_id,
+          String(price.unit_price),
+        ]),
+      ),
       code: promotion.code ?? "",
       discount_type: promotion.discount_type,
       discount_value: String(promotion.discount_value),
@@ -246,6 +276,7 @@ export default function ShopPromotionPanel() {
                 ...current,
                 activity_id: event.target.value,
                 target_product_ids: [],
+                product_prices: {},
               }))}
             >
               {activityOptions.map((option) => (
@@ -289,16 +320,23 @@ export default function ShopPromotionPanel() {
             </span>
           </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-            折扣類型
+            優惠內容
             <select className="input mt-1 w-full" value={form.discount_type} onChange={(e) => update("discount_type", e.target.value as ShopDiscountType)}>
               <option value="percentage">百分比折扣</option>
               <option value="fixed">固定金額折抵</option>
+              <option value="price_override">指定商品優惠價</option>
             </select>
           </label>
-          <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-            {form.discount_type === "percentage" ? "折扣百分比" : "折抵金額"}
-            <input className="input mt-1 w-full" type="number" min="1" max={form.discount_type === "percentage" ? 100 : undefined} value={form.discount_value} onChange={(e) => update("discount_value", e.target.value)} />
-          </label>
+          {form.discount_type !== "price_override" ? (
+            <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              {form.discount_type === "percentage" ? "折扣百分比" : "折抵金額"}
+              <input className="input mt-1 w-full" type="number" min="1" max={form.discount_type === "percentage" ? 100 : undefined} value={form.discount_value} onChange={(e) => update("discount_value", e.target.value)} />
+            </label>
+          ) : (
+            <p className="self-center text-xs" style={{ color: "var(--text-muted)" }}>
+              為下方選擇的商品逐項設定優惠後單價；變體加價會照常計入。
+            </p>
+          )}
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             最低消費（選填）
             <input className="input mt-1 w-full" type="number" min="0" value={form.min_order_price} onChange={(e) => update("min_order_price", e.target.value)} />
@@ -313,7 +351,9 @@ export default function ShopPromotionPanel() {
           <fieldset className="sm:col-span-2">
             <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>適用商品（可複選）</legend>
             <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-              折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。
+              {form.discount_type === "price_override"
+                ? "使用者任選一項已設定商品即可使用；只有實際登記的指定商品會改用優惠單價。"
+                : "折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。"}
             </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
               {scopedProducts.length === 0 ? (
@@ -325,6 +365,45 @@ export default function ShopPromotionPanel() {
                 </label>
               ))}
             </div>
+            {form.discount_type === "price_override" && form.target_product_ids.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {scopedProducts
+                  .filter((product) => form.target_product_ids.includes(product.id))
+                  .map((product) => (
+                    <div
+                      key={product.id}
+                      className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{product.name}</p>
+                        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                          目前單價 NT${product.price.toLocaleString()}
+                        </p>
+                      </div>
+                      <label className="flex min-h-11 items-center gap-2 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                        優惠後單價
+                        <span>NT$</span>
+                        <input
+                          className="input w-32"
+                          type="number"
+                          min="0"
+                          max={Math.max(0, product.price - 1)}
+                          step="1"
+                          inputMode="numeric"
+                          aria-label={`${product.name} 優惠後單價`}
+                          value={form.product_prices[product.id] ?? ""}
+                          placeholder={String(product.price)}
+                          onChange={(event) => update("product_prices", {
+                            ...form.product_prices,
+                            [product.id]: event.target.value,
+                          })}
+                        />
+                      </label>
+                    </div>
+                  ))}
+              </div>
+            )}
           </fieldset>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             使用次數上限（選填）
@@ -364,6 +443,13 @@ export default function ShopPromotionPanel() {
                   ? `${user.email}（學號 ${user.student_id}）`
                   : user.email).join("、")
                 : promotion.target_email || "所有可使用帳號";
+              const benefitLabel = promotion.discount_type === "price_override"
+                ? (promotion.product_price_overrides ?? [])
+                  .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
+                  .join("、")
+                : promotion.discount_type === "percentage"
+                  ? `${promotion.discount_value}% 折扣`
+                  : `折抵 NT$${promotion.discount_value.toLocaleString()}`;
               return (
                 <div key={promotion.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
@@ -377,7 +463,7 @@ export default function ShopPromotionPanel() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {promotion.code ? `優惠碼 ${promotion.code}` : "符合條件自動套用"} · 適用：{activityLabel(promotion.activity_id)} · {targetLabel} · {promotion.discount_type === "percentage" ? `${promotion.discount_value}% 折扣` : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
+                      {promotion.code ? `優惠碼 ${promotion.code}` : "符合條件自動套用"} · 適用：{activityLabel(promotion.activity_id)} · {targetLabel} · {benefitLabel}
                     </p>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                       {promotion.min_order_price > 0 ? `滿 NT$${promotion.min_order_price.toLocaleString()} · ` : ""}

@@ -18,11 +18,14 @@ from api.models.shop import (
     ShopDiscountType,
     ShopOrderPromotion,
     ShopPromotion,
+    ShopPromotionProductPrice,
 )
 from api.models.user import User
 from api.schemas.shop import (
     ShopPromotionCreate,
     ShopPromotionOut,
+    ShopPromotionProductPriceCreate,
+    ShopPromotionProductPriceOut,
     ShopPromotionProductTargetOut,
     ShopPromotionPublicOut,
     ShopPromotionTargetOut,
@@ -77,8 +80,12 @@ def normalize_promotion_code(code: str | None) -> str | None:
 
 
 def _validate_discount(discount_type: ShopDiscountType, discount_value: int) -> None:
-    if discount_type == ShopDiscountType.PERCENTAGE and discount_value > 100:
+    if discount_type == ShopDiscountType.PERCENTAGE and not 1 <= discount_value <= 100:
         raise ValueError("百分比優惠必須介於 1 到 100")
+    if discount_type == ShopDiscountType.FIXED and discount_value <= 0:
+        raise ValueError("固定金額折抵必須大於 0")
+    if discount_type == ShopDiscountType.PRICE_OVERRIDE and discount_value != 0:
+        raise ValueError("指定商品價格優惠不使用折扣數值")
 
 
 async def _target_users(session: AsyncSession, identifiers: list[str]) -> list[User]:
@@ -156,6 +163,48 @@ async def _target_products(session: AsyncSession, product_ids: list[uuid.UUID]) 
     return products
 
 
+def _build_product_price_override_rows(
+    discount_type: ShopDiscountType,
+    target_products: list[Product],
+    overrides: list[ShopPromotionProductPriceCreate],
+    *,
+    validate_current_prices: bool = False,
+) -> list[ShopPromotionProductPrice]:
+    price_by_product: dict[uuid.UUID, int] = {}
+    for override in overrides:
+        if override.product_id in price_by_product:
+            raise ValueError("同一商品不可重複設定優惠後單價")
+        price_by_product[override.product_id] = override.unit_price
+
+    target_ids = {product.id for product in target_products}
+    override_ids = set(price_by_product)
+    if discount_type == ShopDiscountType.PRICE_OVERRIDE:
+        if not target_ids:
+            raise ValueError("指定商品價格優惠至少要選擇一項商品")
+        if override_ids - target_ids:
+            raise ValueError("優惠後單價只能設定在已選擇的適用商品")
+        if target_ids - override_ids:
+            missing_names = [
+                product.name for product in target_products if product.id not in override_ids
+            ]
+            raise ValueError(f"請為每項適用商品設定優惠後單價：{'、'.join(missing_names)}")
+        if validate_current_prices:
+            for product in target_products:
+                unit_price = price_by_product[product.id]
+                if unit_price >= product.price:
+                    raise ValueError(
+                        f"商品「{product.name}」的優惠後單價須低於目前單價 NT${product.price:,}"
+                    )
+    elif overrides:
+        raise ValueError("只有指定商品價格優惠可以設定優惠後單價")
+
+    return [
+        ShopPromotionProductPrice(product_id=product.id, unit_price=price_by_product[product.id])
+        for product in target_products
+        if product.id in price_by_product
+    ]
+
+
 def _product_activity_id(product: Product) -> uuid.UUID | None:
     category = product.category
     if category is None and product.series is not None:
@@ -213,6 +262,8 @@ def _promotion_eligible_subtotal(
     if not target_ids:
         return subtotal
     amounts = product_subtotals or {}
+    if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE:
+        return sum(amounts.get(product_id, 0) for product_id in target_ids)
     if not target_ids.issubset(amounts):
         return 0
     return sum(amounts.get(product_id, 0) for product_id in target_ids)
@@ -224,7 +275,10 @@ def _promotion_eligible_quantity(
 ) -> int:
     quantities = product_quantities or {}
     target_ids = {product.id for product in (promotion.target_products or [])}
-    selected_ids = target_ids or quantities.keys()
+    if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE:
+        selected_ids = target_ids.intersection(quantities)
+    else:
+        selected_ids = target_ids or quantities.keys()
     return sum(quantities.get(product_id, 0) for product_id in selected_ids)
 
 
@@ -262,7 +316,17 @@ def _promotion_issue(
         return "account_not_eligible", "此優惠限符合資格的帳號使用，您的帳號目前不符合資格。", 0, 0
     target_ids = {product.id for product in (promotion.target_products or [])}
     selected_ids = set(product_subtotals or {})
-    if target_ids and not target_ids.issubset(selected_ids):
+    if (
+        promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE
+        and target_ids
+        and not target_ids.intersection(selected_ids)
+    ):
+        return "items_not_matched", "需登記至少一項指定商品才能使用此優惠。", 0, 0
+    if (
+        promotion.discount_type != ShopDiscountType.PRICE_OVERRIDE
+        and target_ids
+        and not target_ids.issubset(selected_ids)
+    ):
         missing_names = [
             product.name
             for product in (promotion.target_products or [])
@@ -280,7 +344,13 @@ def _promotion_issue(
     eligible_quantity = _promotion_eligible_quantity(promotion, product_quantities)
     if eligible_quantity < promotion.min_quantity:
         quantity_shortfall = promotion.min_quantity - eligible_quantity
-        scope = "指定組合商品" if target_ids else "商品"
+        scope = (
+            "指定商品"
+            if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE
+            else "指定組合商品"
+            if target_ids
+            else "商品"
+        )
         return (
             "quantity_not_met",
             f"目前{scope}共 {eligible_quantity} 件，再登記 {quantity_shortfall} 件即可達到 {promotion.min_quantity} 件優惠門檻。",
@@ -535,6 +605,12 @@ async def create_promotion(
     if activity_id is not None and await session.get(Activity, activity_id) is None:
         raise ValueError("找不到指定活動")
     _validate_discount(data.discount_type, data.discount_value)
+    product_price_overrides = _build_product_price_override_rows(
+        data.discount_type,
+        target_products,
+        data.product_price_overrides,
+        validate_current_prices=True,
+    )
     if data.starts_at and data.ends_at and data.starts_at >= data.ends_at:
         raise ValueError("優惠開始時間必須早於結束時間")
     if code and await session.scalar(
@@ -549,6 +625,7 @@ async def create_promotion(
         target_user_id=target_users[0].id if len(target_users) == 1 else None,
         target_users=target_users,
         target_products=target_products,
+        product_price_overrides=product_price_overrides,
         discount_type=data.discount_type,
         discount_value=data.discount_value,
         min_order_price=data.min_order_price,
@@ -648,6 +725,12 @@ async def update_promotion(
     payload = data.model_dump(exclude_unset=True)
     activity_was_explicit = "activity_id" in payload
     target_products_changed = "target_product_ids" in payload
+    price_overrides_were_explicit = "product_price_overrides" in payload
+    requested_price_overrides = payload.pop("product_price_overrides", None)
+    if requested_price_overrides is not None:
+        requested_price_overrides = [
+            ShopPromotionProductPriceCreate.model_validate(row) for row in requested_price_overrides
+        ]
     requested_activity_id = payload.pop("activity_id", promotion.activity_id)
     target_users: list[User] | None = None
     target_products: list[Product] | None = None
@@ -692,6 +775,31 @@ async def update_promotion(
         if activity_id is not None and await session.get(Activity, activity_id) is None:
             raise ValueError("找不到指定活動")
         promotion.activity_id = activity_id
+
+    effective_discount_type = payload.get("discount_type", promotion.discount_type)
+    effective_target_products = (
+        target_products if target_products is not None else list(promotion.target_products or [])
+    )
+    if price_overrides_were_explicit:
+        effective_price_overrides = requested_price_overrides or []
+    elif effective_discount_type == ShopDiscountType.PRICE_OVERRIDE:
+        effective_price_overrides = [
+            ShopPromotionProductPriceCreate(
+                product_id=row.product_id,
+                unit_price=row.unit_price,
+            )
+            for row in (promotion.product_price_overrides or [])
+        ]
+    else:
+        effective_price_overrides = []
+    promotion.product_price_overrides = _build_product_price_override_rows(
+        effective_discount_type,
+        effective_target_products,
+        effective_price_overrides,
+        validate_current_prices=price_overrides_were_explicit,
+    )
+    if effective_discount_type == ShopDiscountType.PRICE_OVERRIDE:
+        payload.setdefault("discount_value", 0)
     apply_updates(promotion, ShopPromotionUpdate.model_validate(payload))
     _validate_discount(promotion.discount_type, promotion.discount_value)
     if promotion.starts_at and promotion.ends_at and promotion.starts_at >= promotion.ends_at:
@@ -714,6 +822,16 @@ def _discount_amount(
     eligible_subtotal = _promotion_eligible_subtotal(promotion, subtotal, product_subtotals)
     if eligible_subtotal <= 0:
         return 0
+    if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE:
+        products_by_id = {product.id: product for product in (promotion.target_products or [])}
+        quantities = product_quantities or {}
+        savings = sum(
+            max(0, products_by_id[row.product_id].price - row.unit_price)
+            * quantities.get(row.product_id, 0)
+            for row in (promotion.product_price_overrides or [])
+            if row.product_id in products_by_id
+        )
+        return min(eligible_subtotal, savings)
     if promotion.discount_type == ShopDiscountType.PERCENTAGE:
         return min(eligible_subtotal, eligible_subtotal * promotion.discount_value // 100)
     return min(eligible_subtotal, promotion.discount_value)
@@ -796,6 +914,8 @@ async def resolve_promotion(
             raise ValueError(reason)
         amount = _discount_amount(promotion, subtotal, product_subtotals, product_quantities)
         if amount <= 0:
+            if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE:
+                raise ValueError("指定商品目前售價不高於設定的優惠後單價，無法折抵")
             if {product.id for product in (promotion.target_products or [])}:
                 missing_names = [
                     product.name
@@ -934,6 +1054,7 @@ def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
             ShopPromotionProductTargetOut(id=product.id, name=product.name)
             for product in (promotion.target_products or [])
         ],
+        product_price_overrides=_serialize_product_price_overrides(promotion),
         discount_type=promotion.discount_type,
         discount_value=promotion.discount_value,
         min_order_price=promotion.min_order_price,
@@ -964,7 +1085,29 @@ def serialize_public_promotion(promotion: ShopPromotion) -> ShopPromotionPublicO
             ShopPromotionProductTargetOut(id=product.id, name=product.name)
             for product in (promotion.target_products or [])
         ],
+        product_price_overrides=_serialize_product_price_overrides(promotion),
         starts_at=promotion.starts_at,
         ends_at=promotion.ends_at,
         description=promotion.description,
     )
+
+
+def serialize_product_price_overrides(
+    promotion: ShopPromotion,
+) -> list[ShopPromotionProductPriceOut]:
+    return _serialize_product_price_overrides(promotion)
+
+
+def _serialize_product_price_overrides(
+    promotion: ShopPromotion,
+) -> list[ShopPromotionProductPriceOut]:
+    products_by_id = {product.id: product for product in (promotion.target_products or [])}
+    return [
+        ShopPromotionProductPriceOut(
+            product_id=row.product_id,
+            product_name=products_by_id[row.product_id].name,
+            unit_price=row.unit_price,
+        )
+        for row in (promotion.product_price_overrides or [])
+        if row.product_id in products_by_id
+    ]

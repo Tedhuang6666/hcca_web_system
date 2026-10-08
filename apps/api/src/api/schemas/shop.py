@@ -404,6 +404,17 @@ class ShopPromotionPreviewRequest(BaseModel):
     activity_id: uuid.UUID | None = Field(None, description="優惠所屬活動；未指定時代表一般商品")
 
 
+class ShopPromotionProductPriceCreate(BaseModel):
+    product_id: uuid.UUID
+    unit_price: int = Field(..., ge=0, description="優惠後單價（新台幣）")
+
+
+class ShopPromotionProductPriceOut(BaseModel):
+    product_id: uuid.UUID
+    product_name: str
+    unit_price: int
+
+
 class ShopPromotionPreviewOut(BaseModel):
     eligible: bool
     promotion_name: str | None = None
@@ -433,6 +444,7 @@ class ShopPromotionPreviewOut(BaseModel):
     min_quantity: int | None = None
     quantity_shortfall: int = 0
     target_products: list[ShopPromotionProductTargetOut] = Field(default_factory=list)
+    product_price_overrides: list[ShopPromotionProductPriceOut] = Field(default_factory=list)
 
 
 class OrderCancelRequest(BaseModel):
@@ -475,11 +487,16 @@ class ShopPromotionCreate(BaseModel):
     target_product_ids: list[uuid.UUID] = Field(
         default_factory=list,
         max_length=100,
-        description="需同時登記的商品組合；折扣僅套用在這些商品",
+        description="優惠適用商品；一般折扣要求同時登記，指定商品價格則可任選",
+    )
+    product_price_overrides: list[ShopPromotionProductPriceCreate] = Field(
+        default_factory=list,
+        max_length=100,
+        description="指定商品價格優惠的商品與優惠後單價",
     )
     code: str | None = Field(None, max_length=80, description="優惠碼；留空時符合條件即自動套用")
     discount_type: ShopDiscountType
-    discount_value: int = Field(..., gt=0)
+    discount_value: int = Field(..., ge=0, description="百分比或固定金額折扣；指定商品價格時填 0")
     min_order_price: int = Field(0, ge=0)
     min_quantity: int = Field(1, ge=1, le=100)
     starts_at: datetime | None = None
@@ -495,9 +512,12 @@ class ShopPromotionUpdate(BaseModel):
     target_email: str | None = Field(None, max_length=255)
     target_identifiers: list[str] | None = Field(None, max_length=500)
     target_product_ids: list[uuid.UUID] | None = Field(None, max_length=100)
+    product_price_overrides: list[ShopPromotionProductPriceCreate] | None = Field(
+        None, max_length=100, description="指定商品價格優惠的商品與優惠後單價"
+    )
     code: str | None = Field(None, max_length=80)
     discount_type: ShopDiscountType | None = None
-    discount_value: int | None = Field(None, gt=0)
+    discount_value: int | None = Field(None, ge=0)
     min_order_price: int | None = Field(None, ge=0)
     min_quantity: int | None = Field(None, ge=1, le=100)
     starts_at: datetime | None = None
@@ -512,6 +532,20 @@ class ShopPromotionUpdate(BaseModel):
     def reject_null_public_visibility(cls, value: bool | None) -> bool:
         if value is None:
             raise ValueError("優惠公開狀態不可為空")
+        return value
+
+    @field_validator("discount_value")
+    @classmethod
+    def reject_null_discount_value(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("優惠折扣數值不可為空")
+        return value
+
+    @field_validator("discount_type")
+    @classmethod
+    def reject_null_discount_type(cls, value: ShopDiscountType | None) -> ShopDiscountType:
+        if value is None:
+            raise ValueError("優惠內容不可為空")
         return value
 
 
@@ -535,6 +569,7 @@ class ShopPromotionPublicOut(BaseModel):
     min_order_price: int
     min_quantity: int
     target_products: list[ShopPromotionProductTargetOut] = Field(default_factory=list)
+    product_price_overrides: list[ShopPromotionProductPriceOut] = Field(default_factory=list)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     description: str | None = None
@@ -549,6 +584,7 @@ class ShopPromotionOut(BaseModel):
     target_email: str | None = None
     target_users: list[ShopPromotionTargetOut] = Field(default_factory=list)
     target_products: list[ShopPromotionProductTargetOut] = Field(default_factory=list)
+    product_price_overrides: list[ShopPromotionProductPriceOut] = Field(default_factory=list)
     discount_type: ShopDiscountType
     discount_value: int
     min_order_price: int
@@ -709,6 +745,8 @@ __all__ = [
     "ShopClassSummaryOut",
     "ShopOrderCloseCreate",
     "ShopOrderCloseOut",
+    "ShopPromotionProductPriceCreate",
+    "ShopPromotionProductPriceOut",
     "CloseStatusItem",
     "CloseStatusOut",
     "OrderQuantityRow",
