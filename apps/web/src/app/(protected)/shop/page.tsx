@@ -27,6 +27,7 @@ import type {
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
@@ -156,10 +157,10 @@ function flyProductIntoOrder() {
   });
 }
 
-const GENERAL_ACTIVITY_SCOPE = "__general__";
+const GENERAL_ACTIVITY_SCOPE = "none";
 
-function activityScopeKey(activityId: string | null | undefined) {
-  return activityId ?? GENERAL_ACTIVITY_SCOPE;
+function activityScopeKey(activityId: string | null | undefined, categoryId?: string | null) {
+  return orderScopeKey({ activity_id: activityId, category_id: categoryId });
 }
 
 function registrationLockMessage({
@@ -186,7 +187,7 @@ function ProductModal({
   authLoading,
   registrationLoadError,
   registration,
-  activityId,
+  scopeKey,
   registrationLocked,
   onClose,
   onRegistrationChange,
@@ -198,10 +199,10 @@ function ProductModal({
   authLoading: boolean;
   registrationLoadError: boolean;
   registration: OrderOut | null;
-  activityId: string | null;
+  scopeKey: string;
   registrationLocked: boolean;
   onClose: () => void;
-  onRegistrationChange: (activityId: string | null, order: OrderOut | null) => void;
+  onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
   onProductAdded: () => void;
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
@@ -393,7 +394,7 @@ function ProductModal({
         variants: [...currentVariants.values()],
       });
       onRegistrationChange(
-        activityId,
+        scopeKey,
         updated?.status === "cancelled" ? null : updated,
       );
       if (quantity > 0 && !wasRegistered) onProductAdded();
@@ -844,27 +845,24 @@ export default function ShopPage() {
   }, [loadCatalog]);
 
   useEffect(() => {
-    const activityId = selectedPromotionScope === GENERAL_ACTIVITY_SCOPE
-      ? null
-      : selectedPromotionScope;
-    const registration = registrations.find((order) => order.activity_id === activityId) ?? null;
+    const scope = orderScopeParams(selectedPromotionScope);
+    const registration = registrations.find((order) => orderScopeKey(order) === selectedPromotionScope) ?? null;
     if (!isLoggedIn || authLoading || !registration) {
       setPromotionPreview(null);
       return;
     }
-    void shopApi.previewCurrentPromotion(registration.promotion_code ?? null, activityId)
+    void shopApi.previewCurrentPromotion(registration.promotion_code ?? null, scope.activity_id ?? null, scope.category_id)
       .then(setPromotionPreview)
       .catch(() => setPromotionPreview(null));
   }, [isLoggedIn, authLoading, registrations, selectedPromotionScope]);
 
   const activityOptions = useMemo(() => {
     const namesById = new Map<string, Set<string>>();
-    const hasGeneralProducts = catalog.some((category) => category.activity_id == null);
     for (const category of catalog) {
-      if (!category.activity_id) continue;
-      const names = namesById.get(category.activity_id) ?? new Set<string>();
+      const key = catalogScopeKey(category);
+      const names = namesById.get(key) ?? new Set<string>();
       names.add(category.activity_name ?? category.name);
-      namesById.set(category.activity_id, names);
+      namesById.set(key, names);
     }
     for (const promotion of availablePromotions) {
       if (promotion.activity_id && !namesById.has(promotion.activity_id)) {
@@ -875,9 +873,6 @@ export default function ShopPage() {
       id,
       label: names.size ? [...names].join("、") : "活動商品",
     }));
-    if (hasGeneralProducts || availablePromotions.some((promotion) => !promotion.activity_id)) {
-      options.unshift({ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" });
-    }
     if (!options.length) options.push({ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" });
     return options;
   }, [catalog, availablePromotions]);
@@ -918,12 +913,11 @@ export default function ShopPage() {
   useEffect(() => {
     if (!catalog.length) return;
     const category = catalog.find((item) => item.id === selectedCategoryId) ?? catalog[0];
-    setSelectedPromotionScope(activityScopeKey(category.activity_id));
+    setSelectedPromotionScope(catalogScopeKey(category));
   }, [catalog, selectedCategoryId]);
 
-  const selectedCategoryActivityId = selectedCategory?.activity_id ?? null;
   const selectedCategoryRegistration = registrations.find(
-    (order) => order.activity_id === selectedCategoryActivityId,
+    (order) => orderScopeKey(order) === (selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE),
   ) ?? null;
   const registeredByProduct = new Map<string, number>();
   for (const item of selectedCategoryRegistration?.items ?? []) {
@@ -938,12 +932,11 @@ export default function ShopPage() {
 
   const inspectAndApplyPromotion = async (
     code: string | null,
-    requestedActivityId = selectedPromotionScope === GENERAL_ACTIVITY_SCOPE
-      ? null
-      : selectedPromotionScope,
+    requestedScopeKey = selectedPromotionScope,
   ) => {
+    const scope = orderScopeParams(requestedScopeKey);
     const registration = registrations.find(
-      (order) => order.activity_id === requestedActivityId,
+      (order) => orderScopeKey(order) === requestedScopeKey,
     ) ?? null;
     if (!isLoggedIn || authLoading) {
       setPromotionFeedback("登入後登記商品即可使用這項優惠。");
@@ -962,15 +955,15 @@ export default function ShopPage() {
     setPromotionBusy(true);
     setPromotionFeedback("");
     try {
-      const preview = await shopApi.previewCurrentPromotion(code, requestedActivityId);
+      const preview = await shopApi.previewCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
       setPromotionPreview(preview);
       if (!preview.eligible) {
         setPromotionFeedback(preview.reason ?? "目前尚未符合優惠條件。");
         return;
       }
-      const updated = await shopApi.applyCurrentPromotion(code, requestedActivityId);
+      const updated = await shopApi.applyCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
       setRegistrations((current) => [
-        ...current.filter((order) => order.activity_id !== requestedActivityId),
+        ...current.filter((order) => orderScopeKey(order) !== requestedScopeKey),
         updated,
       ]);
       setPromotionFeedback(preview.reason ?? "優惠已套用。");
@@ -983,9 +976,11 @@ export default function ShopPage() {
     }
   };
 
-  const handleRegistrationChange = async (activityId: string | null, order: OrderOut | null) => {
+  const handleRegistrationChange = async (scopeKey: string, order: OrderOut | null) => {
+    const scope = orderScopeParams(scopeKey);
+    const activityId = scope.activity_id ?? null;
     if (order) {
-      const previousOrder = registrations.find((existing) => existing.activity_id === activityId) ?? null;
+      const previousOrder = registrations.find((existing) => orderScopeKey(existing) === scopeKey) ?? null;
       const newlyQualifiedPromotions = availablePromotions
         .filter((promotion) => (promotion.activity_id ?? null) === activityId)
         .filter((promotion) => (
@@ -996,28 +991,26 @@ export default function ShopPage() {
       celebratePromotionThresholds(newlyQualifiedPromotions);
     }
     setRegistrations((current) => [
-      ...current.filter((existing) => existing.activity_id !== activityId),
+      ...current.filter((existing) => orderScopeKey(existing) !== scopeKey),
       ...(order ? [order] : []),
     ]);
     const pendingCode = couponCode.trim();
-    const selectedActivityId = selectedPromotionScope === GENERAL_ACTIVITY_SCOPE
-      ? null
-      : selectedPromotionScope;
+
     if (
       !order
-      || activityId !== selectedActivityId
+      || scopeKey !== selectedPromotionScope
       || !pendingCode
       || order.promotion_code?.toUpperCase() === pendingCode.toUpperCase()
     ) {
       return;
     }
     try {
-      const preview = await shopApi.previewCurrentPromotion(pendingCode, activityId);
+      const preview = await shopApi.previewCurrentPromotion(pendingCode, activityId, scope.category_id);
       setPromotionPreview(preview);
       if (preview.eligible) {
-        const updated = await shopApi.applyCurrentPromotion(pendingCode, activityId);
+        const updated = await shopApi.applyCurrentPromotion(pendingCode, activityId, scope.category_id);
         setRegistrations((current) => [
-          ...current.filter((existing) => existing.activity_id !== activityId),
+          ...current.filter((existing) => orderScopeKey(existing) !== scopeKey),
           updated,
         ]);
         setPromotionFeedback(preview.reason ?? "優惠已套用。");
@@ -1031,7 +1024,7 @@ export default function ShopPage() {
 
   const claimPromotion = (promotion: ShopPromotionPublicOut) => {
     const code = promotion.code ?? "";
-    const scopeId = activityScopeKey(promotion.activity_id);
+    const scopeId = promotion.activity_id ? activityScopeKey(promotion.activity_id) : selectedPromotionScope;
     setSelectedPromotionScope(scopeId);
     setCouponCode(code);
     if (promotion.code) {
@@ -1040,7 +1033,7 @@ export default function ShopPage() {
     } else {
       setPromotionFeedback(`「${promotion.name}」符合條件時會自動折抵；可先查看目前進度。`);
     }
-    void inspectAndApplyPromotion(promotion.code ?? null, promotion.activity_id ?? null);
+    void inspectAndApplyPromotion(promotion.code ?? null, scopeId);
   };
 
   const openPromotionProduct = (productId: string) => {
@@ -1180,10 +1173,10 @@ export default function ShopPage() {
             <div className="shop-public-promotion-grid">
               {availablePromotions.map((promotion) => {
               const promotionRegistration = registrations.find(
-                (order) => order.activity_id === (promotion.activity_id ?? null),
+                (order) => orderScopeKey(order) === (promotion.activity_id ?? selectedPromotionScope),
               ) ?? null;
               const promotionScope = activityOptions.find(
-                (option) => option.id === activityScopeKey(promotion.activity_id),
+                (option) => option.id === (promotion.activity_id ?? selectedPromotionScope),
               )?.label ?? "指定活動";
               const targetProducts = promotion.target_products ?? [];
               const targetIds = new Set(targetProducts.map((product) => product.id));
@@ -1356,7 +1349,7 @@ export default function ShopPage() {
                     onClick={() => {
                       setSelectedCategoryId(category.id);
                       setSelectedSeriesId(null);
-                      setSelectedPromotionScope(activityScopeKey(category.activity_id));
+                      setSelectedPromotionScope(catalogScopeKey(category));
                     }}
                     aria-pressed={isSelected}
                     className="shop-public-category-tab">
@@ -1484,7 +1477,7 @@ export default function ShopPage() {
           authLoading={authLoading}
           registrationLoadError={registrationLoadError}
           registration={selectedCategoryRegistration}
-          activityId={selectedCategoryActivityId}
+          scopeKey={selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE}
           registrationLocked={registrationLocked}
           onClose={closeProduct}
           onRegistrationChange={handleRegistrationChange}

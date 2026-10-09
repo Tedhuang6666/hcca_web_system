@@ -8,6 +8,7 @@ import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { useWS } from "@/hooks/useWS";
+import { orderScopeKey } from "@/lib/shop-order-scope";
 import { summarizeOrderItems } from "@/lib/shop-order-items";
 
 function CollectionStatus({ order }: { order: OrderListItem }) {
@@ -67,9 +68,9 @@ export default function OrdersPage() {
     hasClassOrders: boolean;
   }>();
   for (const order of orders) {
-    const key = order.activity_id ?? "general";
+    const key = orderScopeKey(order);
     const group = activityGroups.get(key) ?? {
-      label: order.activity_name ?? (order.activity_id ? "已結束的活動" : "一般商品"),
+      label: order.activity_name ?? order.category_name ?? (order.activity_id ? "已結束的活動" : "一般商品"),
       orders: [],
       amount: 0,
       classCollected: 0,

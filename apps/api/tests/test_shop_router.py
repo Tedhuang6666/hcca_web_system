@@ -793,8 +793,9 @@ async def test_public_coupon_requires_product_bundle_spend_and_quantity(
     creator = await _bare_user(db_session)
     buyer = await _bare_user(db_session)
     manager = await _bare_user(db_session)
-    first = await _make_active_product(db_session, creator, price=100, stock=20)
-    second = await _make_active_product(db_session, creator, price=100, stock=20)
+    category = await _make_category(db_session, creator)
+    first = await _make_active_product(db_session, creator, category=category, price=100, stock=20)
+    second = await _make_active_product(db_session, creator, category=category, price=100, stock=20)
     await _grant_permission(db_session, manager, "shop:manage")
     manager_client = authed_client_factory(manager)
     created = await manager_client.post(
@@ -931,8 +932,9 @@ async def test_coupon_applies_configured_prices_to_multiple_products(
     creator = await _bare_user(db_session)
     buyer = await _bare_user(db_session)
     manager = await _bare_user(db_session)
-    first = await _make_active_product(db_session, creator, price=50, stock=10)
-    second = await _make_active_product(db_session, creator, price=80, stock=10)
+    category = await _make_category(db_session, creator)
+    first = await _make_active_product(db_session, creator, category=category, price=50, stock=10)
+    second = await _make_active_product(db_session, creator, category=category, price=80, stock=10)
     await _grant_permission(db_session, manager, "shop:manage")
     manager_client = authed_client_factory(manager)
 
@@ -1532,8 +1534,9 @@ async def test_cadre_can_register_multiple_products_in_one_request(
     cadre = await _bare_user(db_session, student_id="11501")
     await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
     student = await _bare_user(db_session, student_id="11520")
-    first = await _make_active_product(db_session, cadre, price=15)
-    second = await _make_active_product(db_session, cadre, price=25)
+    category = await _make_category(db_session, cadre)
+    first = await _make_active_product(db_session, cadre, category=category, price=15)
+    second = await _make_active_product(db_session, cadre, category=category, price=25)
 
     response = await authed_client_factory(cadre).post(
         "/shop/orders/class",
@@ -1613,8 +1616,9 @@ async def test_clear_all_order_data_removes_orders_and_restores_derived_data(
     cadre = await _bare_user(db_session, student_id="11501")
     await class_svc.add_cadre(db_session, school_class, user_id=cadre.id)
     student = await _bare_user(db_session, student_id="11520")
-    first = await _make_active_product(db_session, cadre, price=15, stock=20)
-    second = await _make_active_product(db_session, cadre, price=25, stock=30)
+    category = await _make_category(db_session, cadre)
+    first = await _make_active_product(db_session, cadre, category=category, price=15, stock=20)
+    second = await _make_active_product(db_session, cadre, category=category, price=25, stock=30)
     orders = await shop_svc.create_direct_order(
         db_session,
         user_id=student.id,
@@ -1858,3 +1862,265 @@ async def test_get_close_status_reflects_closed_and_open_categories(
     statuses = resp.json()["statuses"]
     assert statuses[str(closed_category.id)]["is_closed"] is True
     assert statuses[str(open_category.id)]["is_closed"] is False
+
+
+async def test_unlinked_catalog_activities_have_independent_registrations(
+    db_session, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session, student_id="11520")
+    christmas = await _make_category(db_session, creator, name="聖誕傳情")
+    anniversary = await _make_category(db_session, creator, name="校慶商品")
+    card = await shop_svc.create_product(
+        db_session,
+        data=ProductCreate(
+            category_id=christmas.id, name="傳情卡片餅乾套組", price=40, stock_quantity=50
+        ),
+        created_by=creator.id,
+    )
+    card = await shop_svc.activate_product(db_session, card)
+    hat = await _make_active_product(db_session, creator, category=anniversary, price=994)
+    second_card = await _make_active_product(db_session, creator, category=christmas, price=20)
+    ac = authed_client_factory(buyer)
+
+    async def register(product, quantity):
+        response = await ac.put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={"variants": [{"option_ids": [], "quantity": quantity}]},
+        )
+        assert response.status_code == 200
+        return response.json()
+
+    cards = await register(card, 3)
+    hats = await register(hat, 4)
+    assert cards["id"] != hats["id"]
+    assert cards["category_name"] == "聖誕傳情"
+    assert hats["category_name"] == "校慶商品"
+    updated_cards = await register(second_card, 2)
+    assert updated_cards["id"] == cards["id"]
+    assert updated_cards["total_price"] == 160
+    registrations = (await ac.get("/shop/registrations")).json()
+    assert len(registrations) == 2
+    assert sum(order["total_price"] for order in registrations) == 4136
+    # Removing one activity does not remove or lock the other.
+    removed = await ac.put(f"/shop/registrations/current/products/{card.id}", json={"variants": []})
+    assert removed.status_code == 200
+    orders = (await ac.get("/shop/orders", params={"my_only": "true"})).json()
+    assert {order["category_id"] for order in orders} == {str(christmas.id), str(anniversary.id)}
+    assert next(order for order in orders if order["id"] == hats["id"])["total_price"] == 3976
+    cancelled = await ac.put(
+        f"/shop/registrations/current/products/{second_card.id}", json={"variants": []}
+    )
+    assert cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["category_id"] == str(christmas.id)
+    assert cancelled.json()["category_name"] == "聖誕傳情"
+
+
+async def test_class_filters_unlinked_activity_and_keeps_other_classes_private(
+    client, db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session, start="11501", end="11540")
+    other_class = await _make_class(db_session, start="11601", end="11640")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    outsider = await _bare_user(db_session, student_id="11620")
+    first_category = await _make_category(db_session, cadre, name="聖誕傳情")
+    second_category = await _make_category(db_session, cadre, name="校慶商品")
+    first = await _make_active_product(db_session, cadre, category=first_category, price=40)
+    second = await _make_active_product(db_session, cadre, category=second_category, price=100)
+    created = await authed_client_factory(cadre).post(
+        "/shop/orders/class",
+        json={
+            "user_id": str(buyer.id),
+            "items": [
+                {"product_id": str(first.id), "quantity": 3},
+                {"product_id": str(second.id), "quantity": 4},
+            ],
+        },
+    )
+    assert created.status_code == 201
+    assert len(created.json()) == 2
+    await shop_svc.create_direct_order(
+        db_session,
+        user_id=outsider.id,
+        class_id=other_class.id,
+        data=ClassOrderUpsert(
+            user_id=outsider.id, items=[OrderItemCreate(product_id=first.id, quantity=2)]
+        ),
+    )
+    ac = authed_client_factory(cadre)
+    params = {"category_id": str(first_category.id), "general_only": "true"}
+    for endpoint in ("/shop/orders/class", "/shop/orders/class/summary"):
+        assert (await client.get(endpoint, params=params)).status_code == 401
+        # Non-cadres receive no class data, consistent with the existing read contract.
+        unauthorized = await authed_client_factory(outsider).get(endpoint, params=params)
+        assert unauthorized.status_code == 200
+        assert unauthorized.json() == (
+            []
+            if endpoint.endswith("class")
+            else {
+                "class_count": 0,
+                "order_count": 0,
+                "item_count": 0,
+                "total_amount": 0,
+                "paid_amount": 0,
+                "unpaid_amount": 0,
+                "paid_order_count": 0,
+                "unpaid_order_count": 0,
+                "assisted_order_count": 0,
+                "product_rows": [],
+            }
+        )
+    filtered = (await ac.get("/shop/orders/class", params=params)).json()
+    assert len(filtered) == 1
+    assert filtered[0]["user_id"] == str(buyer.id)
+    assert filtered[0]["total_price"] == 120
+    summary = (await ac.get("/shop/orders/class/summary", params=params)).json()
+    assert summary["total_amount"] == 120
+    assert summary["item_count"] == 3
+    assert [row["product_id"] for row in summary["product_rows"]] == [str(first.id)]
+    assert (await ac.get("/shop/orders/class", params={"general_only": "true"})).json() == []
+    assert (await ac.get("/shop/orders/class/summary", params={"general_only": "true"})).json()[
+        "total_amount"
+    ] == 0
+    # Editing a scoped order cannot bring the other activity back into it.
+    edited = await ac.patch(
+        f"/shop/orders/{filtered[0]['id']}",
+        json={
+            "user_id": str(buyer.id),
+            "items": [{"product_id": str(second.id), "quantity": 1}],
+        },
+    )
+    assert edited.status_code == 409
+    assert (await ac.get("/shop/orders/class", params=params)).json()[0]["total_price"] == 120
+
+
+async def test_class_summary_activity_filter_includes_all_pages(db_session) -> None:
+    creator = await _bare_user(db_session)
+    buyer = await _bare_user(db_session, student_id="11520")
+    sc = await _make_class(db_session, start="11501", end="11540")
+    activity = Activity(name="校慶", status=ActivityStatus.ACTIVE)
+    db_session.add(activity)
+    await db_session.flush()
+    category = await _make_category(db_session, creator, activity_id=activity.id)
+    product = await _make_active_product(db_session, creator, category=category, price=10)
+    for index in range(501):
+        db_session.add(
+            Order(
+                serial_number=f"SCOPE-{uuid.uuid4().hex[:8]}-{index}",
+                user_id=buyer.id,
+                class_id=sc.id,
+                activity_id=activity.id,
+                status=OrderStatus.PENDING,
+                subtotal_price=10,
+                total_price=10,
+                items=[
+                    OrderItem(product_id=product.id, quantity=1, unit_price=10, selected_options=[])
+                ],
+            )
+        )
+    await db_session.flush()
+    summary = await shop_svc.class_order_summary(
+        db_session, class_ids=[sc.id], activity_id=activity.id
+    )
+    assert summary.order_count == 501
+    assert summary.item_count == 501
+    assert summary.total_amount == 5010
+    assert (
+        await shop_svc.class_order_summary(db_session, class_ids=[sc.id], activity_id=uuid.uuid4())
+    ).order_count == 0
+
+
+async def test_collected_legacy_mixed_order_cannot_be_registered_again(
+    db_session, authed_client_factory
+):
+    buyer = await _bare_user(db_session)
+    first = await _make_active_product(db_session, buyer, price=40)
+    second = await _make_active_product(db_session, buyer, price=994)
+    order = Order(
+        serial_number="LOCKED-LEGACY",
+        user_id=buyer.id,
+        status=OrderStatus.PENDING,
+        subtotal_price=1034,
+        total_price=1034,
+        is_class_collected=True,
+        items=[
+            OrderItem(
+                product_id=product.id, quantity=1, unit_price=product.price, selected_options=[]
+            )
+            for product in (first, second)
+        ],
+    )
+    db_session.add(order)
+    await db_session.flush()
+    response = await authed_client_factory(buyer).put(
+        f"/shop/registrations/current/products/{first.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert response.status_code == 409
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 1
+    assert (await db_session.get(Product, first.id, populate_existing=True)).stock_quantity == 50
+
+
+async def test_categories_linked_to_same_activity_share_registration(
+    db_session, authed_client_factory
+):
+    buyer = await _bare_user(db_session)
+    activity = Activity(name="聖誕活動", status=ActivityStatus.ACTIVE)
+    db_session.add(activity)
+    await db_session.flush()
+    categories = [
+        await _make_category(db_session, buyer, activity_id=activity.id, name=name)
+        for name in ["餅乾", "卡片"]
+    ]
+    products = [await _make_active_product(db_session, buyer, category=c) for c in categories]
+    ac = authed_client_factory(buyer)
+    responses = [
+        await ac.put(
+            f"/shop/registrations/current/products/{p.id}",
+            json={"variants": [{"option_ids": [], "quantity": 1}]},
+        )
+        for p in products
+    ]
+    assert all(response.status_code == 200 for response in responses)
+    assert responses[0].json()["id"] == responses[1].json()["id"]
+    assert responses[1].json()["total_price"] == 200
+    assert responses[1].json()["category_id"] is None
+
+
+async def test_coupon_targets_selected_unlinked_activity(db_session, authed_client_factory):
+    from api.schemas.shop import ShopPromotionCreate
+
+    buyer = await _bare_user(db_session)
+    first = await _make_active_product(db_session, buyer, price=40)
+    second = await _make_active_product(db_session, buyer, price=100)
+    ac = authed_client_factory(buyer)
+    for product in (first, second):
+        assert (
+            await ac.put(
+                f"/shop/registrations/current/products/{product.id}",
+                json={"variants": [{"option_ids": [], "quantity": 1}]},
+            )
+        ).status_code == 200
+    await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="傳情折抵",
+            code="CARD10",
+            discount_type="fixed",
+            discount_value=10,
+            target_product_ids=[first.id],
+        ),
+        created_by=buyer.id,
+    )
+    first = await shop_svc.get_product(db_session, first.id)
+    payload = {"code": "CARD10", "category_id": str(first.series.category_id)}
+    preview = await ac.post("/shop/registrations/current/promotion/preview", json=payload)
+    assert preview.status_code == 200
+    assert preview.json()["eligible"] is True
+    applied = await ac.put("/shop/registrations/current/promotion", json=payload)
+    assert applied.status_code == 200
+    assert applied.json()["total_price"] == 30
+    orders = (await ac.get("/shop/registrations")).json()
+    assert sorted(order["total_price"] for order in orders) == [30, 100]

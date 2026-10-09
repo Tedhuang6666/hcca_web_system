@@ -781,6 +781,7 @@ async def preview_current_registration_promotion(
         session,
         current_user.id,
         activity_id=payload.activity_id,
+        category_id=payload.category_id,
         match_activity=True,
     )
     subtotal = order.subtotal_price if order else 0
@@ -851,6 +852,7 @@ async def apply_current_registration_promotion(
             current_user,
             code=payload.code,
             activity_id=payload.activity_id,
+            category_id=payload.category_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
@@ -968,6 +970,9 @@ async def list_class_orders(
     current_user: CurrentUser,
     is_class_collected: bool | None = Query(None, description="篩選班代個人收款紀錄"),
     assisted_only: bool = Query(False, description="僅顯示班級幹部協助建立的訂單"),
+    activity_id: uuid.UUID | None = Query(None, description="篩選活動"),
+    category_id: uuid.UUID | None = Query(None, description="篩選未綁活動的商品分類"),
+    general_only: bool = Query(False, description="僅顯示未綁活動的訂單"),
     product_id: uuid.UUID | None = Query(None, description="篩選商品"),
     member_user_id: uuid.UUID | None = Query(None, description="篩選特定學生"),
     limit: int = Query(100, ge=1, le=500),
@@ -977,6 +982,9 @@ async def list_class_orders(
     orders = await shop_svc.list_orders(
         session,
         class_ids=class_ids,
+        activity_id=activity_id,
+        category_id=category_id,
+        general_only=general_only,
         user_id=member_user_id,
         assistance_scope="class_assisted" if assisted_only else None,
         product_id=product_id,
@@ -997,12 +1005,18 @@ async def class_order_summary(
     current_user: CurrentUser,
     is_class_collected: bool | None = Query(None, description="篩選班代個人收款紀錄"),
     assisted_only: bool = Query(False, description="僅顯示班級幹部協助建立的訂單"),
+    activity_id: uuid.UUID | None = Query(None, description="篩選活動"),
+    category_id: uuid.UUID | None = Query(None, description="篩選未綁活動的商品分類"),
+    general_only: bool = Query(False, description="僅顯示未綁活動的訂單"),
     product_id: uuid.UUID | None = Query(None, description="篩選商品"),
 ) -> ShopClassSummaryOut:
     class_ids = list(await class_svc.get_cadre_class_ids(session, current_user.id))
     return await shop_svc.class_order_summary(
         session,
         class_ids=class_ids,
+        activity_id=activity_id,
+        category_id=category_id,
+        general_only=general_only,
         assistance_scope="class_assisted" if assisted_only else None,
         product_id=product_id,
         is_class_collected=is_class_collected,

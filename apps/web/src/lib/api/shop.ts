@@ -26,15 +26,17 @@ export const shopApi = {
     productId: string,
     body: { variants: { option_ids: string[]; quantity: number }[] },
   ) => put<OrderOut | null>(`/shop/registrations/current/products/${productId}`, body),
-  previewCurrentPromotion: (code: string | null, activityId: string | null) =>
+  previewCurrentPromotion: (code: string | null, activityId: string | null, categoryId?: string | null) =>
     post<ShopPromotionPreviewOut>("/shop/registrations/current/promotion/preview", {
       code,
       activity_id: activityId,
+      category_id: categoryId,
     }),
-  applyCurrentPromotion: (code: string | null, activityId: string | null) =>
+  applyCurrentPromotion: (code: string | null, activityId: string | null, categoryId?: string | null) =>
     put<OrderOut>("/shop/registrations/current/promotion", {
       code,
       activity_id: activityId,
+      category_id: categoryId,
     }),
 
   // 優惠管理（shop:manage）
@@ -55,6 +57,9 @@ export const shopApi = {
   listClassOrders: (params?: {
     is_class_collected?: string;
     assisted_only?: string;
+    activity_id?: string;
+    category_id?: string;
+    general_only?: string;
     product_id?: string;
     member_user_id?: string;
     limit?: string;
@@ -66,6 +71,9 @@ export const shopApi = {
   classSummary: (params?: {
     is_class_collected?: string;
     assisted_only?: string;
+    activity_id?: string;
+    category_id?: string;
+    general_only?: string;
     product_id?: string;
   }) => {
     const defined = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)) : {};

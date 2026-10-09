@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckSquare, Edit2, Lock, LockOpen, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
+import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
 import { mergeDraftItems } from "@/lib/shop-order-items";
 import type {
   CatalogCategoryOut,
@@ -30,6 +31,7 @@ type CatalogChoice = CatalogProductOut & {
 };
 type ClassOrderQuery = NonNullable<Parameters<typeof shopApi.listClassOrders>[0]>;
 type AssistedItemDraft = {
+  scope_key: string;
   id: string;
   product_id: string;
   product_name: string;
@@ -49,6 +51,7 @@ type AssistedOrderDraft = {
 };
 
 type ActivityCollectionRow = {
+  key: string;
   activity_id: string | null;
   label: string;
   order_count: number;
@@ -127,6 +130,7 @@ export default function ClassOrdersPage() {
   const [myClassId, setMyClassId] = useState<string | null>(null);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [productDetail, setProductDetail] = useState<ProductOut | null>(null);
+  const loadVersion = useRef(0);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -167,13 +171,14 @@ export default function ClassOrdersPage() {
   const formProducts = useMemo(
     () => activeProducts.filter((product) =>
       editOrder
-        ? product.activity_id === (editOrder.activity_id ?? null)
-        : composerActivityKey === null || (product.activity_id ?? "none") === composerActivityKey),
+        ? orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) === orderScopeKey(editOrder)
+        : composerActivityKey === null || orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) === composerActivityKey),
     [activeProducts, editOrder, composerActivityKey],
   );
   const productRows = useMemo(() => {
     const rows = new Map(productSummary.product_rows.map((row) => [row.product_id, row]));
     for (const product of activeProducts) {
+      if (activityFilter !== "all" && orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) !== activityFilter) continue;
       if (rows.has(product.id)) continue;
       rows.set(product.id, {
         product_id: product.id,
@@ -189,21 +194,23 @@ export default function ClassOrdersPage() {
       });
     }
     return [...rows.values()].sort((a, b) => a.product_name.localeCompare(b.product_name, "zh-Hant"));
-  }, [activeProducts, productSummary.product_rows]);
+  }, [activeProducts, activityFilter, productSummary.product_rows]);
   const productFilterOptions = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const p of catalogProducts) byId.set(p.id, p.name);
+    for (const p of catalogProducts) {
+      if (activityFilter === "all" || orderScopeKey({ activity_id: p.activity_id, category_id: p.categoryId }) === activityFilter) byId.set(p.id, p.name);
+    }
     for (const row of productRows) byId.set(row.product_id, row.product_name);
     return Array.from(byId.entries()).sort((a, b) => a[1].localeCompare(b[1], "zh-Hant"));
-  }, [catalogProducts, productRows]);
+  }, [activityFilter, catalogProducts, productRows]);
 
   const activityLabels = useMemo(() => {
     const namesById = new Map<string, Set<string>>();
     for (const category of catalog) {
-      if (!category.activity_id) continue;
-      const names = namesById.get(category.activity_id) ?? new Set<string>();
+      const key = catalogScopeKey(category);
+      const names = namesById.get(key) ?? new Set<string>();
       names.add(category.activity_name ?? category.name);
-      namesById.set(category.activity_id, names);
+      namesById.set(key, names);
     }
     return new Map(
       Array.from(namesById, ([id, names]) => [id, Array.from(names).join("／")]),
@@ -211,7 +218,7 @@ export default function ClassOrdersPage() {
   }, [catalog]);
 
   const activityLabel = useCallback((activityId: string | null | undefined) => {
-    if (!activityId) return "一般商品";
+    if (!activityId || activityId === "none") return "一般商品";
     return activityLabels.get(activityId) ?? `已結束活動 · ${activityId.slice(0, 6)}`;
   }, [activityLabels]);
 
@@ -222,10 +229,10 @@ export default function ClassOrdersPage() {
       categories: CatalogCategoryOut[];
     }>();
     for (const category of catalog) {
-      const key = category.activity_id ?? "none";
+      const key = catalogScopeKey(category);
       const group = groups.get(key) ?? {
         key,
-        label: activityLabel(category.activity_id),
+        label: activityLabel(key),
         categories: [],
       };
       group.categories.push(category);
@@ -237,27 +244,29 @@ export default function ClassOrdersPage() {
   const activityRows = useMemo(() => {
     const rows = new Map<string, ActivityCollectionRow>();
     for (const category of catalog) {
-      const key = category.activity_id ?? "none";
+      const key = catalogScopeKey(category);
       if (!rows.has(key)) rows.set(key, {
+        key,
         activity_id: category.activity_id ?? null,
-        label: category.activity_name ?? (category.activity_id ? category.name : "一般商品"),
+        label: category.activity_name ?? category.name,
         order_count: 0, total_amount: 0, collected_amount: 0, outstanding_amount: 0,
         council_amount: 0,
       });
     }
     for (const order of activityOrders) {
       if (!isCollectableOrder(order)) continue;
-      const key = order.activity_id ?? "none";
+      const key = orderScopeKey(order);
       const row = rows.get(key) ?? {
+        key,
         activity_id: order.activity_id ?? null,
-        label: activityLabel(order.activity_id),
+        label: order.category_name ?? activityLabel(key),
         order_count: 0,
         total_amount: 0,
         collected_amount: 0,
         outstanding_amount: 0,
         council_amount: 0,
       };
-      row.label = order.activity_name ?? row.label;
+      row.label = order.activity_name ?? order.category_name ?? row.label;
       row.order_count += 1;
       row.total_amount += order.total_price;
       if (order.is_class_collected) row.collected_amount += order.total_price;
@@ -276,13 +285,13 @@ export default function ClassOrdersPage() {
     council_amount: total.council_amount + row.council_amount,
   }), { order_count: 0, total_amount: 0, collected_amount: 0, outstanding_amount: 0, council_amount: 0 }), [activityRows]);
 
-  const activeLedgerKey = activityRows.some((row) => (row.activity_id ?? "none") === ledgerActivityKey)
-    ? ledgerActivityKey : (activityRows[0]?.activity_id ?? "none");
-  const ledgerActivity = activityRows.find((row) => (row.activity_id ?? "none") === activeLedgerKey);
+  const activeLedgerKey = activityRows.some((row) => row.key === ledgerActivityKey)
+    ? ledgerActivityKey : (activityRows[0]?.key ?? "none");
+  const ledgerActivity = activityRows.find((row) => row.key === activeLedgerKey);
   const seatRows = useMemo(() => {
     const ordersByMember = new Map<string, OrderListItem[]>();
     for (const order of activityOrders) {
-      if ((order.activity_id ?? "none") !== activeLedgerKey || !isCollectableOrder(order)) continue;
+      if (orderScopeKey(order) !== activeLedgerKey || !isCollectableOrder(order)) continue;
       const memberOrders = ordersByMember.get(order.user_id) ?? [];
       memberOrders.push(order);
       ordersByMember.set(order.user_id, memberOrders);
@@ -321,7 +330,7 @@ export default function ClassOrdersPage() {
     ? "全部活動"
     : activityFilter === "none"
       ? "一般商品"
-      : activityRows.find((row) => row.activity_id === activityFilter)?.label
+      : activityRows.find((row) => row.key === activityFilter)?.label
         ?? `已結束活動 · ${activityFilter.slice(0, 6)}`;
 
   const currentOptionIds = productDetail?.variant_groups
@@ -353,12 +362,13 @@ export default function ClassOrdersPage() {
     !editOrder && recipientIds.length && currentDraftItemCount > 0 && !hasIncompleteCurrentItem,
   );
   const assistedOrderDraftRows = useMemo(() => assistedOrderDrafts.map((draft) => {
-    const activityTotals = new Map<string, { activity_id: string | null; label: string; amount: number }>();
+    const activityTotals = new Map<string, { key: string; activity_id: string | null; label: string; amount: number }>();
     for (const item of draft.items) {
-      const key = item.activity_id ?? "none";
+      const key = item.scope_key;
       const row = activityTotals.get(key) ?? {
+        key,
         activity_id: item.activity_id,
-        label: activityLabel(item.activity_id),
+        label: activityLabel(key),
         amount: 0,
       };
       row.amount += item.quantity * item.unit_price;
@@ -372,14 +382,16 @@ export default function ClassOrdersPage() {
   }), [assistedOrderDrafts, activityLabel]);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setLoadFailed(false);
-    const params: ClassOrderQuery = {};
+    const scope = activityFilter === "all" ? {} : orderScopeParams(activityFilter);
+    const params: ClassOrderQuery = { ...scope };
     if (paidFilter !== "all") params.is_class_collected = paidFilter === "paid" ? "true" : "false";
     if (assistedFilter === "assisted") params.assisted_only = "true";
     if (productFilter) params.product_id = productFilter;
     if (memberFilter) params.member_user_id = memberFilter;
-    const hasFilters = paidFilter !== "all"
+    const hasFilters = activityFilter !== "all" || paidFilter !== "all"
       || assistedFilter !== "all"
       || productFilter !== ""
       || memberFilter !== "";
@@ -391,20 +403,22 @@ export default function ClassOrdersPage() {
       const [orderItems, activityItems, productStatus] = await Promise.all([
         filteredOrdersPromise,
         activityOrdersPromise,
-        shopApi.classSummary(),
+        shopApi.classSummary(scope),
       ]);
+      if (version !== loadVersion.current) return;
       setOrders(orderItems);
       setActivityOrders(activityItems);
       setProductSummary(productStatus);
       setSelectedIds((cur) => cur.filter((id) => orderItems.some((order) =>
         order.id === id && isCollectableOrder(order))));
     } catch (e) {
+      if (version !== loadVersion.current) return;
       setLoadFailed(true);
       toast.error(apiErrorMessage(e, "載入失敗"));
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
-  }, [assistedFilter, paidFilter, productFilter, memberFilter]);
+  }, [activityFilter, assistedFilter, paidFilter, productFilter, memberFilter]);
 
   const loadCloseStatus = useCallback(async (catIds: string[], classId: string) => {
     if (!catIds.length) return;
@@ -525,6 +539,7 @@ export default function ClassOrdersPage() {
         id: item.id,
         product_id: item.product_id,
         product_name: item.product_name ?? "未命名商品",
+        scope_key: orderScopeKey(full),
         activity_id: full.activity_id ?? null,
         quantity: item.quantity,
         option_ids: (item.selected_options ?? []).map((option) => option.option_id),
@@ -567,6 +582,7 @@ export default function ClassOrdersPage() {
       id: `${productDetail.id}-${Date.now()}-${Math.random()}`,
       product_id: productDetail.id,
       product_name: productDetail.name,
+      scope_key: editOrder ? orderScopeKey(editOrder) : orderScopeKey({ activity_id: activityId, category_id: catalogProducts.find((product) => product.id === productDetail.id)?.categoryId }),
       activity_id: activityId,
       quantity,
       option_ids: currentOptionIds,
@@ -590,6 +606,7 @@ export default function ClassOrdersPage() {
         id: `${productDetail.id}-${Date.now()}-${Math.random()}`,
         product_id: productDetail.id,
         product_name: productDetail.name,
+        scope_key: editOrder ? orderScopeKey(editOrder) : orderScopeKey({ activity_id: catalogProducts.find((product) => product.id === productDetail.id)?.activity_id, category_id: catalogProducts.find((product) => product.id === productDetail.id)?.categoryId }),
         activity_id: editOrder?.activity_id
           ?? catalogProducts.find((product) => product.id === productDetail.id)?.activity_id
           ?? null,
@@ -674,7 +691,7 @@ export default function ClassOrdersPage() {
     const needle = query.trim().toLowerCase();
     return orders.filter((o) =>
       (activityFilter === "all"
-        || (activityFilter === "none" ? !o.activity_id : o.activity_id === activityFilter))
+        || orderScopeKey(o) === activityFilter)
       && (!needle
         || o.serial_number.toLowerCase().includes(needle)
         || (o.user_name ?? "").toLowerCase().includes(needle)
@@ -687,9 +704,9 @@ export default function ClassOrdersPage() {
     selectedSet.has(order.id) && isCollectableOrder(order));
   const selectedActivityGroups = new Map<string, { label: string; orders: OrderListItem[] }>();
   for (const order of selectedOrders) {
-    const key = order.activity_id ?? "none";
+    const key = orderScopeKey(order);
     const group = selectedActivityGroups.get(key) ?? {
-      label: activityLabel(order.activity_id),
+      label: order.category_name ?? activityLabel(key),
       orders: [],
     };
     group.orders.push(order);
@@ -915,7 +932,7 @@ export default function ClassOrdersPage() {
     setWorkspace("details");
     const product = catalogProducts.find((item) => item.id === productId);
     const category = catalog.find((item) => item.id === product?.categoryId);
-    setActivityFilter(category?.activity_id ?? "none");
+    setActivityFilter(category ? catalogScopeKey(category) : "none");
     setProductFilter(productId);
     setPaidFilter(hasUncollectedOrders ? "unpaid" : "all");
     setAssistedFilter("all");
@@ -995,6 +1012,18 @@ export default function ClassOrdersPage() {
         ))}
       </nav>
 
+      {workspace === "details" && (
+        <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
+          整理活動
+          <select className="input min-h-11 w-full sm:w-auto" aria-label="整理活動" value={activityFilter}
+            onChange={(event) => { setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
+            <option value="all">全部活動</option>
+            {activityRows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
+          </select>
+          <span style={{ color: "var(--text-muted)" }}>商品統計與訂單清單依所選活動整理</span>
+        </label>
+      )}
+
       {submitMessage && <p role="status" className="rounded-md p-3 text-sm" style={{ background: "var(--bg-elevated)" }}>{submitMessage}</p>}
       {workspace === "order" && catalogFailed && (
         <p role="alert">無法載入可訂購商品。<button type="button" className="btn btn-ghost min-h-11" onClick={() => window.location.reload()}>重新載入</button></p>
@@ -1028,7 +1057,7 @@ export default function ClassOrdersPage() {
             {editOrder
               ? "此訂單限修改原活動的商品。"
               : composerActivityKey
-                ? `目前代訂 ${activityRows.find((row) => (row.activity_id ?? "none") === composerActivityKey)?.label ?? "所選活動"}；同一活動的商品會合成一筆訂單。`
+                ? `目前代訂 ${activityRows.find((row) => row.key === composerActivityKey)?.label ?? "所選活動"}；同一活動的商品會合成一筆訂單。`
                 : "先選一位同學，再逐項加入商品、規格與數量，確認清單後一次送出。相同規格自動合併，不同活動分開計算。"}
           </p>
           {!editOrder && composerActivityKey && (
@@ -1144,7 +1173,7 @@ export default function ClassOrdersPage() {
                     <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                       <p className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.product_name}</p>
                       <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
-                        {activityLabel(item.activity_id)} · {item.option_label || "標準規格"} · {money(item.unit_price)} / 件
+                        {activityLabel(item.scope_key)} · {item.option_label || "標準規格"} · {money(item.unit_price)} / 件
                       </p>
                     </div>
                     <label className="flex items-center gap-2 text-xs">
@@ -1223,7 +1252,7 @@ export default function ClassOrdersPage() {
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
                       {row.activity_totals.map((activity) => (
-                        <span key={activity.activity_id ?? "none"}>{activity.label} {money(activity.amount)}</span>
+                        <span key={activity.key}>{activity.label} {money(activity.amount)}</span>
                       ))}
                     </div>
                     <div className="flex gap-2">
@@ -1266,7 +1295,7 @@ export default function ClassOrdersPage() {
                         <td className="px-3 py-3 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
                           <div className="space-y-1">
                             {row.activity_totals.map((activity) => (
-                              <p key={activity.activity_id ?? "none"}>{activity.label} · {money(activity.amount)}</p>
+                              <p key={activity.key}>{activity.label} · {money(activity.amount)}</p>
                             ))}
                           </div>
                         </td>
@@ -1336,7 +1365,7 @@ export default function ClassOrdersPage() {
           <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
             <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
               {activityRows.map((row) => {
-                const key = row.activity_id ?? "none";
+                const key = row.key;
                 return (
                   <div key={key} className="px-4 py-3" style={{ background: activityFilter === key ? "var(--primary-dim)" : undefined }}>
                     <div className="flex items-start justify-between gap-3">
@@ -1349,7 +1378,7 @@ export default function ClassOrdersPage() {
                       <div><p style={{ color: "var(--text-muted)" }}>待收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--warning)" }}>{money(row.outstanding_amount)}</p></div>
                     </div>
                     <p className="mt-2 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>班聯已確認：{money(row.council_amount)}</p>
-                    <button type="button" onClick={() => showActivityCollection(row.activity_id)}
+                    <button type="button" onClick={() => showActivityCollection(row.key)}
                       className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium"
                       style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
                       查看座號收款
@@ -1387,7 +1416,7 @@ export default function ClassOrdersPage() {
                 </thead>
                 <tbody>
                   {activityRows.map((row) => {
-                    const key = row.activity_id ?? "none";
+                    const key = row.key;
                     return (
                       <tr key={key} style={{ borderBottom: "1px solid var(--border)", background: activityFilter === key ? "var(--primary-dim)" : undefined }}>
                         <th scope="row" className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</th>
@@ -1397,7 +1426,7 @@ export default function ClassOrdersPage() {
                         <td className="px-4 py-3 tabular-nums" style={{ color: "var(--warning)" }}>{money(row.outstanding_amount)}</td>
                         <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{money(row.council_amount)}</td>
                         <td className="px-4 py-2 text-right">
-                          <button type="button" onClick={() => showActivityCollection(row.activity_id)}
+                          <button type="button" onClick={() => showActivityCollection(row.key)}
                             className="min-h-11 rounded-md px-3 text-xs font-medium"
                             style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
                             查看座號收款
@@ -1439,10 +1468,10 @@ export default function ClassOrdersPage() {
             </div>
             <label className="grid gap-1 text-sm" style={{ color: "var(--text-secondary)" }}>
               活動
-              <select className="input min-h-11 min-w-44" value={activeLedgerKey}
-                onChange={(event) => { setLedgerActivityKey(event.target.value); setActivityFilter(event.target.value); }}>
+              <select className="input min-h-11 min-w-44" aria-label="收款活動" value={activeLedgerKey}
+                onChange={(event) => { setLedgerActivityKey(event.target.value); setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
                 {activityRows.map((row) => (
-                  <option key={row.activity_id ?? "none"} value={row.activity_id ?? "none"}>{row.label}</option>
+                  <option key={row.key} value={row.key}>{row.label}</option>
                 ))}
               </select>
             </label>
@@ -1554,7 +1583,7 @@ export default function ClassOrdersPage() {
       <div hidden={workspace !== "details"} className="space-y-5">
       <section aria-labelledby="product-collection-heading" className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <h2 id="product-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>商品收款明細</h2>
+          <h2 id="product-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>商品收款明細 · {selectedActivityLabel}</h2>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>收款紀錄代表班代已向同學收款；整班繳款由班聯會確認。</p>
         </div>
         {loading && productSummary.product_rows.length === 0 ? (
@@ -1673,11 +1702,11 @@ export default function ClassOrdersPage() {
                 <option value="">全部商品</option>
                 {productFilterOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
-              <select className="input min-h-11" value={activityFilter} onChange={(e) => setActivityFilter(e.target.value)} aria-label="依活動篩選">
+              <select className="input min-h-11" value={activityFilter} onChange={(e) => { setActivityFilter(e.target.value); setProductFilter(""); setSelectedIds([]); }} aria-label="依活動篩選">
                 <option value="all">全部活動</option>
                 <option value="none">一般商品</option>
-                {activityRows.filter((row) => row.activity_id).map((row) => (
-                  <option key={row.activity_id} value={row.activity_id ?? ""}>{row.label}</option>
+                {activityRows.filter((row) => row.key !== "none").map((row) => (
+                  <option key={row.key} value={row.key}>{row.label}</option>
                 ))}
               </select>
             </div>
@@ -1745,7 +1774,7 @@ export default function ClassOrdersPage() {
                         </Link>
                         <p className="mt-1 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{order.user_name ?? "未具名訂購人"}</p>
                         <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                          {activityLabel(order.activity_id)} · {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
+                          {order.activity_name ?? order.category_name ?? activityLabel(orderScopeKey(order))} · {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
@@ -1821,7 +1850,7 @@ export default function ClassOrdersPage() {
                           </Link>
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{activityLabel(order.activity_id)}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.activity_name ?? order.category_name ?? activityLabel(orderScopeKey(order))}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
                           {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
                         </td>

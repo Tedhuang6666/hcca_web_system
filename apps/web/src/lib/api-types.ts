@@ -20984,6 +20984,10 @@ export interface components {
             assistance_scope: string;
             /** Assisted By Id */
             assisted_by_id?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Category Name */
+            category_name?: string | null;
             /** Class Id */
             class_id?: string | null;
             /** Class Label */
@@ -21055,6 +21059,10 @@ export interface components {
             assistance_scope: string;
             /** Assisted By Id */
             assisted_by_id?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Category Name */
+            category_name?: string | null;
             /** Class Collected At */
             class_collected_at?: string | null;
             /** Class Id */
@@ -28687,9 +28695,14 @@ export interface components {
         ShopPromotionPreviewRequest: {
             /**
              * Activity Id
-             * @description 優惠所屬活動；未指定時代表一般商品
+             * @description 優惠所屬活動
              */
             activity_id?: string | null;
+            /**
+             * Category Id
+             * @description 未綁活動時的商品分類
+             */
+            category_id?: string | null;
             /**
              * Code
              * @description 優惠碼；留空時檢查帳號自動優惠
@@ -53743,6 +53756,12 @@ export interface operations {
                 is_class_collected?: boolean | null;
                 /** @description 僅顯示班級幹部協助建立的訂單 */
                 assisted_only?: boolean;
+                /** @description 篩選活動 */
+                activity_id?: string | null;
+                /** @description 篩選未綁活動的商品分類 */
+                category_id?: string | null;
+                /** @description 僅顯示未綁活動的訂單 */
+                general_only?: boolean;
                 /** @description 篩選商品 */
                 product_id?: string | null;
                 /** @description 篩選特定學生 */
@@ -53816,6 +53835,12 @@ export interface operations {
                 is_class_collected?: boolean | null;
                 /** @description 僅顯示班級幹部協助建立的訂單 */
                 assisted_only?: boolean;
+                /** @description 篩選活動 */
+                activity_id?: string | null;
+                /** @description 篩選未綁活動的商品分類 */
+                category_id?: string | null;
+                /** @description 僅顯示未綁活動的訂單 */
+                general_only?: boolean;
                 /** @description 篩選商品 */
                 product_id?: string | null;
             };
