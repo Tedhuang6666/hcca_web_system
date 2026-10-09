@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { FileCheck2, Paperclip, ReceiptText } from "lucide-react";
+import Image from "next/image";
+import { Paperclip, ReceiptText } from "lucide-react";
 
-import EvidencePreview from "@/components/finance/EvidencePreview";
 import Modal from "@/components/ui/Modal";
+import { apiUrl } from "@/lib/config";
 import type { PublicBudgetExpenseOut } from "@/lib/types";
 
 export type PublicBudgetExecutionLine = {
@@ -26,6 +27,27 @@ function formatAmount(value: number) {
 
 function formatDate(value: string) {
   return value.replaceAll("-", "/");
+}
+
+const dateTimeFormatter = new Intl.DateTimeFormat("zh-TW-u-ca-gregory", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "Asia/Taipei",
+});
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : dateTimeFormatter.format(date);
+}
+
+function publicEvidenceUrl(url: string) {
+  if (url.startsWith("/finance/")) return apiUrl(url);
+  if (url.startsWith("/api/")) return url;
+  return null;
 }
 
 export default function PublicBudgetExecutionTable({
@@ -125,11 +147,24 @@ export default function PublicBudgetExecutionTable({
                   <article key={expense.id}>
                     <div className="public-budget-detail__expense-heading">
                       <div>
-                        <time dateTime={expense.entry_date}>{formatDate(expense.entry_date)}</time>
                         <h3>{expense.purpose}</h3>
                       </div>
                       <strong>{formatAmount(expense.total_amount)}</strong>
                     </div>
+                    <dl className="public-budget-detail__expense-meta">
+                      <div>
+                        <dt>支出日期</dt>
+                        <dd><time dateTime={expense.entry_date}>{formatDate(expense.entry_date)}</time></dd>
+                      </div>
+                      <div>
+                        <dt>登錄時間</dt>
+                        <dd><time dateTime={expense.created_at}>{formatDateTime(expense.created_at)}</time></dd>
+                      </div>
+                      <div>
+                        <dt>操作人</dt>
+                        <dd>{expense.operator_name}</dd>
+                      </div>
+                    </dl>
                     {expense.items.length > 0 && (
                       <ul aria-label={`${expense.purpose} 購買品項`}>
                         {expense.items.map((item) => (
@@ -146,21 +181,46 @@ export default function PublicBudgetExecutionTable({
                         ))}
                       </ul>
                     )}
-                    <div
-                      className="public-budget-detail__expense-evidence"
+                    <section
+                      className="public-budget-execution-modal__evidence"
                       aria-label={`${expense.purpose} 憑證`}
                     >
-                      <span><Paperclip size={14} aria-hidden="true" />收據與憑證</span>
-                      {expense.evidence.length > 0 ? expense.evidence.map((evidence) => (
-                        <EvidencePreview
-                          key={evidence.id}
-                          url={evidence.url}
-                          filename={evidence.filename}
-                        >
-                          <FileCheck2 size={14} aria-hidden="true" />{evidence.filename}
-                        </EvidencePreview>
-                      )) : <small>此筆支出尚未附憑證。</small>}
-                    </div>
+                      <h4><Paperclip size={14} aria-hidden="true" />收據與憑證</h4>
+                      {expense.evidence.length > 0 ? (
+                        <div className="public-budget-execution-modal__previews">
+                          {expense.evidence.map((evidence) => {
+                            const previewUrl = publicEvidenceUrl(evidence.url);
+                            const isImage = /\.(?:jpe?g|png|webp)$/i.test(evidence.filename);
+                            return (
+                              <figure key={evidence.id}>
+                                <figcaption>{evidence.filename}</figcaption>
+                                {previewUrl ? (
+                                  isImage ? (
+                                    <div className="public-budget-execution-modal__image-preview">
+                                      <Image
+                                        src={previewUrl}
+                                        alt={`${evidence.filename} 預覽`}
+                                        fill
+                                        sizes="(max-width: 680px) 100vw, 720px"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  ) : (
+                                    <iframe
+                                      src={previewUrl}
+                                      title={`${evidence.filename} 預覽`}
+                                      loading="lazy"
+                                    />
+                                  )
+                                ) : (
+                                  <small>無法預覽此憑證。</small>
+                                )}
+                              </figure>
+                            );
+                          })}
+                        </div>
+                      ) : <small>此筆支出尚未附憑證。</small>}
+                    </section>
                   </article>
                 ))}
               </div>

@@ -24752,6 +24752,11 @@ export interface components {
              */
             allocation_node_id: string;
             /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
              * Entry Date
              * Format: date
              */
@@ -24765,6 +24770,8 @@ export interface components {
             id: string;
             /** Items */
             items: components["schemas"]["PublicBudgetExpenseItemOut"][];
+            /** Operator Name */
+            operator_name: string;
             /** Purpose */
             purpose: string;
             /** Total Amount */

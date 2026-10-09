@@ -865,13 +865,14 @@ async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> lis
                     FinanceBudgetAllocation.proposing_org_id,
                 ),
             )
+            .outerjoin(User, User.id == FinanceBudgetExpense.recorded_by_id)
             .where(FinanceBudgetExpense.budget_id == budget_id)
             .order_by(
                 FinanceBudgetExpense.entry_date.desc(), FinanceBudgetExpense.created_at.desc()
             )
         )
     ).all()
-    expense_ids = [expense.id for expense, _, _, _ in rows]
+    expense_ids = [expense.id for expense, _, _, _, _ in rows]
     item_rows = (
         list(
             (
@@ -918,6 +919,7 @@ async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> lis
             "allocation_node_id": node.id,
             "allocation_name": node.name,
             "entry_date": expense.entry_date,
+            "operator_name": operator.display_name if operator else "未知操作人",
             "purpose": expense.purpose,
             "total_amount": expense.total_amount,
             "note": expense.note,
@@ -949,7 +951,7 @@ async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> lis
             ],
             "created_at": expense.created_at,
         }
-        for expense, allocation, node, department in rows
+        for expense, allocation, node, department, operator in rows
     ]
 
 

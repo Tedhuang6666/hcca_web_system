@@ -996,6 +996,8 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
     public_detail = await client.get(f"/finance/public/budgets/{budget.json()['id']}")
     assert public_detail.status_code == 200
     assert public_detail.json()["expenses"][0]["items"][0]["name"] == "原子筆"
+    assert public_detail.json()["expenses"][0]["created_at"]
+    assert public_detail.json()["expenses"][0]["operator_name"] == member_user.display_name
     public_receipt_url = public_detail.json()["expenses"][0]["evidence"][0]["url"]
     public_receipt = await client.get(public_receipt_url)
     assert public_receipt.status_code == 200
