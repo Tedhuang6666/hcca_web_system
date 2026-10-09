@@ -197,39 +197,25 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
             for option in item.get("selected_options", [])
             if isinstance(option, dict) and option.get("value")
         ]
-        option_details = (
-            f'<br><span style="color:#667085">規格：{"、".join(options)}</span>' if options else ""
-        )
+        option_details = f"<br>規格：{'、'.join(options)}" if options else ""
         item_rows.append(
-            "<tr>"
-            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0">{name}{option_details}</td>'
-            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0;text-align:right">NT$ {unit_price:,}</td>'
-            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0;text-align:center">{quantity}</td>'
-            f'<td style="padding:10px 8px;border-bottom:1px solid #eaecf0;text-align:right">NT$ {item_subtotal:,}</td>'
-            "</tr>"
+            f"<p><strong>{name}</strong><br>"
+            f"單價：NT$ {unit_price:,}<br>"
+            f"數量：{quantity}<br>"
+            f"小計：NT$ {item_subtotal:,}{option_details}</p>"
         )
-    items_html = "".join(item_rows) or (
-        '<tr><td colspan="4" style="padding:10px 8px">訂單品項詳情請至「我的訂單」查看。</td></tr>'
-    )
+    items_html = "".join(item_rows) or "<p>訂單品項詳情請至「我的訂單」查看。</p>"
     promotion_code = html_escape(str(payload.get("promotion_code") or ""))
     discount_label = "優惠折抵" + (f"（{promotion_code}）" if promotion_code else "")
     buyer_greeting = html_escape(str(buyer_name or "同學"))
     html = (
         f"<p>親愛的 {buyer_greeting}，感謝您的訂購！</p>"
         f"<p><strong>訂單編號</strong>：{html_escape(str(serial))}</p>"
-        '<table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0">'
-        '<thead><tr style="text-align:left;background:#f2f4f7">'
-        '<th style="padding:10px 8px">商品</th>'
-        '<th style="padding:10px 8px;text-align:right">單價</th>'
-        '<th style="padding:10px 8px;text-align:center">數量</th>'
-        '<th style="padding:10px 8px;text-align:right">小計</th>'
-        "</tr></thead>"
-        f"<tbody>{items_html}</tbody></table>"
-        '<table role="presentation" style="margin-left:auto;border-collapse:collapse">'
-        f'<tr><td style="padding:4px 8px">商品小計</td><td style="padding:4px 8px;text-align:right">NT$ {subtotal:,}</td></tr>'
-        f'<tr><td style="padding:4px 8px">{discount_label}</td><td style="padding:4px 8px;text-align:right">− NT$ {discount:,}</td></tr>'
-        f'<tr><td style="padding:6px 8px;font-weight:bold;border-top:1px solid #98a2b3">應付總額</td><td style="padding:6px 8px;text-align:right;font-weight:bold;border-top:1px solid #98a2b3">NT$ {total:,}</td></tr>'
-        "</table>"
+        f"<p><strong>商品明細</strong></p>{items_html}"
+        f"<p><strong>金額明細</strong><br>"
+        f"商品小計：NT$ {subtotal:,}<br>"
+        f"{discount_label}：− NT$ {discount:,}<br>"
+        f"<strong>應付總額：NT$ {total:,}</strong></p>"
         f'<p><a href="{base}/shop/orders">查看訂單</a></p>'
     )
     try:
