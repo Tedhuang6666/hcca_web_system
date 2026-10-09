@@ -1,14 +1,11 @@
-import { ArrowRight, ClipboardCheck, Landmark, ReceiptText, ShieldCheck } from "lucide-react";
-import Link from "next/link";
+import { Landmark } from "lucide-react";
 
-import PublicExpenseTable from "@/components/finance/PublicExpenseTable";
 import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
 import type { PublicBudgetExecutionLine } from "@/components/finance/PublicBudgetExecutionTable";
 import {
   fetchPublicBudget,
   fetchPublicBudgets,
   fetchPublicBudgetTotals,
-  fetchPublicExpenses,
 } from "@/lib/publicSeoFetch";
 import type {
   PublicBudgetDetail,
@@ -65,21 +62,10 @@ function budgetExecutionLines(
     });
 }
 
-function budgetHref(budget: PublicBudgetListItem) {
-  return budget.review_submission_id
-    ? `/public/budgets/${budget.id}?review_submission_id=${budget.review_submission_id}`
-    : `/public/budgets/${budget.id}`;
-}
-
 export default async function PublicBudgetsPage() {
-  const [budgetResult, expenseResult] = await Promise.all([
-    fetchPublicBudgets(),
-    fetchPublicExpenses(10),
-  ]);
+  const budgetResult = await fetchPublicBudgets();
   const budgets = budgetResult.data ?? [];
-  const expenses = expenseResult.data ?? [];
   const budgetLoadFailed = budgetResult.data === null;
-  const expenseLoadFailed = expenseResult.data === null;
   const approvedBudgets = budgets.filter((budget) => budget.visibility === "approved");
   const currentPeriod = approvedBudgets[0]?.period_name;
   const currentBudgets = approvedBudgets.filter((budget) => budget.period_name === currentPeriod);
@@ -167,63 +153,6 @@ export default async function PublicBudgetsPage() {
         </section>
       )}
 
-      <aside className="public-budget-index__notice" aria-label="公開資料範圍">
-        <ShieldCheck size={18} aria-hidden="true" />
-      </aside>
-
-      <section className="public-finance__expenses" aria-labelledby="public-finance-expenses-heading">
-        <header className="public-finance__section-heading">
-          <div>
-            <span>最近登錄</span>
-            <h2 id="public-finance-expenses-heading">支出紀錄</h2>
-          </div>
-          {!expenseLoadFailed && <span>最近 {expenses.length} 筆</span>}
-        </header>
-        {expenseLoadFailed ? (
-          <div className="public-finance__empty-expenses" role="status">
-            <ReceiptText size={20} aria-hidden="true" />
-            <p>支出紀錄暫時無法載入，請稍後重新整理。</p>
-          </div>
-        ) : expenses.length > 0 ? (
-          <PublicExpenseTable expenses={expenses} />
-        ) : (
-          <div className="public-finance__empty-expenses">
-            <ReceiptText size={20} aria-hidden="true" />
-            <p>目前沒有已列入公開預算的支出紀錄。</p>
-          </div>
-        )}
-      </section>
-
-      {!budgetLoadFailed && <section className="public-finance__budget-list" aria-labelledby="public-finance-budget-list-heading">
-        <header className="public-finance__section-heading">
-          <div>
-            <span>明細與審理進度</span>
-            <h2 id="public-finance-budget-list-heading">預算案</h2>
-          </div>
-        </header>
-        {budgets.length > 0 ? (
-          <div className="public-budget-index__list" aria-label="公開預算案">
-            {budgets.map((budget) => (
-              <Link key={`${budget.id}-${budget.review_submission_id || "approved"}`} href={budgetHref(budget)} className="public-budget-index__row">
-                <span>{budget.period_name}</span>
-                <div>
-                  <h3>{budget.name}</h3>
-                  {budget.review_title && <p>{budget.review_title}</p>}
-                </div>
-                <span className={budget.visibility === "council_review" ? "is-review" : ""}>
-                  {budget.visibility === "council_review" ? (
-                    <><ClipboardCheck size={16} aria-hidden="true" />議員審理草案</>
-                  ) : (
-                    <>查看核准明細 <ArrowRight size={16} aria-hidden="true" /></>
-                  )}
-                </span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="public-finance__empty-budgets">目前沒有可檢視的預算案。</p>
-        )}
-      </section>}
     </div>
   );
 }

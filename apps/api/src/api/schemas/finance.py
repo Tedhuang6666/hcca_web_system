@@ -626,6 +626,8 @@ class PublicBudgetExpenseItemOut(BaseModel):
 class PublicBudgetExpenseOut(BaseModel):
     id: uuid.UUID
     entry_date: date
+    created_at: datetime
+    operator_name: str
     purpose: str
     allocation_node_id: uuid.UUID
     allocation_name: str
