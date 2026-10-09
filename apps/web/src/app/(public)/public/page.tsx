@@ -58,6 +58,8 @@ export default async function PublicHomePage() {
         <h1 className="text-3xl font-semibold">公開資料與校園服務</h1>
       </header>
 
+      <PublicHomeServices initialClosedModuleIds={initialClosedModuleIds} />
+
       <section>
         <div className="mb-4">
           <h2 className="text-2xl font-semibold">查詢資料</h2>
@@ -90,8 +92,6 @@ export default async function PublicHomePage() {
           })}
         </div>
       </section>
-
-      <PublicHomeServices initialClosedModuleIds={initialClosedModuleIds} />
     </div>
   );
 }

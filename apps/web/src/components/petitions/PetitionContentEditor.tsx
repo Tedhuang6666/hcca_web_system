@@ -9,11 +9,10 @@ import type { PetitionCaseOut } from "@/lib/types";
 
 type Props = {
   item: PetitionCaseOut;
-  verificationCode?: string;
   onUpdated: (item: PetitionCaseOut) => void;
 };
 
-export default function PetitionContentEditor({ item, verificationCode, onUpdated }: Props) {
+export default function PetitionContentEditor({ item, onUpdated }: Props) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(item.title);
   const [content, setContent] = useState(item.content);
@@ -46,7 +45,6 @@ export default function PetitionContentEditor({ item, verificationCode, onUpdate
       const updated = await petitionsApi.updateContent(item.id, {
         title: title.trim(),
         content: content.trim(),
-        verification_code: verificationCode || null,
       });
       onUpdated(updated);
       setEditing(false);

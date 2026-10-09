@@ -273,7 +273,7 @@ async def test_petition_case_idor_returns_403(db_session: AsyncSession) -> None:
 
     保護邏輯位於 apps/api/src/api/routers/petitions.py GET /petitions/{case_id}：
     _assert_case_access 只允許本人、超管、陳情權限、或負責機關成員查看，其餘 403。
-    案號 + 驗證碼查詢（/petitions/lookup）是另一條匿名查詢路徑，這裡驗證的是登入後以 id 直查的情境。
+    案號查詢與 id 直查都要求登入，並依 submitter_id 或既有案件權限檢查歸屬。
     """
     from api.models.org import Org
     from api.models.petition import PetitionType
@@ -293,7 +293,7 @@ async def test_petition_case_idor_returns_403(db_session: AsyncSession) -> None:
     user_a = await _make_user(db_session)
     user_b = await _make_user(db_session)
 
-    case_obj, _code, _share_token = await petition_svc.create_case(
+    case_obj, _share_token = await petition_svc.create_case(
         db_session,
         data=PetitionCreate(
             type_id=petition_type.id,

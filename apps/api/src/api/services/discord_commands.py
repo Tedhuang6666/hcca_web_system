@@ -453,7 +453,7 @@ async def execute(
         types = await petition_svc.list_types(db, active_only=True)
         if not types:
             raise DiscordCommandError("目前沒有可用的陳情類型。")
-        case_obj, code, _share_token = await petition_svc.create_case(
+        case_obj, _share_token = await petition_svc.create_case(
             db,
             data=PetitionCreate(
                 type_id=types[0].id,
@@ -474,7 +474,7 @@ async def execute(
             summary=f"Discord 建立陳情案件 {case_obj.case_number}",
             meta={"case_number": case_obj.case_number},
         )
-        return {"case_number": case_obj.case_number, "verification_code": code}
+        return {"case_number": case_obj.case_number}
 
     if operation in {"petitions_pending", "petition_choices"}:
         cases = await petition_svc.list_cases(db, assigned_to_id=user.id, limit=25)

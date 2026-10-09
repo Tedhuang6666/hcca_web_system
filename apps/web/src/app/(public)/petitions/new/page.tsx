@@ -84,7 +84,7 @@ export default function NewPetitionPage() {
         content,
       });
       for (const file of files) {
-          await petitionsApi.uploadAttachment(result.id, file, { verification_code: result.verification_code });
+        await petitionsApi.uploadAttachment(result.id, file);
       }
       clearDraft();
       setCreated(result);
@@ -102,8 +102,6 @@ export default function NewPetitionPage() {
   };
 
   if (created) {
-    // fragment 不會送至伺服器或寫入 access log；頁面再以 POST body 送 token 查詢。
-    const shareHref = `/petitions/share#${created.share_token}`;
     return (
       <div className="petition-receipt-page max-w-2xl mx-auto space-y-5">
         <article className="petition-receipt card p-6 space-y-4">
@@ -117,34 +115,18 @@ export default function NewPetitionPage() {
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>案件已送出</h1>
           </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            請妥善保存案號與驗證碼。驗證碼只會在此畫面顯示一次。
-            您也可以直接在我的案件中查看。
+            案件已連結至你的登入帳號，可從「我的案件」查看進度。
           </p>
-          <div className="petition-receipt-codes grid sm:grid-cols-2 gap-3">
+          <div className="petition-receipt-codes">
             <div className="petition-receipt-code rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>案號</p>
               <p className="text-2xl font-semibold tracking-widest" style={{ color: "var(--text-primary)" }}>{created.case_number}</p>
             </div>
-            <div className="petition-receipt-code petition-receipt-code--verification rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>驗證碼</p>
-              <p className="text-2xl font-semibold tracking-widest" style={{ color: "var(--warning)" }}>{created.verification_code}</p>
-            </div>
           </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>{created.status_public_message}</p>
           <div className="flex gap-2 flex-wrap">
-            <Link className="btn btn-primary" href={shareHref}>查看案件進度</Link>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={async () => {
-                const url = `${window.location.origin}${shareHref}`;
-                await navigator.clipboard.writeText(url);
-                toast.success("分享連結已複製");
-              }}
-            >
-              複製分享連結
-            </button>
-            <Link className="btn btn-ghost" href="/petitions">回陳情系統</Link>
+            <Link className="btn btn-primary" href={`/petitions/${created.id}`}>查看案件進度</Link>
+            <Link className="btn btn-ghost" href="/petitions">回我的案件</Link>
           </div>
         </article>
       </div>

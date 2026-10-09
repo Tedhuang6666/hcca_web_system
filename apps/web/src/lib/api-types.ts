@@ -7832,7 +7832,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 登入後以案號與驗證碼查詢本人案件 */
+        /** 登入後依案號查詢本人案件 */
         get: operations["lookup_case_petitions_lookup_get"];
         put?: never;
         post?: never;
@@ -13327,8 +13327,6 @@ export interface components {
         Body_upload_attachment_petitions__case_id__attachments_post: {
             /** File */
             file: string;
-            /** Verification Code */
-            verification_code?: string | null;
             /** @default public */
             visibility: components["schemas"]["PetitionAttachmentVisibility"];
         };
@@ -23177,8 +23175,6 @@ export interface components {
             content?: string | null;
             /** Title */
             title?: string | null;
-            /** Verification Code */
-            verification_code?: string | null;
         };
         /** PetitionCreate */
         PetitionCreate: {
@@ -23222,8 +23218,6 @@ export interface components {
             status_public_message: string;
             /** Title */
             title: string;
-            /** Verification Code */
-            verification_code: string;
         };
         /** PetitionEventOut */
         PetitionEventOut: {
@@ -23629,8 +23623,6 @@ export interface components {
             decision: "approve" | "approve_with_changes" | "reject";
             /** Title */
             title?: string | null;
-            /** Verification Code */
-            verification_code?: string | null;
         };
         /**
          * PetitionPublicStatus
@@ -23747,8 +23739,6 @@ export interface components {
         PetitionSupplementCreate: {
             /** Content */
             content: string;
-            /** Verification Code */
-            verification_code?: string | null;
         };
         /** PetitionTransferUpdate */
         PetitionTransferUpdate: {
@@ -48229,7 +48219,6 @@ export interface operations {
         parameters: {
             query: {
                 case_number: string;
-                verification_code: string;
             };
             header?: never;
             path?: never;
@@ -48629,9 +48618,7 @@ export interface operations {
     };
     download_attachment_petitions__case_id__attachments__attachment_id__download_get: {
         parameters: {
-            query?: {
-                verification_code?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
                 case_id: string;

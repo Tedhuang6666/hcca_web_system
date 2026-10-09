@@ -133,18 +133,18 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
         "/finance/public/budgets/{budget_id}/expense-claims/{entry_id}/evidence/{evidence_id}",
         "GET",
     ),
-    # 陳情（民眾可匿名提交）
+    # 陳情（送件與本人查詢都要求登入）
     ("/petitions", "POST"),
     ("/petitions/lookup", "GET"),
     ("/petitions/types", "GET"),
-    # 公開陳情查閱；回覆端點在 handler 內以登入身分或驗證碼確認本人
+    # 公開陳情查閱；案件操作依登入身分與案件歸屬確認本人
     ("/petitions/public", "GET"),
     ("/petitions/public/{case_id}", "GET"),
     ("/petitions/{case_id}/public-response", "POST"),
     ("/petitions/{case_id}/attachments", "POST"),
     ("/petitions/{case_id}/attachments/{attachment_id}/download", "GET"),
     ("/petitions/{case_id}/supplement", "POST"),
-    # 陳情人可透過登入身分或案件驗證碼修改尚未分案內容
+    # 陳情人必須以登入身分修改尚未分案內容
     ("/petitions/{case_id}/content", "PATCH"),
     ("/petitions/share", "POST"),
     # 議案（公開查閱）

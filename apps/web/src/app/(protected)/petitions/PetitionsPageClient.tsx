@@ -1,18 +1,15 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { usersApi } from "@/lib/api";
 import { ApiError } from "@/lib/api-helpers";
 import { petitionsApi } from "@/lib/api/petitions";
-import type { PetitionCaseListItem, PetitionCaseOut, PetitionPublicListItem, PetitionStatsOut } from "@/lib/types";
+import type { PetitionCaseListItem, PetitionPublicListItem, PetitionStatsOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
-import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const PetitionPublicConsent = dynamic(() => import("@/components/petitions/PetitionPublicConsent"), { ssr: false });
-const PetitionContentEditor = dynamic(() => import("@/components/petitions/PetitionContentEditor"), { ssr: false });
 const EMPTY_PUBLIC_CASES: PetitionPublicListItem[] = [];
 
 function fmt(iso: string) {
@@ -25,11 +22,11 @@ export default function PetitionsPageClient({
   initialPublicCases?: PetitionPublicListItem[];
 }) {
   const [myCases, setMyCases] = useState<PetitionCaseListItem[]>([]);
+  const [myCasesLoading, setMyCasesLoading] = useState(true);
+  const [myCasesError, setMyCasesError] = useState<string | null>(null);
+  const [caseKeyword, setCaseKeyword] = useState("");
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [stats, setStats] = useState<PetitionStatsOut | null>(null);
-  const [caseNumber, setCaseNumber] = useState("");
-  const [verificationCode, setVerificationCode] = useState("");
-  const [lookup, setLookup] = useState<PetitionCaseOut | null>(null);
-  const [loadingLookup, setLoadingLookup] = useState(false);
   const [publicCases, setPublicCases] = useState(initialPublicCases);
   const [publicCasesLoading, setPublicCasesLoading] = useState(initialPublicCases.length === 0);
   const { can } = usePermissions();
@@ -51,23 +48,59 @@ export default function PetitionsPageClient({
   }, [initialPublicCases]);
 
   useEffect(() => {
-    if (!localStorage.getItem("user_id")) return;
-    petitionsApi.my().then(setMyCases).catch(() => null);
+    let cancelled = false;
+    void usersApi.me()
+      .then(() => {
+        if (!cancelled) setAuthState("authenticated");
+      })
+      .catch(() => {
+        if (!cancelled) setAuthState("unauthenticated");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authState === "checking") return;
+    if (authState === "unauthenticated") {
+      setMyCasesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setMyCasesLoading(true);
+    petitionsApi.my({ limit: 200 })
+      .then((cases) => {
+        if (!cancelled) setMyCases(cases);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setMyCasesError(error instanceof ApiError ? error.message : "無法載入本人案件，請稍後重試");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setMyCasesLoading(false);
+      });
     if (can("petition:view_org") || can("petition:handle") || can("petition:assign") || can("petition:analytics_org")) {
       petitionsApi.stats().then(setStats).catch(() => null);
     }
-  }, [can]);
+    return () => {
+      cancelled = true;
+    };
+  }, [authState, can]);
 
-  const doLookup = async (e: React.FormEvent) => {
+  const searchMyCases = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoadingLookup(true);
+    setMyCasesLoading(true);
+    setMyCasesError(null);
     try {
-      setLookup(await petitionsApi.lookup(caseNumber, verificationCode));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "查詢失敗");
-      setLookup(null);
+      setMyCases(await petitionsApi.my({ keyword: caseKeyword.trim(), limit: 200 }));
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "搜尋本人案件失敗";
+      setMyCasesError(message);
+      toast.error(message);
     } finally {
-      setLoadingLookup(false);
+      setMyCasesLoading(false);
     }
   };
 
@@ -77,7 +110,7 @@ export default function PetitionsPageClient({
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            提出陳情或查詢案件進度。
+            提出陳情並追蹤案件進度。
           </p>
         </div>
         <div className="flex gap-2">
@@ -104,94 +137,56 @@ export default function PetitionsPageClient({
         </div>
       )}
 
-      <div className="grid lg:grid-cols-[1fr_1.2fr] gap-5">
-        <section className="card p-5 space-y-4">
-          <div>
-            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>案號查詢</h2>
-            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-              登入後可使用七碼案號與五碼驗證碼查詢本人案件
-            </p>
-          </div>
-          <form onSubmit={doLookup} className="space-y-3">
-            <div className="space-y-1.5">
-              <label htmlFor="petition-case-number" className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                案號
-              </label>
-              <input
-                id="petition-case-number"
-                name="case_number"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="off"
-                spellCheck={false}
-                className="input w-full"
-                placeholder="七碼案號，例如 1150001…"
-                value={caseNumber}
-                maxLength={7}
-                onChange={(e) => setCaseNumber(e.target.value.replace(/\D/g, ""))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="petition-verification-code" className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                驗證碼
-              </label>
-              <input
-                id="petition-verification-code"
-                name="verification_code"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="off"
-                spellCheck={false}
-                className="input w-full"
-                placeholder="五碼驗證碼，例如 12345…"
-                value={verificationCode}
-                maxLength={5}
-                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
-              />
-            </div>
-            <button type="submit" className="btn btn-primary w-full" disabled={loadingLookup || caseNumber.length !== 7 || verificationCode.length !== 5}>
-              {loadingLookup ? "查詢中…" : "查詢案件"}
-            </button>
-          </form>
-          {lookup && (
-            <>
-              <div className="rounded-lg p-4 space-y-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium" style={{ color: "var(--text-primary)" }}>{lookup.title}</p>
-                  <PetitionStatusBadge status={lookup.status} />
-                </div>
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>{lookup.status_public_message}</p>
-                <Link href={`/petitions/${caseNumber}/${verificationCode}`} className="btn btn-ghost mt-2">查看進度分享頁</Link>
-              </div>
-              {lookup.attachments.length > 0 && (
-                <section className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
-                  <h3 className="text-sm font-medium">案件附件（{lookup.attachments.length}）</h3>
-                  <PetitionAttachmentList caseId={lookup.id} attachments={lookup.attachments} />
-                </section>
-              )}
-              {lookup.can_respond_public && <PetitionPublicConsent item={lookup} verificationCode={verificationCode} onUpdated={setLookup} />}
-              {lookup.can_edit_content && (
-                <PetitionContentEditor item={lookup} verificationCode={verificationCode} onUpdated={setLookup} />
-              )}
-            </>
-          )}
+      {authState === "checking" ? (
+        <section className="card p-5 text-sm" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">
+          正在確認登入狀態…
         </section>
-
+      ) : authState === "unauthenticated" ? (
+        <section className="card p-5 space-y-3" aria-labelledby="petition-login-heading">
+          <h2 id="petition-login-heading" className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            登入後查看本人案件
+          </h2>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            登入後即可查看、搜尋與追蹤你送出的陳情。
+          </p>
+          <Link href="/login?next=%2Fpetitions" className="btn btn-primary w-fit">
+            登入後查看案件
+          </Link>
+        </section>
+      ) : (
         <section className="card p-5 space-y-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>我的案件</h2>
-              <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>登入後可直接追蹤自己送出的陳情</p>
+              <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>登入後直接查看並追蹤本人送出的陳情</p>
             </div>
-            <Link href="/petitions/new" className="btn btn-ghost">新增</Link>
+            <Link href="/petitions/new" className="btn btn-primary shrink-0">我要陳情</Link>
           </div>
-          {myCases.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無案件。</p>
+          <form onSubmit={searchMyCases} className="flex flex-col gap-2 sm:flex-row" role="search">
+            <label className="sr-only" htmlFor="petition-my-case-search">搜尋本人案件</label>
+            <input
+              id="petition-my-case-search"
+              type="search"
+              className="input w-full"
+              placeholder="輸入案號或標題搜尋"
+              value={caseKeyword}
+              onChange={(event) => setCaseKeyword(event.target.value)}
+            />
+            <button type="submit" className="btn btn-ghost shrink-0" disabled={myCasesLoading}>
+              {myCasesLoading ? "載入中…" : "搜尋案件"}
+            </button>
+          </form>
+          {myCasesError ? (
+            <p className="text-sm" style={{ color: "var(--danger)" }} role="alert">{myCasesError}</p>
+          ) : myCasesLoading ? (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">案件載入中…</p>
+          ) : myCases.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              {caseKeyword.trim() ? "找不到符合的案件。" : "尚無案件。"}
+            </p>
           ) : (
             <div className="space-y-2">
-              {myCases.slice(0, 8).map((item) => (
+              {myCases.map((item) => (
                 <Link key={item.id} href={`/petitions/${item.id}`} className="block rounded-lg p-3" style={{ border: "1px solid var(--border)", textDecoration: "none" }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -212,7 +207,7 @@ export default function PetitionsPageClient({
             </div>
           )}
         </section>
-      </div>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3">
