@@ -49,8 +49,6 @@
 }
 .shop-order-next-step h2 { font-size: 1.35rem; font-weight: 650; }
 .shop-order-next-step p { max-width: 42rem; margin-top: 0.5rem; color: var(--text-secondary); }
-.shop-activity-products { padding: 1rem; line-height: 1.8; overflow-wrap: anywhere; }
-.shop-order-history summary { padding: 0.75rem 1rem; min-height: 44px; cursor: pointer; color: var(--primary-text); }
 .shop-quantity-total { padding: 1rem; border-bottom: 1px solid var(--border); font-weight: 600; }
 .shop-quantity-summary details + details { border-top: 1px solid var(--border); }
 .shop-quantity-summary summary { cursor: pointer; padding: 1rem; min-height: 48px; }
@@ -1664,6 +1662,68 @@
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+}
+
+.shop-preorder-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.shop-preorder-items li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.shop-preorder-items p {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.shop-preorder-quantity {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-preorder-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-top: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.shop-preorder-records {
+  flex: 1 1 100%;
+}
+
+.shop-preorder-records summary {
+  min-height: 44px;
+  padding-block: 0.75rem;
+  cursor: pointer;
+  color: var(--primary-text);
+}
+
+.shop-preorder-records .shop-order-details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  overflow-wrap: anywhere;
+}
+
+.shop-preorder-records time {
+  color: var(--text-secondary);
 }
 
 .shop-order-row-items {

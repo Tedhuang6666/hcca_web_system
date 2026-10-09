@@ -123,4 +123,29 @@ describe("班代工作流程", () => {
     await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledTimes(1));
     expect(api.setClassCollected).toHaveBeenCalledWith("one", true);
   });
+
+  it("shows merged items and the supplemental amount, and collects only additions in this activity", async () => {
+    const item = { id: "bag", product_id: "product", product_name: "紀念袋", quantity: 1,
+      unit_price: 100, subtotal: 100, selected_options: [] };
+    api.listClassOrders.mockResolvedValue([
+      { id: "collected", user_id: "a", status: "pending", total_price: 200,
+        activity_id: null, category_id: "category", is_class_collected: true,
+        items: [{ ...item, quantity: 2, subtotal: 200 }] },
+      { id: "addition", user_id: "a", status: "pending", total_price: 100,
+        activity_id: null, category_id: "category", is_class_collected: false, items: [item] },
+      { id: "cancelled", user_id: "a", status: "cancelled", total_price: 500,
+        activity_id: null, category_id: "category", is_class_collected: false, items: [item] },
+      { id: "other", user_id: "a", status: "pending", total_price: 300,
+        activity_id: "other", is_class_collected: false, items: [item] },
+    ]);
+    api.setClassCollected.mockResolvedValue({});
+    render(<ClassOrdersPage />);
+    await screen.findByRole("option", { name: "1 號 · 示範甲" });
+    fireEvent.click(screen.getByRole("button", { name: "班內收款" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "收款活動" }), { target: { value: "category:category" } });
+    await screen.findAllByText("紀念袋 × 3");
+    fireEvent.click(screen.getAllByRole("button", { name: "補收 NT$100" })[0]);
+    await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledTimes(1));
+    expect(api.setClassCollected).toHaveBeenCalledWith("addition", true);
+  });
 });

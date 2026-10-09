@@ -55,7 +55,7 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
             <nav className="public-footer-links" aria-label="頁尾導覽">
               <span className="public-footer-label">快速連結</span>
               <Link href="/shop">商品訂購</Link>
-              <Link href="/shop/orders">我的訂單</Link>
+              <Link href="/shop/orders">我的預購</Link>
               <Link href="/public">公開資料庫</Link>
             </nav>
             <nav className="public-footer-links" aria-label="法律與無障礙資訊">
@@ -84,7 +84,7 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
 
   return [
     { href: "/shop", label: "自己訂購", icon: ShoppingBag, end: true },
-    { href: "/shop/orders", label: "我的訂單", icon: ClipboardList },
+    { href: "/shop/orders", label: "我的預購", icon: ClipboardList },
     ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "收款與代訂", icon: ListChecks }] : []),
     ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校訂單總覽", icon: BarChart2 }] : []),
     ...(canManage ? [{ href: "/shop/admin", label: "商品與活動設定", icon: PackageSearch }] : []),

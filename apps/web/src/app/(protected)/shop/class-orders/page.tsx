@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
-import { mergeDraftItems } from "@/lib/shop-order-items";
+import { mergeDraftItems, summarizeOrderItems } from "@/lib/shop-order-items";
 import type {
   CatalogCategoryOut,
   CatalogProductOut,
@@ -749,7 +749,7 @@ export default function ClassOrdersPage() {
         toast.error(`已更新 ${targets.length - failed.length} 筆，${failed.length} 筆未完成。請確認更新後的狀態再試。`);
         return;
       }
-      toast.success(`${row?.name ?? "同學"}的 ${targets.length} 筆${ledgerActivity?.label ?? "活動"}訂單已${collected ? "記錄收款" : "撤銷收款"}`);
+      toast.success(`${row?.name ?? "同學"}的${ledgerActivity?.label ?? "活動"}預購已${collected ? "記錄收款" : "撤銷收款"}`);
     } catch (error) {
       toast.error(apiErrorMessage(error, "收款狀態更新失敗"));
     } finally {
@@ -1464,7 +1464,7 @@ export default function ClassOrdersPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>依活動與座號收款</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>每位同學在此活動的應收與已收分開計算；代訂可直接帶入同學與活動。</p>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>依活動查看每位同學的品項與款項；已收款後追加品項，會顯示待補收金額。</p>
             </div>
             <label className="grid gap-1 text-sm" style={{ color: "var(--text-secondary)" }}>
               活動
@@ -1499,18 +1499,20 @@ export default function ClassOrdersPage() {
                         <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
                           {row.seat == null ? "未登錄座號" : `${row.seat} 號`} · {row.name}
                         </h3>
-                        <span className="shrink-0 text-xs" style={{ color: "var(--text-secondary)" }}>{row.orders.length} 筆</span>
                       </div>
+                      <p className="text-sm" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+                        {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
+                      </p>
                       <dl className="grid grid-cols-2 gap-2 text-sm">
                         <div><dt style={{ color: "var(--text-secondary)" }}>應收</dt><dd className="font-semibold tabular-nums">{money(row.amount)}</dd></div>
-                        <div><dt style={{ color: "var(--text-secondary)" }}>待收</dt><dd className="font-semibold tabular-nums">{money(outstanding)}</dd></div>
+                        <div><dt style={{ color: "var(--text-secondary)" }}>{row.collected > 0 && outstanding > 0 ? "待補收" : "待收"}</dt><dd className="font-semibold tabular-nums">{money(outstanding)}</dd></div>
                         <div><dt style={{ color: "var(--text-secondary)" }}>班代已收</dt><dd className="tabular-nums">{money(row.collected)}</dd></div>
                         <div><dt style={{ color: "var(--text-secondary)" }}>班聯已確認</dt><dd className="tabular-nums">{money(row.councilPaid)}</dd></div>
                       </dl>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className="btn btn-secondary min-h-11 px-3 text-xs"
                           disabled={!outstanding || busy !== null || loadFailed || batchBusy}
-                          onClick={() => void setSeatCollected(row.id, true)}>{seatBusy ? "處理中" : "設為已收"}</button>
+                          onClick={() => void setSeatCollected(row.id, true)}>{seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}</button>
                         {row.collected > 0 && (
                           <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
                             disabled={busy !== null || loadFailed || batchBusy}
@@ -1528,7 +1530,7 @@ export default function ClassOrdersPage() {
               <table className="w-full min-w-[980px] text-sm" aria-label={`${ledgerActivity?.label ?? "活動"}各座號收款`}>
                 <thead style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
                   <tr>
-                    {["座號", "同學", "訂單", "應收", "班代已收", "待收", "班聯已確認", "快捷操作"].map((heading) => (
+                    {["座號", "同學", "預購品項", "應收", "班代已收", "待收／補收", "班聯已確認", "快捷操作"].map((heading) => (
                       <th key={heading} scope="col" className="px-3 py-3 text-left font-semibold">{heading}</th>
                     ))}
                   </tr>
@@ -1543,17 +1545,22 @@ export default function ClassOrdersPage() {
                           {row.seat == null ? "—" : `${row.seat} 號`}
                         </th>
                         <td className="px-3 py-3" style={{ color: "var(--text-primary)" }}>{row.name}</td>
-                        <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{row.orders.length} 筆</td>
+                        <td className="max-w-64 px-3 py-3" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+                          {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
+                        </td>
                         <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.amount)}</td>
                         <td className="px-3 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected)}</td>
-                        <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: outstanding ? "var(--warning)" : "var(--text-secondary)" }}>{money(outstanding)}</td>
+                        <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: outstanding ? "var(--warning)" : "var(--text-secondary)" }}>
+                          {row.collected > 0 && outstanding > 0 && <span className="block text-xs">待補收</span>}
+                          {money(outstanding)}
+                        </td>
                         <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{money(row.councilPaid)}</td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn btn-secondary min-h-11 px-3 text-xs"
                               disabled={!outstanding || busy !== null || loadFailed || batchBusy}
                               onClick={() => void setSeatCollected(row.id, true)}>
-                              {seatBusy ? "處理中" : "設為已收"}
+                              {seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}
                             </button>
                             {row.collected > 0 && (
                               <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
