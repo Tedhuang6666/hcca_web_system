@@ -8,8 +8,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
+from api.models.person import PersonAffiliationKind, PersonAffiliationStatus
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductMedia
 from api.models.user import User
+from api.schemas.person import PersonAffiliationCreate
 from api.schemas.school_class import (
     ClassManualMemberCreate,
     ClassRosterBulkCreate,
@@ -32,6 +35,7 @@ from api.schemas.shop import (
     ProductVariantGroupCreate,
     ProductVariantOptionCreate,
 )
+from api.services import person as person_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 
@@ -189,6 +193,57 @@ async def test_inactive_class_excluded_from_resolution(db_session: AsyncSession)
     await class_svc.update_class(db_session, sc, data=SchoolClassUpdate(is_active=False))
     user = await _make_user(db_session, student_id="11520")
     assert await class_svc.resolve_user_class(db_session, user) is None
+
+
+@pytest.mark.parametrize(
+    ("start_delta", "end_delta", "status", "class_active", "expected"),
+    [
+        (0, None, PersonAffiliationStatus.ACTIVE, True, True),
+        (-1, 0, PersonAffiliationStatus.ACTIVE, True, True),
+        (1, None, PersonAffiliationStatus.ACTIVE, True, False),
+        (-2, -1, PersonAffiliationStatus.ACTIVE, True, False),
+        (-1, None, PersonAffiliationStatus.ENDED, True, False),
+        (-1, None, PersonAffiliationStatus.ACTIVE, False, False),
+    ],
+)
+async def test_person_class_affiliation_resolution_checks_dates_and_status(
+    db_session, start_delta, end_delta, status, class_active, expected
+) -> None:
+    sc = await _make_class(db_session)
+    user = await _make_user(db_session)
+    person = await person_svc.ensure_person_for_user(db_session, user)
+    affiliation = await person_svc.create_affiliation(
+        db_session,
+        data=PersonAffiliationCreate(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            class_id=sc.id,
+            start_date=local_today() + timedelta(days=start_delta),
+            end_date=local_today() + timedelta(days=end_delta) if end_delta is not None else None,
+        ),
+    )
+    affiliation.status = status
+    sc.is_active = class_active
+    await db_session.flush()
+
+    resolved = await class_svc.resolve_user_class(db_session, user)
+    assert (resolved.id if resolved else None) == (sc.id if expected else None)
+
+
+async def test_person_class_affiliation_does_not_match_an_unlinked_account(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    member = await _make_user(db_session)
+    other_user = await _make_user(db_session)
+    person = await person_svc.ensure_person_for_user(db_session, member)
+    await person_svc.create_affiliation(
+        db_session,
+        data=PersonAffiliationCreate(
+            person_id=person.id, kind=PersonAffiliationKind.CLASS_MEMBER, class_id=sc.id
+        ),
+    )
+    assert await class_svc.resolve_user_class(db_session, other_user) is None
 
 
 async def test_add_cadre_and_lookup_cadre_class_ids(db_session: AsyncSession) -> None:

@@ -1021,7 +1021,7 @@ async def remove_cadre(session: AsyncSession, class_id: uuid.UUID, user_id: uuid
 
 
 async def resolve_user_class(session: AsyncSession, user: User) -> SchoolClass | None:
-    """依手動指派優先，其次從 active 班級的學號區間推導所屬班級。"""
+    """依手動指派、人員歸屬、名冊、學號區間推導目前所屬的 active 班級。"""
     manual_result = await session.execute(
         select(SchoolClass)
         .join(ClassManualMember, ClassManualMember.class_id == SchoolClass.id)
@@ -1032,6 +1032,24 @@ async def resolve_user_class(session: AsyncSession, user: User) -> SchoolClass |
     manual_class = manual_result.scalars().first()
     if manual_class is not None:
         return manual_class
+    today = local_today()
+    affiliation_class = await session.scalar(
+        select(SchoolClass)
+        .join(PersonAffiliation, PersonAffiliation.class_id == SchoolClass.id)
+        .join(Person, Person.id == PersonAffiliation.person_id)
+        .options(selectinload(SchoolClass.ranges))
+        .where(
+            Person.user_id == user.id,
+            SchoolClass.is_active.is_(True),
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+            PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
+            PersonAffiliation.start_date <= today,
+            (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
+        )
+        .order_by(SchoolClass.academic_year.desc(), SchoolClass.class_code)
+    )
+    if affiliation_class is not None:
+        return affiliation_class
     roster_query = (
         select(SchoolClass)
         .join(
