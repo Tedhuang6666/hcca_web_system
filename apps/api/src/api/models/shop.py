@@ -381,6 +381,13 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         nullable=True,
         index=True,
     )
+    # 未綁活動的分類仍各自成單；保留快照供清空／取消後歸類。
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     assistance_scope: Mapped[str] = mapped_column(
         String(30), nullable=False, default="self", server_default="self", index=True
     )
@@ -426,6 +433,7 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     activity: Mapped[Activity | None] = relationship("Activity")
+    category: Mapped[ProductCategory | None] = relationship("ProductCategory")
     assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])
     school_class: Mapped[SchoolClass | None] = relationship(
         "SchoolClass", foreign_keys="Order.class_id"

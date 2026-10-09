@@ -348,6 +348,8 @@ class OrderOut(BaseModel):
     user_id: uuid.UUID
     activity_id: uuid.UUID | None = None
     activity_name: str | None = None
+    category_id: uuid.UUID | None = None
+    category_name: str | None = None
     status: OrderStatus
     subtotal_price: int = 0
     discount_amount: int = 0
@@ -377,6 +379,8 @@ class OrderListItem(BaseModel):
     user_name: str | None = None
     activity_id: uuid.UUID | None = None
     activity_name: str | None = None
+    category_id: uuid.UUID | None = None
+    category_name: str | None = None
     status: OrderStatus
     subtotal_price: int = 0
     discount_amount: int = 0
@@ -401,7 +405,8 @@ class CheckoutRequest(BaseModel):
 
 class ShopPromotionPreviewRequest(BaseModel):
     code: str | None = Field(None, max_length=80, description="優惠碼；留空時檢查帳號自動優惠")
-    activity_id: uuid.UUID | None = Field(None, description="優惠所屬活動；未指定時代表一般商品")
+    activity_id: uuid.UUID | None = Field(None, description="優惠所屬活動")
+    category_id: uuid.UUID | None = Field(None, description="未綁活動時的商品分類")
 
 
 class ShopPromotionProductPriceCreate(BaseModel):
