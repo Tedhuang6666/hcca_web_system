@@ -15,10 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
+from api.models.person import PersonAffiliationKind
 from api.models.receivable import Receivable, ReceivableSource
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory
 from api.models.user import User
-from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
+from api.schemas.person import PersonAffiliationCreate
+from api.schemas.school_class import (
+    ClassManualMemberCreate,
+    ClassStudentRangeCreate,
+    SchoolClassCreate,
+)
 from api.schemas.shop import (
     ClassOrderUpsert,
     OrderItemCreate,
@@ -28,6 +34,7 @@ from api.schemas.shop import (
     ProductVariantGroupCreate,
     ProductVariantOptionCreate,
 )
+from api.services import person as person_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 
@@ -1432,6 +1439,234 @@ async def test_council_can_confirm_whole_class_without_changing_cadre_notes(
 
 
 # ── 班級幹部檢視 ──────────────────────────────────────────────────────────────
+
+
+async def _add_person_class_member(db, user, school_class):
+    person = await person_svc.ensure_person_for_user(db, user)
+    return await person_svc.create_affiliation(
+        db,
+        data=PersonAffiliationCreate(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            class_id=school_class.id,
+        ),
+    )
+
+
+async def test_person_class_member_self_order_is_visible_to_cadre(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session)
+    await _add_person_class_member(db_session, buyer, sc)
+    product = await _make_active_product(db_session, cadre, price=40)
+
+    buyer_client = authed_client_factory(buyer)
+    created = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"quantity": 2, "option_ids": []}]},
+    )
+    assert created.status_code == 200
+    assert created.json()["class_id"] == str(sc.id)
+    assert (await buyer_client.get("/classes/me")).json()["id"] == str(sc.id)
+
+    ac = authed_client_factory(cadre)
+    listed = await ac.get("/shop/orders/class")
+    assert listed.status_code == 200
+    assert [order["id"] for order in listed.json()] == [created.json()["id"]]
+    summary = await ac.get("/shop/orders/class/summary")
+    assert summary.status_code == 200
+    assert summary.json()["order_count"] == 1
+    assert summary.json()["total_amount"] == 80
+    assert summary.json()["product_rows"][0]["quantity"] == 2
+
+
+async def test_person_class_member_assisted_order_is_visible_and_collectable(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session)
+    await _add_person_class_member(db_session, buyer, sc)
+    product = await _make_active_product(db_session, cadre, price=40)
+
+    ac = authed_client_factory(cadre)
+    created = await ac.post(
+        "/shop/orders/class",
+        json={
+            "user_id": str(buyer.id),
+            "items": [{"product_id": str(product.id), "quantity": 3}],
+        },
+    )
+    assert created.status_code == 201
+    order_id = created.json()[0]["id"]
+    listed = await ac.get("/shop/orders/class")
+    assert listed.status_code == 200
+    assert [order["id"] for order in listed.json()] == [order_id]
+    collected = await ac.patch(
+        f"/shop/orders/{order_id}/collection", json={"is_class_collected": True}
+    )
+    assert collected.status_code == 200
+    summary = await ac.get("/shop/orders/class/summary")
+    assert summary.status_code == 200
+    assert summary.json()["paid_amount"] == 120
+    assert summary.json()["product_rows"][0]["collected_quantity"] == 3
+
+
+async def test_person_class_member_unassigned_order_is_recovered_with_receivable(
+    db_session, authed_client_factory, client
+) -> None:
+    sc = await _make_class(db_session)
+    other_class = await _make_class(db_session, start="11601", end="11640")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session)
+    product = await _make_active_product(db_session, cadre, price=40)
+    buyer_client = authed_client_factory(buyer)
+    created = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"quantity": 2, "option_ids": []}]},
+    )
+    assert created.status_code == 200
+    assert created.json()["class_id"] is None
+    order_id = uuid.UUID(created.json()["id"])
+    await _add_person_class_member(db_session, buyer, sc)
+    historical = await _seed_order(db_session, buyer, class_id=other_class.id)
+    cancelled = await _seed_order(db_session, buyer)
+    cancelled.status = OrderStatus.CANCELLED
+    await db_session.flush()
+    outsider = await _bare_user(db_session)
+    await _add_person_class_member(db_session, outsider, other_class)
+    outsider_order = await _seed_order(db_session, outsider)
+    transferred = await _bare_user(db_session)
+    await _add_person_class_member(db_session, transferred, sc)
+    await class_svc.add_manual_member(
+        db_session, other_class, data=ClassManualMemberCreate(user_id=transferred.id)
+    )
+    transferred_order = await _seed_order(db_session, transferred)
+
+    assert (await client.get("/shop/orders/class")).status_code == 401
+    assert (await buyer_client.get("/shop/orders/class")).json() == []
+    await db_session.refresh(outsider_order)
+    assert outsider_order.class_id is None
+
+    ac = authed_client_factory(cadre)
+    # Summary can be requested before the order list, as on the class workspace.
+    summary = await ac.get("/shop/orders/class/summary")
+    assert summary.status_code == 200
+    assert summary.json()["order_count"] == 1
+    assert summary.json()["total_amount"] == 80
+    listed = await ac.get("/shop/orders/class")
+    assert listed.status_code == 200
+    assert [row["id"] for row in listed.json()] == [str(order_id)]
+    assert listed.json()[0]["class_id"] == str(sc.id)
+    assert listed.json()[0]["items"][0]["quantity"] == 2
+    receivable = await db_session.scalar(
+        select(Receivable).where(
+            Receivable.source_type == ReceivableSource.SHOP_ORDER.value,
+            Receivable.source_id == order_id,
+        )
+    )
+    assert receivable.class_id == sc.id
+    assert receivable.amount == 80
+    assert receivable.paid_amount == 0
+    await db_session.refresh(historical)
+    await db_session.refresh(cancelled)
+    await db_session.refresh(outsider_order)
+    await db_session.refresh(transferred_order)
+    assert historical.class_id == other_class.id
+    assert cancelled.class_id is None
+    assert outsider_order.class_id is None
+    assert transferred_order.class_id is None
+    collected = await ac.patch(
+        f"/shop/orders/{order_id}/collection", json={"is_class_collected": True}
+    )
+    assert collected.status_code == 200
+    assert collected.json()["is_class_collected"] is True
+
+
+async def test_person_class_member_can_update_registration_without_class_assignment(
+    db_session, authed_client_factory
+) -> None:
+    buyer = await _bare_user(db_session)
+    product = await _make_active_product(db_session, buyer, price=40)
+    ac = authed_client_factory(buyer)
+    created = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"quantity": 1, "option_ids": []}]},
+    )
+    assert created.status_code == 200
+    assert created.json()["class_id"] is None
+    sc = await _make_class(db_session)
+    await _add_person_class_member(db_session, buyer, sc)
+
+    updated = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"quantity": 3, "option_ids": []}]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["id"] == created.json()["id"]
+    assert updated.json()["class_id"] == str(sc.id)
+    assert updated.json()["total_price"] == 120
+
+
+async def test_person_class_member_does_not_grant_access_to_other_class(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session)
+    other_class = await _make_class(db_session, start="11601", end="11640")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    outsider = await _bare_user(db_session)
+    await _add_person_class_member(db_session, outsider, other_class)
+    product = await _make_active_product(db_session, cadre, price=40)
+    outside_order = await _seed_order(db_session, outsider, class_id=other_class.id)
+    ac = authed_client_factory(cadre)
+
+    created = await ac.post(
+        "/shop/orders/class",
+        json={
+            "user_id": str(outsider.id),
+            "items": [{"product_id": str(product.id), "quantity": 1}],
+        },
+    )
+    assert created.status_code == 403
+    assert (
+        await ac.get("/shop/orders/class", params={"member_user_id": str(outsider.id)})
+    ).json() == []
+    collected = await ac.patch(
+        f"/shop/orders/{outside_order.id}/collection", json={"is_class_collected": True}
+    )
+    assert collected.status_code == 403
+
+
+async def test_person_class_member_keeps_existing_registration_class_snapshot(
+    db_session, authed_client_factory
+) -> None:
+    old_class = await _make_class(db_session)
+    new_class = await _make_class(db_session, start="11601", end="11640")
+    buyer = await _bare_user(db_session)
+    product = await _make_active_product(db_session, buyer, price=40)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=old_class.id,
+        data=ClassOrderUpsert(
+            user_id=buyer.id, items=[OrderItemCreate(product_id=product.id, quantity=1)]
+        ),
+    )
+    await _add_person_class_member(db_session, buyer, new_class)
+    updated = await authed_client_factory(buyer).put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"quantity": 3, "option_ids": []}]},
+    )
+    assert updated.status_code == 409
+    await db_session.refresh(orders[0])
+    assert orders[0].class_id == old_class.id
+    assert orders[0].total_price == 40
 
 
 async def test_list_class_orders_returns_only_cadre_classes(

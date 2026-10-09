@@ -10,11 +10,18 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.clock import now_local
+from api.core.clock import local_today, now_local
 from api.core.config import settings
 from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.outbox import OutboxEvent, OutboxStatus
+from api.models.person import (
+    Person,
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationStatus,
+)
 from api.models.receivable import Receivable, ReceivableSource
+from api.models.school_class import SchoolClass
 from api.models.shop import (
     Cart,
     CartItem,
@@ -913,7 +920,11 @@ async def set_current_registration_product(
     school_class = await class_svc.resolve_user_class(session, user)
     class_id = school_class.id if school_class else None
     if order is not None and order.class_id != class_id:
-        raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
+        if order.class_id is None and school_class is not None:
+            order.class_id = school_class.id
+            order.school_class = school_class
+        else:
+            raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
 
     existing_items = [
         item for item in (order.items if order is not None else []) if item.product_id == product.id
@@ -1062,6 +1073,47 @@ async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
     return result.scalar_one_or_none()
 
 
+async def _reconcile_unassigned_class_orders(
+    session: AsyncSession, class_ids: list[uuid.UUID]
+) -> None:
+    """補齊人員名冊成員尚未歸班的有效訂單，保留既有班級快照。"""
+    today = local_today()
+    member_user_ids = (
+        select(Person.user_id)
+        .join(PersonAffiliation, PersonAffiliation.person_id == Person.id)
+        .where(
+            Person.user_id.is_not(None),
+            PersonAffiliation.class_id.in_(class_ids),
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+            PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
+            PersonAffiliation.start_date <= today,
+            (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
+        )
+    )
+    orders = await session.scalars(
+        select(Order)
+        .options(selectinload(Order.user))
+        .where(
+            Order.class_id.is_(None),
+            Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+            Order.user_id.in_(member_user_ids),
+        )
+        .order_by(Order.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    classes_by_user: dict[uuid.UUID, SchoolClass | None] = {}
+    for order in orders:
+        if order.user_id not in classes_by_user:
+            classes_by_user[order.user_id] = await class_svc.resolve_user_class(session, order.user)
+        school_class = classes_by_user[order.user_id]
+        if school_class is None or school_class.id not in class_ids:
+            continue
+        order.class_id = school_class.id
+        order.school_class = school_class
+        await receivable_svc.sync_shop_order(session, order)
+
+
 async def list_orders(
     session: AsyncSession,
     *,
@@ -1082,6 +1134,10 @@ async def list_orders(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Order]:
+    if class_ids is not None:
+        if not class_ids:
+            return []
+        await _reconcile_unassigned_class_orders(session, class_ids)
     q = (
         select(Order)
         .options(
@@ -1109,8 +1165,6 @@ async def list_orders(
         if category_id is None:
             q = q.where(Order.category_id.is_(None))
     if class_ids is not None:
-        if not class_ids:
-            return []
         q = q.where(Order.class_id.in_(class_ids))
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
