@@ -871,10 +871,6 @@
   min-width: 0;
 }
 
-.shop-public-series-heading.shop-public-series-heading--single {
-  margin-bottom: 1rem;
-}
-
 .shop-public-series-heading {
   display: flex;
   align-items: center;
