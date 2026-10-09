@@ -88,7 +88,6 @@ class PetitionSubmitterUpdate(BaseModel):
 class PetitionCreatedOut(BaseModel):
     id: uuid.UUID
     case_number: str
-    verification_code: str
     share_token: str
     status: PetitionStatus
     title: str
@@ -226,13 +225,11 @@ class PetitionConfidentialityCreate(BaseModel):
 
 class PetitionSupplementCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=10000)
-    verification_code: str | None = Field(None, min_length=5, max_length=5, pattern=r"^\d{5}$")
 
 
 class PetitionContentUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=200)
     content: str | None = Field(None, min_length=1, max_length=10000)
-    verification_code: str | None = Field(None, min_length=5, max_length=5, pattern=r"^\d{5}$")
 
     @model_validator(mode="after")
     def require_content_change(self) -> PetitionContentUpdate:
@@ -292,7 +289,6 @@ class PetitionPublicResponse(BaseModel):
     decision: Literal["approve", "approve_with_changes", "reject"]
     title: str | None = Field(None, min_length=1, max_length=200)
     content: str | None = Field(None, min_length=1, max_length=10000)
-    verification_code: str | None = Field(None, min_length=5, max_length=5, pattern=r"^\d{5}$")
 
     @model_validator(mode="after")
     def require_changes(self) -> PetitionPublicResponse:

@@ -540,7 +540,7 @@ async def create_petition(
     current_user: CurrentUser,
 ) -> PetitionCreatedOut:
     try:
-        case_obj, code, share_token = await petition_svc.create_case(
+        case_obj, share_token = await petition_svc.create_case(
             session, data=payload, submitter=current_user
         )
     except ValueError as e:
@@ -611,7 +611,6 @@ async def create_petition(
     return PetitionCreatedOut(
         id=case_obj.id,
         case_number=case_obj.case_number,
-        verification_code=code,
         share_token=share_token,
         status=case_obj.status,
         title=case_obj.title,
@@ -623,15 +622,14 @@ async def create_petition(
     )
 
 
-@router.get("/lookup", response_model=PetitionLookupOut, summary="登入後以案號與驗證碼查詢本人案件")
+@router.get("/lookup", response_model=PetitionLookupOut, summary="登入後依案號查詢本人案件")
 async def lookup_case(
     request: Request,
     session: DbDep,
     current_user: CurrentUser,
     case_number: str = Query(..., min_length=7, max_length=7, pattern=r"^\d{7}$"),
-    verification_code: str = Query(..., min_length=5, max_length=5, pattern=r"^\d{5}$"),
 ) -> PetitionLookupOut:
-    # 僅允許登入帳號查詢本人案件；公開頁只提供已發布的公開陳情。
+    # 僅允許登入帳號查詢本人案件；登入身份與案件歸屬取代案件驗證碼。
     client_ip = request.client.host if request.client else "unknown"
     ip_key = f"petition_lookup_ip:{client_ip}"
     case_key = f"petition_lookup_case:{case_number}"
@@ -644,16 +642,12 @@ async def lookup_case(
             )
 
     case_obj = await petition_svc.get_case_by_number(session, case_number)
-    if (
-        case_obj is None
-        or case_obj.is_confidential
-        or not petition_svc.verify_code(case_obj, verification_code)
-    ):
+    if case_obj is None:
         await record_failure(ip_key)
         await record_failure(case_key)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此案件")
     if case_obj.submitter_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此案件")
 
     await record_success(ip_key)
     await record_success(case_key)
@@ -662,7 +656,7 @@ async def lookup_case(
             case_obj,
             include_internal=False,
             can_view_submitter=True,
-            can_respond_public=True,
+            can_respond_public=not case_obj.is_confidential,
             can_edit_content=True,
         )
     )
@@ -798,7 +792,7 @@ async def create_admin_petition(
     user: CurrentUser,
 ) -> PetitionCreatedOut:
     try:
-        case_obj, code, share_token = await petition_svc.create_admin_case(
+        case_obj, share_token = await petition_svc.create_admin_case(
             session, data=payload, actor_id=user.id
         )
     except ValueError as exc:
@@ -861,7 +855,6 @@ async def create_admin_petition(
     return PetitionCreatedOut(
         id=case_obj.id,
         case_number=case_obj.case_number,
-        verification_code=code,
         share_token=share_token,
         status=case_obj.status,
         title=case_obj.title,
@@ -1821,7 +1814,6 @@ async def upload_attachment(
     case_id: uuid.UUID,
     session: DbDep,
     user: CurrentUser,
-    verification_code: str | None = Form(None),
     visibility: PetitionAttachmentVisibility = Form(PetitionAttachmentVisibility.PUBLIC),
     file: UploadFile = File(...),
 ) -> PetitionAttachmentOut:
@@ -1860,7 +1852,6 @@ async def download_attachment(
     attachment_id: uuid.UUID,
     session: DbDep,
     user: CurrentUser,
-    verification_code: str | None = Query(None),
 ) -> FileResponse | RedirectResponse:
     case_obj = await _case_or_404(session, case_id)
     include_internal, _ = await _assert_case_access(session, case_obj, user)

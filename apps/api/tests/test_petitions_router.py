@@ -54,9 +54,7 @@ async def _make_org_and_type(db, *, name: str = "學生事務處") -> tuple[Org,
     org = Org(name=name)
     db.add(org)
     await db.flush()
-    petition_type = PetitionType(
-        name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id
-    )
+    petition_type = PetitionType(name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id)
     db.add(petition_type)
     await db.flush()
     return org, petition_type
@@ -87,10 +85,8 @@ async def _create_case(
         title="教室冷氣故障",
         content="B302 教室冷氣無法啟動，請盡快派員維修。",
     )
-    case_obj, code, _share_token = await petition_svc.create_case(
-        db, data=data, submitter=submitter
-    )
-    return case_obj, code
+    case_obj, share_token = await petition_svc.create_case(db, data=data, submitter=submitter)
+    return case_obj, share_token
 
 
 # ── 前台送件 ──────────────────────────────────────────────────────────────────
@@ -136,6 +132,8 @@ async def test_admin_can_create_external_petition_with_contact_email(
     assert case_obj.submitter_id is None
     assert case_obj.contact_name == "校外陳情人"
     assert case_obj.contact_email == "external@example.com"
+    assert case_obj.verification_code_hash is None
+    assert "verification_code" not in response.json()
     assert response.json()["status"] == "submitted"
 
 
@@ -299,7 +297,7 @@ async def test_closing_assigned_case_does_not_notify_unrelated_permission_holder
     council_member = await _bare_user(db_session)
     await _grant_org_permission(db_session, council_member, council_org, "petition:handle")
 
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
     assigned = await authed_client_factory(handler).patch(
         f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(handler.id)}
     )
@@ -349,6 +347,7 @@ async def test_create_petition_survives_optional_integration_failure(
 
     assert response.status_code == 201
     assert response.json()["status"] == "submitted"
+    assert "verification_code" not in response.json()
 
 
 async def test_create_petition_without_login_without_contact_returns_401(
@@ -402,27 +401,28 @@ async def test_list_public_types_hides_inactive(db_session, client) -> None:
 # ── 查詢 ──────────────────────────────────────────────────────────────────────
 
 
-async def test_lookup_case_with_correct_code_succeeds(db_session, authed_client_factory) -> None:
+async def test_lookup_case_by_owner_case_number_succeeds(db_session, authed_client_factory) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
-    case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     resp = await authed_client_factory(owner).get(
         "/petitions/lookup",
-        params={"case_number": case_obj.case_number, "verification_code": code},
+        params={"case_number": case_obj.case_number},
     )
     assert resp.status_code == 200
     assert resp.json()["case_number"] == case_obj.case_number
 
 
-async def test_lookup_case_with_wrong_code_returns_404(db_session, authed_client_factory) -> None:
+async def test_lookup_case_rejects_another_submitter(db_session, authed_client_factory) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    other_user = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
-    resp = await authed_client_factory(owner).get(
+    resp = await authed_client_factory(other_user).get(
         "/petitions/lookup",
-        params={"case_number": case_obj.case_number, "verification_code": "00000"},
+        params={"case_number": case_obj.case_number},
     )
     assert resp.status_code == 404
 
@@ -435,9 +435,7 @@ async def test_lookup_case_by_share_token_succeeds(db_session, authed_client_fac
         title="教室冷氣故障",
         content="B302 教室冷氣無法啟動，請盡快派員維修。",
     )
-    case_obj, _code, share_token = await petition_svc.create_case(
-        db_session, data=data, submitter=owner
-    )
+    case_obj, share_token = await petition_svc.create_case(db_session, data=data, submitter=owner)
 
     resp = await authed_client_factory(owner).post(
         "/petitions/share", json={"share_token": share_token}
@@ -451,7 +449,7 @@ async def test_submitter_can_edit_content_before_assignment(
 ) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     resp = await authed_client_factory(owner).patch(
         f"/petitions/{case_obj.id}/content",
@@ -464,24 +462,16 @@ async def test_submitter_can_edit_content_before_assignment(
     assert resp.json()["can_edit_content"] is True
 
 
-async def test_unauthenticated_cannot_edit_content_with_verification_code(
-    db_session, client
-) -> None:
+async def test_unauthenticated_cannot_edit_content(db_session, client) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
-    case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     forbidden = await client.patch(
         f"/petitions/{case_obj.id}/content",
         json={"content": "不應該成功"},
     )
     assert forbidden.status_code == 401
-
-    edited = await client.patch(
-        f"/petitions/{case_obj.id}/content",
-        json={"content": "訪客修改後的內容", "verification_code": code},
-    )
-    assert edited.status_code == 401
 
 
 async def test_submitter_cannot_edit_content_after_assignment(
@@ -491,7 +481,7 @@ async def test_submitter_cannot_edit_content_after_assignment(
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:assign")
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     assigned = await authed_client_factory(handler).patch(
         f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(handler.id)}
@@ -585,8 +575,8 @@ async def test_parent_org_handler_can_manage_child_cases_but_viewer_cannot(
     await db_session.flush()
     _child, child_type = await _make_child_org_and_type(db_session, parent)
     _unrelated_org, unrelated_type = await _make_org_and_type(db_session)
-    child_case, _code = await _create_case(db_session, child_type)
-    unrelated_case, _code = await _create_case(db_session, unrelated_type)
+    child_case, _share_token = await _create_case(db_session, child_type)
+    unrelated_case, _share_token = await _create_case(db_session, unrelated_type)
     parent_handler = await _bare_user(db_session)
     parent_viewer = await _bare_user(db_session)
     await _grant_org_permission(db_session, parent_handler, parent, "petition:assign")
@@ -616,7 +606,7 @@ async def test_confidential_petition_access_is_scoped_by_role(
     viewer = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:view_org")
     await _grant_org_permission(db_session, viewer, org, "petition:view_org")
-    case_obj, code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
     case_obj.assigned_to_id = handler.id
     case_obj.status = PetitionStatus.ASSIGNED
     await db_session.flush()
@@ -679,9 +669,11 @@ async def test_confidential_petition_access_is_scoped_by_role(
 
     lookup = await authed_client_factory(owner).get(
         "/petitions/lookup",
-        params={"case_number": case_obj.case_number, "verification_code": code},
+        params={"case_number": case_obj.case_number},
     )
-    assert lookup.status_code == 404
+    assert lookup.status_code == 200
+    assert lookup.json()["confidential_blocked"] is False
+    assert lookup.json()["content"]
 
     public_request = await authed_client_factory(admin_user).post(
         f"/petitions/{case_obj.id}/public-request",
@@ -701,7 +693,7 @@ async def test_petition_confidentiality_reason_is_required(
 ) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     response = await authed_client_factory(admin_user).post(
         f"/petitions/{case_obj.id}/confidential", json={"reason": "   "}
@@ -727,12 +719,12 @@ async def test_monthly_stats_filter_by_month_type_and_org_scope(
     from api.core.clock import TAIPEI
 
     org, petition_type = await _make_org_and_type(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
     case_obj.submitted_at = datetime(2026, 9, 1, 9, tzinfo=TAIPEI)
     case_obj.closed_at = datetime(2026, 9, 2, 9, tzinfo=TAIPEI)
 
     _other_org, other_type = await _make_org_and_type(db_session, name="教務處")
-    other_case, _other_code = await _create_case(db_session, other_type)
+    other_case, _other_share_token = await _create_case(db_session, other_type)
     other_case.submitted_at = datetime(2026, 9, 3, 9, tzinfo=TAIPEI)
     other_case.closed_at = datetime(2026, 9, 4, 9, tzinfo=TAIPEI)
     await db_session.flush()
@@ -768,7 +760,7 @@ async def test_get_case_forbidden_for_unrelated_user(db_session, authed_client_f
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     stranger = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     ac = authed_client_factory(stranger)
     resp = await ac.get(f"/petitions/{case_obj.id}")
@@ -778,7 +770,7 @@ async def test_get_case_forbidden_for_unrelated_user(db_session, authed_client_f
 async def test_get_case_visible_to_submitter(db_session, authed_client_factory) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     ac = authed_client_factory(owner)
     resp = await ac.get(f"/petitions/{case_obj.id}")
@@ -792,7 +784,7 @@ async def test_get_case_by_case_number_compatibility_route(
 ) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     resp = await authed_client_factory(owner).get(f"/petitions/{case_obj.case_number}")
 
@@ -804,7 +796,7 @@ async def test_list_assignable_users_returns_org_members(db_session, authed_clie
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:view_org")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     resp = await ac.get(f"/petitions/{case_obj.id}/assignable-users")
@@ -825,7 +817,7 @@ async def test_list_assignable_users_includes_parent_members_only_for_parent_ass
     await _grant_org_permission(db_session, child_member, org, "petition:view_org")
     await _grant_org_permission(db_session, parent_assigner, parent, "petition:assign")
     await _grant_org_permission(db_session, child_assigner, org, "petition:assign")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     parent_response = await authed_client_factory(parent_assigner).get(
         f"/petitions/{case_obj.id}/assignable-users"
@@ -851,7 +843,7 @@ async def test_assign_case_requires_permission(
     db_session, member_user, authed_client_factory
 ) -> None:
     _, petition_type = await _make_org_and_type(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
     ac = authed_client_factory(member_user)
     resp = await ac.patch(
         f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(member_user.id)}
@@ -864,7 +856,7 @@ async def test_assign_case_rejects_user_outside_org(db_session, authed_client_fa
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:assign")
     outsider = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     resp = await ac.patch(
@@ -877,7 +869,7 @@ async def test_assign_case_succeeds_for_org_member(db_session, authed_client_fac
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:assign")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     resp = await ac.patch(
@@ -887,7 +879,9 @@ async def test_assign_case_succeeds_for_org_member(db_session, authed_client_fac
     assert resp.json()["status"] == "assigned"
 
 
-async def test_parent_org_can_assign_and_handle_child_case(db_session, authed_client_factory) -> None:
+async def test_parent_org_can_assign_and_handle_child_case(
+    db_session, authed_client_factory
+) -> None:
     parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
     db_session.add(parent)
     await db_session.flush()
@@ -895,7 +889,7 @@ async def test_parent_org_can_assign_and_handle_child_case(db_session, authed_cl
     chair = await _bare_user(db_session)
     await _grant_org_permission(db_session, chair, parent, "petition:assign")
     await _grant_org_permission(db_session, chair, parent, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
     ac = authed_client_factory(chair)
 
     assigned = await ac.patch(
@@ -924,7 +918,7 @@ async def test_parent_assigner_cannot_assign_to_sibling_org_member(
     sibling_member = await _bare_user(db_session)
     await _grant_org_permission(db_session, assigner, parent, "petition:assign")
     await _grant_org_permission(db_session, sibling_member, sibling_org, "petition:view_org")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     response = await authed_client_factory(assigner).patch(
         f"/petitions/{case_obj.id}/assign",
@@ -941,7 +935,7 @@ async def test_transfer_case_moves_to_new_org(db_session, authed_client_factory)
     await db_session.flush()
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:transfer")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     resp = await ac.patch(
@@ -957,7 +951,7 @@ async def test_reply_case_marks_resolved_when_requested(db_session, authed_clien
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     resp = await ac.post(
@@ -979,7 +973,7 @@ async def test_public_petition_attachment_can_be_downloaded_by_submitter(
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     uploaded = await authed_client_factory(handler).post(
         f"/petitions/{case_obj.id}/attachments",
@@ -1113,7 +1107,7 @@ async def test_office_attachment_preview_returns_converted_pdf(
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
     uploaded = await authed_client_factory(handler).post(
         f"/petitions/{case_obj.id}/attachments",
         files={
@@ -1153,7 +1147,7 @@ async def test_account_reply_attachment_is_added_to_notification_email(
     owner.notification_preferences = {"petition_replied": {"inapp": True, "email": True}}
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     uploaded = await authed_client_factory(handler).post(
         f"/petitions/{case_obj.id}/attachments",
@@ -1209,7 +1203,7 @@ async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     image_buffer = BytesIO()
     Image.new("RGB", (8, 8), color=(30, 100, 180)).save(image_buffer, format="PNG")
@@ -1262,7 +1256,7 @@ async def test_handler_can_edit_own_public_reply_within_one_hour(
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
     ac = authed_client_factory(handler)
 
     response = await ac.post(
@@ -1295,7 +1289,7 @@ async def test_public_event_cannot_be_edited_after_one_hour(
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
     ac = authed_client_factory(handler)
 
     replied = await ac.post(
@@ -1328,7 +1322,7 @@ async def test_reply_case_can_auto_assign_and_close(db_session, authed_client_fa
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     resp = await ac.post(
@@ -1354,7 +1348,7 @@ async def test_public_petition_requires_user_then_handler_confirmation(
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
     handler_client = authed_client_factory(handler)
 
     closed = await handler_client.post(
@@ -1399,7 +1393,7 @@ async def test_update_status_needs_info_requires_message(db_session, authed_clie
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     missing_message = await ac.patch(
@@ -1432,7 +1426,7 @@ async def test_petition_updates_email_logged_in_submitter(
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     scheduled: list[dict] = []
 
@@ -1488,7 +1482,7 @@ async def test_petition_transfer_does_not_email_submitter(
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:transfer")
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
 
     scheduled: list[dict] = []
     monkeypatch.setattr(
@@ -1509,7 +1503,7 @@ async def test_add_internal_note_succeeds(db_session, authed_client_factory) -> 
     org, petition_type = await _make_org_and_type(db_session)
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
-    case_obj, _code = await _create_case(db_session, petition_type)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
 
     ac = authed_client_factory(handler)
     resp = await ac.post(f"/petitions/{case_obj.id}/notes", json={"content": "已電話聯繫陳情人"})
@@ -1527,7 +1521,7 @@ async def test_supplement_case_requires_authenticated_submitter(
     handler = await _bare_user(db_session)
     await _grant_org_permission(db_session, handler, org, "petition:handle")
     owner = await _bare_user(db_session)
-    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
     await petition_svc.update_status(
         db_session,
         case_obj,

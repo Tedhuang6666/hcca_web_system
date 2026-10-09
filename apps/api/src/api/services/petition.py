@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -13,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import local_today, roc_year
-from api.core.config import settings
 from api.core.database import advisory_xact_lock
 from api.core.permission_codes import PermissionCode
 from api.models.org import Org, Position, UserPosition
@@ -146,22 +144,8 @@ NEXT_ACTIONS: dict[PetitionStatus, str] = {
 }
 
 
-def generate_verification_code() -> str:
-    return f"{secrets.randbelow(100000):05d}"
-
-
-def hash_verification_code(case_number: str, code: str) -> str:
-    raw = f"{case_number}:{code}".encode()
-    return hmac.new(settings.SECRET_KEY.encode(), raw, hashlib.sha256).hexdigest()
-
-
-def verify_code(case: PetitionCase, code: str) -> bool:
-    expected = hash_verification_code(case.case_number, code)
-    return hmac.compare_digest(case.verification_code_hash, expected)
-
-
 def generate_share_token() -> str:
-    """產生僅顯示一次的高熵 bearer token，取代可暴力猜測的五位數分享碼。"""
+    """產生僅顯示一次的高熵分享權杖。"""
     return secrets.token_urlsafe(32)
 
 
@@ -307,17 +291,15 @@ async def _create_case(
     contact_email: str,
     actor_id: uuid.UUID | None,
     created_title: str = "案件已建立",
-) -> tuple[PetitionCase, str, str]:
+) -> tuple[PetitionCase, str]:
     petition_type = await get_type(session, type_id)
     if petition_type is None or not petition_type.is_active:
         raise ValueError("陳情類型不存在或已停用")
 
-    code = generate_verification_code()
     share_token = generate_share_token()
     case_number = await _next_case_number(session)
     case_obj = PetitionCase(
         case_number=case_number,
-        verification_code_hash=hash_verification_code(case_number, code),
         share_token_hash=hash_share_token(share_token),
         type_id=type_id,
         is_named=True,
@@ -339,7 +321,7 @@ async def _create_case(
         content=STATUS_MESSAGES[PetitionStatus.SUBMITTED],
         actor_id=actor_id,
     )
-    return case_obj, code, share_token
+    return case_obj, share_token
 
 
 async def create_case(
@@ -347,7 +329,7 @@ async def create_case(
     *,
     data: PetitionCreate,
     submitter: User,
-) -> tuple[PetitionCase, str, str]:
+) -> tuple[PetitionCase, str]:
     if submitter is None:
         raise ValueError("陳情必須先登入帳號")
     return await _create_case(
@@ -367,7 +349,7 @@ async def create_admin_case(
     *,
     data: PetitionAdminCreate,
     actor_id: uuid.UUID,
-) -> tuple[PetitionCase, str, str]:
+) -> tuple[PetitionCase, str]:
     return await _create_case(
         session,
         type_id=data.type_id,
@@ -427,7 +409,7 @@ async def update_content(
 ) -> PetitionCase:
     if not can_edit_content(case_obj):
         raise ValueError("案件已進入分案或處理流程，無法再編輯原始內容")
-    changes = data.model_dump(exclude_unset=True, exclude={"verification_code"})
+    changes = data.model_dump(exclude_unset=True)
     if "title" in changes:
         case_obj.title = changes["title"]
     if "content" in changes:

@@ -62,10 +62,8 @@ export const petitionsApi = {
   deleteNotificationRule: (id: string) =>
     del<void>(`/petitions/admin/notification-rules/${id}`),
   create: (body: PetitionCreate) => post<PetitionCreatedOut>("/petitions", body),
-  lookup: (caseNumber: string, verificationCode: string) =>
-    get<PetitionCaseOut>(
-      `/petitions/lookup?${new URLSearchParams({ case_number: caseNumber, verification_code: verificationCode }).toString()}`
-    ),
+  lookup: (caseNumber: string) =>
+    get<PetitionCaseOut>(`/petitions/lookup?${new URLSearchParams({ case_number: caseNumber }).toString()}`),
   lookupShare: (shareToken: string) => post<PetitionCaseOut>("/petitions/share", { share_token: shareToken }),
   publicList: (params?: { limit?: number; offset?: number }) => {
     const p = new URLSearchParams();
@@ -74,8 +72,13 @@ export const petitionsApi = {
     return get<PetitionPublicListItem[]>(`/petitions/public${p.size ? `?${p}` : ""}`);
   },
   publicGet: (id: string) => get<PetitionPublicOut>(`/petitions/public/${id}`),
-  my: (params?: { status?: PetitionStatus; keyword?: string }) => {
-    const qs = params ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString()}` : "";
+  my: (params?: { status?: PetitionStatus; keyword?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.keyword?.trim()) query.set("keyword", params.keyword.trim());
+    if (params?.limit !== undefined) query.set("limit", String(params.limit));
+    if (params?.offset !== undefined) query.set("offset", String(params.offset));
+    const qs = query.size ? `?${query}` : "";
     return get<PetitionCaseListItem[]>(`/petitions/my${qs}`);
   },
   manage: (params?: { status?: PetitionStatus; keyword?: string; assigned_to_me?: boolean }) => {
@@ -95,7 +98,7 @@ export const petitionsApi = {
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
     return res.blob();
   },
-  updateContent: (id: string, body: { title?: string; content?: string; verification_code?: string | null }) =>
+  updateContent: (id: string, body: { title?: string; content?: string }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/content`, body),
   assignableUsers: (id: string) =>
     get<{ id: string; display_name: string; email: string }[]>(`/petitions/${id}/assignable-users`),
@@ -106,7 +109,7 @@ export const petitionsApi = {
       `/petitions/${id}/confidential`,
       { reason },
     ),
-  supplement: (id: string, body: { content: string; verification_code?: string | null }) =>
+  supplement: (id: string, body: { content: string }) =>
     post<PetitionCaseOut>(`/petitions/${id}/supplement`, body),
   assign: (id: string, body: { assigned_to_id: string; internal_note?: string | null }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/assign`, body),
@@ -120,7 +123,6 @@ export const petitionsApi = {
     decision: "approve" | "approve_with_changes" | "reject";
     title?: string;
     content?: string;
-    verification_code?: string | null;
   }) => post<PetitionCaseOut>(`/petitions/${id}/public-response`, body),
   confirmPublic: (id: string) => post<PetitionCaseOut>(`/petitions/${id}/public-confirm`, {}),
   editEvent: (id: string, eventId: string, body: { title?: string; content?: string | null }) =>
@@ -128,17 +130,14 @@ export const petitionsApi = {
   updateStatus: (id: string, body: { status: PetitionStatus; public_message?: string | null; internal_note?: string | null }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/status`, body),
   addNote: (id: string, content: string) => post<PetitionCaseOut>(`/petitions/${id}/notes`, { content }),
-  uploadAttachment: (id: string, file: File, options?: { verification_code?: string; visibility?: "public" | "internal" }, onProgress?: (progress: number) => void) => {
+  uploadAttachment: (id: string, file: File, options?: { visibility?: "public" | "internal" }, onProgress?: (progress: number) => void) => {
     const fd = new FormData();
     fd.append("file", file);
-    if (options?.verification_code) fd.append("verification_code", options.verification_code);
     if (options?.visibility) fd.append("visibility", options.visibility);
     return uploadPetitionFile<{ id: string; filename: string; url: string }>(`/petitions/${id}/attachments`, fd, onProgress);
   },
-  attachmentDownloadUrl: (id: string, attachmentId: string, verificationCode?: string) => {
-    const qs = verificationCode ? `?${new URLSearchParams({ verification_code: verificationCode }).toString()}` : "";
-    return `${BASE}/petitions/${id}/attachments/${attachmentId}/download${qs}`;
-  },
+  attachmentDownloadUrl: (id: string, attachmentId: string) =>
+    `${BASE}/petitions/${id}/attachments/${attachmentId}/download`,
   attachmentPreviewUrl: (id: string, attachmentId: string) =>
     `${BASE}/petitions/${id}/attachments/${attachmentId}/preview`,
 };

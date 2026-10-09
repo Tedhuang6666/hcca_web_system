@@ -30,11 +30,9 @@ export function PetitionPublicDiff({ before, after }: { before: string; after: s
 
 export default function PetitionPublicConsent({
   item,
-  verificationCode,
   onUpdated,
 }: {
   item: PetitionCaseOut;
-  verificationCode?: string;
   onUpdated: (item: PetitionCaseOut) => void;
 }) {
   const [title, setTitle] = useState(item.public_title || item.title);
@@ -55,7 +53,6 @@ export default function PetitionPublicConsent({
       const updated = await petitionsApi.respondPublic(item.id, {
         decision,
         ...(decision === "approve_with_changes" ? { title: title.trim(), content: content.trim() } : {}),
-        verification_code: verificationCode || null,
       });
       onUpdated(updated);
       toast.success(decision === "reject" ? "已拒絕公開" : "公開意願已送出");

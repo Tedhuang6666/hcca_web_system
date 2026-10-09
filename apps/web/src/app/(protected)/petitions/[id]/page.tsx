@@ -23,7 +23,6 @@ export default function PetitionDetailPage() {
   const [item, setItem] = useState<PetitionCaseOut | null>(null);
   const [supplement, setSupplement] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [verificationCode, setVerificationCode] = useState("");
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -44,9 +43,8 @@ export default function PetitionDetailPage() {
     try {
       const updated = await petitionsApi.supplement(item.id, {
         content: supplement,
-        verification_code: verificationCode || null,
       });
-      if (file) await petitionsApi.uploadAttachment(item.id, file, { verification_code: verificationCode || undefined });
+      if (file) await petitionsApi.uploadAttachment(item.id, file);
       setItem(updated);
       setSupplement("");
       setFile(null);
@@ -62,7 +60,7 @@ export default function PetitionDetailPage() {
     return (
       <div className="max-w-2xl mx-auto card p-5 space-y-3">
         <p style={{ color: "var(--text-muted)" }}>無法直接查看此案件。</p>
-        <Link className="btn btn-primary" href="/petitions">回案號查詢</Link>
+        <Link className="btn btn-primary" href="/petitions">回我的案件</Link>
       </div>
     );
   }
@@ -141,7 +139,6 @@ export default function PetitionDetailPage() {
               <h2 className="font-semibold">補充資料</h2>
               {item.supplement_request && <p className="text-sm" style={{ color: "var(--danger)" }}>{item.supplement_request}</p>}
               <textarea className="input w-full min-h-28" value={supplement} onChange={(e) => setSupplement(e.target.value)} placeholder="請補充承辦機關要求的資料" />
-              <input className="input w-full" placeholder="案件驗證碼（登入本人可留空）" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))} maxLength={5} />
               <AnimatedFileUpload
                 accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
                 label="拖曳補件附件到這裡"
