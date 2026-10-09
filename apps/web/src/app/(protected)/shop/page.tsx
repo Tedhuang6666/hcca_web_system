@@ -400,7 +400,7 @@ function ProductModal({
       if (quantity > 0 && !wasRegistered) onProductAdded();
       if (key === selectedOptionIds.join(",")) setQty(quantity > 0 ? quantity : 1);
       setRegistrationUpdateMessage(quantity > 0
-        ? wasRegistered ? `已立即更新為 ${quantity} 件。` : `已登記 ${quantity} 件。`
+        ? wasRegistered ? `已更新為 ${quantity} 件。` : `已登記 ${quantity} 件。`
         : "已從登記移除這個規格。");
     } catch (e) {
       setRegistrationUpdateMessage("更新失敗，登記數量維持原值。");
