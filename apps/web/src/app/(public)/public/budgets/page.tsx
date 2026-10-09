@@ -2,13 +2,18 @@ import { ArrowRight, ClipboardCheck, Landmark, ReceiptText, ShieldCheck } from "
 import Link from "next/link";
 
 import PublicExpenseTable from "@/components/finance/PublicExpenseTable";
+import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
+import type { PublicBudgetExecutionLine } from "@/components/finance/PublicBudgetExecutionTable";
 import {
   fetchPublicBudget,
   fetchPublicBudgets,
   fetchPublicBudgetTotals,
   fetchPublicExpenses,
 } from "@/lib/publicSeoFetch";
-import type { PublicBudgetDetail, PublicBudgetListItem } from "@/lib/types";
+import type {
+  PublicBudgetDetail,
+  PublicBudgetListItem,
+} from "@/lib/types";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -18,18 +23,6 @@ export const metadata = pageMetadata({
   type: "website",
 });
 
-type BudgetExecutionLine = {
-  id: string;
-  budgetName: string;
-  name: string;
-  allocated: number;
-  spent: number;
-  remaining: number;
-  depth: number;
-  isGroup: boolean;
-  isBudgetStart: boolean;
-};
-
 function formatAmount(value: number) {
   return `NT$${value.toLocaleString("zh-TW")}`;
 }
@@ -37,7 +30,7 @@ function formatAmount(value: number) {
 function budgetExecutionLines(
   budget: PublicBudgetDetail,
   summary: PublicBudgetListItem,
-): BudgetExecutionLine[] {
+): PublicBudgetExecutionLine[] {
   const nodes = new Map(budget.nodes.map((node) => [node.id, node]));
   const parentIds = new Set(budget.nodes.flatMap((node) => (
     node.parent_id ? [node.parent_id] : []
@@ -65,6 +58,7 @@ function budgetExecutionLines(
         depth,
         isGroup: parentIds.has(node.id),
         isBudgetStart,
+        expenses: budget.expenses.filter((expense) => expense.allocation_node_id === node.id),
       };
       isBudgetStart = false;
       return line;
@@ -158,43 +152,7 @@ export default async function PublicBudgetsPage() {
             <p className="is-income">收入<strong>{formatAmount(incomeTotal)}</strong></p>
             <p className="is-expense">支出<strong>{formatAmount(expenseTotal)}</strong></p>
           </div>
-          <div className="public-finance__lines" role="region" aria-label="預算執行表，可左右捲動" tabIndex={0}>
-            <table>
-              <thead><tr><th scope="col">預算條目</th><th scope="col">編列</th><th scope="col">已用</th><th scope="col">剩餘</th><th scope="col">執行率</th></tr></thead>
-              <tbody>
-            {executionLines.map((line) => {
-              const ratio = line.allocated > 0
-                ? Math.round((line.spent / line.allocated) * 100)
-                : 0;
-              const barWidth = Math.min(Math.max(ratio, 0), 100);
-              return (
-                <tr key={line.id} className={`${line.isGroup ? "is-group" : ""} ${ratio > 100 ? "is-over-budget" : ""}`}>
-                  <th scope="row" style={{ paddingLeft: `${0.85 + line.depth * 1.25}rem` }}>
-                    <strong>{line.name}</strong>
-                    {line.isBudgetStart && <small>{line.budgetName}</small>}
-                  </th>
-                  <td>{line.isGroup ? "—" : formatAmount(line.allocated)}</td>
-                  <td className="is-expense">{line.isGroup ? "—" : formatAmount(line.spent)}</td>
-                  <td>{line.isGroup ? "—" : formatAmount(line.remaining)}</td>
-                  <td>
-                    {line.isGroup ? "—" : (
-                      <span className="public-finance__execution-rate">
-                        <span className="public-finance__progress" role="img" aria-label={`${line.name} 執行率 ${ratio}%`}>
-                          <i style={{ width: `${barWidth}%` }} />
-                        </span>
-                        <b>{ratio}%</b>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {executionLines.length === 0 && (
-              <tr><td className="public-finance__empty-line" colSpan={5}>這個期間尚未公開預算明細。</td></tr>
-            )}
-              </tbody>
-            </table>
-          </div>
+          <PublicBudgetExecutionTable lines={executionLines} />
           <p className="public-finance__calculation-note">
             核准預算的支出登錄後即計入執行額與決算；舊制報帳仍依原紀錄狀態列帳。
           </p>
