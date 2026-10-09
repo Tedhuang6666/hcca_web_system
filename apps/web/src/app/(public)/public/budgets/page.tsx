@@ -115,7 +115,6 @@ export default async function PublicBudgetsPage() {
         <div>
           <span className="public-finance__eyebrow">學生會財務公開</span>
           <h1>財務總覽</h1>
-          <p>預算、支出與餘額放在同一頁。金額依已核准且公開的預算與支出紀錄彙整。</p>
         </div>
         {!budgetLoadFailed && <span>
           <Landmark size={20} aria-hidden="true" />
@@ -212,7 +211,6 @@ export default async function PublicBudgetsPage() {
 
       <aside className="public-budget-index__notice" aria-label="公開資料範圍">
         <ShieldCheck size={18} aria-hidden="true" />
-        <p><strong>已完成報帳的部門、報帳人與憑證會公開。</strong>任何人都能查看支出用途、品項、核銷時間與憑證；銀行帳戶與內部備註不會出現在這裡。</p>
       </aside>
 
       <section className="public-finance__expenses" aria-labelledby="public-finance-expenses-heading">
