@@ -24739,6 +24739,11 @@ export interface components {
             /** Allocation Name */
             allocation_name: string;
             /**
+             * Allocation Node Id
+             * Format: uuid
+             */
+            allocation_node_id: string;
+            /**
              * Entry Date
              * Format: date
              */

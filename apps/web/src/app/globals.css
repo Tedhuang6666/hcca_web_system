@@ -10515,6 +10515,12 @@ input[type="radio"]:checked {
 .public-finance__lines tbody th strong,
 .public-finance__lines tbody th small { display: block; }
 .public-finance__lines tbody th small { margin-top: 0.15rem; color: var(--text-muted); font-size: 0.62rem; font-weight: 500; }
+.public-finance__line-trigger { display: inline-flex; width: 100%; min-height: 2.75rem; align-items: center; justify-content: space-between; gap: 0.5rem; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.public-finance__lines tbody th .public-finance__line-trigger strong { display: inline; }
+.public-finance__line-trigger svg { flex: 0 0 auto; color: var(--public-accent-text); opacity: 0.72; }
+.public-finance__line-trigger:hover { color: var(--public-accent-text); }
+.public-finance__line-trigger:hover strong { text-decoration: underline; text-underline-offset: 0.18em; }
+.public-finance__line-trigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; border-radius: var(--radius-sm); }
 .public-finance__lines tbody td { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .public-finance__lines tbody tr.is-group th,
 .public-finance__lines tbody tr.is-group td { background: color-mix(in srgb, var(--public-soft) 70%, transparent); color: var(--text-secondary); font-weight: 750; }
@@ -10553,6 +10559,12 @@ input[type="radio"]:checked {
 .public-finance__claim-detail .finance-evidence-preview__trigger:hover,
 .public-finance__claim-extra-evidence .finance-evidence-preview__trigger:hover { background: var(--public-soft); }
 .public-finance__claim-extra-evidence { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0.8rem; }
+.public-budget-execution-modal__summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.4rem 1rem; margin: 0; border-bottom: 1px solid var(--public-border); padding: 0 0 0.75rem; color: var(--text-muted); font-size: 0.72rem; }
+.public-budget-execution-modal__summary span:last-child { color: var(--public-accent-text); font-weight: 750; }
+.public-budget-execution-modal__empty { display: flex; min-height: 9rem; align-items: center; justify-content: center; gap: 0.55rem; color: var(--text-muted); }
+.public-budget-execution-modal__empty svg { flex: 0 0 auto; color: var(--public-accent-text); }
+.public-budget-execution-modal__empty p { margin: 0; font-size: 0.76rem; }
+.public-budget-detail__expense-evidence > small { color: var(--text-muted); font-size: 0.66rem; }
 .public-finance__budget-list .public-budget-index__list { margin: 0; border: 0; }
 .public-finance__budget-list .public-budget-index__row h3 { margin: 0; font-size: 0.95rem; }
 
