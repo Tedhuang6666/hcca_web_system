@@ -4,26 +4,11 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { OrderListItem } from "@/lib/types";
-import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { useWS } from "@/hooks/useWS";
-import { orderScopeKey } from "@/lib/shop-order-scope";
 import { summarizeOrderItems } from "@/lib/shop-order-items";
-
-function CollectionStatus({ order }: { order: OrderListItem }) {
-  if (!order.class_id) {
-    return <span>{order.is_paid ? "已繳費" : "尚未繳費"}</span>;
-  }
-  return (
-    <span className="grid gap-0.5">
-      <span>班代收款：{order.is_class_collected ? "已收款" : "待收款"}</span>
-      <span style={{ color: "var(--text-muted)" }}>
-        班聯確認：{order.is_paid ? "已繳費" : "尚未確認"}
-      </span>
-    </span>
-  );
-}
+import { groupActivityPreorders } from "@/lib/shop-preorders";
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -59,37 +44,8 @@ export default function OrdersPage() {
     if (message.type === "order.updated") void load();
   }, [load]));
 
-  const activityGroups = new Map<string, {
-    label: string;
-    orders: OrderListItem[];
-    amount: number;
-    classCollected: number;
-    councilPaid: number;
-    hasClassOrders: boolean;
-  }>();
-  for (const order of orders) {
-    const key = orderScopeKey(order);
-    const group = activityGroups.get(key) ?? {
-      label: order.activity_name ?? order.category_name ?? (order.activity_id ? "已結束的活動" : "一般商品"),
-      orders: [],
-      amount: 0,
-      classCollected: 0,
-      councilPaid: 0,
-      hasClassOrders: false,
-    };
-    group.orders.push(order);
-    if (order.class_id) group.hasClassOrders = true;
-    if (order.status !== "cancelled" && order.status !== "refunded") {
-      group.amount += order.total_price;
-      if (order.is_class_collected) group.classCollected += order.total_price;
-      if (order.is_paid) group.councilPaid += order.total_price;
-    }
-    activityGroups.set(key, group);
-  }
-
-  const activeOrders = orders.filter((order) => !["cancelled", "refunded"].includes(order.status));
-  const outstanding = activeOrders.reduce((sum, order) => sum
-    + (!order.is_paid && !(order.class_id && order.is_class_collected) ? order.total_price : 0), 0);
+  const activityGroups = groupActivityPreorders(orders);
+  const outstanding = activityGroups.reduce((sum, group) => sum + group.outstanding, 0);
 
   return (
     <div className="shop-orders-page">
@@ -98,24 +54,24 @@ export default function OrdersPage() {
           <Link href="/shop" className="shop-orders-back" aria-label="返回商品頁">
             <ArrowLeft size={17} aria-hidden="true" />
           </Link>
-          <h1>我的訂單</h1>
+          <h1>我的預購</h1>
         </div>
       </header>
 
-      {!loading && !loadError && activeOrders.length > 0 && (
+      {!loading && !loadError && activityGroups.length > 0 && (
         <section className="shop-order-next-step" aria-label="下一步">
           <div>
             <h2>{outstanding > 0 ? `待繳 NT$${outstanding.toLocaleString("zh-TW")}` : "目前沒有待繳款項"}</h2>
             <p>{outstanding > 0
-              ? "已登記的商品會保留在下方；班級訂單請向班代繳款，其他訂單請查看付款方式。"
-              : "款項已登記，請依活動通知領取商品。班聯確認進度可在訂單內查看。"}</p>
+              ? "品項依活動列在下方，班級預購請向班代繳款。已收款後追加的品項，只需補繳差額。"
+              : "款項已登記，請依活動通知領取商品。"}</p>
           </div>
           <Link href="/shop" className="shop-order-details">繼續選購 <ArrowRight size={15} aria-hidden="true" /></Link>
         </section>
       )}
 
       <section className="shop-orders-list" aria-labelledby="shop-orders-list-title">
-        <h2 id="shop-orders-list-title">依活動查看訂單</h2>
+        <h2 id="shop-orders-list-title">預購品項</h2>
         {loading ? (
           <div className="py-3">
             <ListPageSkeleton rows={4} showHeader={false} showFilters={false} />
@@ -125,73 +81,61 @@ export default function OrdersPage() {
             <p>{loadError}</p>
             <button type="button" onClick={() => void load()} className="shop-order-details">重新載入</button>
           </div>
-        ) : orders.length === 0 ? (
+        ) : activityGroups.length === 0 ? (
           <SmartEmptyState
             reason="new"
-            subject="商品登記"
+            subject="預購品項"
             createHref="/shop"
-            message="還沒有商品登記，先到商品頁挑選商品。"
+            message="目前沒有預購品項，先到商品頁挑選商品。"
           />
         ) : (
           <div className="shop-order-activity-list">
-            {[...activityGroups.entries()].map(([activityKey, group]) => (
-              <section key={activityKey} className="shop-order-activity" aria-label={`${group.label}訂單`}>
+            {activityGroups.map((group) => (
+              <section key={group.key} className="shop-order-activity" aria-label={`${group.label}預購`}>
                 <div className="shop-order-activity-heading">
                   <div>
                     <h3>{group.label}</h3>
-                    <p>{group.orders.length} 筆訂單 · 應繳金額不含取消及退款訂單</p>
                   </div>
                   <div className="shop-order-activity-amounts">
-                    <strong>訂單總額 NT${group.amount.toLocaleString("zh-TW")}</strong>
-                    {group.hasClassOrders ? (
-                      <span>班代已收 NT${group.classCollected.toLocaleString("zh-TW")} · 班聯已確認 NT${group.councilPaid.toLocaleString("zh-TW")}</span>
-                    ) : (
-                      <span>已繳費 NT${group.councilPaid.toLocaleString("zh-TW")}</span>
-                    )}
+                    <strong>合計 NT${group.amount.toLocaleString("zh-TW")}</strong>
+                    <span>
+                      已繳 NT${group.received.toLocaleString("zh-TW")} · {group.received > 0 && group.outstanding > 0 ? "待補繳" : "待繳"} NT${group.outstanding.toLocaleString("zh-TW")}
+                    </span>
                   </div>
                 </div>
-                <p className="shop-activity-products">{summarizeOrderItems(group.orders
-                  .filter((order) => !["cancelled", "refunded"].includes(order.status))
-                  .flatMap((order) => order.items ?? [])) || "此活動沒有有效訂購商品"}</p>
-                <details className="shop-order-history">
-                  <summary>查看 {group.orders.length} 筆訂單與收款紀錄</summary>
-                <div className="shop-order-list-rows" role="list" aria-label={`${group.label}訂單列表`}>
-                  {group.orders.map((order) => (
-                    <article key={order.id} className="shop-order-row" role="listitem">
+                <ul className="shop-preorder-items" aria-label={`${group.label}品項`}>
+                  {group.items.map((item) => (
+                    <li key={item.id}>
                       <div>
-                        <div className="shop-order-row-main">
-                          <div>
-                            <p className="shop-order-row-code">{order.serial_number}</p>
-                            <p className="shop-order-row-meta">
-                              <time dateTime={order.created_at}>
-                                {new Date(order.created_at).toLocaleString("zh-TW")}
-                              </time>
-                              {order.class_label && <span>{order.class_label}</span>}
-                            </p>
-                          </div>
-                          <OrderStatusBadge status={order.status} />
-                        </div>
-                        <div className="shop-order-row-collection">
-                          <CollectionStatus order={order} />
-                        </div>
-                        <p className="shop-order-row-items">
-                          {order.items?.length
-                            ? summarizeOrderItems(order.items)
-                            : "商品明細請查看訂單"}
-                        </p>
+                        <span>{item.product_name ?? "商品"}</span>
+                        {item.selected_options.length > 0 && (
+                          <p>{item.selected_options.map((option) => option.value).join("／")}</p>
+                        )}
                       </div>
-                      <div className="shop-order-row-side">
-                        <strong className="shop-order-row-amount">
-                          NT${order.total_price.toLocaleString()}
-                        </strong>
-                        <Link href={`/shop/orders/${order.id}`} className="shop-order-details">
-                          查看訂單 <ArrowRight size={15} aria-hidden="true" />
-                        </Link>
-                      </div>
-                    </article>
+                      <span className="shop-preorder-quantity">× {item.quantity}</span>
+                    </li>
                   ))}
+                </ul>
+                {group.items.length === 0 && <p className="shop-order-row-items">品項資訊請查看登記。</p>}
+                <div className="shop-preorder-info">
+                  <span>{group.hasClassOrders ? "向班代繳款" : "依活動通知繳款"}</span>
+                  {group.orders.length === 1 ? (
+                    <Link href={`/shop/orders/${group.orders[0].id}`} className="shop-order-details">
+                      登記資訊 <ArrowRight size={15} aria-hidden="true" />
+                    </Link>
+                  ) : (
+                    <details className="shop-preorder-records">
+                      <summary>登記資訊</summary>
+                      {group.orders.map((order) => (
+                        <Link key={order.id} href={`/shop/orders/${order.id}`} className="shop-order-details">
+                          {summarizeOrderItems(order.items ?? []) || "商品登記"}
+                          <time dateTime={order.created_at}>{new Date(order.created_at).toLocaleString("zh-TW")}</time>
+                          <ArrowRight size={15} aria-hidden="true" />
+                        </Link>
+                      ))}
+                    </details>
+                  )}
                 </div>
-                </details>
               </section>
             ))}
           </div>

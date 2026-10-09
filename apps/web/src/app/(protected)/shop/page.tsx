@@ -1066,8 +1066,8 @@ export default function ShopPage() {
         {isLoggedIn && (
           <Link href="/shop/orders" className="shop-public-order-link">
             <ClipboardList size={19} aria-hidden="true" />
-            我的訂單
-            {registrations.length > 0 && <span className="shop-public-order-link-count">{registrations.length} 筆</span>}
+            我的預購
+            {registrations.length > 0 && <span className="shop-public-order-link-count">{registrations.length} 個活動</span>}
           </Link>
         )}
       </header>
@@ -1457,11 +1457,11 @@ export default function ShopPage() {
           className="shop-public-order-shortcut"
           data-order-flight-target
           aria-label={registrations.length > 0
-            ? `開啟我的訂單，共 ${registrations.length} 筆訂單`
-            : "開啟我的訂單"}
+            ? `開啟我的預購，共 ${registrations.length} 個活動`
+            : "開啟我的預購"}
         >
           <ClipboardList size={19} aria-hidden="true" />
-          <span>我的訂單</span>
+          <span>我的預購</span>
           {registrations.length > 0 && (
             <span className="shop-public-order-shortcut-count">{registrations.length}</span>
           )}

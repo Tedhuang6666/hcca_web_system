@@ -21,7 +21,7 @@ export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const fromClass = useSearchParams().get("from") === "class";
   const backHref = fromClass ? "/shop/class-orders" : "/shop/orders";
-  const backLabel = fromClass ? "返回班代收款" : "返回我的訂單";
+  const backLabel = fromClass ? "返回班代收款" : "返回我的預購";
   const [order, setOrder] = useState<OrderOut | null>(null);
   const [assignments, setAssignments] = useState<SeatBookingOut[]>([]);
   const [seatingItems, setSeatingItems] = useState<SeatingItem[]>([]);
