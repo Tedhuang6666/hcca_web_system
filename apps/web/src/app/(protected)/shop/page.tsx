@@ -1413,11 +1413,6 @@ export default function ShopPage() {
             <div className="shop-public-series-list">
               {!selectedSeriesId && selectedCategory.products.length > 0 && (
                 <section className="shop-public-series">
-                  <div className="shop-public-series-heading shop-public-series-heading--single">
-                    <div>
-                      <h3>單一商品</h3>
-                    </div>
-                  </div>
                   <div className={`shop-public-product-grid${selectedCategory.products.length === 1 ? " shop-public-product-grid--featured" : ""}`}>
                     {selectedCategory.products.map((product) => (
                       <ProductCard
