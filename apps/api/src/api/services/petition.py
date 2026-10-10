@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import local_today, roc_year
+from api.core.config import settings
 from api.core.database import advisory_xact_lock
 from api.core.permission_codes import PermissionCode
 from api.models.org import Org, Position, UserPosition
@@ -84,10 +85,15 @@ def can_edit_content(case_obj: PetitionCase) -> bool:
     return case_obj.status == PetitionStatus.SUBMITTED
 
 
+def is_site_owner(user: User) -> bool:
+    email = user.email.strip().lower()
+    return email in {owner.strip().lower() for owner in settings.OWNER_EMAILS}
+
+
 async def can_view_case(session: AsyncSession, case_obj: PetitionCase, user: User) -> bool:
     """檢查使用者是否可將案件內容用於其他受保護的業務流程。"""
     if case_obj.is_confidential:
-        return case_obj.submitter_id == user.id
+        return is_site_owner(user) or user.id in {case_obj.submitter_id, case_obj.assigned_to_id}
     codes = await get_user_permission_codes(session, user.id)
     if case_obj.submitter_id == user.id:
         return True
@@ -391,12 +397,10 @@ async def update_submitter(
 async def set_confidential(
     session: AsyncSession, case_obj: PetitionCase, *, reason: str
 ) -> PetitionCase:
-    if case_obj.submitter_id is None:
+    if not case_obj.is_confidential and case_obj.submitter_id is None:
         raise ValueError("案件尚未綁定平台帳號，無法指定密件擁有者")
-    if case_obj.is_confidential:
-        raise ValueError("此案件已標註為密件")
     case_obj.is_confidential = True
-    case_obj.confidential_reason = reason
+    case_obj.confidential_reason = reason.strip()
     await session.flush()
     return case_obj
 

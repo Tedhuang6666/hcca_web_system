@@ -110,16 +110,6 @@ def _has_all_scope(codes: frozenset[str], user: User) -> bool:
     )
 
 
-def _has_confidential_full_scope(codes: frozenset[str], user: User) -> bool:
-    return user.is_superuser or bool(
-        codes
-        & {
-            str(PermissionCode.ADMIN_ALL),
-            str(PermissionCode.PETITION_ADMIN),
-        }
-    )
-
-
 async def _case_or_404(session: AsyncSession, case_id: uuid.UUID) -> PetitionCase:
     case_obj = await petition_svc.get_case(session, case_id)
     return or_404(case_obj, "找不到此陳情案件")
@@ -181,8 +171,7 @@ async def _assert_case_access(
 ) -> tuple[bool, bool]:
     """回傳 (include_internal, can_view_submitter)。"""
     if case_obj.is_confidential:
-        codes = await get_user_permission_codes(session, user.id)
-        if _has_confidential_full_scope(codes, user):
+        if petition_svc.is_site_owner(user):
             return True, True
         if case_obj.submitter_id == user.id:
             return False, True
@@ -230,10 +219,11 @@ async def _assert_case_access(
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此陳情案件")
 
 
-def _can_view_confidential_case(
-    case_obj: PetitionCase, user: User, *, has_full_scope: bool = False
-) -> bool:
-    return has_full_scope or user.id in {case_obj.submitter_id, case_obj.assigned_to_id}
+def _can_view_confidential_case(case_obj: PetitionCase, user: User) -> bool:
+    return petition_svc.is_site_owner(user) or user.id in {
+        case_obj.submitter_id,
+        case_obj.assigned_to_id,
+    }
 
 
 async def _notify(
@@ -1011,15 +1001,10 @@ async def list_manage_cases(
         limit=limit,
         offset=offset,
     )
-    permission_codes = await get_user_permission_codes(session, user.id)
-    has_confidential_full_scope = _has_confidential_full_scope(permission_codes, user)
     return [
         _decorate_list_item(
             c,
-            redact_confidential=c.is_confidential
-            and not _can_view_confidential_case(
-                c, user, has_full_scope=has_confidential_full_scope
-            ),
+            redact_confidential=c.is_confidential and not _can_view_confidential_case(c, user),
         )
         for c in cases
     ]
@@ -1075,7 +1060,7 @@ async def set_case_confidential(
     user: CurrentUser,
 ) -> PetitionConfidentialityOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    reason_was_updated = case_obj.is_confidential
     try:
         case_obj = await petition_svc.set_confidential(session, case_obj, reason=payload.reason)
     except ValueError as exc:
@@ -1084,11 +1069,19 @@ async def set_case_confidential(
         session,
         entity_type="petition_case",
         entity_id=str(case_obj.id),
-        action="petition.confidentiality.set",
+        action=(
+            "petition.confidentiality.reason.update"
+            if reason_was_updated
+            else "petition.confidentiality.set"
+        ),
         actor_id=str(user.id),
         actor_email=user.email,
-        meta={"case_number": case_obj.case_number, "reason": payload.reason},
-        summary=f"陳情案件 {case_obj.case_number} 標註為密件",
+        meta={"case_number": case_obj.case_number, "reason": case_obj.confidential_reason},
+        summary=(
+            f"更新陳情案件 {case_obj.case_number} 的密件原因"
+            if reason_was_updated
+            else f"陳情案件 {case_obj.case_number} 標註為密件"
+        ),
     )
     return PetitionConfidentialityOut(
         id=case_obj.id,

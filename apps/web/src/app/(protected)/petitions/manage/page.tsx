@@ -14,6 +14,7 @@ import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
 import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
+import { PetitionConfidentialReasonEditor } from "@/components/petitions/PetitionConfidentialReasonEditor";
 
 type QueueKey = "all" | "pending" | "mine" | "active" | "needs_info" | "done";
 type ActionKey = "assign" | "handle" | "transfer" | "reject_close" | "public" | "attachments";
@@ -49,7 +50,7 @@ function queueStatus(queue: QueueKey): PetitionStatus | undefined {
   return undefined;
 }
 
-const PET_LIST_KEY = "petitions/manage/list";
+const PET_LIST_KEY = "petitions/manage/list:confidential-scope-v2";
 const PET_STATS_KEY = "petitions/manage/stats";
 const PET_ORGS_KEY = "petitions/manage/orgs";
 
@@ -319,7 +320,7 @@ export default function PetitionManagePage() {
       setSelected(null);
       setConfirmingConfidential(false);
       await load();
-      toast.success("案件已標註為密件，並從管理工作台移除");
+      toast.success("案件已標註為密件");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "標註密件失敗");
     } finally {
@@ -591,7 +592,19 @@ export default function PetitionManagePage() {
               請從左側選擇案件。建議先處理「待分案」與「我承辦」，再看跨機關轉派或補件中的案件。
             </div>
           ) : selected.confidential_blocked ? (
-            <PetitionConfidentialBlocked item={selected} />
+            <>
+              <PetitionConfidentialBlocked item={selected} />
+              {can("petition:admin") && (
+                <PetitionConfidentialReasonEditor
+                  key={selected.id}
+                  caseId={selected.id}
+                  reason={selected.confidential_reason}
+                  onUpdated={(reason) => setSelected((current) =>
+                    current ? { ...current, confidential_reason: reason } : current
+                  )}
+                />
+              )}
+            </>
           ) : (
             <>
               <div className="flex min-w-0 items-start justify-between gap-3">
@@ -627,7 +640,7 @@ export default function PetitionManagePage() {
                           />
                         </label>
                         <p className="w-full text-xs text-left" style={{ color: "var(--text-muted)" }}>
-                          設定後僅陳情人與目前承辦人可查看完整內容，其他人只能看到封鎖頁面與此原因，且案件無法公開。
+                          設定後只有陳情人本人、該案指派承辦人與網站擁有者能看完整內容，密件案件不能公開。
                         </p>
                         <button className="btn btn-primary" disabled={busy || !confidentialReason.trim()} onClick={() => void setConfidential()}>
                           {busy ? "設定中…" : "確認設為密件"}
@@ -655,7 +668,17 @@ export default function PetitionManagePage() {
                 <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
                   <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
                   <p style={{ color: "var(--text-secondary)" }}>密件原因：{selected.confidential_reason || "未提供密件原因。"}</p>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅案件擁有者與目前承辦人可查看。</p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅陳情人本人、該案指派承辦人與網站擁有者可查看。</p>
+                  {can("petition:admin") && (
+                    <PetitionConfidentialReasonEditor
+                      key={selected.id}
+                      caseId={selected.id}
+                      reason={selected.confidential_reason}
+                      onUpdated={(reason) => setSelected((current) =>
+                        current ? { ...current, confidential_reason: reason } : current
+                      )}
+                    />
+                  )}
                 </div>
               )}
 
