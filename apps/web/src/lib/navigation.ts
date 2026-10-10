@@ -342,7 +342,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-main",
     heading: "我的校園服務",
-    items: byIds(["dashboard", "announcements", "documents", "regulations", "surveys"]),
+    items: byIds(["dashboard", "announcements", "documents", "regulations", "surveys", "petitions"]),
   },
   {
     id: "student-services",
@@ -511,6 +511,19 @@ function ensureCredentialEntry(entries: NavEntry[]): NavEntry[] {
   ));
 }
 
+function ensurePetitionEntry(entries: NavEntry[]): NavEntry[] {
+  if (navItemsFromEntries(entries).some((item) => item.id === "petitions")) return entries;
+
+  const sectionIndex = entries.findIndex(isSection);
+  if (sectionIndex < 0) return [...entries, NAV_ITEMS_BY_ID.petitions];
+
+  return entries.map((entry, index) => (
+    index === sectionIndex && isSection(entry)
+      ? { ...entry, items: [...entry.items, NAV_ITEMS_BY_ID.petitions] }
+      : entry
+  ));
+}
+
 export function navProfileFromApi(profile: NavigationProfileOut): NavigationProfileConfig {
   const sections = (profile.desktop_sections ?? []).map((section) => ({
     id: section.id,
@@ -521,7 +534,10 @@ export function navProfileFromApi(profile: NavigationProfileOut): NavigationProf
       (item) => profile.key !== "public" || !PRIVATE_PUBLIC_NAV_ITEM_IDS.has(item.id),
     ),
   }));
-  const desktopSections = profile.key === "public" ? sections : ensureCredentialEntry(sections);
+  const profileSections = profile.key === "public" ? sections : ensureCredentialEntry(sections);
+  const desktopSections = profile.key === "student"
+    ? ensurePetitionEntry(profileSections)
+    : profileSections;
   return {
     id: profile.key,
     label: profile.label,

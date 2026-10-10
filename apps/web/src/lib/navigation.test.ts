@@ -4,6 +4,7 @@ import type { NavigationProfileOut } from "./types";
 import {
   NAV_DEF,
   NAV_DEF_LOGGED_OUT,
+  NAV_DEF_STUDENT,
   NAV_ITEMS,
   NAVIGATION_PROFILES,
   isSection,
@@ -30,6 +31,29 @@ describe("navigation visibility", () => {
     expect(ids).toContain("publicPetition");
     expect(navItemsFromEntries(NAV_DEF_LOGGED_OUT).find((item) => item.id === "publicPetition"))
       .toMatchObject({ href: "/petitions/public", label: "公開陳情" });
+  });
+
+  it("shows the petition center in the student navigation profile", () => {
+    const studentItems = navItemsFromEntries(NAV_DEF_STUDENT);
+    expect(studentItems.find((item) => item.id === "petitions")).toMatchObject({
+      href: "/petitions",
+      label: "陳情中心",
+    });
+
+    const profile = {
+      key: "student",
+      desktop_sections: [{ id: "student-main", heading: "我的校園服務", items: ["dashboard"] }],
+    } as NavigationProfileOut;
+    const resolved = navProfileFromApi(profile);
+
+    expect(navItemsFromEntries(resolved.desktopSections).map((item) => item.id)).toContain("petitions");
+
+    const teacherProfile = navProfileFromApi({
+      key: "teacher",
+      desktop_sections: [{ id: "teacher-main", heading: "教職員", items: ["dashboard"] }],
+    } as NavigationProfileOut);
+    expect(navItemsFromEntries(teacherProfile.desktopSections).map((item) => item.id))
+      .not.toContain("petitions");
   });
 
   it("adds the electronic credential when an API profile omits it", () => {

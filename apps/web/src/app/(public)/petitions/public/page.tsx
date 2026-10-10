@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { FilePlus2 } from "lucide-react";
 
 import { fetchPublicPetitions } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
@@ -33,6 +34,10 @@ export default async function PublicPetitionsPage() {
             以下案件已經陳情人同意公開，內容不包含姓名、Email、學號或其他聯絡資料。
           </p>
         </div>
+        <Link href="/petitions/new" className="btn btn-primary min-h-11 w-full gap-2 px-4 sm:w-auto">
+          <FilePlus2 size={16} aria-hidden />
+          提出陳情
+        </Link>
       </header>
 
       {items.length === 0 ? (

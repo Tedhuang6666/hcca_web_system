@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
+import { FilePlus2 } from "lucide-react";
 import { usersApi } from "@/lib/api";
 import { ApiError } from "@/lib/api-helpers";
 import { petitionsApi } from "@/lib/api/petitions";
@@ -24,7 +24,6 @@ export default function PetitionsPageClient({
   const [myCases, setMyCases] = useState<PetitionCaseListItem[]>([]);
   const [myCasesLoading, setMyCasesLoading] = useState(true);
   const [myCasesError, setMyCasesError] = useState<string | null>(null);
-  const [caseKeyword, setCaseKeyword] = useState("");
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [stats, setStats] = useState<PetitionStatsOut | null>(null);
   const [publicCases, setPublicCases] = useState(initialPublicCases);
@@ -89,33 +88,23 @@ export default function PetitionsPageClient({
     };
   }, [authState, can]);
 
-  const searchMyCases = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setMyCasesLoading(true);
-    setMyCasesError(null);
-    try {
-      setMyCases(await petitionsApi.my({ keyword: caseKeyword.trim(), limit: 200 }));
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "搜尋本人案件失敗";
-      setMyCasesError(message);
-      toast.error(message);
-    } finally {
-      setMyCasesLoading(false);
-    }
-  };
-
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情中心</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            提出陳情並追蹤案件進度。
+            提出校園問題、建議或申訴，並追蹤案件辦理進度。
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/petitions/public" className="btn btn-ghost">公開陳情</Link>
-          <Link href="/petitions/new" className="btn btn-primary">我要陳情</Link>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Link href="/petitions/new" className="btn btn-primary min-h-11 w-full gap-2 px-4 sm:w-auto">
+            <FilePlus2 size={16} aria-hidden />
+            提出陳情
+          </Link>
+          <Link href="/petitions/public" className="btn btn-ghost min-h-11 w-full px-4 sm:w-auto">
+            公開陳情
+          </Link>
         </div>
       </div>
 
@@ -147,7 +136,7 @@ export default function PetitionsPageClient({
             登入後查看本人案件
           </h2>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            登入後即可查看、搜尋與追蹤你送出的陳情。
+            登入後即可查看並追蹤你送出的陳情。
           </p>
           <Link href="/login?next=%2Fpetitions" className="btn btn-primary w-fit">
             登入後查看案件
@@ -158,32 +147,15 @@ export default function PetitionsPageClient({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>我的案件</h2>
-              <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>登入後直接查看並追蹤本人送出的陳情</p>
+              <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>查看並追蹤本人送出的陳情</p>
             </div>
-            <Link href="/petitions/new" className="btn btn-primary shrink-0">我要陳情</Link>
           </div>
-          <form onSubmit={searchMyCases} className="flex flex-col gap-2 sm:flex-row" role="search">
-            <label className="sr-only" htmlFor="petition-my-case-search">搜尋本人案件</label>
-            <input
-              id="petition-my-case-search"
-              type="search"
-              className="input w-full"
-              placeholder="輸入案號或標題搜尋"
-              value={caseKeyword}
-              onChange={(event) => setCaseKeyword(event.target.value)}
-            />
-            <button type="submit" className="btn btn-ghost shrink-0" disabled={myCasesLoading}>
-              {myCasesLoading ? "載入中…" : "搜尋案件"}
-            </button>
-          </form>
           {myCasesError ? (
             <p className="text-sm" style={{ color: "var(--danger)" }} role="alert">{myCasesError}</p>
           ) : myCasesLoading ? (
             <p className="text-sm" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">案件載入中…</p>
           ) : myCases.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              {caseKeyword.trim() ? "找不到符合的案件。" : "尚無案件。"}
-            </p>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無案件。</p>
           ) : (
             <div className="space-y-2">
               {myCases.map((item) => (
