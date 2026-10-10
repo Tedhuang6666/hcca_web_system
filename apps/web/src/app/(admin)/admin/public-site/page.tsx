@@ -5,9 +5,12 @@ import {
   closestCenter,
   DndContext,
   KeyboardSensor,
+  pointerWithin,
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
@@ -508,6 +511,7 @@ function SortablePublicLinkRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: link.id,
     disabled,
+    data: { type: "link", categoryId: link.category_id ?? null },
   });
   const isManuallyEnabled = link.is_active;
 
@@ -538,7 +542,6 @@ function SortablePublicLinkRow({
         </button>
         <span className="min-w-0 pt-1 text-sm">
           <span className="font-medium">{link.title}</span>
-          <span className="ml-2 text-[var(--text-muted)]">{link.category?.title ?? "未分類"}</span>
           <span className="mt-1 block break-all text-xs text-[var(--text-muted)]">{link.url}</span>
           <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-muted)]">
             <span
@@ -574,13 +577,193 @@ function SortablePublicLinkRow({
   );
 }
 
+function dndItemType(args: Parameters<CollisionDetection>[0], id: string | number) {
+  return args.droppableContainers.find((container) => container.id === id)?.data.current?.type;
+}
+
+const linkTreeCollisionDetection: CollisionDetection = (args) => {
+  const activeType = args.active.data.current?.type;
+  const allowedTypes = activeType === "category"
+    ? new Set(["category"])
+    : new Set(["link", "category-drop", "category"]);
+  const matches = (collisions: ReturnType<typeof pointerWithin>) =>
+    collisions.filter((collision) => allowedTypes.has(String(dndItemType(args, collision.id))));
+  const pointerMatches = matches(pointerWithin(args));
+
+  if (activeType === "category") {
+    if (pointerMatches.length > 0) return pointerMatches;
+  } else {
+    const linkRow = pointerMatches.find((collision) => dndItemType(args, collision.id) === "link");
+    if (linkRow) return [linkRow];
+    const categoryDrop = pointerMatches.find((collision) => dndItemType(args, collision.id) === "category-drop");
+    if (categoryDrop) return [categoryDrop];
+    const category = pointerMatches.find((collision) => dndItemType(args, collision.id) === "category");
+    if (category) return [category];
+  }
+
+  return matches(closestCenter(args));
+};
+
+function SortablePublicLinkCategory({
+  category,
+  links,
+  disabled,
+  onDelete,
+  onEditLink,
+  onDeleteLink,
+  onToggleLink,
+}: {
+  category: PublicLinkCategoryOut;
+  links: PublicLinkOut[];
+  disabled: boolean;
+  onDelete: () => void;
+  onEditLink: (link: PublicLinkOut) => void;
+  onDeleteLink: (link: PublicLinkOut) => void;
+  onToggleLink: (link: PublicLinkOut) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: category.id,
+    disabled,
+    data: { type: "category", categoryId: category.id },
+  });
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: `category-drop:${category.id}`,
+    disabled,
+    data: { type: "category-drop", categoryId: category.id },
+  });
+
+  return (
+    <section
+      ref={setNodeRef}
+      className="rounded-xl"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.55 : 1,
+        zIndex: isDragging ? 1 : undefined,
+      }}
+    >
+      <div className="rounded-xl p-3 sm:p-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost min-h-11 min-w-11 shrink-0 cursor-grab touch-none active:cursor-grabbing"
+            aria-label={`拖曳調整「${category.title}」分類順序`}
+            style={{ touchAction: "none" }}
+            disabled={disabled}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical size={17} aria-hidden />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h3 className="break-words text-sm font-semibold">{category.title}</h3>
+            {category.description && <p className="mt-0.5 text-xs text-[var(--text-muted)]">{category.description}</p>}
+          </div>
+          <span className="shrink-0 text-xs text-[var(--text-muted)]">{links.length} 個連結</span>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost min-h-11 shrink-0"
+            onClick={onDelete}
+            disabled={disabled}
+            aria-label={`刪除「${category.title}」分類`}
+          >
+            <Trash2 size={14} aria-hidden />
+            <span className="hidden sm:inline">刪除</span>
+          </button>
+        </div>
+        <div
+          ref={setDropNodeRef}
+          className="mt-3 min-h-14 space-y-2 rounded-lg p-2 transition-colors"
+          style={{
+            background: isOver ? "var(--primary-dim)" : "var(--bg-surface)",
+            border: `1px ${links.length ? "solid" : "dashed"} ${isOver ? "var(--primary)" : "var(--border)"}`,
+          }}
+        >
+          {links.length === 0 ? (
+            <p className="px-2 py-2 text-sm text-[var(--text-muted)]">把連結拖到這裡加入分類</p>
+          ) : (
+            <SortableContext items={links.map((link) => link.id)} strategy={verticalListSortingStrategy}>
+              {links.map((link) => (
+                <SortablePublicLinkRow
+                  key={link.id}
+                  link={link}
+                  disabled={disabled}
+                  onEdit={() => onEditLink(link)}
+                  onDelete={() => onDeleteLink(link)}
+                  onToggle={() => onToggleLink(link)}
+                />
+              ))}
+            </SortableContext>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UnassignedPublicLinks({
+  links,
+  disabled,
+  onEditLink,
+  onDeleteLink,
+  onToggleLink,
+}: {
+  links: PublicLinkOut[];
+  disabled: boolean;
+  onEditLink: (link: PublicLinkOut) => void;
+  onDeleteLink: (link: PublicLinkOut) => void;
+  onToggleLink: (link: PublicLinkOut) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: "category-drop:uncategorized",
+    disabled,
+    data: { type: "category-drop", categoryId: null },
+  });
+
+  return (
+    <section
+      ref={setNodeRef}
+      aria-label="未分類連結放置區"
+      className="min-h-16 rounded-xl p-3 transition-colors sm:p-4"
+      style={{
+        background: isOver ? "var(--primary-dim)" : "var(--bg-surface)",
+        border: `1px ${links.length ? "solid" : "dashed"} ${isOver ? "var(--primary)" : "var(--border)"}`,
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">未分類</h3>
+        <span className="text-xs text-[var(--text-muted)]">{links.length} 個連結</span>
+      </div>
+      {links.length === 0 ? (
+        <p className="text-sm text-[var(--text-muted)]">把連結拖到這裡即可移出分類</p>
+      ) : (
+        <SortableContext items={links.map((link) => link.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {links.map((link) => (
+              <SortablePublicLinkRow
+                key={link.id}
+                link={link}
+                disabled={disabled}
+                onEdit={() => onEditLink(link)}
+                onDelete={() => onDeleteLink(link)}
+                onToggle={() => onToggleLink(link)}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      )}
+    </section>
+  );
+}
+
 export default function PublicSiteAdminPage() {
   const confirm = useConfirm();
   const linkSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const [reorderingLinks, setReorderingLinks] = useState(false);
+  const [savingLinkTree, setSavingLinkTree] = useState(false);
   const [tab, setTab] = useState<Tab>("homepage");
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<PublicSiteSettingsOut>(emptySettings);
@@ -1085,6 +1268,7 @@ export default function PublicSiteAdminPage() {
         slug: `category-${crypto.randomUUID()}`,
         title,
         description: categoryDraft.description.trim() || null,
+        sort_order: Math.max(-1, ...categories.map((category) => category.sort_order)) + 1,
       });
       toast.success("分類已新增");
       setCategoryDraft({ title: "", description: "", sort_order: 0, is_active: true });
@@ -1279,26 +1463,111 @@ export default function PublicSiteAdminPage() {
     setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", is_active: true, starts_at: "", ends_at: "" });
   };
 
-  const reorderLinks = async ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id || reorderingLinks) return;
-    const oldIndex = links.findIndex((link) => link.id === active.id);
-    const newIndex = links.findIndex((link) => link.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-
+  const persistLinkTree = async (
+    nextCategories: PublicLinkCategoryOut[],
+    nextLinks: PublicLinkOut[],
+  ) => {
+    const previousCategories = categories;
     const previousLinks = links;
-    const reordered = arrayMove(links, oldIndex, newIndex);
-    setLinks(reordered);
-    setReorderingLinks(true);
+    setCategories(nextCategories);
+    setLinks(nextLinks);
+    setSavingLinkTree(true);
     try {
-      const savedLinks = await siteApi.reorderLinks(reordered.map((link) => link.id));
-      setLinks(savedLinks);
-      toast.success("連結順序已儲存");
+      const saved = await siteApi.updateLinkTree({
+        category_ids: nextCategories.map((category) => category.id),
+        links: nextLinks.map((link) => ({ id: link.id, category_id: link.category_id ?? null })),
+      });
+      setCategories(saved.categories);
+      setLinks(saved.links);
+      toast.success("連結樹已儲存");
     } catch (error) {
+      setCategories(previousCategories);
       setLinks(previousLinks);
-      displayError(error, "調整連結順序失敗");
+      displayError(error, "儲存連結分類與排序失敗");
     } finally {
-      setReorderingLinks(false);
+      setSavingLinkTree(false);
     }
+  };
+
+  const reorderLinkTree = async ({ active, over }: DragEndEvent) => {
+    if (!over || savingLinkTree) return;
+    const activeType = active.data.current?.type;
+
+    if (activeType === "category") {
+      if (over.data.current?.type !== "category") return;
+      const oldIndex = categories.findIndex((category) => category.id === active.id);
+      const newIndex = categories.findIndex((category) => category.id === over.id);
+      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+
+      const nextCategories = arrayMove(categories, oldIndex, newIndex);
+      const lanes = new Map<string | null, PublicLinkOut[]>();
+      categories.forEach((category) => lanes.set(category.id, []));
+      lanes.set(null, []);
+      for (const link of links) {
+        lanes.get(link.category_id ?? null)?.push(link);
+      }
+      const nextLinks = [
+        ...nextCategories.flatMap((category) => lanes.get(category.id) ?? []),
+        ...(lanes.get(null) ?? []),
+      ];
+      await persistLinkTree(nextCategories, nextLinks);
+      return;
+    }
+
+    if (
+      activeType !== "link" ||
+      (active.id === over.id && over.data.current?.type === "link")
+    ) return;
+
+    const activeLinkId = String(active.id);
+    const sourceCategoryId = (active.data.current?.categoryId as string | null | undefined) ?? null;
+    const overType = over.data.current?.type;
+    if (overType !== "link" && overType !== "category" && overType !== "category-drop") return;
+
+    const targetCategoryId = (over.data.current?.categoryId as string | null | undefined) ?? null;
+    const targetLinkId = overType === "link" ? String(over.id) : null;
+    const lanes = new Map<string | null, string[]>();
+    categories.forEach((category) => lanes.set(category.id, []));
+    lanes.set(null, []);
+    for (const link of links) {
+      lanes.get(link.category_id ?? null)?.push(link.id);
+    }
+
+    const sourceLane = lanes.get(sourceCategoryId);
+    const targetLaneBeforeMove = lanes.get(targetCategoryId);
+    const sourceIndex = sourceLane?.indexOf(activeLinkId) ?? -1;
+    if (!sourceLane || sourceIndex < 0 || !targetLaneBeforeMove) return;
+    const targetIndexBeforeMove = targetLinkId ? targetLaneBeforeMove.indexOf(targetLinkId) : -1;
+    if (targetLinkId && targetIndexBeforeMove < 0) return;
+
+    sourceLane.splice(sourceIndex, 1);
+    const targetLane = lanes.get(targetCategoryId);
+    if (!targetLane) return;
+    let insertIndex = targetLane.length;
+    if (targetLinkId) {
+      const targetIndex = targetLane.indexOf(targetLinkId);
+      if (targetIndex < 0) return;
+      insertIndex = sourceCategoryId === targetCategoryId && sourceIndex < targetIndexBeforeMove
+        ? targetIndex + 1
+        : targetIndex;
+    }
+    targetLane.splice(insertIndex, 0, activeLinkId);
+
+    const orderedLinkIds = [
+      ...categories.flatMap((category) => lanes.get(category.id) ?? []),
+      ...(lanes.get(null) ?? []),
+    ];
+    const linksById = new Map(links.map((link) => [link.id, link]));
+    const nextLinks = orderedLinkIds.flatMap((id) => {
+      const link = linksById.get(id);
+      if (!link) return [];
+      if (id !== activeLinkId) return [link];
+      const category = targetCategoryId
+        ? categories.find((entry) => entry.id === targetCategoryId) ?? null
+        : null;
+      return [{ ...link, category_id: targetCategoryId, category }];
+    });
+    await persistLinkTree(categories, nextLinks);
   };
 
   const deleteLink = async (link: PublicLinkOut) => {
@@ -2035,87 +2304,100 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "links" && (
-        <section key="links" className="tab-panel-transition grid min-w-0 gap-4 lg:grid-cols-2">
-          <div className="card min-w-0 space-y-4 p-5">
-            <h2 className="font-semibold">新增連結分類</h2>
-            <Field label="分類名稱"><TextInput value={categoryDraft.title} onChange={(e) => setCategoryDraft({ ...categoryDraft, title: e.target.value })} /></Field>
-            <p className="text-xs leading-5 text-[var(--text-muted)]">
-              分類名稱會顯示在公開連結頁，可把多個連結放在同一分類下。
-            </p>
-            <Field label="說明"><TextInput value={categoryDraft.description} onChange={(e) => setCategoryDraft({ ...categoryDraft, description: e.target.value })} /></Field>
-            <button type="button" onClick={createCategory} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增分類</button>
-            <div className="space-y-2">
-              {categories.map((category) => (
-                <div key={category.id} className="flex flex-col gap-2 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:justify-between" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                  <span className="min-w-0 break-words text-sm">{category.title}</span>
-                  <button type="button" className="btn btn-sm btn-ghost self-start sm:self-auto" onClick={() => siteApi.deleteLinkCategory(category.id).then(load).catch((e) => displayError(e, "刪除類別失敗"))}>刪除</button>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="card min-w-0 space-y-4 p-5">
-            <h2 className="font-semibold">{editingLinkId ? "編輯 Linktree 連結" : "新增 Linktree 連結"}</h2>
-            <Field label="標題"><TextInput value={linkDraft.title} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} /></Field>
-            <Field label="URL"><TextInput value={linkDraft.url} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} /></Field>
-            <Field label="類別">
-              <Select value={linkDraft.category_id} onChange={(e) => setLinkDraft({ ...linkDraft, category_id: e.target.value })}>
-                <option value="">不分類</option>
-                {categories.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}
-              </Select>
-            </Field>
-            <Field label="說明"><TextInput value={linkDraft.description} onChange={(e) => setLinkDraft({ ...linkDraft, description: e.target.value })} /></Field>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="啟用時間">
-                <TextInput type="datetime-local" value={linkDraft.starts_at} onChange={(e) => setLinkDraft({ ...linkDraft, starts_at: e.target.value })} />
-              </Field>
-              <Field label="停用時間">
-                <TextInput type="datetime-local" value={linkDraft.ends_at} onChange={(e) => setLinkDraft({ ...linkDraft, ends_at: e.target.value })} />
-              </Field>
-            </div>
-            <p className="-mt-2 text-xs leading-5 text-[var(--text-muted)]">
-              時間使用此裝置的本機時區；留空代表不設定該時間。連結須手動啟用，且在排程時間範圍內才會公開顯示。
-            </p>
-            <Toggle label="手動啟用" checked={linkDraft.is_active} onChange={(value) => setLinkDraft({ ...linkDraft, is_active: value })} />
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={createLink} className="btn btn-primary">
-                {editingLinkId ? <Save size={16} aria-hidden /> : <Plus size={16} aria-hidden />}
-                {editingLinkId ? "儲存修改" : "新增連結"}
+        <section key="links" className="tab-panel-transition min-w-0 space-y-6">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+            <div className="card min-w-0 space-y-4 p-5">
+              <div>
+                <h2 className="font-semibold">新增連結分類</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                  建立後可在下方分類樹調整順序，或把連結拖進分類。
+                </p>
+              </div>
+              <Field label="分類名稱"><TextInput value={categoryDraft.title} onChange={(e) => setCategoryDraft({ ...categoryDraft, title: e.target.value })} /></Field>
+              <Field label="說明"><TextInput value={categoryDraft.description} onChange={(e) => setCategoryDraft({ ...categoryDraft, description: e.target.value })} /></Field>
+              <button type="button" onClick={createCategory} className="btn btn-primary" disabled={savingLinkTree}>
+                <Plus size={16} aria-hidden /> 新增分類
               </button>
-              {editingLinkId && <button type="button" onClick={cancelEditLink} className="btn btn-ghost">取消編輯</button>}
             </div>
-            <p className="text-xs leading-5 text-[var(--text-muted)]">
-              拖曳左側把手調整順序；鍵盤可在把手上按 Space，再用方向鍵移動並按 Space 放置。
-            </p>
-            <DndContext
-              sensors={linkSensors}
-              collisionDetection={closestCenter}
-              onDragEnd={reorderLinks}
-            >
-              <SortableContext
-                items={links.map((link) => link.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2">
-                  {links.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-6 text-center text-sm text-[var(--text-muted)]">
-                      尚未新增連結。新增後可在此調整顯示順序。
-                    </p>
-                  ) : (
-                    links.map((link) => (
-                      <SortablePublicLinkRow
-                        key={link.id}
-                        link={link}
-                        disabled={reorderingLinks}
-                        onEdit={() => startEditLink(link)}
-                        onDelete={() => void deleteLink(link)}
-                        onToggle={() => patchLink(link, { is_active: !link.is_active }).catch((error) => displayError(error, "更新連結失敗"))}
-                      />
-                    ))
-                  )}
-                </div>
-              </SortableContext>
-            </DndContext>
+            <div className="card min-w-0 space-y-4 p-5">
+              <h2 className="font-semibold">{editingLinkId ? "編輯 Linktree 連結" : "新增 Linktree 連結"}</h2>
+              <Field label="標題"><TextInput value={linkDraft.title} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} /></Field>
+              <Field label="URL"><TextInput value={linkDraft.url} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} /></Field>
+              <Field label="類別">
+                <Select value={linkDraft.category_id} onChange={(e) => setLinkDraft({ ...linkDraft, category_id: e.target.value })}>
+                  <option value="">不分類</option>
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}
+                </Select>
+              </Field>
+              <Field label="說明"><TextInput value={linkDraft.description} onChange={(e) => setLinkDraft({ ...linkDraft, description: e.target.value })} /></Field>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="啟用時間">
+                  <TextInput type="datetime-local" value={linkDraft.starts_at} onChange={(e) => setLinkDraft({ ...linkDraft, starts_at: e.target.value })} />
+                </Field>
+                <Field label="停用時間">
+                  <TextInput type="datetime-local" value={linkDraft.ends_at} onChange={(e) => setLinkDraft({ ...linkDraft, ends_at: e.target.value })} />
+                </Field>
+              </div>
+              <p className="-mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                時間使用此裝置的本機時區；留空代表不設定該時間。連結須手動啟用，且在排程時間範圍內才會公開顯示。
+              </p>
+              <Toggle label="手動啟用" checked={linkDraft.is_active} onChange={(value) => setLinkDraft({ ...linkDraft, is_active: value })} />
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={createLink} className="btn btn-primary" disabled={savingLinkTree}>
+                  {editingLinkId ? <Save size={16} aria-hidden /> : <Plus size={16} aria-hidden />}
+                  {editingLinkId ? "儲存修改" : "新增連結"}
+                </button>
+                {editingLinkId && <button type="button" onClick={cancelEditLink} className="btn btn-ghost">取消編輯</button>}
+              </div>
+            </div>
           </div>
+
+          <section className="space-y-3" aria-labelledby="public-link-tree-title">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 id="public-link-tree-title" className="font-semibold">連結分類樹</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                  拖曳把手可排序分類或連結；把連結拖進分類即可加入。拖到分類空白處會放在末端，拖到連結上會插入該位置。鍵盤可在把手按 Space，再用方向鍵移動並按 Space 放置。
+                </p>
+              </div>
+              {savingLinkTree && <span className="text-sm text-[var(--text-muted)]" role="status">儲存分類與排序中…</span>}
+            </div>
+            {categories.length === 0 && links.length === 0 ? (
+              <div className="rounded-xl px-4 py-8 text-center text-sm text-[var(--text-muted)]" style={{ border: "1px dashed var(--border)" }}>
+                先新增分類或連結，接著就能在這裡整理公開連結。
+              </div>
+            ) : (
+              <DndContext
+                sensors={linkSensors}
+                collisionDetection={linkTreeCollisionDetection}
+                onDragEnd={reorderLinkTree}
+              >
+                <SortableContext items={categories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-3">
+                    {categories.map((category) => (
+                      <SortablePublicLinkCategory
+                        key={category.id}
+                        category={category}
+                        links={links.filter((link) => link.category_id === category.id)}
+                        disabled={savingLinkTree}
+                        onDelete={() => siteApi.deleteLinkCategory(category.id).then(load).catch((error) => displayError(error, "刪除類別失敗"))}
+                        onEditLink={startEditLink}
+                        onDeleteLink={(link) => void deleteLink(link)}
+                        onToggleLink={(link) => patchLink(link, { is_active: !link.is_active }).catch((error) => displayError(error, "更新連結失敗"))}
+                      />
+                    ))}
+                    <UnassignedPublicLinks
+                      links={links.filter((link) => !link.category_id)}
+                      disabled={savingLinkTree}
+                      onEditLink={startEditLink}
+                      onDeleteLink={(link) => void deleteLink(link)}
+                      onToggleLink={(link) => patchLink(link, { is_active: !link.is_active }).catch((error) => displayError(error, "更新連結失敗"))}
+                    />
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
+          </section>
         </section>
       )}
 

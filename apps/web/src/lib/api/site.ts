@@ -1,5 +1,5 @@
 import type {
-  PublicLinkCategoryCreate, PublicLinkCategoryOut, PublicLinkCategoryUpdate, PublicLinkCreate, PublicLinkOut, PublicLinkReorder, PublicLinkUpdate, PublicOfficerCandidateOut, PublicOfficerOut, PublicOfficerProfileCreate, PublicOfficerProfileOut, PublicOfficerProfileUpdate, PublicSiteBundleOut, PublicSitePageCreate, PublicSitePageOut, PublicSitePageUpdate, PublicSiteSettingsOut, PublicSiteSettingsUpdate, UploadedImageOut,
+  PublicLinkCategoryCreate, PublicLinkCategoryOut, PublicLinkCategoryUpdate, PublicLinkCreate, PublicLinkOut, PublicLinkReorder, PublicLinkTreeOut, PublicLinkTreeUpdate, PublicLinkUpdate, PublicOfficerCandidateOut, PublicOfficerOut, PublicOfficerProfileCreate, PublicOfficerProfileOut, PublicOfficerProfileUpdate, PublicSiteBundleOut, PublicSitePageCreate, PublicSitePageOut, PublicSitePageUpdate, PublicSiteSettingsOut, PublicSiteSettingsUpdate, UploadedImageOut,
 } from "../types";
 import type { UploadedPublicFileOut } from "../types";
 import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
@@ -77,6 +77,8 @@ export const siteApi = {
     patch<PublicLinkOut[]>("/site/admin/links/reorder", {
       link_ids: linkIds,
     } satisfies PublicLinkReorder),
+  updateLinkTree: (body: PublicLinkTreeUpdate) =>
+    patch<PublicLinkTreeOut>("/site/admin/links/tree", body),
   deleteLink: (id: string) => del<void>(`/site/admin/links/${encodeURIComponent(id)}`),
 
   officerCandidates: (active_only = true) =>

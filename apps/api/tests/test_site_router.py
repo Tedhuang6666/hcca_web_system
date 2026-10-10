@@ -431,6 +431,97 @@ async def test_admin_reorder_links_persists_complete_order(
     assert incomplete.status_code == 422
 
 
+async def test_admin_update_link_tree_requires_permission(
+    member_user, authed_client_factory
+) -> None:
+    ac = authed_client_factory(member_user)
+    response = await ac.patch("/site/admin/links/tree", json={"category_ids": [], "links": []})
+    assert response.status_code == 403
+
+
+async def test_admin_update_link_tree_persists_categories_membership_and_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    first_category = await ac.post(
+        "/site/admin/link-categories", json=_link_category_payload(title="第一分類")
+    )
+    second_category = await ac.post(
+        "/site/admin/link-categories", json=_link_category_payload(title="第二分類")
+    )
+    first_link = await ac.post(
+        "/site/admin/links",
+        json=_link_payload(title="第一連結", category_id=first_category.json()["id"]),
+    )
+    second_link = await ac.post(
+        "/site/admin/links",
+        json=_link_payload(title="第二連結", category_id=second_category.json()["id"]),
+    )
+    unassigned_link = await ac.post(
+        "/site/admin/links", json=_link_payload(title="未分類連結")
+    )
+
+    updated = await ac.patch(
+        "/site/admin/links/tree",
+        json={
+            "category_ids": [second_category.json()["id"], first_category.json()["id"]],
+            "links": [
+                {"id": second_link.json()["id"], "category_id": first_category.json()["id"]},
+                {"id": first_link.json()["id"], "category_id": first_category.json()["id"]},
+                {"id": unassigned_link.json()["id"], "category_id": None},
+            ],
+        },
+    )
+
+    assert updated.status_code == 200
+    body = updated.json()
+    assert [category["id"] for category in body["categories"]] == [
+        second_category.json()["id"],
+        first_category.json()["id"],
+    ]
+    assert [category["sort_order"] for category in body["categories"]] == [0, 1]
+    assert [link["id"] for link in body["links"]] == [
+        second_link.json()["id"],
+        first_link.json()["id"],
+        unassigned_link.json()["id"],
+    ]
+    assert [link["category_id"] for link in body["links"]] == [
+        first_category.json()["id"],
+        first_category.json()["id"],
+        None,
+    ]
+    assert [link["sort_order"] for link in body["links"]] == [0, 1, 2]
+
+
+async def test_admin_update_link_tree_rejects_incomplete_or_unknown_membership(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+    category = await ac.post("/site/admin/link-categories", json=_link_category_payload())
+    link = await ac.post("/site/admin/links", json=_link_payload())
+
+    incomplete = await ac.patch(
+        "/site/admin/links/tree",
+        json={"category_ids": [category.json()["id"]], "links": []},
+    )
+    assert incomplete.status_code == 422
+
+    unknown_category = await ac.patch(
+        "/site/admin/links/tree",
+        json={
+            "category_ids": [category.json()["id"]],
+            "links": [{"id": link.json()["id"], "category_id": str(uuid.uuid4())}],
+        },
+    )
+    assert unknown_category.status_code == 422
+
+    current = await ac.get("/site/admin/links")
+    assert current.json()[0]["category_id"] is None
+
+
 async def test_admin_update_missing_link_returns_404(
     db_session, member_user, authed_client_factory
 ) -> None:

@@ -10943,6 +10943,23 @@ export interface paths {
         patch: operations["admin_reorder_links_site_admin_links_reorder_patch"];
         trace?: never;
     };
+    "/site/admin/links/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Update Link Tree */
+        patch: operations["admin_update_link_tree_site_admin_links_tree_patch"];
+        trace?: never;
+    };
     "/site/admin/links/{link_id}": {
         parameters: {
             query?: never;
@@ -25102,6 +25119,30 @@ export interface components {
         PublicLinkReorder: {
             /** Link Ids */
             link_ids: string[];
+        };
+        /** PublicLinkTreeEntry */
+        PublicLinkTreeEntry: {
+            /** Category Id */
+            category_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
+        /** PublicLinkTreeOut */
+        PublicLinkTreeOut: {
+            /** Categories */
+            categories: components["schemas"]["PublicLinkCategoryOut"][];
+            /** Links */
+            links: components["schemas"]["PublicLinkOut"][];
+        };
+        /** PublicLinkTreeUpdate */
+        PublicLinkTreeUpdate: {
+            /** Category Ids */
+            category_ids: string[];
+            /** Links */
+            links: components["schemas"]["PublicLinkTreeEntry"][];
         };
         /** PublicLinkUpdate */
         PublicLinkUpdate: {
@@ -55483,6 +55524,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicLinkOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_link_tree_site_admin_links_tree_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicLinkTreeUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicLinkTreeOut"];
                 };
             };
             /** @description Validation Error */

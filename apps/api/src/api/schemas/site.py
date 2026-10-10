@@ -181,6 +181,23 @@ class PublicLinkOut(PublicLinkBase):
         return value
 
 
+class PublicLinkTreeEntry(BaseModel):
+    id: uuid.UUID
+    category_id: uuid.UUID | None
+
+
+class PublicLinkTreeUpdate(BaseModel):
+    category_ids: list[uuid.UUID]
+    links: list[PublicLinkTreeEntry]
+
+
+class PublicLinkTreeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    categories: list[PublicLinkCategoryOut]
+    links: list[PublicLinkOut]
+
+
 class PublicOfficerProfileBase(BaseModel):
     user_position_id: uuid.UUID
     display_name_override: str | None = Field(None, max_length=100)
