@@ -10525,6 +10525,7 @@ input[type="radio"]:checked {
 .public-finance__lines tbody td { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .public-finance__lines tbody tr.is-group th,
 .public-finance__lines tbody tr.is-group td { background: color-mix(in srgb, var(--public-soft) 70%, transparent); color: var(--text-secondary); font-weight: 750; }
+.public-finance__lines tbody tr:has(.public-finance__line-trigger:is(:hover, :focus-visible, :active)) > * { background: color-mix(in srgb, var(--public-accent-text) 9%, var(--public-surface)); }
 .public-finance__lines tbody tr.is-over-budget td.is-expense { color: var(--danger); font-weight: 800; }
 .public-finance__execution-rate { display: inline-flex; min-width: 7.5rem; align-items: center; justify-content: flex-end; gap: 0.5rem; }
 .public-finance__execution-rate .public-finance__progress { flex: 1 1 auto; min-width: 3rem; height: 0.32rem; margin: 0; }
@@ -10569,6 +10570,9 @@ input[type="radio"]:checked {
 .public-budget-execution-modal__previews figcaption { overflow: hidden; padding: 0.4rem 0.6rem; color: var(--text-muted); font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
 .public-budget-execution-modal__previews iframe,
 .public-budget-execution-modal__image-preview { display: block; width: 100%; height: clamp(12rem, 32vh, 18rem); border: 0; background: #111319; }
+.public-budget-execution-modal__open-evidence { display: inline-flex; min-height: 2.5rem; align-items: center; gap: 0.35rem; margin: 0.25rem 0.6rem 0.5rem; color: var(--public-accent-text); font-size: 0.68rem; font-weight: 700; text-decoration: none; }
+.public-budget-execution-modal__open-evidence:hover { text-decoration: underline; text-underline-offset: 0.18em; }
+.public-budget-execution-modal__open-evidence:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; border-radius: var(--radius-sm); }
 .public-budget-execution-modal__image-preview { position: relative; }
 .public-budget-execution-modal__image-preview img { object-fit: contain; }
 .public-budget-execution-modal__evidence > small,

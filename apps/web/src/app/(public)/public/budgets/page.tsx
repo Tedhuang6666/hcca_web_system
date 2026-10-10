@@ -1,16 +1,12 @@
 import { Landmark } from "lucide-react";
 
 import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
-import type { PublicBudgetExecutionLine } from "@/components/finance/PublicBudgetExecutionTable";
+import { budgetExecutionLines } from "@/components/finance/publicBudgetExecution";
 import {
   fetchPublicBudget,
   fetchPublicBudgets,
   fetchPublicBudgetTotals,
 } from "@/lib/publicSeoFetch";
-import type {
-  PublicBudgetDetail,
-  PublicBudgetListItem,
-} from "@/lib/types";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -22,44 +18,6 @@ export const metadata = pageMetadata({
 
 function formatAmount(value: number) {
   return `NT$${value.toLocaleString("zh-TW")}`;
-}
-
-function budgetExecutionLines(
-  budget: PublicBudgetDetail,
-  summary: PublicBudgetListItem,
-): PublicBudgetExecutionLine[] {
-  const nodes = new Map(budget.nodes.map((node) => [node.id, node]));
-  const parentIds = new Set(budget.nodes.flatMap((node) => (
-    node.parent_id ? [node.parent_id] : []
-  )));
-  let isBudgetStart = true;
-
-  return budget.nodes
-    .filter((node) => (
-      node.allocated_amount > 0 || node.used_amount > 0 || parentIds.has(node.id)
-    ))
-    .map((node) => {
-      let depth = 0;
-      let current = node.parent_id ? nodes.get(node.parent_id) : undefined;
-      while (current) {
-        depth += 1;
-        current = current.parent_id ? nodes.get(current.parent_id) : undefined;
-      }
-      const line = {
-        id: `${summary.id}-${node.id}`,
-        budgetName: summary.name,
-        name: node.name,
-        allocated: node.allocated_amount,
-        spent: node.used_amount,
-        remaining: node.remaining_amount,
-        depth,
-        isGroup: parentIds.has(node.id),
-        isBudgetStart,
-        expenses: budget.expenses.filter((expense) => expense.allocation_node_id === node.id),
-      };
-      isBudgetStart = false;
-      return line;
-    });
 }
 
 export default async function PublicBudgetsPage() {
@@ -78,11 +36,11 @@ export default async function PublicBudgetsPage() {
     return detail && summary ? budgetExecutionLines(detail, summary) : [];
   });
   const budgetTotal = executionLines.reduce(
-    (total, line) => total + (line.isGroup ? 0 : line.allocated),
+    (total, line) => total + line.allocated,
     0,
   );
   const spentTotal = executionLines.reduce(
-    (total, line) => total + (line.isGroup ? 0 : line.spent),
+    (total, line) => total + line.spent,
     0,
   );
   const remainingTotal = budgetTotal - spentTotal;

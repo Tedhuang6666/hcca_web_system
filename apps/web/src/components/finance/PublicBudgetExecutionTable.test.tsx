@@ -65,6 +65,8 @@ describe("PublicBudgetExecutionTable", () => {
     expect(screen.getByText("王小明")).toBeVisible();
     expect(screen.getByTitle("網域續約收據.pdf 預覽")).toBeVisible();
     expect(screen.getByRole("img", { name: "網域續約收據.jpg 預覽" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "在新分頁檢視：網域續約收據.pdf" }))
+      .toHaveAttribute("target", "_blank");
     expect(screen.queryByRole("button", { name: "預覽憑證：網域續約收據.pdf" }))
       .not.toBeInTheDocument();
 
@@ -84,5 +86,19 @@ describe("PublicBudgetExecutionTable", () => {
 
     expect(await screen.findByText("這個預算項目目前沒有可公開的支出紀錄。"))
       .toBeVisible();
+  });
+
+  it("keeps a parent budget row's own spending visible and opens its records", async () => {
+    render(<PublicBudgetExecutionTable lines={[{ ...line, isGroup: true }]} />);
+
+    expect(screen.getAllByText("NT$756")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", {
+      name: "查看「網域費用（續約）」的支出紀錄與憑證",
+    }));
+
+    expect(await screen.findByRole("dialog", {
+      name: "網域費用（續約）｜支出紀錄",
+    })).toBeVisible();
+    expect(screen.getByText("網域續約一年")).toBeVisible();
   });
 });

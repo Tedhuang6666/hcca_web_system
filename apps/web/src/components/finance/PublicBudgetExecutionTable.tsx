@@ -2,24 +2,13 @@
 
 import { useCallback, useState } from "react";
 import Image from "next/image";
-import { Paperclip, ReceiptText } from "lucide-react";
+import { ExternalLink, Paperclip, ReceiptText } from "lucide-react";
 
 import Modal from "@/components/ui/Modal";
 import { apiUrl } from "@/lib/config";
-import type { PublicBudgetExpenseOut } from "@/lib/types";
+import type { PublicBudgetExecutionLine } from "./publicBudgetExecution";
 
-export type PublicBudgetExecutionLine = {
-  id: string;
-  budgetName: string;
-  name: string;
-  allocated: number;
-  spent: number;
-  remaining: number;
-  depth: number;
-  isGroup: boolean;
-  isBudgetStart: boolean;
-  expenses: PublicBudgetExpenseOut[];
-};
+export type { PublicBudgetExecutionLine } from "./publicBudgetExecution";
 
 function formatAmount(value: number) {
   return `NT$${value.toLocaleString("zh-TW")}`;
@@ -77,15 +66,17 @@ export default function PublicBudgetExecutionTable({
                 ? Math.round((line.spent / line.allocated) * 100)
                 : 0;
               const barWidth = Math.min(Math.max(ratio, 0), 100);
+              const hasOwnActivity = line.allocated > 0
+                || line.spent > 0
+                || line.expenses.length > 0;
+              const showDetails = !line.isGroup || hasOwnActivity;
               return (
                 <tr
                   key={line.id}
                   className={`${line.isGroup ? "is-group" : ""} ${ratio > 100 ? "is-over-budget" : ""}`}
                 >
                   <th scope="row" style={{ paddingLeft: `${0.85 + line.depth * 1.25}rem` }}>
-                    {line.isGroup ? (
-                      <strong>{line.name}</strong>
-                    ) : (
+                    {showDetails ? (
                       <button
                         type="button"
                         className="public-finance__line-trigger"
@@ -96,14 +87,16 @@ export default function PublicBudgetExecutionTable({
                         <strong>{line.name}</strong>
                         <ReceiptText size={15} aria-hidden="true" />
                       </button>
+                    ) : (
+                      <strong>{line.name}</strong>
                     )}
                     {line.isBudgetStart && <small>{line.budgetName}</small>}
                   </th>
-                  <td>{line.isGroup ? "—" : formatAmount(line.allocated)}</td>
-                  <td className="is-expense">{line.isGroup ? "—" : formatAmount(line.spent)}</td>
-                  <td>{line.isGroup ? "—" : formatAmount(line.remaining)}</td>
+                  <td>{showDetails ? formatAmount(line.allocated) : "—"}</td>
+                  <td className="is-expense">{showDetails ? formatAmount(line.spent) : "—"}</td>
+                  <td>{showDetails ? formatAmount(line.remaining) : "—"}</td>
                   <td>
-                    {line.isGroup ? "—" : (
+                    {!showDetails ? "—" : (
                       <span className="public-finance__execution-rate">
                         <span
                           className="public-finance__progress"
@@ -214,6 +207,18 @@ export default function PublicBudgetExecutionTable({
                                   )
                                 ) : (
                                   <small>無法預覽此憑證。</small>
+                                )}
+                                {previewUrl && (
+                                  <a
+                                    className="public-budget-execution-modal__open-evidence"
+                                    href={previewUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label={`在新分頁檢視：${evidence.filename}`}
+                                  >
+                                    <ExternalLink size={14} aria-hidden="true" />
+                                    在新分頁檢視
+                                  </a>
                                 )}
                               </figure>
                             );
