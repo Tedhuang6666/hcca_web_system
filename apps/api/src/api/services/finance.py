@@ -851,7 +851,7 @@ async def add_budget_allocation_evidence(
 async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> list[dict]:
     rows = (
         await db.execute(
-            select(FinanceBudgetExpense, FinanceBudgetAllocation, FinanceBudgetNode, Org)
+            select(FinanceBudgetExpense, FinanceBudgetAllocation, FinanceBudgetNode, Org, User)
             .join(
                 FinanceBudgetAllocation,
                 FinanceBudgetAllocation.id == FinanceBudgetExpense.allocation_id,
