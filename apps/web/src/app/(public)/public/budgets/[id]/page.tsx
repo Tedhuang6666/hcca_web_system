@@ -6,6 +6,7 @@ import { ArrowLeft, Check, CircleAlert, FileText, Paperclip, ReceiptText, Shield
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
 import EvidencePreview from "@/components/finance/EvidencePreview";
+import { orderBudgetNodes } from "@/components/finance/publicBudgetExecution";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -44,16 +45,21 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
   const isCouncilReview = budget.visibility === "council_review";
 
   const nodes = new Map(budget.nodes.map((node) => [node.id, node]));
+  const nodeOrder = new Map(orderBudgetNodes(budget.nodes).map(({ node }, index) => (
+    [node.id, index]
+  )));
   const pathFor = (nodeId: string) => {
     const path: (typeof budget.nodes)[number][] = [];
     let current = nodes.get(nodeId);
-    while (current) {
+    const seen = new Set<string>();
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
       path.unshift(current);
       current = current.parent_id ? nodes.get(current.parent_id) : undefined;
     }
     return path;
   };
-  const groups = Array.from(budget.allocations.reduce((result, allocation) => {
+  const groupedAllocations = budget.allocations.reduce((result, allocation) => {
     const path = pathFor(allocation.node_id);
     const groupNode = path[0];
     const groupId = groupNode?.id || allocation.node_id;
@@ -75,7 +81,19 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
     name: string;
     total: number;
     rows: Array<{ allocation: (typeof budget.allocations)[number]; detail: string }>;
-  }>()).values());
+  }>());
+  const groups = Array.from(groupedAllocations.values())
+    .map((group) => ({
+      ...group,
+      rows: group.rows.sort((left, right) => (
+        (nodeOrder.get(left.allocation.node_id) ?? Number.MAX_SAFE_INTEGER)
+        - (nodeOrder.get(right.allocation.node_id) ?? Number.MAX_SAFE_INTEGER)
+      )),
+    }))
+    .sort((left, right) => (
+      (nodeOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
+      - (nodeOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+    ));
   const total = budget.allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
   const councilApprovedOn = budget.submissions.at(-1)?.council_approved_on;
 
