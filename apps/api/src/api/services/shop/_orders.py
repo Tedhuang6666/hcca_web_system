@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -1083,7 +1083,7 @@ async def _reconcile_unassigned_class_orders(
 ) -> None:
     """補齊班級成員尚未歸班的有效訂單，保留既有班級快照。"""
     today = local_today()
-    member_user_ids = (
+    member_user_ids = union(
         select(Person.user_id)
         .join(PersonAffiliation, PersonAffiliation.person_id == Person.id)
         .where(
@@ -1093,22 +1093,18 @@ async def _reconcile_unassigned_class_orders(
             PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
             PersonAffiliation.start_date <= today,
             (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
-        )
-        .union(select(ClassManualMember.user_id).where(ClassManualMember.class_id.in_(class_ids)))
-        .union(
-            select(ClassRosterEntry.user_id).where(
-                ClassRosterEntry.class_id.in_(class_ids),
-                ClassRosterEntry.user_id.is_not(None),
-            )
-        )
-        .union(
-            select(User.id)
-            .join(ClassRosterEntry, ClassRosterEntry.student_id == User.student_id)
-            .where(
-                ClassRosterEntry.class_id.in_(class_ids),
-                User.student_id.is_not(None),
-            )
-        )
+        ),
+        select(ClassManualMember.user_id).where(ClassManualMember.class_id.in_(class_ids)),
+        select(ClassRosterEntry.user_id).where(
+            ClassRosterEntry.class_id.in_(class_ids),
+            ClassRosterEntry.user_id.is_not(None),
+        ),
+        select(User.id)
+        .join(ClassRosterEntry, ClassRosterEntry.student_id == User.student_id)
+        .where(
+            ClassRosterEntry.class_id.in_(class_ids),
+            User.student_id.is_not(None),
+        ),
     )
     unassigned_orders = (
         select(Order)
