@@ -341,7 +341,7 @@ async def _handle_petition_external_notify(db: AsyncSession, payload: dict) -> N
             contact_email,
             subject,
             html,
-            subtype="html",
+            "html",
             attachments=attachments or None,
         )
     except Exception as exc:
