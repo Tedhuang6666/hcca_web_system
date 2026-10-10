@@ -21,7 +21,12 @@ from api.models.person import (
     PersonAffiliationStatus,
 )
 from api.models.receivable import Receivable, ReceivableSource
-from api.models.school_class import SchoolClass
+from api.models.school_class import (
+    ClassManualMember,
+    ClassRosterEntry,
+    ClassStudentRange,
+    SchoolClass,
+)
 from api.models.shop import (
     Cart,
     CartItem,
@@ -1076,7 +1081,7 @@ async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
 async def _reconcile_unassigned_class_orders(
     session: AsyncSession, class_ids: list[uuid.UUID]
 ) -> None:
-    """補齊人員名冊成員尚未歸班的有效訂單，保留既有班級快照。"""
+    """補齊班級成員尚未歸班的有效訂單，保留既有班級快照。"""
     today = local_today()
     member_user_ids = (
         select(Person.user_id)
@@ -1089,19 +1094,60 @@ async def _reconcile_unassigned_class_orders(
             PersonAffiliation.start_date <= today,
             (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
         )
+        .union(select(ClassManualMember.user_id).where(ClassManualMember.class_id.in_(class_ids)))
+        .union(
+            select(ClassRosterEntry.user_id).where(
+                ClassRosterEntry.class_id.in_(class_ids),
+                ClassRosterEntry.user_id.is_not(None),
+            )
+        )
+        .union(
+            select(User.id)
+            .join(ClassRosterEntry, ClassRosterEntry.student_id == User.student_id)
+            .where(
+                ClassRosterEntry.class_id.in_(class_ids),
+                User.student_id.is_not(None),
+            )
+        )
     )
-    orders = await session.scalars(
+    unassigned_orders = (
         select(Order)
         .options(selectinload(Order.user))
         .where(
             Order.class_id.is_(None),
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
-            Order.user_id.in_(member_user_ids),
         )
         .order_by(Order.id)
-        .with_for_update()
+        .with_for_update(of=Order)
         .execution_options(populate_existing=True)
     )
+    orders = list(
+        (await session.scalars(unassigned_orders.where(Order.user_id.in_(member_user_ids)))).all()
+    )
+
+    range_result = await session.execute(
+        select(ClassStudentRange.student_id_start, ClassStudentRange.student_id_end)
+        .join(SchoolClass, SchoolClass.id == ClassStudentRange.class_id)
+        .where(SchoolClass.id.in_(class_ids), SchoolClass.is_active.is_(True))
+    )
+    class_ranges = list(range_result.tuples())
+    if class_ranges:
+        range_orders = await session.scalars(
+            unassigned_orders.join(Order.user).where(
+                Order.user_id.not_in(member_user_ids),
+                User.student_id.is_not(None),
+            )
+        )
+        orders.extend(
+            order
+            for order in range_orders
+            if order.user is not None
+            and any(
+                class_svc.student_id_in_range(order.user.student_id or "", start, end)
+                for start, end in class_ranges
+            )
+        )
+
     classes_by_user: dict[uuid.UUID, SchoolClass | None] = {}
     for order in orders:
         if order.user_id not in classes_by_user:
