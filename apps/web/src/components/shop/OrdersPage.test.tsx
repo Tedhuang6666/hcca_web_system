@@ -29,7 +29,9 @@ describe("我的預購", () => {
       items: [{ ...order.items![0], id: "more", quantity: 1, subtotal: 100 }],
     }, { ...order, id: "cancelled", status: "cancelled", total_price: 500 }]);
     render(<OrdersPage />);
-    expect(await screen.findByRole("heading", { name: "待繳 NT$100" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "預購品項" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "下一步" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /待繳 NT\$/ })).not.toBeInTheDocument();
     const activity = screen.getByRole("region", { name: "校慶預購" });
     expect(within(activity).getByText("合計 NT$300")).toBeVisible();
     expect(within(activity).getByText("已繳 NT$200 · 待補繳 NT$100")).toBeVisible();

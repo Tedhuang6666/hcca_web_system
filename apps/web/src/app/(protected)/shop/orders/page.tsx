@@ -45,7 +45,6 @@ export default function OrdersPage() {
   }, [load]));
 
   const activityGroups = groupActivityPreorders(orders);
-  const outstanding = activityGroups.reduce((sum, group) => sum + group.outstanding, 0);
 
   return (
     <div className="shop-orders-page">
@@ -57,18 +56,6 @@ export default function OrdersPage() {
           <h1>我的預購</h1>
         </div>
       </header>
-
-      {!loading && !loadError && activityGroups.length > 0 && (
-        <section className="shop-order-next-step" aria-label="下一步">
-          <div>
-            <h2>{outstanding > 0 ? `待繳 NT$${outstanding.toLocaleString("zh-TW")}` : "目前沒有待繳款項"}</h2>
-            <p>{outstanding > 0
-              ? "品項依活動列在下方，班級預購請向班代繳款。已收款後追加的品項，只需補繳差額。"
-              : "款項已登記，請依活動通知領取商品。"}</p>
-          </div>
-          <Link href="/shop" className="shop-order-details">繼續選購 <ArrowRight size={15} aria-hidden="true" /></Link>
-        </section>
-      )}
 
       <section className="shop-orders-list" aria-labelledby="shop-orders-list-title">
         <h2 id="shop-orders-list-title">預購品項</h2>

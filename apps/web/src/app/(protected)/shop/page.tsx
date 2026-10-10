@@ -1063,13 +1063,6 @@ export default function ShopPage() {
           <h1>商品預購</h1>
           <p className="shop-public-hero-copy">先選活動，再查看商品與這次登記進度。</p>
         </div>
-        {isLoggedIn && (
-          <Link href="/shop/orders" className="shop-public-order-link">
-            <ClipboardList size={19} aria-hidden="true" />
-            我的預購
-            {registrations.length > 0 && <span className="shop-public-order-link-count">{registrations.length} 個活動</span>}
-          </Link>
-        )}
       </header>
 
       {myClass && (
