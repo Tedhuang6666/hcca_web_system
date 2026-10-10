@@ -60,15 +60,19 @@ describe("route manifest", () => {
     expect(getRoutePolicy("/about").shell).toBe("bare");
   });
 
-  it("shows personal shop registrations in the shop shell after login", () => {
-    for (const path of ["/shop/orders", "/shop/orders/order-id"]) {
-      expect(getRoutePolicy(path)).toMatchObject({
-        public: false,
-        requiresAuth: true,
-        shell: "bare",
-        indexable: false,
-      });
-    }
+  it("keeps personal preorders private and renders order details in the public shell", () => {
+    expect(getRoutePolicy("/shop/orders")).toMatchObject({
+      public: false,
+      requiresAuth: true,
+      shell: "bare",
+      indexable: false,
+    });
+    expect(getRoutePolicy("/shop/orders/order-id")).toMatchObject({
+      public: true,
+      requiresAuth: false,
+      shell: "bare",
+      indexable: false,
+    });
     expect(getRoutePolicy("/shop/class-orders").shell).toBe("app");
   });
 

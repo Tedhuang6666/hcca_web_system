@@ -40,8 +40,9 @@ describe("我的預購", () => {
     expect(within(items).getByText("× 3")).toBeVisible();
     expect(screen.queryByText("ORDER-001")).not.toBeInTheDocument();
     expect(screen.queryByText(/筆訂單/)).not.toBeInTheDocument();
-    fireEvent.click(within(activity).getByText("登記資訊", { selector: "summary" }));
-    expect(within(activity).getAllByRole("link")).toHaveLength(2);
+    expect(screen.queryByText("登記資訊")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
+      .toHaveAttribute("href", "/shop/orders/first");
     expect(api.listOrders).toHaveBeenCalledWith({ limit: "500", offset: "0", my_only: "true" });
   });
 
@@ -52,12 +53,14 @@ describe("我的預購", () => {
     expect(screen.queryByRole("region", { name: "校慶預購" })).not.toBeInTheDocument();
   });
 
-  it("allows retry after failure and keeps registration details accessible when items are absent", async () => {
+  it("allows retry after failure and links to the order details when items are absent", async () => {
     api.listOrders.mockRejectedValueOnce(new Error("連線失敗")).mockResolvedValueOnce([{ ...order, items: undefined }]);
     render(<OrdersPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("無法載入登記紀錄，請重試。");
     fireEvent.click(screen.getByRole("button", { name: "重新載入" }));
-    expect(await screen.findByText("品項資訊請查看登記。")).toBeVisible();
-    expect(screen.getByRole("link", { name: "登記資訊" })).toHaveAttribute("href", "/shop/orders/first");
+    expect(await screen.findByText("品項資訊請查看訂單詳情。")).toBeVisible();
+    expect(screen.queryByText("登記資訊")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
+      .toHaveAttribute("href", "/shop/orders/first");
   });
 });
