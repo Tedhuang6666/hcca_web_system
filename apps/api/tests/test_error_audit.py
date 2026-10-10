@@ -166,7 +166,20 @@ async def test_client_error_endpoint_is_anonymous_and_returns_error_id(
             "message": "Something broke",
             "stack": "Error: Something broke",
             "pathname": "/documents?token=should-not-be-retained#section",
-            "context": {"release": "web@abc123", "viewport": "390x844", "online": True},
+            "context": {
+                "release": "web@abc123",
+                "viewport": "390x844",
+                "online": True,
+                "page_origin": "https://hcca.tw",
+                "api_origin": "https://api.hcca.tw",
+                "diagnostics": {
+                    "failure_kind": "timeout",
+                    "request_method": "GET",
+                    "request_path": "/shop/products/123?token=do-not-retain",
+                    "request_attempts": 2,
+                    "request_timeout_ms": 15_000,
+                },
+            },
         },
     )
 
@@ -174,7 +187,21 @@ async def test_client_error_endpoint_is_anonymous_and_returns_error_id(
     assert response.json()["error_id"] == "client-error-1"
     assert received["error_id"] == "client-error-1"
     assert received["path"] == "/documents"
-    assert received["context"] == {"release": "web@abc123", "viewport": "390x844", "online": True}
+    assert received["context"] == {
+        "release": "web@abc123",
+        "viewport": "390x844",
+        "online": True,
+        "page_origin": "https://hcca.tw",
+        "api_origin": "https://api.hcca.tw",
+        "diagnostics": {
+            "failure_kind": "timeout",
+            "request_method": "GET",
+            "request_path": "/shop/products/123",
+            "request_attempts": 2,
+            "request_timeout_ms": 15_000,
+        },
+    }
+    assert "do-not-retain" not in str(received["context"])
 
 
 async def test_validation_errors_are_recorded(

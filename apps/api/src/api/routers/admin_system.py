@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from redis.exceptions import RedisError
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1705,6 +1705,34 @@ async def recover_incident(
     }
 
 
+class ClientErrorDiagnostics(BaseModel):
+    """Bounded, typed details for diagnosing browser and API transport failures."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    failure_kind: Literal["offline", "network", "timeout", "csp", "resource"] | None = None
+    request_method: (
+        Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "UNKNOWN"] | None
+    ) = None
+    request_path: str | None = Field(None, max_length=500)
+    request_attempts: int | None = Field(None, ge=0, le=10)
+    request_timeout_ms: int | None = Field(None, ge=0, le=120_000)
+    csp_directive: str | None = Field(None, max_length=100)
+    csp_disposition: Literal["enforce", "report"] | None = None
+    csp_blocked_source: str | None = Field(None, max_length=256)
+    csp_source_origin: str | None = Field(None, max_length=256)
+    csp_line_number: int | None = Field(None, ge=0)
+    csp_column_number: int | None = Field(None, ge=0)
+    resource_origin: str | None = Field(None, max_length=256)
+
+    @field_validator("request_path", mode="before")
+    @classmethod
+    def remove_request_query_and_fragment(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.split("?", 1)[0].split("#", 1)[0][:500]
+
+
 class ClientErrorContext(BaseModel):
     """有限且無 query string 的瀏覽器診斷欄位。"""
 
@@ -1714,10 +1742,13 @@ class ClientErrorContext(BaseModel):
     language: str | None = Field(None, max_length=32)
     timezone: str | None = Field(None, max_length=100)
     viewport: str | None = Field(None, max_length=32)
+    page_origin: str | None = Field(None, max_length=256)
+    api_origin: str | None = Field(None, max_length=256)
     connection_type: str | None = Field(None, max_length=32)
     referrer_path: str | None = Field(None, max_length=500)
     online: bool | None = None
     visibility_state: str | None = Field(None, max_length=32)
+    diagnostics: ClientErrorDiagnostics | None = None
 
 
 class ClientErrorReport(BaseModel):

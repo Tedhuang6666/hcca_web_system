@@ -1,4 +1,4 @@
-import { apiUrl } from "./config";
+import { API_BASE, apiUrl } from "./config";
 import { recordClientMetric } from "./client-metrics";
 
 const MAX_MESSAGE_LENGTH = 1000;
@@ -26,6 +26,22 @@ export interface ClientErrorInput {
   scope?: string;
   pathname?: string;
   dedupeKey?: string;
+  diagnostics?: ClientErrorDiagnostics;
+}
+
+export interface ClientErrorDiagnostics {
+  failure_kind?: "offline" | "network" | "timeout" | "csp" | "resource";
+  request_method?: string;
+  request_path?: string;
+  request_attempts?: number;
+  request_timeout_ms?: number;
+  csp_directive?: string;
+  csp_disposition?: "enforce" | "report";
+  csp_blocked_source?: string;
+  csp_source_origin?: string;
+  csp_line_number?: number;
+  csp_column_number?: number;
+  resource_origin?: string;
 }
 
 export interface ClientErrorReceipt {
@@ -52,6 +68,14 @@ function referrerPath(): string | undefined {
   }
 }
 
+function apiOrigin(): string {
+  try {
+    return new URL(API_BASE, window.location.origin).origin;
+  } catch {
+    return window.location.origin;
+  }
+}
+
 function diagnosticContext(): Record<string, string | boolean> {
   const navigatorWithConnection = navigator as Navigator & { connection?: BrowserConnection };
   const release = process.env.NEXT_PUBLIC_APP_RELEASE
@@ -59,6 +83,8 @@ function diagnosticContext(): Record<string, string | boolean> {
     || process.env.NEXT_PUBLIC_APP_VERSION;
   return {
     ...(release ? { release: release.slice(0, 128) } : {}),
+    page_origin: window.location.origin,
+    api_origin: apiOrigin(),
     language: navigator.language.slice(0, 32),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone.slice(0, 100),
     viewport: `${window.innerWidth}x${window.innerHeight}`,
@@ -79,6 +105,21 @@ function csrfHeader(): Record<string, string> {
     .find((item) => item.startsWith("csrf_token="))
     ?.slice("csrf_token=".length);
   return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+}
+
+function safeDiagnostics(input: ClientErrorDiagnostics | undefined): ClientErrorDiagnostics | undefined {
+  if (!input) return undefined;
+  const requestMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+  const method = input.request_method?.trim().toUpperCase();
+  return {
+    ...input,
+    ...(method !== undefined
+      ? { request_method: requestMethods.has(method) ? method : "UNKNOWN" }
+      : {}),
+    ...(input.request_path !== undefined
+      ? { request_path: input.request_path.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
+      : {}),
+  };
 }
 
 /** 將瀏覽器錯誤送到後端；回報失敗絕不能再製造一個未處理 rejection。 */
@@ -107,12 +148,16 @@ export function reportClientError(input: ClientErrorInput): Promise<ClientErrorR
     interaction_name: (input.scope || "runtime").slice(0, 120),
   });
 
+  const diagnostics = safeDiagnostics(input.diagnostics);
   const payload = JSON.stringify({
     message: limit(input.message || "Unknown client error", MAX_MESSAGE_LENGTH),
     stack: limit(input.stack, MAX_STACK_LENGTH),
     scope: limit(input.scope || "runtime", MAX_SCOPE_LENGTH),
     pathname: limit(input.pathname || window.location.pathname, MAX_PATH_LENGTH),
-    context: diagnosticContext(),
+    context: {
+      ...diagnosticContext(),
+      ...(diagnostics ? { diagnostics } : {}),
+    },
   });
 
   return fetch(apiUrl("/system/client-errors"), {
@@ -253,12 +298,25 @@ function normalizedTransientResourceUrl(url: string | null): string {
   if (!url) return "unknown";
   try {
     const parsed = new URL(url, window.location.href);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return parsed.protocol || "unknown";
+    }
     parsed.search = "";
     parsed.hash = "";
     parsed.pathname = parsed.pathname.replace(/\b[a-f\d]{16,}\b/gi, "{asset}");
     return parsed.href;
   } catch {
-    return url.replace(/[?#][^\s\]]*$/, "").replace(/\b[a-f\d]{16,}\b/gi, "{asset}");
+    return "unknown";
+  }
+}
+
+function safeHttpOrigin(value: string | null): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value, window.location.href);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.origin : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -292,13 +350,23 @@ export function installGlobalClientErrorReporter(): () => void {
     const failedResource = resource ? resourceUrl(target) : null;
     if (isIgnoredWindowError(details.message) || isIgnoredResource(failedResource)) return;
     if (resource && target instanceof HTMLScriptElement) recoverFromChunkFailure(failedResource);
+    const safeResource = normalizedTransientResourceUrl(failedResource);
+    const resourceOrigin = safeHttpOrigin(failedResource);
     reportClientError({
       ...details,
       message: resource
-        ? `${details.message || "資源載入失敗"}${failedResource ? ` [${failedResource}]` : ""}`
+        ? `${details.message || "資源載入失敗"}${failedResource ? ` [${safeResource}]` : ""}`
         : details.message,
       scope: resource ? `resource:${target.tagName.toLowerCase()}` : "window.error",
       ...(resource ? { dedupeKey: `resource:${normalizedTransientResourceUrl(failedResource)}` } : {}),
+      ...(resource
+        ? {
+            diagnostics: {
+              failure_kind: "resource" as const,
+              ...(resourceOrigin ? { resource_origin: resourceOrigin } : {}),
+            },
+          }
+        : {}),
     });
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -315,10 +383,20 @@ export function installGlobalClientErrorReporter(): () => void {
     const state = event.disposition === "enforce" ? "blocked" : "violated";
     const dedupeKey = `${directive}:${source}`;
     if (!shouldReportCspViolation(dedupeKey)) return;
+    const sourceOrigin = safeHttpOrigin(event.sourceFile || null);
     reportClientError({
       message: `CSP ${state} ${directive}: ${source}`,
       scope: "securitypolicyviolation",
       dedupeKey,
+      diagnostics: {
+        failure_kind: "csp",
+        csp_directive: directive,
+        ...(event.disposition === "enforce" ? { csp_disposition: "enforce" as const } : {}),
+        csp_blocked_source: source,
+        ...(sourceOrigin ? { csp_source_origin: sourceOrigin } : {}),
+        ...(event.lineNumber > 0 ? { csp_line_number: event.lineNumber } : {}),
+        ...(event.columnNumber > 0 ? { csp_column_number: event.columnNumber } : {}),
+      },
     });
   };
 

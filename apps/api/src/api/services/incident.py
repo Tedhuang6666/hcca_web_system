@@ -325,6 +325,21 @@ async def persist_error_incident(
             return None
 
 
+def _normalize_client_request_path(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    parsed = urlsplit(raw)
+    if parsed.scheme and parsed.netloc:
+        if parsed.scheme.lower() not in {"http", "https"}:
+            return None
+        raw = parsed.path or "/"
+    else:
+        raw = raw.split("?", 1)[0].split("#", 1)[0]
+    normalized = normalize_error_message(raw)
+    return normalized[:500] if normalized else None
+
+
 async def persist_client_error_incident(
     *,
     error_id: str,
@@ -339,10 +354,45 @@ async def persist_client_error_incident(
     user_agent: str | None,
 ) -> SystemIncident | None:
     """Persist browser failures beside API and Celery incidents for one operational timeline."""
+    # Client offline state is an expected user condition, not an application incident.
+    # The raw client event remains available through the recent-error buffer.
+    if scope == "api.offline":
+        return None
+
     release = str(context.get("release") or "").strip() or None
     fingerprint_message = normalize_client_incident_message(message, scope)
     sitewide_csp = scope == "securitypolicyviolation"
     incident_path = "browser-csp" if sitewide_csp else path or "unknown"
+    incident_title = (
+        "web: securitypolicyviolation (site-wide CSP)"
+        if sitewide_csp
+        else f"web: {scope} at {path or 'unknown'}"
+    )
+
+    diagnostics = context.get("diagnostics")
+    if scope in {"api.network", "api.timeout", "api.refresh-network"} and isinstance(
+        diagnostics, dict
+    ):
+        request_path = _normalize_client_request_path(diagnostics.get("request_path"))
+        if request_path:
+            method_value = str(diagnostics.get("request_method") or "").upper()
+            method = (
+                method_value
+                if method_value in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+                else "UNKNOWN"
+            )
+            incident_path = request_path
+            incident_title = f"web: {scope} {method} {request_path}"
+            fingerprint_message = f"{scope} {method}"
+            context = {
+                **context,
+                "diagnostics": {
+                    **diagnostics,
+                    "request_method": method,
+                    "request_path": request_path,
+                },
+            }
+
     return await persist_error_incident(
         error_id=error_id,
         exception_type="ClientError",
@@ -354,9 +404,7 @@ async def persist_client_error_incident(
         request_id=request_id,
         service="web",
         release_version=release,
-        title="web: securitypolicyviolation (site-wide CSP)"
-        if sitewide_csp
-        else f"web: {scope} at {path or 'unknown'}",
+        title=incident_title,
         details={
             "scope": scope,
             "message": message,

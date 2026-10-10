@@ -72,6 +72,10 @@ function requestTimeoutMs(init: HccaRequestInit): number {
     : MUTATION_REQUEST_TIMEOUT_MS;
 }
 
+function clientRequestPath(path: string): string {
+  return path.split(/[?#]/, 1)[0].slice(0, 500);
+}
+
 function createRequestTimeout(signal: AbortSignal | null | undefined, timeoutMs: number) {
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal?.reason);
@@ -98,6 +102,8 @@ function responseWithBodyTimeout(
   timeoutSignal: AbortSignal,
   requestSignal: AbortSignal | null | undefined,
   path: string,
+  method: string,
+  attempts: number,
   timeoutMs: number,
   cleanup: () => void,
 ): Response {
@@ -126,8 +132,18 @@ function responseWithBodyTimeout(
       } catch (error) {
         finish();
         if (timeoutSignal.aborted && !requestSignal?.aborted) {
-          const message = `後端 API 回應逾時（${Math.round(timeoutMs / 1000)} 秒）：${path}`;
-          reportClientError({ scope: "api.timeout", message });
+          const message = `後端 API 回應逾時（${Math.round(timeoutMs / 1000)} 秒）：${clientRequestPath(path)}`;
+          reportClientError({
+            scope: "api.timeout",
+            message,
+            diagnostics: {
+              failure_kind: "timeout",
+              request_method: method,
+              request_path: clientRequestPath(path),
+              request_attempts: attempts,
+              request_timeout_ms: timeoutMs,
+            },
+          });
           controller.error(new NetworkRequestError(message));
         } else {
           controller.error(error);
@@ -181,7 +197,10 @@ export async function fetchWithRetry(
   trace: Record<string, string>,
   maxRetries: number,
 ): Promise<{ response: Response; attempts: number }> {
-  const timeout = createRequestTimeout(init.signal, requestTimeoutMs(init));
+  const method = (init.method ?? "GET").toUpperCase();
+  const timeoutMs = requestTimeoutMs(init);
+  const requestPath = clientRequestPath(path);
+  const timeout = createRequestTimeout(init.signal, timeoutMs);
   let attempts = 0;
   let timeoutTransferredToBody = false;
   try {
@@ -196,7 +215,9 @@ export async function fetchWithRetry(
           timeout.signal,
           init.signal,
           path,
-          requestTimeoutMs(init),
+          method,
+          attempts + 1,
+          timeoutMs,
           timeout.cleanup,
         );
         timeoutTransferredToBody = Boolean(response.body);
@@ -205,14 +226,36 @@ export async function fetchWithRetry(
         // 元件卸載或路由切換造成的取消不是網路故障；不要重試、開熔斷或回報錯誤。
         if (init.signal?.aborted) throw error;
         if (timeout.signal.aborted) {
-          const message = `後端 API 回應逾時（${Math.round(requestTimeoutMs(init) / 1000)} 秒）：${path}`;
-          reportClientError({ scope: "api.timeout", message });
+          const message = `後端 API 回應逾時（${Math.round(timeoutMs / 1000)} 秒）：${requestPath}`;
+          reportClientError({
+            scope: "api.timeout",
+            message,
+            diagnostics: {
+              failure_kind: "timeout",
+              request_method: method,
+              request_path: requestPath,
+              request_attempts: attempts + 1,
+              request_timeout_ms: timeoutMs,
+            },
+          });
           throw new NetworkRequestError(message);
         }
         if (isRequestAborted(error, init.signal)) throw error;
         if (attempts >= maxRetries) {
-          const message = error instanceof Error ? error.message : `無法連線：${path}`;
-          reportClientError({ scope: "api.network", message, stack: error instanceof Error ? error.stack : undefined });
+          const failureName = error instanceof Error ? error.name : "UnknownError";
+          const message = `${failureName}: API request failed`;
+          reportClientError({
+            scope: "api.network",
+            message,
+            stack: error instanceof Error ? error.stack : undefined,
+            diagnostics: {
+              failure_kind: "network",
+              request_method: method,
+              request_path: requestPath,
+              request_attempts: attempts + 1,
+              request_timeout_ms: timeoutMs,
+            },
+          });
           throw new NetworkRequestError(`無法連線至後端 API：${API_BASE}`);
         }
         await waitForRetry([400, 900][attempts] ?? 1500, timeout.signal);

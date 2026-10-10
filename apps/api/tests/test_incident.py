@@ -16,6 +16,7 @@ from api.services.incident import (
     list_incident_events,
     normalize_client_incident_message,
     normalize_error_message,
+    persist_client_error_incident,
     upsert_incident,
 )
 
@@ -237,9 +238,78 @@ def test_normalize_client_incident_message_groups_cache_busted_resources() -> No
     )
     assert first_csp == "CSP blocked connect-src: https://hcca.tw"
     assert first_csp == second_csp
-    assert normalize_client_incident_message(
-        "CSP blocked frame-src: blob", "securitypolicyviolation"
-    ) == "CSP blocked frame-src: blob:"
-    assert normalize_client_incident_message(
-        "CSP blocked connect-src: https://api.example.org/surveys", "securitypolicyviolation"
-    ) != first_csp
+    assert (
+        normalize_client_incident_message("CSP blocked frame-src: blob", "securitypolicyviolation")
+        == "CSP blocked frame-src: blob:"
+    )
+    assert (
+        normalize_client_incident_message(
+            "CSP blocked connect-src: https://api.example.org/surveys", "securitypolicyviolation"
+        )
+        != first_csp
+    )
+
+
+async def test_client_api_incidents_group_by_sanitized_request_path(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def persist(**kwargs):
+        captured.update(kwargs)
+        return "incident"
+
+    monkeypatch.setattr("api.services.incident.persist_error_incident", persist)
+
+    result = await persist_client_error_incident(
+        error_id="client-error-1",
+        message="Failed to fetch",
+        stack="TypeError: Failed to fetch",
+        scope="api.network",
+        path="/dashboard",
+        context={
+            "diagnostics": {
+                "request_method": "get",
+                "request_path": "/shop/products/123?token=private",
+                "request_attempts": 3,
+            }
+        },
+        trace_id="trace-1",
+        request_id="request-1",
+        client_ip=None,
+        user_agent=None,
+    )
+
+    assert result == "incident"
+    assert captured["path"] == "/shop/products/{id}"
+    assert captured["message"] == "api.network GET"
+    assert captured["title"] == "web: api.network GET /shop/products/{id}"
+    details = captured["details"]
+    assert isinstance(details, dict)
+    client_context = details["client_context"]
+    assert client_context["diagnostics"]["request_path"] == "/shop/products/{id}"
+    assert "private" not in str(client_context)
+
+
+async def test_offline_client_error_does_not_create_an_incident(monkeypatch) -> None:
+    persisted = False
+
+    async def persist(**_kwargs):
+        nonlocal persisted
+        persisted = True
+
+    monkeypatch.setattr("api.services.incident.persist_error_incident", persist)
+
+    result = await persist_client_error_incident(
+        error_id="client-error-offline",
+        message="離線狀態：/shop/products",
+        stack="",
+        scope="api.offline",
+        path="/shop",
+        context={"diagnostics": {"failure_kind": "offline"}},
+        trace_id=None,
+        request_id=None,
+        client_ip=None,
+        user_agent=None,
+    )
+
+    assert result is None
+    assert not persisted

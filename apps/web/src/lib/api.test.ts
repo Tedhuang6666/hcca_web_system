@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { reportClientError } from "./client-error-reporter";
 import { ApiError, apiErrorMessage, withFallback } from "./api-helpers";
 import { request } from "./api/core";
 import { apiErrorFromResponse } from "./api/errors";
-import { uploadWithProgress } from "./api/transport";
+import { fetchWithRetry, uploadWithProgress } from "./api/transport";
 import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "./permission-events";
+
+vi.mock("./client-error-reporter", () => ({ reportClientError: vi.fn() }));
 
 describe("API helpers", () => {
   it("returns successful values without invoking the error hook", async () => {
@@ -122,6 +125,7 @@ describe("API helpers", () => {
   });
 
   it("fails a stalled request after the client timeout", async () => {
+    vi.mocked(reportClientError).mockClear();
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockImplementation(
       (input: string, init: RequestInit) => {
@@ -138,12 +142,23 @@ describe("API helpers", () => {
     await vi.advanceTimersByTimeAsync(15_000);
     await assertion;
     expect(fetchMock.mock.calls.filter(([input]) => input === "/api/test/stalled-request")).toHaveLength(1);
+    expect(reportClientError).toHaveBeenCalledWith(expect.objectContaining({
+      scope: "api.timeout",
+      diagnostics: expect.objectContaining({
+        failure_kind: "timeout",
+        request_method: "GET",
+        request_path: "/test/stalled-request",
+        request_attempts: 1,
+        request_timeout_ms: 15_000,
+      }),
+    }));
 
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
   it("keeps the request timeout active while the response body is still streaming", async () => {
+    vi.mocked(reportClientError).mockClear();
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockImplementation(
       (input: string, init: RequestInit) => {
@@ -169,8 +184,39 @@ describe("API helpers", () => {
     const assertion = expect(pending).rejects.toThrow("後端 API 回應逾時（15 秒）");
     await vi.advanceTimersByTimeAsync(15_000);
     await assertion;
+    expect(reportClientError).toHaveBeenCalledWith(expect.objectContaining({
+      scope: "api.timeout",
+      diagnostics: expect.objectContaining({
+        failure_kind: "timeout",
+        request_method: "GET",
+        request_path: "/test/stalled-body",
+        request_attempts: 1,
+        request_timeout_ms: 15_000,
+      }),
+    }));
 
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("reports network failures with a query-free API path and retry context", async () => {
+    vi.mocked(reportClientError).mockClear();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    await expect(
+      fetchWithRetry("/shop/products?search=private", { method: "POST" }, {}, 0),
+    ).rejects.toThrow("無法連線至後端 API");
+
+    expect(reportClientError).toHaveBeenCalledWith(expect.objectContaining({
+      scope: "api.network",
+      diagnostics: {
+        failure_kind: "network",
+        request_method: "POST",
+        request_path: "/shop/products",
+        request_attempts: 1,
+        request_timeout_ms: 30_000,
+      },
+    }));
     vi.unstubAllGlobals();
   });
 
