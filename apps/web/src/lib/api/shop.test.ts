@@ -44,28 +44,3 @@ describe("shop quantity API", () => {
     expect(requestUrl.searchParams.get("is_paid")).toBe("false");
   });
 });
-
-describe("class order API", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("does not reuse cached class orders or summaries", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response("[]", {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }))
-      .mockResolvedValueOnce(new Response("{}", {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await shopApi.listClassOrders();
-    await shopApi.classSummary();
-
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ cache: "no-store" }));
-    expect(fetchMock.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ cache: "no-store" }));
-  });
-});

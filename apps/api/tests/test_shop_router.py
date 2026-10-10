@@ -1688,6 +1688,49 @@ async def test_list_class_orders_returns_only_cadre_classes(
     assert payload[0]["class_id"] == str(sc.id)
 
 
+async def test_superuser_class_orders_include_current_class_without_cadre(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session, start="11501", end="11540")
+    other_sc = await _make_class(db_session, start="11601", end="11640")
+    superuser = await _bare_user(db_session, student_id="11501")
+    superuser.is_superuser = True
+    student = await _bare_user(db_session, student_id="11520")
+    other_student = await _bare_user(db_session, student_id="11620")
+    product = await _make_active_product(db_session, superuser, price=20)
+
+    client = authed_client_factory(superuser)
+    created = await client.post(
+        "/shop/orders/class",
+        json={
+            "user_id": str(student.id),
+            "items": [{"product_id": str(product.id), "quantity": 1}],
+        },
+    )
+    assert created.status_code == 201
+    created_order_id = created.json()[0]["id"]
+
+    await shop_svc.create_direct_order(
+        db_session,
+        user_id=other_student.id,
+        class_id=other_sc.id,
+        data=ClassOrderUpsert(
+            user_id=other_student.id,
+            items=[OrderItemCreate(product_id=product.id, quantity=1)],
+        ),
+    )
+
+    orders = await client.get("/shop/orders/class")
+    assert orders.status_code == 200
+    assert [order["id"] for order in orders.json()] == [created_order_id]
+    assert orders.json()[0]["class_id"] == str(sc.id)
+
+    summary = await client.get("/shop/orders/class/summary")
+    assert summary.status_code == 200
+    assert summary.json()["order_count"] == 1
+    assert summary.json()["total_amount"] == 20
+
+
 async def test_class_order_summary_for_cadre(db_session, authed_client_factory) -> None:
     sc = await _make_class(db_session)
     cadre = await _bare_user(db_session, student_id="11501")

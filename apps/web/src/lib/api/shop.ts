@@ -1,7 +1,7 @@
 import type {
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
-import { authFetch, BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
@@ -66,7 +66,7 @@ export const shopApi = {
     offset?: string;
   }) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
-    return request<OrderListItem[]>(`/shop/orders/class${qs}`, { cache: "no-store" });
+    return get<OrderListItem[]>(`/shop/orders/class${qs}`);
   },
   classSummary: (params?: {
     is_class_collected?: string;
@@ -78,7 +78,7 @@ export const shopApi = {
   }) => {
     const defined = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)) : {};
     const qs = Object.keys(defined).length ? "?" + new URLSearchParams(defined).toString() : "";
-    return request<ShopClassSummaryOut>(`/shop/orders/class/summary${qs}`, { cache: "no-store" });
+    return get<ShopClassSummaryOut>(`/shop/orders/class/summary${qs}`);
   },
   orderSummary: (params: {
     group_by: "class" | "grade" | "user";
