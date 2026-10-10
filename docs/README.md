@@ -19,6 +19,9 @@
 `audits/`、`BASELINE_METRICS.md`、`HOST_MIGRATION_PERFORMANCE_REPORT_20260818.md` 是特定時間的證據，
 不代表目前 HEAD 的驗證結果。先讀報告日期、commit、重現條件，再決定是否仍適用。
 
+- [商品預購介面與邏輯盤點（2026-10-10）](audits/SHOP_PREORDER_UX_AUDIT_20261010.md)：
+  六個商品功能頁、HTTP 介面、分單根因，以及一般使用者與班代的活動預購改造規格。
+
 此主機還有未追蹤的營運／事故／設計筆記，保留原檔供按需參考；它們可能包含過時路徑與主機資訊，
 不作新模型的必讀入口。需要引用其中指令時先與目前程式、服務狀態核對。
 所有入口文件連結由 `bash scripts/check.sh docs` 檢查，不依賴讀完整個 docs 目錄。
