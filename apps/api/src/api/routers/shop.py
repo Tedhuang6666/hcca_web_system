@@ -960,6 +960,15 @@ async def list_orders(
     return [shop_svc.serialize_order_list_item(o) for o in orders]
 
 
+async def _class_order_scope_ids(session: AsyncSession, user: User) -> list[uuid.UUID]:
+    class_ids = await class_svc.get_cadre_class_ids(session, user.id)
+    if user.is_superuser:
+        current_class = await class_svc.resolve_user_class(session, user)
+        if current_class is not None:
+            class_ids.add(current_class.id)
+    return list(class_ids)
+
+
 @router.get(
     "/orders/class",
     response_model=list[OrderListItem],
@@ -978,7 +987,7 @@ async def list_class_orders(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[OrderListItem]:
-    class_ids = list(await class_svc.get_cadre_class_ids(session, current_user.id))
+    class_ids = await _class_order_scope_ids(session, current_user)
     orders = await shop_svc.list_orders(
         session,
         class_ids=class_ids,
@@ -1010,7 +1019,7 @@ async def class_order_summary(
     general_only: bool = Query(False, description="僅顯示未綁活動的訂單"),
     product_id: uuid.UUID | None = Query(None, description="篩選商品"),
 ) -> ShopClassSummaryOut:
-    class_ids = list(await class_svc.get_cadre_class_ids(session, current_user.id))
+    class_ids = await _class_order_scope_ids(session, current_user)
     return await shop_svc.class_order_summary(
         session,
         class_ids=class_ids,
