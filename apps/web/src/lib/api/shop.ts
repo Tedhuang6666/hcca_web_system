@@ -200,8 +200,12 @@ export const shopApi = {
     date_from?: string;
     date_to?: string;
   }) => {
-    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
-    return get<OrderQuantityRow[]>(`/shop/orders/quantities${qs}`);
+    const query = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value) query.set(key, value);
+    });
+    const qs = query.toString();
+    return get<OrderQuantityRow[]>(`/shop/orders/quantities${qs ? `?${qs}` : ""}`);
   },
 
   // 圖片上傳
