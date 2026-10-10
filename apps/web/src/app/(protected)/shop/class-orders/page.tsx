@@ -50,15 +50,9 @@ type AssistedOrderDraft = {
   notes: string;
 };
 
-type ActivityCollectionRow = {
+type ActivityOptionRow = {
   key: string;
-  activity_id: string | null;
   label: string;
-  order_count: number;
-  total_amount: number;
-  collected_amount: number;
-  outstanding_amount: number;
-  council_amount: number;
 };
 
 const CLASS_ORDER_PAGE_SIZE = 500;
@@ -115,7 +109,7 @@ async function listAllClassOrders(params: ClassOrderQuery = {}): Promise<OrderLi
 }
 
 export default function ClassOrdersPage() {
-  const [workspace, setWorkspace] = useState<"order" | "collect" | "details">("order");
+  const [workspace, setWorkspace] = useState<"order" | "collect" | "details">("collect");
   const [seatFilter, setSeatFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [seatSearch, setSeatSearch] = useState("");
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -242,15 +236,12 @@ export default function ClassOrdersPage() {
   }, [catalog, activityLabel]);
 
   const activityRows = useMemo(() => {
-    const rows = new Map<string, ActivityCollectionRow>();
+    const rows = new Map<string, ActivityOptionRow>();
     for (const category of catalog) {
       const key = catalogScopeKey(category);
       if (!rows.has(key)) rows.set(key, {
         key,
-        activity_id: category.activity_id ?? null,
         label: category.activity_name ?? category.name,
-        order_count: 0, total_amount: 0, collected_amount: 0, outstanding_amount: 0,
-        council_amount: 0,
       });
     }
     for (const order of activityOrders) {
@@ -258,32 +249,13 @@ export default function ClassOrdersPage() {
       const key = orderScopeKey(order);
       const row = rows.get(key) ?? {
         key,
-        activity_id: order.activity_id ?? null,
         label: order.category_name ?? activityLabel(key),
-        order_count: 0,
-        total_amount: 0,
-        collected_amount: 0,
-        outstanding_amount: 0,
-        council_amount: 0,
       };
       row.label = order.activity_name ?? order.category_name ?? row.label;
-      row.order_count += 1;
-      row.total_amount += order.total_price;
-      if (order.is_class_collected) row.collected_amount += order.total_price;
-      else row.outstanding_amount += order.total_price;
-      if (order.is_paid) row.council_amount += order.total_price;
       rows.set(key, row);
     }
     return Array.from(rows.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
   }, [activityOrders, activityLabel, catalog]);
-
-  const activityTotals = useMemo(() => activityRows.reduce((total, row) => ({
-    order_count: total.order_count + row.order_count,
-    total_amount: total.total_amount + row.total_amount,
-    collected_amount: total.collected_amount + row.collected_amount,
-    outstanding_amount: total.outstanding_amount + row.outstanding_amount,
-    council_amount: total.council_amount + row.council_amount,
-  }), { order_count: 0, total_amount: 0, collected_amount: 0, outstanding_amount: 0, council_amount: 0 }), [activityRows]);
 
   const activeLedgerKey = activityRows.some((row) => row.key === ledgerActivityKey)
     ? ledgerActivityKey : (activityRows[0]?.key ?? "none");
@@ -316,7 +288,7 @@ export default function ClassOrdersPage() {
         councilPaid: memberOrders.reduce((sum, order) => sum + (order.is_paid ? order.total_price : 0), 0),
       });
     }
-    return rows.sort((a, b) => (a.seat ?? 1000) - (b.seat ?? 1000)
+    return rows.sort((a, b) => (a.seat ?? Number.POSITIVE_INFINITY) - (b.seat ?? Number.POSITIVE_INFINITY)
       || a.name.localeCompare(b.name, "zh-Hant"));
   }, [activityOrders, activeLedgerKey, members]);
 
@@ -941,19 +913,6 @@ export default function ClassOrdersPage() {
     scrollToSection("class-orders-list");
   };
 
-  const showActivityCollection = (activityId: string | null | undefined) => {
-    setWorkspace(activityId === undefined ? "details" : "collect");
-    setActivityFilter(activityId === undefined ? "all" : activityId ?? "none");
-    if (activityId !== undefined) setLedgerActivityKey(activityId ?? "none");
-    setProductFilter("");
-    setPaidFilter("all");
-    setAssistedFilter("all");
-    setMemberFilter("");
-    setQuery("");
-    setSelectedIds([]);
-    scrollToSection(activityId === undefined ? "class-orders-list" : "seat-collection-heading");
-  };
-
   const clearFilters = () => {
     setActivityFilter("all");
     setLedgerActivityKey("");
@@ -1003,7 +962,7 @@ export default function ClassOrdersPage() {
 
       <nav className="shop-task-switch" aria-label="班代工作">
         {([
-          ["order", "幫同學訂購"], ["collect", "班內收款"], ["details", "訂單與商品明細"],
+          ["collect", "依活動與座號收款"], ["order", "幫同學訂購"], ["details", "訂單與商品明細"],
         ] as const).map(([key, label]) => (
           <button key={key} type="button" aria-pressed={workspace === key}
             onClick={() => { setWorkspace(key); if (key === "order") setFormOpen(true); }}>
@@ -1337,231 +1296,71 @@ export default function ClassOrdersPage() {
       )}
 
       <div hidden={workspace !== "collect"} className="space-y-5">
-      <section aria-labelledby="activity-collection-heading" className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <h2 id="activity-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-            活動收款總覽
-          </h2>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            應收包含已收與待收；取消及退款訂單不列入。選一列即可查看該活動。
-          </p>
-        </div>
-        {loading && activityOrders.length === 0 ? (
-          <p className="rounded-lg px-4 py-8 text-center text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-            正在整理各活動款項...
-          </p>
-        ) : loadFailed && activityOrders.length === 0 ? (
-          <p className="rounded-lg px-4 py-8 text-center text-sm" role="alert"
-            style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>
-            無法載入活動款項，請重新整理後再試。
-          </p>
-        ) : activityRows.length === 0 ? (
-          <div className="rounded-lg px-4 py-8 text-center" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>目前還沒有有效訂單</p>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>替同學建立代訂後，應收與收款進度會出現在這裡。</p>
-            <button type="button" onClick={openCreate} className="btn btn-ghost mt-3 min-h-11">幫同學下單</button>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-            <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
-              {activityRows.map((row) => {
-                const key = row.key;
-                return (
-                  <div key={key} className="px-4 py-3" style={{ background: activityFilter === key ? "var(--primary-dim)" : undefined }}>
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="min-w-0 break-words text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{row.label}</h3>
-                      <span className="shrink-0 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>{row.order_count} 筆</span>
-                    </div>
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                      <div><p style={{ color: "var(--text-muted)" }}>應收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</p></div>
-                      <div><p style={{ color: "var(--text-muted)" }}>已收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</p></div>
-                      <div><p style={{ color: "var(--text-muted)" }}>待收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--warning)" }}>{money(row.outstanding_amount)}</p></div>
-                    </div>
-                    <p className="mt-2 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>班聯已確認：{money(row.council_amount)}</p>
-                    <button type="button" onClick={() => showActivityCollection(row.key)}
-                      className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium"
-                      style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
-                      查看座號收款
-                    </button>
-                  </div>
-                );
-              })}
-              <div className="px-4 py-3" style={{ background: "var(--bg-elevated)" }}>
-                <div className="flex items-baseline justify-between gap-3">
-                  <strong className="text-sm" style={{ color: "var(--text-primary)" }}>全部活動</strong>
-                  <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>{activityTotals.order_count} 筆</span>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                  <div><p style={{ color: "var(--text-muted)" }}>應收</p><p className="mt-0.5 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(activityTotals.total_amount)}</p></div>
-                  <div><p style={{ color: "var(--text-muted)" }}>已收</p><p className="mt-0.5 font-semibold tabular-nums" style={{ color: "var(--success)" }}>{money(activityTotals.collected_amount)}</p></div>
-                  <div><p style={{ color: "var(--text-muted)" }}>待收</p><p className="mt-0.5 font-semibold tabular-nums" style={{ color: "var(--warning)" }}>{money(activityTotals.outstanding_amount)}</p></div>
-                </div>
-                <p className="mt-2 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>班聯已確認：{money(activityTotals.council_amount)}</p>
-                <button type="button" onClick={() => showActivityCollection(undefined)}
-                  className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium"
-                  style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
-                  查看全部活動訂單
-                </button>
-              </div>
-            </div>
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[880px] text-sm" aria-label="各活動應收與收款金額">
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                    {["活動", "訂單", "應收總額", "班代已收", "待收", "班聯已確認", ""].map((heading) => (
-                      <th key={heading || "action"} scope="col" className="px-4 py-3 text-left text-xs font-semibold"
-                        style={{ color: "var(--text-muted)" }}>{heading}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activityRows.map((row) => {
-                    const key = row.key;
-                    return (
-                      <tr key={key} style={{ borderBottom: "1px solid var(--border)", background: activityFilter === key ? "var(--primary-dim)" : undefined }}>
-                        <th scope="row" className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</th>
-                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{row.order_count}</td>
-                        <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--warning)" }}>{money(row.outstanding_amount)}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{money(row.council_amount)}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button type="button" onClick={() => showActivityCollection(row.key)}
-                            className="min-h-11 rounded-md px-3 text-xs font-medium"
-                            style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
-                            查看座號收款
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: "var(--bg-elevated)" }}>
-                    <th scope="row" className="px-4 py-3 text-left text-sm font-semibold" style={{ color: "var(--text-primary)" }}>全部活動</th>
-                    <td className="px-4 py-3 font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>{activityTotals.order_count}</td>
-                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(activityTotals.total_amount)}</td>
-                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--success)" }}>{money(activityTotals.collected_amount)}</td>
-                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--warning)" }}>{money(activityTotals.outstanding_amount)}</td>
-                    <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--text-secondary)" }}>{money(activityTotals.council_amount)}</td>
-                    <td className="px-4 py-2 text-right">
-                      <button type="button" onClick={() => showActivityCollection(undefined)}
-                        className="min-h-11 rounded-md px-3 text-xs font-medium"
-                        style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
-                        全部訂單
-                      </button>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {activityRows.length > 0 && !loadFailed && (
         <section aria-labelledby="seat-collection-heading" className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>依活動與座號收款</h2>
               <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>依活動查看每位同學的品項與款項；已收款後追加品項，會顯示待補收金額。</p>
             </div>
-            <label className="grid gap-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-              活動
-              <select className="input min-h-11 min-w-44" aria-label="收款活動" value={activeLedgerKey}
-                onChange={(event) => { setLedgerActivityKey(event.target.value); setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
-                {activityRows.map((row) => (
-                  <option key={row.key} value={row.key}>{row.label}</option>
-                ))}
-              </select>
-            </label>
+            {activityRows.length > 0 && (
+              <label className="grid gap-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                活動
+                <select className="input min-h-11 min-w-44" aria-label="收款活動" value={activeLedgerKey}
+                  onChange={(event) => { setLedgerActivityKey(event.target.value); setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
+                  {activityRows.map((row) => (
+                    <option key={row.key} value={row.key}>{row.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <input className="input min-h-11 min-w-0 flex-1" placeholder="搜尋座號或姓名" aria-label="搜尋收款同學"
-              value={seatSearch} onChange={(event) => setSeatSearch(event.target.value)} />
-            <select className="input min-h-11" aria-label="名冊收款狀態" value={seatFilter}
-              onChange={(event) => setSeatFilter(event.target.value as typeof seatFilter)}>
-              <option value="all">全班同學</option><option value="unpaid">只看待收</option><option value="paid">已收齊</option>
-            </select>
-          </div>
-          {membersLoading ? (
-            <p className="rounded-lg px-4 py-6 text-sm" role="status"
-              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>正在載入班級座號與收款資料…</p>
+          {activityRows.length === 0 ? (
+            <p className="rounded-lg px-4 py-6 text-sm" role={loadFailed ? "alert" : "status"}
+              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+              {loading ? "正在載入活動與座號收款資料…" : loadFailed ? "無法載入活動與座號收款資料，請重新整理後再試。" : "目前沒有可收款的活動；活動開放或有同學完成預購後，收款資料會顯示在這裡。"}
+            </p>
           ) : (
-            <div className="rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-              <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
-                {filteredSeatRows.map((row) => {
-                  const outstanding = row.amount - row.collected;
-                  const seatBusy = busy === `seat:${row.id}`;
-                  return (
-                    <article key={row.id} className="space-y-3 p-4">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                          {row.seat == null ? "未登錄座號" : `${row.seat} 號`} · {row.name}
-                        </h3>
-                      </div>
-                      <p className="text-sm" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
-                        {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
-                      </p>
-                      <dl className="grid grid-cols-2 gap-2 text-sm">
-                        <div><dt style={{ color: "var(--text-secondary)" }}>應收</dt><dd className="font-semibold tabular-nums">{money(row.amount)}</dd></div>
-                        <div><dt style={{ color: "var(--text-secondary)" }}>{row.collected > 0 && outstanding > 0 ? "待補收" : "待收"}</dt><dd className="font-semibold tabular-nums">{money(outstanding)}</dd></div>
-                        <div><dt style={{ color: "var(--text-secondary)" }}>班代已收</dt><dd className="tabular-nums">{money(row.collected)}</dd></div>
-                        <div><dt style={{ color: "var(--text-secondary)" }}>班聯已確認</dt><dd className="tabular-nums">{money(row.councilPaid)}</dd></div>
-                      </dl>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" className="btn btn-secondary min-h-11 px-3 text-xs"
-                          disabled={!outstanding || busy !== null || loadFailed || batchBusy}
-                          onClick={() => void setSeatCollected(row.id, true)}>{seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}</button>
-                        {row.collected > 0 && (
-                          <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
-                            disabled={busy !== null || loadFailed || batchBusy}
-                            onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>
-                        )}
-                        <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
-                          disabled={!members.some((member) => member.id === row.id) || loadFailed}
-                          onClick={() => openCreateForSeat(row.id)}>代訂</button>
-                      </div>
-                    </article>
-                  );
-                })}
+            <>
+              <div className="flex flex-wrap gap-2">
+                <input className="input min-h-11 min-w-0 flex-1" placeholder="搜尋座號或姓名" aria-label="搜尋收款同學"
+                  value={seatSearch} onChange={(event) => setSeatSearch(event.target.value)} />
+                <select className="input min-h-11" aria-label="名冊收款狀態" value={seatFilter}
+                  onChange={(event) => setSeatFilter(event.target.value as typeof seatFilter)}>
+                  <option value="all">全班同學</option><option value="unpaid">只看待收</option><option value="paid">已收齊</option>
+                </select>
               </div>
-              <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[980px] text-sm" aria-label={`${ledgerActivity?.label ?? "活動"}各座號收款`}>
-                <thead style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
-                  <tr>
-                    {["座號", "同學", "預購品項", "應收", "班代已收", "待收／補收", "班聯已確認", "快捷操作"].map((heading) => (
-                      <th key={heading} scope="col" className="px-3 py-3 text-left font-semibold">{heading}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSeatRows.map((row) => {
-                    const outstanding = row.amount - row.collected;
-                    const seatBusy = busy === `seat:${row.id}`;
-                    return (
-                      <tr key={row.id} style={{ borderTop: "1px solid var(--border)" }}>
-                        <th scope="row" className="px-3 py-3 text-left tabular-nums" style={{ color: "var(--text-primary)" }}>
-                          {row.seat == null ? "—" : `${row.seat} 號`}
-                        </th>
-                        <td className="px-3 py-3" style={{ color: "var(--text-primary)" }}>{row.name}</td>
-                        <td className="max-w-64 px-3 py-3" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
-                          {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
-                        </td>
-                        <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.amount)}</td>
-                        <td className="px-3 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected)}</td>
-                        <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: outstanding ? "var(--warning)" : "var(--text-secondary)" }}>
-                          {row.collected > 0 && outstanding > 0 && <span className="block text-xs">待補收</span>}
-                          {money(outstanding)}
-                        </td>
-                        <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{money(row.councilPaid)}</td>
-                        <td className="px-3 py-2">
+              {membersLoading ? (
+                <p className="rounded-lg px-4 py-6 text-sm" role="status"
+                  style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>正在載入班級座號與收款資料…</p>
+              ) : membersLoadFailed ? (
+                <p className="rounded-lg px-4 py-6 text-sm" role="alert"
+                  style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>無法載入本班座號名冊，請重新整理後再試。</p>
+              ) : (
+                <div className="rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+                  <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
+                    {filteredSeatRows.map((row) => {
+                      const outstanding = row.amount - row.collected;
+                      const seatBusy = busy === `seat:${row.id}`;
+                      return (
+                        <article key={row.id} className="space-y-3 p-4">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                              {row.seat == null ? "未登錄座號" : `${row.seat} 號`} · {row.name}
+                            </h3>
+                          </div>
+                          <p className="text-sm" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+                            {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
+                          </p>
+                          <dl className="grid grid-cols-2 gap-2 text-sm">
+                            <div><dt style={{ color: "var(--text-secondary)" }}>應收</dt><dd className="font-semibold tabular-nums">{money(row.amount)}</dd></div>
+                            <div><dt style={{ color: "var(--text-secondary)" }}>{row.collected > 0 && outstanding > 0 ? "待補收" : "待收"}</dt><dd className="font-semibold tabular-nums">{money(outstanding)}</dd></div>
+                            <div><dt style={{ color: "var(--text-secondary)" }}>班代已收</dt><dd className="tabular-nums">{money(row.collected)}</dd></div>
+                            <div><dt style={{ color: "var(--text-secondary)" }}>班聯已確認</dt><dd className="tabular-nums">{money(row.councilPaid)}</dd></div>
+                          </dl>
                           <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn btn-secondary min-h-11 px-3 text-xs"
                               disabled={!outstanding || busy !== null || loadFailed || batchBusy}
-                              onClick={() => void setSeatCollected(row.id, true)}>
-                              {seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}
-                            </button>
+                              onClick={() => void setSeatCollected(row.id, true)}>{seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}</button>
                             {row.collected > 0 && (
                               <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
                                 disabled={busy !== null || loadFailed || batchBusy}
@@ -1571,20 +1370,70 @@ export default function ClassOrdersPage() {
                               disabled={!members.some((member) => member.id === row.id) || loadFailed}
                               onClick={() => openCreateForSeat(row.id)}>代訂</button>
                           </div>
-                        </td>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[980px] text-sm" aria-label={`${ledgerActivity?.label ?? "活動"}各座號收款`}>
+                    <thead style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                      <tr>
+                        {["座號", "同學", "預購品項", "應收", "班代已收", "待收／補收", "班聯已確認", "快捷操作"].map((heading) => (
+                          <th key={heading} scope="col" className="px-3 py-3 text-left font-semibold">{heading}</th>
+                        ))}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              </div>
-              {filteredSeatRows.length === 0 && (
-                <p className="px-4 py-6 text-sm" role="status" style={{ color: "var(--text-secondary)" }}>目前沒有符合條件的同學；可以清除搜尋或切換收款狀態。</p>
+                    </thead>
+                    <tbody>
+                      {filteredSeatRows.map((row) => {
+                        const outstanding = row.amount - row.collected;
+                        const seatBusy = busy === `seat:${row.id}`;
+                        return (
+                          <tr key={row.id} style={{ borderTop: "1px solid var(--border)" }}>
+                            <th scope="row" className="px-3 py-3 text-left tabular-nums" style={{ color: "var(--text-primary)" }}>
+                              {row.seat == null ? "—" : `${row.seat} 號`}
+                            </th>
+                            <td className="px-3 py-3" style={{ color: "var(--text-primary)" }}>{row.name}</td>
+                            <td className="max-w-64 px-3 py-3" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+                              {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.amount)}</td>
+                            <td className="px-3 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected)}</td>
+                            <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: outstanding ? "var(--warning)" : "var(--text-secondary)" }}>
+                              {row.collected > 0 && outstanding > 0 && <span className="block text-xs">待補收</span>}
+                              {money(outstanding)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{money(row.councilPaid)}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-wrap gap-2">
+                                <button type="button" className="btn btn-secondary min-h-11 px-3 text-xs"
+                                  disabled={!outstanding || busy !== null || loadFailed || batchBusy}
+                                  onClick={() => void setSeatCollected(row.id, true)}>
+                                  {seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}
+                                </button>
+                                {row.collected > 0 && (
+                                  <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
+                                    disabled={busy !== null || loadFailed || batchBusy}
+                                    onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>
+                                )}
+                                <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
+                                  disabled={!members.some((member) => member.id === row.id) || loadFailed}
+                                  onClick={() => openCreateForSeat(row.id)}>代訂</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  </div>
+                  {filteredSeatRows.length === 0 && (
+                    <p className="px-4 py-6 text-sm" role="status" style={{ color: "var(--text-secondary)" }}>目前沒有符合條件的同學；可以清除搜尋或切換收款狀態。</p>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
         </section>
-      )}
 
       </div>
       <div hidden={workspace !== "details"} className="space-y-5">
