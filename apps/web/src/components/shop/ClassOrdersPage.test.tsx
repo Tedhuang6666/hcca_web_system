@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClassOrdersPage from "@/app/(protected)/shop/class-orders/page";
 
@@ -46,9 +46,43 @@ async function chooseProduct(id = "product") {
   await waitFor(() => expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled());
 }
 
+function openOrderWorkspace() {
+  fireEvent.click(screen.getByRole("button", { name: "幫同學訂購" }));
+}
+
 describe("班代工作流程", () => {
+  it("opens seat collection first, sorts by seat number, and omits order counts", async () => {
+    api.members.mockResolvedValue([
+      { id: "b", display_name: "示範乙", seat_number: 2 },
+      { id: "a", display_name: "示範甲", seat_number: 1 },
+    ]);
+    render(<ClassOrdersPage />);
+
+    expect(screen.getByRole("button", { name: "依活動與座號收款" })).toHaveAttribute("aria-pressed", "true");
+    const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((row) => within(row).getByRole("rowheader").textContent)).toEqual(["1 號", "2 號"]);
+    expect(within(table).queryByRole("columnheader", { name: "訂單" })).not.toBeInTheDocument();
+  });
+
+  it("shows a clear message when there are no activities to collect", async () => {
+    api.catalog.mockResolvedValue([]);
+    render(<ClassOrdersPage />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("目前沒有可收款的活動");
+  });
+
+  it("shows an error message when collection data cannot be loaded", async () => {
+    api.listClassOrders.mockRejectedValue(new Error("service unavailable"));
+    api.catalog.mockResolvedValue([]);
+    render(<ClassOrdersPage />);
+
+    expect(await screen.findByText(/無法載入活動與座號收款資料/)).toHaveAttribute("role", "alert");
+  });
+
   it("builds a multi-product order for one student with merged quantities and the chosen variant", async () => {
     render(<ClassOrdersPage />);
+    openOrderWorkspace();
     expect(screen.getByRole("combobox", { name: "商品" })).toBeDisabled();
     await chooseStudent();
     await chooseProduct();
@@ -75,6 +109,7 @@ describe("班代工作流程", () => {
   it("queues one student's products before selecting the next and retries only failed drafts", async () => {
     api.createClassOrder.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error("中斷")).mockResolvedValueOnce([]);
     render(<ClassOrdersPage />);
+    openOrderWorkspace();
     await chooseStudent();
     await chooseProduct();
     fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
@@ -99,9 +134,10 @@ describe("班代工作流程", () => {
 
   it("preserves the current draft when switching to collection and back", async () => {
     render(<ClassOrdersPage />);
+    openOrderWorkspace();
     await chooseStudent();
     await chooseProduct();
-    fireEvent.click(screen.getByRole("button", { name: "班內收款" }));
+    fireEvent.click(screen.getByRole("button", { name: "依活動與座號收款" }));
     expect(screen.queryByRole("combobox", { name: "商品" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "幫同學訂購" }));
     expect(screen.getByRole("combobox", { name: "同班學生" })).toHaveValue("a");
@@ -116,9 +152,8 @@ describe("班代工作流程", () => {
     ]);
     api.setClassCollected.mockResolvedValue({});
     render(<ClassOrdersPage />);
-    await screen.findByRole("option", { name: "1 號 · 示範甲" });
-    fireEvent.click(screen.getByRole("button", { name: "班內收款" }));
-    fireEvent.change(screen.getByLabelText("活動", { selector: "select" }), { target: { value: "none" } });
+    await screen.findByRole("option", { name: "園遊會" });
+    fireEvent.change(screen.getByRole("combobox", { name: "收款活動" }), { target: { value: "none" } });
     fireEvent.click(screen.getAllByRole("button", { name: "設為已收" }).find((button) => !button.hasAttribute("disabled"))!);
     await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledTimes(1));
     expect(api.setClassCollected).toHaveBeenCalledWith("one", true);
@@ -140,8 +175,7 @@ describe("班代工作流程", () => {
     ]);
     api.setClassCollected.mockResolvedValue({});
     render(<ClassOrdersPage />);
-    await screen.findByRole("option", { name: "1 號 · 示範甲" });
-    fireEvent.click(screen.getByRole("button", { name: "班內收款" }));
+    await screen.findByRole("option", { name: "園遊會" });
     fireEvent.change(screen.getByRole("combobox", { name: "收款活動" }), { target: { value: "category:category" } });
     await screen.findAllByText("紀念袋 × 3");
     fireEvent.click(screen.getAllByRole("button", { name: "補收 NT$100" })[0]);
