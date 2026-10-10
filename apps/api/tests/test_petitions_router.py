@@ -740,7 +740,14 @@ async def test_confidential_petition_access_is_scoped_by_role(
         f"/petitions/{case_obj.id}/public-request",
         json={"title": "不應公開", "content": "不應公開"},
     )
-    assert public_request.status_code == 409
+    assert public_request.status_code == 403
+
+    site_owner_public_request = await authed_client_factory(site_owner).post(
+        f"/petitions/{case_obj.id}/public-request",
+        json={"title": "不應公開", "content": "不應公開"},
+    )
+    assert site_owner_public_request.status_code == 409
+    assert site_owner_public_request.json()["detail"] == "密件不可申請公開"
 
     public_cases = await authed_client_factory(owner).get("/petitions/public")
     assert public_cases.status_code == 200
