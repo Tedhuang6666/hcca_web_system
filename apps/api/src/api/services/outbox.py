@@ -310,16 +310,40 @@ async def _handle_petition_external_notify(db: AsyncSession, payload: dict) -> N
     from api.services.mail import enqueue_email
 
     contact_email = payload.get("contact_email", "")
-    contact_name = payload.get("contact_name", "")
+    contact_name = str(payload.get("contact_name") or "陳情人")
     title = payload.get("title", "")
-    body = payload.get("body", "")
+    body = str(payload.get("body") or "")
     if not contact_email:
         return
     subject = f"您的陳情案件有新進展：{title}"
-    html = f"<p>親愛的 {contact_name or '陳情人'}，您的陳情案件有新進展：{body}</p>"
+    content_blocks = [
+        f"<p>親愛的 {html_escape(contact_name)}，您的陳情案件有新進展。</p>",
+        "<h3>案件資訊</h3>",
+    ]
+    section_labels = {"陳情內容：", "本次更新：", "公開回覆：", "回覆附件："}
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line in section_labels:
+            content_blocks.append(f"<h3>{html_escape(line.rstrip('：'))}</h3>")
+        elif "：" in line:
+            label, value = line.split("：", 1)
+            content_blocks.append(
+                f"<p><strong>{html_escape(label)}：</strong>{html_escape(value)}</p>"
+            )
+        else:
+            content_blocks.append(f"<p>{html_escape(line)}</p>")
+    html = "".join(content_blocks)
     try:
         attachments = await _petition_email_attachments(db, payload)
-        enqueue_email(contact_email, subject, html, attachments=attachments or None)
+        enqueue_email(
+            contact_email,
+            subject,
+            html,
+            subtype="html",
+            attachments=attachments or None,
+        )
     except Exception as exc:
         logger.warning("petition.external_notify email failed: %s", exc)
         raise

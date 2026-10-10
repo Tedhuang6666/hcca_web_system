@@ -183,7 +183,9 @@ async def test_send_email_now_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -
         patch("api.services.mail._update_email_message_status", new=AsyncMock()),
         patch("api.services.mail.httpx.AsyncClient", return_value=mock_client),
     ):
-        await send_email_now("user@example.com", "主旨", "<p>內容</p>")
+        await send_email_now(
+            "user@example.com", "主旨", "<p>內容 https://example.com/petitions/1</p>"
+        )
 
     mock_client.post.assert_awaited_once()
     _url, kwargs = mock_client.post.call_args
@@ -192,6 +194,10 @@ async def test_send_email_now_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -
     assert kwargs["json"]["to"] == ["user@example.com"]
     assert kwargs["json"]["subject"] == "主旨"
     assert "內容" in kwargs["json"]["html"]
+    assert (
+        '<a href="https://example.com/petitions/1" '
+        'style="color:#9b7a18;text-decoration:underline;">查看連結</a>'
+    ) in kwargs["json"]["html"]
 
 
 async def test_send_email_now_explains_invalid_api_key(

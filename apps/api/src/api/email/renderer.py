@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 import uuid
 from functools import lru_cache
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -72,6 +73,8 @@ _CONDITIONAL_OPERATORS = frozenset(
 )
 
 _UNSUBSCRIBE_SALT = "hcca-email-unsubscribe"
+_VISIBLE_URL_RE = re.compile(r"(?i)(?:https?://|www\.)[^\s<>\"'`]+")
+_URL_TRAILING_PUNCTUATION = ".,!?;:)]}，。！？；：、）】》」』"
 
 # context 缺漏欄位的安全預設值（避免範本 Jinja Undefined）
 _CONTEXT_DEFAULTS: dict = {
@@ -133,6 +136,84 @@ def _nl2br(value: str | None) -> Markup:
     return Markup("<br>".join(escape(line) for line in (value or "").splitlines()))  # nosec
 
 
+class _VisibleUrlMasker(HTMLParser):
+    """保留 HTML 結構，將內文中裸露的網址改成描述文字超連結。"""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.changed = False
+        self._anchor_depth = 0
+        self._raw_text_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.parts.append(self.get_starttag_text() or f"<{tag}>")
+        if tag == "a":
+            self._anchor_depth += 1
+        elif tag in {"script", "style", "title"}:
+            self._raw_text_depth += 1
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.parts.append(self.get_starttag_text() or f"<{tag}/>")
+
+    def handle_endtag(self, tag: str) -> None:
+        self.parts.append(f"</{tag}>")
+        if tag == "a":
+            self._anchor_depth = max(0, self._anchor_depth - 1)
+        elif tag in {"script", "style", "title"}:
+            self._raw_text_depth = max(0, self._raw_text_depth - 1)
+
+    def handle_data(self, data: str) -> None:
+        if self._raw_text_depth:
+            self.parts.append(data)
+            return
+
+        cursor = 0
+        for match in _VISIBLE_URL_RE.finditer(data):
+            url = match.group().rstrip(_URL_TRAILING_PUNCTUATION)
+            if not url:
+                continue
+            url_end = match.start() + len(url)
+            self.parts.append(str(escape(data[cursor : match.start()])))
+            if self._anchor_depth:
+                self.parts.append("查看連結")
+            else:
+                href = url if url.lower().startswith(("http://", "https://")) else f"https://{url}"
+                self.parts.append(
+                    f'<a href="{escape(href)}" '
+                    'style="color:#9b7a18;text-decoration:underline;">查看連結</a>'
+                )
+            self.parts.append(str(escape(data[url_end : match.end()])))
+            cursor = match.end()
+            self.changed = True
+        self.parts.append(str(escape(data[cursor:])))
+
+    def handle_comment(self, data: str) -> None:
+        self.parts.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self.parts.append(f"<!{decl}>")
+
+    def handle_pi(self, data: str) -> None:
+        self.parts.append(f"<?{data}>")
+
+    def handle_entityref(self, name: str) -> None:
+        self.parts.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self.parts.append(f"&#{name};")
+
+
+def mask_visible_urls(html: str | None) -> str:
+    """將 HTML 顯示文字中的裸網址改為「查看連結」，保留既有 href。"""
+    if not html:
+        return ""
+    parser = _VisibleUrlMasker()
+    parser.feed(html)
+    parser.close()
+    return "".join(parser.parts) if parser.changed else html
+
+
 @lru_cache(maxsize=1)
 def _environment() -> Environment:
     env = Environment(
@@ -156,11 +237,12 @@ def render_email(template_name: str, context: dict) -> str:
         "brand_logo_url": absolutize_url(settings.EMAIL_BRAND_LOGO_URL),
         **context,
     }
-    return template.render(
+    rendered = template.render(
         app_name=settings.APP_NAME,
         frontend_base_url=email_link_base_url,
         **render_context,
     )
+    return mask_visible_urls(rendered)
 
 
 def sanitize_html(raw: str | None) -> str:
