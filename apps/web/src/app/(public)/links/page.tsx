@@ -1,9 +1,9 @@
 import { ArrowUpRight } from "lucide-react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { fetchPublicShellData } from "@/lib/serverFetch";
+import { fetchLivePublicLinkTree, fetchPublicShellData } from "@/lib/serverFetch";
+import { groupPublicLinks } from "@/lib/public-link-groups";
 import { pageMetadata } from "@/lib/seo";
-import type { PublicLinkOut } from "@/lib/types";
 
 export const metadata = pageMetadata({
   title: "平台連結",
@@ -13,14 +13,14 @@ export const metadata = pageMetadata({
 });
 
 export default async function LinksPage() {
-  const { bundle, urgentAnnouncement } = await fetchPublicShellData();
-
-  const grouped = new Map<string, PublicLinkOut[]>();
-  for (const link of bundle?.links ?? []) {
-    const key = link.category?.title ?? "其他連結";
-    grouped.set(key, [...(grouped.get(key) ?? []), link]);
-  }
-  const groupEntries = Array.from(grouped.entries());
+  const [{ bundle, urgentAnnouncement }, liveLinkTree] = await Promise.all([
+    fetchPublicShellData(),
+    fetchLivePublicLinkTree(),
+  ]);
+  const groupEntries = groupPublicLinks(
+    liveLinkTree?.link_categories ?? bundle?.link_categories ?? [],
+    liveLinkTree?.links ?? bundle?.links ?? [],
+  );
 
   return (
     <PublicSiteShell
@@ -33,11 +33,11 @@ export default async function LinksPage() {
           <h1 className="text-3xl font-bold">平台連結</h1>
         </header>
         <div className="space-y-6">
-          {groupEntries.map(([category, links]) => (
-            <section key={category}>
-              <h2 className="mb-3 text-sm font-semibold text-[var(--text-muted)]">{category}</h2>
+          {groupEntries.map((group) => (
+            <section key={group.id}>
+              <h2 className="mb-3 text-sm font-semibold text-[var(--text-muted)]">{group.title}</h2>
               <div className="space-y-3">
-                {links.map((link) => (
+                {group.links.map((link) => (
                   <a
                     key={link.id}
                     href={link.url}

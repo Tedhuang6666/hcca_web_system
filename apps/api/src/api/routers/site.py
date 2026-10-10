@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.cache import cache_get, cache_set
+from api.core.cache import cache_get, cache_invalidate, cache_set
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -27,6 +27,8 @@ from api.schemas.site import (
     PublicLinkCreate,
     PublicLinkOut,
     PublicLinkReorder,
+    PublicLinkTreeOut,
+    PublicLinkTreeUpdate,
     PublicLinkUpdate,
     PublicOfficerCandidateOut,
     PublicOfficerOut,
@@ -444,6 +446,34 @@ async def admin_reorder_links(
         summary=f"調整公開連結排序（{len(links)} 筆）",
     )
     return links
+
+
+@router.patch(
+    "/admin/links/tree",
+    response_model=PublicLinkTreeOut,
+    dependencies=[SiteAdminDep],
+)
+async def admin_update_link_tree(
+    data: PublicLinkTreeUpdate,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> PublicLinkTreeOut:
+    try:
+        categories, links = await site_svc.update_link_tree(db, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await audit_svc.record(
+        db,
+        entity_type="public_link",
+        entity_id="tree",
+        action="site.links.tree.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=data.model_dump(mode="json"),
+        summary=f"更新公開連結分類與排序（{len(links)} 筆）",
+    )
+    await cache_invalidate("site:public")
+    return PublicLinkTreeOut(categories=categories, links=links)
 
 
 @router.patch("/admin/links/{link_id}", response_model=PublicLinkOut, dependencies=[SiteAdminDep])

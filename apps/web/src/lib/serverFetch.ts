@@ -100,6 +100,13 @@ export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
   return getCachedPublicJson<PublicSiteBundleOut>("/site/public");
 }
 
+export async function fetchLivePublicLinkTree(): Promise<
+  Pick<PublicSiteBundleOut, "links" | "link_categories"> | null
+> {
+  const { data } = await fetchPublicJsonResult<PublicSiteBundleOut>("/site/public");
+  return data ? { links: data.links, link_categories: data.link_categories } : null;
+}
+
 export async function fetchAnnouncements(limit = 100): Promise<AnnouncementListItem[]> {
   return (await getCachedPublicJson<AnnouncementListItem[]>(`/announcements?limit=${limit}`)) ?? [];
 }

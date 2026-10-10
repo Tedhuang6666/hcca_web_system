@@ -24,6 +24,7 @@ from api.schemas.site import (
     PublicLinkCategoryCreate,
     PublicLinkCategoryUpdate,
     PublicLinkCreate,
+    PublicLinkTreeUpdate,
     PublicLinkUpdate,
     PublicOfficerCandidateOut,
     PublicOfficerOut,
@@ -181,6 +182,38 @@ async def reorder_links(db: AsyncSession, link_ids: list[uuid.UUID]) -> list[Pub
         by_id[link_id].sort_order = sort_order
     await db.flush()
     return await list_links(db)
+
+
+async def update_link_tree(
+    db: AsyncSession, data: PublicLinkTreeUpdate
+) -> tuple[list[PublicLinkCategory], list[PublicLink]]:
+    categories = await list_link_categories(db)
+    links = await list_links(db)
+    category_ids = data.category_ids
+    link_ids = [entry.id for entry in data.links]
+
+    if len(category_ids) != len(set(category_ids)) or set(category_ids) != {
+        category.id for category in categories
+    }:
+        raise ValueError("分類排序必須包含所有分類且不可重複")
+    if len(link_ids) != len(set(link_ids)) or set(link_ids) != {link.id for link in links}:
+        raise ValueError("連結樹必須包含所有連結且不可重複")
+
+    categories_by_id = {category.id: category for category in categories}
+    links_by_id = {link.id: link for link in links}
+    for sort_order, category_id in enumerate(category_ids):
+        categories_by_id[category_id].sort_order = sort_order
+
+    for sort_order, entry in enumerate(data.links):
+        if entry.category_id is not None and entry.category_id not in categories_by_id:
+            raise ValueError("連結所屬分類不存在")
+        link = links_by_id[entry.id]
+        link.category_id = entry.category_id
+        link.category = categories_by_id.get(entry.category_id)
+        link.sort_order = sort_order
+
+    await db.flush()
+    return await list_link_categories(db), await list_links(db)
 
 
 def _active_term_filter(stmt: Select[Any], on_date: date) -> Select[Any]:
