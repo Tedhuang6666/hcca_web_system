@@ -37,18 +37,6 @@
 .shop-council-page button, .shop-council-page .input { min-height: 44px; }
 .shop-council-page { min-width: 0; }
 .shop-role-navigation { display: none; }
-.shop-order-next-step {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.25rem 0;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border);
-}
-.shop-order-next-step h2 { font-size: 1.35rem; font-weight: 650; }
-.shop-order-next-step p { max-width: 42rem; margin-top: 0.5rem; color: var(--text-secondary); }
 .shop-quantity-total { padding: 1rem; border-bottom: 1px solid var(--border); font-weight: 600; }
 .shop-quantity-summary details + details { border-top: 1px solid var(--border); }
 .shop-quantity-summary summary { cursor: pointer; padding: 1rem; min-height: 48px; }
@@ -207,7 +195,6 @@
   gap: 0.75rem;
 }
 
-.shop-public-order-link,
 .shop-public-cart-link {
   display: inline-flex;
   min-height: 2.75rem;
@@ -220,36 +207,11 @@
   transition: color var(--transition), background-color var(--transition), transform var(--transition);
 }
 
-.shop-public-order-link {
-  width: fit-content;
-  border: 2px solid var(--public-accent);
-  border-radius: 0.7rem;
-  background: var(--public-accent);
-  padding: 0.7rem 1.1rem;
-  color: var(--primary-fg);
-  box-shadow: 0 0.25rem 0.75rem rgb(0 0 0 / 0.12);
-}
-
-.shop-public-order-link-count {
-  border-radius: 999px;
-  background: rgb(0 0 0 / 0.13);
-  padding: 0.15rem 0.5rem;
-  font-size: 0.75rem;
-}
-
 .shop-public-cart-link {
   border-radius: 999px;
   background: var(--public-accent);
   padding: 0.45rem 1rem;
   color: var(--primary-fg);
-}
-
-.shop-public-order-link:hover,
-.shop-public-order-link:focus-visible {
-  background: var(--public-accent-strong);
-  color: var(--primary-fg);
-  outline: 2px solid var(--public-focus);
-  outline-offset: 2px;
 }
 
 .shop-public-order-shortcut {
@@ -2077,7 +2039,6 @@
     width: 100%;
   }
 
-  .shop-public-order-link,
   .shop-public-cart-link {
     flex: 1;
     justify-content: center;
@@ -2086,7 +2047,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .shop-public-product-media img,
-  .shop-public-order-link,
   .shop-public-cart-link,
   .shop-public-category-tab::after {
     transition: none;

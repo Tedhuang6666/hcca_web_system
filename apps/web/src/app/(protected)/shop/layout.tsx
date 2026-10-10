@@ -9,7 +9,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
 import { usePermissions } from "@/hooks/usePermissions";
-import { BarChart2, ListChecks, PackageSearch, ShoppingBag, ClipboardList } from "lucide-react";
+import { BarChart2, ListChecks, PackageSearch } from "lucide-react";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 
@@ -83,8 +83,6 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
   const canCollectForClass = isAdmin || permissions.has("admin:all") || permissions.has("class:shop_collect");
 
   return [
-    { href: "/shop", label: "自己訂購", icon: ShoppingBag, end: true },
-    { href: "/shop/orders", label: "我的預購", icon: ClipboardList },
     ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "收款與代訂", icon: ListChecks }] : []),
     ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校訂單總覽", icon: BarChart2 }] : []),
     ...(canManage ? [{ href: "/shop/admin", label: "商品與活動設定", icon: PackageSearch }] : []),
@@ -99,10 +97,6 @@ type ShopNavigationGroup = {
 function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
   return [
     {
-      label: "學生自購",
-      tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
-    },
-    {
       label: "班代",
       tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
     },
@@ -116,6 +110,8 @@ function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
 function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  if (groups.length === 0) return null;
+
   const activeGroup = groups.find((group) => group.tabs.some((tab) =>
     tab.href === "/shop" ? pathname === "/shop" : pathname.startsWith(tab.href),
   ));
