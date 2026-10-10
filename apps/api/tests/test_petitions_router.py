@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from api.core.config import settings
 from api.models.notification import Notification
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
@@ -598,14 +599,24 @@ async def test_parent_org_handler_can_manage_child_cases_but_viewer_cannot(
 
 
 async def test_confidential_petition_access_is_scoped_by_role(
-    db_session, authed_client_factory, admin_user: User
+    db_session, authed_client_factory, admin_user: User, monkeypatch
 ) -> None:
     org, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
     handler = await _bare_user(db_session)
+    other_handler = await _bare_user(db_session)
     viewer = await _bare_user(db_session)
+    cross_org_viewer = await _bare_user(db_session)
+    petition_admin = await _bare_user(db_session)
+    site_owner = await _bare_user(db_session)
+    site_owner.is_superuser = True
+    monkeypatch.setattr(settings, "OWNER_EMAILS", [site_owner.email.lower()])
     await _grant_org_permission(db_session, handler, org, "petition:view_org")
+    await _grant_org_permission(db_session, other_handler, org, "petition:handle")
     await _grant_org_permission(db_session, viewer, org, "petition:view_org")
+    await _grant_org_permission(db_session, petition_admin, org, "petition:admin")
+    other_org, _other_type = await _make_org_and_type(db_session, name="另一負責機關")
+    await _grant_org_permission(db_session, cross_org_viewer, other_org, "petition:view_org")
     case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
     case_obj.assigned_to_id = handler.id
     case_obj.status = PetitionStatus.ASSIGNED
@@ -616,7 +627,7 @@ async def test_confidential_petition_access_is_scoped_by_role(
     )
     assert unauthorized.status_code == 403
 
-    marked = await authed_client_factory(admin_user).post(
+    marked = await authed_client_factory(petition_admin).post(
         f"/petitions/{case_obj.id}/confidential",
         json={"reason": "涉及個人安全與敏感聯絡資料"},
     )
@@ -631,11 +642,18 @@ async def test_confidential_petition_access_is_scoped_by_role(
     case_obj.public_status = PetitionPublicStatus.PUBLISHED
     await db_session.flush()
 
+    updated_reason = await authed_client_factory(petition_admin).post(
+        f"/petitions/{case_obj.id}/confidential",
+        json={"reason": "更新後的密件原因"},
+    )
+    assert updated_reason.status_code == 200
+    assert updated_reason.json()["confidential_reason"] == "更新後的密件原因"
+
     owner_detail = await authed_client_factory(owner).get(f"/petitions/{case_obj.id}")
     assert owner_detail.status_code == 200
     assert owner_detail.json()["is_confidential"] is True
     assert owner_detail.json()["confidential_blocked"] is False
-    assert owner_detail.json()["confidential_reason"] == "涉及個人安全與敏感聯絡資料"
+    assert owner_detail.json()["confidential_reason"] == "更新後的密件原因"
     assert owner_detail.json()["content"]
 
     handler_detail = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}")
@@ -643,25 +661,68 @@ async def test_confidential_petition_access_is_scoped_by_role(
     assert handler_detail.json()["confidential_blocked"] is False
     assert handler_detail.json()["content"]
 
+    other_handler_detail = await authed_client_factory(other_handler).get(
+        f"/petitions/{case_obj.id}"
+    )
+    assert other_handler_detail.status_code == 200
+    assert other_handler_detail.json()["confidential_blocked"] is True
+    assert other_handler_detail.json()["content"] == ""
+
+    site_owner_detail = await authed_client_factory(site_owner).get(f"/petitions/{case_obj.id}")
+    assert site_owner_detail.status_code == 200
+    assert site_owner_detail.json()["confidential_blocked"] is False
+    assert site_owner_detail.json()["content"]
+
+    petition_admin_client = authed_client_factory(petition_admin)
+    admin_detail = await petition_admin_client.get(f"/petitions/{case_obj.id}")
+    assert admin_detail.status_code == 200
+    assert admin_detail.json()["confidential_blocked"] is True
+    assert admin_detail.json()["content"] == ""
+    assert (
+        await authed_client_factory(cross_org_viewer).get(f"/petitions/{case_obj.id}")
+    ).status_code == 403
+    assert (await petition_admin_client.get(f"/petitions/{case_obj.id}/print")).status_code == 403
+    assert (
+        await petition_admin_client.get(
+            f"/petitions/{case_obj.id}/attachments/{uuid.uuid4()}/download"
+        )
+    ).status_code == 403
     admin_detail = await authed_client_factory(admin_user).get(f"/petitions/{case_obj.id}")
     assert admin_detail.status_code == 200
-    assert admin_detail.json()["confidential_blocked"] is False
-    assert admin_detail.json()["content"]
+    assert admin_detail.json()["confidential_blocked"] is True
+    assert admin_detail.json()["content"] == ""
 
     viewer_detail = await authed_client_factory(viewer).get(f"/petitions/{case_obj.id}")
     assert viewer_detail.status_code == 200
     assert viewer_detail.json()["title"] == "此案件已被設為密件"
     assert viewer_detail.json()["confidential_blocked"] is True
     assert viewer_detail.json()["content"] == ""
-    assert viewer_detail.json()["confidential_reason"] == "涉及個人安全與敏感聯絡資料"
+    assert viewer_detail.json()["confidential_reason"] == "更新後的密件原因"
 
     viewer_cases = (await authed_client_factory(viewer).get("/petitions/manage")).json()
     assert viewer_cases[0]["id"] == str(case_obj.id)
     assert viewer_cases[0]["title"] == "此案件已被設為密件"
     handler_cases = (await authed_client_factory(handler).get("/petitions/manage")).json()
     assert handler_cases[0]["title"] == "教室冷氣故障"
-    admin_cases = (await authed_client_factory(admin_user).get("/petitions/manage")).json()
-    assert admin_cases[0]["title"] == "教室冷氣故障"
+    other_handler_cases = (
+        await authed_client_factory(other_handler).get("/petitions/manage")
+    ).json()
+    assert other_handler_cases[0]["title"] == "此案件已被設為密件"
+    admin_cases = (await petition_admin_client.get("/petitions/manage")).json()
+    assert admin_cases[0]["title"] == "此案件已被設為密件"
+    site_owner_cases = (await authed_client_factory(site_owner).get("/petitions/manage")).json()
+    assert site_owner_cases[0]["title"] == "教室冷氣故障"
+    cross_org_cases = (
+        await authed_client_factory(cross_org_viewer).get("/petitions/manage")
+    ).json()
+    assert all(item["id"] != str(case_obj.id) for item in cross_org_cases)
+
+    assert await petition_svc.can_view_case(db_session, case_obj, owner)
+    assert await petition_svc.can_view_case(db_session, case_obj, handler)
+    assert await petition_svc.can_view_case(db_session, case_obj, site_owner)
+    assert not await petition_svc.can_view_case(db_session, case_obj, viewer)
+    assert not await petition_svc.can_view_case(db_session, case_obj, other_handler)
+    assert not await petition_svc.can_view_case(db_session, case_obj, petition_admin)
 
     own_cases = await authed_client_factory(owner).get("/petitions/my")
     assert own_cases.status_code == 200

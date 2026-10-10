@@ -28,7 +28,7 @@ export function PetitionConfidentialBlocked({ item }: { item: PetitionCaseOut })
         </p>
       </div>
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        完整內容僅案件擁有者與目前承辦人可查看。
+        完整內容僅陳情人本人、該案指派承辦人與網站擁有者可查看。
       </p>
     </section>
   );
