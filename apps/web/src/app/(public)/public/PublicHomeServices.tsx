@@ -21,8 +21,8 @@ const SERVICES: Array<{
 }> = [
   {
     href: "/petitions",
-    title: "陳情系統",
-    description: "登入後提出陳情，搜尋並追蹤本人案件。",
+    title: "陳情中心",
+    description: "登入後提出陳情，並追蹤案件辦理進度。",
     icon: MessageSquareText,
     moduleId: "petitions",
   },
