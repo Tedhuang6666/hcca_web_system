@@ -14611,12 +14611,17 @@ export interface components {
          * @description 有限且無 query string 的瀏覽器診斷欄位。
          */
         ClientErrorContext: {
+            /** Api Origin */
+            api_origin?: string | null;
             /** Connection Type */
             connection_type?: string | null;
+            diagnostics?: components["schemas"]["ClientErrorDiagnostics"] | null;
             /** Language */
             language?: string | null;
             /** Online */
             online?: boolean | null;
+            /** Page Origin */
+            page_origin?: string | null;
             /** Referrer Path */
             referrer_path?: string | null;
             /** Release */
@@ -14627,6 +14632,36 @@ export interface components {
             viewport?: string | null;
             /** Visibility State */
             visibility_state?: string | null;
+        };
+        /**
+         * ClientErrorDiagnostics
+         * @description Bounded, typed details for diagnosing browser and API transport failures.
+         */
+        ClientErrorDiagnostics: {
+            /** Csp Blocked Source */
+            csp_blocked_source?: string | null;
+            /** Csp Column Number */
+            csp_column_number?: number | null;
+            /** Csp Directive */
+            csp_directive?: string | null;
+            /** Csp Disposition */
+            csp_disposition?: ("enforce" | "report") | null;
+            /** Csp Line Number */
+            csp_line_number?: number | null;
+            /** Csp Source Origin */
+            csp_source_origin?: string | null;
+            /** Failure Kind */
+            failure_kind?: ("offline" | "network" | "timeout" | "csp" | "resource") | null;
+            /** Request Attempts */
+            request_attempts?: number | null;
+            /** Request Method */
+            request_method?: ("GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS" | "UNKNOWN") | null;
+            /** Request Path */
+            request_path?: string | null;
+            /** Request Timeout Ms */
+            request_timeout_ms?: number | null;
+            /** Resource Origin */
+            resource_origin?: string | null;
         };
         /**
          * ClientErrorReport

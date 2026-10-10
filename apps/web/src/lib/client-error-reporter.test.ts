@@ -52,6 +52,10 @@ describe("client error reporter", () => {
       Object.defineProperties(event, {
         effectiveDirective: { value: "connect-src" },
         blockedURI: { value: `https://hcca.tw/surveys?_rsc=${token}` },
+        disposition: { value: "enforce" },
+        sourceFile: { value: "https://hcca.tw/_next/static/chunks/app.js" },
+        lineNumber: { value: 12 },
+        columnNumber: { value: 7 },
       });
       window.dispatchEvent(event);
     }
@@ -59,9 +63,27 @@ describe("client error reporter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const resourcePayload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
     const cspPayload = JSON.parse(String(fetchMock.mock.calls[1][1].body));
-    expect(resourcePayload.message).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png");
-    expect(cspPayload.message).toBe("CSP violated connect-src: https://hcca.tw");
+    expect(resourcePayload.message).toContain("%7Basset%7D.png");
+    expect(resourcePayload.message).not.toContain("signature=");
+    expect(resourcePayload.context.diagnostics).toMatchObject({
+      failure_kind: "resource",
+      resource_origin: "https://hcca.tw",
+    });
+    expect(cspPayload.message).toBe("CSP blocked connect-src: https://hcca.tw");
     expect(cspPayload.pathname).toBe("/");
+    expect(cspPayload.context).toMatchObject({
+      page_origin: window.location.origin,
+      api_origin: expect.any(String),
+      diagnostics: {
+        failure_kind: "csp",
+        csp_directive: "connect-src",
+        csp_disposition: "enforce",
+        csp_blocked_source: "https://hcca.tw",
+        csp_source_origin: "https://hcca.tw",
+        csp_line_number: 12,
+        csp_column_number: 7,
+      },
+    });
     uninstall();
     window.history.replaceState({}, "", "/");
   });

@@ -140,6 +140,7 @@ export type ClassStudentRangeOverride = components['schemas']['ClassStudentRange
 export type ClassStudentRangeTemplate = components['schemas']['ClassStudentRangeTemplate']
 export type ClassUserBrief = components['schemas']['ClassUserBrief']
 export type ClientErrorContext = components['schemas']['ClientErrorContext']
+export type ClientErrorDiagnostics = components['schemas']['ClientErrorDiagnostics']
 export type ClientErrorReport = components['schemas']['ClientErrorReport']
 export type CloseStatusItem = components['schemas']['CloseStatusItem']
 export type CloseStatusOut = components['schemas']['CloseStatusOut']

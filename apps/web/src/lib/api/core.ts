@@ -68,7 +68,16 @@ export async function request<T>(
   const key = circuitKey(path);
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   if (isOffline()) {
-    reportClientError({ scope: "api.offline", message: `離線狀態：${path}` });
+    reportClientError({
+      scope: "api.offline",
+      message: "離線狀態",
+      diagnostics: {
+        failure_kind: "offline",
+        request_method: method,
+        request_path: path,
+        request_attempts: 0,
+      },
+    });
     throw new ApiError(0, "目前處於離線狀態");
   }
   if (circuitOpen(key)) {
@@ -107,7 +116,16 @@ export async function request<T>(
       try {
         ({ response: retry } = await fetchWithRetry(path, init, trace, 0));
       } catch {
-        reportClientError({ scope: "api.refresh-network", message: `刷新後重試失敗：${path}` });
+        reportClientError({
+          scope: "api.refresh-network",
+          message: "刷新後重試失敗",
+          diagnostics: {
+            failure_kind: "network",
+            request_method: method,
+            request_path: path,
+            request_attempts: 1,
+          },
+        });
         throw new ApiError(0, `無法連線至後端 API：${BASE}`);
       }
       if (retry.ok) {
