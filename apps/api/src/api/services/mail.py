@@ -16,6 +16,7 @@ from api.core.celery_app import celery_app
 from api.core.config import settings
 from api.core.prometheus_metrics import record_email_delivery
 from api.email.generic import render_generic_message
+from api.email.renderer import mask_visible_urls
 from api.models.email_message import (
     EmailCampaignRecipient,
     EmailMessage,
@@ -54,6 +55,17 @@ async def _send_via_resend(
 ) -> str | None:
     if not settings.RESEND_API_KEY:
         raise RuntimeError("RESEND_API_KEY 未設定，無法寄送 Email")
+
+    if subtype == "plain":
+        markdown_body = "\n".join(f"{line}  " if line else "" for line in body.splitlines())
+        body = render_generic_message(
+            subject,
+            markdown_body,
+            {"body_format": "markdown"},
+        )
+        subtype = "html"
+    if subtype == "html":
+        body = mask_visible_urls(body)
 
     payload: dict[str, object] = {
         "from": _format_from(),

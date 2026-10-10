@@ -58,6 +58,28 @@ def test_render_notification_omits_optional_blocks_when_absent() -> None:
     assert "{%" not in html
 
 
+def test_render_email_masks_visible_urls_and_preserves_link_targets() -> None:
+    notification_html = render_email(
+        "notification",
+        {"body_text": "請前往 https://example.com/petitions/1 查看。"},
+    )
+    assert (
+        '<a href="https://example.com/petitions/1" '
+        'style="color:#9b7a18;text-decoration:underline;">查看連結</a> 查看。'
+    ) in notification_html
+
+    generic_html = render_email(
+        "generic",
+        {
+            "body_html": (
+                '<p><a href="https://example.com/petitions/1">'
+                "https://example.com/petitions/1</a></p>"
+            )
+        },
+    )
+    assert '<a href="https://example.com/petitions/1">查看連結</a>' in generic_html
+
+
 def test_render_generic_injects_body_html_verbatim() -> None:
     html = render_email(
         "generic",
