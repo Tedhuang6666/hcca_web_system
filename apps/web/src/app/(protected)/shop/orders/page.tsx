@@ -7,7 +7,6 @@ import type { OrderListItem } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { useWS } from "@/hooks/useWS";
-import { summarizeOrderItems } from "@/lib/shop-order-items";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
 
 export default function OrdersPage() {
@@ -78,52 +77,46 @@ export default function OrdersPage() {
         ) : (
           <div className="shop-order-activity-list">
             {activityGroups.map((group) => (
-              <section key={group.key} className="shop-order-activity" aria-label={`${group.label}預購`}>
-                <div className="shop-order-activity-heading">
-                  <div>
-                    <h3>{group.label}</h3>
+              <Link
+                key={group.key}
+                href={`/shop/orders/${group.orders[0].id}`}
+                className="shop-order-activity-link"
+                aria-label={`查看${group.label}預購詳情`}
+              >
+                <section className="shop-order-activity" aria-label={`${group.label}預購`}>
+                  <div className="shop-order-activity-heading">
+                    <div>
+                      <h3>{group.label}</h3>
+                    </div>
+                    <div className="shop-order-activity-amounts">
+                      <strong>合計 NT${group.amount.toLocaleString("zh-TW")}</strong>
+                      <span>
+                        已繳 NT${group.received.toLocaleString("zh-TW")} · {group.received > 0 && group.outstanding > 0 ? "待補繳" : "待繳"} NT${group.outstanding.toLocaleString("zh-TW")}
+                      </span>
+                    </div>
                   </div>
-                  <div className="shop-order-activity-amounts">
-                    <strong>合計 NT${group.amount.toLocaleString("zh-TW")}</strong>
-                    <span>
-                      已繳 NT${group.received.toLocaleString("zh-TW")} · {group.received > 0 && group.outstanding > 0 ? "待補繳" : "待繳"} NT${group.outstanding.toLocaleString("zh-TW")}
+                  <ul className="shop-preorder-items" aria-label={`${group.label}品項`}>
+                    {group.items.map((item) => (
+                      <li key={item.id}>
+                        <div>
+                          <span>{item.product_name ?? "商品"}</span>
+                          {item.selected_options.length > 0 && (
+                            <p>{item.selected_options.map((option) => option.value).join("／")}</p>
+                          )}
+                        </div>
+                        <span className="shop-preorder-quantity">× {item.quantity}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {group.items.length === 0 && <p className="shop-order-row-items">品項資訊請查看訂單詳情。</p>}
+                  <div className="shop-preorder-info">
+                    <span>{group.hasClassOrders ? "向班代繳款" : "依活動通知繳款"}</span>
+                    <span className="shop-order-details">
+                      查看訂單詳情 <ArrowRight size={15} aria-hidden="true" />
                     </span>
                   </div>
-                </div>
-                <ul className="shop-preorder-items" aria-label={`${group.label}品項`}>
-                  {group.items.map((item) => (
-                    <li key={item.id}>
-                      <div>
-                        <span>{item.product_name ?? "商品"}</span>
-                        {item.selected_options.length > 0 && (
-                          <p>{item.selected_options.map((option) => option.value).join("／")}</p>
-                        )}
-                      </div>
-                      <span className="shop-preorder-quantity">× {item.quantity}</span>
-                    </li>
-                  ))}
-                </ul>
-                {group.items.length === 0 && <p className="shop-order-row-items">品項資訊請查看登記。</p>}
-                <div className="shop-preorder-info">
-                  <span>{group.hasClassOrders ? "向班代繳款" : "依活動通知繳款"}</span>
-                  {group.orders.length === 1 ? (
-                    <Link href={`/shop/orders/${group.orders[0].id}`} className="shop-order-details">
-                      登記資訊 <ArrowRight size={15} aria-hidden="true" />
-                    </Link>
-                  ) : (
-                    <details className="shop-preorder-records">
-                      <summary>登記資訊</summary>
-                      {group.orders.map((order) => (
-                        <Link key={order.id} href={`/shop/orders/${order.id}`} className="shop-order-details">
-                          {summarizeOrderItems(order.items ?? []) || "商品登記"}
-                          <time dateTime={order.created_at}>{new Date(order.created_at).toLocaleString("zh-TW")}</time>
-                          <ArrowRight size={15} aria-hidden="true" />
-                        </Link>
-                      ))}
-                    </details>
-                  )}
-                </div>
-              </section>
+                </section>
+              </Link>
             ))}
           </div>
         )}

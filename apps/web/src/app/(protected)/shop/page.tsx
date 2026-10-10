@@ -1449,15 +1449,10 @@ export default function ShopPage() {
           href="/shop/orders"
           className="shop-public-order-shortcut"
           data-order-flight-target
-          aria-label={registrations.length > 0
-            ? `開啟我的預購，共 ${registrations.length} 個活動`
-            : "開啟我的預購"}
+          aria-label="開啟我的訂購"
         >
           <ClipboardList size={19} aria-hidden="true" />
-          <span>我的預購</span>
-          {registrations.length > 0 && (
-            <span className="shop-public-order-shortcut-count">{registrations.length}</span>
-          )}
+          <span>我的訂購</span>
         </Link>,
         document.body,
       )}
