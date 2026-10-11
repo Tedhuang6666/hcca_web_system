@@ -1067,7 +1067,6 @@ async def create_class_order(
         full = await shop_svc.get_order(session, order.id)
         result.append(shop_svc.serialize_order(full or order))
         await _broadcast_shop_order(full or order)
-        await _queue_order_confirmation(session, target, full or order)
     return result
 
 
@@ -1286,6 +1285,7 @@ async def update_class_collection(
     current_user: CurrentUser,
 ) -> OrderOut:
     order = await _get_order_or_404(order_id, session)
+    was_class_collected = order.is_class_collected
     cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
     if not current_user.is_superuser and (
         order.class_id is None or order.class_id not in cadre_ids
@@ -1306,6 +1306,10 @@ async def update_class_collection(
     )
     full = await shop_svc.get_order(session, order.id)
     updated = full or order
+    if payload.is_class_collected and not was_class_collected:
+        buyer = await session.get(User, updated.user_id)
+        if buyer is not None:
+            await _queue_order_confirmation(session, buyer, updated)
     await _broadcast_shop_order(updated)
     return shop_svc.serialize_order(updated)
 
