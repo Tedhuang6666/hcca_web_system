@@ -63,7 +63,8 @@ describe("PublicBudgetExecutionTable", () => {
     expect(screen.getByText("登錄時間")).toBeVisible();
     expect(screen.getByText("操作人")).toBeVisible();
     expect(screen.getByText("王小明")).toBeVisible();
-    expect(screen.getByTitle("網域續約收據.pdf 預覽")).toBeVisible();
+    expect(screen.getByRole("button", { name: "預覽 PDF" }))
+      .toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("img", { name: "網域續約收據.jpg 預覽" })).toBeVisible();
     expect(screen.getByRole("link", { name: "在新分頁檢視：網域續約收據.pdf" }))
       .toHaveAttribute("target", "_blank");

@@ -2,10 +2,11 @@
 
 import { useCallback, useState } from "react";
 import Image from "next/image";
-import { ExternalLink, Paperclip, ReceiptText } from "lucide-react";
+import { ExternalLink, FileText, Paperclip, ReceiptText } from "lucide-react";
 
 import Modal from "@/components/ui/Modal";
 import { apiUrl } from "@/lib/config";
+import { PdfEvidenceViewer } from "./EvidencePreview";
 import type { PublicBudgetExecutionLine } from "./publicBudgetExecution";
 
 export type { PublicBudgetExecutionLine } from "./publicBudgetExecution";
@@ -45,6 +46,7 @@ export default function PublicBudgetExecutionTable({
   lines: PublicBudgetExecutionLine[];
 }) {
   const [selectedLine, setSelectedLine] = useState<PublicBudgetExecutionLine | null>(null);
+  const [activePdfEvidenceId, setActivePdfEvidenceId] = useState<string | null>(null);
   const closeDetails = useCallback(() => setSelectedLine(null), []);
 
   return (
@@ -82,7 +84,10 @@ export default function PublicBudgetExecutionTable({
                         className="public-finance__line-trigger"
                         aria-haspopup="dialog"
                         aria-label={`查看「${line.name}」的支出紀錄與憑證`}
-                        onClick={() => setSelectedLine(line)}
+                        onClick={() => {
+                          setActivePdfEvidenceId(null);
+                          setSelectedLine(line);
+                        }}
                       >
                         <strong>{line.name}</strong>
                         <ReceiptText size={15} aria-hidden="true" />
@@ -184,6 +189,7 @@ export default function PublicBudgetExecutionTable({
                           {expense.evidence.map((evidence) => {
                             const previewUrl = publicEvidenceUrl(evidence.url);
                             const isImage = /\.(?:jpe?g|png|webp)$/i.test(evidence.filename);
+                            const isPdf = /\.pdf$/i.test(evidence.filename);
                             return (
                               <figure key={evidence.id}>
                                 <figcaption>{evidence.filename}</figcaption>
@@ -198,12 +204,34 @@ export default function PublicBudgetExecutionTable({
                                         unoptimized
                                       />
                                     </div>
+                                  ) : isPdf ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="public-budget-execution-modal__pdf-trigger"
+                                        aria-expanded={activePdfEvidenceId === evidence.id}
+                                        aria-controls={`public-budget-pdf-${evidence.id}`}
+                                        onClick={() => setActivePdfEvidenceId((current) => (
+                                          current === evidence.id ? null : evidence.id
+                                        ))}
+                                      >
+                                        <FileText size={17} aria-hidden="true" />
+                                        {activePdfEvidenceId === evidence.id
+                                          ? "收合 PDF 預覽"
+                                          : "預覽 PDF"}
+                                      </button>
+                                      {activePdfEvidenceId === evidence.id && (
+                                        <div id={`public-budget-pdf-${evidence.id}`}>
+                                          <PdfEvidenceViewer
+                                            url={previewUrl}
+                                            filename={evidence.filename}
+                                            compact
+                                          />
+                                        </div>
+                                      )}
+                                    </>
                                   ) : (
-                                    <iframe
-                                      src={previewUrl}
-                                      title={`${evidence.filename} 預覽`}
-                                      loading="lazy"
-                                    />
+                                    <small>無法預覽此憑證。</small>
                                   )
                                 ) : (
                                   <small>無法預覽此憑證。</small>
