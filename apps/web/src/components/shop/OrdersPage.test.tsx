@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrdersPage from "@/app/(protected)/shop/orders/page";
 import type { OrderListItem } from "@/lib/types";
 
-const api = vi.hoisted(() => ({ listOrders: vi.fn() }));
+const api = vi.hoisted(() => ({ listOrders: vi.fn(), catalog: vi.fn(), getProduct: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
 vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
 
@@ -20,10 +20,16 @@ const order: OrderListItem = {
 beforeEach(() => {
   vi.clearAllMocks();
   api.listOrders.mockResolvedValue([]);
+  api.catalog.mockResolvedValue([]);
+  api.getProduct.mockResolvedValue({ image_url: null });
 });
 
 describe("我的預購", () => {
   it("shows activity items and supplemental payment without order numbers or counts", async () => {
+    api.catalog.mockResolvedValue([{
+      products: [{ id: "bag", image_url: "/uploads/bag.png" }],
+      series: [],
+    }]);
     api.listOrders.mockResolvedValue([order, {
       ...order, id: "addition", is_class_collected: false, total_price: 100,
       items: [{ ...order.items![0], id: "more", quantity: 1, subtotal: 100 }],
@@ -38,6 +44,9 @@ describe("我的預購", () => {
     const items = within(activity).getByRole("list", { name: "校慶品項" });
     expect(within(items).getAllByRole("listitem")).toHaveLength(1);
     expect(within(items).getByText("× 3")).toBeVisible();
+    expect(await screen.findByAltText("")).toHaveAttribute(
+      "src", expect.stringContaining("bag.png"),
+    );
     expect(screen.queryByText("ORDER-001")).not.toBeInTheDocument();
     expect(screen.queryByText(/筆訂單/)).not.toBeInTheDocument();
     expect(screen.queryByText("登記資訊")).not.toBeInTheDocument();
