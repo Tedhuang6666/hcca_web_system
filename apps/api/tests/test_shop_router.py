@@ -1503,6 +1503,14 @@ async def test_person_class_member_assisted_order_is_visible_and_collectable(
     )
     assert created.status_code == 201
     order_id = created.json()[0]["id"]
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.event_type == "shop.order_confirmed")
+        )
+        == 0
+    )
     listed = await ac.get("/shop/orders/class")
     assert listed.status_code == 200
     assert [order["id"] for order in listed.json()] == [order_id]
@@ -1510,6 +1518,24 @@ async def test_person_class_member_assisted_order_is_visible_and_collectable(
         f"/shop/orders/{order_id}/collection", json={"is_class_collected": True}
     )
     assert collected.status_code == 200
+    confirmation = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_confirmed")
+    )
+    assert confirmation is not None
+    assert confirmation.payload["order_id"] == order_id
+    assert confirmation.payload["buyer_email"] == buyer.email
+    collected_again = await ac.patch(
+        f"/shop/orders/{order_id}/collection", json={"is_class_collected": True}
+    )
+    assert collected_again.status_code == 200
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.event_type == "shop.order_confirmed")
+        )
+        == 1
+    )
     summary = await ac.get("/shop/orders/class/summary")
     assert summary.status_code == 200
     assert summary.json()["paid_amount"] == 120
