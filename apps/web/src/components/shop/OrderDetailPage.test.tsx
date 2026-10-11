@@ -93,16 +93,17 @@ beforeEach(() => {
   api.getOrder.mockImplementation(async (id: string) => id === "added" ? addedOrder : firstOrder);
   api.listOrders.mockResolvedValue([firstOrder, addedOrder]);
   api.getCurrentRegistrations.mockResolvedValue([]);
-  api.getProduct.mockResolvedValue({ requires_seating: false });
+  api.getProduct.mockResolvedValue({ requires_seating: false, image_url: "/uploads/bag.png" });
   api.orderAssignments.mockResolvedValue([]);
   api.listZones.mockResolvedValue([]);
 });
 
 describe("公開訂單詳情", () => {
   it("combines every preorder from the same activity into one detail view", async () => {
-    render(<OrderDetailPage />);
+    const { container } = render(<OrderDetailPage />);
 
     expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();
+    expect(container.querySelector('img[alt=""]')).toHaveAttribute("src", expect.stringContaining("bag.png"));
     expect(screen.getByText("活動預購總額").parentElement).toHaveTextContent("NT$300");
     expect(screen.getAllByText("NT$300").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/×\s*3/)).toBeVisible();

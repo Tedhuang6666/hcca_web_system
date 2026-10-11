@@ -8,12 +8,14 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
+import ProductThumbnail from "@/components/shop/ProductThumbnail";
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [userRoom, setUserRoom] = useState<string | null>(null);
+  const [productImages, setProductImages] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
@@ -44,6 +46,39 @@ export default function OrdersPage() {
   }, [load]));
 
   const activityGroups = groupActivityPreorders(orders);
+  const productIdsKey = [...new Set(activityGroups.flatMap((group) =>
+    group.items.map((item) => item.product_id),
+  ))].join(",");
+
+  useEffect(() => {
+    if (!productIdsKey) return;
+
+    let cancelled = false;
+    const productIds = productIdsKey.split(",");
+    void (async () => {
+      const catalog = await shopApi.catalog().catch(() => []);
+      const images = new Map<string, string | null>();
+      for (const category of catalog) {
+        for (const product of category.products) images.set(product.id, product.image_url ?? null);
+        for (const series of category.series) {
+          for (const product of series.products) images.set(product.id, product.image_url ?? null);
+        }
+      }
+
+      await Promise.all(productIds.filter((id) => !images.has(id)).map(async (id) => {
+        try {
+          const product = await shopApi.getProduct(id);
+          images.set(id, product.image_url ?? null);
+        } catch {
+          images.set(id, null);
+        }
+      }));
+
+      if (!cancelled) setProductImages(Object.fromEntries(images));
+    })();
+
+    return () => { cancelled = true; };
+  }, [productIdsKey]);
 
   return (
     <div className="shop-orders-page">
@@ -98,7 +133,8 @@ export default function OrdersPage() {
                   <ul className="shop-preorder-items" aria-label={`${group.label}品項`}>
                     {group.items.map((item) => (
                       <li key={item.id}>
-                        <div>
+                        <ProductThumbnail url={productImages[item.product_id]} />
+                        <div className="min-w-0 flex-1">
                           <span>{item.product_name ?? "商品"}</span>
                           {item.selected_options.length > 0 && (
                             <p>{item.selected_options.map((option) => option.value).join("／")}</p>

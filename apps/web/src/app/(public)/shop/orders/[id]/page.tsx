@@ -10,6 +10,7 @@ import type { SeatBookingOut, OrderListItem, OrderOut, ProductOut, ZoneListItem 
 import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
 import OrderItemSources from "@/components/shop/OrderItemSources";
+import ProductThumbnail from "@/components/shop/ProductThumbnail";
 
 type SeatingItem = {
   productId: string;
@@ -42,6 +43,7 @@ export default function OrderDetailPage() {
   const [orders, setOrders] = useState<OrderOut[]>([]);
   const [activityPreorder, setActivityPreorder] = useState<ActivityPreorder | null>(null);
   const [seatingItems, setSeatingItems] = useState<SeatingItem[]>([]);
+  const [productImages, setProductImages] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [requiresLogin, setRequiresLogin] = useState(false);
@@ -59,6 +61,7 @@ export default function OrderDetailPage() {
     setLoading(true);
     setLoadError("");
     setRequiresLogin(false);
+    setProductImages({});
     try {
       const user = await authApi.me().catch(() => null);
       if (!user) {
@@ -180,9 +183,11 @@ export default function OrderDetailPage() {
         }
       }
 
+      const imageUrls = new Map<string, string | null>();
       const seating = await Promise.all([...quantitiesByProduct.entries()].map(async ([productId, sources]) => {
         try {
           const product = await shopApi.getProduct(productId);
+          imageUrls.set(productId, product.image_url ?? null);
           if (!product.requires_seating) return null;
           const zones = await seatingApi.listZones(productId);
           const zoneIds = new Set(zones.map((zone) => zone.id));
@@ -199,9 +204,11 @@ export default function OrderDetailPage() {
             })),
           } satisfies SeatingItem;
         } catch {
+          imageUrls.set(productId, null);
           return null;
         }
       }));
+      setProductImages(Object.fromEntries(imageUrls));
       setSeatingItems(seating.filter((item): item is SeatingItem => item !== null));
     } catch (e) {
       setOrder(null);
@@ -345,28 +352,31 @@ export default function OrderDetailPage() {
         <div className="shop-order-items">
         {itemsToDisplay.map((it) => (
           <article key={it.id} className="shop-order-item">
-            <div className="min-w-0">
-              <h3>
-                {it.product_name ?? it.product_id.slice(0, 8)}
-              </h3>
-              {it.selected_options.length > 0 && (
-                <p className="shop-order-item-options">
-                  {it.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")}
+            <div className="shop-order-item-main">
+              <ProductThumbnail url={productImages[it.product_id]} />
+              <div className="min-w-0">
+                <h3>
+                  {it.product_name ?? it.product_id.slice(0, 8)}
+                </h3>
+                {it.selected_options.length > 0 && (
+                  <p className="shop-order-item-options">
+                    {it.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")}
+                  </p>
+                )}
+                <p className="shop-order-item-unit">
+                  NT${it.unit_price.toLocaleString()} × {it.quantity}
                 </p>
-              )}
-              <p className="shop-order-item-unit">
-                NT${it.unit_price.toLocaleString()} × {it.quantity}
-              </p>
-              <OrderItemSources sources={detailOrders.flatMap((sourceOrder) => sourceOrder.items
-                .filter((source) => activityPreorder ? source.product_id === it.product_id && source.unit_price === it.unit_price
-                  && source.selected_options.map((option) => option.option_id).sort().join(",")
-                    === it.selected_options.map((option) => option.option_id).sort().join(",") : source.id === it.id)
-                .map((item) => ({
-                  item,
-                  orderId: sourceOrder.id,
-                  canEdit: canModifyRegistration && sourceOrder.id === currentRegistrationId
-                    && currentUserId === sourceOrder.user_id && editableProductIds.has(item.product_id),
-                })))} onChange={() => void load()} />
+                <OrderItemSources sources={detailOrders.flatMap((sourceOrder) => sourceOrder.items
+                  .filter((source) => activityPreorder ? source.product_id === it.product_id && source.unit_price === it.unit_price
+                    && source.selected_options.map((option) => option.option_id).sort().join(",")
+                      === it.selected_options.map((option) => option.option_id).sort().join(",") : source.id === it.id)
+                  .map((item) => ({
+                    item,
+                    orderId: sourceOrder.id,
+                    canEdit: canModifyRegistration && sourceOrder.id === currentRegistrationId
+                      && currentUserId === sourceOrder.user_id && editableProductIds.has(item.product_id),
+                  })))} onChange={() => void load()} />
+              </div>
             </div>
             <div className="shrink-0">
               <p className="shop-order-item-total">NT${it.subtotal.toLocaleString()}</p>
