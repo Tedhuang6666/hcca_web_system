@@ -1,0 +1,163 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import ShopPage from "@/app/(protected)/shop/page";
+import type { OrderOut, ShopDelegationContextOut } from "@/lib/types";
+
+const api = vi.hoisted(() => ({
+  me: vi.fn(), catalog: vi.fn(), getCurrentRegistrations: vi.fn(), listAvailablePromotions: vi.fn(),
+  accessDelegation: vi.fn(), getDelegationProduct: vi.fn(), setDelegationProduct: vi.fn(),
+  previewDelegationPromotion: vi.fn(), applyDelegationPromotion: vi.fn(),
+  setCurrentRegistrationProduct: vi.fn(), getProduct: vi.fn(), listDelegationLinks: vi.fn(),
+}));
+vi.mock("@/lib/api", () => ({
+  authApi: { me: api.me }, shopApi: api, classApi: { myClass: vi.fn().mockResolvedValue(null) },
+  apiErrorMessage: (error: Error) => error.message,
+}));
+vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
+vi.mock("@/lib/api-cache", () => ({ cacheGet: () => null, cacheHas: () => false, cacheSet: vi.fn() }));
+
+const product = {
+  id: "bag", name: "紀念袋", price: 100, image_url: null, status: "active" as const,
+  is_unlimited: true, stock_quantity: 10, has_variants: false, requires_seating: false,
+  seating_mode: null, sale_start: null, sale_end: "2099-10-12T00:00:00Z",
+};
+const order: OrderOut = {
+  id: "order", user_id: "student", activity_id: "festival", status: "pending",
+  serial_number: "ORDER-001", assistance_scope: "self", payment_method: "school_collection",
+  created_at: "2026-10-10T00:00:00Z", updated_at: "2026-10-10T00:00:00Z",
+  subtotal_price: 500, discount_amount: 0, total_price: 500, is_paid: false, is_class_collected: false,
+  promotion_code: null, applied_promotions: [], items: [
+    { id: "own", product_id: "bag", product_name: "紀念袋", quantity: 2, unit_price: 100, subtotal: 200, selected_options: [], delegation_link_id: null },
+    { id: "mom", product_id: "bag", product_name: "紀念袋", quantity: 1, unit_price: 100, subtotal: 100, selected_options: [], delegation_link_id: "link" },
+    { id: "dad", product_id: "bag", product_name: "紀念袋", quantity: 2, unit_price: 100, subtotal: 200, selected_options: [], delegation_link_id: "other-link" },
+  ],
+};
+const context: ShopDelegationContextOut = {
+  link: { id: "link", category_id: "goods", activity_id: "festival", name: "給媽媽代訂", created_at: "2026-10-10T00:00:00Z", revoked_at: null },
+  student_name: "學生", can_claim: false, can_edit: true, registration: order,
+  catalog: [{ id: "goods", name: "校慶商品", activity_id: "festival", activity_name: "校慶", sort_order: 0, products: [product], series: [] }],
+  promotions: [], closed_category_ids: [],
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  window.history.replaceState({}, "", "/shop#delegate=synthetic-test-token");
+  api.me.mockResolvedValue({ id: "parent", display_name: "妈妈" });
+  api.accessDelegation.mockResolvedValue(context);
+  api.getDelegationProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
+  api.setDelegationProduct.mockResolvedValue(order);
+  api.previewDelegationPromotion.mockResolvedValue({ eligible: true, reason_code: "no_promotion", subtotal_price: 500, total_price: 500, discount_amount: 0 });
+  api.applyDelegationPromotion.mockResolvedValue(order);
+});
+
+describe("原商品頁的家人代訂模式", () => {
+  it("uses only this link's rows for editing while displaying the combined order", async () => {
+    render(<ShopPage />);
+    expect(await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" })).toBeVisible();
+    expect(screen.getByText("已登記 5 件")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
+    const increase = await screen.findByRole("button", { name: "增加數量" });
+    fireEvent.click(increase);
+    await waitFor(() => expect(api.setDelegationProduct).toHaveBeenCalledWith("synthetic-test-token", "bag", {
+      variants: [{ option_ids: [], quantity: 2 }],
+    }));
+    expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
+    expect(api.getCurrentRegistrations).not.toHaveBeenCalled();
+    expect(api.previewDelegationPromotion).toHaveBeenCalledWith("synthetic-test-token", null);
+  });
+
+  it("requires an explicit account claim before showing an editable modal", async () => {
+    api.accessDelegation.mockImplementation(async (_token, claim) => claim ? context : {
+      ...context, can_claim: true, can_edit: false, registration: null,
+    });
+    render(<ShopPage />);
+    const claim = await screen.findByRole("button", { name: "使用此帳號代訂" });
+    fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(claim);
+    await waitFor(() => expect(api.accessDelegation).toHaveBeenCalledWith("synthetic-test-token", true));
+    expect(await screen.findByRole("dialog")).toBeVisible();
+  });
+
+  it("keeps revoked links in the delegation error flow", async () => {
+    api.accessDelegation.mockRejectedValue(new Error("此代訂連結已撤銷"));
+    render(<ShopPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("此代訂連結已撤銷");
+    expect(api.getCurrentRegistrations).not.toHaveBeenCalled();
+    expect(api.catalog).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "登記購買" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the delegation secret out of the login URL", async () => {
+    api.me.mockRejectedValue(new Error("未登入"));
+    render(<ShopPage />);
+    const login = await screen.findByRole("link", { name: "登入自己的帳號開始代訂" });
+    expect(login).toHaveAttribute("href", "/login?next=%2Fshop%3Fdelegation%3Dresume");
+    expect(api.accessDelegation).not.toHaveBeenCalled();
+  });
+
+  it("keeps the delegated identity when using the public skip link", async () => {
+    render(<ShopPage />);
+    await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" });
+    window.history.replaceState({}, "", "/shop#main-content");
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    expect(window.location.hash).toBe("#delegate=synthetic-test-token");
+    expect(api.getCurrentRegistrations).not.toHaveBeenCalled();
+  });
+
+  it("asks for the original link if login continuation credentials are missing", async () => {
+    window.history.replaceState({}, "", "/shop?delegation=resume");
+    render(<ShopPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("請重新開啟家人分享的連結");
+    expect(api.accessDelegation).not.toHaveBeenCalled();
+    expect(api.getCurrentRegistrations).not.toHaveBeenCalled();
+  });
+
+  it("ignores an old link's failure after switching to another link", async () => {
+    let failOld!: (error: Error) => void;
+    api.accessDelegation.mockImplementation((token) => token === "synthetic-test-token"
+      ? new Promise<ShopDelegationContextOut>((_resolve, reject) => { failOld = reject; })
+      : Promise.resolve({ ...context, link: { ...context.link, name: "新連結" } }));
+    render(<ShopPage />);
+    await waitFor(() => expect(api.accessDelegation).toHaveBeenCalled());
+    window.history.replaceState({}, "", "/shop#delegate=new-synthetic-token");
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    await screen.findByRole("heading", { name: "新連結 · 為 學生 代訂" });
+    await act(async () => { failOld(new Error("舊連結已撤銷")); });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "新連結 · 為 學生 代訂" })).toBeVisible();
+  });
+
+  it("ignores pending own catalog and orders after entering delegation mode", async () => {
+    let finishCatalog!: (catalog: ShopDelegationContextOut["catalog"]) => void;
+    let finishOrders!: (orders: OrderOut[]) => void;
+    window.history.replaceState({}, "", "/shop");
+    api.catalog.mockImplementation(() => new Promise((resolve) => { finishCatalog = resolve; }));
+    api.getCurrentRegistrations.mockImplementation(() => new Promise((resolve) => { finishOrders = resolve; }));
+    api.listAvailablePromotions.mockResolvedValue([]);
+    render(<ShopPage />);
+    await waitFor(() => expect(api.getCurrentRegistrations).toHaveBeenCalled());
+    window.history.replaceState({}, "", "/shop#delegate=synthetic-test-token");
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" });
+    await act(async () => {
+      finishCatalog([{ ...context.catalog![0], id: "own-category", name: "本人其他活動", products: [], series: [] }]);
+      finishOrders([]);
+    });
+    expect(screen.getByText("已登記 5 件")).toBeVisible();
+    expect(screen.getByRole("button", { name: "查看商品：紀念袋" })).toBeVisible();
+    expect(screen.queryByText("本人其他活動")).not.toBeInTheDocument();
+  });
+
+  it("uses the latest link if it changes while the login account is loading", async () => {
+    let finishLogin!: (account: { id: string; display_name: string; email: string }) => void;
+    api.me.mockImplementation(() => new Promise((resolve) => { finishLogin = resolve; }));
+    render(<ShopPage />);
+    window.history.replaceState({}, "", "/shop#delegate=new-synthetic-token");
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    await act(async () => { finishLogin({ id: "parent", display_name: "家人", email: "parent@synthetic.test" }); });
+    await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" });
+    expect(api.accessDelegation).toHaveBeenCalledWith("new-synthetic-token", false);
+    expect(api.accessDelegation).not.toHaveBeenCalledWith("synthetic-test-token", false);
+  });
+});

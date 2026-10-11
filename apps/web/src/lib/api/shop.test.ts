@@ -7,6 +7,16 @@ describe("shop quantity API", () => {
     vi.unstubAllGlobals();
   });
 
+  it("sends delegation secrets in the body and keeps them out of request URLs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    await shopApi.accessDelegation("synthetic-test-token", true);
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("synthetic-test-token");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ token: "synthetic-test-token", claim: true });
+  });
+
   it("omits unset dates from the quantities request", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("[]", {
@@ -42,5 +52,47 @@ describe("shop quantity API", () => {
     expect(requestUrl.searchParams.get("date_from")).toBe("2026-10-01T00:00:00.000Z");
     expect(requestUrl.searchParams.get("date_to")).toBe("2026-10-10T15:59:59.000Z");
     expect(requestUrl.searchParams.get("is_paid")).toBe("false");
+  });
+
+  it.each(["expired", "mfa"] as const)("keeps delegation secrets out of the %s redirect", async (kind) => {
+    const replace = vi.fn();
+    const location = { pathname: "/shop", search: "", hash: "#delegate=synthetic-test-token", replace };
+    const browser = window;
+    vi.stubGlobal("window", new Proxy(browser, { get(target, key) {
+      if (key === "location") return location;
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    } }));
+    browser.localStorage.setItem("user_id", "synthetic-parent");
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response("{}", {
+      status: kind === "expired" ? 401 : 403,
+      headers: { "Content-Type": "application/json", ...(kind === "mfa" ? { "X-MFA-Required": "true" } : {}) },
+    })));
+    await expect(shopApi.accessDelegation("synthetic-test-token")).rejects.toMatchObject({ status: kind === "expired" ? 401 : 403 });
+    expect(replace).toHaveBeenCalledWith(kind === "expired"
+      ? "/login?next=%2Fshop%3Fdelegation%3Dresume"
+      : "/settings/security?mfa_required=1&next=%2Fshop%3Fdelegation%3Dresume");
+    expect(browser.sessionStorage.getItem("hcca:shop:pending-delegation")).toBe("synthetic-test-token");
+  });
+
+  it.each(["expired", "mfa"] as const)("preserves ordinary navigation for the %s redirect", async (kind) => {
+    const replace = vi.fn();
+    const location = { pathname: "/shop/orders", search: "?from=class", hash: "#items", replace };
+    const browser = window;
+    vi.stubGlobal("window", new Proxy(browser, { get(target, key) {
+      if (key === "location") return location;
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    } }));
+    browser.localStorage.setItem("user_id", "synthetic-student");
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response("{}", {
+      status: kind === "expired" ? 401 : 403,
+      headers: { "Content-Type": "application/json", ...(kind === "mfa" ? { "X-MFA-Required": "true" } : {}) },
+    })));
+    await expect(shopApi.listOrders()).rejects.toMatchObject({ status: kind === "expired" ? 401 : 403 });
+    expect(replace).toHaveBeenCalledWith(kind === "expired"
+      ? "/login?next=%2Fshop%2Forders%3Ffrom%3Dclass%23items"
+      : "/settings/security?mfa_required=1&next=%2Fshop%2Forders%3Ffrom%3Dclass");
+    expect(browser.sessionStorage.getItem("hcca:shop:pending-delegation")).toBeNull();
   });
 });

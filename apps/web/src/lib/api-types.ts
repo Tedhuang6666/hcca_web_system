@@ -10244,6 +10244,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/delegation-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Delegation Links */
+        get: operations["list_delegation_links_shop_delegation_links_get"];
+        put?: never;
+        /** Create Delegation Link */
+        post: operations["create_delegation_link_shop_delegation_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/delegation-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Delegation Link */
+        delete: operations["revoke_delegation_link_shop_delegation_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Delegation Link */
+        patch: operations["rename_delegation_link_shop_delegation_links__link_id__patch"];
+        trace?: never;
+    };
+    "/shop/delegation-links/{link_id}/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renew Delegation Link */
+        post: operations["renew_delegation_link_shop_delegation_links__link_id__renew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/delegation/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Access Delegation */
+        post: operations["access_delegation_shop_delegation_access_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/delegation/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update Delegation Product */
+        post: operations["update_delegation_product_shop_delegation_products__product_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/delegation/products/{product_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read Delegation Product */
+        post: operations["read_delegation_product_shop_delegation_products__product_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/delegation/promotion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Delegation Promotion */
+        post: operations["apply_delegation_promotion_shop_delegation_promotion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/delegation/promotion/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Delegation Promotion */
+        post: operations["preview_delegation_promotion_shop_delegation_promotion_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/images": {
         parameters: {
             query?: never;
@@ -10418,6 +10556,23 @@ export interface paths {
         head?: never;
         /** 班代紀錄本班學生收款 */
         patch: operations["update_class_collection_shop_orders__order_id__collection_patch"];
+        trace?: never;
+    };
+    "/shop/orders/{order_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Owned Order Item */
+        patch: operations["update_owned_order_item_shop_orders__order_id__items__item_id__patch"];
         trace?: never;
     };
     "/shop/orders/{order_id}/payment": {
@@ -20997,11 +21152,19 @@ export interface components {
         };
         /** OrderItemOut */
         OrderItemOut: {
+            /** Delegation Link Id */
+            delegation_link_id?: string | null;
+            /** Delegation Name */
+            delegation_name?: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Ordered By Id */
+            ordered_by_id?: string | null;
+            /** Ordered By Name */
+            ordered_by_name?: string | null;
             /**
              * Product Id
              * Format: uuid
@@ -21020,6 +21183,11 @@ export interface components {
             subtotal: number;
             /** Unit Price */
             unit_price: number;
+        };
+        /** OrderItemQuantityUpdate */
+        OrderItemQuantityUpdate: {
+            /** Quantity */
+            quantity: number;
         };
         /** OrderListItem */
         OrderListItem: {
@@ -28556,6 +28724,102 @@ export interface components {
              * @default 0
              */
             unpaid_order_count: number;
+        };
+        /** ShopDelegationAccess */
+        ShopDelegationAccess: {
+            /**
+             * Claim
+             * @default false
+             */
+            claim: boolean;
+            /** Token */
+            token: string;
+        };
+        /** ShopDelegationContextOut */
+        ShopDelegationContextOut: {
+            /** Can Claim */
+            can_claim: boolean;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Catalog */
+            catalog?: components["schemas"]["CatalogCategoryOut"][];
+            /** Closed Category Ids */
+            closed_category_ids?: string[];
+            link: components["schemas"]["ShopDelegationOut"];
+            /** Promotions */
+            promotions?: components["schemas"]["ShopPromotionPublicOut"][];
+            registration?: components["schemas"]["OrderOut"] | null;
+            /** Student Name */
+            student_name: string;
+        };
+        /** ShopDelegationCreate */
+        ShopDelegationCreate: {
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /** Name */
+            name: string;
+        };
+        /** ShopDelegationOut */
+        ShopDelegationOut: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Bound User Email */
+            bound_user_email?: string | null;
+            /** Bound User Name */
+            bound_user_name?: string | null;
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Token */
+            token?: string | null;
+        };
+        /** ShopDelegationPromotionUpdate */
+        ShopDelegationPromotionUpdate: {
+            /**
+             * Claim
+             * @default false
+             */
+            claim: boolean;
+            /** Code */
+            code?: string | null;
+            /** Token */
+            token: string;
+        };
+        /** ShopDelegationRegistrationUpdate */
+        ShopDelegationRegistrationUpdate: {
+            /**
+             * Claim
+             * @default false
+             */
+            claim: boolean;
+            /** Token */
+            token: string;
+            /** Variants */
+            variants?: components["schemas"]["RegistrationVariantCreate"][];
+        };
+        /** ShopDelegationUpdate */
+        ShopDelegationUpdate: {
+            /** Name */
+            name: string;
         };
         /**
          * ShopDiscountType
@@ -53720,6 +53984,323 @@ export interface operations {
             };
         };
     };
+    list_delegation_links_shop_delegation_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopDelegationOut"][];
+                };
+            };
+        };
+    };
+    create_delegation_link_shop_delegation_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopDelegationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_delegation_link_shop_delegation_links__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_delegation_link_shop_delegation_links__link_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopDelegationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_delegation_link_shop_delegation_links__link_id__renew_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopDelegationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    access_delegation_shop_delegation_access_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationAccess"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopDelegationContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_delegation_product_shop_delegation_products__product_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationRegistrationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_delegation_product_shop_delegation_products__product_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationAccess"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_delegation_promotion_shop_delegation_promotion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationPromotionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_delegation_promotion_shop_delegation_promotion_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationPromotionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopPromotionPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_image_shop_images_post: {
         parameters: {
             query?: never;
@@ -54178,6 +54759,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_owned_order_item_shop_orders__order_id__items__item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderItemQuantityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"] | null;
                 };
             };
             /** @description Validation Error */

@@ -307,6 +307,10 @@ class OrderItemOut(BaseModel):
     unit_price: int
     subtotal: int
     selected_options: list[SelectedOption] = []
+    ordered_by_id: uuid.UUID | None = None
+    ordered_by_name: str | None = None
+    delegation_link_id: uuid.UUID | None = None
+    delegation_name: str | None = None
 
 
 class OrderItemCreate(BaseModel):
@@ -322,6 +326,60 @@ class RegistrationVariantCreate(BaseModel):
 
 class CurrentRegistrationUpdate(BaseModel):
     variants: list[RegistrationVariantCreate] = Field(default_factory=list, max_length=100)
+
+
+class ShopDelegationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    category_id: uuid.UUID
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("請輸入連結名稱")
+        return value.strip()
+
+
+class ShopDelegationUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("請輸入連結名稱")
+        return value.strip()
+
+
+class ShopDelegationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    category_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
+    name: str
+    bound_user_name: str | None = None
+    bound_user_email: str | None = None
+    revoked_at: datetime | None
+    created_at: datetime
+    token: str | None = None  # 僅建立／重新產生時回傳一次。
+
+
+class ShopDelegationAccess(BaseModel):
+    token: str = Field(min_length=32, max_length=100)
+    claim: bool = False
+
+
+class ShopDelegationRegistrationUpdate(ShopDelegationAccess, CurrentRegistrationUpdate):
+    pass
+
+
+class ShopDelegationPromotionUpdate(ShopDelegationAccess):
+    code: str | None = Field(None, max_length=80)
+
+
+class OrderItemQuantityUpdate(BaseModel):
+    quantity: int = Field(ge=0, le=100)
 
 
 class OrderCreate(BaseModel):
@@ -692,6 +750,17 @@ class CloseStatusOut(BaseModel):
 
 
 # ── 商品規格數量彙總 ────────────────────────────────────────────────────────────
+
+
+class ShopDelegationContextOut(BaseModel):
+    link: ShopDelegationOut
+    student_name: str
+    can_claim: bool
+    can_edit: bool
+    registration: OrderOut | None = None
+    catalog: list[CatalogCategoryOut] = Field(default_factory=list)
+    promotions: list[ShopPromotionPublicOut] = Field(default_factory=list)
+    closed_category_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class OrderQuantityRow(BaseModel):

@@ -1,4 +1,5 @@
 import { getPublicSentryDsn } from "./lib/sentry-config";
+import { redactShopDelegationSecrets } from "./lib/shop-delegation-link";
 
 function installNonceStyleGuard(): void {
   if (typeof document === "undefined") return;
@@ -32,6 +33,9 @@ function loadSentry(): Promise<SentryClient> {
         environment: process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV,
         tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || "0.05"),
         sendDefaultPii: false,
+        beforeBreadcrumb: (breadcrumb) => redactShopDelegationSecrets(breadcrumb),
+        beforeSendTransaction: (event) => redactShopDelegationSecrets(event),
+        beforeSendSpan: (span) => redactShopDelegationSecrets(span),
         beforeSend(event) {
           const values = event.exception?.values ?? [];
           const messages = [event.message, ...values.map((value) => value.value)]
@@ -48,7 +52,7 @@ function loadSentry(): Promise<SentryClient> {
           if (frames.length > 0 && frames.every((frame) => extensionFrame.test(frame.filename ?? ""))) {
             return null;
           }
-          return event;
+          return redactShopDelegationSecrets(event);
         },
       });
       return Sentry;

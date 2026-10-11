@@ -1,0 +1,462 @@
+"""家人代訂的真實資料庫／HTTP 授權與來源隔離回歸。"""
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from api.models.activity import Activity, ActivityStatus
+from api.models.shop import ShopDelegationLink
+from api.schemas.shop import ProductCategoryCreate, ProductCreate, ShopPromotionCreate
+from api.services import shop as shop_svc
+from api.services.shop import _delegation
+
+
+@pytest.fixture
+async def delegation_setup(db_session, make_user, admin_user, authed_client_factory):
+    student = await make_user(student_id="991001", display_name="學生")
+    parent = await make_user(email="parent@example.test", display_name="媽媽")
+    other = await make_user(email="other@example.test", display_name="其他人")
+    activity = Activity(name="校慶", status=ActivityStatus.ACTIVE, is_active=True)
+    db_session.add(activity)
+    await db_session.flush()
+    category = await shop_svc.create_category(
+        db_session,
+        data=ProductCategoryCreate(name="校慶商品", activity_id=activity.id),
+        created_by=admin_user.id,
+    )
+    product = await shop_svc.create_product(
+        db_session,
+        data=ProductCreate(
+            category_id=category.id,
+            name="紀念袋",
+            price=100,
+            stock_quantity=10,
+            max_quantity_per_user=5,
+            sale_end=datetime.now(UTC) + timedelta(days=1),
+        ),
+        created_by=admin_user.id,
+    )
+    await shop_svc.activate_product(db_session, product)
+    sc, pc, oc = [authed_client_factory(user) for user in (student, parent, other)]
+    response = await sc.post(
+        "/shop/delegation-links",
+        json={
+            "name": "給媽媽代訂",
+            "category_id": str(category.id),
+        },
+    )
+    assert response.status_code == 201
+    link = response.json()
+    return student, parent, category, product, sc, pc, oc, link
+
+
+async def _claim(client, link):
+    result = await client.post(
+        "/shop/delegation/access", json={"token": link["token"], "claim": True}
+    )
+    assert result.status_code == 200
+    return result.json()
+
+
+async def _set(client, product, quantity, token=None):
+    variants = [{"option_ids": [], "quantity": quantity}] if quantity else []
+    if token:
+        return await client.post(
+            f"/shop/delegation/products/{product.id}",
+            json={
+                "token": token,
+                "variants": variants,
+            },
+        )
+    return await client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={
+            "variants": variants,
+        },
+    )
+
+
+async def test_unbound_privacy_and_link_ownership(delegation_setup, db_session, client):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    assert (await _set(sc, product, 1)).status_code == 200
+    preview = await pc.post("/shop/delegation/access", json={"token": link["token"]})
+    assert preview.status_code == 200
+    assert preview.json()["can_claim"] is True
+    assert preview.json()["registration"] is None
+    assert preview.json()["promotions"] == []
+    assert (await _set(pc, product, 1, link["token"])).status_code == 403
+    assert (
+        await oc.patch(f"/shop/delegation-links/{link['id']}", json={"name": "偷改"})
+    ).status_code == 404
+    assert (await oc.delete(f"/shop/delegation-links/{link['id']}")).status_code == 404
+    assert (
+        await pc.post(
+            "/shop/delegation-links",
+            json={
+                "name": "非法",
+                "category_id": str(category.id),
+            },
+        )
+    ).status_code == 403
+    assert (await client.get("/shop/delegation-links")).status_code == 401
+    saved = await db_session.get(ShopDelegationLink, link["id"])
+    assert saved.token_hash == _delegation.token_hash(link["token"])
+    assert saved.token_hash != link["token"]
+    listed = (await sc.get("/shop/delegation-links")).json()
+    assert listed[0]["token"] is None
+
+
+async def test_reusable_link_combines_coupon_using_student_identity(delegation_setup, db_session):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="學生專屬合計優惠",
+            activity_id=category.activity_id,
+            target_identifiers=[student.email],
+            code="FAMILY",
+            discount_type="fixed",
+            discount_value=50,
+            min_order_price=300,
+        ),
+        created_by=student.id,
+    )
+    assert (await _set(sc, product, 1)).status_code == 200
+    context = await _claim(pc, link)
+    assert context["student_name"] == student.display_name
+    assert [p["code"] for p in context["promotions"]] == ["FAMILY"]
+    first = await _set(pc, product, 1, link["token"])
+    assert first.status_code == 200
+    second = await _set(pc, product, 2, link["token"])
+    assert second.status_code == 200
+    order = second.json()
+    assert order["user_id"] == str(student.id)
+    assert order["subtotal_price"] == 300
+    assert len(order["items"]) == 2
+    own = next(i for i in order["items"] if i["delegation_link_id"] is None)
+    delegated = next(i for i in order["items"] if i["delegation_link_id"])
+    assert own["quantity"] == 1
+    assert delegated["quantity"] == 2
+    assert delegated["ordered_by_id"] == str(parent.id)
+    assert delegated["ordered_by_name"] == "媽媽"
+    assert delegated["delegation_name"] == "給媽媽代訂"
+    preview = await pc.post(
+        "/shop/delegation/promotion/preview", json={"token": link["token"], "code": "FAMILY"}
+    )
+    assert preview.status_code == 200
+    assert preview.json()["eligible"] is True
+    assert preview.json()["subtotal_price"] == 300
+    applied = await pc.post(
+        "/shop/delegation/promotion", json={"token": link["token"], "code": "FAMILY"}
+    )
+    assert applied.status_code == 200
+    assert applied.json()["total_price"] == 250
+    # 本人更新只改本人來源，家人兩件仍保留，優惠因合計不足自动撤下。
+    updated = await _set(sc, product, 0)
+    assert updated.status_code == 200
+    assert updated.json()["subtotal_price"] == 200
+    assert len(updated.json()["items"]) == 1
+    assert updated.json()["discount_amount"] == 0
+    assert (await pc.get(f"/shop/orders/{order['id']}")).status_code == 404
+    assert (await pc.get("/shop/registrations")).json() == []
+
+
+async def test_bound_account_scope_and_student_limits(delegation_setup, db_session):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    await _claim(pc, link)
+    assert (
+        await oc.post("/shop/delegation/access", json={"token": link["token"], "claim": True})
+    ).status_code == 403
+    assert (await _set(oc, product, 1, link["token"])).status_code == 403
+    assert (await _set(sc, product, 4)).status_code == 200
+    limited = await _set(pc, product, 2, link["token"])
+    assert limited.status_code == 422
+    assert (await _set(pc, product, 1, link["token"])).status_code == 200
+    # 其他活動／未綁活動分類不可透過 token 指定商品跨越授權。
+    foreign_category = await shop_svc.create_category(
+        db_session, data=ProductCategoryCreate(name="其他主題"), created_by=student.id
+    )
+    foreign = await shop_svc.create_product(
+        db_session,
+        data=ProductCreate(
+            category_id=foreign_category.id, name="其他商品", price=10, is_unlimited=True
+        ),
+        created_by=student.id,
+    )
+    await shop_svc.activate_product(db_session, foreign)
+    assert (await _set(pc, foreign, 1, link["token"])).status_code == 404
+    assert (
+        await pc.post(f"/shop/delegation/products/{foreign.id}/read", json={"token": link["token"]})
+    ).status_code == 404
+    assert (await pc.post("/shop/delegation/access", json={"token": "x" * 43})).status_code == 404
+    read = await pc.post(
+        f"/shop/delegation/products/{product.id}/read", json={"token": link["token"]}
+    )
+    assert read.status_code == 200
+    assert read.json()["remaining_quantity_for_user"] == 0
+
+
+async def test_rename_revoke_and_renew_keep_historical_sources(delegation_setup):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    await _claim(pc, link)
+    result = await _set(pc, product, 1, link["token"])
+    old_item = result.json()["items"][0]
+    rename = await sc.patch(f"/shop/delegation-links/{link['id']}", json={"name": "給家人代訂"})
+    assert rename.status_code == 200
+    assert (await _set(pc, product, 2, link["token"])).json()["items"][0][
+        "delegation_name"
+    ] == "給媽媽代訂"
+    renewed = await sc.post(f"/shop/delegation-links/{link['id']}/renew")
+    assert renewed.status_code == 201
+    new_link = renewed.json()
+    assert new_link["id"] != link["id"]
+    assert new_link["token"] != link["token"]
+    assert (await _set(pc, product, 1, link["token"])).status_code == 410
+    await _claim(oc, new_link)
+    new_order = (await _set(oc, product, 1, new_link["token"])).json()
+    assert len(new_order["items"]) == 2
+    assert next(i for i in new_order["items"] if i["id"] == old_item["id"])["quantity"] == 2
+    assert (await sc.delete(f"/shop/delegation-links/{new_link['id']}")).status_code == 204
+    assert (
+        await oc.post(
+            "/shop/delegation/promotion/preview", json={"token": new_link["token"], "code": None}
+        )
+    ).status_code == 410
+
+
+@pytest.mark.parametrize("lock", ["deadline", "paid", "collected", "closed", "inactive"])
+async def test_cutoff_and_collection_prevent_changes(delegation_setup, db_session, lock):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    await _claim(pc, link)
+    result = await _set(pc, product, 1, link["token"])
+    order = await shop_svc.get_order(db_session, result.json()["id"])
+    if lock == "deadline":
+        product.sale_end = datetime.now(UTC) - timedelta(seconds=1)
+    elif lock == "paid":
+        order.is_paid = True
+    elif lock == "collected":
+        order.is_class_collected = True
+    elif lock == "inactive":
+        student.is_active = False
+    else:
+        await shop_svc.close_category_for_class(
+            db_session,
+            category_id=category.id,
+            class_id=None,
+            closed_by_id=student.id,
+        )
+    await db_session.flush()
+    response = await _set(pc, product, 2, link["token"])
+    assert response.status_code in (409, 410)
+    coupon = await pc.post(
+        "/shop/delegation/promotion", json={"token": link["token"], "code": None}
+    )
+    assert coupon.status_code in (409, 410)
+
+
+async def test_owner_can_adjust_delegated_source_after_revocation(delegation_setup):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    await _claim(pc, link)
+    order = (await _set(pc, product, 2, link["token"])).json()
+    item = order["items"][0]
+    path = f"/shop/orders/{order['id']}/items/{item['id']}"
+    bulk_update = await sc.patch(
+        f"/shop/orders/{order['id']}",
+        json={
+            "user_id": str(student.id),
+            "items": [{"product_id": str(product.id), "quantity": 1, "option_ids": []}],
+        },
+    )
+    assert bulk_update.status_code == 409
+    unchanged = (await sc.get(f"/shop/orders/{order['id']}")).json()["items"][0]
+    assert unchanged["quantity"] == 2
+    assert unchanged["delegation_link_id"] == link["id"]
+    assert (await oc.patch(path, json={"quantity": 1})).status_code == 404
+    assert (await pc.patch(path, json={"quantity": 1})).status_code == 404
+    assert (await sc.delete(f"/shop/delegation-links/{link['id']}")).status_code == 204
+    edited = await sc.patch(path, json={"quantity": 1})
+    assert edited.status_code == 200
+    assert edited.json()["items"][0]["ordered_by_id"] == str(parent.id)
+    assert edited.json()["items"][0]["delegation_name"] == "給媽媽代訂"
+    removed = await sc.patch(path, json={"quantity": 0})
+    assert removed.status_code == 200
+    assert removed.json()["status"] == "cancelled"
+    assert (await sc.patch(path, json={"quantity": 101})).status_code == 422
+
+
+async def test_two_links_never_overwrite_each_other_and_stock_is_shared(
+    delegation_setup, db_session
+):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    product.max_quantity_per_user = None
+    product.stock_quantity = 3
+    await db_session.flush()
+    new_link = (
+        await sc.post(
+            "/shop/delegation-links",
+            json={
+                "name": "給爸爸代訂",
+                "category_id": str(category.id),
+            },
+        )
+    ).json()
+    await _claim(pc, link)
+    await _claim(oc, new_link)
+    assert (await _set(pc, product, 2, link["token"])).status_code == 200
+    assert (await _set(oc, product, 2, new_link["token"])).status_code == 409
+    assert (await _set(oc, product, 1, new_link["token"])).status_code == 200
+    # 已售完仍可減量，僅釋放本來源庫存。
+    result = await _set(pc, product, 0, link["token"])
+    assert result.status_code == 200
+    assert len(result.json()["items"]) == 1
+    assert result.json()["items"][0]["delegation_link_id"] == new_link["id"]
+    assert product.stock_quantity == 2
+
+
+async def test_concurrent_claim_and_revocation_use_real_postgres_locks(db_session):
+    import asyncio
+    import uuid
+
+    from sqlalchemy import delete
+    from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
+
+    from api.models.shop import Product, ProductCategory, ProductStatus
+    from api.models.user import User
+    from api.schemas.shop import CurrentRegistrationUpdate, ShopDelegationCreate
+
+    bind = db_session.bind
+    assert isinstance(bind, AsyncConnection)
+    if bind.dialect.name != "postgresql":
+        pytest.skip("需要 PostgreSQL row locks")
+    factory = async_sessionmaker(bind.engine, expire_on_commit=False)
+    ids = [uuid.uuid4() for _ in range(3)]
+    async with factory() as session:
+        users = [
+            User(
+                id=uid,
+                email=f"{uid}@example.test",
+                display_name=f"帳號{index}",
+                is_active=True,
+                is_verified=True,
+                student_id=str(uid)[:8] if index == 0 else None,
+            )
+            for index, uid in enumerate(ids)
+        ]
+        session.add_all(users)
+        await session.flush()
+        category = ProductCategory(name="並發測試", created_by=ids[0])
+        session.add(category)
+        await session.flush()
+        product = Product(
+            name="並發商品",
+            price=100,
+            is_unlimited=True,
+            category_id=category.id,
+            created_by=ids[0],
+            status=ProductStatus.ACTIVE,
+        )
+        session.add(product)
+        await session.flush()
+        link = await _delegation.create_link(
+            session,
+            users[0],
+            ShopDelegationCreate(
+                name="並發連結",
+                category_id=category.id,
+            ),
+        )
+        await session.commit()
+        category_id, product_id = category.id, product.id
+    try:
+
+        async def claim(actor_id):
+            async with factory() as session:
+                actor = await session.get(User, actor_id)
+                try:
+                    await _delegation.resolve_link(session, actor, link.token, claim=True)
+                    await session.commit()
+                    return 200, actor_id
+                except _delegation.DelegationError as error:
+                    await session.rollback()
+                    return error.status_code, actor_id
+
+        results = await asyncio.wait_for(asyncio.gather(claim(ids[1]), claim(ids[2])), timeout=5)
+        assert sorted(code for code, _ in results) == [200, 403]
+        winner = next(actor_id for code, actor_id in results if code == 200)
+        # 撤銷尚未 commit 時，代訂會等候學生鎖；取得鎖後必須重新檢查撤銷狀態。
+        async with factory() as revoker:
+            owner = await revoker.get(User, ids[0])
+            await _delegation.revoke_link(revoker, owner, link.id)
+
+            async def write():
+                async with factory() as session:
+                    actor = await session.get(User, winner)
+                    try:
+                        await _delegation.set_product(
+                            session,
+                            actor,
+                            link.token,
+                            product_id,
+                            CurrentRegistrationUpdate(variants=[]),
+                        )
+                        return 200
+                    except _delegation.DelegationError as error:
+                        return error.status_code
+
+            pending = asyncio.create_task(write())
+            await asyncio.sleep(0.05)
+            assert not pending.done()
+            await revoker.commit()
+            assert await asyncio.wait_for(pending, timeout=5) == 410
+    finally:
+        async with factory() as session:
+            await session.execute(
+                delete(ShopDelegationLink).where(ShopDelegationLink.id == link.id)
+            )
+            await session.execute(delete(Product).where(Product.id == product_id))
+            await session.execute(delete(ProductCategory).where(ProductCategory.id == category_id))
+            await session.execute(delete(User).where(User.id.in_(ids)))
+            await session.commit()
+
+
+async def test_delegate_uses_students_class_for_closure_and_order(delegation_setup, db_session):
+    from api.schemas.school_class import ClassManualMemberCreate, SchoolClassCreate
+    from api.services import school_class as class_svc
+
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    student_class = await class_svc.create_class(
+        db_session,
+        data=SchoolClassCreate(
+            academic_year=115,
+            class_code="101",
+            grade=1,
+        ),
+        created_by=student.id,
+    )
+    parent_class = await class_svc.create_class(
+        db_session,
+        data=SchoolClassCreate(
+            academic_year=115,
+            class_code="102",
+            grade=1,
+        ),
+        created_by=student.id,
+    )
+    await class_svc.add_manual_member(
+        db_session, student_class, data=ClassManualMemberCreate(user_id=student.id)
+    )
+    await class_svc.add_manual_member(
+        db_session, parent_class, data=ClassManualMemberCreate(user_id=parent.id)
+    )
+    await _claim(pc, link)
+    result = await _set(pc, product, 1, link["token"])
+    assert result.status_code == 200
+    assert result.json()["class_id"] == str(student_class.id)
+    await shop_svc.close_category_for_class(
+        db_session, category_id=category.id, class_id=parent_class.id, closed_by_id=student.id
+    )
+    assert (await _set(pc, product, 2, link["token"])).status_code == 200
+    await shop_svc.close_category_for_class(
+        db_session, category_id=category.id, class_id=student_class.id, closed_by_id=student.id
+    )
+    assert (await _set(pc, product, 3, link["token"])).status_code == 410

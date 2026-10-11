@@ -23,11 +23,15 @@ import type {
   OrderOut,
   ShopPromotionPreviewOut,
   ShopPromotionPublicOut,
+  ShopDelegationContextOut,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
+import DelegationLinks from "@/components/shop/DelegationLinks";
+import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-delegation-link";
+import { useWS } from "@/hooks/useWS";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
@@ -182,6 +186,7 @@ function registrationLockMessage({
 
 function ProductModal({
   productId,
+  shoppingApi,
   classClosed,
   isLoggedIn,
   authLoading,
@@ -189,11 +194,13 @@ function ProductModal({
   registration,
   scopeKey,
   registrationLocked,
+  editingDescription,
   onClose,
   onRegistrationChange,
   onProductAdded,
 }: {
   productId: string;
+  shoppingApi: Pick<typeof shopApi, "getProduct" | "setCurrentRegistrationProduct">;
   classClosed: boolean;
   isLoggedIn: boolean;
   authLoading: boolean;
@@ -201,6 +208,7 @@ function ProductModal({
   registration: OrderOut | null;
   scopeKey: string;
   registrationLocked: boolean;
+  editingDescription?: string;
   onClose: () => void;
   onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
   onProductAdded: () => void;
@@ -230,13 +238,13 @@ function ProductModal({
     setProductLoading(true);
     setProductLoadError(false);
     try {
-      setProduct(await shopApi.getProduct(productId));
+      setProduct(await shoppingApi.getProduct(productId));
     } catch {
       setProductLoadError(true);
     } finally {
       setProductLoading(false);
     }
-  }, [productId]);
+  }, [productId, shoppingApi]);
 
   useEffect(() => {
     void loadProduct();
@@ -245,6 +253,16 @@ function ProductModal({
   useEffect(() => {
     registrationItemsRef.current = registration?.items ?? [];
   }, [registration?.items]);
+
+  useEffect(() => {
+    if (registrationUpdateInFlightRef.current) return;
+    const signature = Object.values(picked).sort().join(",");
+    const quantity = (registration?.items ?? [])
+      .filter((item) => item.product_id === loadedProductId
+        && registrationVariantKey(item.selected_options) === signature)
+      .reduce((total, item) => total + item.quantity, 0);
+    if (quantity > 0) setQty(quantity);
+  }, [registration?.items, loadedProductId, picked]);
 
   useEffect(() => {
     if (!loadedProductId) return;
@@ -390,7 +408,7 @@ function ProductModal({
       const wasRegistered = (currentVariants.get(key)?.quantity ?? 0) > 0;
       currentVariants.delete(key);
       if (quantity > 0) currentVariants.set(key, { option_ids: [...optionIds].sort(), quantity });
-      const updated = await shopApi.setCurrentRegistrationProduct(product.id, {
+      const updated = await shoppingApi.setCurrentRegistrationProduct(product.id, {
         variants: [...currentVariants.values()],
       });
       onRegistrationChange(
@@ -510,6 +528,7 @@ function ProductModal({
             <>
               <div className="shop-product-dialog-heading">
                 <h3 id="product-modal-title">{product.name}</h3>
+                {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
                 {product.description && <p className="whitespace-pre-line">{product.description}</p>}
                 {!product.is_unlimited && product.status === "active" && (
                   <p className="shop-product-dialog-stock">剩餘 {product.stock_quantity} 件</p>
@@ -746,6 +765,15 @@ export default function ShopPage() {
   const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isStudent, setIsStudent] = useState(false);
+  const [currentAccount, setCurrentAccount] = useState("");
+  const [userRoom, setUserRoom] = useState<string | null>(null);
+  const [delegationToken, setDelegationToken] = useState<string | null>(null);
+  const [delegationContext, setDelegationContext] = useState<ShopDelegationContextOut | null>(null);
+  const [delegationError, setDelegationError] = useState("");
+  const [delegationBusy, setDelegationBusy] = useState(false);
+  const refreshGeneration = useRef(0);
+  const mutationBusy = useRef(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [registrationLoadError, setRegistrationLoadError] = useState(false);
   const [registrations, setRegistrations] = useState<OrderOut[]>([]);
@@ -796,53 +824,203 @@ export default function ShopPage() {
   };
 
   const loadCatalog = useCallback(() => {
+    const generation = refreshGeneration.current;
     if (!cacheHas(catalogCacheKey)) setLoading(true);
     setLoadError(false);
     shopApi
       .catalog()
       .then(async (data) => {
+        if (generation !== refreshGeneration.current) return;
         setCatalog(data);
         cacheSet(catalogCacheKey, data);
         setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);
         try {
           const schoolClass = await classApi.myClass();
+          if (generation !== refreshGeneration.current) return;
           if (schoolClass && data.length) {
             setMyClass(schoolClass);
             const catIds = data.map((c) => c.id);
             const status = await shopApi.getCloseStatus(catIds, schoolClass.id);
+            if (generation !== refreshGeneration.current) return;
             setCloseStatus(status.statuses);
           } else {
             setMyClass(null);
           }
         } catch {
-          setMyClass(null);
+          if (generation === refreshGeneration.current) setMyClass(null);
         }
       })
-      .catch(() => setLoadError(true))
-      .finally(() => setLoading(false));
+      .catch(() => { if (generation === refreshGeneration.current) setLoadError(true); })
+      .finally(() => { if (generation === refreshGeneration.current) setLoading(false); });
   }, [setSelectedCategoryId, catalogCacheKey]);
 
+  const loadDelegation = useCallback(async (token: string, claim = false) => {
+    const generation = refreshGeneration.current;
+    if (token === "invalid") {
+      setDelegationError("代訂連結無法接續，請重新開啟家人分享的連結。");
+      setRegistrationLoadError(true);
+      setLoading(false);
+      return;
+    }
+    try {
+      const context = await shopApi.accessDelegation(token, claim);
+      if (generation !== refreshGeneration.current) return;
+      setDelegationContext(context);
+      setDelegationError("");
+      setRegistrationLoadError(false);
+      const scopedCatalog = context.catalog ?? [];
+      setCatalog(scopedCatalog);
+      setSelectedCategoryId((current) => scopedCatalog.some((row) => row.id === current)
+        ? current : scopedCatalog[0]?.id ?? null);
+      setRegistrations(context.registration ? [context.registration] : []);
+      setAvailablePromotions(context.promotions ?? []);
+      setCloseStatus(Object.fromEntries((context.closed_category_ids ?? []).map((id) => [id, { is_closed: true }])));
+      setLoading(false);
+    } catch (error) {
+      if (generation !== refreshGeneration.current) return;
+      setDelegationError(apiErrorMessage(error, "無法使用代訂連結"));
+      setRegistrationLoadError(true);
+      setDelegationContext(null);
+      setRegistrations([]);
+      setLoading(false);
+    }
+  }, [setSelectedCategoryId]);
+
+  const shoppingApi = useMemo(() => {
+    const mutate = async <T,>(operation: () => Promise<T>) => {
+      const generation = ++refreshGeneration.current;
+      mutationBusy.current = true;
+      try {
+        const result = await operation();
+        if (generation !== refreshGeneration.current) throw new Error("商品登記已更新，請查看目前頁面。");
+        return result;
+      }
+      finally { mutationBusy.current = false; }
+    };
+    if (!delegationToken) return {
+      ...shopApi,
+      setCurrentRegistrationProduct: (id: string, body: Parameters<typeof shopApi.setCurrentRegistrationProduct>[1]) =>
+        mutate(() => shopApi.setCurrentRegistrationProduct(id, body)),
+      applyCurrentPromotion: (code: string | null, activityId: string | null, categoryId?: string | null) =>
+        mutate(() => shopApi.applyCurrentPromotion(code, activityId, categoryId)),
+    };
+    return {
+      ...shopApi,
+      getProduct: (id: string) => shopApi.getDelegationProduct(delegationToken, id),
+      setCurrentRegistrationProduct: (id: string, body: Parameters<typeof shopApi.setCurrentRegistrationProduct>[1]) =>
+        mutate(() => shopApi.setDelegationProduct(delegationToken, id, body)),
+      previewCurrentPromotion: (code: string | null) => shopApi.previewDelegationPromotion(delegationToken, code),
+      applyCurrentPromotion: (code: string | null) => mutate(() => shopApi.applyDelegationPromotion(delegationToken, code)),
+    };
+  }, [delegationToken]);
+
   useEffect(() => {
-    loadCatalog();
-    void shopApi.listAvailablePromotions()
-      .then(setAvailablePromotions)
-      .catch(() => setAvailablePromotions([]));
-    void authApi.me()
-      .then(async () => {
-        setIsLoggedIn(true);
+    let active = true;
+    const token = readShopDelegationToken();
+    setDelegationToken(token);
+    if (!token) {
+      loadCatalog();
+      const generation = refreshGeneration.current;
+      void shopApi.listAvailablePromotions()
+        .then((promotions) => { if (active && generation === refreshGeneration.current) setAvailablePromotions(promotions); })
+        .catch(() => { if (active && generation === refreshGeneration.current) setAvailablePromotions([]); });
+    } else {
+      setCatalog([]);
+      setLoading(true);
+    }
+    void authApi.me().then(async (user) => {
+      if (!active) return;
+      setIsLoggedIn(true);
+      setIsStudent(Boolean(user.student_id));
+      setCurrentAccount(`${user.display_name}（${user.email}）`);
+      setUserRoom(`user:${user.id}`);
+      const currentToken = readShopDelegationToken();
+      setDelegationToken(currentToken);
+      if (currentToken) {
+        await loadDelegation(currentToken);
+      } else {
+        const generation = refreshGeneration.current;
         try {
-          setRegistrations(await shopApi.getCurrentRegistrations());
-        } catch (error) {
+          const orders = await shopApi.getCurrentRegistrations();
+          if (active && generation === refreshGeneration.current) setRegistrations(orders);
+        }
+        catch (error) {
+          if (!active || generation !== refreshGeneration.current) return;
           setRegistrationLoadError(true);
           toast.error(apiErrorMessage(error, "無法載入商品登記"));
         }
-      })
-      .catch(() => {
-        setIsLoggedIn(false);
-        setRegistrations([]);
-      })
-      .finally(() => setAuthLoading(false));
-  }, [loadCatalog]);
+      }
+    }).catch(() => {
+      if (!active) return;
+      setIsLoggedIn(false);
+      setRegistrations([]);
+      if (readShopDelegationToken()) setLoading(false);
+    }).finally(() => { if (active) setAuthLoading(false); });
+    return () => { active = false; };
+  }, [loadCatalog, loadDelegation]);
+
+  useEffect(() => {
+    const changeContext = () => {
+      if (delegationToken && window.location.hash === "#main-content") {
+        // 公開頁的「跳到主要內容」只移動焦點，保留目前代訂身分與分享連結。
+        window.history.replaceState(window.history.state, "",
+          `${window.location.pathname}${window.location.search}#delegate=${encodeURIComponent(delegationToken)}`);
+        return;
+      }
+      refreshGeneration.current += 1;
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const token = fragment.has("delegate") ? fragment.get("delegate") || "invalid" : null;
+      setDelegationToken(token);
+      setDelegationContext(null);
+      setDelegationError("");
+      setRegistrations([]);
+      setOpenProduct(null);
+      setMyClass(null);
+      setLoadError(false);
+      setRegistrationLoadError(false);
+      setAvailablePromotions([]);
+      setCloseStatus({});
+      if (token) {
+        setCatalog([]);
+        setLoading(isLoggedIn);
+        if (isLoggedIn) void loadDelegation(token);
+      } else {
+        loadCatalog();
+        const generation = refreshGeneration.current;
+        void shopApi.listAvailablePromotions()
+          .then((promotions) => { if (generation === refreshGeneration.current) setAvailablePromotions(promotions); })
+          .catch(() => { if (generation === refreshGeneration.current) setAvailablePromotions([]); });
+        if (isLoggedIn) void shopApi.getCurrentRegistrations()
+          .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
+          .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
+      }
+    };
+    window.addEventListener("hashchange", changeContext);
+    return () => window.removeEventListener("hashchange", changeContext);
+  }, [isLoggedIn, delegationToken, loadCatalog, loadDelegation]);
+
+  const refreshRegistrations = useCallback(async () => {
+    if (!isLoggedIn || authLoading || mutationBusy.current || document.visibilityState === "hidden") return;
+    if (delegationToken) {
+      await loadDelegation(delegationToken);
+    } else {
+      const generation = refreshGeneration.current;
+      try {
+        const orders = await shopApi.getCurrentRegistrations();
+        if (generation === refreshGeneration.current) setRegistrations(orders);
+      } catch { /* 保留已載入內容；下一次同步重試。 */ }
+    }
+  }, [isLoggedIn, authLoading, delegationToken, loadDelegation]);
+  useEffect(() => {
+    if (!isLoggedIn || authLoading) return;
+    const timer = window.setInterval(() => void refreshRegistrations(), 5000);
+    const refresh = () => void refreshRegistrations();
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [isLoggedIn, authLoading, refreshRegistrations]);
+  useWS(userRoom, (message) => {
+    if (message.type === "order.updated") void refreshRegistrations();
+  });
 
   useEffect(() => {
     const scope = orderScopeParams(selectedPromotionScope);
@@ -851,10 +1029,10 @@ export default function ShopPage() {
       setPromotionPreview(null);
       return;
     }
-    void shopApi.previewCurrentPromotion(registration.promotion_code ?? null, scope.activity_id ?? null, scope.category_id)
+    void shoppingApi.previewCurrentPromotion(registration.promotion_code ?? null, scope.activity_id ?? null, scope.category_id)
       .then(setPromotionPreview)
       .catch(() => setPromotionPreview(null));
-  }, [isLoggedIn, authLoading, registrations, selectedPromotionScope]);
+  }, [isLoggedIn, authLoading, registrations, selectedPromotionScope, shoppingApi]);
 
   const activityOptions = useMemo(() => {
     const namesById = new Map<string, Set<string>>();
@@ -927,7 +1105,7 @@ export default function ShopPage() {
     );
   }
   const registrationLocked = Boolean(
-    selectedCategoryRegistration && (selectedCategoryRegistration.is_paid || selectedCategoryRegistration.is_class_collected),
+    (delegationToken && !delegationContext?.can_edit) || selectedCategoryRegistration && (selectedCategoryRegistration.is_paid || selectedCategoryRegistration.is_class_collected),
   );
 
   const inspectAndApplyPromotion = async (
@@ -955,13 +1133,13 @@ export default function ShopPage() {
     setPromotionBusy(true);
     setPromotionFeedback("");
     try {
-      const preview = await shopApi.previewCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
+      const preview = await shoppingApi.previewCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
       setPromotionPreview(preview);
       if (!preview.eligible) {
         setPromotionFeedback(preview.reason ?? "目前尚未符合優惠條件。");
         return;
       }
-      const updated = await shopApi.applyCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
+      const updated = await shoppingApi.applyCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
       setRegistrations((current) => [
         ...current.filter((order) => orderScopeKey(order) !== requestedScopeKey),
         updated,
@@ -977,6 +1155,7 @@ export default function ShopPage() {
   };
 
   const handleRegistrationChange = async (scopeKey: string, order: OrderOut | null) => {
+    refreshGeneration.current += 1;
     const scope = orderScopeParams(scopeKey);
     const activityId = scope.activity_id ?? null;
     if (order) {
@@ -1005,10 +1184,10 @@ export default function ShopPage() {
       return;
     }
     try {
-      const preview = await shopApi.previewCurrentPromotion(pendingCode, activityId, scope.category_id);
+      const preview = await shoppingApi.previewCurrentPromotion(pendingCode, activityId, scope.category_id);
       setPromotionPreview(preview);
       if (preview.eligible) {
-        const updated = await shopApi.applyCurrentPromotion(pendingCode, activityId, scope.category_id);
+        const updated = await shoppingApi.applyCurrentPromotion(pendingCode, activityId, scope.category_id);
         setRegistrations((current) => [
           ...current.filter((existing) => orderScopeKey(existing) !== scopeKey),
           updated,
@@ -1064,6 +1243,32 @@ export default function ShopPage() {
           <p className="shop-public-hero-copy">先選活動，再查看商品與這次登記進度。</p>
         </div>
       </header>
+
+      {delegationToken && <section className="shop-public-context shop-delegation-context" aria-label="家人代訂">
+        <div>
+          <h2>{delegationContext ? `${delegationContext.link.name} · 為 ${delegationContext.student_name} 代訂` : "家人代訂"}</h2>
+          {isLoggedIn && <p>目前帳號：{currentAccount}</p>}
+          <p>送出後立即加入學生訂單，學生負責繳費與領取。你只能修改這個連結登記的品項。</p>
+          <p>優惠按學生本人與所有代訂合計，送出後立即更新，其他人的變更每 5 秒同步。</p>
+          {delegationError && <p role="alert">{delegationError}</p>}
+          {delegationContext?.can_claim && <>
+            <p>確認後此連結會綁定你目前登入的帳號，截止前可重複使用。</p>
+            <button type="button" disabled={delegationBusy} onClick={async () => {
+              setDelegationBusy(true);
+              await loadDelegation(delegationToken, true);
+              setDelegationBusy(false);
+            }}>{delegationBusy ? "確認中…" : "使用此帳號代訂"}</button>
+          </>}
+          {!isLoggedIn && !authLoading && <Link
+            href="/login?next=%2Fshop%3Fdelegation%3Dresume"
+            onClick={() => shopDelegationLoginNext(delegationToken)}>登入自己的帳號開始代訂</Link>}
+          {delegationError && isLoggedIn && <button type="button" onClick={() => void loadDelegation(delegationToken)}>重新載入</button>}
+          {delegationContext && !delegationContext.can_claim && !delegationContext.can_edit && <p>這是你建立的連結。<Link href="/shop">返回本人商品頁</Link></p>}
+        </div>
+      </section>}
+
+      {isStudent && !delegationToken && selectedCategory && <DelegationLinks
+        categoryId={selectedCategory.id} activityId={selectedCategory.activity_id ?? null} />}
 
       {myClass && (
         <section
@@ -1444,7 +1649,7 @@ export default function ShopPage() {
         </div>
       )}
 
-      {isLoggedIn && orderShortcutPortalReady && createPortal(
+      {isLoggedIn && !delegationToken && orderShortcutPortalReady && createPortal(
         <Link
           href="/shop/orders"
           className="shop-public-order-shortcut"
@@ -1457,16 +1662,26 @@ export default function ShopPage() {
         document.body,
       )}
 
-      {openProduct && (
+      {openProduct && (!delegationToken || delegationContext?.can_edit) && (
         <ProductModal
           productId={openProduct}
+          shoppingApi={shoppingApi}
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           isLoggedIn={isLoggedIn}
           authLoading={authLoading}
           registrationLoadError={registrationLoadError}
-          registration={selectedCategoryRegistration}
+          registration={selectedCategoryRegistration ? {
+            ...selectedCategoryRegistration,
+            items: selectedCategoryRegistration.items.filter((item) =>
+              (item.delegation_link_id ?? null) === (delegationToken ? delegationContext?.link.id : null)),
+          } : null}
           scopeKey={selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE}
           registrationLocked={registrationLocked}
+          editingDescription={delegationToken
+            ? `正在修改「${delegationContext?.link.name ?? "家人代訂"}」登記的數量。優惠按學生合計計算。`
+            : selectedCategoryRegistration?.items.some((item) => item.delegation_link_id)
+              ? "這裡修改本人登記的數量。家人代訂品項可在訂單明細修改；優惠按全部品項合計。"
+              : undefined}
           onClose={closeProduct}
           onRegistrationChange={handleRegistrationChange}
           onProductAdded={flyProductIntoOrder}

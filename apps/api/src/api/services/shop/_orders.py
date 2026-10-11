@@ -37,6 +37,7 @@ from api.models.shop import (
     ProductCategory,
     ProductSeries,
     ProductStatus,
+    ShopDelegationLink,
     ShopOrderClose,
     ShopOrderPromotion,
     ShopPromotion,
@@ -575,8 +576,16 @@ async def _create_order_from_items(
     )
     session.add(order)
     await session.flush()
+    actor = await session.get(User, assisted_by_id or user_id)
     for spec in specs:
-        session.add(OrderItem(order_id=order.id, **spec))
+        session.add(
+            OrderItem(
+                order_id=order.id,
+                ordered_by_id=actor.id if actor else None,
+                ordered_by_name=actor.display_name if actor else None,
+                **spec,
+            )
+        )
     await session.flush()
     logger.info("訂單建立 serial=%s total=%d", serial, total_price)
     return order
@@ -890,6 +899,8 @@ async def set_current_registration_product(
     product_id: uuid.UUID,
     *,
     data: CurrentRegistrationUpdate,
+    actor: User | None = None,
+    delegation: ShopDelegationLink | None = None,
 ) -> Order | None:
     """立即登記某商品的規格數量，並以目前有效訂單保存。"""
     await session.execute(select(User.id).where(User.id == user.id).with_for_update())
@@ -931,15 +942,23 @@ async def set_current_registration_product(
         else:
             raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
 
-    existing_items = [
+    actor = actor or user
+    source_id = delegation.id if delegation else None
+    if delegation is not None and delegation.user_id != user.id:
+        raise ValueError("代訂連結不屬於此學生")
+    product_items = [
         item for item in (order.items if order is not None else []) if item.product_id == product.id
     ]
+    existing_items = [item for item in product_items if item.delegation_link_id == source_id]
+    other_quantity = sum(
+        item.quantity for item in product_items if item.delegation_link_id != source_id
+    )
     existing_quantity = sum(item.quantity for item in existing_items)
     await _assert_product_registration_open(
         session,
         product,
         class_id=class_id,
-        allow_sold_out=existing_quantity > 0,
+        allow_sold_out=existing_quantity + other_quantity > 0,
     )
 
     variants: dict[str, tuple[int, list[dict]]] = {}
@@ -957,7 +976,7 @@ async def set_current_registration_product(
         session,
         product,
         user.id,
-        requested_total,
+        requested_total + other_quantity,
         excluding_order_id=order.id if order is not None else None,
     )
 
@@ -1011,6 +1030,9 @@ async def set_current_registration_product(
         keep.quantity = quantity
         keep.unit_price = product.price + _options_delta(selected)
         keep.selected_options = selected
+        if keep.ordered_by_id is None:
+            keep.ordered_by_id = actor.id
+            keep.ordered_by_name = actor.display_name
         for item in duplicates:
             order.items.remove(item)
             await session.delete(item)
@@ -1024,6 +1046,10 @@ async def set_current_registration_product(
                 quantity=quantity,
                 unit_price=product.price + _options_delta(selected),
                 selected_options=selected,
+                ordered_by_id=actor.id,
+                ordered_by_name=actor.display_name,
+                delegation_link_id=source_id,
+                delegation_name=delegation.name if delegation else None,
             )
         )
 
@@ -1345,6 +1371,10 @@ def serialize_order_item(item: OrderItem) -> OrderItemOut:
         unit_price=item.unit_price,
         subtotal=item.quantity * item.unit_price,
         selected_options=item.selected_options or [],
+        ordered_by_id=item.ordered_by_id,
+        ordered_by_name=item.ordered_by_name,
+        delegation_link_id=item.delegation_link_id,
+        delegation_name=item.delegation_name,
     )
 
 
@@ -1478,6 +1508,8 @@ async def replace_order_items(
     *,
     data: ClassOrderUpsert,
 ) -> Order:
+    if any(item.delegation_link_id is not None for item in order.items):
+        raise ValueError("此訂單含家人代訂品項，請學生由商品頁或訂單明細逐項修改")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法修改")
     if order.is_paid or order.is_class_collected:

@@ -9,6 +9,7 @@ import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import type { SeatBookingOut, OrderListItem, OrderOut, ProductOut, ZoneListItem } from "@/lib/types";
 import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
+import OrderItemSources from "@/components/shop/OrderItemSources";
 
 type SeatingItem = {
   productId: string;
@@ -356,6 +357,16 @@ export default function OrderDetailPage() {
               <p className="shop-order-item-unit">
                 NT${it.unit_price.toLocaleString()} × {it.quantity}
               </p>
+              <OrderItemSources sources={detailOrders.flatMap((sourceOrder) => sourceOrder.items
+                .filter((source) => activityPreorder ? source.product_id === it.product_id && source.unit_price === it.unit_price
+                  && source.selected_options.map((option) => option.option_id).sort().join(",")
+                    === it.selected_options.map((option) => option.option_id).sort().join(",") : source.id === it.id)
+                .map((item) => ({
+                  item,
+                  orderId: sourceOrder.id,
+                  canEdit: canModifyRegistration && sourceOrder.id === currentRegistrationId
+                    && currentUserId === sourceOrder.user_id && editableProductIds.has(item.product_id),
+                })))} onChange={() => void load()} />
             </div>
             <div className="shrink-0">
               <p className="shop-order-item-total">NT${it.subtotal.toLocaleString()}</p>

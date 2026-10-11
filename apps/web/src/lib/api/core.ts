@@ -1,4 +1,5 @@
 import { API_BASE } from "../config";
+import { shopDelegationLoginNext } from "../shop-delegation-link";
 import { ApiError } from "../api-helpers";
 import { clearAuthCache } from "../auth-cache";
 import { reportClientError } from "../client-error-reporter";
@@ -48,7 +49,11 @@ function redirectToLoginAfterExpiry(): void {
   if (typeof window === "undefined") return;
   clearAuthCache();
   if (window.location.pathname === "/login") return;
-  const next = `${window.location.pathname}${window.location.search}`;
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const delegation = window.location.pathname === "/shop" && fragment.has("delegate");
+  const next = delegation
+    ? shopDelegationLoginNext(fragment.get("delegate") || "invalid")
+    : `${window.location.pathname}${window.location.search}${window.location.hash}`;
   window.location.replace(`/login?next=${encodeURIComponent(next)}`);
 }
 
@@ -181,7 +186,11 @@ export async function request<T>(
   if (!response.ok) {
     if (response.status === 412 && typeof window !== "undefined") window.dispatchEvent(new CustomEvent("hcca:policy-consent-required"));
     if (response.status === 403 && typeof window !== "undefined" && response.headers.get("X-MFA-Required") === "true") {
-      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const destination = window.location.pathname === "/shop" && fragment.has("delegate")
+        ? shopDelegationLoginNext(fragment.get("delegate") || "invalid")
+        : window.location.pathname + window.location.search;
+      const next = encodeURIComponent(destination);
       window.location.replace(`/settings/security?mfa_required=1&next=${next}`);
       throw new ApiError(403, "需要設定雙重驗證才能存取此功能");
     }
