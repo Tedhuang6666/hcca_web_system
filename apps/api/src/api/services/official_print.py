@@ -1845,7 +1845,7 @@ def render_petition_print_html(
     .print-time {{ margin: 0 0 7mm; font-size: 10.5pt; line-height: 1.4; }}
     h1 {{
       margin: 0 0 3mm;
-      font-family: "標楷體", "OfficialKai", "DFKai-SB", serif;
+      font-family: "OfficialKai", "標楷體", "DFKai-SB", serif;
       color: #111;
       font-size: 18pt;
       font-weight: 400;

@@ -141,10 +141,23 @@ def test_render_petition_print_html_uses_intake_detail_layout() -> None:
     assert "陳情承辦人：黃丞廷" in html
     assert 'href="mailto:hchshcca@gmail.com"' in html
     assert "submitter@example.com" not in html
-    assert 'font-family: "標楷體", "OfficialKai", "DFKai-SB", serif' in html
+    assert 'font-family: "OfficialKai", "標楷體", "DFKai-SB", serif' in html
     assert ".print-time" in html and ".last-updated" in html
     assert "正式回覆" not in html
     assert "處理時間軸" not in html
+
+    # Render the real PDF: the heading must use the bundled font even when the
+    # host supplies a different 標楷體 with incompatible glyph metrics.
+    heading_runs: list[tuple[str, str]] = []
+
+    def collect_heading(text, _cm, _tm, font, size):
+        if text.strip() and size >= 23:
+            heading_runs.append((text, str(font.get("/BaseFont", ""))))
+
+    reader = PdfReader(BytesIO(render_print_pdf(html)))
+    reader.pages[0].extract_text(visitor_text=collect_heading)
+    assert "竹嶺班聯陳情收案詳情" in "".join(text for text, _font in heading_runs)
+    assert heading_runs and all("OfficialKai" in font for _text, font in heading_runs)
 
 
 @pytest.mark.asyncio
