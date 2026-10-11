@@ -9924,7 +9924,17 @@ input[type="radio"]:checked {
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
 }
-.finance-evidence-preview__viewer iframe { display: block; width: 100%; height: 100%; min-height: inherit; border: 0; background: white; }
+.finance-evidence-preview__image { display: block; width: 100%; height: 100%; min-height: inherit; object-fit: contain; background: white; }
+.finance-evidence-preview__pdf { display: grid; min-width: 0; gap: 0.5rem; }
+.finance-evidence-preview__pdf-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; color: var(--text-secondary); font-size: 0.78rem; }
+.finance-evidence-preview__pdf-pages,
+.finance-evidence-preview__pdf-zoom { display: flex; align-items: center; gap: 0.45rem; }
+.finance-evidence-preview__pdf-toolbar button { min-width: 44px; min-height: 44px; padding: 0.35rem; }
+.finance-evidence-preview__viewer--pdf { display: flex; flex-direction: column; overflow: auto; background: #3b3d42; }
+.finance-evidence-preview__viewer--pdf.is-compact { height: clamp(12rem, 32vh, 18rem); min-height: 12rem; }
+.finance-evidence-preview__pdf-canvas { display: flex; min-width: 0; min-height: 0; flex: 1; justify-content: center; overflow: auto; padding: 0.75rem; }
+.finance-evidence-preview__canvas { display: block; max-width: none; background: white; box-shadow: 0 2px 14px rgb(0 0 0 / 24%); }
+.finance-evidence-preview__error { position: relative; z-index: 1; align-self: center; margin: auto; padding: 1rem; color: var(--text-secondary); font-size: 0.88rem; text-align: center; }
 .finance-evidence-preview__loading {
   position: absolute;
   z-index: 1;
@@ -10568,8 +10578,10 @@ input[type="radio"]:checked {
 .public-budget-execution-modal__previews { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: 0.6rem; }
 .public-budget-execution-modal__previews figure { overflow: hidden; min-width: 0; margin: 0; border: 1px solid var(--public-border); border-radius: var(--radius-md); background: #111319; }
 .public-budget-execution-modal__previews figcaption { overflow: hidden; padding: 0.4rem 0.6rem; color: var(--text-muted); font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
-.public-budget-execution-modal__previews iframe,
 .public-budget-execution-modal__image-preview { display: block; width: 100%; height: clamp(12rem, 32vh, 18rem); border: 0; background: #111319; }
+.public-budget-execution-modal__pdf-trigger { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; gap: 0.45rem; border: 1px solid var(--public-border); padding: 0.55rem; background: var(--public-soft); color: var(--public-accent-text); font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+.public-budget-execution-modal__pdf-trigger:hover { background: color-mix(in srgb, var(--public-soft) 75%, var(--public-accent) 25%); }
+.public-budget-execution-modal__pdf-trigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; }
 .public-budget-execution-modal__open-evidence { display: inline-flex; min-height: 2.5rem; align-items: center; gap: 0.35rem; margin: 0.25rem 0.6rem 0.5rem; color: var(--public-accent-text); font-size: 0.68rem; font-weight: 700; text-decoration: none; }
 .public-budget-execution-modal__open-evidence:hover { text-decoration: underline; text-underline-offset: 0.18em; }
 .public-budget-execution-modal__open-evidence:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; border-radius: var(--radius-sm); }
