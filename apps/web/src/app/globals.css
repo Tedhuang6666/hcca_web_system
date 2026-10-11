@@ -1634,8 +1634,8 @@
   }
 
   .public-nav-dropdown-panel {
-    position: fixed;
-    top: var(--public-menu-top, 4.5rem);
+    position: absolute;
+    top: calc(100% + 0.55rem);
     left: 50%;
     right: auto;
     width: min(52rem, calc(100vw - 1.5rem));

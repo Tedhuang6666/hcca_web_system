@@ -252,13 +252,7 @@ function PublicSiteHeaderContent({
               ref={menuRef}
               onToggle={(event) => {
                 const dropdown = event.currentTarget as HTMLDetailsElement;
-                if (dropdown.open) {
-                  const headerBottom = headerRef.current?.getBoundingClientRect().bottom ?? 0;
-                  dropdown.style.setProperty("--public-menu-top", `${headerBottom + 8}px`);
-                  setOpen(false);
-                } else {
-                  dropdown.style.removeProperty("--public-menu-top");
-                }
+                if (dropdown.open) setOpen(false);
               }}
             >
               <summary className="public-nav-link cursor-pointer list-none">
