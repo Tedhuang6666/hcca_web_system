@@ -4,6 +4,7 @@ type AuthenticatedUser = {
   id: string;
   display_name: string;
   email: string;
+  student_id?: string | null;
   avatar_url?: string | null;
   is_superuser?: boolean;
   is_owner?: boolean;

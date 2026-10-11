@@ -2219,3 +2219,93 @@
     transition: none;
   }
 }
+.shop-delegation-form,
+.shop-delegation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin-block: 0.75rem;
+}
+
+.shop-delegation-context h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.shop-delegation-context p,
+.shop-delegation-list p {
+  overflow-wrap: anywhere;
+}
+
+.shop-delegation-links details > summary {
+  min-height: 44px;
+  padding-block: 0.75rem;
+  cursor: pointer;
+}
+
+.shop-delegation-form label {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.shop-delegation-links input,
+.shop-order-item-sources input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.shop-delegation-links button,
+.shop-delegation-context button,
+.shop-order-item-sources button {
+  min-height: 44px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  cursor: pointer;
+}
+
+.shop-delegation-links button:disabled,
+.shop-order-item-sources button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.shop-delegation-links input:focus-visible,
+.shop-delegation-links button:focus-visible,
+.shop-delegation-context button:focus-visible,
+.shop-order-item-sources :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.shop-delegation-list,
+.shop-order-item-sources {
+  list-style: none;
+  padding: 0;
+}
+
+.shop-delegation-list li {
+  padding-block: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.shop-order-item-sources {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.shop-order-item-sources input {
+  max-width: 7rem;
+}

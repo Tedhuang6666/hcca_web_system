@@ -459,6 +459,29 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
 # ── 訂單明細 ──────────────────────────────────────────────────────────────────
 
 
+class ShopDelegationLink(Base, TimestampMixin):
+    """學生授權的具名連結；僅保存秘密的雜湊，首次使用綁定帳號。"""
+
+    __tablename__ = "shop_delegation_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("product_categories.id", ondelete="RESTRICT")
+    )
+    activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("activities.id", ondelete="RESTRICT"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(80))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    bound_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class OrderItem(Base, TimestampMixin):
     """訂單明細（下單當時的單價與變體快照）"""
 
@@ -480,6 +503,17 @@ class OrderItem(Base, TimestampMixin):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # 下單時的單價快照（= 商品價 + 變體加價總和，不受日後調價影響）
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    ordered_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    ordered_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    delegation_link_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_delegation_links.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    delegation_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # 所選變體快照：list[{group_id, group_name, option_id, value, price_delta}]
     selected_options: Mapped[list] = mapped_column(
         JSONDict, nullable=False, default=list, server_default="[]"

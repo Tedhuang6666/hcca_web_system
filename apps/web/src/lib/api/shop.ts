@@ -1,4 +1,5 @@
 import type {
+  ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
@@ -6,6 +7,21 @@ import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
+  listDelegationLinks: () => get<ShopDelegationOut[]>("/shop/delegation-links"),
+  createDelegationLink: (body: ShopDelegationCreate) => post<ShopDelegationOut>("/shop/delegation-links", body),
+  renameDelegationLink: (id: string, name: string) => patch<ShopDelegationOut>(`/shop/delegation-links/${id}`, { name }),
+  revokeDelegationLink: (id: string) => del<void>(`/shop/delegation-links/${id}`),
+  renewDelegationLink: (id: string) => post<ShopDelegationOut>(`/shop/delegation-links/${id}/renew`),
+  accessDelegation: (token: string, claim = false) => post<ShopDelegationContextOut>("/shop/delegation/access", { token, claim }),
+  getDelegationProduct: (token: string, id: string) => post<ProductOut>(`/shop/delegation/products/${id}/read`, { token }),
+  setDelegationProduct: (token: string, id: string, body: { variants: { option_ids: string[]; quantity: number }[] }) =>
+    post<OrderOut | null>(`/shop/delegation/products/${id}`, { token, ...body }),
+  previewDelegationPromotion: (token: string, code: string | null) =>
+    post<ShopPromotionPreviewOut>("/shop/delegation/promotion/preview", { token, code }),
+  applyDelegationPromotion: (token: string, code: string | null) =>
+    post<OrderOut>("/shop/delegation/promotion", { token, code }),
+  updateOrderItemQuantity: (orderId: string, itemId: string, quantity: number) =>
+    patch<OrderOut | null>(`/shop/orders/${orderId}/items/${itemId}`, { quantity }),
   // 瀏覽
   catalog: (activityId?: string) => {
     const q = new URLSearchParams();
