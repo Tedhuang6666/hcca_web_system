@@ -354,9 +354,20 @@ async def persist_client_error_incident(
     user_agent: str | None,
 ) -> SystemIncident | None:
     """Persist browser failures beside API and Celery incidents for one operational timeline."""
-    # Client offline state is an expected user condition, not an application incident.
-    # The raw client event remains available through the recent-error buffer.
+    diagnostics = context.get("diagnostics")
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+
+    # These observations remain in the recent-error buffer, but are not durable incidents.
     if scope == "api.offline":
+        return None
+    if diagnostics.get("failure_kind") == "offline":
+        return None
+    if scope == "securitypolicyviolation" and diagnostics.get("csp_disposition") == "report":
+        return None
+    if context.get("online") is False and (
+        scope in {"api.network", "api.timeout", "api.refresh-network"}
+        or scope.startswith("resource:")
+    ):
         return None
 
     release = str(context.get("release") or "").strip() or None
@@ -369,7 +380,6 @@ async def persist_client_error_incident(
         else f"web: {scope} at {path or 'unknown'}"
     )
 
-    diagnostics = context.get("diagnostics")
     if scope in {"api.network", "api.timeout", "api.refresh-network"} and isinstance(
         diagnostics, dict
     ):
