@@ -313,3 +313,96 @@ async def test_offline_client_error_does_not_create_an_incident(monkeypatch) -> 
 
     assert result is None
     assert not persisted
+
+
+async def test_offline_network_and_resource_errors_do_not_create_incidents(monkeypatch) -> None:
+    persisted = False
+
+    async def persist(**_kwargs):
+        nonlocal persisted
+        persisted = True
+
+    monkeypatch.setattr("api.services.incident.persist_error_incident", persist)
+
+    for scope, failure_kind, online in (
+        ("api.network", "network", False),
+        ("api.timeout", "timeout", False),
+        ("api.refresh-network", "network", False),
+        ("resource:img", "resource", False),
+        ("api.network", "offline", True),
+    ):
+        result = await persist_client_error_incident(
+            error_id=f"client-error-{scope}",
+            message="Request failed",
+            stack="",
+            scope=scope,
+            path="/dashboard",
+            context={"online": online, "diagnostics": {"failure_kind": failure_kind}},
+            trace_id=None,
+            request_id=None,
+            client_ip=None,
+            user_agent=None,
+        )
+
+        assert result is None
+
+    assert not persisted
+
+
+async def test_report_only_csp_error_does_not_create_an_incident(monkeypatch) -> None:
+    persisted = False
+
+    async def persist(**_kwargs):
+        nonlocal persisted
+        persisted = True
+
+    monkeypatch.setattr("api.services.incident.persist_error_incident", persist)
+
+    result = await persist_client_error_incident(
+        error_id="client-error-report-only-csp",
+        message="CSP violated connect-src: https://example.org",
+        stack="",
+        scope="securitypolicyviolation",
+        path="/dashboard",
+        context={
+            "online": True,
+            "diagnostics": {"failure_kind": "csp", "csp_disposition": "report"},
+        },
+        trace_id=None,
+        request_id=None,
+        client_ip=None,
+        user_agent=None,
+    )
+
+    assert result is None
+    assert not persisted
+
+
+async def test_enforced_csp_error_remains_an_incident(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def persist(**kwargs):
+        captured.update(kwargs)
+        return "incident"
+
+    monkeypatch.setattr("api.services.incident.persist_error_incident", persist)
+
+    result = await persist_client_error_incident(
+        error_id="client-error-enforced-csp",
+        message="CSP blocked frame-src: blob",
+        stack="",
+        scope="securitypolicyviolation",
+        path="/dashboard",
+        context={
+            "online": True,
+            "diagnostics": {"failure_kind": "csp", "csp_disposition": "enforce"},
+        },
+        trace_id=None,
+        request_id=None,
+        client_ip=None,
+        user_agent=None,
+    )
+
+    assert result == "incident"
+    assert captured["path"] == "browser-csp"
+    assert captured["title"] == "web: securitypolicyviolation (site-wide CSP)"
