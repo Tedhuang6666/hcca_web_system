@@ -4,11 +4,19 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from api.core.security import redis_client
 from api.models.activity import Activity, ActivityStatus
 from api.models.shop import ShopDelegationLink
 from api.schemas.shop import ProductCategoryCreate, ProductCreate, ShopPromotionCreate
 from api.services import shop as shop_svc
-from api.services.shop import _delegation
+from api.services.shop import _delegation, _delegation_codes
+
+
+@pytest.fixture(autouse=True)
+def isolate_code_namespace(monkeypatch):
+    import uuid
+
+    monkeypatch.setattr(_delegation_codes, "_PREFIX", f"test:delegation-code:{uuid.uuid4()}:")
 
 
 @pytest.fixture
@@ -56,6 +64,142 @@ async def _claim(client, link):
     )
     assert result.status_code == 200
     return result.json()
+
+
+async def test_seven_digit_code_exchanges_for_same_scoped_link(delegation_setup):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    code = link["authorization_code"]
+    assert len(code) == 7 and code.isascii() and code.isdecimal()
+    expires_at = datetime.fromisoformat(link["authorization_code_expires_at"])
+    assert timedelta(minutes=29) < expires_at - datetime.now(UTC) < timedelta(minutes=31)
+    key = f"{_delegation_codes._PREFIX}value:{_delegation_codes._digest(code)}"
+    assert 0 < await redis_client.ttl(key) <= _delegation_codes.CODE_TTL_SECONDS
+    listed = (await sc.get("/shop/delegation-links")).json()
+    assert listed[0]["authorization_code"] is None
+    assert listed[0]["token"] is None
+    exchanged = await pc.post("/shop/delegation/code", json={"code": code})
+    assert exchanged.status_code == 200
+    assert exchanged.json()["token"] == link["token"]
+    preview = await pc.post("/shop/delegation/access", json=exchanged.json())
+    assert preview.status_code == 200
+    assert preview.json()["can_claim"] is True
+    assert preview.json()["registration"] is None
+    assert preview.json()["link"]["category_id"] == str(category.id)
+    await _claim(pc, exchanged.json())
+    denied = await oc.post("/shop/delegation/code", json={"code": code})
+    assert denied.status_code == 403
+    assert "token" not in denied.json()
+
+
+async def test_code_requires_login_and_does_not_allow_parent_to_create_authorization(
+    delegation_setup, client
+):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    assert (
+        await client.post("/shop/delegation/code", json={"code": link["authorization_code"]})
+    ).status_code == 401
+    assert (
+        await pc.post(
+            "/shop/delegation-links", json={"name": "家長", "category_id": str(category.id)}
+        )
+    ).status_code == 403
+
+
+@pytest.mark.parametrize("code", ["123456", "12345678", "abcdefg", "１２３４５６７", 1234567])
+async def test_code_requires_exactly_seven_ascii_digits(delegation_setup, code):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    response = await pc.post("/shop/delegation/code", json={"code": code})
+    assert response.status_code == 422
+
+
+async def test_expired_code_does_not_invalidate_share_link(delegation_setup):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    key = (
+        f"{_delegation_codes._PREFIX}value:{_delegation_codes._digest(link['authorization_code'])}"
+    )
+    await redis_client.expire(key, 0)
+    expired = await pc.post("/shop/delegation/code", json={"code": link["authorization_code"]})
+    assert expired.status_code == 404
+    assert "過期" in expired.json()["detail"]
+    assert (
+        await pc.post("/shop/delegation/access", json={"token": link["token"]})
+    ).status_code == 200
+
+
+async def test_renewal_and_revocation_disable_old_codes(delegation_setup):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    new_link = (await sc.post(f"/shop/delegation-links/{link['id']}/renew")).json()
+    assert (
+        await pc.post("/shop/delegation/code", json={"code": link["authorization_code"]})
+    ).status_code == 410
+    assert (
+        await pc.post("/shop/delegation/code", json={"code": new_link["authorization_code"]})
+    ).status_code == 200
+    assert (await sc.delete(f"/shop/delegation-links/{new_link['id']}")).status_code == 204
+    assert (
+        await pc.post("/shop/delegation/code", json={"code": new_link["authorization_code"]})
+    ).status_code == 410
+
+
+async def test_code_rejects_deactivated_student(delegation_setup, db_session):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    student.is_active = False
+    await db_session.flush()
+    response = await pc.post("/shop/delegation/code", json={"code": link["authorization_code"]})
+    assert response.status_code == 410
+    assert "token" not in response.json()
+
+
+async def test_code_account_attempt_limit_always_applies(delegation_setup):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    wrong = "0000000" if link["authorization_code"] != "0000000" else "0000001"
+    for _ in range(5):
+        assert (await pc.post("/shop/delegation/code", json={"code": wrong})).status_code == 404
+    limited = await pc.post("/shop/delegation/code", json={"code": link["authorization_code"]})
+    assert limited.status_code == 429
+    assert "10 分鐘" in limited.json()["detail"]
+
+
+async def test_code_ip_limit_applies_across_accounts():
+    for index in range(30):
+        with pytest.raises(_delegation_codes.DelegationCodeError) as error:
+            await _delegation_codes.exchange_code(
+                "0000000", actor_id=str(index), client_ip="test-ip"
+            )
+        assert error.value.status_code == 404
+    with pytest.raises(_delegation_codes.DelegationCodeError) as error:
+        await _delegation_codes.exchange_code("0000000", actor_id="31", client_ip="test-ip")
+    assert error.value.status_code == 429
+
+
+async def test_code_exchange_fails_closed_when_redis_is_unavailable(delegation_setup, monkeypatch):
+    from redis.exceptions import ConnectionError
+
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+
+    async def unavailable(*args, **kwargs):
+        raise ConnectionError("synthetic test outage")
+
+    monkeypatch.setattr(redis_client, "get", unavailable)
+    response = await pc.post("/shop/delegation/code", json={"code": link["authorization_code"]})
+    assert response.status_code == 503
+    assert "token" not in response.json()
+
+
+async def test_code_collision_never_overwrites_previous_authorization(monkeypatch):
+    values = iter([1234567, 1234567, 1234568])
+    monkeypatch.setattr(_delegation_codes.secrets, "randbelow", lambda maximum: next(values))
+    first, _ = await _delegation_codes.issue_code("synthetic-first-token")
+    second, _ = await _delegation_codes.issue_code("synthetic-second-token")
+    assert first != second
+    assert (
+        await _delegation_codes.exchange_code(first, actor_id="parent-a", client_ip="ip-a")
+        == "synthetic-first-token"
+    )
+    assert (
+        await _delegation_codes.exchange_code(second, actor_id="parent-b", client_ip="ip-b")
+        == "synthetic-second-token"
+    )
 
 
 async def _set(client, product, quantity, token=None):

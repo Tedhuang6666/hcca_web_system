@@ -30,7 +30,8 @@ import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
 import DelegationLinks from "@/components/shop/DelegationLinks";
-import DelegationPermissions from "@/components/shop/DelegationPermissions";
+import DelegationInstructions from "@/components/shop/DelegationInstructions";
+import ParentDelegationEntry from "@/components/shop/ParentDelegationEntry";
 import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-delegation-link";
 import { useWS } from "@/hooks/useWS";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
@@ -195,6 +196,7 @@ function ProductModal({
   registration,
   scopeKey,
   registrationLocked,
+  authorizationRequired = false,
   editingDescription,
   onClose,
   onRegistrationChange,
@@ -209,6 +211,7 @@ function ProductModal({
   registration: OrderOut | null;
   scopeKey: string;
   registrationLocked: boolean;
+  authorizationRequired?: boolean;
   editingDescription?: string;
   onClose: () => void;
   onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
@@ -359,6 +362,7 @@ function ProductModal({
       && (product.is_unlimited || product.stock_quantity > 0 || registeredQuantity > 0),
   );
   const canEdit = isLoggedIn
+    && !authorizationRequired
     && !authLoading
     && !registrationLoadError
     && !registrationLocked
@@ -618,6 +622,10 @@ function ProductModal({
                 <p className="shop-product-purchase-hint" role="status">
                   {authLoading ? "正在確認登入狀態…" : "登入後即可登記商品。"}
                 </p>
+              ) : authorizationRequired ? (
+                <p className="shop-product-purchase-hint" role="status">
+                  家長代訂需要學生授權。請先在商品頁輸入七位數授權碼，或開啟學生傳來的連結。
+                </p>
               ) : registrationLoadError ? (
                 <p className="shop-product-purchase-hint" role="alert">
                   目前無法讀取商品登記，請重新載入頁面後再修改。
@@ -767,6 +775,7 @@ export default function ShopPage() {
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isStudent, setIsStudent] = useState(false);
+  const [canOrderForSelf, setCanOrderForSelf] = useState(false);
   const [currentAccount, setCurrentAccount] = useState("");
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [delegationToken, setDelegationToken] = useState<string | null>(null);
@@ -933,6 +942,7 @@ export default function ShopPage() {
       if (!active) return;
       setIsLoggedIn(true);
       setIsStudent(Boolean(user.student_id));
+      setCanOrderForSelf(Boolean(user.student_id || user.is_school_email));
       setCurrentAccount(`${user.display_name}（${user.email}）`);
       setUserRoom(`user:${user.id}`);
       const currentToken = readShopDelegationToken();
@@ -1263,11 +1273,7 @@ export default function ShopPage() {
             : "已綁定此帳號，可在下方選購。送出後直接加入學生的預購。"}</p>}
           {(!delegationContext || delegationContext.can_claim || delegationContext.can_edit) && <>
             <p>送出即加入學生預購，不需學生再次確認，由學生繳款與領取。你只能修改此連結登記的品項，無法修改學生本人或其他家人的品項。</p>
-            <details className="shop-delegation-help">
-              <summary>學生與家長的用途及權限說明</summary>
-              <DelegationPermissions />
-              <p>連結確認綁定前，只能查看商品與學生姓名；確認後可查看此授權範圍的合計與品項。之後可重開同一連結接續代訂。</p>
-            </details>
+            <p>確認綁定前，只能查看商品與學生姓名；確認後可查看此授權範圍的合計與品項。</p>
           </>}
           {delegationContext?.can_claim && <>
             <button type="button" className="shop-delegation-primary" disabled={delegationBusy} onClick={async () => {
@@ -1282,6 +1288,7 @@ export default function ShopPage() {
             onClick={() => shopDelegationLoginNext(delegationToken)}>登入自己的帳號開始代訂</Link>}
           {delegationError && isLoggedIn && <button type="button" onClick={() => void loadDelegation(delegationToken)}>重新載入</button>}
           {delegationContext && !delegationContext.can_claim && !delegationContext.can_edit && <p>這是你建立的連結。<Link href="/shop">返回本人商品頁</Link></p>}
+          <DelegationInstructions />
         </div>
       </section>}
 
@@ -1290,19 +1297,7 @@ export default function ShopPage() {
         categoryId={selectedCategory.id} activityId={selectedCategory.activity_id ?? null}
         scopeName={selectedCategory.activity_name ?? selectedCategory.name} />}
 
-      {!delegationToken && !authLoading && !isStudent && <section
-        className="shop-delegation-entry" aria-labelledby="shop-delegation-guide-title">
-        <h2 id="shop-delegation-guide-title">家長代訂</h2>
-        <p>家長想替學生選購？請學生先在商品頁建立代訂連結，再私下傳給你。</p>
-        <p>開啟學生傳來的連結後，登入自己的帳號、確認學生與授權範圍，即可開始。一般商品頁不會自動取得學生的代訂權限。</p>
-        <p>代訂會直接加入學生的預購，由學生繳款與領取；家長只能修改自己透過該連結登記的品項。</p>
-        {!isLoggedIn && <Link href="/login?next=%2Fshop" className="shop-delegation-primary">我是學生，登入建立代訂連結</Link>}
-        {isLoggedIn && <p>目前帳號沒有學生身分，無法建立授權連結；請使用學生傳來的連結。</p>}
-        <details className="shop-delegation-help">
-          <summary>學生與家長的用途及權限說明</summary>
-          <DelegationPermissions />
-        </details>
-      </section>}
+      {!delegationToken && !authLoading && !isStudent && <ParentDelegationEntry isLoggedIn={isLoggedIn} />}
 
       {myClass && (
         <section
@@ -1683,7 +1678,7 @@ export default function ShopPage() {
         </div>
       )}
 
-      {isLoggedIn && !delegationToken && orderShortcutPortalReady && createPortal(
+      {isLoggedIn && canOrderForSelf && !delegationToken && orderShortcutPortalReady && createPortal(
         <Link
           href="/shop/orders"
           className="shop-public-order-shortcut"
@@ -1711,6 +1706,7 @@ export default function ShopPage() {
           } : null}
           scopeKey={selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE}
           registrationLocked={registrationLocked}
+          authorizationRequired={isLoggedIn && !canOrderForSelf && !delegationToken}
           editingDescription={delegationToken
             ? `正在修改「${delegationContext?.link.name ?? "家人代訂"}」登記的數量。優惠按學生合計計算。`
             : selectedCategoryRegistration?.items.some((item) => item.delegation_link_id)

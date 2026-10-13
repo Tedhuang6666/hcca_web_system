@@ -2269,6 +2269,11 @@
 .shop-delegation-ready { color: var(--public-accent-text); font-weight: 600; }
 .shop-delegation-context > div > button,
 .shop-delegation-context > div > a { margin-top: 0.75rem; }
+.shop-delegation-instructions h3 { margin-top: 1.25rem; color: var(--public-text); font-weight: 700; }
+.shop-delegation-instructions ol { list-style: decimal; padding-left: 1.25rem; margin-top: 0.5rem; }
+.shop-delegation-instructions li + li { margin-top: 0.5rem; }
+.shop-delegation-code-form { max-width: 36rem; }
+.shop-delegation-code { font-size: 1.5rem; letter-spacing: 0.1em; font-variant-numeric: tabular-nums; }
 
 .shop-delegation-entry .shop-delegation-primary {
   display: inline-flex;
@@ -2296,6 +2301,7 @@
   .shop-delegation-permissions > div { grid-template-columns: 1fr; gap: 0.25rem; }
   .shop-delegation-steps { flex-direction: column; }
   .shop-delegation-form input { font-size: 1rem; }
+  .shop-delegation-form .shop-delegation-code { font-size: 1.5rem; }
   .shop-delegation-form button { width: 100%; }
   /* 留出建立與分享連結的操作空間，避免浮動捷徑遮住表單。 */
   body:has(#shop-delegation-create:not([hidden]), .shop-delegation-share) .shop-public-order-shortcut { display: none; }

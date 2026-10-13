@@ -31,7 +31,7 @@ from api.schemas.shop import (
     ShopPromotionProductTargetOut,
 )
 from api.services import school_class as class_svc
-from api.services.shop import _catalog, _orders, _promotions
+from api.services.shop import _catalog, _delegation_codes, _orders, _promotions
 
 
 class DelegationError(ValueError):
@@ -99,7 +99,10 @@ async def create_link(
     )
     session.add(link)
     await session.flush()
-    return await serialize_link(session, link, token=token)
+    code, expires_at = await _delegation_codes.issue_code(token)
+    return (await serialize_link(session, link, token=token)).model_copy(
+        update={"authorization_code": code, "authorization_code_expires_at": expires_at}
+    )
 
 
 async def list_links(session: AsyncSession, user: User) -> list[ShopDelegationOut]:
