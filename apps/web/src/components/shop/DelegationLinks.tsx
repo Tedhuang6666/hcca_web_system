@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { ShopDelegationOut } from "@/lib/types";
+import DelegationPermissions from "./DelegationPermissions";
 
-export default function DelegationLinks({ categoryId, activityId }: {
+export default function DelegationLinks({ categoryId, activityId, scopeName }: {
   categoryId: string;
   activityId: string | null;
+  scopeName: string;
 }) {
   const [links, setLinks] = useState<ShopDelegationOut[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -16,7 +18,19 @@ export default function DelegationLinks({ categoryId, activityId }: {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const shareInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (creating) nameInput.current?.focus(); }, [creating]);
+  useEffect(() => {
+    if (shareUrl) {
+      shareInput.current?.focus();
+      shareInput.current?.select();
+    }
+  }, [shareUrl]);
   const load = useCallback(async () => {
+    setLoading(true);
     setLoadError(false);
     try {
       const result = await shopApi.listDelegationLinks();
@@ -25,6 +39,8 @@ export default function DelegationLinks({ categoryId, activityId }: {
     } catch (error) {
       setLoadError(true);
       setMessage(apiErrorMessage(error, "無法載入代訂連結"));
+    } finally {
+      setLoading(false);
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -76,44 +92,69 @@ export default function DelegationLinks({ categoryId, activityId }: {
   </li>;
 
   return (
-    <details className="shop-public-promotions shop-delegation-links">
-      <summary className="shop-public-promotion-toggle">
-        <span><strong>請家人幫忙代訂</strong><br />建立具名連結，使用同一個商品頁</span>
-        <span>管理連結</span>
-      </summary>
-      <div className="shop-public-promotions-content">
-        <p>送出後立即加入你的訂單，優惠按本人與家人合計。家人需登入自己的帳號，確認後此連結只供該帳號使用；各商品截止、班級結單或收款後無法再修改。</p>
-        <p>請只分享給你授權的人。你可隨時撤銷連結；已登記品項會保留，可在訂單明細修改。</p>
+    <section className="shop-delegation-links shop-delegation-entry" aria-labelledby="shop-delegation-title">
+      <div className="shop-delegation-heading">
+        <div>
+          <h2 id="shop-delegation-title">家長代訂</h2>
+          <p>請家長或受你授權的家人替你選購，代訂品項會直接加入你的預購。</p>
+          <p>家長只能修改自己透過連結登記的品項；你仍可管理全部品項。</p>
+        </div>
+        <button type="button" className={creating ? undefined : "shop-delegation-primary"} aria-expanded={creating}
+          aria-controls="shop-delegation-create" disabled={busy}
+          onClick={() => setCreating((current) => !current)}>
+          {creating ? "收起建立表單" : "建立家長代訂連結"}
+        </button>
+      </div>
+      <p className="shop-delegation-scope"><strong>本次授權：{scopeName}</strong>
+        {activityId ? "（包含同活動的商品主題）" : "（僅此商品主題）"}。要授權其他活動，請先切換下方商品主題。</p>
+      <div id="shop-delegation-create" hidden={!creating}>
+        <ol className="shop-delegation-steps" aria-label="家長代訂流程">
+          <li>為家長建立具名連結</li>
+          <li>複製連結，私下傳給家長</li>
+          <li>家長登入自己的帳號，確認後開始代訂</li>
+        </ol>
+        <p>每個連結只綁定一個家人帳號。請只分享給你授權的人，不需要提供你的帳號或密碼。</p>
         <form className="shop-delegation-form" onSubmit={(event) => {
           event.preventDefault();
           if (name.trim()) void run(() => shopApi.createDelegationLink({ name: name.trim(), category_id: categoryId }), "連結已建立，請複製並分享給家人。");
         }}>
           <label>連結名稱（給誰代訂）
-            <input value={name} maxLength={80} placeholder="例如：給媽媽代訂" required
+            <input ref={nameInput} value={name} maxLength={80} placeholder="例如：給媽媽代訂" required
               onChange={(event) => setName(event.target.value)} disabled={busy} />
           </label>
-          <button type="submit" disabled={busy || !name.trim()}>建立連結</button>
+          <button type="submit" className="shop-delegation-primary" disabled={busy || !name.trim()}>建立連結</button>
         </form>
-        {shareUrl && <div className="shop-delegation-form">
+      </div>
+      {shareUrl && <div className="shop-delegation-share">
+        <p><strong>連結已準備好，請複製並傳給家長。</strong></p>
+        <div className="shop-delegation-form">
           <label>分享連結（請在離開頁面前保存）
-            <input readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
+            <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
           </label>
-          <button type="button" onClick={async () => {
+          <button type="button" className="shop-delegation-primary" onClick={async () => {
             try { await navigator.clipboard.writeText(shareUrl); setMessage("連結已複製。"); }
             catch { setMessage("請選取分享連結後手動複製。"); }
           }}>複製連結</button>
-        </div>}
-        <p role="status">{busy ? "處理中…" : message}</p>
-        {loadError && <button type="button" onClick={() => void load()}>重新載入連結</button>}
-        {!loadError && visibleLinks.length === 0 && <p>這個活動尚未建立代訂連結。</p>}
+        </div>
+        <p>切換活動、關閉或重整頁面後，無法再次查看這個網址；未保存時可在連結管理重新產生。</p>
+      </div>}
+      <p role="status">{busy ? "處理中…" : loading ? "載入代訂連結中…" : message}</p>
+      {loadError && <button type="button" onClick={() => void load()}>重新載入連結</button>}
+      {!loading && !loadError && visibleLinks.length === 0 && <p>這個活動尚未建立代訂連結。</p>}
+      <details className="shop-delegation-help">
+        <summary>學生與家長的用途及權限說明</summary>
+        <DelegationPermissions />
+      </details>
+      {visibleLinks.length > 0 && <details className="shop-delegation-management">
+        <summary>管理本次授權的連結（{visibleLinks.length}）</summary>
         <ul className="shop-delegation-list">
           {visibleLinks.map(renderLink)}
         </ul>
-        {otherLinks.length > 0 && <details>
-          <summary>其他活動的連結（{otherLinks.length}）</summary>
-          <ul className="shop-delegation-list">{otherLinks.map(renderLink)}</ul>
-        </details>}
-      </div>
-    </details>
+      </details>}
+      {otherLinks.length > 0 && <details>
+        <summary>其他活動的連結（{otherLinks.length}）</summary>
+        <ul className="shop-delegation-list">{otherLinks.map(renderLink)}</ul>
+      </details>}
+    </section>
   );
 }
