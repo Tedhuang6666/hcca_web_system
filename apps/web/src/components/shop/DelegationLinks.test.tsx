@@ -20,7 +20,7 @@ describe("學生代訂連結管理", () => {
     fireEvent.click(create);
     expect(screen.getByRole("textbox", { name: "連結名稱（給誰代訂）" })).toHaveFocus();
     expect(screen.getByRole("list", { name: "家長代訂流程" })).toBeVisible();
-    fireEvent.click(screen.getByText("學生與家長的用途及權限說明"));
+    fireEvent.click(screen.getByText("完整操作介紹與權限說明"));
     expect(screen.getByText(/撤銷只停止後續代訂，已登記的品項仍保留/)).toBeVisible();
     await screen.findByText("這個活動尚未建立代訂連結。");
   });
@@ -37,7 +37,7 @@ describe("學生代訂連結管理", () => {
 
   it("creates a named link and presents the fragment URL for sharing", async () => {
     api.listDelegationLinks.mockResolvedValue([]);
-    api.createDelegationLink.mockResolvedValue({ ...link, token: "synthetic-test-token" });
+    api.createDelegationLink.mockResolvedValue({ ...link, token: "synthetic-test-token", authorization_code: "0123456", authorization_code_expires_at: "2026-10-14T01:30:00Z" });
     render(<DelegationLinks categoryId="goods" activityId="festival" scopeName="校慶" />);
     fireEvent.click(screen.getByRole("button", { name: "建立家長代訂連結" }));
     await screen.findByText("這個活動尚未建立代訂連結。");
@@ -45,7 +45,10 @@ describe("學生代訂連結管理", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立連結" }));
     await waitFor(() => expect(api.createDelegationLink).toHaveBeenCalledWith({ name: "給媽媽代訂", category_id: "goods" }));
     expect(await screen.findByRole("textbox", { name: "分享連結（請在離開頁面前保存）" })).toHaveValue(`${window.location.origin}/shop#delegate=synthetic-test-token`);
-    expect(screen.getByRole("textbox", { name: "分享連結（請在離開頁面前保存）" })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "七位數授權碼" })).toHaveFocus();
+    expect(screen.queryByRole("textbox", { name: "連結名稱（給誰代訂）" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "七位數授權碼" })).toHaveValue("0123456");
+    expect(screen.getByRole("button", { name: "複製授權碼" })).toBeVisible();
   });
 
   it("displays the bound account and supports renaming and revocation", async () => {

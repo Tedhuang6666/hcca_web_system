@@ -10314,6 +10314,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/delegation/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange Delegation Code */
+        post: operations["exchange_delegation_code_shop_delegation_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/delegation/products/{product_id}": {
         parameters: {
             query?: never;
@@ -28735,6 +28752,16 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** ShopDelegationCodeCreate */
+        ShopDelegationCodeCreate: {
+            /** Code */
+            code: string;
+        };
+        /** ShopDelegationCodeOut */
+        ShopDelegationCodeOut: {
+            /** Token */
+            token: string;
+        };
         /** ShopDelegationContextOut */
         ShopDelegationContextOut: {
             /** Can Claim */
@@ -28766,6 +28793,10 @@ export interface components {
         ShopDelegationOut: {
             /** Activity Id */
             activity_id?: string | null;
+            /** Authorization Code */
+            authorization_code?: string | null;
+            /** Authorization Code Expires At */
+            authorization_code_expires_at?: string | null;
             /** Bound User Email */
             bound_user_email?: string | null;
             /** Bound User Name */
@@ -54152,6 +54183,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopDelegationContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exchange_delegation_code_shop_delegation_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopDelegationCodeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopDelegationCodeOut"];
                 };
             };
             /** @description Validation Error */

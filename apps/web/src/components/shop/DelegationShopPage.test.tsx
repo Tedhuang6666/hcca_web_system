@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
   me: vi.fn(), catalog: vi.fn(), getCurrentRegistrations: vi.fn(), listAvailablePromotions: vi.fn(),
   accessDelegation: vi.fn(), getDelegationProduct: vi.fn(), setDelegationProduct: vi.fn(),
   previewDelegationPromotion: vi.fn(), applyDelegationPromotion: vi.fn(),
-  setCurrentRegistrationProduct: vi.fn(), getProduct: vi.fn(), listDelegationLinks: vi.fn(),
+  setCurrentRegistrationProduct: vi.fn(), getProduct: vi.fn(), listDelegationLinks: vi.fn(), exchangeDelegationCode: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({
   authApi: { me: api.me }, shopApi: api, classApi: { myClass: vi.fn().mockResolvedValue(null) },
@@ -51,6 +51,24 @@ beforeEach(() => {
 });
 
 describe("原商品頁的家人代訂模式", () => {
+  it("enters the same explicit binding flow after a parent submits a seven-digit code", async () => {
+    window.history.replaceState({}, "", "/shop");
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.getCurrentRegistrations.mockResolvedValue([]);
+    api.exchangeDelegationCode.mockResolvedValue({ token: "synthetic-code-link-token" });
+    api.accessDelegation.mockResolvedValue({ ...context, can_claim: true, can_edit: false, registration: null });
+    render(<ShopPage />);
+    const code = await screen.findByRole("textbox", { name: "學生提供的七位數授權碼" });
+    fireEvent.change(code, { target: { value: "0123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "查看學生授權" }));
+    expect(await screen.findByRole("button", { name: "確認授權並開始代訂" })).toBeVisible();
+    expect(api.exchangeDelegationCode).toHaveBeenCalledWith("0123456");
+    expect(api.accessDelegation).toHaveBeenCalledWith("synthetic-code-link-token", false);
+    expect(api.accessDelegation).not.toHaveBeenCalledWith("synthetic-code-link-token", true);
+    expect(screen.getByText("媽媽（parent@synthetic.test）")).toBeVisible();
+  });
+
   it("uses only this link's rows for editing while displaying the combined order", async () => {
     render(<ShopPage />);
     expect(await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" })).toBeVisible();
@@ -75,7 +93,7 @@ describe("原商品頁的家人代訂模式", () => {
     expect(screen.getByText("媽媽（parent@synthetic.test）")).toBeVisible();
     expect(screen.getByText(/確認後，這個連結只供目前帳號使用/)).toBeVisible();
     expect(screen.getByText(/^送出即加入學生預購，不需學生再次確認/)).toBeVisible();
-    fireEvent.click(screen.getByText("學生與家長的用途及權限說明"));
+    fireEvent.click(screen.getByText("完整操作介紹與權限說明"));
     expect(screen.getByText(/代訂送出後立即加入學生的預購，不需學生再次確認/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -90,10 +108,15 @@ describe("原商品頁的家人代訂模式", () => {
     api.listAvailablePromotions.mockResolvedValue([]);
     api.getCurrentRegistrations.mockResolvedValue([]);
     render(<ShopPage />);
-    expect(await screen.findByText("目前帳號沒有學生身分，無法建立授權連結；請使用學生傳來的連結。")).toBeVisible();
+    expect(await screen.findByText("目前帳號沒有學生身分，需由學生建立授權。代訂直接加入學生預購，由學生繳款與領取；你只能修改自己透過這份授權登記的品項。")).toBeVisible();
     expect(screen.queryByRole("button", { name: "建立家長代訂連結" })).not.toBeInTheDocument();
     expect(api.listDelegationLinks).not.toHaveBeenCalled();
     expect(api.accessDelegation).not.toHaveBeenCalled();
+    api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
+    fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
+    expect(await screen.findByText("家長代訂需要學生授權。請先在商品頁輸入七位數授權碼，或開啟學生傳來的連結。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeDisabled();
+    expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
   });
 
   it("shows students a scoped create entry while guests receive login guidance", async () => {
@@ -109,7 +132,7 @@ describe("原商品頁的家人代訂模式", () => {
     unmount();
     api.me.mockRejectedValue(new Error("未登入"));
     render(<ShopPage />);
-    expect(await screen.findByRole("link", { name: "我是學生，登入建立代訂連結" })).toHaveAttribute("href", "/login?next=%2Fshop");
+    expect(await screen.findByRole("link", { name: "登入家長帳號" })).toHaveAttribute("href", "/login?next=%2Fshop");
     expect(screen.queryByRole("button", { name: "建立家長代訂連結" })).not.toBeInTheDocument();
   });
 

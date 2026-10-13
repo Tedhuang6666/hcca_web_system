@@ -8,7 +8,7 @@ from collections.abc import Awaitable
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
@@ -66,6 +66,8 @@ from api.schemas.shop import (
     ProductVariantOptionUpdate,
     ShopClassSummaryOut,
     ShopDelegationAccess,
+    ShopDelegationCodeCreate,
+    ShopDelegationCodeOut,
     ShopDelegationContextOut,
     ShopDelegationCreate,
     ShopDelegationOut,
@@ -90,6 +92,7 @@ from api.services import shop as shop_svc
 from api.services.permission import get_user_permission_codes
 from api.services.realtime_events import broadcast_order_updated
 from api.services.shop import _delegation as delegation_svc
+from api.services.shop import _delegation_codes as delegation_code_svc
 from api.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -1621,7 +1624,7 @@ async def get_close_status(
 async def _delegation_result[T](operation: Awaitable[T]) -> T:
     try:
         return await operation
-    except delegation_svc.DelegationError as error:
+    except (delegation_svc.DelegationError, delegation_code_svc.DelegationCodeError) as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     except StaleDataError as error:
         raise HTTPException(status_code=409, detail="庫存已更新，請重新載入") from error
@@ -1716,6 +1719,25 @@ async def access_delegation(
             summary=f"綁定代訂連結「{result.link.name}」",
         )
     return result
+
+
+@router.post("/delegation/code", response_model=ShopDelegationCodeOut)
+async def exchange_delegation_code(
+    payload: ShopDelegationCodeCreate,
+    request: Request,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> ShopDelegationCodeOut:
+    token = await _delegation_result(
+        delegation_code_svc.exchange_code(
+            payload.code,
+            actor_id=str(current_user.id),
+            client_ip=request.client.host if request.client else "unknown",
+        )
+    )
+    # 回傳完整連結前必須確認未撤銷、帳號綁定、學生／活動仍有效及商品開放範圍。
+    await _delegation_result(delegation_svc.resolve_link(session, current_user, token))
+    return ShopDelegationCodeOut(token=token)
 
 
 @router.post("/delegation/products/{product_id}/read", response_model=ProductOut)

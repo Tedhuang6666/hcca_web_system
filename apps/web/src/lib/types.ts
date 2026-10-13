@@ -390,6 +390,8 @@ export type {
   OrderItemOut,
   OrderItemQuantityUpdate,
   ShopDelegationAccess,
+  ShopDelegationCodeCreate,
+  ShopDelegationCodeOut,
   ShopDelegationContextOut,
   ShopDelegationCreate,
   ShopDelegationOut,

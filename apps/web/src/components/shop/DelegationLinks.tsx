@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { ShopDelegationOut } from "@/lib/types";
-import DelegationPermissions from "./DelegationPermissions";
+import DelegationInstructions from "./DelegationInstructions";
 
 export default function DelegationLinks({ categoryId, activityId, scopeName }: {
   categoryId: string;
@@ -15,6 +15,8 @@ export default function DelegationLinks({ categoryId, activityId, scopeName }: {
   const [name, setName] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [shareLinkId, setShareLinkId] = useState<string | null>(null);
+  const [authorizationCode, setAuthorizationCode] = useState<string | null>(null);
+  const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState(false);
@@ -22,13 +24,15 @@ export default function DelegationLinks({ categoryId, activityId, scopeName }: {
   const [creating, setCreating] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
   const shareInput = useRef<HTMLInputElement>(null);
+  const codeInput = useRef<HTMLInputElement>(null);
   useEffect(() => { if (creating) nameInput.current?.focus(); }, [creating]);
   useEffect(() => {
     if (shareUrl) {
-      shareInput.current?.focus();
-      shareInput.current?.select();
+      const input = authorizationCode ? codeInput.current : shareInput.current;
+      input?.focus();
+      input?.select();
     }
-  }, [shareUrl]);
+  }, [shareUrl, authorizationCode]);
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
@@ -53,10 +57,15 @@ export default function DelegationLinks({ categoryId, activityId, scopeName }: {
       if (result?.token) {
         setShareUrl(`${window.location.origin}/shop#delegate=${encodeURIComponent(result.token)}`);
         setShareLinkId(result.id);
+        setAuthorizationCode(result.authorization_code ?? null);
+        setCodeExpiresAt(result.authorization_code_expires_at ?? null);
+        setCreating(false);
         setName("");
       } else if (revokedId === shareLinkId) {
         setShareUrl("");
         setShareLinkId(null);
+        setAuthorizationCode(null);
+        setCodeExpiresAt(null);
       }
       setMessage(success);
       await load();
@@ -110,7 +119,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName }: {
       <div id="shop-delegation-create" hidden={!creating}>
         <ol className="shop-delegation-steps" aria-label="家長代訂流程">
           <li>為家長建立具名連結</li>
-          <li>複製連結，私下傳給家長</li>
+          <li>把七位數授權碼或連結私下傳給家長</li>
           <li>家長登入自己的帳號，確認後開始代訂</li>
         </ol>
         <p>每個連結只綁定一個家人帳號。請只分享給你授權的人，不需要提供你的帳號或密碼。</p>
@@ -126,7 +135,20 @@ export default function DelegationLinks({ categoryId, activityId, scopeName }: {
         </form>
       </div>
       {shareUrl && <div className="shop-delegation-share">
-        <p><strong>連結已準備好，請複製並傳給家長。</strong></p>
+        <p><strong>授權已準備好，選一種方式傳給家長即可。</strong></p>
+        {authorizationCode && <>
+          <div className="shop-delegation-form">
+            <label>七位數授權碼
+              <input ref={codeInput} readOnly value={authorizationCode} className="shop-delegation-code"
+                onFocus={(event) => event.target.select()} />
+            </label>
+            <button type="button" className="shop-delegation-primary" onClick={async () => {
+              try { await navigator.clipboard.writeText(authorizationCode); setMessage("授權碼已複製，請傳給家長。"); }
+              catch { codeInput.current?.focus(); codeInput.current?.select(); setMessage("請選取授權碼後手動複製。"); }
+            }}>複製授權碼</button>
+          </div>
+          <p>有效至 {codeExpiresAt ? new Date(codeExpiresAt).toLocaleString("zh-TW") : "建立後 30 分鐘"}。家長在商品頁輸入即可；過期時可改用下方連結。</p>
+        </>}
         <div className="shop-delegation-form">
           <label>分享連結（請在離開頁面前保存）
             <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
@@ -141,10 +163,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName }: {
       <p role="status">{busy ? "處理中…" : loading ? "載入代訂連結中…" : message}</p>
       {loadError && <button type="button" onClick={() => void load()}>重新載入連結</button>}
       {!loading && !loadError && visibleLinks.length === 0 && <p>這個活動尚未建立代訂連結。</p>}
-      <details className="shop-delegation-help">
-        <summary>學生與家長的用途及權限說明</summary>
-        <DelegationPermissions />
-      </details>
+      <DelegationInstructions />
       {visibleLinks.length > 0 && <details className="shop-delegation-management">
         <summary>管理本次授權的連結（{visibleLinks.length}）</summary>
         <ul className="shop-delegation-list">

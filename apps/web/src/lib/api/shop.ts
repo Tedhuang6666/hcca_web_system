@@ -1,5 +1,5 @@
 import type {
-  ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
+  ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
@@ -13,6 +13,7 @@ export const shopApi = {
   revokeDelegationLink: (id: string) => del<void>(`/shop/delegation-links/${id}`),
   renewDelegationLink: (id: string) => post<ShopDelegationOut>(`/shop/delegation-links/${id}/renew`),
   accessDelegation: (token: string, claim = false) => post<ShopDelegationContextOut>("/shop/delegation/access", { token, claim }),
+  exchangeDelegationCode: (code: string) => post<ShopDelegationCodeOut>("/shop/delegation/code", { code }),
   getDelegationProduct: (token: string, id: string) => post<ProductOut>(`/shop/delegation/products/${id}/read`, { token }),
   setDelegationProduct: (token: string, id: string, body: { variants: { option_ids: string[]; quantity: number }[] }) =>
     post<OrderOut | null>(`/shop/delegation/products/${id}`, { token, ...body }),

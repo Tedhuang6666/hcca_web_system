@@ -363,6 +363,16 @@ class ShopDelegationOut(BaseModel):
     revoked_at: datetime | None
     created_at: datetime
     token: str | None = None  # 僅建立／重新產生時回傳一次。
+    authorization_code: str | None = None  # 短效七位數碼，僅建立／重新產生時回傳。
+    authorization_code_expires_at: datetime | None = None
+
+
+class ShopDelegationCodeCreate(BaseModel):
+    code: str = Field(pattern=r"^[0-9]{7}$")
+
+
+class ShopDelegationCodeOut(BaseModel):
+    token: str
 
 
 class ShopDelegationAccess(BaseModel):
