@@ -42,7 +42,7 @@ const context: ShopDelegationContextOut = {
 beforeEach(() => {
   vi.resetAllMocks();
   window.history.replaceState({}, "", "/shop#delegate=synthetic-test-token");
-  api.me.mockResolvedValue({ id: "parent", display_name: "妈妈" });
+  api.me.mockResolvedValue({ id: "parent", display_name: "媽媽", email: "parent@synthetic.test" });
   api.accessDelegation.mockResolvedValue(context);
   api.getDelegationProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
   api.setDelegationProduct.mockResolvedValue(order);
@@ -71,12 +71,62 @@ describe("原商品頁的家人代訂模式", () => {
       ...context, can_claim: true, can_edit: false, registration: null,
     });
     render(<ShopPage />);
-    const claim = await screen.findByRole("button", { name: "使用此帳號代訂" });
+    const claim = await screen.findByRole("button", { name: "確認授權並開始代訂" });
+    expect(screen.getByText("媽媽（parent@synthetic.test）")).toBeVisible();
+    expect(screen.getByText(/確認後，這個連結只供目前帳號使用/)).toBeVisible();
+    expect(screen.getByText(/^送出即加入學生預購，不需學生再次確認/)).toBeVisible();
+    fireEvent.click(screen.getByText("學生與家長的用途及權限說明"));
+    expect(screen.getByText(/代訂送出後立即加入學生的預購，不需學生再次確認/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(claim);
     await waitFor(() => expect(api.accessDelegation).toHaveBeenCalledWith("synthetic-test-token", true));
     expect(await screen.findByRole("dialog")).toBeVisible();
+  });
+
+  it("guides a parent without a student link without exposing student link management", async () => {
+    window.history.replaceState({}, "", "/shop");
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.getCurrentRegistrations.mockResolvedValue([]);
+    render(<ShopPage />);
+    expect(await screen.findByText("目前帳號沒有學生身分，無法建立授權連結；請使用學生傳來的連結。")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "建立家長代訂連結" })).not.toBeInTheDocument();
+    expect(api.listDelegationLinks).not.toHaveBeenCalled();
+    expect(api.accessDelegation).not.toHaveBeenCalled();
+  });
+
+  it("shows students a scoped create entry while guests receive login guidance", async () => {
+    window.history.replaceState({}, "", "/shop");
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.getCurrentRegistrations.mockResolvedValue([]);
+    api.listDelegationLinks.mockResolvedValue([]);
+    api.me.mockResolvedValue({ id: "student", display_name: "學生", student_id: "S001" });
+    const { unmount } = render(<ShopPage />);
+    expect(await screen.findByRole("button", { name: "建立家長代訂連結" })).toBeVisible();
+    expect(screen.getByText("本次授權：校慶")).toBeVisible();
+    unmount();
+    api.me.mockRejectedValue(new Error("未登入"));
+    render(<ShopPage />);
+    expect(await screen.findByRole("link", { name: "我是學生，登入建立代訂連結" })).toHaveAttribute("href", "/login?next=%2Fshop");
+    expect(screen.queryByRole("button", { name: "建立家長代訂連結" })).not.toBeInTheDocument();
+  });
+
+  it("identifies a student's own link as read-only rather than inviting account binding", async () => {
+    api.accessDelegation.mockResolvedValue({ ...context, can_claim: false, can_edit: false });
+    render(<ShopPage />);
+    expect(await screen.findByRole("link", { name: "返回本人商品頁" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "確認授權並開始代訂" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.setDelegationProduct).not.toHaveBeenCalled();
+  });
+
+  it("explains that collected registrations cannot be changed in an already bound session", async () => {
+    api.accessDelegation.mockResolvedValue({ ...context, registration: { ...order, is_class_collected: true } });
+    render(<ShopPage />);
+    expect(await screen.findByText("本次預購已收款，品項不能再修改。可查看已登記品項。")).toBeVisible();
   });
 
   it("keeps revoked links in the delegation error flow", async () => {

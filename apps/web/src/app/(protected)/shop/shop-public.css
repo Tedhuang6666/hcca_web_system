@@ -2236,10 +2236,69 @@
   margin-block: 0.75rem;
 }
 
-.shop-delegation-context h2 {
-  font-size: 1rem;
+.shop-delegation-entry {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 0;
+  border-block: 1px solid var(--public-border);
+  color: var(--public-secondary);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.shop-delegation-entry h2 {
+  margin: 0 0 0.5rem;
+  color: var(--public-text);
+  font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.5;
+}
+
+.shop-delegation-entry p + p { margin-top: 0.4rem; }
+.shop-delegation-entry strong { color: var(--public-text); }
+.shop-delegation-entry [hidden] { display: none; }
+.shop-delegation-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.shop-delegation-heading > div { min-width: 0; }
+.shop-delegation-scope { margin-block: 0.75rem; }
+.shop-delegation-steps { display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; padding-left: 1.25rem; margin-block: 1rem; color: var(--public-text); list-style: decimal; }
+.shop-delegation-share { margin-block: 1rem; padding: 1rem; background: var(--public-surface); border-radius: 0.5rem; }
+.shop-delegation-permissions { margin-block: 1rem; }
+.shop-delegation-permissions > div { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 1rem; padding-block: 0.65rem; border-bottom: 1px solid var(--public-border); }
+.shop-delegation-permissions dt { color: var(--public-text); font-weight: 700; }
+.shop-delegation-permissions dd { margin: 0; max-width: 70ch; }
+.shop-delegation-account { overflow-wrap: anywhere; }
+.shop-delegation-ready { color: var(--public-accent-text); font-weight: 600; }
+.shop-delegation-context > div > button,
+.shop-delegation-context > div > a { margin-top: 0.75rem; }
+
+.shop-delegation-entry .shop-delegation-primary {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--public-accent);
+  color: var(--primary-fg);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.shop-delegation-entry .shop-delegation-primary:hover { background: var(--public-accent-strong); }
+.shop-delegation-entry .shop-delegation-primary:disabled { opacity: 0.55; cursor: default; }
+.shop-delegation-entry :focus-visible { outline: 2px solid var(--public-focus); outline-offset: 3px; }
+.shop-delegation-entry summary { min-height: 44px; padding-block: 0.65rem; color: var(--public-text); cursor: pointer; }
+
+@media (max-width: 640px) {
+  .shop-delegation-heading { align-items: stretch; flex-direction: column; }
+  .shop-delegation-permissions > div { grid-template-columns: 1fr; gap: 0.25rem; }
+  .shop-delegation-steps { flex-direction: column; }
+  .shop-delegation-form input { font-size: 1rem; }
+  .shop-delegation-form button { width: 100%; }
+  /* 留出建立與分享連結的操作空間，避免浮動捷徑遮住表單。 */
+  body:has(#shop-delegation-create:not([hidden]), .shop-delegation-share) .shop-public-order-shortcut { display: none; }
 }
 
 .shop-delegation-context p,

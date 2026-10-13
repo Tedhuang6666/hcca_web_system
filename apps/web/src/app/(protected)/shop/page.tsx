@@ -30,6 +30,7 @@ import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
 import DelegationLinks from "@/components/shop/DelegationLinks";
+import DelegationPermissions from "@/components/shop/DelegationPermissions";
 import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-delegation-link";
 import { useWS } from "@/hooks/useWS";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
@@ -1240,26 +1241,43 @@ export default function ShopPage() {
       <header className="shop-public-hero">
         <div>
           <h1>商品預購</h1>
-          <p className="shop-public-hero-copy">先選活動，再查看商品與這次登記進度。</p>
+          <p className="shop-public-hero-copy">{delegationToken
+            ? "使用學生授權的連結，替學生選購本次活動商品。"
+            : "先選活動，再查看商品與這次登記進度。也可以邀請家長幫忙選購。"}</p>
         </div>
       </header>
 
-      {delegationToken && <section className="shop-public-context shop-delegation-context" aria-label="家人代訂">
+      {delegationToken && <section className="shop-delegation-entry shop-delegation-context" aria-label="家長代訂">
         <div>
-          <h2>{delegationContext ? `${delegationContext.link.name} · 為 ${delegationContext.student_name} 代訂` : "家人代訂"}</h2>
-          {isLoggedIn && <p>目前帳號：{currentAccount}</p>}
-          <p>送出後立即加入學生訂單，學生負責繳費與領取。你只能修改這個連結登記的品項。</p>
-          <p>優惠按學生本人與所有代訂合計，送出後立即更新，其他人的變更每 5 秒同步。</p>
+          <h2>{delegationContext ? `${delegationContext.link.name} · 為 ${delegationContext.student_name} 代訂` : "家長代訂"}</h2>
+          {authLoading && <p role="status">確認登入帳號與代訂授權中…</p>}
+          {!authLoading && isLoggedIn && <p className="shop-delegation-account">目前帳號：<strong>{currentAccount}</strong></p>}
+          {delegationContext && <p className="shop-delegation-scope"><strong>授權範圍：{[...new Set((delegationContext.catalog ?? []).map((category) =>
+            category.activity_name ?? category.name))].join("、") || "此連結的商品主題"}</strong>。本頁只顯示可代訂的商品。</p>}
           {delegationError && <p role="alert">{delegationError}</p>}
           {delegationContext?.can_claim && <>
-            <p>確認後此連結會綁定你目前登入的帳號，截止前可重複使用。</p>
-            <button type="button" disabled={delegationBusy} onClick={async () => {
+            <p><strong>請先確認學生與登入帳號。</strong>確認後，這個連結只供目前帳號使用；若帳號不正確，請先登出並登入自己的帳號，再開啟原連結。</p>
+          </>}
+          {delegationContext?.can_edit && <p role="status" className="shop-delegation-ready">{registrationLocked
+            ? "本次預購已收款，品項不能再修改。可查看已登記品項。"
+            : "已綁定此帳號，可在下方選購。送出後直接加入學生的預購。"}</p>}
+          {(!delegationContext || delegationContext.can_claim || delegationContext.can_edit) && <>
+            <p>送出即加入學生預購，不需學生再次確認，由學生繳款與領取。你只能修改此連結登記的品項，無法修改學生本人或其他家人的品項。</p>
+            <details className="shop-delegation-help">
+              <summary>學生與家長的用途及權限說明</summary>
+              <DelegationPermissions />
+              <p>連結確認綁定前，只能查看商品與學生姓名；確認後可查看此授權範圍的合計與品項。之後可重開同一連結接續代訂。</p>
+            </details>
+          </>}
+          {delegationContext?.can_claim && <>
+            <button type="button" className="shop-delegation-primary" disabled={delegationBusy} onClick={async () => {
               setDelegationBusy(true);
               await loadDelegation(delegationToken, true);
               setDelegationBusy(false);
-            }}>{delegationBusy ? "確認中…" : "使用此帳號代訂"}</button>
+            }}>{delegationBusy ? "確認中…" : "確認授權並開始代訂"}</button>
           </>}
           {!isLoggedIn && !authLoading && <Link
+            className="shop-delegation-primary"
             href="/login?next=%2Fshop%3Fdelegation%3Dresume"
             onClick={() => shopDelegationLoginNext(delegationToken)}>登入自己的帳號開始代訂</Link>}
           {delegationError && isLoggedIn && <button type="button" onClick={() => void loadDelegation(delegationToken)}>重新載入</button>}
@@ -1268,7 +1286,23 @@ export default function ShopPage() {
       </section>}
 
       {isStudent && !delegationToken && selectedCategory && <DelegationLinks
-        categoryId={selectedCategory.id} activityId={selectedCategory.activity_id ?? null} />}
+        key={catalogScopeKey(selectedCategory)}
+        categoryId={selectedCategory.id} activityId={selectedCategory.activity_id ?? null}
+        scopeName={selectedCategory.activity_name ?? selectedCategory.name} />}
+
+      {!delegationToken && !authLoading && !isStudent && <section
+        className="shop-delegation-entry" aria-labelledby="shop-delegation-guide-title">
+        <h2 id="shop-delegation-guide-title">家長代訂</h2>
+        <p>家長想替學生選購？請學生先在商品頁建立代訂連結，再私下傳給你。</p>
+        <p>開啟學生傳來的連結後，登入自己的帳號、確認學生與授權範圍，即可開始。一般商品頁不會自動取得學生的代訂權限。</p>
+        <p>代訂會直接加入學生的預購，由學生繳款與領取；家長只能修改自己透過該連結登記的品項。</p>
+        {!isLoggedIn && <Link href="/login?next=%2Fshop" className="shop-delegation-primary">我是學生，登入建立代訂連結</Link>}
+        {isLoggedIn && <p>目前帳號沒有學生身分，無法建立授權連結；請使用學生傳來的連結。</p>}
+        <details className="shop-delegation-help">
+          <summary>學生與家長的用途及權限說明</summary>
+          <DelegationPermissions />
+        </details>
+      </section>}
 
       {myClass && (
         <section
