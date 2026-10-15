@@ -364,7 +364,7 @@ async def test_decree_print_uses_full_school_heading_and_government_layout() -> 
         issuer_full_name=None,
         org=council,
         org_id="council",
-        title="議長令",
+        title="國立新竹高級中學班級聯合自治會主席令",
         urgency="normal",
         classification="normal",
         recipients=[],
@@ -387,8 +387,8 @@ async def test_decree_print_uses_full_school_heading_and_government_layout() -> 
 
     rendered = await render_document_print_html(_OrgSession(council), doc)
 
-    assert "國立新竹高級中學班聯會議長令</header>" in rendered
-    assert '<span class="signature-title">議長</span>' in rendered
+    assert "國立新竹高級中學班級聯合自治會主席令</header>" in rendered
+    assert '<span class="signature-title">主席</span>' in rendered
     assert '<span class="signature-name">黃丞廷</span>' in rendered
     assert "margin: 25mm;" in rendered
     assert 'font-family: "Times New Roman","OfficialKai","標楷體","DFKai-SB",serif;' in rendered

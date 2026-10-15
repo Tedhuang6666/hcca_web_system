@@ -25,6 +25,7 @@ _CN_DIGITS = "零一二三四五六七八九"
 _WEEKDAYS = "一二三四五六日"
 _SCHOOL_FULL_NAME = "國立新竹高級中學"
 _SCHOOL_SHORT_NAME = "新竹高中"
+_DECREE_ISSUER_NAME = f"{_SCHOOL_FULL_NAME}班級聯合自治會"
 _BUNDLED_KAI_FONT = "edukai-5.1_20251208.ttf"
 _FALLBACK_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
 _BUNDLED_LISHU_FONT = "MoeLI-3.0.ttf"
@@ -600,7 +601,8 @@ async def render_document_print_html(
     is_decree = cat == "decree"
     is_record = cat == "record"
     is_consultation = cat == "consultation"
-    issuer_name = await _full_org_name(session, doc)
+    # 主席令由班級聯合自治會發布，不把主席職位組織併入機關全銜。
+    issuer_name = _DECREE_ISSUER_NAME if is_decree else await _full_org_name(session, doc)
     decree_authority_title = _decree_issuer_title(doc, issuer_name) if is_decree else ""
     issuer = _esc(issuer_name)
     category_label = {
