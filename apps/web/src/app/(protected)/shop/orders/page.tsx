@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
-import type { OrderListItem } from "@/lib/types";
+import type { OrderListItem, ShopDelegatedOrderOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { useWS } from "@/hooks/useWS";
@@ -16,6 +16,7 @@ export default function OrdersPage() {
   const [loadError, setLoadError] = useState("");
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [productImages, setProductImages] = useState<Record<string, string | null>>({});
+  const [delegatedOrderIds, setDelegatedOrderIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
@@ -32,7 +33,14 @@ export default function OrdersPage() {
         allOrders.push(...page);
         if (page.length < 500) break;
       }
-      setOrders(allOrders);
+      const delegatedOrders: ShopDelegatedOrderOut[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const page = await shopApi.listDelegatedOrders({ limit: "500", offset: String(offset) });
+        delegatedOrders.push(...page);
+        if (page.length < 500) break;
+      }
+      setOrders([...allOrders, ...delegatedOrders.map((entry) => entry.order)]);
+      setDelegatedOrderIds(new Set(delegatedOrders.map((entry) => entry.order.id)));
     } catch (error) {
       setLoadError(apiErrorMessage(error, "無法載入登記紀錄，請重試。"));
     } finally {
@@ -87,7 +95,7 @@ export default function OrdersPage() {
           <Link href="/shop" className="shop-orders-back" aria-label="返回商品頁">
             <ArrowLeft size={17} aria-hidden="true" />
           </Link>
-          <h1>我的預購</h1>
+          <h1>我的預購與代訂</h1>
         </div>
       </header>
 
@@ -122,6 +130,11 @@ export default function OrdersPage() {
                   <div className="shop-order-activity-heading">
                     <div>
                       <h3>{group.label}</h3>
+                      {group.orders.some((order) => delegatedOrderIds.has(order.id)) && (
+                        <p className="shop-order-delegated-note">
+                          明細中只能修改你代訂的品項，其他來源僅供查看。
+                        </p>
+                      )}
                     </div>
                     <div className="shop-order-activity-amounts">
                       <strong>合計 NT${group.amount.toLocaleString("zh-TW")}</strong>

@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrdersPage from "@/app/(protected)/shop/orders/page";
 import type { OrderListItem } from "@/lib/types";
 
-const api = vi.hoisted(() => ({ listOrders: vi.fn(), catalog: vi.fn(), getProduct: vi.fn() }));
+const api = vi.hoisted(() => ({
+  listOrders: vi.fn(), listDelegatedOrders: vi.fn(), catalog: vi.fn(), getProduct: vi.fn(),
+}));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
 vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
 
@@ -20,6 +22,7 @@ const order: OrderListItem = {
 beforeEach(() => {
   vi.clearAllMocks();
   api.listOrders.mockResolvedValue([]);
+  api.listDelegatedOrders.mockResolvedValue([]);
   api.catalog.mockResolvedValue([]);
   api.getProduct.mockResolvedValue({ image_url: null });
 });
@@ -38,7 +41,7 @@ describe("我的預購", () => {
     expect(await screen.findByRole("heading", { name: "預購品項" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "下一步" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /待繳 NT\$/ })).not.toBeInTheDocument();
-    const activity = screen.getByRole("region", { name: "校慶預購" });
+    const activity = await screen.findByRole("region", { name: "校慶預購" });
     expect(within(activity).getByText("合計 NT$300")).toBeVisible();
     expect(within(activity).getByText("已繳 NT$200 · 待補繳 NT$100")).toBeVisible();
     const items = within(activity).getByRole("list", { name: "校慶品項" });
@@ -60,6 +63,22 @@ describe("我的預購", () => {
     render(<OrdersPage />);
     expect(await screen.findByText("目前沒有預購品項，先到商品頁挑選商品。")).toBeVisible();
     expect(screen.queryByRole("region", { name: "校慶預購" })).not.toBeInTheDocument();
+  });
+
+  it("includes student orders where the current user added delegated items", async () => {
+    api.listDelegatedOrders.mockResolvedValue([{
+      order: { ...order, id: "student-order", user_name: "小明" },
+      editable_item_ids: ["mom-item"],
+    }]);
+    render(<OrdersPage />);
+
+    const activity = await screen.findByRole("region", { name: "校慶預購" });
+    expect(await within(activity).findByText("明細中只能修改你代訂的品項，其他來源僅供查看。"))
+      .toBeVisible();
+    expect(within(activity).getByText("× 2")).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
+      .toHaveAttribute("href", "/shop/orders/student-order");
+    expect(api.listDelegatedOrders).toHaveBeenCalledWith({ limit: "500", offset: "0" });
   });
 
   it("allows retry after failure and links to the order details when items are absent", async () => {

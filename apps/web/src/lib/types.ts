@@ -393,6 +393,7 @@ export type {
   ShopDelegationCodeCreate,
   ShopDelegationCodeOut,
   ShopDelegationContextOut,
+  ShopDelegatedOrderOut,
   ShopDelegationCreate,
   ShopDelegationOut,
   ShopDelegationUpdate,

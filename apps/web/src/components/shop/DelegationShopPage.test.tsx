@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ShopPage from "@/app/(protected)/shop/page";
 import type { OrderOut, ShopDelegationContextOut } from "@/lib/types";
@@ -104,6 +104,13 @@ describe("原商品頁的家人代訂模式", () => {
   it("uses only this link's rows for editing while displaying the combined order", async () => {
     render(<ShopPage />);
     expect(await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" })).toBeVisible();
+    const existingOrder = screen.getByRole("region", { name: "學生在此活動的預購" });
+    expect(within(existingOrder).getByText("學生本人和家人已登記的品項只供查看；你只能修改自己透過此連結加入的品項。"))
+      .toBeVisible();
+    expect(within(existingOrder).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(existingOrder).getByRole("link", { name: "查看訂單明細" }))
+      .toHaveAttribute("href", "/shop/orders/order");
+    expect(screen.getByRole("link", { name: "查看我的代訂訂單" })).toHaveAttribute("href", "/shop/orders");
     expect(screen.getByText("已登記 5 件")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     const increase = await screen.findByRole("button", { name: "增加數量" });

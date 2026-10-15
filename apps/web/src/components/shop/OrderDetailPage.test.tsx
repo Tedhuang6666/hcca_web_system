@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   me: vi.fn(),
   getOrder: vi.fn(),
   listOrders: vi.fn(),
+  listDelegatedOrders: vi.fn(),
   getCurrentRegistrations: vi.fn(),
   catalog: vi.fn(),
   getCloseStatus: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("@/lib/api", () => ({
   shopApi: {
     getOrder: api.getOrder,
     listOrders: api.listOrders,
+    listDelegatedOrders: api.listDelegatedOrders,
     getCurrentRegistrations: api.getCurrentRegistrations,
     catalog: api.catalog,
     getCloseStatus: api.getCloseStatus,
@@ -92,6 +94,7 @@ beforeEach(() => {
   api.me.mockResolvedValue({ id: "student" });
   api.getOrder.mockImplementation(async (id: string) => id === "added" ? addedOrder : firstOrder);
   api.listOrders.mockResolvedValue([firstOrder, addedOrder]);
+  api.listDelegatedOrders.mockResolvedValue([]);
   api.getCurrentRegistrations.mockResolvedValue([]);
   api.getProduct.mockResolvedValue({ requires_seating: false, image_url: "/uploads/bag.png" });
   api.orderAssignments.mockResolvedValue([]);
@@ -121,5 +124,43 @@ describe("公開訂單詳情", () => {
     expect(screen.getByRole("link", { name: "登入" }))
       .toHaveAttribute("href", "/login?next=%2Fshop%2Forders%2Ffirst");
     expect(api.getOrder).not.toHaveBeenCalled();
+  });
+
+  it("lets a parent edit only the line they added to the student's order", async () => {
+    const delegatedOrder: OrderOut = {
+      ...firstOrder,
+      is_class_collected: false,
+      items: [
+        firstOrder.items[0],
+        {
+          ...firstOrder.items[0], id: "mom-item", delegation_link_id: "mom-link",
+          delegation_name: "給媽媽代訂", ordered_by_id: "parent", ordered_by_name: "媽媽",
+        },
+        {
+          ...firstOrder.items[0], id: "dad-item", delegation_link_id: "dad-link",
+          delegation_name: "給爸爸代訂", ordered_by_id: "dad", ordered_by_name: "爸爸",
+        },
+      ],
+    };
+    api.me.mockResolvedValue({ id: "parent" });
+    api.getOrder.mockResolvedValue(delegatedOrder);
+    api.listDelegatedOrders.mockResolvedValue([{
+      order: { ...delegatedOrder, user_name: "學生" },
+      editable_item_ids: ["mom-item"],
+    }]);
+    api.catalog.mockResolvedValue([{
+      id: "goods",
+      products: [{ id: "bag", status: "active", sale_end: null }],
+      series: [],
+    }]);
+    api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
+
+    render(<OrderDetailPage />);
+
+    expect(await screen.findByText("只能修改你代訂的品項；學生本人與其他家人的品項僅供查看。"))
+      .toBeVisible();
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
+    expect(api.listDelegatedOrders).toHaveBeenCalledWith({ order_id: "first", limit: "1" });
+    expect(screen.queryByRole("link", { name: "修改紀念袋登記" })).not.toBeInTheDocument();
   });
 });

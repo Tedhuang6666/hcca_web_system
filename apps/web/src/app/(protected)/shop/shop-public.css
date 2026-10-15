@@ -1659,6 +1659,14 @@
   font-weight: 750;
 }
 
+.shop-order-activity-heading .shop-order-delegated-note {
+  max-width: 34rem;
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .shop-order-activity-heading p {
   margin: 0.25rem 0 0;
   color: var(--text-secondary);
@@ -2335,6 +2343,57 @@
 .shop-delegation-permissions dd { margin: 0; max-width: 70ch; }
 .shop-delegation-account { overflow-wrap: anywhere; }
 .shop-delegation-ready { color: var(--public-accent-text); font-weight: 600; }
+.shop-delegation-registration {
+  margin-top: 1rem;
+  border-top: 1px solid var(--public-border);
+  padding-top: 1rem;
+}
+.shop-delegation-registration h3 {
+  margin: 0 0 0.35rem;
+  color: var(--public-text);
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+.shop-delegation-registration > p {
+  max-width: 65ch;
+  color: var(--public-secondary);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.shop-delegation-registration ul {
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.shop-delegation-registration li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid var(--public-border);
+  padding: 0.65rem 0;
+  color: var(--public-text);
+  font-size: 0.82rem;
+}
+.shop-delegation-registration li > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.shop-delegation-registration li > div span {
+  color: var(--public-secondary);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+.shop-delegation-registration li > strong {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--public-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.shop-delegation-registration .shop-order-details {
+  margin-top: 0.5rem;
+}
 .shop-delegation-context > div > button,
 .shop-delegation-context > div > a { margin-top: 0.75rem; }
 .shop-delegation-instructions h3 { margin-top: 1.25rem; color: var(--public-text); font-weight: 700; }
@@ -2371,6 +2430,7 @@
   .shop-delegation-form input { font-size: 1rem; }
   .shop-delegation-form .shop-delegation-code { font-size: 1.5rem; }
   .shop-delegation-form button { width: 100%; }
+  .shop-delegation-registration li { align-items: flex-start; }
 }
 
 .shop-delegation-context p,

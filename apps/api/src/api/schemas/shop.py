@@ -465,6 +465,11 @@ class OrderListItem(BaseModel):
     items: list[OrderItemOut] = Field(default_factory=list)
 
 
+class ShopDelegatedOrderOut(BaseModel):
+    order: OrderListItem
+    editable_item_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
 class CheckoutRequest(BaseModel):
     notes: str | None = Field(None, max_length=500, description="備註")
     coupon_code: str | None = Field(None, max_length=80, description="優惠碼")
@@ -800,6 +805,7 @@ __all__ = [
     "OrderItemOut",
     "OrderListItem",
     "OrderOut",
+    "ShopDelegatedOrderOut",
     "OrderPaymentUpdate",
     "ClassPaymentUpdate",
     "ClassCollectionUpdate",

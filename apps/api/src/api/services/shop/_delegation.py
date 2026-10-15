@@ -13,17 +13,20 @@ from sqlalchemy.orm import selectinload
 
 from api.models.shop import (
     Order,
+    OrderItem,
     Product,
     ProductCategory,
     ProductSeries,
     ProductStatus,
     ShopDelegationLink,
+    ShopOrderPromotion,
 )
 from api.models.user import User
 from api.schemas.shop import (
     CurrentRegistrationUpdate,
     ProductOut,
     RegistrationVariantCreate,
+    ShopDelegatedOrderOut,
     ShopDelegationContextOut,
     ShopDelegationCreate,
     ShopDelegationOut,
@@ -276,6 +279,92 @@ async def context(
     )
 
 
+async def list_delegated_orders(
+    session: AsyncSession,
+    actor: User,
+    *,
+    order_id: uuid.UUID | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[ShopDelegatedOrderOut]:
+    link_rows = (
+        await session.execute(
+            select(
+                ShopDelegationLink.id,
+                ShopDelegationLink.user_id,
+            ).where(
+                ShopDelegationLink.bound_user_id == actor.id,
+                ShopDelegationLink.user_id != actor.id,
+                ShopDelegationLink.revoked_at.is_(None),
+            )
+        )
+    ).all()
+    if not link_rows:
+        return []
+    link_owner_by_id = {link_id: owner_id for link_id, owner_id in link_rows}
+    editable_link_ids = set(link_owner_by_id)
+
+    query = (
+        select(Order)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .join(ShopDelegationLink, ShopDelegationLink.id == OrderItem.delegation_link_id)
+        .where(
+            ShopDelegationLink.bound_user_id == actor.id,
+            ShopDelegationLink.user_id == Order.user_id,
+            ShopDelegationLink.revoked_at.is_(None),
+        )
+        .options(
+            selectinload(Order.activity),
+            selectinload(Order.category),
+            selectinload(Order.school_class),
+            selectinload(Order.user),
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.category),
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.series)
+            .selectinload(ProductSeries.category),
+            selectinload(Order.applied_promotions).selectinload(ShopOrderPromotion.promotion),
+        )
+        .order_by(Order.created_at.desc(), Order.id.desc())
+        .distinct()
+    )
+    if order_id is not None:
+        query = query.where(Order.id == order_id)
+    result = await session.execute(query.limit(limit).offset(offset))
+    orders = list(result.scalars().unique().all())
+    return [
+        ShopDelegatedOrderOut(
+            order=_orders.serialize_order_list_item(order),
+            editable_item_ids=[
+                item.id
+                for item in order.items
+                if item.delegation_link_id in editable_link_ids
+                and link_owner_by_id.get(item.delegation_link_id) == order.user_id
+            ],
+        )
+        for order in orders
+    ]
+
+
+async def can_view_order(session: AsyncSession, actor: User, order: Order) -> bool:
+    if actor.id == order.user_id:
+        return False
+    link_id = await session.scalar(
+        select(ShopDelegationLink.id)
+        .join(OrderItem, OrderItem.delegation_link_id == ShopDelegationLink.id)
+        .where(
+            ShopDelegationLink.user_id == order.user_id,
+            ShopDelegationLink.bound_user_id == actor.id,
+            ShopDelegationLink.revoked_at.is_(None),
+            OrderItem.order_id == order.id,
+        )
+        .limit(1)
+    )
+    return link_id is not None
+
+
 async def delegated_product(
     session: AsyncSession, actor: User, token: str, product_id: uuid.UUID
 ) -> ProductOut:
@@ -368,16 +457,38 @@ async def preview(
 async def update_owned_item(
     session: AsyncSession, user: User, order_id: uuid.UUID, item_id: uuid.UUID, quantity: int
 ) -> Order | None:
-    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     order = await _orders.get_order(session, order_id)
-    if order is None or order.user_id != user.id:
+    if order is None:
+        raise DelegationError("找不到此訂單", 404)
+
+    await session.execute(select(User.id).where(User.id == order.user_id).with_for_update())
+    order = await _orders.get_order(session, order_id)
+    if order is None:
+        raise DelegationError("找不到此訂單", 404)
+    owner = await session.get(User, order.user_id)
+    if owner is None:
         raise DelegationError("找不到此訂單", 404)
     item = next((row for row in order.items if row.id == item_id), None)
     if item is None:
         raise DelegationError("找不到此品項", 404)
+    link = None
+    if item.delegation_link_id is not None:
+        link = await session.scalar(
+            select(ShopDelegationLink)
+            .where(ShopDelegationLink.id == item.delegation_link_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    if order.user_id != user.id and (
+        link is None
+        or link.user_id != order.user_id
+        or link.bound_user_id != user.id
+        or link.revoked_at is not None
+    ):
+        raise DelegationError("只能修改自己代訂的品項", 404)
     current = await _orders.get_current_registration(
         session,
-        user.id,
+        owner.id,
         activity_id=order.activity_id,
         category_id=order.category_id,
         match_activity=True,
@@ -385,11 +496,6 @@ async def update_owned_item(
     )
     if current is None or current.id != order.id:
         raise DelegationError("此訂單已無法修改", 409)
-    link = (
-        await session.get(ShopDelegationLink, item.delegation_link_id)
-        if item.delegation_link_id
-        else None
-    )
     variants = [
         RegistrationVariantCreate(
             option_ids=[uuid.UUID(str(o["option_id"])) for o in row.selected_options],
@@ -402,8 +508,9 @@ async def update_owned_item(
     ]
     return await _orders.set_current_registration_product(
         session,
-        user,
+        owner,
         item.product_id,
         data=CurrentRegistrationUpdate(variants=variants),
+        actor=user,
         delegation=link,
     )
