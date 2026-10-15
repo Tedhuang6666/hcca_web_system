@@ -125,7 +125,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
         <p className="shop-delegation-note">家人選購後，品項會加入你的預購，由你繳款與領取。</p>
       </div>
       {shareUrl && <div className="shop-delegation-share">
-        <p className="shop-delegation-share-title">把驗證碼傳給家人</p>
+        <p className="shop-delegation-share-title">驗證碼與分享連結</p>
         {authorizationCode && <>
           <div className="shop-delegation-form">
             <label>七位數代訂驗證碼
@@ -139,18 +139,15 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
           </div>
           <p className="shop-delegation-note">有效至 {codeExpiresAt ? new Date(codeExpiresAt).toLocaleString("zh-TW") : "建立後 7 天"}。家人登入後，在商品頁點「代訂」輸入。</p>
         </>}
-        <details className="shop-delegation-share-link" open={!authorizationCode}>
-          <summary tabIndex={0}>改用分享連結</summary>
-          <div className="shop-delegation-form">
-            <label>分享連結（請在離開頁面前保存）
-              <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
-            </label>
-            <button type="button" onClick={async () => {
-              try { await navigator.clipboard.writeText(shareUrl); setMessage("連結已複製。"); }
-              catch { shareInput.current?.focus(); shareInput.current?.select(); setMessage("請選取分享連結後手動複製。"); }
-            }}>複製連結</button>
-          </div>
-        </details>
+        <div className="shop-delegation-form">
+          <label>分享連結（請在離開頁面前保存）
+            <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
+          </label>
+          <button type="button" className="shop-delegation-primary" onClick={async () => {
+            try { await navigator.clipboard.writeText(shareUrl); setMessage("連結已複製。"); }
+            catch { shareInput.current?.focus(); shareInput.current?.select(); setMessage("請選取分享連結後手動複製。"); }
+          }}>複製連結</button>
+        </div>
         <p className="shop-delegation-note">請先保存驗證碼或連結。切換活動、關閉或重整頁面後無法再次查看，未保存時可重新產生。</p>
       </div>}
       {!creating && <button type="button" className={shareUrl ? "shop-delegation-secondary" : "shop-delegation-primary"}
