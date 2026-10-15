@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 import type { OrgRead } from "@/lib/api";
 import { orgDisplayName } from "@/lib/orgs";
+import { buildDocumentAutoTitle } from "@/lib/document-title";
 import GongwenEditor from "@/components/ui/GongwenEditor";
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import Toggle from "@/components/ui/Toggle";
@@ -372,9 +373,7 @@ export default function NewDocumentPage() {
   // 自動標題
   const autoTitle = useMemo(() => {
     const issuer = officialOrgFullName(selectedOrg, orgHierarchy.length ? orgHierarchy : orgs);
-    if (category === "decree") return issuer ? `${issuer}主席令` : "主席令";
-    const parts = [issuer, docType.trim()].filter(Boolean);
-    return parts.join("").replace(/\s+/g, "");
+    return buildDocumentAutoTitle(category, issuer, docType);
   }, [category, selectedOrg, orgHierarchy, orgs, docType]);
 
   const [docDescription, setDocDescription] = useState("");
