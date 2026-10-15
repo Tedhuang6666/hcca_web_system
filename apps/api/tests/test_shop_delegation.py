@@ -7,6 +7,7 @@ import pytest
 from api.core.security import redis_client
 from api.models.activity import Activity, ActivityStatus
 from api.models.shop import ShopDelegationLink
+from api.models.user_identity import UserIdentity
 from api.schemas.shop import ProductCategoryCreate, ProductCreate, ShopPromotionCreate
 from api.services import shop as shop_svc
 from api.services.shop import _delegation, _delegation_codes
@@ -101,6 +102,45 @@ async def test_code_requires_login_and_does_not_allow_parent_to_create_authoriza
     assert (
         await pc.post(
             "/shop/delegation-links", json={"name": "家長", "category_id": str(category.id)}
+        )
+    ).status_code == 403
+
+
+@pytest.mark.parametrize("private_primary", [False, True])
+async def test_school_identity_can_create_and_use_links_without_stored_student_id(
+    delegation_setup, db_session, private_primary
+):
+    student, parent, category, product, sc, pc, oc, old_link = delegation_setup
+    student.student_id = None
+    school_email = "g0991001@hchs.hc.edu.tw"
+    student.email = "private@example.test" if private_primary else school_email
+    if private_primary:
+        db_session.add(
+            UserIdentity(
+                user_id=student.id,
+                provider="email",
+                external_id=school_email,
+                email=school_email,
+                linked_at=datetime.now(UTC),
+            )
+        )
+    await db_session.flush()
+    profile = await sc.get("/auth/me")
+    assert profile.json()["can_create_shop_delegation"] is True
+    created = await sc.post(
+        "/shop/delegation-links",
+        json={"name": "綁定後的邀請", "category_id": str(category.id)},
+    )
+    assert created.status_code == 201
+    claimed = await pc.post(
+        "/shop/delegation/access", json={"token": created.json()["token"], "claim": True}
+    )
+    assert claimed.status_code == 200
+    assert claimed.json()["can_edit"] is True
+    assert claimed.json()["student_name"] == student.display_name
+    assert (
+        await oc.post(
+            "/shop/delegation/access", json={"token": created.json()["token"], "claim": True}
         )
     ).status_code == 403
 

@@ -255,8 +255,29 @@
 .shop-public-delegation-shortcut:hover { background: var(--bg-hover); }
 .shop-public-delegation-shortcut:disabled { opacity: 0.65; cursor: wait; }
 
-.shop-delegation-panel { min-height: 0; }
-.shop-delegation-panel .shop-delegation-entry { margin: 0; border: 0; padding-block: 1rem 0; }
+.public-site.shop-delegation-panel { min-height: 0; background: transparent; }
+.shop-delegation-panel .shop-delegation-entry { margin: 0; border: 0; padding: 0; }
+.shop-delegation-panel .shop-delegation-intro { margin-bottom: 1.25rem; color: var(--public-secondary); font-size: 0.95rem; line-height: 1.7; }
+.shop-delegation-panel .shop-delegation-entry h2 { font-size: 1.3rem; margin-bottom: 0.5rem; }
+.shop-delegation-panel .shop-delegation-form { flex-direction: column; align-items: stretch; gap: 0.85rem; margin-block: 1.25rem 0.75rem; }
+.shop-delegation-panel .shop-delegation-form label { flex: 0 0 auto; color: var(--public-text); font-weight: 600; }
+.shop-delegation-panel .shop-delegation-form input { margin-top: 0.5rem; min-height: 48px; font-size: 1rem; font-weight: 400; }
+.shop-delegation-panel .shop-delegation-form button { width: 100%; min-height: 48px; font-size: 0.95rem; }
+.shop-delegation-panel .shop-delegation-scope { margin-top: 0.5rem; font-size: 0.8rem; }
+.shop-delegation-panel .shop-delegation-scope strong { display: none; }
+.shop-delegation-scope span { display: block; color: var(--public-secondary); }
+.shop-delegation-panel .shop-delegation-share { margin: 1.25rem 0 0; padding: 0; background: transparent; border-radius: 0; }
+.shop-delegation-panel .shop-delegation-share-title { font-size: 1.1rem; font-weight: 700; color: var(--public-text); }
+.shop-delegation-panel .shop-delegation-form .shop-delegation-code { font-size: 2rem; font-weight: 650; letter-spacing: 0.25em; text-indent: 0.25em; text-align: center; padding-block: 0.75rem; }
+.shop-delegation-panel .shop-delegation-note { margin-top: 0.65rem; color: var(--public-secondary); font-size: 0.8rem; line-height: 1.7; }
+.shop-delegation-panel .shop-delegation-secondary { margin-top: 1rem; }
+.shop-delegation-support { margin-top: 1.5rem; padding-top: 0.5rem; border-top: 1px solid var(--public-border); }
+.shop-delegation-panel .shop-delegation-support summary { font-size: 0.8rem; color: var(--public-secondary); }
+.shop-delegation-panel [role="status"]:empty { display: none; }
+@media (max-width: 767px) {
+  /* 只讀驗證碼覆蓋全站輸入欄防縮放字級，保留手機上的可讀性。 */
+  .shop-delegation-panel .shop-delegation-form .shop-delegation-code { font-size: 2rem !important; }
+}
 .shop-delegation-panel .shop-delegation-steps { flex-direction: column; gap: 0.35rem; }
 .shop-delegation-activity { color: var(--public-text); font-size: 0.875rem; font-weight: 600; }
 .shop-delegation-activity select {

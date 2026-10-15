@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -26,6 +27,7 @@ from api.core.security import (
     decode_token,
 )
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 
 # ---------------------------------------------------------------------------
 # /auth/refresh
@@ -191,6 +193,48 @@ async def test_get_me_flags_superuser_and_owner(
     payload = response.json()
     assert payload["is_superuser"] is True
     assert payload["is_owner"] is True
+
+
+@pytest.mark.parametrize(
+    ("email", "student_id", "linked_email", "owns_identity", "expected"),
+    [
+        ("g0991001@hchs.hc.edu.tw", "991001", None, True, True),
+        ("g0991001@hchs.hc.edu.tw", None, None, True, True),
+        ("private@example.test", "991001", "g0991001@hchs.hc.edu.tw", True, True),
+        ("private@example.test", None, "g0991001@hchs.hc.edu.tw", True, True),
+        ("private@example.test", None, "teacher@hchs.hc.edu.tw", True, False),
+        ("teacher@hchs.hc.edu.tw", None, None, True, False),
+        ("private@example.test", None, "g0991001@hchs.hc.edu.tw", False, False),
+        ("private@example.test", None, "g0991001@hchs.hc.edu.tw.evil.test", True, False),
+        ("private@example.test", None, None, True, False),
+    ],
+)
+async def test_get_me_exposes_delegation_eligibility_for_verified_student_identities(
+    db_session: AsyncSession,
+    authed_client_factory,
+    make_user,
+    email,
+    student_id,
+    linked_email,
+    owns_identity,
+    expected,
+):
+    user = await make_user(email=email, student_id=student_id)
+    if linked_email:
+        owner = user if owns_identity else await make_user(email="other@example.test")
+        db_session.add(
+            UserIdentity(
+                user_id=owner.id,
+                provider="email",
+                external_id=linked_email,
+                email=linked_email,
+                linked_at=datetime.now(UTC),
+            )
+        )
+        await db_session.flush()
+    response = await authed_client_factory(user).get("/auth/me")
+    assert response.status_code == 200
+    assert response.json()["can_create_shop_delegation"] is expected
 
 
 # ---------------------------------------------------------------------------

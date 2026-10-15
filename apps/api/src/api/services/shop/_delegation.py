@@ -32,6 +32,7 @@ from api.schemas.shop import (
 )
 from api.services import school_class as class_svc
 from api.services.shop import _catalog, _delegation_codes, _orders, _promotions
+from api.services.student_identity import has_student_identity
 
 
 class DelegationError(ValueError):
@@ -73,7 +74,7 @@ async def owned_link(session: AsyncSession, user: User, link_id: uuid.UUID) -> S
 async def create_link(
     session: AsyncSession, user: User, data: ShopDelegationCreate
 ) -> ShopDelegationOut:
-    if not user.student_id:
+    if not await has_student_identity(session, user):
         raise DelegationError("僅學生可建立家人代訂連結")
     await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     count = await session.scalar(
@@ -200,7 +201,7 @@ async def resolve_link(
     if link is None or link.revoked_at is not None:
         raise DelegationError("此代訂連結已撤銷", 410)
     user = await session.get(User, link.user_id)
-    if user is None or not user.is_active or not user.student_id:
+    if user is None or not user.is_active or not await has_student_identity(session, user):
         raise DelegationError("學生帳號無法使用代訂", 410)
     category = await session.get(ProductCategory, link.category_id)
     if category is None or not category.is_active or category.activity_id != link.activity_id:

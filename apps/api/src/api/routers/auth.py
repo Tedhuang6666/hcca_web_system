@@ -59,6 +59,7 @@ from api.services.discord_bot import (
 from api.services.discord_bot import (
     is_configured as discord_is_configured,
 )
+from api.services.student_identity import has_student_identity
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,7 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
         "is_superuser": user.is_superuser,
         "is_owner": user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),
+        "can_create_shop_delegation": await has_student_identity(db, user),
         "is_school_email": bool(user.student_id)
         or domain in {item.lower().lstrip("@") for item in settings.LOGIN_ALLOWED_EMAIL_DOMAINS},
     }
