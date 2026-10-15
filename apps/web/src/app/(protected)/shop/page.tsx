@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Gift,
   Package,
+  UsersRound,
 } from "lucide-react";
 import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
@@ -35,6 +36,7 @@ import ParentDelegationEntry from "@/components/shop/ParentDelegationEntry";
 import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-delegation-link";
 import { useWS } from "@/hooks/useWS";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
+import Modal from "@/components/ui/Modal";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -201,6 +203,7 @@ function ProductModal({
   onClose,
   onRegistrationChange,
   onProductAdded,
+  onRequestDelegation,
 }: {
   productId: string;
   shoppingApi: Pick<typeof shopApi, "getProduct" | "setCurrentRegistrationProduct">;
@@ -216,6 +219,7 @@ function ProductModal({
   onClose: () => void;
   onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
   onProductAdded: () => void;
+  onRequestDelegation: () => void;
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -624,7 +628,10 @@ function ProductModal({
                 </p>
               ) : authorizationRequired ? (
                 <p className="shop-product-purchase-hint" role="status">
-                  家長代訂需要學生授權。請先在商品頁輸入七位數授權碼，或開啟學生傳來的連結。
+                  代訂需要學生授權。請輸入學生提供的七位數驗證碼，或開啟學生傳來的連結。
+                  <button type="button" className="shop-product-delegation-action" onClick={onRequestDelegation}>
+                    前往代訂，輸入驗證碼
+                  </button>
                 </p>
               ) : registrationLoadError ? (
                 <p className="shop-product-purchase-hint" role="alert">
@@ -803,15 +810,30 @@ export default function ShopPage() {
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [orderShortcutPortalReady, setOrderShortcutPortalReady] = useState(false);
+  const [delegationOpen, setDelegationOpen] = useState(false);
+  const delegationTriggerRef = useRef<HTMLButtonElement>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
 
   useEffect(() => {
     setOrderShortcutPortalReady(true);
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("delegation") === "entry") {
+      setDelegationOpen(true);
+      query.delete("delegation");
+      const search = query.toString();
+      window.history.replaceState(window.history.state, "",
+        `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`);
+    }
   }, []);
 
   const closeProduct = useCallback(() => {
     setOpenProduct(null);
+  }, []);
+
+  const closeDelegation = useCallback(() => {
+    setDelegationOpen(false);
+    window.requestAnimationFrame(() => delegationTriggerRef.current?.focus());
   }, []);
 
   useEffect(() => () => {
@@ -981,6 +1003,7 @@ export default function ShopPage() {
       refreshGeneration.current += 1;
       const fragment = new URLSearchParams(window.location.hash.slice(1));
       const token = fragment.has("delegate") ? fragment.get("delegate") || "invalid" : null;
+      if (token) setDelegationOpen(false);
       setDelegationToken(token);
       setDelegationContext(null);
       setDelegationError("");
@@ -1291,13 +1314,6 @@ export default function ShopPage() {
           <DelegationInstructions />
         </div>
       </section>}
-
-      {isStudent && !delegationToken && selectedCategory && <DelegationLinks
-        key={catalogScopeKey(selectedCategory)}
-        categoryId={selectedCategory.id} activityId={selectedCategory.activity_id ?? null}
-        scopeName={selectedCategory.activity_name ?? selectedCategory.name} />}
-
-      {!delegationToken && !authLoading && !isStudent && <ParentDelegationEntry isLoggedIn={isLoggedIn} />}
 
       {myClass && (
         <section
@@ -1678,18 +1694,51 @@ export default function ShopPage() {
         </div>
       )}
 
-      {isLoggedIn && canOrderForSelf && !delegationToken && orderShortcutPortalReady && createPortal(
-        <Link
-          href="/shop/orders"
-          className="shop-public-order-shortcut"
-          data-order-flight-target
-          aria-label="開啟我的訂購"
-        >
-          <ClipboardList size={19} aria-hidden="true" />
-          <span>我的訂購</span>
-        </Link>,
+      {!delegationToken && orderShortcutPortalReady && createPortal(
+        <nav className="shop-public-shortcuts" aria-label="商品快捷操作">
+          <button ref={delegationTriggerRef} type="button" className="shop-public-order-shortcut shop-public-delegation-shortcut"
+            aria-haspopup="dialog" aria-expanded={delegationOpen} disabled={authLoading}
+            onClick={() => setDelegationOpen(true)}>
+            <UsersRound size={19} aria-hidden="true" />
+            <span>{authLoading ? "確認身分中…" : "代訂"}</span>
+          </button>
+          {isLoggedIn && canOrderForSelf && <Link
+            href="/shop/orders"
+            className="shop-public-order-shortcut"
+            data-order-flight-target
+            aria-label="開啟我的訂購"
+          >
+            <ClipboardList size={19} aria-hidden="true" />
+            <span>我的訂購</span>
+          </Link>}
+        </nav>,
         document.body,
       )}
+
+      {delegationOpen && !delegationToken && <Modal title="代訂" size="2xl" onClose={closeDelegation}>
+        <div className="public-site shop-delegation-panel">
+          {authLoading ? <p role="status">正在確認帳號身分…</p> : isStudent ? <>
+            {catalog.length > 0 && <label className="shop-delegation-activity">選擇要授權的活動／商品主題
+              <select value={selectedCategory?.id ?? ""} onChange={(event) => setSelectedCategoryId(event.target.value)}>
+                {catalog.map((category) => <option key={category.id} value={category.id}>
+                  {category.activity_name ? `${category.activity_name} · ${category.name}` : category.name}
+                </option>)}
+              </select>
+            </label>}
+            {selectedCategory ? <DelegationLinks
+              key={catalogScopeKey(selectedCategory)} initiallyCreating
+              categoryId={selectedCategory.id} activityId={selectedCategory.activity_id ?? null}
+              scopeName={selectedCategory.activity_name ?? selectedCategory.name} />
+              : <>
+                <h2>邀請家人幫我訂購</h2>
+                <p>{loading ? "正在載入可授權的活動…" : loadError
+                  ? "活動載入失敗，請重試後建立代訂連結。" : "目前沒有可授權的商品活動，開放預購後即可建立代訂連結。"}</p>
+                {loadError && <button type="button" className="btn btn-secondary" onClick={() => void loadCatalog()}>重新載入活動</button>}
+                <DelegationInstructions />
+              </>}
+          </> : <ParentDelegationEntry isLoggedIn={isLoggedIn} />}
+        </div>
+      </Modal>}
 
       {openProduct && (!delegationToken || delegationContext?.can_edit) && (
         <ProductModal
@@ -1715,6 +1764,7 @@ export default function ShopPage() {
           onClose={closeProduct}
           onRegistrationChange={handleRegistrationChange}
           onProductAdded={flyProductIntoOrder}
+          onRequestDelegation={() => { closeProduct(); setDelegationOpen(true); }}
         />
       )}
     </div>

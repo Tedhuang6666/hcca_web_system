@@ -214,14 +214,21 @@
   color: var(--primary-fg);
 }
 
-.shop-public-order-shortcut {
-  --public-accent: var(--primary);
-  --public-accent-strong: var(--primary-hover);
-  --public-focus: var(--border-focus);
+.shop-public-shortcuts {
   position: fixed;
   z-index: 40;
   right: max(1rem, env(safe-area-inset-right));
   bottom: max(1rem, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.shop-public-order-shortcut {
+  --public-accent: var(--primary);
+  --public-accent-strong: var(--primary-hover);
+  --public-focus: var(--border-focus);
   display: inline-flex;
   min-height: 3.1rem;
   align-items: center;
@@ -236,6 +243,43 @@
   text-decoration: none;
   box-shadow: 0 0.35rem 1.2rem rgb(0 0 0 / 0.24);
   transition: background-color var(--transition), transform var(--transition);
+}
+
+.shop-public-delegation-shortcut {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+  cursor: pointer;
+}
+
+.shop-public-delegation-shortcut:hover { background: var(--bg-hover); }
+.shop-public-delegation-shortcut:disabled { opacity: 0.65; cursor: wait; }
+
+.shop-delegation-panel { min-height: 0; }
+.shop-delegation-panel .shop-delegation-entry { margin: 0; border: 0; padding-block: 1rem 0; }
+.shop-delegation-panel .shop-delegation-steps { flex-direction: column; gap: 0.35rem; }
+.shop-delegation-activity { color: var(--public-text); font-size: 0.875rem; font-weight: 600; }
+.shop-delegation-activity select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+.shop-delegation-activity select:focus-visible { outline: 2px solid var(--public-focus); outline-offset: 3px; }
+.shop-product-delegation-action {
+  display: block;
+  min-height: 44px;
+  margin-top: 0.5rem;
+  color: var(--primary-text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
 }
 
 .shop-public-order-shortcut:hover {
@@ -2303,8 +2347,6 @@
   .shop-delegation-form input { font-size: 1rem; }
   .shop-delegation-form .shop-delegation-code { font-size: 1.5rem; }
   .shop-delegation-form button { width: 100%; }
-  /* 留出建立與分享連結的操作空間，避免浮動捷徑遮住表單。 */
-  body:has(#shop-delegation-create:not([hidden]), .shop-delegation-share) .shop-public-order-shortcut { display: none; }
 }
 
 .shop-delegation-context p,
