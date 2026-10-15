@@ -51,6 +51,7 @@ export default function OrderDetailPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentRegistrationId, setCurrentRegistrationId] = useState<string | null>(null);
   const [editableProductIds, setEditableProductIds] = useState<Set<string>>(new Set());
+  const [delegatedEditableItemIds, setDelegatedEditableItemIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
@@ -62,6 +63,7 @@ export default function OrderDetailPage() {
     setLoadError("");
     setRequiresLogin(false);
     setProductImages({});
+    setDelegatedEditableItemIds(new Set());
     try {
       const user = await authApi.me().catch(() => null);
       if (!user) {
@@ -71,9 +73,15 @@ export default function OrderDetailPage() {
         return;
       }
 
-      const o = await shopApi.getOrder(id);
+      const [o, delegatedOrders] = await Promise.all([
+        shopApi.getOrder(id),
+        shopApi.listDelegatedOrders({ order_id: id, limit: "1" }).catch(() => []),
+      ]);
       setOrder(o);
       setCurrentUserId(user.id);
+      const delegatedOrder = delegatedOrders.find((entry) => entry.order.id === o.id) ?? null;
+      const delegatedItemIds = new Set(delegatedOrder?.editable_item_ids ?? []);
+      setDelegatedEditableItemIds(delegatedItemIds);
 
       let summary: ActivityPreorder | null = null;
       if (!fromClass && !fromCouncil && user.id === o.user_id) {
@@ -102,16 +110,21 @@ export default function OrderDetailPage() {
       setActivityPreorder(summary);
       const currentRegistration = currentRegistrations.find((registration) =>
         relatedOrderIds.includes(registration.id),
-      );
+      ) ?? delegatedOrder?.order;
       setCurrentRegistrationId(currentRegistration?.id ?? null);
 
       const editableIds = new Set<string>();
-      const registrationIsEditable = currentRegistration?.user_id === user.id
+      const isOwner = currentRegistration?.user_id === user.id;
+      const registrationIsEditable = Boolean(currentRegistration
         && (currentRegistration.status === "pending" || currentRegistration.status === "confirmed")
         && !currentRegistration.is_paid
-        && !currentRegistration.is_class_collected;
+        && !currentRegistration.is_class_collected
+        && (isOwner || delegatedItemIds.size > 0));
       if (registrationIsEditable && currentRegistration) {
         try {
+          const itemsToCheck = delegatedOrder
+            ? (currentRegistration.items ?? []).filter((item) => delegatedItemIds.has(item.id))
+            : currentRegistration.items ?? [];
           const catalog = await shopApi.catalog();
           const productCategories = new Map<string, {
             categoryId: string;
@@ -137,7 +150,7 @@ export default function OrderDetailPage() {
             }
           }
           const categoryIds = [...new Set(
-            currentRegistration.items.flatMap((item) => {
+            itemsToCheck.flatMap((item) => {
               const product = productCategories.get(item.product_id);
               return product ? [product.categoryId] : [];
             }),
@@ -145,7 +158,7 @@ export default function OrderDetailPage() {
           const closeStatus = categoryIds.length
             ? await shopApi.getCloseStatus(categoryIds, currentRegistration.class_id ?? undefined)
             : null;
-          for (const item of currentRegistration.items) {
+          for (const item of itemsToCheck) {
             const product = productCategories.get(item.product_id);
             const categoryStatus = product && closeStatus?.statuses[product.categoryId];
             const saleStillOpen = !product?.saleEnd
@@ -273,9 +286,15 @@ export default function OrderDetailPage() {
       || order.is_paid || order.is_class_collected ? 0 : order.total_price);
   const currentRegistration = detailOrders.find((relatedOrder) => relatedOrder.id === currentRegistrationId);
   const canModifyRegistration = currentRegistration?.user_id === currentUserId
-    && (currentRegistration.status === "pending" || currentRegistration.status === "confirmed")
-    && !currentRegistration.is_paid
-    && !currentRegistration.is_class_collected;
+    ? (currentRegistration.status === "pending" || currentRegistration.status === "confirmed")
+      && !currentRegistration.is_paid
+      && !currentRegistration.is_class_collected
+    : Boolean(currentRegistration
+      && currentRegistration.id === order.id
+      && delegatedEditableItemIds.size > 0
+      && (currentRegistration.status === "pending" || currentRegistration.status === "confirmed")
+      && !currentRegistration.is_paid
+      && !currentRegistration.is_class_collected);
   const classOrders = detailOrders.filter((relatedOrder) => relatedOrder.class_id);
   const collectedClassOrders = classOrders.filter((relatedOrder) => relatedOrder.is_class_collected);
   const paidOrders = detailOrders.filter((relatedOrder) => relatedOrder.is_paid);
@@ -338,7 +357,9 @@ export default function OrderDetailPage() {
         </dl>
         {canModifyRegistration && editableProductIds.size > 0 ? (
           <p className="shop-order-edit-note">
-            尚未收款，可修改下方仍開放的商品。
+            {currentRegistration?.user_id === currentUserId
+              ? "尚未收款，可修改下方仍開放的商品。"
+              : "只能修改你代訂的品項；學生本人與其他家人的品項僅供查看。"}
           </p>
         ) : canModifyRegistration ? (
           <p className="shop-order-edit-note">商品截止或班級結單後，無法修改這筆登記。</p>
@@ -374,13 +395,15 @@ export default function OrderDetailPage() {
                     item,
                     orderId: sourceOrder.id,
                     canEdit: canModifyRegistration && sourceOrder.id === currentRegistrationId
-                      && currentUserId === sourceOrder.user_id && editableProductIds.has(item.product_id),
+                      && editableProductIds.has(item.product_id)
+                      && (currentUserId === sourceOrder.user_id || delegatedEditableItemIds.has(item.id)),
                   })))} onChange={() => void load()} />
               </div>
             </div>
             <div className="shrink-0">
               <p className="shop-order-item-total">NT${it.subtotal.toLocaleString()}</p>
-              {canModifyRegistration && editableProductIds.has(it.product_id) && (
+              {currentRegistration?.user_id === currentUserId
+                && canModifyRegistration && editableProductIds.has(it.product_id) && (
                 <Link
                   href={`/shop?product=${encodeURIComponent(it.product_id)}`}
                   className="shop-order-edit"

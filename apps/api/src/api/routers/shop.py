@@ -65,6 +65,7 @@ from api.schemas.shop import (
     ProductVariantOptionOut,
     ProductVariantOptionUpdate,
     ShopClassSummaryOut,
+    ShopDelegatedOrderOut,
     ShopDelegationAccess,
     ShopDelegationCodeCreate,
     ShopDelegationCodeOut,
@@ -973,6 +974,27 @@ async def list_orders(
     return [shop_svc.serialize_order_list_item(o) for o in orders]
 
 
+@router.get(
+    "/orders/delegated",
+    response_model=list[ShopDelegatedOrderOut],
+    summary="列出本人代訂的學生訂單",
+)
+async def list_delegated_orders(
+    session: DbDep,
+    current_user: CurrentUser,
+    order_id: uuid.UUID | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[ShopDelegatedOrderOut]:
+    return await delegation_svc.list_delegated_orders(
+        session,
+        current_user,
+        order_id=order_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
 async def _class_order_scope_ids(session: AsyncSession, user: User) -> list[uuid.UUID]:
     class_ids = await class_svc.get_cadre_class_ids(session, user.id)
     if user.is_superuser:
@@ -1213,7 +1235,13 @@ async def get_order(order_id: uuid.UUID, session: DbDep, current_user: CurrentUs
         is_activity_manager = await activity_svc.can_manage_activity_resource(
             session, current_user, shop_svc._order_activity_id(order)
         )
-        if not (_ADMIN_VIEW_CODES & set(codes)) and not is_cadre and not is_activity_manager:
+        is_bound_delegate = await delegation_svc.can_view_order(session, current_user, order)
+        if (
+            not (_ADMIN_VIEW_CODES & set(codes))
+            and not is_cadre
+            and not is_activity_manager
+            and not is_bound_delegate
+        ):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此訂單")
     return shop_svc.serialize_order(order)
 

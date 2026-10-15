@@ -291,6 +291,52 @@ async def test_unbound_privacy_and_link_ownership(delegation_setup, db_session, 
     assert listed[0]["token"] is None
 
 
+async def test_parent_can_view_student_order_and_edit_only_own_delegated_items(
+    delegation_setup, client
+):
+    student, _, _, product, sc, pc, oc, link = delegation_setup
+    student_order = await _set(sc, product, 2)
+    await _claim(pc, link)
+    parent_order = await _set(pc, product, 1, link["token"])
+    assert parent_order.status_code == 200
+    order_id = parent_order.json()["id"]
+    own_item = next(
+        item for item in parent_order.json()["items"] if item["delegation_link_id"] == link["id"]
+    )
+    student_item = next(
+        item for item in parent_order.json()["items"] if item["delegation_link_id"] is None
+    )
+
+    assert (await client.get("/shop/orders/delegated")).status_code == 401
+    delegated_orders = await pc.get("/shop/orders/delegated")
+    assert delegated_orders.status_code == 200
+    assert [entry["order"]["id"] for entry in delegated_orders.json()] == [order_id]
+    assert delegated_orders.json()[0]["editable_item_ids"] == [own_item["id"]]
+    assert (await oc.get("/shop/orders/delegated")).json() == []
+
+    detail = await pc.get(f"/shop/orders/{order_id}")
+    assert detail.status_code == 200
+    assert {item["id"] for item in detail.json()["items"]} == {own_item["id"], student_item["id"]}
+    assert (await oc.get(f"/shop/orders/{order_id}")).status_code == 404
+    assert (
+        await pc.patch(f"/shop/orders/{order_id}", json={"user_id": str(student.id), "items": []})
+    ).status_code == 403
+
+    changed = await pc.patch(
+        f"/shop/orders/{order_id}/items/{own_item['id']}", json={"quantity": 2}
+    )
+    assert changed.status_code == 200
+    changed_item = next(item for item in changed.json()["items"] if item["id"] == own_item["id"])
+    assert changed_item["quantity"] == 2
+    assert (
+        await pc.patch(f"/shop/orders/{order_id}/items/{student_item['id']}", json={"quantity": 1})
+    ).status_code == 404
+    assert (
+        await oc.patch(f"/shop/orders/{order_id}/items/{own_item['id']}", json={"quantity": 1})
+    ).status_code == 404
+    assert student_order.json()["id"] == order_id
+
+
 async def test_reusable_link_combines_coupon_using_student_identity(delegation_setup, db_session):
     student, parent, category, product, sc, pc, oc, link = delegation_setup
     await shop_svc.create_promotion(
@@ -457,8 +503,11 @@ async def test_owner_can_adjust_delegated_source_after_revocation(delegation_set
     assert unchanged["quantity"] == 2
     assert unchanged["delegation_link_id"] == link["id"]
     assert (await oc.patch(path, json={"quantity": 1})).status_code == 404
-    assert (await pc.patch(path, json={"quantity": 1})).status_code == 404
+    assert (await pc.patch(path, json={"quantity": 1})).status_code == 200
     assert (await sc.delete(f"/shop/delegation-links/{link['id']}")).status_code == 204
+    assert (await pc.patch(path, json={"quantity": 1})).status_code == 404
+    assert (await pc.get("/shop/orders/delegated")).json() == []
+    assert (await pc.get(f"/shop/orders/{order['id']}")).status_code == 404
     edited = await sc.patch(path, json={"quantity": 1})
     assert edited.status_code == 200
     assert edited.json()["items"][0]["ordered_by_id"] == str(parent.id)

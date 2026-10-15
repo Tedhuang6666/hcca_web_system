@@ -1177,6 +1177,7 @@ export default function ShopPage() {
   const selectedCategoryRegistration = registrations.find(
     (order) => orderScopeKey(order) === (selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE),
   ) ?? null;
+  const delegatedRegistration = delegationContext ? registrations[0] ?? null : null;
   const registeredByProduct = new Map<string, number>();
   for (const item of selectedCategoryRegistration?.items ?? []) {
     registeredByProduct.set(
@@ -1326,13 +1327,59 @@ export default function ShopPage() {
         {delegationContext?.can_claim && <>
           <p><strong>請先確認學生與登入帳號。</strong>確認後，這個連結只供目前帳號使用；若帳號不正確，請先登出並登入自己的帳號，再開啟原連結。</p>
         </>}
-        {delegationContext?.can_edit && <p role="status" className="shop-delegation-ready">{registrationLocked
-          ? "本次預購已收款，品項不能再修改。可查看已登記品項。"
-          : "已綁定此帳號，可在下方選購。送出後直接加入學生的預購。"}</p>}
+        {delegationContext?.can_edit && (
+          <p role="status" className="shop-delegation-ready">
+            {registrationLocked
+              ? "本次預購已收款，品項不能再修改。可查看已登記品項。"
+              : "已綁定此帳號，可在下方選購。送出後直接加入學生的預購。"}
+          </p>
+        )}
+        {delegationContext?.can_edit && (
+          <Link href="/shop/orders" className="shop-order-details">
+            查看我的代訂訂單
+          </Link>
+        )}
         {(!delegationContext || delegationContext.can_claim || delegationContext.can_edit) && <>
           <p>送出即加入學生預購，不需學生再次確認，由學生繳款與領取。你只能修改此連結登記的品項，無法修改學生本人或其他家人的品項。</p>
           <p>確認綁定前，只能查看商品與學生姓名；確認後可查看此授權範圍的合計與品項。</p>
         </>}
+        {delegationContext && !delegationContext.can_claim && (
+          <section
+            className="shop-delegation-registration"
+            aria-labelledby="shop-delegation-registration-title"
+          >
+            <h3 id="shop-delegation-registration-title">學生在此活動的預購</h3>
+            <p>學生本人和家人已登記的品項只供查看；你只能修改自己透過此連結加入的品項。</p>
+            {delegatedRegistration?.items.length ? (
+              <ul aria-label="學生本活動已登記品項">
+                {delegatedRegistration.items.map((item) => (
+                  <li key={item.id}>
+                    <div>
+                      <strong>{item.product_name ?? "商品"}</strong>
+                      <span>{item.delegation_link_id
+                        ? `${item.delegation_name ?? "家人代訂"} · ${item.ordered_by_name ?? "家人"}代訂`
+                        : `${item.ordered_by_name ?? delegationContext.student_name}登記`}</span>
+                      {item.selected_options.length > 0 && <span>
+                        {item.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")}
+                      </span>}
+                    </div>
+                    <strong>× {item.quantity} · NT${item.subtotal.toLocaleString("zh-TW")}</strong>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>目前尚無已登記品項。</p>
+            )}
+            {delegatedRegistration && (
+              <Link
+                href={`/shop/orders/${delegatedRegistration.id}`}
+                className="shop-order-details"
+              >
+                查看訂單明細
+              </Link>
+            )}
+          </section>
+        )}
         {delegationContext?.can_claim && <>
           <button type="button" className="shop-delegation-primary" disabled={delegationBusy} onClick={async () => {
             setDelegationBusy(true);
@@ -1761,7 +1808,7 @@ export default function ShopPage() {
             <UsersRound size={19} aria-hidden="true" />
             <span>{authLoading ? "確認身分中…" : "代訂"}</span>
           </button>
-          {isLoggedIn && canOrderForSelf && <Link
+          {isLoggedIn && <Link
             href="/shop/orders"
             className="shop-public-order-shortcut"
             data-order-flight-target
