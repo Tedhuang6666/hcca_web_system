@@ -137,7 +137,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
               catch { codeInput.current?.focus(); codeInput.current?.select(); setMessage("請選取驗證碼後手動複製。"); }
             }}>複製驗證碼</button>
           </div>
-          <p className="shop-delegation-note">有效至 {codeExpiresAt ? new Date(codeExpiresAt).toLocaleString("zh-TW") : "建立後 30 分鐘"}。家人登入後，在商品頁點「代訂」輸入。</p>
+          <p className="shop-delegation-note">有效至 {codeExpiresAt ? new Date(codeExpiresAt).toLocaleString("zh-TW") : "建立後 7 天"}。家人登入後，在商品頁點「代訂」輸入。</p>
         </>}
         <details className="shop-delegation-share-link" open={!authorizationCode}>
           <summary tabIndex={0}>改用分享連結</summary>

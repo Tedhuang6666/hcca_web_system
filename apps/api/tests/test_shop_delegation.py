@@ -72,7 +72,8 @@ async def test_seven_digit_code_exchanges_for_same_scoped_link(delegation_setup)
     code = link["authorization_code"]
     assert len(code) == 7 and code.isascii() and code.isdecimal()
     expires_at = datetime.fromisoformat(link["authorization_code_expires_at"])
-    assert timedelta(minutes=29) < expires_at - datetime.now(UTC) < timedelta(minutes=31)
+    remaining = expires_at - datetime.now(UTC)
+    assert timedelta(days=6, hours=23) < remaining <= timedelta(days=7)
     key = f"{_delegation_codes._PREFIX}value:{_delegation_codes._digest(code)}"
     assert 0 < await redis_client.ttl(key) <= _delegation_codes.CODE_TTL_SECONDS
     listed = (await sc.get("/shop/delegation-links")).json()

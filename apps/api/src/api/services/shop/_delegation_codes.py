@@ -1,4 +1,4 @@
-"""短效七位數代訂授權碼；換取既有連結後沿用帳號綁定與授權檢查。"""
+"""七日有效的七位數代訂授權碼；換取既有連結後沿用帳號綁定與授權檢查。"""
 
 import asyncio
 import hashlib
@@ -9,7 +9,7 @@ from redis.exceptions import RedisError
 
 from api.core.security import redis_client
 
-CODE_TTL_SECONDS = 30 * 60
+CODE_TTL_SECONDS = 7 * 24 * 60 * 60
 _ATTEMPT_WINDOW_SECONDS = 10 * 60
 _PREFIX = "shop:delegation-code:"
 

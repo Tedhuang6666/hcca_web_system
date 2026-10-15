@@ -44,7 +44,7 @@ export default function ParentDelegationEntry({ isLoggedIn }: { isLoggedIn: bool
         <p>請先登入自己的帳號，登入後會回到這裡輸入驗證碼。</p>
         <Link href="/login?next=%2Fshop%3Fdelegation%3Dentry" className="shop-delegation-primary">登入後開始代訂</Link>
       </>}
-      <p id="shop-delegation-code-hint" className="shop-delegation-note">驗證碼有效 30 分鐘。已有分享連結？直接點開即可。</p>
+      <p id="shop-delegation-code-hint" className="shop-delegation-note">驗證碼有效 7 天。已有分享連結？直接點開即可。</p>
       {error && <p id="shop-delegation-code-error" role="alert">{error}</p>}
       <p className="shop-delegation-note">下一步會先核對學生與帳號，確認後才開始代訂。品項由學生繳款與領取。</p>
       {!isLoggedIn && <p>如果你是學生，登入學生帳號後即可看到建立授權的入口。</p>}
