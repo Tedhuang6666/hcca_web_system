@@ -232,6 +232,7 @@ function ProductModal({
   const [registrationUpdateMessage, setRegistrationUpdateMessage] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const mediaSwipeRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const registrationUpdateInFlightRef = useRef(false);
   const registrationItemsRef = useRef(registration?.items ?? []);
   const loadedProductId = product?.id ?? null;
@@ -389,6 +390,40 @@ function ProductModal({
         ? "商品主圖"
         : "商品照片";
 
+  const startMediaSwipe = (event: React.PointerEvent<HTMLImageElement>) => {
+    if (media.length < 2 || (event.pointerType === "mouse" && event.button !== 0)) return;
+    mediaSwipeRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const finishMediaSwipe = (event: React.PointerEvent<HTMLImageElement>) => {
+    const start = mediaSwipeRef.current;
+    mediaSwipeRef.current = null;
+    if (!start || start.pointerId !== event.pointerId || media.length < 2) return;
+
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 42 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+
+    const currentIndex = selectedMediaIndex ?? media.findIndex(
+      (item) => item.image_url === displayMedia?.image_url,
+    );
+    if (currentIndex < 0) {
+      if (deltaX < 0) setSelectedMediaIndex(0);
+      return;
+    }
+
+    const nextIndex = Math.max(0, Math.min(
+      media.length - 1,
+      currentIndex + (deltaX < 0 ? 1 : -1),
+    ));
+    if (nextIndex !== currentIndex) setSelectedMediaIndex(nextIndex);
+  };
+
+  const cancelMediaSwipe = (event: React.PointerEvent<HTMLImageElement>) => {
+    if (mediaSwipeRef.current?.pointerId === event.pointerId) mediaSwipeRef.current = null;
+  };
+
   const setVariantQuantity = async (optionIds: string[], quantity: number) => {
     if (!product) return;
     if (registrationUpdateInFlightRef.current) return;
@@ -477,6 +512,10 @@ function ProductModal({
               data-product-flight-source
               src={uploadUrl(displayMedia.image_url)}
               alt={`${product.name}・${displayLabel}`}
+              draggable={false}
+              onPointerDown={startMediaSwipe}
+              onPointerUp={finishMediaSwipe}
+              onPointerCancel={cancelMediaSwipe}
             />
           ) : (
             <div className="shop-product-dialog-placeholder" data-product-flight-source>
