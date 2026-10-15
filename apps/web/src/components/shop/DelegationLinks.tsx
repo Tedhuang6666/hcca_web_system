@@ -105,46 +105,27 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
   </li>;
 
   return (
-    <section className="shop-delegation-links shop-delegation-entry" aria-labelledby="shop-delegation-title">
-      <div className="shop-delegation-heading">
-        <div>
-          <h2 id="shop-delegation-title">邀請家人幫我訂購</h2>
-          <p>請家長或受你授權的家人替你選購，代訂品項會直接加入你的預購。</p>
-          <p>家長只能修改自己透過連結登記的品項；你仍可管理全部品項。</p>
-        </div>
-        {(!initiallyCreating || !creating) && <button type="button" className={creating ? undefined : "shop-delegation-primary"} aria-expanded={creating}
-          aria-controls="shop-delegation-create" disabled={busy}
-          onClick={() => {
-            setCreating((current) => !current);
-            if (initiallyCreating && !creating) {
-              window.requestAnimationFrame(() => nameInput.current?.focus());
-            }
-          }}>
-          {creating ? "收起建立表單" : "建立家長代訂連結"}
-        </button>}
-      </div>
+    <section className="shop-delegation-links shop-delegation-entry" aria-label="建立與管理代訂授權">
       <p className="shop-delegation-scope"><strong>本次授權：{scopeName}</strong>
-        {activityId ? "（包含同活動的商品主題）" : "（僅此商品主題）"}。要授權其他活動，請先切換商品主題。</p>
+        <span>{activityId ? "同活動商品皆可代訂" : "僅限此商品主題"}</span>
+      </p>
       <div id="shop-delegation-create" hidden={!creating}>
-        <ol className="shop-delegation-steps" aria-label="家長代訂流程">
-          <li>為家長建立具名連結</li>
-          <li>把七位數驗證碼或連結私下傳給家長</li>
-          <li>家長登入自己的帳號，確認後開始代訂</li>
-        </ol>
-        <p>每個連結只綁定一個家人帳號。請只分享給你授權的人，不需要提供你的帳號或密碼。</p>
         <form className="shop-delegation-form" onSubmit={(event) => {
           event.preventDefault();
-          if (name.trim()) void run(() => shopApi.createDelegationLink({ name: name.trim(), category_id: categoryId }), "連結已建立，請複製並分享給家人。");
+          if (!busy && name.trim()) void run(() => shopApi.createDelegationLink({ name: name.trim(), category_id: categoryId }), "驗證碼與連結已建立，請傳給家人。");
         }}>
-          <label>連結名稱（給誰代訂）
-            <input ref={nameInput} data-autofocus value={name} maxLength={80} placeholder="例如：給媽媽代訂" required
+          <label>邀請誰來代訂
+            <input ref={nameInput} data-autofocus value={name} maxLength={80} placeholder="例如：媽媽、爸爸" required
               onChange={(event) => setName(event.target.value)} disabled={busy} />
           </label>
-          <button type="submit" className="shop-delegation-primary" disabled={busy || !name.trim()}>建立連結</button>
+          <button type="submit" className="shop-delegation-primary" disabled={busy || !name.trim()}>
+            {busy ? "建立中…" : "建立代訂驗證碼"}
+          </button>
         </form>
+        <p className="shop-delegation-note">家人選購後，品項會加入你的預購，由你繳款與領取。</p>
       </div>
       {shareUrl && <div className="shop-delegation-share">
-        <p><strong>授權已準備好，選一種方式傳給家長即可。</strong></p>
+        <p className="shop-delegation-share-title">把驗證碼傳給家人</p>
         {authorizationCode && <>
           <div className="shop-delegation-form">
             <label>七位數代訂驗證碼
@@ -152,37 +133,46 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
                 onFocus={(event) => event.target.select()} />
             </label>
             <button type="button" className="shop-delegation-primary" onClick={async () => {
-              try { await navigator.clipboard.writeText(authorizationCode); setMessage("授權碼已複製，請傳給家長。"); }
-              catch { codeInput.current?.focus(); codeInput.current?.select(); setMessage("請選取授權碼後手動複製。"); }
+              try { await navigator.clipboard.writeText(authorizationCode); setMessage("驗證碼已複製，請傳給家人。"); }
+              catch { codeInput.current?.focus(); codeInput.current?.select(); setMessage("請選取驗證碼後手動複製。"); }
             }}>複製驗證碼</button>
           </div>
-          <p>有效至 {codeExpiresAt ? new Date(codeExpiresAt).toLocaleString("zh-TW") : "建立後 30 分鐘"}。家長登入後，點商品頁右下角「代訂」輸入驗證碼；過期時可改用下方連結。</p>
+          <p className="shop-delegation-note">有效至 {codeExpiresAt ? new Date(codeExpiresAt).toLocaleString("zh-TW") : "建立後 30 分鐘"}。家人登入後，在商品頁點「代訂」輸入。</p>
         </>}
-        <div className="shop-delegation-form">
-          <label>分享連結（請在離開頁面前保存）
-            <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
-          </label>
-          <button type="button" className="shop-delegation-primary" onClick={async () => {
-            try { await navigator.clipboard.writeText(shareUrl); setMessage("連結已複製。"); }
-            catch { setMessage("請選取分享連結後手動複製。"); }
-          }}>複製連結</button>
-        </div>
-        <p>切換活動、關閉或重整頁面後，無法再次查看這個網址；未保存時可在連結管理重新產生。</p>
+        <details className="shop-delegation-share-link" open={!authorizationCode}>
+          <summary tabIndex={0}>改用分享連結</summary>
+          <div className="shop-delegation-form">
+            <label>分享連結（請在離開頁面前保存）
+              <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
+            </label>
+            <button type="button" onClick={async () => {
+              try { await navigator.clipboard.writeText(shareUrl); setMessage("連結已複製。"); }
+              catch { shareInput.current?.focus(); shareInput.current?.select(); setMessage("請選取分享連結後手動複製。"); }
+            }}>複製連結</button>
+          </div>
+        </details>
+        <p className="shop-delegation-note">請先保存驗證碼或連結。切換活動、關閉或重整頁面後無法再次查看，未保存時可重新產生。</p>
       </div>}
+      {!creating && <button type="button" className={shareUrl ? "shop-delegation-secondary" : "shop-delegation-primary"}
+        aria-expanded={creating} aria-controls="shop-delegation-create" disabled={busy}
+        onClick={() => {
+          setCreating(true);
+          if (initiallyCreating) window.requestAnimationFrame(() => nameInput.current?.focus());
+        }}>{shareUrl ? "建立另一組驗證碼" : "建立家長代訂連結"}</button>}
       <p role="status">{busy ? "處理中…" : loading ? "載入代訂連結中…" : message}</p>
       {loadError && <button type="button" onClick={() => void load()}>重新載入連結</button>}
-      {!loading && !loadError && visibleLinks.length === 0 && <p>這個活動尚未建立代訂連結。</p>}
-      <DelegationInstructions />
-      {visibleLinks.length > 0 && <details className="shop-delegation-management">
-        <summary tabIndex={0}>管理本次授權的連結（{visibleLinks.length}）</summary>
-        <ul className="shop-delegation-list">
-          {visibleLinks.map(renderLink)}
-        </ul>
-      </details>}
-      {otherLinks.length > 0 && <details>
-        <summary tabIndex={0}>其他活動的連結（{otherLinks.length}）</summary>
-        <ul className="shop-delegation-list">{otherLinks.map(renderLink)}</ul>
-      </details>}
+      <div className="shop-delegation-support">
+        <DelegationInstructions />
+        {visibleLinks.length > 0 && <details className="shop-delegation-management">
+          <summary tabIndex={0}>管理本次授權的連結（{visibleLinks.length}）</summary>
+          <ul className="shop-delegation-list">{visibleLinks.map(renderLink)}</ul>
+        </details>}
+        {!loading && !loadError && visibleLinks.length === 0 && <p className="shop-delegation-note">這個活動尚未建立代訂連結。</p>}
+        {otherLinks.length > 0 && <details>
+          <summary tabIndex={0}>其他活動的連結（{otherLinks.length}）</summary>
+          <ul className="shop-delegation-list">{otherLinks.map(renderLink)}</ul>
+        </details>}
+      </div>
     </section>
   );
 }

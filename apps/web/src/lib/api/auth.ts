@@ -10,6 +10,7 @@ type AuthenticatedUser = {
   is_owner?: boolean;
   permissions: string[];
   is_school_email?: boolean;
+  can_create_shop_delegation?: boolean;
 };
 
 // /auth/me is used by the shell on every navigation. Keep the session check

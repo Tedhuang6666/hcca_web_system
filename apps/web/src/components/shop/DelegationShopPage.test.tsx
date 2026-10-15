@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   setCurrentRegistrationProduct: vi.fn(), getProduct: vi.fn(), listDelegationLinks: vi.fn(), exchangeDelegationCode: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({
-  authApi: { me: api.me }, shopApi: api, classApi: { myClass: vi.fn().mockResolvedValue(null) },
+  authApi: { me: api.me, refresh: api.me }, shopApi: api, classApi: { myClass: vi.fn().mockResolvedValue(null) },
   apiErrorMessage: (error: Error) => error.message,
 }));
 vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
@@ -51,6 +51,36 @@ beforeEach(() => {
 });
 
 describe("原商品頁的家人代訂模式", () => {
+  it.each([
+    { email: "g0991001@hchs.hc.edu.tw", is_school_email: true },
+    { email: "private@example.test", is_school_email: false },
+  ])("uses server eligibility for a student signing in with $email without a student_id field", async (account) => {
+    window.history.replaceState({}, "", "/shop");
+    api.me.mockResolvedValue({ id: "student", display_name: "學生", ...account, can_create_shop_delegation: true });
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.getCurrentRegistrations.mockResolvedValue([]);
+    api.listDelegationLinks.mockResolvedValue([]);
+    render(<ShopPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "代訂" }));
+    expect(await screen.findByRole("textbox", { name: "邀請誰來代訂" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "建立代訂驗證碼" })).toBeDisabled();
+    expect(screen.queryByRole("textbox", { name: "學生提供的七位數代訂驗證碼" })).not.toBeInTheDocument();
+  });
+
+  it("does not treat a teacher's school-email flag as student authorization", async () => {
+    window.history.replaceState({}, "", "/shop");
+    api.me.mockResolvedValue({ id: "teacher", email: "teacher@hchs.hc.edu.tw", is_school_email: true, can_create_shop_delegation: false });
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.getCurrentRegistrations.mockResolvedValue([]);
+    render(<ShopPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "代訂" }));
+    expect(await screen.findByRole("textbox", { name: "學生提供的七位數代訂驗證碼" })).toBeVisible();
+    expect(screen.queryByRole("textbox", { name: "邀請誰來代訂" })).not.toBeInTheDocument();
+    expect(api.listDelegationLinks).not.toHaveBeenCalled();
+  });
+
   it("enters the same explicit binding flow after a parent submits a seven-digit code", async () => {
     window.history.replaceState({}, "", "/shop");
     api.catalog.mockResolvedValue(context.catalog);
@@ -124,7 +154,7 @@ describe("原商品頁的家人代訂模式", () => {
     expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeDisabled();
     expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "前往代訂，輸入驗證碼" }));
-    expect(await screen.findByRole("dialog", { name: "代訂" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "代訂商品" })).toBeVisible();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("textbox", { name: "學生提供的七位數代訂驗證碼" })).toBeVisible();
   });
@@ -138,9 +168,8 @@ describe("原商品頁的家人代訂模式", () => {
     api.me.mockResolvedValue({ id: "student", display_name: "學生", student_id: "S001" });
     const { unmount } = render(<ShopPage />);
     fireEvent.click(await screen.findByRole("button", { name: "代訂" }));
-    expect(await screen.findByRole("textbox", { name: "連結名稱（給誰代訂）" })).toBeVisible();
-    expect(screen.getByText("本次授權：校慶")).toBeVisible();
-    expect(screen.getByRole("combobox", { name: "選擇要授權的活動／商品主題" })).toHaveValue("goods");
+    expect(await screen.findByRole("textbox", { name: "邀請誰來代訂" })).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "選擇活動" })).toHaveValue("goods");
     expect(screen.queryByRole("textbox", { name: "學生提供的七位數代訂驗證碼" })).not.toBeInTheDocument();
     unmount();
     api.me.mockRejectedValue(new Error("未登入"));

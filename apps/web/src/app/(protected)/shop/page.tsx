@@ -999,11 +999,11 @@ export default function ShopPage() {
       setCatalog([]);
       setLoading(true);
     }
-    void authApi.me().then(async (user) => {
+    void authApi.refresh().then(async (user) => {
       if (!active) return;
       setIsLoggedIn(true);
-      setIsStudent(Boolean(user.student_id));
-      setCanOrderForSelf(Boolean(user.student_id || user.is_school_email));
+      setIsStudent(user.can_create_shop_delegation ?? Boolean(user.student_id));
+      setCanOrderForSelf(Boolean(user.can_create_shop_delegation || user.student_id || user.is_school_email));
       setCurrentAccount(`${user.display_name}（${user.email}）`);
       setUserRoom(`user:${user.id}`);
       const currentToken = readShopDelegationToken();
@@ -1754,10 +1754,11 @@ export default function ShopPage() {
         document.body,
       )}
 
-      {delegationOpen && !delegationToken && <Modal title="代訂" size="2xl" onClose={closeDelegation}>
+      {delegationOpen && !delegationToken && <Modal title={isStudent ? "邀請家人代訂" : "代訂商品"} size="lg" onClose={closeDelegation}>
         <div className="public-site shop-delegation-panel">
           {authLoading ? <p role="status">正在確認帳號身分…</p> : isStudent ? <>
-            {catalog.length > 0 && <label className="shop-delegation-activity">選擇要授權的活動／商品主題
+            <p className="shop-delegation-intro">建立一組驗證碼，讓家人用自己的帳號替你選購。</p>
+            {catalog.length > 0 && <label className="shop-delegation-activity">選擇活動
               <select value={selectedCategory?.id ?? ""} onChange={(event) => setSelectedCategoryId(event.target.value)}>
                 {catalog.map((category) => <option key={category.id} value={category.id}>
                   {category.activity_name ? `${category.activity_name} · ${category.name}` : category.name}
