@@ -392,6 +392,17 @@ async def test_decree_print_uses_full_school_heading_and_government_layout() -> 
     assert '<span class="signature-name">黃丞廷</span>' in rendered
     assert "margin: 25mm;" in rendered
     assert 'font-family: "Times New Roman","OfficialKai","標楷體","DFKai-SB",serif;' in rendered
+    signature_title_style = rendered.split(".signature-title {", maxsplit=1)[1].split(
+        "}", maxsplit=1
+    )[0]
+    signature_name_style = rendered.split(".signature-name {", maxsplit=1)[1].split(
+        "}", maxsplit=1
+    )[0]
+    assert 'font-family: "OfficialKai","標楷體","DFKai-SB",serif;' in signature_title_style
+    assert (
+        'font-family: "OfficialXingshu","OfficialLishu","OfficialKai","OfficialSerifTC",'
+        '"LiSu","STLiti",serif;' in signature_name_style
+    )
 
 
 @pytest.mark.asyncio

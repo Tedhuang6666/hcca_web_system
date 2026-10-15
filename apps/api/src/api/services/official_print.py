@@ -1173,7 +1173,7 @@ async def render_document_print_html(
     .signature-title {{
       display: inline-block;
       margin-right: 5mm;
-      font-family: "OfficialTitle","OfficialKai","OfficialLishu","OfficialSerifTC","LiSu","STLiti",serif;
+      font-family: "OfficialKai","標楷體","DFKai-SB",serif;
       font-size: 22pt;
       vertical-align: middle;
     }}
