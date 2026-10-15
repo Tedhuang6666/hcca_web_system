@@ -851,6 +851,8 @@ export default function ShopPage() {
   const [orderShortcutPortalReady, setOrderShortcutPortalReady] = useState(false);
   const [delegationOpen, setDelegationOpen] = useState(false);
   const delegationTriggerRef = useRef<HTMLButtonElement>(null);
+  const delegationReopenRef = useRef<HTMLButtonElement>(null);
+  const delegationReadyRef = useRef<HTMLHeadingElement>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
 
@@ -872,8 +874,10 @@ export default function ShopPage() {
 
   const closeDelegation = useCallback(() => {
     setDelegationOpen(false);
-    window.requestAnimationFrame(() => delegationTriggerRef.current?.focus());
-  }, []);
+    window.requestAnimationFrame(() => {
+      (delegationToken ? delegationReopenRef : delegationTriggerRef).current?.focus();
+    });
+  }, [delegationToken]);
 
   useEffect(() => () => {
     if (promotionCelebrationTimer.current !== null) {
@@ -931,11 +935,11 @@ export default function ShopPage() {
       setDelegationError("代訂連結無法接續，請重新開啟家人分享的連結。");
       setRegistrationLoadError(true);
       setLoading(false);
-      return;
+      return null;
     }
     try {
       const context = await shopApi.accessDelegation(token, claim);
-      if (generation !== refreshGeneration.current) return;
+      if (generation !== refreshGeneration.current) return null;
       setDelegationContext(context);
       setDelegationError("");
       setRegistrationLoadError(false);
@@ -947,13 +951,15 @@ export default function ShopPage() {
       setAvailablePromotions(context.promotions ?? []);
       setCloseStatus(Object.fromEntries((context.closed_category_ids ?? []).map((id) => [id, { is_closed: true }])));
       setLoading(false);
+      return context;
     } catch (error) {
-      if (generation !== refreshGeneration.current) return;
+      if (generation !== refreshGeneration.current) return null;
       setDelegationError(apiErrorMessage(error, "無法使用代訂連結"));
       setRegistrationLoadError(true);
       setDelegationContext(null);
       setRegistrations([]);
       setLoading(false);
+      return null;
     }
   }, [setSelectedCategoryId]);
 
@@ -989,6 +995,7 @@ export default function ShopPage() {
     let active = true;
     const token = readShopDelegationToken();
     setDelegationToken(token);
+    setDelegationOpen(Boolean(token));
     if (!token) {
       loadCatalog();
       const generation = refreshGeneration.current;
@@ -1026,7 +1033,7 @@ export default function ShopPage() {
       if (!active) return;
       setIsLoggedIn(false);
       setRegistrations([]);
-      if (readShopDelegationToken()) setLoading(false);
+      if (token) setLoading(false);
     }).finally(() => { if (active) setAuthLoading(false); });
     return () => { active = false; };
   }, [loadCatalog, loadDelegation]);
@@ -1042,7 +1049,7 @@ export default function ShopPage() {
       refreshGeneration.current += 1;
       const fragment = new URLSearchParams(window.location.hash.slice(1));
       const token = fragment.has("delegate") ? fragment.get("delegate") || "invalid" : null;
-      if (token) setDelegationOpen(false);
+      setDelegationOpen(Boolean(token));
       setDelegationToken(token);
       setDelegationContext(null);
       setDelegationError("");
@@ -1307,6 +1314,48 @@ export default function ShopPage() {
     (selectedSeriesId ? 0 : selectedCategory?.products.length ?? 0)
     + visibleSeries.reduce((count, series) => count + series.products.length, 0)
   );
+  const delegationPanel = delegationToken && (
+    <section className="shop-delegation-entry shop-delegation-context" aria-label="家長代訂">
+      <div>
+        <h2 ref={delegationReadyRef} tabIndex={-1}>{delegationContext ? `${delegationContext.link.name} · 為 ${delegationContext.student_name} 代訂` : "家長代訂"}</h2>
+        {authLoading && <p role="status">確認登入帳號與代訂授權中…</p>}
+        {!authLoading && isLoggedIn && <p className="shop-delegation-account">目前帳號：<strong>{currentAccount}</strong></p>}
+        {delegationContext && <p className="shop-delegation-scope"><strong>授權範圍：{[...new Set((delegationContext.catalog ?? []).map((category) =>
+          category.activity_name ?? category.name))].join("、") || "此連結的商品主題"}</strong>。本頁只顯示可代訂的商品。</p>}
+        {delegationError && <p role="alert">{delegationError}</p>}
+        {delegationContext?.can_claim && <>
+          <p><strong>請先確認學生與登入帳號。</strong>確認後，這個連結只供目前帳號使用；若帳號不正確，請先登出並登入自己的帳號，再開啟原連結。</p>
+        </>}
+        {delegationContext?.can_edit && <p role="status" className="shop-delegation-ready">{registrationLocked
+          ? "本次預購已收款，品項不能再修改。可查看已登記品項。"
+          : "已綁定此帳號，可在下方選購。送出後直接加入學生的預購。"}</p>}
+        {(!delegationContext || delegationContext.can_claim || delegationContext.can_edit) && <>
+          <p>送出即加入學生預購，不需學生再次確認，由學生繳款與領取。你只能修改此連結登記的品項，無法修改學生本人或其他家人的品項。</p>
+          <p>確認綁定前，只能查看商品與學生姓名；確認後可查看此授權範圍的合計與品項。</p>
+        </>}
+        {delegationContext?.can_claim && <>
+          <button type="button" className="shop-delegation-primary" disabled={delegationBusy} onClick={async () => {
+            setDelegationBusy(true);
+            const context = await loadDelegation(delegationToken, true);
+            if (context?.can_edit) {
+              setDelegationOpen(false);
+              window.requestAnimationFrame(() => delegationReadyRef.current?.focus());
+            }
+            setDelegationBusy(false);
+          }}>{delegationBusy ? "確認中…" : "確認授權並開始代訂"}</button>
+        </>}
+        {!isLoggedIn && !authLoading && <Link
+          className="shop-delegation-primary"
+          href="/login?next=%2Fshop%3Fdelegation%3Dresume"
+          onClick={() => shopDelegationLoginNext(delegationToken)}>登入自己的帳號開始代訂</Link>}
+        {delegationError && isLoggedIn && <button type="button" onClick={() => void loadDelegation(delegationToken)}>重新載入</button>}
+        {delegationContext && !delegationContext.can_claim && !delegationContext.can_edit && <p>這是你建立的連結。<Link href="/shop">返回本人商品頁</Link></p>}
+        {!delegationOpen && !delegationContext?.can_edit && <button ref={delegationReopenRef} type="button"
+          className="shop-delegation-primary" onClick={() => setDelegationOpen(true)}>重新開啟授權確認</button>}
+        <DelegationInstructions />
+      </div>
+    </section>
+  );
 
   return (
     <div className="shop-public-page">
@@ -1319,40 +1368,11 @@ export default function ShopPage() {
         </div>
       </header>
 
-      {delegationToken && <section className="shop-delegation-entry shop-delegation-context" aria-label="家長代訂">
-        <div>
-          <h2>{delegationContext ? `${delegationContext.link.name} · 為 ${delegationContext.student_name} 代訂` : "家長代訂"}</h2>
-          {authLoading && <p role="status">確認登入帳號與代訂授權中…</p>}
-          {!authLoading && isLoggedIn && <p className="shop-delegation-account">目前帳號：<strong>{currentAccount}</strong></p>}
-          {delegationContext && <p className="shop-delegation-scope"><strong>授權範圍：{[...new Set((delegationContext.catalog ?? []).map((category) =>
-            category.activity_name ?? category.name))].join("、") || "此連結的商品主題"}</strong>。本頁只顯示可代訂的商品。</p>}
-          {delegationError && <p role="alert">{delegationError}</p>}
-          {delegationContext?.can_claim && <>
-            <p><strong>請先確認學生與登入帳號。</strong>確認後，這個連結只供目前帳號使用；若帳號不正確，請先登出並登入自己的帳號，再開啟原連結。</p>
-          </>}
-          {delegationContext?.can_edit && <p role="status" className="shop-delegation-ready">{registrationLocked
-            ? "本次預購已收款，品項不能再修改。可查看已登記品項。"
-            : "已綁定此帳號，可在下方選購。送出後直接加入學生的預購。"}</p>}
-          {(!delegationContext || delegationContext.can_claim || delegationContext.can_edit) && <>
-            <p>送出即加入學生預購，不需學生再次確認，由學生繳款與領取。你只能修改此連結登記的品項，無法修改學生本人或其他家人的品項。</p>
-            <p>確認綁定前，只能查看商品與學生姓名；確認後可查看此授權範圍的合計與品項。</p>
-          </>}
-          {delegationContext?.can_claim && <>
-            <button type="button" className="shop-delegation-primary" disabled={delegationBusy} onClick={async () => {
-              setDelegationBusy(true);
-              await loadDelegation(delegationToken, true);
-              setDelegationBusy(false);
-            }}>{delegationBusy ? "確認中…" : "確認授權並開始代訂"}</button>
-          </>}
-          {!isLoggedIn && !authLoading && <Link
-            className="shop-delegation-primary"
-            href="/login?next=%2Fshop%3Fdelegation%3Dresume"
-            onClick={() => shopDelegationLoginNext(delegationToken)}>登入自己的帳號開始代訂</Link>}
-          {delegationError && isLoggedIn && <button type="button" onClick={() => void loadDelegation(delegationToken)}>重新載入</button>}
-          {delegationContext && !delegationContext.can_claim && !delegationContext.can_edit && <p>這是你建立的連結。<Link href="/shop">返回本人商品頁</Link></p>}
-          <DelegationInstructions />
-        </div>
-      </section>}
+      {delegationToken && delegationOpen && !delegationContext?.can_edit && <Modal
+        title="確認代訂授權" size="lg" onClose={closeDelegation}>
+        <div className="public-site shop-delegation-panel">{delegationPanel}</div>
+      </Modal>}
+      {delegationToken && (!delegationOpen || delegationContext?.can_edit) && delegationPanel}
 
       {myClass && (
         <section
