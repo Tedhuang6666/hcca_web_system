@@ -45,10 +45,10 @@ describe("學生代訂連結管理", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立連結" }));
     await waitFor(() => expect(api.createDelegationLink).toHaveBeenCalledWith({ name: "給媽媽代訂", category_id: "goods" }));
     expect(await screen.findByRole("textbox", { name: "分享連結（請在離開頁面前保存）" })).toHaveValue(`${window.location.origin}/shop#delegate=synthetic-test-token`);
-    expect(screen.getByRole("textbox", { name: "七位數授權碼" })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "七位數代訂驗證碼" })).toHaveFocus();
     expect(screen.queryByRole("textbox", { name: "連結名稱（給誰代訂）" })).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "七位數授權碼" })).toHaveValue("0123456");
-    expect(screen.getByRole("button", { name: "複製授權碼" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "七位數代訂驗證碼" })).toHaveValue("0123456");
+    expect(screen.getByRole("button", { name: "複製驗證碼" })).toBeVisible();
   });
 
   it("displays the bound account and supports renaming and revocation", async () => {
