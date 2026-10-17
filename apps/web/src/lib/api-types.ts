@@ -34090,8 +34090,10 @@ export interface operations {
     list_users_admin_users_get: {
         parameters: {
             query?: {
-                /** @description 搜尋姓名/Email/學號 */
+                /** @description 搜尋姓名、Email、學號、班級或座號 */
                 keyword?: string | null;
+                /** @description 依班級名冊篩選 */
+                class_id?: string | null;
                 /** @description 僅顯示啟用中帳號 */
                 active_only?: boolean;
                 limit?: number;

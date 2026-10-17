@@ -572,7 +572,13 @@ function PersonDirectoryPanel() {
       )}
         </>
       ) : (
-        <AccountDirectoryPanel users={users} loading={usersLoading} onRefresh={refreshAll} />
+        <AccountDirectoryPanel
+          users={users}
+          loading={usersLoading}
+          classes={classes}
+          canManageClasses={canAssignClass}
+          onRefresh={refreshAll}
+        />
       )}
     </div>
   );
@@ -885,6 +891,8 @@ function PersonDetailPanel({
                     key={linkedAccount.id}
                     user={linkedAccount}
                     users={users}
+                    classes={classes}
+                    canManageClasses={canAssignClass}
                     onChanged={onChanged}
                   />
                 </div>

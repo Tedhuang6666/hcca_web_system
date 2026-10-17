@@ -17,9 +17,22 @@ import {
 import { toast } from "sonner";
 
 import Modal from "@/components/ui/Modal";
-import { adminApi, apiErrorMessage } from "@/lib/api";
-import type { AccountMergeConflict, AdminUserDetail } from "@/lib/types";
+import { adminApi, apiErrorMessage, classApi } from "@/lib/api";
+import type {
+  AccountMergeConflict,
+  AdminUserDetail,
+  ClassRosterEntryOut,
+  SchoolClassListItem,
+} from "@/lib/types";
 import { AccountLifecycleSection, AccountTenureSection } from "./AccountGovernanceSections";
+
+function classOptionLabel(item: SchoolClassListItem) {
+  return item.academic_year + " 學年度 " + (item.label ?? (item.class_code + " 班"));
+}
+
+function rosterClassLabel(entry: AdminUserDetail["class_roster"][number]) {
+  return entry.class_label ?? (entry.academic_year + " 學年度 " + entry.class_code + " 班");
+}
 
 const NOTIFICATION_LABELS: Record<string, string> = {
   document_pending: "公文待審",
@@ -198,10 +211,14 @@ function ToggleRow({
 export function AccountDetailPanel({
   user,
   users,
+  classes,
+  canManageClasses,
   onChanged,
 }: {
   user: AdminUserDetail;
   users: AdminUserDetail[];
+  classes: SchoolClassListItem[];
+  canManageClasses: boolean;
   onChanged: () => Promise<void>;
 }) {
   const [confirm, setConfirm] = useState<ConfirmState>(null);
@@ -220,7 +237,14 @@ export function AccountDetailPanel({
 
   return (
     <>
-      <AccountDetail user={user} users={users} onChanged={onChanged} onConfirm={setConfirm} />
+      <AccountDetail
+        user={user}
+        users={users}
+        classes={classes}
+        canManageClasses={canManageClasses}
+        onChanged={onChanged}
+        onConfirm={setConfirm}
+      />
       {confirm && (
         <Modal title={confirm.title} onClose={() => setConfirm(null)}>
           <div className="space-y-5">
@@ -242,11 +266,15 @@ export function AccountDetailPanel({
 function AccountDetail({
   user,
   users,
+  classes,
+  canManageClasses,
   onChanged,
   onConfirm,
 }: {
   user: AdminUserDetail;
   users: AdminUserDetail[];
+  classes: SchoolClassListItem[];
+  canManageClasses: boolean;
   onChanged: () => Promise<void>;
   onConfirm: (state: ConfirmState) => void;
 }) {
@@ -266,6 +294,12 @@ function AccountDetail({
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [working, setWorking] = useState(false);
+  const [rosterClassId, setRosterClassId] = useState("");
+  const [rosterSeatNumber, setRosterSeatNumber] = useState("");
+  const [rosterEntries, setRosterEntries] = useState<ClassRosterEntryOut[]>([]);
+  const [rosterEntriesLoading, setRosterEntriesLoading] = useState(false);
+  const [rosterEntriesError, setRosterEntriesError] = useState(false);
+  const [rosterSaving, setRosterSaving] = useState(false);
 
   useEffect(() => {
     setDisplayName(user.display_name);
@@ -282,6 +316,51 @@ function AccountDetail({
     setMergeChoices({});
     setMergeModalOpen(false);
   }, [user]);
+
+  useEffect(() => {
+    const currentRoster = user.class_roster.find(
+      (entry) => entry.is_active && classes.some((item) => item.id === entry.class_id),
+    );
+    setRosterClassId(currentRoster?.class_id ?? "");
+    setRosterSeatNumber(currentRoster ? String(currentRoster.seat_number) : "");
+  }, [classes, user]);
+
+  useEffect(() => {
+    if (!canManageClasses || !rosterClassId) {
+      setRosterEntries([]);
+      setRosterEntriesLoading(false);
+      setRosterEntriesError(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRosterEntries([]);
+    setRosterEntriesLoading(true);
+    setRosterEntriesError(false);
+    void classApi.roster(rosterClassId)
+      .then((entries) => {
+        if (!cancelled) setRosterEntries(entries);
+      })
+      .catch(() => {
+        if (!cancelled) setRosterEntriesError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setRosterEntriesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageClasses, rosterClassId]);
+
+  const matchingRosterEntry = rosterEntries.find(
+    (entry) => entry.user_id === user.id || (user.student_id && entry.student_id === user.student_id),
+  );
+  const seatLimit = Math.max(50, ...rosterEntries.map((entry) => entry.seat_number));
+  const availableSeatNumbers = Array.from({ length: seatLimit + 1 }, (_, index) => index + 1)
+    .filter((seatNumber) => rosterEntries.every(
+      (entry) => entry.seat_number !== seatNumber || entry.id === matchingRosterEntry?.id,
+    ));
 
   const updatePreference = (type: string, channel: keyof PreferenceChannels, checked: boolean) => {
     setPreferences((current) => ({
@@ -309,6 +388,35 @@ function AccountDetail({
       toast.error(apiErrorMessage(error, "儲存帳號設定失敗"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveClassRoster = async () => {
+    const seatNumberValue = Number(rosterSeatNumber);
+    if (!rosterClassId || !Number.isInteger(seatNumberValue) || seatNumberValue < 1) return;
+    if (rosterEntriesLoading || rosterEntriesError) return;
+
+    setRosterSaving(true);
+    try {
+      if (matchingRosterEntry) {
+        await classApi.updateRoster(rosterClassId, matchingRosterEntry.id, {
+          seat_number: seatNumberValue,
+        });
+      } else if (user.student_id) {
+        await classApi.addRoster(rosterClassId, {
+          seat_number: seatNumberValue,
+          student_id: user.student_id,
+        });
+      } else {
+        toast.error("請先在基本資料儲存學號，再新增班級名冊。");
+        return;
+      }
+      toast.success("班級與座號已更新");
+      await onChanged();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "更新班級與座號失敗"));
+    } finally {
+      setRosterSaving(false);
     }
   };
 
@@ -429,7 +537,7 @@ function AccountDetail({
             </div>
           </Section>
 
-          <Section title="班級與座號" description="依班級座號名冊顯示目前及歷史資料；如需調整，請到班級與名冊管理。">
+          <Section title="班級與座號" description="查看目前及歷史名冊資料，並在此快速新增班級或調整座號。">
             {user.class_roster.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無班級座號名冊資料。</p>
             ) : (
@@ -438,7 +546,7 @@ function AccountDetail({
                   <div key={`${entry.class_id}-${entry.student_id}-${entry.seat_number}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5" style={{ background: "var(--bg-elevated)" }}>
                     <div className="min-w-0">
                       <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                        {entry.class_label ?? `${entry.academic_year} 學年度 ${entry.class_code} 班`}
+                        {rosterClassLabel(entry)}
                       </p>
                       <p className="mt-1 break-all text-xs" style={{ color: "var(--text-muted)" }}>
                         {entry.academic_year} 學年度 · 學號 {entry.student_id}
@@ -449,6 +557,81 @@ function AccountDetail({
                     </span>
                   </div>
                 ))}
+              </div>
+            )}
+            {canManageClasses && (
+              <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+                  <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    班級
+                    <SelectInput
+                      className="mt-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+                      value={rosterClassId}
+                      onChange={(event) => {
+                        const nextClassId = event.target.value;
+                        const currentEntry = user.class_roster.find((entry) => entry.class_id === nextClassId);
+                        setRosterClassId(nextClassId);
+                        setRosterSeatNumber(currentEntry ? String(currentEntry.seat_number) : "");
+                        setRosterEntries([]);
+                        setRosterEntriesLoading(Boolean(nextClassId));
+                        setRosterEntriesError(false);
+                      }}
+                      disabled={rosterSaving || classes.length === 0}
+                      aria-label="快速設定班級"
+                    >
+                      <option value="">選擇班級</option>
+                      {classes.map((item) => (
+                        <option key={item.id} value={item.id}>{classOptionLabel(item)}</option>
+                      ))}
+                    </SelectInput>
+                  </label>
+                  <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    座號
+                    <SelectInput
+                      className="mt-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+                      value={rosterSeatNumber}
+                      onChange={(event) => setRosterSeatNumber(event.target.value)}
+                      disabled={!rosterClassId || rosterEntriesLoading || rosterEntriesError || rosterSaving}
+                      aria-label="快速設定座號"
+                    >
+                      <option value="">選擇座號</option>
+                      {availableSeatNumbers.map((seatNumber) => (
+                        <option key={seatNumber} value={seatNumber}>{seatNumber} 號</option>
+                      ))}
+                    </SelectInput>
+                  </label>
+                  <Button
+                    onClick={saveClassRoster}
+                    tone="primary"
+                    disabled={
+                      !rosterClassId
+                      || !rosterSeatNumber
+                      || (!matchingRosterEntry && !user.student_id)
+                      || rosterEntriesLoading
+                      || rosterEntriesError
+                      || rosterSaving
+                    }
+                    className="w-full sm:w-auto"
+                  >
+                    <Check size={15} />{rosterSaving ? "儲存中…" : "儲存班級座號"}
+                  </Button>
+                </div>
+                {classes.length === 0 && (
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前沒有啟用中的班級可選。</p>
+                )}
+                {rosterEntriesLoading && (
+                  <p className="text-xs" role="status" style={{ color: "var(--text-muted)" }}>正在載入座號名冊…</p>
+                )}
+                {rosterEntriesError && (
+                  <p className="text-xs" role="alert" style={{ color: "var(--danger)" }}>
+                    無法讀取該班名冊，請重新選擇班級或重新整理頁面。
+                  </p>
+                )}
+                {!user.student_id && !matchingRosterEntry && (
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    新增名冊需要學號；請先在基本資料儲存學號。
+                  </p>
+                )}
               </div>
             )}
             <Link href="/admin/people?section=classes" className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary)" }}>
