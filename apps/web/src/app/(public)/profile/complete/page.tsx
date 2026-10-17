@@ -1,144 +1,154 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
-import { usersApi, ApiError, apiErrorMessage } from "@/lib/api";
-import type { UserRead } from "@/lib/types";
 
-/** 從學校 Google 信箱中解析學號（g0{student_id}@hchs.hc.edu.tw） */
-function parseStudentIdFromEmail(email: string): string {
-  const m = email.match(/^g0(\d+)@/i);
-  return m ? m[1] : "";
-}
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+
+import { ApiError, apiErrorMessage, authApi, classApi } from "@/lib/api";
+import { cacheCurrentUser } from "@/lib/auth-cache";
+import { confirmationReturnPath } from "@/lib/login-destination";
+import type { ClassConfirmationOut } from "@/lib/types";
+import styles from "./page.module.css";
 
 export default function CompleteProfilePage() {
   const router = useRouter();
-  const [user, setUser] = useState<UserRead | null>(null);
-  const [displayName, setDisplayName] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [data, setData] = useState<ClassConfirmationOut | null>(null);
+  const [classId, setClassId] = useState("");
+  const [seatNumber, setSeatNumber] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    usersApi.me().then(u => {
-      setUser(u);
-      setDisplayName(u.display_name || "");
-      setStudentId(u.student_id || parseStudentIdFromEmail(u.email));
-    }).catch(() => {
-      router.replace("/login");
-    }).finally(() => setLoading(false));
-  }, [router]);
+  const returnPath = useCallback(() => confirmationReturnPath(
+    new URLSearchParams(window.location.search).get("next"),
+  ), []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!displayName.trim()) { toast.error("請填寫顯示名稱"); return; }
-    if (!studentId.trim()) { toast.error("請填寫學號"); return; }
-    setSaving(true);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
     try {
-      await usersApi.updateMe({
-        display_name: displayName.trim(),
-        student_id: studentId.trim(),
-      });
-      toast.success("個人資料已完成設定");
-      const next = new URLSearchParams(window.location.search).get("next") || "/";
-      router.replace(next);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        toast.error("此學號已被使用，請確認您的學號");
-      } else {
-        toast.error(apiErrorMessage(e, "儲存失敗，請稍後再試"));
+      const result = await classApi.myConfirmation();
+      if (!result.required) {
+        router.replace(returnPath());
+        return;
       }
+      setData(result);
+      setClassId(result.current_class?.id ?? "");
+      setSeatNumber(result.current_class?.seat_number?.toString() ?? "");
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        router.replace(`/login?${new URLSearchParams({
+          next: returnPath(),
+        })}`);
+      } else {
+        setError(apiErrorMessage(cause, "無法載入班級資料，請重試。"));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [returnPath, router]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const result = await classApi.confirmClass({
+        class_id: classId, seat_number: Number(seatNumber),
+      });
+      if (result.required) {
+        setError("班級資料已變動，請重新載入後確認。");
+        return;
+      }
+      setSaved(true);
+      // 更新 auth/me 短期快取；資料已儲存時，網路失敗仍可繼續。
+      try { cacheCurrentUser(await authApi.refresh()); } catch { /* 下頁會重新驗證 session。 */ }
+      router.replace(returnPath());
+    } catch (cause) {
+      setError(apiErrorMessage(cause, "儲存失敗，請確認班級座號後重試。"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-base)" }}>
-        <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
-      </div>
-    );
-  }
+  const hasOptions = Boolean(data?.class_options.length);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12"
-      style={{ background: "var(--bg-base)" }}>
-      <div className="w-full max-w-md">
-        {/* 頁首 */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center text-2xl font-bold"
-            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-            {user?.display_name?.charAt(0)?.toUpperCase() ?? "?"}
-          </div>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-            完成個人資料
-          </h1>
-          <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>
-            首次登入需填寫以下資料，才能使用系統完整功能
+    <main className={styles.page}>
+      <div className={styles.content}>
+        <h1>確認班級與座號</h1>
+        <p className={styles.intro}>
+          {data?.current_class
+            ? "已找到你的班級資料，請覆核班級與座號；若有誤，可直接修改後儲存。"
+            : "首次登入請設定目前的班級與座號，供班級服務與訂購歸戶使用。"}
+        </p>
+
+        {loading ? (
+          <p role="status" className={styles.status}>
+            <Loader2 size={20} className="animate-spin" aria-hidden="true" /> 載入班級資料中…
           </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="card p-6 space-y-5">
-          {/* 顯示名稱 */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-primary)" }}>
-              顯示名稱 <span style={{ color: "var(--danger)" }}>*</span>
-            </label>
-            <input
-              className="input"
-              value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
-              placeholder="您的姓名"
-              maxLength={100}
-              required
-              autoFocus
-            />
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              通常即您的 Google 帳號名稱，可手動更改
-            </p>
+        ) : saved ? (
+          <div role="status" className={styles.panel}>
+            <p>班級與座號已確認。</p>
+            <Link href={returnPath()} className={styles.primary}>繼續前往原頁面</Link>
           </div>
-
-          {/* 學號 */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-primary)" }}>
-              學號 <span style={{ color: "var(--danger)" }}>*</span>
-            </label>
-            <input
-              className="input"
-              value={studentId}
-              onChange={e => setStudentId(e.target.value)}
-              placeholder="例：410532"
-              maxLength={20}
-              required
-            />
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              已從您的信箱自動帶入，請確認是否正確
-            </p>
+        ) : data ? (
+          <form onSubmit={handleSubmit} className={styles.panel} aria-busy={saving}>
+            <p className={styles.identity}>學號 <strong>{data.student_id}</strong></p>
+            {error && <p role="alert" className={styles.error}>{error}</p>}
+            {hasOptions ? (
+              <>
+                <div className={styles.group}>
+                  <label htmlFor="confirmation-class">班級</label>
+                  <select
+                    id="confirmation-class" value={classId} required disabled={saving}
+                    onChange={(event) => { setClassId(event.target.value); setSeatNumber(""); }}
+                    aria-describedby="class-hint"
+                  >
+                    <option value="" disabled>請選擇目前的班級</option>
+                    {data.class_options.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.academic_year} 學年度 · {item.label || `${item.class_code} 班`}
+                      </option>
+                    ))}
+                  </select>
+                  <p id="class-hint">只顯示目前啟用的班級。</p>
+                </div>
+                <div className={styles.group}>
+                  <label htmlFor="confirmation-seat">座號</label>
+                  <input
+                    id="confirmation-seat" type="number" inputMode="numeric"
+                    min={1} max={999} step={1} required value={seatNumber} disabled={saving}
+                    onChange={(event) => setSeatNumber(event.target.value)}
+                    aria-describedby="seat-hint"
+                  />
+                  <p id="seat-hint">請填寫你在班上的座號。</p>
+                </div>
+                <button type="submit" className={styles.primary} disabled={saving || !classId || !seatNumber}>
+                  {saving ? "儲存中…" : data.current_class ? "確認資料並繼續" : "儲存班級座號並繼續"}
+                </button>
+              </>
+            ) : (
+              <div role="status">
+                <p>目前尚未開放班級設定，請聯絡管理員建立班級後再確認。</p>
+                <Link href="/contact">聯絡管理員</Link>
+                <button type="button" className={styles.secondary} onClick={() => void load()}>重新載入</button>
+              </div>
+            )}
+          </form>
+        ) : (
+          <div className={styles.panel}>
+            <p role="alert" className={styles.error}>{error}</p>
+            <button type="button" className={styles.primary} onClick={() => void load()}>重新載入</button>
           </div>
-
-          {/* 信箱（唯讀） */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
-              電子郵件（唯讀）
-            </label>
-            <input
-              className="input"
-              value={user?.email ?? ""}
-              disabled
-              style={{ opacity: 0.6, cursor: "not-allowed" }}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn btn-primary w-full btn-lg">
-            {saving ? "儲存中…" : "完成設定，進入系統"}
-          </button>
-        </form>
+        )}
+        <Link href="/" className={styles.home}>回到首頁</Link>
       </div>
-    </div>
+    </main>
   );
 }

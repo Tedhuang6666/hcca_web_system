@@ -33,6 +33,21 @@ class GoogleOneTapRequest(BaseModel):
     next: str | None = None
 
 
+class AuthSessionOut(BaseModel):
+    """登入工作階段的身份、權限及首次登入導引。"""
+
+    id: uuid.UUID
+    email: str
+    display_name: str
+    avatar_url: str | None
+    is_superuser: bool
+    is_owner: bool
+    permissions: list[str]
+    can_create_shop_delegation: bool
+    is_school_email: bool
+    requires_class_confirmation: bool
+
+
 class UserRead(BaseModel):
     """當前使用者資訊回應"""
 

@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { safeNextPath } from "@/lib/safe-redirect";
+import { loginDestination } from "@/lib/login-destination";
 
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
@@ -31,7 +32,7 @@ export default function AuthCallbackPage() {
     void authApi.me()
       .then((user) => {
         cacheCurrentUser(user);
-        window.location.replace(next);
+        window.location.replace(loginDestination(user, next));
       })
       .catch(() => {
         const query = new URLSearchParams({

@@ -16,6 +16,7 @@ from api.dependencies.permissions import require_any, require_permission
 from api.models.school_class import ClassCorrectionRequest, SchoolClass
 from api.models.user import User
 from api.routers._common import or_404
+from api.schemas.class_confirmation import ClassConfirmationCreate, ClassConfirmationOut
 from api.schemas.school_class import (
     ClassCadreCreate,
     ClassCadreOut,
@@ -47,6 +48,7 @@ from api.schemas.school_class import (
     SchoolClassOut,
     SchoolClassUpdate,
 )
+from api.services import class_confirmation as confirmation_svc
 from api.services import class_correction as correction_svc
 from api.services import school_class as class_svc
 from api.services import school_class_import as class_import_svc
@@ -295,6 +297,31 @@ async def get_my_class(session: DbDep, user: CurrentUser) -> SchoolClass | None:
             session, school_class, user
         )
     return school_class
+
+
+@router.get(
+    "/me/confirmation", response_model=ClassConfirmationOut, summary="查詢首次登入班級確認資料"
+)
+async def get_my_class_confirmation(session: DbDep, user: CurrentUser) -> ClassConfirmationOut:
+    return await confirmation_svc.get_confirmation(session, user)
+
+
+@router.post(
+    "/me/confirmation", response_model=ClassConfirmationOut, summary="確認本人的班級與座號"
+)
+async def confirm_my_class(
+    payload: ClassConfirmationCreate, session: DbDep, user: CurrentUser
+) -> ClassConfirmationOut:
+    try:
+        return await confirmation_svc.confirm_class(session, user, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=409, detail="班級座號已有異動，請重新確認或聯絡管理員"
+        ) from exc
 
 
 @router.get("/{class_id}", response_model=SchoolClassOut, summary="取得班級詳情")

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { authApi } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { isPublicRoute } from "@/lib/route-access";
+import { loginDestination } from "@/lib/login-destination";
 
 declare global {
   interface Window {
@@ -60,7 +61,7 @@ export default function GoogleOneTap() {
         }
         if (result.user) {
           cacheCurrentUser(result.user);
-          window.location.replace(result.next || nextPath || "/");
+          window.location.replace(loginDestination(result.user, result.next || nextPath));
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Google 快速登入失敗";
