@@ -49,7 +49,7 @@ from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.models.user_session import UserSession
-from api.schemas.auth import GoogleOneTapRequest
+from api.schemas.auth import AuthSessionOut, GoogleOneTapRequest
 from api.services import audit as audit_svc
 from api.services import passkey as passkey_svc
 from api.services import user_session as user_session_svc
@@ -174,6 +174,7 @@ def _email_can_login(
 
 
 async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
+    from api.services.class_confirmation import requires_confirmation
     from api.services.permission import get_user_permission_codes
 
     # 權限異動流程會主動失效 Redis 快取；正常讀取沿用短期快取，避免每次
@@ -190,6 +191,7 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
         "is_owner": user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),
         "can_create_shop_delegation": await has_student_identity(db, user),
+        "requires_class_confirmation": await requires_confirmation(db, user),
         "is_school_email": bool(user.student_id)
         or domain in {item.lower().lstrip("@") for item in settings.LOGIN_ALLOWED_EMAIL_DOMAINS},
     }
@@ -849,7 +851,7 @@ async def refresh_token(
     return {"message": "ok"}
 
 
-@router.get("/me", summary="取得當前使用者資料")
+@router.get("/me", response_model=AuthSessionOut, summary="取得當前使用者資料")
 async def get_me(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),

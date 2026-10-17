@@ -8,6 +8,7 @@ import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react";
 import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { safeNextPath } from "@/lib/safe-redirect";
+import { loginDestination } from "@/lib/login-destination";
 import OtpInput from "@/components/auth/OtpInput";
 
 export default function MFALoginPage() {
@@ -54,7 +55,7 @@ export default function MFALoginPage() {
       const me = await authApi.me();
       cacheCurrentUser(me);
       await new Promise((resolve) => window.setTimeout(resolve, 420));
-      window.location.replace(next);
+      window.location.replace(loginDestination(me, next));
     } catch (e) {
       setVerificationError(apiErrorMessage(e, "驗證失敗，請重新輸入"));
       setCode("");
@@ -76,7 +77,7 @@ export default function MFALoginPage() {
       await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
       const me = await authApi.me();
       cacheCurrentUser(me);
-      window.location.replace(next);
+      window.location.replace(loginDestination(me, next));
     } catch (e) {
       setVerificationError(apiErrorMessage(e, "Passkey 驗證失敗，請改用驗證器 App"));
       codeInputRef.current?.focus();

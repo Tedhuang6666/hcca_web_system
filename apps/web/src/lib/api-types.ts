@@ -2608,6 +2608,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/classes/me/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查詢首次登入班級確認資料 */
+        get: operations["get_my_class_confirmation_classes_me_confirmation_get"];
+        put?: never;
+        /** 確認本人的班級與座號 */
+        post: operations["confirm_my_class_classes_me_confirmation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/classes/recipient-options": {
         parameters: {
             query?: never;
@@ -13143,6 +13161,35 @@ export interface components {
             /** Summary */
             summary: string | null;
         };
+        /**
+         * AuthSessionOut
+         * @description 登入工作階段的身份、權限及首次登入導引。
+         */
+        AuthSessionOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Can Create Shop Delegation */
+            can_create_shop_delegation: boolean;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Owner */
+            is_owner: boolean;
+            /** Is School Email */
+            is_school_email: boolean;
+            /** Is Superuser */
+            is_superuser: boolean;
+            /** Permissions */
+            permissions: string[];
+            /** Requires Class Confirmation */
+            requires_class_confirmation: boolean;
+        };
         /** AuthenticatedAuditIn */
         AuthenticatedAuditIn: {
             /** Display Value */
@@ -14301,6 +14348,26 @@ export interface components {
              * @description 班代是否已向此學生收款（僅供班級紀錄）
              */
             is_class_collected: boolean;
+        };
+        /** ClassConfirmationCreate */
+        ClassConfirmationCreate: {
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Seat Number */
+            seat_number: number;
+        };
+        /** ClassConfirmationOut */
+        ClassConfirmationOut: {
+            /** Class Options */
+            class_options: components["schemas"]["SchoolClassListItem"][];
+            current_class: components["schemas"]["MySchoolClassOut"] | null;
+            /** Required */
+            required: boolean;
+            /** Student Id */
+            student_id: string | null;
         };
         /** ClassCorrectionRequestCreate */
         ClassCorrectionRequestCreate: {
@@ -35756,9 +35823,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AuthSessionOut"];
                 };
             };
         };
@@ -36455,6 +36520,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MySchoolClassOut"] | null;
+                };
+            };
+        };
+    };
+    get_my_class_confirmation_classes_me_confirmation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassConfirmationOut"];
+                };
+            };
+        };
+    };
+    confirm_my_class_classes_me_confirmation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassConfirmationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassConfirmationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

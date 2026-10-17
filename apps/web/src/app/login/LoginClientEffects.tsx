@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
+import { authApi } from "@/lib/api/auth";
+import { loginDestination } from "@/lib/login-destination";
 
 export default function LoginClientEffects({ nextPath }: { nextPath: string }) {
   useEffect(() => {
     try {
       if (localStorage.getItem("user_id")) {
-        window.location.replace(nextPath);
+        void authApi.me().then((user) => {
+          window.location.replace(loginDestination(user, nextPath));
+        }).catch(() => {
+          // 無法驗證既有 session 時保留登入選項。
+        });
       }
     } catch {
       // Storage is optional; the normal login flow remains available.

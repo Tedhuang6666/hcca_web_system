@@ -19,6 +19,7 @@ from api.models.api_key import ApiKey  # noqa: F401
 from api.models.audit_anchor import AuditLogAnchor  # noqa: F401
 from api.models.audit_log import AuditLog  # noqa: F401
 from api.models.backup_record import BackupKind, BackupRecord, BackupStatus  # noqa: F401
+from api.models.class_confirmation import ClassConfirmation  # noqa: F401
 from api.models.council_proposal import (  # noqa: F401
     CouncilProposal,
     CouncilProposalCaseType,

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiErrorMessage } from "@/lib/api-helpers";
+import { loginDestination } from "@/lib/login-destination";
 
 export default function PasskeyLogin({ nextPath }: { nextPath: string }) {
   const [ready, setReady] = useState(false);
@@ -36,8 +37,9 @@ export default function PasskeyLogin({ nextPath }: { nextPath: string }) {
         >[0]["optionsJSON"],
       });
       await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
-      cacheCurrentUser(await authApi.me());
-      window.location.replace(safeNextPath(nextPath, "/dashboard"));
+      const user = await authApi.me();
+      cacheCurrentUser(user);
+      window.location.replace(loginDestination(user, safeNextPath(nextPath, "/dashboard")));
     } catch (error) {
       window.history.replaceState(null, "", window.location.pathname);
       alert(apiErrorMessage(error, "生物辨識快速登入失敗，請改用 Google 或 Discord 登入"));
