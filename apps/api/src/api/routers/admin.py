@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
@@ -33,6 +33,7 @@ from api.core.security import revoke_user
 from api.dependencies.permissions import require_permission
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.person import PersonAffiliationKind, PersonAffiliationSource
+from api.models.school_class import ClassRosterEntry, SchoolClass
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.schemas.cadre_import import CadreDirectoryImportOut
@@ -496,7 +497,8 @@ async def dashboard_stats(db: DbDep, _: AdminUser) -> AdminDashboardStats:
 async def list_users(
     db: DbDep,
     _: AdminUser,
-    keyword: str | None = Query(None, description="搜尋姓名/Email/學號"),
+    keyword: str | None = Query(None, description="搜尋姓名、Email、學號、班級或座號"),
+    class_id: uuid.UUID | None = Query(None, description="依班級名冊篩選"),
     active_only: bool = Query(False, description="僅顯示啟用中帳號"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -527,22 +529,63 @@ async def list_users(
     )
     if active_only:
         q = q.where(User.is_active == True)  # noqa: E712
+    roster_identity_filter = or_(
+        ClassRosterEntry.user_id == User.id,
+        ClassRosterEntry.student_id == User.student_id,
+    )
+    if class_id:
+        class_roster_match = (
+            select(ClassRosterEntry.id)
+            .where(ClassRosterEntry.class_id == class_id, roster_identity_filter)
+            .correlate(User)
+            .exists()
+        )
+        q = q.where(class_roster_match)
     if keyword:
         from api.core.search import like_contains
 
-        pattern = like_contains(keyword)
-        from sqlalchemy import or_
+        normalized_keyword = keyword.strip()
+        pattern = like_contains(normalized_keyword)
+        roster_filters = [
+            SchoolClass.class_code.ilike(pattern),
+            SchoolClass.label.ilike(pattern),
+            cast(SchoolClass.academic_year, String).ilike(pattern),
+        ]
+        if (
+            normalized_keyword.isascii()
+            and normalized_keyword.isdecimal()
+            and len(normalized_keyword) <= 9
+        ):
+            roster_filters.append(ClassRosterEntry.seat_number == int(normalized_keyword))
+        roster_match = (
+            select(ClassRosterEntry.id)
+            .join(SchoolClass, SchoolClass.id == ClassRosterEntry.class_id)
+            .where(
+                roster_identity_filter,
+                or_(*roster_filters),
+            )
+            .correlate(User)
+            .exists()
+        )
 
         q = q.where(
             or_(
                 User.display_name.ilike(pattern),
                 User.email.ilike(pattern),
                 User.student_id.ilike(pattern),
+                roster_match,
             )
         )
     result = await db.execute(q)
     users = result.scalars().all()
-    return await _enrich_users_batch(db, list(users))
+    details = await _enrich_users_batch(db, list(users))
+    class_rosters = await person_svc.class_rosters_for_identities(
+        db,
+        [(detail.id, detail.student_id) for detail in details],
+    )
+    for detail in details:
+        detail.class_roster = class_rosters.get(detail.id, [])
+    return details
 
 
 @router.post(

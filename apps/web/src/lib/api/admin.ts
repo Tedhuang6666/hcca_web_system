@@ -6,9 +6,16 @@ import { get, post, patch, del, request } from "./core";
 export const adminApi = {
   dashboardStats: () => get<{ active_user_count: number; position_count: number }>("/admin/dashboard-stats"),
   // 使用者
-  listUsers: (params?: { keyword?: string; active_only?: boolean; limit?: number; offset?: number }) => {
+  listUsers: (params?: {
+    keyword?: string;
+    class_id?: string;
+    active_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => {
     const p: Record<string, string> = {};
     if (params?.keyword) p.keyword = params.keyword;
+    if (params?.class_id) p.class_id = params.class_id;
     if (params?.active_only !== undefined) p.active_only = String(params.active_only);
     if (params?.limit !== undefined) p.limit = String(params.limit);
     if (params?.offset !== undefined) p.offset = String(params.offset);

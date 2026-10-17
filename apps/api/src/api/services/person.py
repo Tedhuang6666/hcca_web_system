@@ -133,6 +133,58 @@ async def class_roster_for_identity(
     ]
 
 
+async def class_rosters_for_identities(
+    db: AsyncSession,
+    identities: list[tuple[uuid.UUID, str | None]],
+) -> dict[uuid.UUID, list[ClassRosterSummary]]:
+    user_ids = {user_id for user_id, _ in identities}
+    users_by_student_id: dict[str, set[uuid.UUID]] = {}
+    for user_id, student_id in identities:
+        if student_id:
+            users_by_student_id.setdefault(student_id, set()).add(user_id)
+
+    rosters = {user_id: [] for user_id in user_ids}
+    identity_filters = []
+    if user_ids:
+        identity_filters.append(ClassRosterEntry.user_id.in_(user_ids))
+    if users_by_student_id:
+        identity_filters.append(ClassRosterEntry.student_id.in_(users_by_student_id))
+    if not identity_filters:
+        return rosters
+
+    result = await db.execute(
+        select(ClassRosterEntry)
+        .join(ClassRosterEntry.school_class)
+        .options(selectinload(ClassRosterEntry.school_class))
+        .where(or_(*identity_filters))
+        .order_by(
+            SchoolClass.academic_year.desc(),
+            SchoolClass.class_code,
+            ClassRosterEntry.seat_number,
+        )
+    )
+    for entry in result.scalars().all():
+        matched_user_ids = set(users_by_student_id.get(entry.student_id, ()))
+        if entry.user_id in rosters:
+            matched_user_ids.add(entry.user_id)
+        if not matched_user_ids:
+            continue
+
+        summary = ClassRosterSummary(
+            class_id=entry.class_id,
+            academic_year=entry.school_class.academic_year,
+            class_code=entry.school_class.class_code,
+            class_label=_class_label(entry.school_class),
+            is_active=entry.school_class.is_active,
+            seat_number=entry.seat_number,
+            student_id=entry.student_id,
+        )
+        for user_id in matched_user_ids:
+            rosters[user_id].append(summary)
+
+    return rosters
+
+
 async def get_person(db: AsyncSession, person_id: uuid.UUID) -> Person | None:
     return await db.scalar(
         select(Person)

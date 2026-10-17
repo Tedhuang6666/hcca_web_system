@@ -205,6 +205,26 @@ async def test_admin_user_detail_includes_class_roster_seat(
         }
     ]
 
+    list_response = await client.get("/admin/users", params={"keyword": member.student_id})
+
+    assert list_response.status_code == 200, list_response.text
+    listed_users = list_response.json()
+    assert len(listed_users) == 1
+    assert listed_users[0]["class_roster"] == response.json()["class_roster"]
+
+    for keyword in ("202", "115", "7"):
+        search_response = await client.get("/admin/users", params={"keyword": keyword})
+
+        assert search_response.status_code == 200, search_response.text
+        assert [user["id"] for user in search_response.json()] == [str(member.id)]
+
+    class_filter_response = await client.get(
+        "/admin/users", params={"class_id": str(school_class.id)}
+    )
+
+    assert class_filter_response.status_code == 200, class_filter_response.text
+    assert [user["id"] for user in class_filter_response.json()] == [str(member.id)]
+
 
 @pytest.mark.asyncio
 async def test_replacing_position_permissions_invalidates_holder_caches(
