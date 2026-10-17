@@ -364,6 +364,7 @@ class ClassMemberOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    user_id: uuid.UUID | None = None
     display_name: str
     student_id: str | None
     email: str

@@ -209,8 +209,6 @@ async def create_correction_request(
     payload: ClassCorrectionRequestCreate, session: DbDep, user: CurrentUser
 ) -> ClassCorrectionRequestOut:
     school_class = await class_svc.resolve_user_class(session, user)
-    if school_class is None:
-        raise HTTPException(status_code=422, detail="目前沒有可確認的班級歸戶")
     try:
         request = await correction_svc.create_request(
             session,

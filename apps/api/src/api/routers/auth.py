@@ -52,6 +52,8 @@ from api.models.user_session import UserSession
 from api.schemas.auth import AuthSessionOut, GoogleOneTapRequest
 from api.services import audit as audit_svc
 from api.services import passkey as passkey_svc
+from api.services import person as person_svc
+from api.services import school_class as class_svc
 from api.services import user_session as user_session_svc
 from api.services.discord_bot import (
     get_user_by_discord_id,
@@ -355,6 +357,9 @@ async def _upsert_google_user(
         identity_by_sub.display_name = display_name
         identity_by_sub.last_login_at = now
     await db.flush()
+
+    await person_svc.ensure_person_for_user(db, user)
+    await class_svc.link_roster_accounts(db, user_id=user.id)
 
     is_suspicious, reason = await check_suspicious_login(str(user.id), client_ip)
     if is_suspicious:

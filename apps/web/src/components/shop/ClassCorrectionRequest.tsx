@@ -13,7 +13,7 @@ function classLabel(schoolClass: SchoolClassListItem) {
   return schoolClass.label ?? `${schoolClass.academic_year} 學年度 ${schoolClass.class_code} 班`;
 }
 
-export default function ClassCorrectionRequest({ currentClass }: { currentClass: MyClassContext }) {
+export default function ClassCorrectionRequest({ currentClass }: { currentClass: MyClassContext | null }) {
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [requests, setRequests] = useState<ClassCorrectionRequestOut[]>([]);
   const [selectedClassId, setSelectedClassId] = useState("");
@@ -45,8 +45,8 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
   }, [load]);
 
   const availableClasses = useMemo(
-    () => classes.filter((schoolClass) => schoolClass.id !== currentClass.id),
-    [classes, currentClass.id],
+    () => classes.filter((schoolClass) => schoolClass.id !== currentClass?.id),
+    [classes, currentClass?.id],
   );
   const latestRequest = requests[0] ?? null;
   const hasPendingRequest = latestRequest?.status === "pending";
@@ -95,7 +95,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
         >
-          {open ? "收起班級更正申請" : "班級有誤？告知我們"}
+          {open ? "收起申請" : currentClass ? "班級有誤？申請更正" : "申請加入班級"}
         </button>
       )}
 
@@ -108,7 +108,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
 
       {open && !loadError && (
         <form className="shop-class-correction-form" onSubmit={submit}>
-          <label htmlFor="shop-correction-target">你認為正確的班級</label>
+          <label htmlFor="shop-correction-target">{currentClass ? "你認為正確的班級" : "你目前就讀的班級"}</label>
           <select
             id="shop-correction-target"
             value={selectedClassId}
@@ -122,7 +122,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
             ))}
           </select>
           {availableClasses.length === 0 && !loading && (
-            <p className="shop-class-correction-help">目前沒有其他可選的班級，請聯繫班級管理員。</p>
+            <p className="shop-class-correction-help">目前沒有可選的班級，請聯繫班級管理員。</p>
           )}
 
           <label htmlFor="shop-correction-message">補充說明（選填）</label>
@@ -142,7 +142,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
               disabled={loading || submitting || !selectedClassId}
               className="shop-class-correction-submit"
             >
-              {submitting ? "送出中…" : "送出更正申請"}
+              {submitting ? "送出中…" : "送出申請"}
             </button>
             <button type="button" onClick={() => setOpen(false)} disabled={submitting}>
               取消

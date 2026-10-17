@@ -12,7 +12,7 @@ from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
@@ -679,9 +679,11 @@ async def bulk_upsert_roster(
 
 
 async def list_roster_entries(session: AsyncSession, sc: SchoolClass) -> list[ClassRosterEntry]:
+    await link_roster_accounts(session, class_id=sc.id)
     result = await session.execute(
         select(ClassRosterEntry)
         .options(selectinload(ClassRosterEntry.user))
+        .execution_options(populate_existing=True)
         .where(ClassRosterEntry.class_id == sc.id)
         .order_by(ClassRosterEntry.seat_number)
     )
@@ -810,6 +812,19 @@ async def end_membership(
         return False
     membership.status = ClassMembershipStatus.ENDED
     membership.end_date = end_date or local_today()
+    affiliations = await session.scalars(
+        select(PersonAffiliation)
+        .join(Person, Person.id == PersonAffiliation.person_id)
+        .where(
+            Person.user_id == user_id,
+            PersonAffiliation.class_id == class_id,
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+            PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
+        )
+    )
+    for affiliation in affiliations:
+        affiliation.status = PersonAffiliationStatus.ENDED
+        affiliation.end_date = membership.end_date
     await session.flush()
     return True
 
@@ -836,6 +851,18 @@ async def assign_class_role(
     )
     if binding is None:
         raise ValueError("找不到此班級職位")
+    existing = await session.scalar(
+        select(UserPosition).where(
+            UserPosition.user_id == data.user_id,
+            UserPosition.position_id == binding.position_id,
+            UserPosition.start_date == (data.start_date or local_today()),
+            UserPosition.end_date.is_(None)
+            if data.end_date is None
+            else UserPosition.end_date == data.end_date,
+        )
+    )
+    if existing is not None:
+        return existing
     await add_membership(
         session,
         sc,
@@ -1020,8 +1047,41 @@ async def remove_cadre(session: AsyncSession, class_id: uuid.UUID, user_id: uuid
 # ── 可重用 helper ─────────────────────────────────────────────────────────────
 
 
+async def link_roster_accounts(
+    session: AsyncSession, *, class_id: uuid.UUID | None = None, user_id: uuid.UUID | None = None
+) -> None:
+    """補連名冊建立後才出現的帳號；保留既有連結及人工轉班結果。"""
+    override_class = aliased(SchoolClass)
+    manual_override = (
+        select(ClassManualMember.id)
+        .join(override_class, override_class.id == ClassManualMember.class_id)
+        .where(
+            ClassManualMember.user_id == User.id,
+            override_class.academic_year == SchoolClass.academic_year,
+            override_class.is_active.is_(True),
+            ClassManualMember.class_id != ClassRosterEntry.class_id,
+        )
+        .exists()
+    )
+    query = (
+        select(ClassRosterEntry, User)
+        .join(User, User.student_id == ClassRosterEntry.student_id)
+        .join(SchoolClass, SchoolClass.id == ClassRosterEntry.class_id)
+        .where(ClassRosterEntry.user_id.is_(None), User.is_active.is_(True), ~manual_override)
+    )
+    if class_id is not None:
+        query = query.where(ClassRosterEntry.class_id == class_id)
+    if user_id is not None:
+        query = query.where(User.id == user_id)
+    for entry, user in (await session.execute(query)).all():
+        entry.user_id = user.id
+        entry.user = user
+    await session.flush()
+
+
 async def resolve_user_class(session: AsyncSession, user: User) -> SchoolClass | None:
     """依手動指派、人員歸屬、名冊、學號區間推導目前所屬的 active 班級。"""
+    await link_roster_accounts(session, user_id=user.id)
     manual_result = await session.execute(
         select(SchoolClass)
         .join(ClassManualMember, ClassManualMember.class_id == SchoolClass.id)
@@ -1061,7 +1121,11 @@ async def resolve_user_class(session: AsyncSession, user: User) -> SchoolClass |
     )
     if user.student_id:
         roster_query = roster_query.where(
-            (ClassRosterEntry.user_id == user.id) | (ClassRosterEntry.student_id == user.student_id)
+            (ClassRosterEntry.user_id == user.id)
+            | (
+                ClassRosterEntry.user_id.is_(None)
+                & (ClassRosterEntry.student_id == user.student_id)
+            )
         )
     else:
         roster_query = roster_query.where(ClassRosterEntry.user_id == user.id)
@@ -1200,6 +1264,8 @@ async def get_cadre_class_ids(session: AsyncSession, user_id: uuid.UUID) -> set[
 
 async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[ClassMemberOut]:
     """依手動成員與學號區間列出班級成員，並標示是否為幹部。"""
+    roster_entries = await list_roster_entries(session, sc)
+    roster_users = {entry.student_id: entry.user for entry in roster_entries if entry.user}
     cadre_ids = {c.user_id for c in sc.cadres}
     members_by_id: dict[uuid.UUID, ClassMemberOut] = {}
     member_ids_by_student_id: dict[str, uuid.UUID] = {}
@@ -1210,22 +1276,26 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             PersonAffiliation.class_id == sc.id,
             PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
             PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
+            PersonAffiliation.start_date <= local_today(),
+            (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= local_today()),
         )
     )
     for affiliation in affiliation_result.scalars().all():
         person = affiliation.person
         if person is None:
             continue
-        member_id = person.user_id or person.id
+        user = person.user or roster_users.get(person.student_id or "")
+        member_id = user.id if user else person.id
         member_ids_by_student_id[person.student_id or ""] = member_id
-        display_name = person.user.display_name if person.user else person.display_name
-        email = person.user.email if person.user else person.email or ""
+        display_name = user.display_name if user else person.display_name
+        email = user.email if user else person.email or ""
         members_by_id[member_id] = ClassMemberOut(
             id=member_id,
+            user_id=user.id if user else None,
             display_name=display_name,
             student_id=person.student_id,
             email=email,
-            is_cadre=person.user_id in cadre_ids if person.user_id else False,
+            is_cadre=user.id in cadre_ids if user else False,
             source="person_affiliation",
         )
     for member in sc.manual_members:
@@ -1233,6 +1303,7 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             continue
         members_by_id[member.user_id] = ClassMemberOut(
             id=member.user.id,
+            user_id=member.user.id,
             display_name=member.user.display_name,
             student_id=member.user.student_id,
             email=member.user.email,
@@ -1240,7 +1311,7 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             source="manual",
             manual_member_id=member.id,
         )
-    for entry in sc.roster_entries:
+    for entry in roster_entries:
         member_id = entry.user.id if entry.user else member_ids_by_student_id.get(entry.student_id)
         if member_id is None:
             continue
@@ -1251,6 +1322,7 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             continue
         members_by_id[entry.user.id] = ClassMemberOut(
             id=entry.user.id,
+            user_id=entry.user.id,
             display_name=entry.user.display_name,
             student_id=entry.student_id,
             email=entry.user.email,
@@ -1264,6 +1336,7 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             continue
         members_by_id[u.id] = ClassMemberOut(
             id=u.id,
+            user_id=u.id,
             display_name=u.display_name,
             student_id=u.student_id,
             email=u.email,
