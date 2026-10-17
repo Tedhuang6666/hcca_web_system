@@ -26,14 +26,14 @@ async def create_request(
     session: AsyncSession,
     *,
     user: User,
-    reported_class: SchoolClass,
+    reported_class: SchoolClass | None,
     requested_class_id: uuid.UUID,
     message: str | None,
 ) -> ClassCorrectionRequest:
     requested_class = await session.get(SchoolClass, requested_class_id)
     if requested_class is None or not requested_class.is_active:
         raise ValueError("請選擇目前有效的班級")
-    if requested_class.id == reported_class.id:
+    if reported_class is not None and requested_class.id == reported_class.id:
         raise ValueError("請選擇與目前歸戶不同的班級")
 
     pending = await session.scalar(
@@ -47,7 +47,7 @@ async def create_request(
 
     request = ClassCorrectionRequest(
         user_id=user.id,
-        reported_class_id=reported_class.id,
+        reported_class_id=reported_class.id if reported_class is not None else None,
         requested_class_id=requested_class.id,
         message=message.strip() if message and message.strip() else None,
     )

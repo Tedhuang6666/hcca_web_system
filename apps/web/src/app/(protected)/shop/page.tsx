@@ -848,6 +848,7 @@ export default function ShopPage() {
   const [claimedPromotionIds, setClaimedPromotionIds] = useState<Set<string>>(() => new Set());
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
+  const [classLoadFailed, setClassLoadFailed] = useState(false);
   const [orderShortcutPortalReady, setOrderShortcutPortalReady] = useState(false);
   const [delegationOpen, setDelegationOpen] = useState(false);
   const delegationTriggerRef = useRef<HTMLButtonElement>(null);
@@ -912,17 +913,21 @@ export default function ShopPage() {
         try {
           const schoolClass = await classApi.myClass();
           if (generation !== refreshGeneration.current) return;
+          setMyClass(schoolClass);
+          setClassLoadFailed(false);
           if (schoolClass && data.length) {
-            setMyClass(schoolClass);
             const catIds = data.map((c) => c.id);
             const status = await shopApi.getCloseStatus(catIds, schoolClass.id);
             if (generation !== refreshGeneration.current) return;
             setCloseStatus(status.statuses);
           } else {
-            setMyClass(null);
+            setCloseStatus({});
           }
         } catch {
-          if (generation === refreshGeneration.current) setMyClass(null);
+          if (generation === refreshGeneration.current) {
+            setMyClass(null);
+            setClassLoadFailed(true);
+          }
         }
       })
       .catch(() => { if (generation === refreshGeneration.current) setLoadError(true); })
@@ -1437,6 +1442,26 @@ export default function ShopPage() {
             </p>
             <p>{myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}</p>
             {isLoggedIn && <ClassCorrectionRequest currentClass={myClass} />}
+          </div>
+        </section>
+      )}
+
+      {isLoggedIn && !delegationToken && !myClass && !loading && (
+        <section className="shop-public-context" aria-label="班級歸戶資訊">
+          <CircleAlert size={18} aria-hidden />
+          <div>
+            {classLoadFailed ? (
+              <div role="alert">
+                <p><strong>暫時無法確認你的班級</strong></p>
+                <button type="button" className="shop-class-correction-toggle" onClick={loadCatalog}>重新確認班級</button>
+              </div>
+            ) : (
+              <>
+                <p><strong>你的帳號尚未歸入班級</strong></p>
+                <p>系統會依學號與班級名冊配對；若仍未找到，可申請由管理員確認。</p>
+                <ClassCorrectionRequest currentClass={null} />
+              </>
+            )}
           </div>
         </section>
       )}

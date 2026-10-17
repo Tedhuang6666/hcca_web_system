@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BadgeCheck,
   BookUser,
-  CalendarDays,
   CheckSquare,
   FileUp,
   GraduationCap,
@@ -37,26 +35,17 @@ import type {
   UserSummary,
 } from "@/lib/types";
 
-type TabKey = "overview" | "roles" | "members" | "roster" | "ranges";
-
-const roleAccent: Record<string, string> = {
-  class_representative: "#2563eb",
-  class_leader: "#0f766e",
-  vice_leader: "#7c3aed",
-};
+type TabKey = "roles" | "members" | "roster" | "ranges";
 
 const roleHelp: Record<string, string> = {
   class_representative: "同步成為議員，可參與議事、法規與公文流程。",
-  class_leader: "管理班級日常與本班訂購收款。",
-  vice_leader: "協助班長處理班級與訂購事項。",
+  class_leader: "檢視本班成員，處理班級日常事務。",
+  vice_leader: "協助班長處理班級事務，檢視本班成員。",
 };
 
-function roleColor(roleKey: string) {
-  return roleAccent[roleKey] ?? "var(--primary)";
-}
 function classTitle(c: SchoolClassListItem | SchoolClassOut | null) {
   if (!c) return "未選擇班級";
-  return `${c.academic_year} 學年度 ${c.class_code} 班`;
+  return c.label || `${c.academic_year} 學年度 ${c.class_code} 班`;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -519,12 +508,12 @@ function StatTile({
   value: string | number;
 }) {
   return (
-    <div className="rounded-md p-3" style={{ border: "1px solid var(--border)" }}>
+    <div className="flex items-center justify-between gap-2 py-1">
       <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
         {icon}
         {label}
       </div>
-      <p className="mt-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+      <p className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
         {value}
       </p>
     </div>
@@ -533,88 +522,65 @@ function StatTile({
 
 function RoleBoard({
   roles,
+  candidates,
   onAssign,
 }: {
   roles: ClassRoleOut[];
-  onAssign: (roleKey: string, user: UserSummary) => Promise<void>;
+  candidates: Array<{ seat_number?: number; user: UserSummary }>;
+  onAssign: (roleKey: string, user: UserSummary) => Promise<boolean>;
 }) {
+  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [busyRole, setBusyRole] = useState<string | null>(null);
+
+  const assign = async (roleKey: string, user: UserSummary) => {
+    setBusyRole(roleKey);
+    try {
+      if (await onAssign(roleKey, user)) setSelected((current) => ({ ...current, [roleKey]: "" }));
+    } finally {
+      setBusyRole(null);
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+    <div className="divide-y" style={{ borderColor: "var(--border)" }}>
       {roles.map((role) => {
-        const color = roleColor(role.role_key);
+        const available = candidates.filter(({ user }) => !role.holders.some((holder) => holder.user_id === user.id));
+        const chosen = available.find(({ user }) => user.id === selected[role.role_key]);
         return (
-          <section
-            key={role.role_key}
-            className="rounded-md p-4"
-            style={{ border: `1px solid ${color}33`, background: "var(--card-bg)" }}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-                  <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {role.label}
-                  </h3>
-                </div>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                  {roleHelp[role.role_key] ?? "班級職位。"}
-                </p>
-              </div>
-              <span className="rounded px-2 py-1 text-[11px] font-medium"
-                style={{ color, background: `${color}17` }}>
-                {role.holders.length || "未任命"}
+          <section key={role.role_key} className="py-5 first:pt-0">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{role.label}</h2>
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                {role.holders.length ? role.holders.map((holder) => holder.display_name).join("、") : "尚未任命"}
               </span>
             </div>
-
-            <div className="mt-3 space-y-2">
-              {role.holders.length === 0 ? (
-                <p className="rounded-md px-3 py-2 text-xs"
-                  style={{ border: "1px dashed var(--border)", color: "var(--text-muted)" }}>
-                  尚未任命
-                </p>
-              ) : (
-                role.holders.map((holder) => (
-                  <div
-                    key={holder.user_position_id}
-                    className="flex items-center justify-between rounded-md px-3 py-2"
-                    style={{ border: "1px solid var(--border)" }}>
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                        {holder.display_name}
-                      </p>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        {holder.student_id ?? holder.email} · {holder.start_date} 起
-                      </p>
-                    </div>
-                    <BadgeCheck size={17} style={{ color }} />
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="mt-3">
-              <UserPicker
-                placeholder={`任命${role.label}`}
-                onPick={(user) => onAssign(role.role_key, user)}
-              />
-            </div>
-
-            {role.permission_codes.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {role.permission_codes.slice(0, 6).map((code) => (
-                  <span
-                    key={code}
-                    className="rounded px-1.5 py-0.5 text-[11px] font-mono"
-                    style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-                    {code}
-                  </span>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{roleHelp[role.role_key]}</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <select
+                className="input min-h-11 min-w-0 flex-1"
+                aria-label={`選擇${role.label}`}
+                value={selected[role.role_key] ?? ""}
+                disabled={busyRole !== null || available.length === 0}
+                onChange={(event) => setSelected((current) => ({ ...current, [role.role_key]: event.target.value }))}
+              >
+                <option value="">{available.length ? "從本班成員選擇" : "目前沒有可任命的已連結成員"}</option>
+                {available.map(({ seat_number, user }) => (
+                  <option key={user.id} value={user.id}>
+                    {seat_number ? `${seat_number} 號 · ` : ""}{user.display_name}{user.student_id ? ` · ${user.student_id}` : ""}
+                  </option>
                 ))}
-                {role.permission_codes.length > 6 && (
-                  <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                    +{role.permission_codes.length - 6}
-                  </span>
-                )}
-              </div>
-            )}
+              </select>
+              <button type="button" className="btn btn-primary min-h-11 disabled:opacity-50"
+                disabled={!chosen || busyRole !== null}
+                onClick={() => { if (chosen) void assign(role.role_key, chosen.user); }}>
+                {busyRole === role.role_key ? "任命中…" : `任命${role.label}`}
+              </button>
+            </div>
+            <details className="mt-3">
+              <summary className="min-h-11 cursor-pointer py-2 text-sm" style={{ color: "var(--text-secondary)" }}>找不到人？搜尋其他帳號</summary>
+              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>選取後會加入本班並任命；尚未登入的同學，請先請他使用校內帳號登入。</p>
+              {busyRole === null && <UserPicker placeholder={`搜尋帳號並任命${role.label}`} onPick={(user) => void assign(role.role_key, user)} />}
+            </details>
           </section>
         );
       })}
@@ -625,85 +591,91 @@ function RoleBoard({
 function MembershipPanel({
   memberships,
   members,
+  entries,
   onAdd,
   onEnd,
+  onManageRoles,
 }: {
   memberships: ClassMembershipOut[];
   members: ClassMemberOut[];
+  entries: ClassRosterEntryOut[];
   onAdd: (user: UserSummary) => Promise<void>;
   onEnd: (userId: string) => Promise<void>;
+  onManageRoles: () => void;
 }) {
-  const activeMemberships = memberships.filter((item) => item.status === "active");
-  const rangeMembers = members.filter((item) => item.source === "range");
+  const [query, setQuery] = useState("");
+  const [onlyUnlinked, setOnlyUnlinked] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const memberIds = new Set(entries.map((entry) => entry.user_id).filter(Boolean));
+  const studentIds = new Set(entries.map((entry) => entry.student_id));
+  const rows = [
+    ...entries.map((entry) => ({
+      key: entry.id,
+      seat: entry.seat_number,
+      studentId: entry.student_id,
+      name: entry.user?.display_name ?? members.find((member) => member.student_id === entry.student_id)?.display_name ?? "尚未連結帳號",
+      userId: entry.user_id,
+      source: "座號名冊",
+    })),
+    ...members.filter((member) => !memberIds.has(member.id) && !studentIds.has(member.student_id ?? "")).map((member) => ({
+      key: member.id,
+      seat: member.seat_number,
+      studentId: member.student_id,
+      name: member.display_name,
+      userId: member.user_id ?? null,
+      source: member.source === "range" ? "學號區間" : member.source === "manual" ? "手動加入" : "人員歸屬",
+    })),
+  ];
+  rows.sort((a, b) => (a.seat ?? Infinity) - (b.seat ?? Infinity));
+  const needle = query.trim().toLocaleLowerCase();
+  const visible = rows.filter((row) => (!onlyUnlinked || !row.userId)
+    && [row.name, row.studentId ?? "", String(row.seat ?? "")].some((value) => value.toLocaleLowerCase().includes(needle)));
+  const unlinked = rows.filter((row) => !row.userId).length;
 
   return (
     <div className="space-y-4">
-      <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-          加入名冊
-        </h3>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          名冊是學年度快照；轉班或特殊學生請用這裡加入，不會影響歷史訂單。
-        </p>
-        <div className="mt-3">
-          <UserPicker placeholder="搜尋學生姓名、Email 或學號" onPick={onAdd} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>班級成員</h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>共 {rows.length} 位 · {unlinked} 位待連結帳號</p>
         </div>
-      </section>
-
-      <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            年度名冊快照
-          </h3>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            {activeMemberships.length} 位有效名冊成員 · {rangeMembers.length} 位由學號區間推導
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border)" }}>
-                <th className="px-4 py-2 text-left font-medium">姓名</th>
-                <th className="px-4 py-2 text-left font-medium">學號</th>
-                <th className="px-4 py-2 text-left font-medium">來源</th>
-                <th className="px-4 py-2 text-right font-medium">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeMemberships.map((membership) => (
-                <tr key={membership.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-4 py-2" style={{ color: "var(--text-primary)" }}>
-                    {membership.user?.display_name ?? membership.user_id}
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
-                    {membership.user?.student_id ?? "—"}
-                  </td>
-                  <td className="px-4 py-2" style={{ color: "var(--text-muted)" }}>
-                    {membership.source}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onEnd(membership.user_id)}
-                      className="text-xs"
-                      style={{ color: "var(--danger)" }}>
-                      結束歸屬
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {activeMemberships.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm"
-                    style={{ color: "var(--text-muted)" }}>
-                    尚無手動名冊快照。
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        <button type="button" className="btn btn-ghost min-h-11" onClick={onManageRoles}>設定班級幹部</button>
+      </div>
+      <details>
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium" style={{ color: "var(--primary)" }}>新增班級成員</summary>
+        <p className="mb-2 text-sm" style={{ color: "var(--text-muted)" }}>搜尋已登入的帳號加入本班。尚未登入的同學，可先到「匯入與座號」建立名冊。</p>
+        <UserPicker placeholder="搜尋姓名、Email 或學號加入本班" onPick={onAdd} />
+      </details>
+      {unlinked > 0 && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>待連結的同學使用對應學號的校內帳號登入後，系統會自動配對。</p>}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input className="input min-h-11 min-w-0 flex-1" aria-label="搜尋班級成員" placeholder="搜尋座號、姓名、學號" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+          <input type="checkbox" checked={onlyUnlinked} onChange={(event) => setOnlyUnlinked(event.target.checked)} />只看待連結
+        </label>
+      </div>
+      <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+        {visible.map((row) => {
+          const membership = memberships.find((item) => item.user_id === row.userId && item.status === "active");
+          const canEnd = membership && !studentIds.has(row.studentId ?? "") && row.source !== "學號區間" && row.source !== "手動加入";
+          return (
+            <li key={row.key} className="flex items-center gap-3 py-3">
+              <span className="w-10 shrink-0 text-center text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>{row.seat ? `${row.seat} 號` : "—"}</span>
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{row.name}</p>
+                <p className="break-all text-xs" style={{ color: "var(--text-muted)" }}>{row.studentId ?? "未提供學號"} · {row.source}</p>
+              </div>
+              <span className="shrink-0 text-xs" style={{ color: row.userId ? "var(--success)" : "var(--text-secondary)" }}>{row.userId ? "已連結" : "待連結"}</span>
+              {canEnd && <button type="button" className="min-h-11 shrink-0 px-2 text-xs disabled:opacity-50" style={{ color: "var(--danger)" }} disabled={busy !== null}
+                aria-label={`結束 ${row.name} 的班級歸屬`}
+                onClick={async () => {
+                  setBusy(row.key);
+                  try { await onEnd(membership.user_id); } finally { setBusy(null); }
+                }}>結束歸屬</button>}
+            </li>
+          );
+        })}
+      </ul>
+      {visible.length === 0 && <p className="py-8 text-center text-sm" role="status" style={{ color: "var(--text-muted)" }}>{rows.length ? "沒有符合的成員，請調整搜尋條件。" : "尚未建立班級名冊，可新增成員或匯入座號名冊。"}</p>}
     </div>
   );
 }
@@ -988,12 +960,13 @@ function ClassWorkspace({
   const [memberships, setMemberships] = useState<ClassMembershipOut[]>([]);
   const [rosterEntries, setRosterEntries] = useState<ClassRosterEntryOut[]>([]);
   const [roles, setRoles] = useState<ClassRoleOut[]>([]);
-  const [tab, setTab] = useState<TabKey>("overview");
+  const [tab, setTab] = useState<TabKey>("members");
   const [loading, setLoading] = useState(true);
-  const [configuringRole, setConfiguringRole] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     Promise.all([
       classApi.get(classId),
       classApi.members(classId),
@@ -1008,7 +981,10 @@ function ClassWorkspace({
         setRosterEntries(nextRosterEntries);
         setRoles(nextRoles);
       })
-      .catch((error) => toast.error(getErrorMessage(error, "載入班級資料失敗")))
+      .catch((error) => {
+        setLoadError(true);
+        toast.error(getErrorMessage(error, "載入班級資料失敗"));
+      })
       .finally(() => setLoading(false));
   }, [classId]);
 
@@ -1018,12 +994,29 @@ function ClassWorkspace({
     () => roles.reduce((sum, role) => sum + role.holders.length, 0),
     [roles],
   );
-  const seatRoster = useMemo(
-    () => rosterEntries.flatMap((entry) => entry.user
-      ? [{ seat_number: entry.seat_number, user: entry.user }]
-      : []),
-    [rosterEntries],
-  );
+  const candidates = useMemo(() => {
+    const users = new Map<string, { seat_number?: number; user: UserSummary }>();
+    for (const membership of memberships) {
+      if (membership.status === "active" && membership.user) users.set(membership.user_id, { user: membership.user });
+    }
+    for (const member of members) {
+      if (member.user_id) users.set(member.user_id, { seat_number: member.seat_number ?? undefined, user: { ...member, id: member.user_id } });
+    }
+    for (const entry of rosterEntries) {
+      if (entry.user) users.set(entry.user.id, { seat_number: entry.seat_number, user: entry.user });
+    }
+    return [...users.values()].sort((a, b) => (a.seat_number ?? Infinity) - (b.seat_number ?? Infinity));
+  }, [memberships, members, rosterEntries]);
+  const unlinkedCount = rosterEntries.filter((entry) => !entry.user_id).length
+    + members.filter((member) => !member.user_id
+      && !rosterEntries.some((entry) => entry.student_id === member.student_id)).length;
+
+  if (loadError) {
+    return <section className="space-y-3 rounded-md p-6" role="alert" style={{ border: "1px solid var(--border)" }}>
+      <p style={{ color: "var(--text-primary)" }}>無法載入班級資料，請重新載入。</p>
+      <button type="button" className="btn btn-primary min-h-11" onClick={load}>重新載入班級</button>
+    </section>;
+  }
 
   if (loading || !detail) {
     return (
@@ -1034,11 +1027,10 @@ function ClassWorkspace({
   }
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
-    { key: "overview", label: "總覽" },
-    { key: "roles", label: "職位", count: roleHolderCount },
-    { key: "members", label: "名冊", count: memberships.filter((item) => item.status === "active").length },
-    { key: "roster", label: "座號名冊", count: rosterEntries.length },
-    { key: "ranges", label: "學號區間", count: detail.ranges.length },
+    { key: "members", label: "班級成員" },
+    { key: "roles", label: "幹部設定", count: roleHolderCount },
+    { key: "roster", label: "匯入與座號" },
+    { key: "ranges", label: "自動歸班規則", count: detail.ranges.length },
   ];
 
   const assignRole = async (roleKey: string, user: UserSummary) => {
@@ -1169,7 +1161,7 @@ function ClassWorkspace({
               </h1>
             </div>
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              {detail.grade} 年級 · RBAC Org {detail.org_id ? "已綁定" : "尚未綁定"}
+              {detail.grade} 年級 · {detail.is_active ? "目前使用中" : "已停用，保留歷史資料"}
             </p>
           </div>
           <button
@@ -1182,11 +1174,11 @@ function ClassWorkspace({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatTile icon={<UsersRound size={15} />} label="推導成員" value={members.length} />
-          <StatTile icon={<BookUser size={15} />} label="名冊快照" value={memberships.filter((item) => item.status === "active").length} />
+          <StatTile icon={<UsersRound size={15} />} label="已連結帳號" value={candidates.length} />
+          <StatTile icon={<BookUser size={15} />} label="待連結帳號" value={unlinkedCount} />
           <StatTile icon={<ListChecks size={15} />} label="座號名冊" value={rosterEntries.length} />
           <StatTile icon={<ShieldCheck size={15} />} label="已任命職位" value={roleHolderCount} />
-          <StatTile icon={<CalendarDays size={15} />} label="學號區間" value={detail.ranges.length} />
+
         </div>
       </section>
 
@@ -1197,7 +1189,8 @@ function ClassWorkspace({
             key={item.key}
             type="button"
             onClick={() => setTab(item.key)}
-            className={`module-tab-link cursor-pointer${tab === item.key ? " is-active" : ""}`}>
+            aria-pressed={tab === item.key}
+            className={`module-tab-link min-h-11 cursor-pointer${tab === item.key ? " is-active" : ""}`}>
             <span>{item.label}</span>
             {item.count !== undefined && <span className="ml-1 text-xs">{item.count}</span>}
           </button>
@@ -1205,65 +1198,9 @@ function ClassWorkspace({
         </div>
       </nav>
 
-      {tab === "overview" && (
-        <div key="overview" className="tab-panel-transition grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              身分組狀態
-            </h2>
-            <div className="mt-3 space-y-2">
-              {roles.map((role) => (
-                <div key={role.role_key} className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2"
-                    style={{ border: "1px solid var(--border)" }}>
-                    <span className="text-sm" style={{ color: "var(--text-primary)" }}>
-                      {role.label}
-                    </span>
-                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                      <span className="break-words text-right text-xs" style={{ color: role.holders.length ? roleColor(role.role_key) : "var(--text-muted)" }}>
-                        {role.holders.length ? role.holders.map((holder) => holder.display_name).join("、") : "未任命"}
-                      </span>
-                      <button
-                        type="button"
-                        aria-expanded={configuringRole === role.role_key}
-                        onClick={() => setConfiguringRole((current) => current === role.role_key ? null : role.role_key)}
-                        className="min-h-10 shrink-0 rounded-md px-2.5 text-xs font-medium"
-                        style={{ border: "1px solid var(--border)", color: "var(--primary)" }}
-                      >
-                        {configuringRole === role.role_key ? "取消" : "設定"}
-                      </button>
-                    </div>
-                  </div>
-                  {configuringRole === role.role_key && (
-                    <div className="rounded-md p-3" style={{ background: "var(--bg-elevated)" }}>
-                      <UserPicker
-                        placeholder={`輸入座號，或搜尋學號、Email、姓名以設定${role.label}`}
-                        seatRoster={seatRoster}
-                        onPick={async (user) => {
-                          if (await assignRole(role.role_key, user)) setConfiguringRole(null);
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              重要連動
-            </h2>
-            <div className="mt-3 space-y-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              <p className="flex gap-2"><BadgeCheck size={16} style={{ color: "#2563eb" }} />班代會同步取得議員職位與議事/法規/公文權限。</p>
-              <p className="flex gap-2"><CalendarDays size={16} style={{ color: "#d97706" }} />班長與副班長可處理本班學餐收款、領餐與整班領取碼。</p>
-              <p className="flex gap-2"><ShieldCheck size={16} style={{ color: "#0f766e" }} />班長與副班長可處理本班訂購收款。</p>
-            </div>
-          </section>
-        </div>
-      )}
       {tab === "roles" && (
         <div key="roles" className="tab-panel-transition">
-          <RoleBoard roles={roles} onAssign={async (roleKey, user) => { await assignRole(roleKey, user); }} />
+          <RoleBoard roles={roles} candidates={candidates} onAssign={assignRole} />
         </div>
       )}
       {tab === "members" && (
@@ -1271,6 +1208,8 @@ function ClassWorkspace({
           <MembershipPanel
             memberships={memberships}
             members={members}
+            entries={rosterEntries}
+            onManageRoles={() => setTab("roles")}
             onAdd={addMembership}
             onEnd={endMembership}
           />
@@ -1367,6 +1306,7 @@ function ClassManagementPanel() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCorrectionRequests, setShowCorrectionRequests] = useState(false);
+  const [workspaceVersion, setWorkspaceVersion] = useState(0);
 
   const loadClasses = useCallback(() => {
     setLoading(true);
@@ -1425,7 +1365,7 @@ function ClassManagementPanel() {
               班級與名冊
             </h1>
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              管理班級、年度名冊、班級幹部與學號區間；人員身分和職位會在同一管理工作台維護。
+              先選班級，即可查看成員、設定幹部或處理尚未連結的帳號。
             </p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
@@ -1452,8 +1392,6 @@ function ClassManagementPanel() {
         <>
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
           <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
-            <RosterFileImportPanel onImported={loadClasses} />
-            <CreateClassPanel onCreated={loadClasses} />
             <ClassList
               classes={classes}
               selectedId={selectedId}
@@ -1463,6 +1401,13 @@ function ClassManagementPanel() {
               onBulkAction={runBulkAction}
               bulkBusy={bulkBusy}
             />
+            <details className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
+              <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">匯入名單或建立班級</summary>
+              <div className="mt-3 space-y-4">
+                <RosterFileImportPanel onImported={() => { loadClasses(); setWorkspaceVersion((value) => value + 1); }} />
+                <CreateClassPanel onCreated={loadClasses} />
+              </div>
+            </details>
           </aside>
           <main className={mobileDetailOpen ? "" : "hidden xl:block"}>
             <div className="xl:hidden mb-3">
@@ -1470,7 +1415,7 @@ function ClassManagementPanel() {
             </div>
             {selectedId ? (
               <ClassWorkspace
-                key={selectedId}
+                key={`${selectedId}:${workspaceVersion}`}
                 classId={selectedId}
                 onClassChanged={loadClasses}
               />

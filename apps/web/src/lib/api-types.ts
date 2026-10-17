@@ -14495,6 +14495,8 @@ export interface components {
             source: string;
             /** Student Id */
             student_id: string | null;
+            /** User Id */
+            user_id?: string | null;
         };
         /** ClassMembershipCreate */
         ClassMembershipCreate: {
