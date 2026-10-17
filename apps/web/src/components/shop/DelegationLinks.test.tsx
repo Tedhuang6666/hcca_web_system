@@ -44,7 +44,6 @@ describe("學生代訂連結管理", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立代訂驗證碼" }));
     await waitFor(() => expect(api.createDelegationLink).toHaveBeenCalledWith({ name: "給媽媽代訂", category_id: "goods" }));
     await screen.findByRole("textbox", { name: "七位數代訂驗證碼" });
-    fireEvent.click(screen.getByText("改用分享連結"));
     expect(await screen.findByRole("textbox", { name: "分享連結（請在離開頁面前保存）" })).toHaveValue(`${window.location.origin}/shop#delegate=synthetic-test-token`);
     expect(screen.getByRole("textbox", { name: "七位數代訂驗證碼" })).toHaveFocus();
     expect(screen.queryByRole("textbox", { name: "邀請誰來代訂" })).not.toBeInTheDocument();

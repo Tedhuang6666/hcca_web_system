@@ -34,4 +34,19 @@ describe("未歸戶學生的班級申請", () => {
     fireEvent.click(screen.getByRole("button", { name: "申請加入班級" }));
     expect(screen.getByRole("button", { name: "送出申請" })).toBeDisabled();
   });
+  it("keeps the selected class and explanation after a failed submission", async () => {
+    api.createCorrectionRequest.mockRejectedValueOnce(new Error("offline"));
+    render(<ClassCorrectionRequest currentClass={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "申請加入班級" }));
+    await screen.findByRole("option", { name: "一年一班" });
+    fireEvent.change(screen.getByRole("combobox", { name: "你目前就讀的班級" }), { target: { value: "class" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "補充說明（選填）" }), { target: { value: "我剛轉班" } });
+    fireEvent.click(screen.getByRole("button", { name: "送出申請" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("申請未送出");
+    expect(screen.getByRole("combobox", { name: "你目前就讀的班級" })).toHaveValue("class");
+    expect(screen.getByRole("textbox", { name: "補充說明（選填）" })).toHaveValue("我剛轉班");
+    fireEvent.click(screen.getByRole("button", { name: "送出申請" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("等待管理員審核");
+  });
+
 });

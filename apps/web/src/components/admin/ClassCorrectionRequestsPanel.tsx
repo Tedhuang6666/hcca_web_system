@@ -51,7 +51,7 @@ export default function ClassCorrectionRequestsPanel() {
         class_id: decision === "approved" ? targetClassIds[request.id] : null,
         review_note: reviewNotes[request.id]?.trim() || null,
       });
-      toast.success(decision === "approved" ? "已核准並更新班級歸戶" : "已退回班級更正申請");
+      toast.success(decision === "approved" ? "已核准並更新班級" : "已退回班級更正申請");
       await load();
     } catch (error) {
       toast.error(apiErrorMessage(error, "處理申請失敗，請重新載入後再試"));
@@ -68,7 +68,7 @@ export default function ClassCorrectionRequestsPanel() {
             班級更正申請
           </h2>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            確認使用者資料後，可直接選擇實際歸戶班級並核准。
+            核對學生資料與申請班級，再選擇正確班級並核准。
           </p>
         </div>
         <button type="button" onClick={() => void load()} className="btn btn-ghost min-h-11" disabled={loading}>
@@ -105,7 +105,7 @@ export default function ClassCorrectionRequestsPanel() {
           </div>
 
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            目前歸戶：{request.reported_class_label ?? "未指定"}　→　使用者希望：{request.requested_class_label}
+            目前班級：{request.reported_class_label ?? "未指定"}　→　申請班級：{request.requested_class_label}
           </p>
           {request.message && (
             <p className="whitespace-pre-wrap text-sm" style={{ color: "var(--text-primary)" }}>
@@ -115,7 +115,7 @@ export default function ClassCorrectionRequestsPanel() {
 
           <div className="grid gap-3 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,2fr)]">
             <label className="grid content-start gap-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-              核准後歸戶至
+              核准後的班級
               <select
                 value={targetClassIds[request.id] ?? ""}
                 onChange={(event) => setTargetClassIds((current) => ({ ...current, [request.id]: event.target.value }))}
@@ -147,7 +147,7 @@ export default function ClassCorrectionRequestsPanel() {
               disabled={savingId === request.id || !targetClassIds[request.id]}
               className="btn btn-primary min-h-11"
             >
-              {savingId === request.id ? "處理中…" : "核准並更改歸戶"}
+              {savingId === request.id ? "處理中…" : "核准並更新班級"}
             </button>
             <button
               type="button"

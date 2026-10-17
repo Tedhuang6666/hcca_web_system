@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
@@ -26,6 +26,15 @@ const ACTIVITY_STATUS_LABEL: Record<string, string> = {
   ended: "已結束",
   archived: "已封存",
 };
+
+async function listProductChoices() {
+  const products: ProductOut[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await shopApi.listProducts({ limit: "100", offset: String(offset) });
+    products.push(...page);
+    if (page.length < 100) return products;
+  }
+}
 
 // ── 共用小元件 ────────────────────────────────────────────────────────────────
 
@@ -87,12 +96,12 @@ function MiniBtn({
 }) {
   const style = {
     neutral: { color: "var(--text-secondary)", border: "1px solid var(--border)" },
-    primary: { color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" },
+    primary: { color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" },
     danger: { color: "#f87171", border: "1px solid rgba(248,113,113,0.3)" },
   }[tone];
   return (
     <button type="button" onClick={onClick} disabled={disabled}
-      className="min-h-11 px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-45 sm:min-h-0 sm:px-2.5"
+      className="min-h-11 px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-45 sm:px-2.5"
       style={style}>
       {children}
     </button>
@@ -485,7 +494,7 @@ function ProductFormModal({
           )}
         </div>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {editing ? "尺寸 / 顏色等變體於商品詳情頁管理。" : "建立後可於商品詳情頁新增尺寸 / 顏色等變體。"}
+          {editing ? "尺寸 / 顏色等規格於商品詳情頁管理。" : "建立後可於商品詳情頁新增尺寸 / 顏色等規格。"}
         </p>
         <div className="flex gap-3 pt-1">
           <button disabled={busy || mediaUploadsInProgress > 0} onClick={async () => {
@@ -656,7 +665,7 @@ function VariantGroupModal({
 
   const submit = async () => {
     if (!name.trim()) {
-      toast.error("請輸入變體群組名稱");
+      toast.error("請輸入規格類別名稱");
       return;
     }
     setBusy(true);
@@ -684,7 +693,7 @@ function VariantGroupModal({
           options,
         });
       }
-      toast.success("變體群組已儲存");
+      toast.success("規格類別已儲存");
       onSaved();
     } catch (e) {
       toast.error(apiErrorMessage(e, "儲存失敗"));
@@ -694,7 +703,7 @@ function VariantGroupModal({
   };
 
   return (
-    <Modal title={`${editing ? "編輯" : "新增"}變體群組`} onClose={onClose} size="md">
+    <Modal title={`${editing ? "編輯" : "新增"}規格類別`} onClose={onClose} size="md">
       <div className="space-y-3">
         <Field label="群組名稱">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full" placeholder="如：顏色、尺寸" />
@@ -852,7 +861,7 @@ function SmartOptionsModal({
   );
 }
 
-// ── 變體管理（一個商品下的多個變體群組） ────────────────────────────────────
+// ── 變體管理（一個商品下的多個規格類別） ────────────────────────────────────
 
 function VariantManager({
   product,
@@ -880,7 +889,7 @@ function VariantManager({
   );
 
   const removeGroup = async (g: ProductVariantGroupOut) => {
-    if (!confirm(`確定刪除變體群組「${g.name}」？`)) return;
+    if (!confirm(`確定刪除規格類別「${g.name}」？`)) return;
     try {
       await shopApi.deleteVariantGroup(g.id);
       onChanged();
@@ -900,24 +909,24 @@ function VariantManager({
 
   return (
     <div className="card p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-          變體群組（{product.variant_groups.length}）
+          規格類別（{product.variant_groups.length}）
         </p>
-        <MiniBtn tone="primary" onClick={() => setGroupModal("new")}>+ 新增變體群組</MiniBtn>
+        <MiniBtn tone="primary" onClick={() => setGroupModal("new")}>+ 新增規格類別</MiniBtn>
       </div>
       {product.variant_groups.length === 0 ? (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          尚無變體。可新增多個群組（例如「顏色」與「尺寸」），購買時每個群組需各選一項。
+          尚未設定規格。例如新增「尺寸」，再加入 S、M、L；訂購時每種規格都需選一項。
         </p>
       ) : (
         product.variant_groups.map((g) => (
           <div key={g.id} className="rounded-lg p-3 space-y-2"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{g.name}</p>
-              <div className="flex gap-1.5">
-                <MiniBtn tone="primary" onClick={() => setSmartTarget(g)}>智慧新增</MiniBtn>
+              <div className="flex flex-wrap gap-1.5">
+                <MiniBtn tone="primary" onClick={() => setSmartTarget(g)}>批次新增選項</MiniBtn>
                 <MiniBtn onClick={() => setGroupModal(g)}>編輯</MiniBtn>
                 <MiniBtn tone="danger" onClick={() => removeGroup(g)}>刪除</MiniBtn>
               </div>
@@ -935,9 +944,9 @@ function VariantManager({
                     </span>
                   )}
                   <button onClick={() => setOptionModal({ groupId: g.id, option: o })}
-                    className="px-1" style={{ color: "var(--text-muted)" }} aria-label="編輯選項">✎</button>
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: "var(--text-muted)" }} aria-label={`編輯${o.value}`}><Pencil size={14} aria-hidden /></button>
                   <button onClick={() => removeOption(o)}
-                    className="px-1" style={{ color: "var(--text-muted)" }} aria-label="刪除選項">×</button>
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: "var(--text-muted)" }} aria-label={`刪除${o.value}`}><Trash2 size={14} aria-hidden /></button>
                 </span>
               ))}
               <button onClick={() => setOptionModal({ groupId: g.id, option: null })}
@@ -997,44 +1006,58 @@ function StatsView() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [activities, setActivities] = useState<ActivityOut[]>([]);
+  const [activityId, setActivityId] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
+  const [optionsError, setOptionsError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setOptionsError(false);
     Promise.all([
-      shopApi.listProducts({ limit: "100" }).catch(() => []),
-      classApi.list({ limit: "500" }).catch(() => []),
-      shopApi.orderSummary({ group_by: "user" }).catch(() => null),
-    ]).then(([loadedProducts, loadedClasses, userSummary]) => {
+      listProductChoices(),
+      classApi.recipientOptions(),
+      shopApi.orderSummary({ group_by: "user" }),
+      shopApi.listActivities(),
+    ]).then(([loadedProducts, loadedClasses, userSummary, loadedActivities]) => {
+      if (cancelled) return;
       setProducts(loadedProducts);
       setClasses(loadedClasses);
+      setActivities(loadedActivities);
       setUserOptions(
         userSummary?.rows
           .filter((row) => row.key !== "none")
           .map((row) => ({ id: row.key, label: row.label })) ?? []
       );
-    });
-  }, []);
+    }).catch(() => { if (!cancelled) setOptionsError(true); });
+    return () => { cancelled = true; };
+  }, [retryKey]);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     shopApi.orderSummary({
       group_by: groupBy,
+      activity_id: activityId,
       product_id: productId,
       grade,
       class_id: classId,
       user_id: userId.trim(),
       status: statusFilter,
       is_paid: paid,
-      date_from: dateFrom ? new Date(`${dateFrom}T00:00:00`).toISOString() : "",
-      date_to: dateTo ? new Date(`${dateTo}T23:59:59`).toISOString() : "",
+      date_from: dateFrom ? new Date(`${dateFrom}T00:00:00+08:00`).toISOString() : "",
+      date_to: dateTo ? new Date(`${dateTo}T23:59:59+08:00`).toISOString() : "",
     })
-      .then(setData)
+      .then((result) => { if (!cancelled) setData(result); })
       .catch((e) => {
+        if (cancelled) return;
         setData(null);
         setError(apiErrorMessage(e, "統計載入失敗"));
       })
-      .finally(() => setLoading(false));
-  }, [classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId]);
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [activityId, classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId, retryKey]);
 
   const groupOptions = [
     ["class", "依班級"],
@@ -1048,6 +1071,7 @@ function StatsView() {
     (!grade || String(schoolClass.grade) === grade)
   );
   const resetFilters = () => {
+    setActivityId("");
     setProductId("");
     setGrade("");
     setClassId("");
@@ -1058,60 +1082,47 @@ function StatsView() {
     setDateTo("");
   };
   const hasAdvancedFilters = Boolean(
-    productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
+    activityId || productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
   );
+  const scopeLabels = [
+    activities.find((activity) => activity.id === activityId)?.name || "全部活動",
+    products.find((product) => product.id === productId)?.name,
+    grade && `${grade} 年級`,
+    classes.find((schoolClass) => schoolClass.id === classId)?.label,
+    userOptions.find((user) => user.id === userId)?.label,
+    paid === "true" ? "班聯已確認" : paid === "false" ? "班聯未確認" : "全部收款狀態",
+    statusFilter ? { pending: "待確認訂單", confirmed: "已確認訂單", cancelled: "已取消訂單", refunded: "已退款訂單" }[statusFilter] : "排除取消與退款",
+    (dateFrom || dateTo) && `${dateFrom || "不限起日"} 至 ${dateTo || "不限迄日"}`,
+  ].filter(Boolean);
 
   return (
     <div className="space-y-4">
       <div className="card p-4 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {!advancedOpen ? (
-            <>
-              <div className="hidden sm:flex gap-0.5 p-1 rounded-xl w-fit"
-                style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-                {groupOptions.map(([k, label]) => (
-                  <button key={k} onClick={() => setGroupBy(k)}
-                    className="px-4 py-1.5 rounded-lg text-xs font-medium"
-                    style={groupBy === k
-                      ? { background: "var(--primary-dim)", color: "var(--primary)" }
-                      : { color: "var(--text-muted)" }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <select
-                value={groupBy}
-                onChange={(e) => setGroupBy(e.target.value as "class" | "grade" | "user")}
-                className="input w-full sm:hidden"
-              >
-                {groupOptions.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-              </select>
-              <MiniBtn tone={hasAdvancedFilters ? "primary" : "neutral"} onClick={() => setAdvancedOpen(true)}>
-                進階篩選{hasAdvancedFilters ? "（已套用）" : ""}
-              </MiniBtn>
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>進階篩選</p>
-                <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  可疊加商品、年級、班級、個人與日期條件。
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <MiniBtn onClick={() => setAdvancedOpen(false)}>返回簡易篩選</MiniBtn>
-                <MiniBtn onClick={resetFilters}>清除篩選</MiniBtn>
-              </div>
-            </>
-          )}
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="活動">
+            <select className="input min-h-11 w-full" value={activityId} onChange={(event) => { setActivityId(event.target.value); setProductId(""); }}>
+              <option value="">全部活動</option>
+              {activities.map((activity) => <option key={activity.id} value={activity.id}>{activity.name}</option>)}
+            </select>
+          </Field>
+          <Field label="統計方式">
+            <select className="input min-h-11 w-full" value={groupBy} onChange={(event) => setGroupBy(event.target.value as "class" | "grade" | "user")}>
+              {groupOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </Field>
+          <button type="button" className="btn btn-ghost min-h-11" aria-expanded={advancedOpen} aria-controls="shop-stats-filters" onClick={() => setAdvancedOpen((value) => !value)}>
+            {advancedOpen ? "收起篩選" : "更多篩選"}
+          </button>
+          {hasAdvancedFilters && <MiniBtn onClick={resetFilters}>清除篩選</MiniBtn>}
+          <button type="button" className="btn btn-ghost min-h-11" disabled={loading} onClick={() => setRetryKey((value) => value + 1)}>重新整理</button>
         </div>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>統計範圍：{scopeLabels.join(" · ")}</p>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>交給班代的款項，需由班聯確認後才計入「班聯已確認」。</p>
+        {optionsError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+          篩選選項載入失敗。<button type="button" className="btn btn-ghost min-h-11" onClick={() => setRetryKey((value) => value + 1)}>重新載入選項</button>
+        </div>}
         {advancedOpen && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="彙總方式">
-              <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as "class" | "grade" | "user")} className="input w-full">
-                {groupOptions.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-              </select>
-            </Field>
+          <div id="shop-stats-filters" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="商品">
               <select value={productId} onChange={(e) => setProductId(e.target.value)} className="input w-full">
                 <option value="">全部商品</option>
@@ -1134,24 +1145,24 @@ function StatsView() {
                 ))}
               </select>
             </Field>
-            <Field label="特定使用者">
+            <Field label="訂購人">
               <select value={userId} onChange={(e) => setUserId(e.target.value)} className="input w-full">
-                <option value="">全部使用者</option>
+                <option value="">全部訂購人</option>
                 {userOptions.map((user) => (
                   <option key={user.id} value={user.id}>{user.label}</option>
                 ))}
               </select>
             </Field>
-            <Field label="繳費狀態">
+            <Field label="班聯收款狀態">
               <select value={paid} onChange={(e) => setPaid(e.target.value)} className="input w-full">
                 <option value="">全部</option>
-                <option value="true">已繳</option>
-                <option value="false">未繳</option>
+                <option value="true">班聯已確認</option>
+                <option value="false">班聯未確認</option>
               </select>
             </Field>
             <Field label="訂單狀態">
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-full">
-                <option value="">排除已取消</option>
+                <option value="">排除取消與退款</option>
                 <option value="pending">待確認</option>
                 <option value="confirmed">已確認</option>
                 <option value="cancelled">已取消</option>
@@ -1159,37 +1170,38 @@ function StatsView() {
               </select>
             </Field>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="起日">
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input w-full" />
+              <Field label="訂購起日">
+                <input type="date" max={dateTo || undefined} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input w-full" />
               </Field>
-              <Field label="迄日">
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input w-full" />
+              <Field label="訂購迄日">
+                <input type="date" min={dateFrom || undefined} value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input w-full" />
               </Field>
             </div>
           </div>
         )}
       </div>
       {loading && (
-        <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+        <div role="status" className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
           載入統計中…
         </div>
       )}
       {error && (
-        <div className="card p-4 text-sm" style={{ color: "var(--danger, #e11d48)" }}>
-          {error}
+        <div role="alert" className="card p-4 text-sm" style={{ color: "var(--danger, #e11d48)" }}>
+          <p>{error}</p>
+          <MiniBtn onClick={() => setRetryKey((value) => value + 1)}>重新載入統計</MiniBtn>
         </div>
       )}
       {!loading && data && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { label: "總金額", value: data.total_amount },
-              { label: "已繳金額", value: data.paid_amount },
-              { label: "未繳金額", value: data.unpaid_amount },
+              { label: "訂購金額", value: data.total_amount },
+              { label: "班聯已確認", value: data.paid_amount },
+              { label: "班聯未確認", value: data.unpaid_amount },
             ].map(({ label, value }) => (
               <div key={label} className="card p-4 text-center">
                 <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
-                <p className="text-lg font-bold" style={{ color: "var(--primary)" }}>
+                <p className="text-lg font-bold" style={{ color: "var(--primary-text)" }}>
                   NT${value.toLocaleString()}
                 </p>
               </div>
@@ -1198,7 +1210,7 @@ function StatsView() {
           <div className="grid gap-3 sm:hidden">
             {data.rows.length === 0 ? (
               <div className="card p-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-                尚無訂單資料
+                目前範圍沒有訂單；可清除篩選或改選其他活動。
               </div>
             ) : data.rows.map((r) => (
               <div key={r.key} className="card p-4 space-y-3">
@@ -1209,28 +1221,28 @@ function StatsView() {
                       {r.order_count} 筆訂單 · {r.item_count} 件
                     </p>
                   </div>
-                  <p className="font-bold" style={{ color: "var(--primary)" }}>
+                  <p className="font-bold" style={{ color: "var(--primary-text)" }}>
                     NT${r.total_amount.toLocaleString()}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
-                    <p style={{ color: "var(--text-muted)" }}>已繳</p>
-                    <p className="font-semibold mt-0.5" style={{ color: "#16a34a" }}>NT${r.paid_amount.toLocaleString()}</p>
+                    <p style={{ color: "var(--text-muted)" }}>班聯已確認</p>
+                    <p className="font-semibold mt-0.5" style={{ color: "var(--success)" }}>NT${r.paid_amount.toLocaleString()}</p>
                   </div>
                   <div className="rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
-                    <p style={{ color: "var(--text-muted)" }}>未繳</p>
+                    <p style={{ color: "var(--text-muted)" }}>班聯未確認</p>
                     <p className="font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>NT${r.unpaid_amount.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-          <div className="card overflow-hidden hidden sm:block">
-            <table className="w-full text-sm">
+          <div className="card overflow-x-auto hidden sm:block">
+            <table className="w-full min-w-[680px] text-sm tabular-nums">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["項目", "訂單數", "件數", "總額", "已繳", "未繳"].map((h) => (
+                  {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "訂購人", "訂單數", "商品件數", "訂購金額", "班聯已確認", "班聯未確認"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold"
                       style={{ color: "var(--text-muted)" }} scope="col">{h}</th>
                   ))}
@@ -1239,7 +1251,7 @@ function StatsView() {
               <tbody>
                 {data.rows.length === 0 ? (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-sm"
-                    style={{ color: "var(--text-muted)" }}>尚無訂單資料</td></tr>
+                    style={{ color: "var(--text-muted)" }}>目前範圍沒有訂單；可清除篩選或改選其他活動。</td></tr>
                 ) : (
                   data.rows.map((r) => (
                     <tr key={r.key} style={{ borderBottom: "1px solid var(--border)" }}>
@@ -1249,7 +1261,7 @@ function StatsView() {
                       <td className="px-4 py-3" style={{ color: "var(--text-primary)" }}>
                         NT${r.total_amount.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3" style={{ color: "#16a34a" }}>
+                      <td className="px-4 py-3" style={{ color: "var(--success)" }}>
                         NT${r.paid_amount.toLocaleString()}
                       </td>
                       <td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
@@ -1290,6 +1302,8 @@ export default function ShopAdminPage() {
 
   // 各層資料
   const [categories, setCategories] = useState<ProductCategoryOut[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
   const [seriesList, setSeriesList] = useState<ProductSeriesOut[]>([]);
   const [products, setProducts] = useState<ProductOut[]>([]);
   const [directProducts, setDirectProducts] = useState<ProductOut[]>([]);
@@ -1334,13 +1348,19 @@ export default function ShopAdminPage() {
   } | null>(null);
 
   const loadCategories = useCallback(() => {
+    setCatalogLoading(true);
+    setCatalogError("");
     shopApi
       .listCategories()
       .then(setCategories)
-      .catch(() => setCategories([]));
+      .catch((error) => setCatalogError(apiErrorMessage(error, "無法載入商品主題，請重新載入。")))
+      .finally(() => setCatalogLoading(false));
   }, []);
   const loadSeries = useCallback((categoryId: string) => {
-    shopApi.listSeries({ category_id: categoryId }).then(setSeriesList).catch(() => setSeriesList([]));
+    shopApi.listSeries({ category_id: categoryId }).then(setSeriesList).catch((error) => {
+      setSeriesList([]);
+      setCatalogError(apiErrorMessage(error, "無法載入商品系列，請重新載入。"));
+    });
   }, []);
   const loadProducts = useCallback((sid: string) => {
     shopApi.listProducts({ series_id: sid }).then(setProducts).catch((error) => {
@@ -1355,7 +1375,7 @@ export default function ShopAdminPage() {
     });
   }, []);
   const loadAllProducts = useCallback(() => {
-    shopApi.listProducts({ limit: "100" }).then(setAllProducts).catch(() => setAllProducts([]));
+    listProductChoices().then(setAllProducts).catch(() => setAllProducts([]));
   }, []);
   const loadProduct = useCallback((pid: string) => {
     shopApi.getProduct(pid).then(setProduct).catch((error) => {
@@ -1365,10 +1385,6 @@ export default function ShopAdminPage() {
   }, []);
 
   useEffect(() => {
-    shopApi
-      .listCategories()
-      .then(setCategories)
-      .catch(() => setCategories([]));
     if (!allowed) return;
     loadCategories();
     loadAllProducts();
@@ -1461,17 +1477,17 @@ export default function ShopAdminPage() {
     setProductId(nextProductId);
   };
   const productRow = (item: ProductOut) => (
-    <div key={item.id} className="flex min-w-0 items-center gap-1.5">
+    <div key={item.id} className="shop-admin-product-row flex min-w-0 flex-wrap items-center gap-1.5">
       <button type="button" onClick={() => selectProduct(item.id)}
-        className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg p-2 text-left"
+        className="shop-admin-product-select flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg p-2 text-left"
         style={productId === item.id
           ? { background: "var(--primary-dim)", color: "var(--primary)" }
           : { background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
         <Thumb url={item.image_url} size={34} />
         <span className="flex-1 min-w-0">
-          <span className="block text-sm font-medium truncate">{item.name}</span>
+          <span className="block break-words text-sm font-medium">{item.name}</span>
           <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
-            NT${item.price.toLocaleString()} · {STATUS_LABEL[item.status] ?? item.status} · {item.variant_groups.length} 組變體
+            NT${item.price.toLocaleString()} · {STATUS_LABEL[item.status] ?? item.status} · {item.variant_groups.length} 組規格
           </span>
         </span>
       </button>
@@ -1488,7 +1504,7 @@ export default function ShopAdminPage() {
   );
 
   const detailContent = !cat ? (
-    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>選擇主題後，可在右側編輯主題、系列、商品與多組變體。</div>
+    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>選擇商品即可編輯售價、上架狀態與規格。</div>
   ) : productId && !product ? (
     <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入商品詳情中…</div>
   ) : product ? (
@@ -1556,22 +1572,22 @@ export default function ShopAdminPage() {
   );
 
   return (
-    <div className="space-y-5 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-4">
+    <div className="shop-admin-page w-full min-w-0 space-y-5 max-w-7xl mx-auto px-4 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品後台</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品管理</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            按主題管理單一商品或系列商品，再設定商品規格與變體
+            管理商品、查看訂購統計與設定優惠。
           </p>
         </div>
-        <Link href="/shop/council-orders" className="btn btn-ghost">全校訂單總覽</Link>
+        <div className="flex flex-wrap gap-2"><Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link><Link href="/shop/council-orders" className="btn btn-ghost min-h-11">全校收款與訂單</Link></div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-0.5 p-1 rounded-xl w-fit"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           {([["catalog", "商品目錄"], ["stats", "訂購統計"], ["promotions", "優惠設定"]] as const).map(([k, label]) => (
-            <button key={k} onClick={() => setTab(k)}
+            <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}
               className="min-h-11 px-4 py-1.5 rounded-lg text-xs font-medium"
               style={tab === k
                 ? { background: "var(--primary-dim)", color: "var(--primary)" }
@@ -1580,13 +1596,7 @@ export default function ShopAdminPage() {
             </button>
           ))}
         </div>
-        {tab === "stats" && (
-          <button type="button" onClick={() => setClearOrdersOpen(true)}
-            className="btn btn-ghost min-h-11 px-3 text-sm"
-            style={{ color: "var(--danger)", border: "1px solid var(--border)" }}>
-            <Trash2 size={15} /> 清除所有商品訂購資料
-          </button>
-        )}
+
       </div>
 
       {tab === "stats" ? (
@@ -1594,15 +1604,23 @@ export default function ShopAdminPage() {
       ) : tab === "promotions" ? (
         <ShopPromotionPanel />
       ) : (
-        <div className="card overflow-hidden min-h-[620px]">
-          <div className="grid grid-cols-1 lg:grid-cols-[240px_360px_1fr] min-h-[620px]">
-            <aside className="overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
+        <div className="card overflow-hidden lg:min-h-[620px]">
+          {catalogError && <div role="alert" className="p-4 text-sm" style={{ color: "var(--danger)" }}>
+            <p>{catalogError}</p>
+            <button type="button" className="btn btn-ghost min-h-11" onClick={() => {
+              loadCategories();
+              if (cat) { loadSeries(cat.id); loadDirectProducts(cat.id); }
+              if (series) loadProducts(series.id);
+            }}>重新載入商品目錄</button>
+          </div>}
+          <div className="grid grid-cols-1 lg:grid-cols-[190px_minmax(0,1fr)_minmax(0,1.2fr)] lg:min-h-[620px]">
+            <aside className="min-w-0 overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
               <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>主題</p>
                   <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個主題</p>
                 </div>
-                <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增</MiniBtn>
+                <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增主題</MiniBtn>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {categories.map((c) => (
@@ -1623,13 +1641,14 @@ export default function ShopAdminPage() {
                     <MiniBtn tone="danger" onClick={() => void delCategory(c)}>刪除</MiniBtn>
                   </div>
                 ))}
-                {categories.length === 0 && <p className="p-4 text-sm text-center" style={{ color: "var(--text-muted)" }}>尚無主題</p>}
+                {catalogLoading && <p role="status" className="p-4 text-sm">正在載入商品主題…</p>}
+                {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm" style={{ color: "var(--text-secondary)" }}>尚未建立商品主題。按「新增主題」開始，例如「校慶商品」。</p>}
               </div>
             </aside>
 
-            <section className="overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
+            <section className="min-w-0 overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
               <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>系列與商品</p>
                     <p className="text-sm font-medium truncate mt-0.5" style={{ color: "var(--text-primary)" }}>
@@ -1648,7 +1667,7 @@ export default function ShopAdminPage() {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {!cat ? (
-                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>從左側選一個主題開始管理。</p>
+                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>先選擇商品主題，即可新增或管理商品。</p>
                 ) : (
                   <div className="divide-y" style={{ borderColor: "var(--border)" }}>
                     <section className="space-y-2 p-3">
@@ -1696,11 +1715,21 @@ export default function ShopAdminPage() {
               </div>
             </section>
 
-            <section className="hidden lg:block overflow-y-auto">
+            <section className="hidden min-w-0 lg:block overflow-y-auto">
               {detailContent}
             </section>
           </div>
         </div>
+      )}
+
+      {tab === "stats" && (
+        <details className="border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <summary className="min-h-11 cursor-pointer text-sm" style={{ color: "var(--text-secondary)" }}>訂單資料維護</summary>
+          <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>清除會永久刪除所有活動的訂單，包含已收款資料，且無法復原。</p>
+          <button type="button" onClick={() => setClearOrdersOpen(true)} className="btn btn-ghost min-h-11" style={{ color: "var(--danger)" }}>
+            <Trash2 size={15} /> 清除所有商品訂購資料
+          </button>
+        </details>
       )}
 
       {clearOrdersOpen && (

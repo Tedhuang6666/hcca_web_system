@@ -58,6 +58,7 @@ export default function ShopPromotionPanel() {
   const [form, setForm] = useState(emptyForm);
   const [editingPromotionId, setEditingPromotionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingPromotionId, setDeletingPromotionId] = useState<string | null>(null);
   const formSectionRef = useRef<HTMLElement>(null);
@@ -65,6 +66,7 @@ export default function ShopPromotionPanel() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const [promotionRows, productRows, catalogRows] = await Promise.all([
         shopApi.listPromotions(),
@@ -75,7 +77,7 @@ export default function ShopPromotionPanel() {
       setProducts(productRows);
       setCatalog(catalogRows);
     } catch (error) {
-      toast.error(apiErrorMessage(error, "載入優惠失敗"));
+      setLoadError(apiErrorMessage(error, "無法載入優惠，請重新載入後再操作。"));
     } finally {
       setLoading(false);
     }
@@ -322,19 +324,20 @@ export default function ShopPromotionPanel() {
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             優惠內容
             <select className="input mt-1 w-full" value={form.discount_type} onChange={(e) => update("discount_type", e.target.value as ShopDiscountType)}>
-              <option value="percentage">百分比折扣</option>
+              <option value="percentage">按百分比折抵</option>
               <option value="fixed">固定金額折抵</option>
               <option value="price_override">指定商品優惠價</option>
             </select>
           </label>
           {form.discount_type !== "price_override" ? (
             <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-              {form.discount_type === "percentage" ? "折扣百分比" : "折抵金額"}
+              {form.discount_type === "percentage" ? "折抵百分比（%）" : "折抵金額"}
               <input className="input mt-1 w-full" type="number" min="1" max={form.discount_type === "percentage" ? 100 : undefined} value={form.discount_value} onChange={(e) => update("discount_value", e.target.value)} />
+              {form.discount_type === "percentage" && <span className="mt-1 block font-normal">例如填 10，表示減價 10%，也就是打 9 折。</span>}
             </label>
           ) : (
             <p className="self-center text-xs" style={{ color: "var(--text-muted)" }}>
-              為下方選擇的商品逐項設定優惠後單價；變體加價會照常計入。
+              為下方選擇的商品逐項設定優惠後單價；規格加價會照常計入。
             </p>
           )}
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
@@ -432,6 +435,10 @@ export default function ShopPromotionPanel() {
         </div>
         {loading ? (
           <p className="p-5 text-sm" style={{ color: "var(--text-muted)" }}>載入中…</p>
+        ) : loadError ? (
+          <div role="alert" className="p-5 text-sm" style={{ color: "var(--danger)" }}>
+            <p>{loadError}</p><button type="button" className="btn btn-ghost min-h-11" onClick={() => void load()}>重新載入優惠</button>
+          </div>
         ) : promotions.length === 0 ? (
           <p className="p-5 text-sm" style={{ color: "var(--text-muted)" }}>尚未建立優惠。</p>
         ) : (
@@ -448,7 +455,7 @@ export default function ShopPromotionPanel() {
                   .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
                   .join("、")
                 : promotion.discount_type === "percentage"
-                  ? `${promotion.discount_value}% 折扣`
+                  ? `減價 ${promotion.discount_value}%`
                   : `折抵 NT$${promotion.discount_value.toLocaleString()}`;
               return (
                 <div key={promotion.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">

@@ -98,7 +98,8 @@ describe("原商品頁的家人代訂模式", () => {
     expect(api.accessDelegation).toHaveBeenCalledWith("synthetic-code-link-token", false);
     expect(api.accessDelegation).not.toHaveBeenCalledWith("synthetic-code-link-token", true);
     expect(screen.getByText("媽媽（parent@synthetic.test）")).toBeVisible();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "確認代訂授權" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "增加數量" })).not.toBeInTheDocument();
   });
 
   it("uses only this link's rows for editing while displaying the combined order", async () => {
@@ -128,15 +129,16 @@ describe("原商品頁的家人代訂模式", () => {
       ...context, can_claim: true, can_edit: false, registration: null,
     });
     render(<ShopPage />);
-    const claim = await screen.findByRole("button", { name: "確認授權並開始代訂" });
+    await screen.findByRole("button", { name: "確認授權並開始代訂" });
     expect(screen.getByText("媽媽（parent@synthetic.test）")).toBeVisible();
     expect(screen.getByText(/確認後，這個連結只供目前帳號使用/)).toBeVisible();
     expect(screen.getByText(/^送出即加入學生預購，不需學生再次確認/)).toBeVisible();
     fireEvent.click(screen.getByText("完整操作介紹與權限說明"));
     expect(screen.getByText(/代訂送出後立即加入學生的預購，不需學生再次確認/)).toBeVisible();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "確認代訂授權" })).getByRole("button", { name: "關閉" }));
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(claim);
+    fireEvent.click(screen.getByRole("button", { name: "確認授權並開始代訂" }));
     await waitFor(() => expect(api.accessDelegation).toHaveBeenCalledWith("synthetic-test-token", true));
     expect(await screen.findByRole("dialog")).toBeVisible();
   });
@@ -215,6 +217,7 @@ describe("原商品頁的家人代訂模式", () => {
     render(<ShopPage />);
     expect(await screen.findByRole("link", { name: "返回本人商品頁" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "確認授權並開始代訂" })).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "確認代訂授權" })).getByRole("button", { name: "關閉" }));
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.setDelegationProduct).not.toHaveBeenCalled();
