@@ -22,6 +22,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +55,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedClassId) return;
+    setSubmitError("");
     setSubmitting(true);
     try {
       const request = await classApi.createCorrectionRequest({
@@ -66,7 +68,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
       setOpen(false);
       toast.success("班級更正申請已送出");
     } catch (error) {
-      toast.error(apiErrorMessage(error, "送出申請失敗，請稍後再試"));
+      setSubmitError(apiErrorMessage(error, "申請未送出，請稍後再試；你填寫的內容已保留。"));
     } finally {
       setSubmitting(false);
     }
@@ -84,7 +86,7 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
         </div>
       ) : latestRequest?.status === "approved" ? (
         <p className="shop-class-correction-status" role="status">
-          班級更正已完成，帳號已歸戶至「{latestRequest.resolved_class_label ?? latestRequest.requested_class_label}」。
+          班級已更新為「{latestRequest.resolved_class_label ?? latestRequest.requested_class_label}」。
         </p>
       ) : null}
 
@@ -135,7 +137,8 @@ export default function ClassCorrectionRequest({ currentClass }: { currentClass:
             placeholder="例如：我已轉到二年 8 班。"
             disabled={submitting}
           />
-          <p className="shop-class-correction-help">管理員審核後會更新你的班級歸戶。</p>
+          <p className="shop-class-correction-help">管理員確認後會更新你的班級；送出申請不會立即更改。</p>
+          {submitError && <p role="alert" className="shop-class-correction-error">{submitError}</p>}
           <div className="shop-class-correction-actions">
             <button
               type="submit"

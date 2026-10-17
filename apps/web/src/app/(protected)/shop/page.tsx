@@ -1000,7 +1000,7 @@ export default function ShopPage() {
     let active = true;
     const token = readShopDelegationToken();
     setDelegationToken(token);
-    setDelegationOpen(Boolean(token));
+    setDelegationOpen((alreadyOpen) => alreadyOpen || Boolean(token));
     if (!token) {
       loadCatalog();
       const generation = refreshGeneration.current;
@@ -1429,7 +1429,7 @@ export default function ShopPage() {
       {myClass && (
         <section
           className="shop-public-context"
-          aria-label="班級歸戶資訊"
+          aria-label="我的班級"
           data-closed={Object.values(closeStatus).some((status) => status.is_closed) || undefined}>
           {Object.values(closeStatus).some((status) => status.is_closed)
             ? <CircleAlert size={18} style={{ color: "var(--danger)" }} aria-hidden />
@@ -1437,7 +1437,7 @@ export default function ShopPage() {
           <div>
             <p>
               <strong>
-                你的帳號已被歸戶至「{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}」
+                我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}
               </strong>
             </p>
             <p>{myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}</p>
@@ -1446,8 +1446,8 @@ export default function ShopPage() {
         </section>
       )}
 
-      {isLoggedIn && !delegationToken && !myClass && !loading && (
-        <section className="shop-public-context" aria-label="班級歸戶資訊">
+      {isLoggedIn && isStudent && !delegationToken && !myClass && !loading && (
+        <section className="shop-public-context" aria-label="我的班級">
           <CircleAlert size={18} aria-hidden />
           <div>
             {classLoadFailed ? (
@@ -1457,8 +1457,8 @@ export default function ShopPage() {
               </div>
             ) : (
               <>
-                <p><strong>你的帳號尚未歸入班級</strong></p>
-                <p>系統會依學號與班級名冊配對；若仍未找到，可申請由管理員確認。</p>
+                <p><strong>還沒找到你的班級</strong></p>
+                <p>選擇目前就讀的班級，請管理員協助確認。</p>
                 <ClassCorrectionRequest currentClass={null} />
               </>
             )}
@@ -1632,7 +1632,7 @@ export default function ShopPage() {
                         .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
                         .join("、")}`
                       : promotion.discount_type === "percentage"
-                        ? `${promotion.discount_value}% 折扣`
+                        ? `減價 ${promotion.discount_value}%`
                         : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
                   </p>
                   {promotion.code && <p className="shop-public-promotion-code">{promotion.code}</p>}

@@ -83,9 +83,9 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
   const canCollectForClass = isAdmin || permissions.has("admin:all") || permissions.has("class:shop_collect");
 
   return [
-    ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "收款與代訂", icon: ListChecks }] : []),
-    ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校訂單總覽", icon: BarChart2 }] : []),
-    ...(canManage ? [{ href: "/shop/admin", label: "商品與活動設定", icon: PackageSearch }] : []),
+    ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "班級收款與代訂", icon: ListChecks }] : []),
+    ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校收款與訂單", icon: BarChart2 }] : []),
+    ...(canManage ? [{ href: "/shop/admin", label: "商品管理與統計", icon: PackageSearch }] : []),
   ];
 }
 
@@ -126,7 +126,7 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
           {groups.map((group) => (
             <Link key={group.label} href={group.tabs[0].href}
               aria-current={group === activeGroup ? "location" : undefined}>
-              {group.label === "班代" ? "班代代購" : group.label}
+              {group.label === "班代" ? "班級收款與代訂" : group.label}
             </Link>
           ))}
         </div>

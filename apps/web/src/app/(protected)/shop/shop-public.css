@@ -36,6 +36,12 @@
 .shop-class-orders-page [hidden] { display: none; }
 .shop-council-page button, .shop-council-page .input { min-height: 44px; }
 .shop-council-page { min-width: 0; }
+.shop-admin-page .input { min-height: 44px; max-width: 100%; }
+.shop-admin-page label { min-width: 0; }
+.shop-admin-page :is(button, a):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
 .shop-role-navigation { display: none; }
 .shop-quantity-total { padding: 1rem; border-bottom: 1px solid var(--border); font-weight: 600; }
 .shop-quantity-summary details + details { border-top: 1px solid var(--border); }
@@ -69,7 +75,8 @@
   .shop-role-shortcuts a { display: inline-flex; align-items: center; min-height: 44px; color: var(--text-secondary); font-size: 0.8rem; }
   .shop-role-shortcuts a[aria-current] { color: var(--primary-text); text-decoration: underline; text-underline-offset: 0.3em; }
   .shop-task-switch button { font-size: 0.8rem; }
-  .shop-class-orders-page .input, .shop-council-page .input { font-size: 16px; }
+  .shop-admin-product-row .shop-admin-product-select { flex-basis: 100%; }
+  .shop-class-orders-page .input, .shop-council-page .input, .shop-admin-page .input { font-size: 16px; }
 }
 
 .shop-workspace-navigation {
