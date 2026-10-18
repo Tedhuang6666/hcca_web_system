@@ -5,7 +5,10 @@ import ShopAdminPage from "@/app/(protected)/shop/admin/page";
 const api = vi.hoisted(() => ({
   listCategories: vi.fn(), listProducts: vi.fn(), listActivities: vi.fn(),
   list: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(),
+  listSeries: vi.fn(), createProduct: vi.fn(), getProduct: vi.fn(),
 }));
+const navigation = vi.hoisted(() => ({ search: "" }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }));
 vi.mock("@/lib/api", () => ({ shopApi: api, classApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ can: () => true }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
@@ -15,22 +18,37 @@ const summary = (label: string) => ({ group_by: "class", total_amount: 300, paid
 
 beforeEach(() => {
   vi.resetAllMocks();
+  navigation.search = "";
   api.listCategories.mockResolvedValue([]);
   api.listProducts.mockResolvedValue([]);
   api.list.mockResolvedValue([]);
   api.recipientOptions.mockResolvedValue([]);
   api.listActivities.mockResolvedValue([{ id: "festival", name: "校慶" }, { id: "winter", name: "冬季活動" }]);
   api.orderSummary.mockResolvedValue(summary("初始班級"));
+  api.listSeries.mockResolvedValue([]);
 });
 
 async function openStats() {
+  navigation.search = "view=stats";
   render(<ShopAdminPage />);
-  fireEvent.click(screen.getByRole("button", { name: "訂購統計" }));
   await screen.findByRole("option", { name: "校慶" });
   await screen.findAllByText("初始班級");
 }
 
 describe("商品管理與統計", () => {
+  it("opens statistics from its URL and follows navigation back to the catalog", async () => {
+    navigation.search = "view=stats";
+    const page = render(<ShopAdminPage />);
+    expect(screen.getByRole("heading", { name: "訂購統計", level: 1 })).toBeVisible();
+    expect(screen.getByRole("link", { name: "訂購統計" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "商品目錄" })).toHaveAttribute("href", "/shop/admin");
+    await screen.findAllByText("初始班級");
+    navigation.search = "";
+    page.rerender(<ShopAdminPage />);
+    expect(screen.getByRole("heading", { name: "商品管理", level: 1 })).toBeVisible();
+    expect(screen.getByRole("link", { name: "商品目錄" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("loads products beyond the first page without requesting class-management access", async () => {
     api.list.mockRejectedValue(new Error("requires class:manage"));
     api.listProducts.mockImplementation(({ offset }: { offset: string }) => Promise.resolve(offset === "0"
@@ -76,5 +94,35 @@ describe("商品管理與統計", () => {
     expect(screen.queryByText(/尚未建立商品主題/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重新載入商品目錄" }));
     expect(await screen.findByText(/尚未建立商品主題/)).toBeVisible();
+  });
+
+  it("rejects invalid amounts and preserves the product form after a failed save", async () => {
+    api.listCategories.mockResolvedValue([{ id: "category", name: "校慶商品", is_active: true }]);
+    api.createProduct.mockRejectedValueOnce(new Error("offline"));
+    render(<ShopAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /校慶商品/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "新增單一商品" })[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念袋" } });
+    const price = screen.getByRole("spinbutton", { name: "售價（新台幣元）" });
+    fireEvent.change(price, { target: { value: "-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立草稿商品" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("售價請填寫 0 或正整數");
+    expect(price).toHaveFocus();
+    expect(price).toHaveAttribute("aria-invalid", "true");
+    expect(price).toHaveAccessibleDescription("售價請填寫 0 或正整數，單位為新台幣元。");
+    expect(api.createProduct).not.toHaveBeenCalled();
+    fireEvent.change(price, { target: { value: "100" } });
+    const stock = screen.getByRole("spinbutton", { name: "可訂購數量（件）" });
+    fireEvent.change(stock, { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立草稿商品" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("可訂購數量請填寫 0 或正整數");
+    expect(api.createProduct).not.toHaveBeenCalled();
+    fireEvent.change(stock, { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立草稿商品" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("商品尚未儲存，請重試");
+    expect(screen.getByRole("textbox", { name: "商品名稱" })).toHaveValue("紀念袋");
+    expect(price).toHaveValue(100);
+    expect(stock).toHaveValue(50);
+    expect(api.createProduct).toHaveBeenCalledWith(expect.objectContaining({ price: 100, stock_quantity: 50 }));
   });
 });

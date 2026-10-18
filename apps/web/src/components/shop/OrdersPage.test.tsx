@@ -62,6 +62,7 @@ describe("我的預購", () => {
     api.listOrders.mockResolvedValue([{ ...order, status: "cancelled" }, { ...order, status: "refunded" }]);
     render(<OrdersPage />);
     expect(await screen.findByText("目前沒有預購品項，先到商品頁挑選商品。")).toBeVisible();
+    expect(screen.getByRole("link", { name: "去選購商品" })).toHaveAttribute("href", "/shop");
     expect(screen.queryByRole("region", { name: "校慶預購" })).not.toBeInTheDocument();
   });
 

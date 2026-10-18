@@ -40,7 +40,7 @@ describe("班級管理工作台", () => {
 
   it("appoints a local student by seat without searching accounts again", async () => {
     render(<ClassesAdminPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "設定班級幹部" }));
+    fireEvent.click(await screen.findByRole("button", { name: "設定班代（議員）與幹部" }));
     expect(screen.getByRole("option", { name: "7 號 · 測試同學 · 510007" })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: "選擇班長" }), { target: { value: student.id } });
     fireEvent.click(screen.getByRole("button", { name: "任命班長" }));
@@ -60,7 +60,7 @@ describe("班級管理工作台", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "只看待連結" }));
     expect(screen.queryByText("測試同學")).not.toBeInTheDocument();
     expect(screen.getByText("尚未登入的同學")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "設定班級幹部" }));
+    fireEvent.click(screen.getByRole("button", { name: "設定班代（議員）與幹部" }));
     expect(screen.getByRole("option", { name: "測試同學 · 510007" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /尚未登入的同學/ })).not.toBeInTheDocument();
   });
@@ -70,5 +70,25 @@ describe("班級管理工作台", () => {
     render(<ClassesAdminPage />);
     fireEvent.click(await screen.findByRole("button", { name: "重新載入班級" }));
     expect(await screen.findByRole("textbox", { name: "搜尋班級成員" })).toBeInTheDocument();
+  });
+
+  it("recovers from a failed class list without presenting it as an empty school", async () => {
+    api.list.mockRejectedValueOnce(new Error("offline"));
+    render(<ClassesAdminPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法載入班級清單");
+    expect(screen.queryByText("0 個班級")).not.toBeInTheDocument();
+    expect(screen.queryByText("請先建立或選擇班級。")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新載入班級清單" }));
+    expect(await screen.findByRole("textbox", { name: "搜尋班級成員" })).toBeInTheDocument();
+  });
+
+  it("identifies the representative as a council member while retaining the correct role key", async () => {
+    api.roles.mockResolvedValue([{ role_key: "class_representative", label: "班代", holders: [] }]);
+    render(<ClassesAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "設定班代（議員）與幹部" }));
+    expect(screen.getByRole("heading", { name: "班代（議員）" })).toBeVisible();
+    fireEvent.change(screen.getByRole("combobox", { name: "選擇班代（議員）" }), { target: { value: student.id } });
+    fireEvent.click(screen.getByRole("button", { name: "任命班代（議員）" }));
+    await waitFor(() => expect(api.assignRole).toHaveBeenCalledWith("class", "class_representative", { user_id: student.id }));
   });
 });

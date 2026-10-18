@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BookUser,
   CheckSquare,
@@ -544,12 +545,13 @@ function RoleBoard({
   return (
     <div className="divide-y" style={{ borderColor: "var(--border)" }}>
       {roles.map((role) => {
+        const label = role.role_key === "class_representative" ? "班代（議員）" : role.label;
         const available = candidates.filter(({ user }) => !role.holders.some((holder) => holder.user_id === user.id));
         const chosen = available.find(({ user }) => user.id === selected[role.role_key]);
         return (
           <section key={role.role_key} className="py-5 first:pt-0">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{role.label}</h2>
+              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{label}</h2>
               <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
                 {role.holders.length ? role.holders.map((holder) => holder.display_name).join("、") : "尚未任命"}
               </span>
@@ -558,7 +560,7 @@ function RoleBoard({
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <select
                 className="input min-h-11 min-w-0 flex-1"
-                aria-label={`選擇${role.label}`}
+                aria-label={`選擇${label}`}
                 value={selected[role.role_key] ?? ""}
                 disabled={busyRole !== null || available.length === 0}
                 onChange={(event) => setSelected((current) => ({ ...current, [role.role_key]: event.target.value }))}
@@ -573,13 +575,13 @@ function RoleBoard({
               <button type="button" className="btn btn-primary min-h-11 disabled:opacity-50"
                 disabled={!chosen || busyRole !== null}
                 onClick={() => { if (chosen) void assign(role.role_key, chosen.user); }}>
-                {busyRole === role.role_key ? "任命中…" : `任命${role.label}`}
+                {busyRole === role.role_key ? "任命中…" : `任命${label}`}
               </button>
             </div>
             <details className="mt-3">
               <summary className="min-h-11 cursor-pointer py-2 text-sm" style={{ color: "var(--text-secondary)" }}>找不到人？搜尋其他帳號</summary>
               <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>選取後會加入本班並任命；尚未登入的同學，請先請他使用校內帳號登入。</p>
-              {busyRole === null && <UserPicker placeholder={`搜尋帳號並任命${role.label}`} onPick={(user) => void assign(role.role_key, user)} />}
+              {busyRole === null && <UserPicker placeholder={`搜尋帳號並任命${label}`} onPick={(user) => void assign(role.role_key, user)} />}
             </details>
           </section>
         );
@@ -639,7 +641,7 @@ function MembershipPanel({
           <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>班級成員</h2>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>共 {rows.length} 位 · {unlinked} 位待連結帳號</p>
         </div>
-        <button type="button" className="btn btn-ghost min-h-11" onClick={onManageRoles}>設定班級幹部</button>
+        <button type="button" className="btn btn-ghost min-h-11" onClick={onManageRoles}>設定班代（議員）與幹部</button>
       </div>
       <details>
         <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium" style={{ color: "var(--primary)" }}>新增班級成員</summary>
@@ -666,11 +668,11 @@ function MembershipPanel({
               </div>
               <span className="shrink-0 text-xs" style={{ color: row.userId ? "var(--success)" : "var(--text-secondary)" }}>{row.userId ? "已連結" : "待連結"}</span>
               {canEnd && <button type="button" className="min-h-11 shrink-0 px-2 text-xs disabled:opacity-50" style={{ color: "var(--danger)" }} disabled={busy !== null}
-                aria-label={`結束 ${row.name} 的班級歸屬`}
+                aria-label={`將 ${row.name} 移出本班`}
                 onClick={async () => {
                   setBusy(row.key);
                   try { await onEnd(membership.user_id); } finally { setBusy(null); }
-                }}>結束歸屬</button>}
+                }}>移出本班</button>}
             </li>
           );
         })}
@@ -1028,7 +1030,7 @@ function ClassWorkspace({
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "members", label: "班級成員" },
-    { key: "roles", label: "幹部設定", count: roleHolderCount },
+    { key: "roles", label: "班代與幹部", count: roleHolderCount },
     { key: "roster", label: "匯入與座號" },
     { key: "ranges", label: "自動歸班規則", count: detail.ranges.length },
   ];
@@ -1058,7 +1060,7 @@ function ClassWorkspace({
   const endMembership = async (userId: string) => {
     try {
       await classApi.endMembership(classId, userId);
-      toast.success("已結束班級歸屬");
+      toast.success("已將成員移出本班");
       load();
     } catch (error) {
       toast.error(getErrorMessage(error, "更新名冊失敗"));
@@ -1173,13 +1175,13 @@ function ClassWorkspace({
           </button>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {tab === "members" && <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatTile icon={<UsersRound size={15} />} label="已連結帳號" value={candidates.length} />
           <StatTile icon={<BookUser size={15} />} label="待連結帳號" value={unlinkedCount} />
           <StatTile icon={<ListChecks size={15} />} label="座號名冊" value={rosterEntries.length} />
           <StatTile icon={<ShieldCheck size={15} />} label="已任命職位" value={roleHolderCount} />
 
-        </div>
+        </div>}
       </section>
 
       <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="班級管理分頁">
@@ -1305,11 +1307,13 @@ function ClassManagementPanel() {
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showCorrectionRequests, setShowCorrectionRequests] = useState(false);
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
 
   const loadClasses = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     classApi
       .list()
       .then((items) => {
@@ -1319,7 +1323,10 @@ function ClassManagementPanel() {
           current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
         );
       })
-      .catch((error) => toast.error(getErrorMessage(error, "載入班級清單失敗")))
+      .catch((error) => {
+        setLoadError(true);
+        toast.error(getErrorMessage(error, "載入班級清單失敗"));
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -1352,7 +1359,7 @@ function ClassManagementPanel() {
   if (!allowed) {
     return (
       <div className="py-24 text-center" style={{ color: "var(--text-muted)" }}>
-        需要 class:manage 權限才能管理班級。
+        目前帳號無法管理班級，請聯繫管理員確認是否已授權。
       </div>
     );
   }
@@ -1362,17 +1369,20 @@ function ClassManagementPanel() {
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              班級與名冊
+              班級、名冊與議員設定
             </h1>
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              先選班級，即可查看成員、設定幹部或處理尚未連結的帳號。
+              選擇班級後，可核對同學與座號、設定班代（議員）或處理班級更正。
             </p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
-            style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-            <UsersRound size={16} />
-            {loading ? "載入中" : `${classes.length} 個班級`}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/shop" className="btn btn-ghost min-h-11">返回商品目錄</Link>
+            <span className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+              style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+              <UsersRound size={16} />
+              {loading ? "載入中" : loadError ? "班級清單未載入" : `${classes.length} 個班級`}
+            </span>
+          </div>
         </header>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1386,7 +1396,12 @@ function ClassManagementPanel() {
           </button>
         </div>
 
-        {showCorrectionRequests ? (
+        {loadError ? (
+          <section role="alert" className="space-y-3 rounded-md p-5" style={{ border: "1px solid var(--danger)", color: "var(--text-primary)" }}>
+            <p>無法載入班級清單，請重新載入後再操作。</p>
+            <button type="button" className="btn btn-primary min-h-11" onClick={loadClasses}>重新載入班級清單</button>
+          </section>
+        ) : showCorrectionRequests ? (
           <ClassCorrectionRequestsPanel />
         ) : (
         <>

@@ -9,7 +9,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
 import { usePermissions } from "@/hooks/usePermissions";
-import { BarChart2, ListChecks, PackageSearch } from "lucide-react";
+import { BarChart2, ChevronDown, ClipboardList, ListChecks, PackageSearch, ShoppingBag, UsersRound } from "lucide-react";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 
@@ -81,11 +81,18 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
     || permissions.has("shop:manage_orders")
     || permissions.has("shop:manage");
   const canCollectForClass = isAdmin || permissions.has("admin:all") || permissions.has("class:shop_collect");
+  const canManageClasses = isAdmin || permissions.has("admin:all") || permissions.has("class:manage");
 
   return [
+    { href: "/shop", label: "商品目錄", icon: ShoppingBag, end: true },
+    { href: "/shop/orders", label: "我的預購", icon: ClipboardList },
     ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "班級收款與代訂", icon: ListChecks }] : []),
     ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校收款與訂單", icon: BarChart2 }] : []),
-    ...(canManage ? [{ href: "/shop/admin", label: "商品管理與統計", icon: PackageSearch }] : []),
+    ...(canManage ? [
+      { href: "/shop/admin", label: "商品管理", icon: PackageSearch },
+      { href: "/shop/admin?view=stats", label: "訂購統計", icon: BarChart2 },
+    ] : []),
+    ...(canManageClasses ? [{ href: "/admin/people?section=classes", label: "班級與議員設定", icon: UsersRound }] : []),
   ];
 }
 
@@ -97,12 +104,12 @@ type ShopNavigationGroup = {
 function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
   return [
     {
-      label: "班代",
-      tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
+      label: "預購",
+      tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
     },
     {
-      label: "班聯統籌",
-      tabs: tabs.filter((tab) => tab.href === "/shop/council-orders" || tab.href === "/shop/admin"),
+      label: "收款與管理",
+      tabs: tabs.filter((tab) => tab.href !== "/shop" && tab.href !== "/shop/orders"),
     },
   ].filter((group) => group.tabs.length > 0);
 }
@@ -112,61 +119,50 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
   const searchParams = useSearchParams();
   if (groups.length === 0) return null;
 
-  const activeGroup = groups.find((group) => group.tabs.some((tab) =>
-    tab.href === "/shop" ? pathname === "/shop" : pathname.startsWith(tab.href),
-  ));
+  const isActive = (tab: ModuleTab) => {
+    const [tabPath, tabQuery] = tab.href.split("?", 2);
+    const queryMatches = [...new URLSearchParams(tabQuery ?? "").entries()].every(
+      ([key, value]) => searchParams.get(key) === value,
+    );
+    const matchesPath = tab.end
+      ? pathname === tabPath
+      : pathname === tabPath || pathname.startsWith(`${tabPath}/`);
+    return matchesPath && queryMatches
+      && !(tab.href === "/shop/admin" && searchParams.get("view") === "stats");
+  };
+  const links = (group: ShopNavigationGroup) => (
+    <div className="shop-workspace-links">
+      {group.tabs.map((tab) => {
+        const active = isActive(tab);
+        const Icon = tab.icon;
+        return <Link key={tab.href} href={tab.href} aria-current={active ? "page" : undefined}
+          className={`shop-workspace-tab${active ? " is-active" : ""}`}>
+          <Icon size={15} aria-hidden />
+          <span>{tab.label}</span>
+        </Link>;
+      })}
+    </div>
+  );
 
   return (
     <nav
       aria-label="商品工作區"
       className="shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4"
     >
-      <div className="shop-role-navigation">
-        <div className="shop-role-links">
-          {groups.map((group) => (
-            <Link key={group.label} href={group.tabs[0].href}
-              aria-current={group === activeGroup ? "location" : undefined}>
-              {group.label === "班代" ? "班級收款與代訂" : group.label}
-            </Link>
-          ))}
-        </div>
-        {activeGroup && activeGroup.tabs.length > 1 && (
-          <div className="shop-role-shortcuts">
-            {activeGroup.tabs.map((tab) => (
-              <Link key={tab.href} href={tab.href} aria-current={pathname === tab.href ? "page" : undefined}>{tab.label}</Link>
-            ))}
-          </div>
-        )}
-      </div>
-      {groups.map((group) => (
-        <section key={group.label} className="shop-workspace-group" aria-label={`${group.label}功能`}>
-          <h2 className="shop-workspace-label">{group.label}</h2>
-          <div className="shop-workspace-links">
-            {group.tabs.map((tab) => {
-              const [tabPath, tabQuery] = tab.href.split("?", 2);
-              const tabParams = new URLSearchParams(tabQuery ?? "");
-              const queryMatches = [...tabParams.entries()].every(
-                ([key, value]) => searchParams.get(key) === value,
-              );
-              const active = tab.end
-                ? pathname === tabPath && searchParams.toString() === ""
-                : (pathname === tabPath || pathname.startsWith(`${tabPath}/`)) && queryMatches;
-              const Icon = tab.icon;
-
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`shop-workspace-tab${active ? " is-active" : ""}`}
-                >
-                  <Icon size={15} aria-hidden={true} />
-                  <span>{tab.label}</span>
-                </Link>
-              );
-            })}
-          </div>
+      {groups.map((group) => group.label === "預購" ? (
+        <section key={group.label} className="shop-workspace-group" aria-label="預購功能">
+          <h2 className="sr-only">預購</h2>
+          {links(group)}
         </section>
+      ) : (
+        <details key={`${group.label}:${pathname}:${searchParams.toString()}`} className="shop-workspace-menu">
+          <summary>
+            <span>{group.label}</span>
+            <strong>{group.tabs.find(isActive)?.label ?? "切換工作"}</strong>
+            <ChevronDown size={16} aria-hidden />
+          </summary>
+          {links(group)}
+        </details>
       ))}
     </nav>
   );

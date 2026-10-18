@@ -202,19 +202,33 @@ export default function ProductSeatingPage() {
 
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [zones, setZones] = useState<ZoneListItem[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
+  const [zonesError, setZonesError] = useState(false);
+  const [productError, setProductError] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [activeZone, setActiveZone] = useState<ZoneOut | null>(null);
   const [tab, setTab] = useState<Tab>("seats");
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", starts_at: "", seating_opens_at: "", hold_minutes: 10 });
 
   const loadZones = useCallback(() => {
-    seatingApi.listZones(productId).then(setZones).catch(() => setZones([]));
+    setZonesLoading(true);
+    setZonesError(false);
+    return seatingApi.listZones(productId).then(setZones)
+      .catch(() => setZonesError(true))
+      .finally(() => setZonesLoading(false));
+  }, [productId]);
+
+  const loadProduct = useCallback(() => {
+    setProductError(false);
+    shopApi.getProduct(productId).then(setProduct).catch(() => setProductError(true));
   }, [productId]);
 
   useEffect(() => {
-    shopApi.getProduct(productId).then(setProduct).catch(() => setProduct(null));
+    if (!allowed) return;
+    loadProduct();
     loadZones();
-  }, [productId, loadZones]);
+  }, [allowed, loadProduct, loadZones]);
 
   const openZone = async (zoneId: string) => {
     try {
@@ -227,7 +241,9 @@ export default function ProductSeatingPage() {
   };
 
   const createZone = async () => {
+    if (creating) return;
     if (!form.name.trim()) { toast.error("請填場次名稱"); return; }
+    setCreating(true);
     try {
       const z = await seatingApi.createZone({
         product_id: productId,
@@ -244,6 +260,8 @@ export default function ProductSeatingPage() {
       toast.success("已建立場次");
     } catch (e) {
       toast.error(apiErrorMessage(e, "建立失敗"));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -275,7 +293,7 @@ export default function ProductSeatingPage() {
   if (!allowed) {
     return (
       <div className="max-w-3xl mx-auto p-6">
-        <p style={{ color: "var(--text-muted)" }}>需要「管理劃位」權限（seating:manage）。</p>
+        <p style={{ color: "var(--text-muted)" }}>目前帳號無法管理劃位，請聯繫管理員確認是否已授權。</p>
         <Link href="/shop/admin" className="btn btn-ghost text-sm mt-3">← 返回商品管理</Link>
       </div>
     );
@@ -283,53 +301,63 @@ export default function ProductSeatingPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <Link href="/shop/admin" className="btn btn-ghost text-sm">← 返回</Link>
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href="/shop/admin" className="btn btn-ghost min-h-11 text-sm">返回商品管理</Link>
         <div>
           <h1 className="text-lg font-bold">劃位管理</h1>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>{product?.name ?? "票種"}</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>{product?.name ?? (productError ? "商品資料未載入" : "正在載入商品…")}</p>
         </div>
         <div className="flex-1" />
-        <button className="btn btn-primary text-sm" onClick={() => setShowCreate(true)}>＋ 新增場次</button>
+        <button type="button" className="btn btn-primary min-h-11 text-sm" onClick={() => setShowCreate(true)}>新增場次</button>
       </div>
 
+      {productError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+        無法載入商品資料。<button type="button" className="btn btn-ghost min-h-11" onClick={loadProduct}>重新載入商品</button>
+      </div>}
+      {zonesError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+        無法載入場次，請重新載入後再操作。<button type="button" className="btn btn-ghost min-h-11" onClick={loadZones}>重新載入場次</button>
+      </div>}
+      {zonesLoading && <p role="status" className="text-sm">正在載入場次…</p>}
+
       {/* 場次清單 */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="場次清單">
+        {!zonesError && !zonesLoading && <>
         {zones.map((z) => (
           <div key={z.id}
-            className="rounded-xl p-3 cursor-pointer transition-colors"
+            className="flex items-start gap-2 rounded-xl p-3 transition-colors"
             style={{
               background: activeZone?.id === z.id ? "var(--bg-elevated)" : "var(--bg-base)",
               border: `1px solid ${activeZone?.id === z.id ? "var(--primary)" : "var(--border)"}`,
-            }}
-            onClick={() => openZone(z.id)}>
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-sm">{z.name}</span>
-              <button type="button" className="text-xs" style={{ color: "var(--danger,#c0392b)" }}
-                onClick={(e) => { e.stopPropagation(); deleteZone(z.id); }}>刪除</button>
-            </div>
+            }}>
+            <button type="button" onClick={() => openZone(z.id)} aria-pressed={activeZone?.id === z.id} aria-label={`開啟場次：${z.name}`}
+              className="min-h-11 min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--primary)]">
+              <span className="block break-words text-sm font-semibold">{z.name}</span>
             {z.starts_at && (
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>
                 {new Date(z.starts_at).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" })}
-              </p>
+              </span>
             )}
-            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-              座位 {z.seat_count}｜可選 {z.available_count}｜已劃 {z.assigned_count}
-            </p>
+              <span className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>
+                共 {z.seat_count} 席 · 可選 {z.available_count} 席 · 已劃 {z.assigned_count} 席
+              </span>
+            </button>
+            <button type="button" className="min-h-11 min-w-11 shrink-0 text-xs" style={{ color: "var(--danger)" }}
+              aria-label={`刪除場次：${z.name}`} onClick={() => deleteZone(z.id)}>刪除</button>
           </div>
         ))}
         {!zones.length && (
           <p className="text-sm col-span-full" style={{ color: "var(--text-muted)" }}>尚無場次，按「新增場次」建立第一張座位圖。</p>
         )}
+        </>}
       </div>
 
       {/* 場次編輯 */}
-      {activeZone && (
+      {activeZone && !zonesError && (
         <div className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
           <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="座位管理分頁">
             <div className="module-tabs-list">
             {tabs.map((t) => (
-              <button key={t.key} type="button" onClick={() => setTab(t.key)}
+              <button key={t.key} type="button" onClick={() => setTab(t.key)} aria-pressed={tab === t.key}
                 className={`module-tab-link cursor-pointer${tab === t.key ? " is-active" : ""}`}>
                 <span>{t.label}</span>
               </button>
@@ -355,11 +383,11 @@ export default function ProductSeatingPage() {
       )}
 
       {showCreate && (
-        <Modal title="新增場次" size="md" onClose={() => setShowCreate(false)}
+        <Modal title="新增場次" size="md" onClose={() => { if (!creating) setShowCreate(false); }}
           footer={
             <div className="flex justify-end gap-2">
-              <button className="btn btn-ghost text-sm" onClick={() => setShowCreate(false)}>取消</button>
-              <button className="btn btn-primary text-sm" onClick={createZone}>建立</button>
+              <button type="button" disabled={creating} className="btn btn-ghost min-h-11 text-sm" onClick={() => setShowCreate(false)}>取消</button>
+              <button type="button" disabled={creating} className="btn btn-primary min-h-11 text-sm" onClick={createZone}>{creating ? "建立中…" : "建立場次"}</button>
             </div>
           }>
           <div className="space-y-3">
@@ -371,11 +399,11 @@ export default function ProductSeatingPage() {
               <input type="datetime-local" className="input mt-1 w-full" value={form.starts_at}
                 onChange={(e) => setForm({ ...form, starts_at: e.target.value })} />
             </label>
-            <label className="block text-sm">自助劃位開放時間（scheduled 模式用，選填）
+            <label className="block text-sm">自助劃位開放時間（選填）
               <input type="datetime-local" className="input mt-1 w-full" value={form.seating_opens_at}
                 onChange={(e) => setForm({ ...form, seating_opens_at: e.target.value })} />
             </label>
-            <label className="block text-sm">保留鎖時間（分鐘）
+            <label className="block text-sm">選位暫時保留時間（分鐘）
               <input type="number" min={1} max={120} className="input mt-1 w-full" value={form.hold_minutes}
                 onChange={(e) => setForm({ ...form, hold_minutes: Number(e.target.value) || 10 })} />
             </label>
