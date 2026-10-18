@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
@@ -158,7 +159,7 @@ function EntityModal({
       <div className="space-y-3">
         <Field label="名稱">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
-            placeholder={kind === "category" ? "如：商品" : "如：衣服系列"} />
+            placeholder={kind === "category" ? "例如：校慶紀念商品" : "例如：紀念上衣"} />
         </Field>
         <Field label="描述（選填）">
           <input value={description} onChange={(e) => setDescription(e.target.value)} className="input w-full" />
@@ -195,12 +196,12 @@ function EntityModal({
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="排序">
+          <Field label="顯示順序（數字小的在前）">
             <input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="input w-full" inputMode="numeric" />
           </Field>
           <label className="flex items-end gap-2 pb-2 text-xs" style={{ color: "var(--text-secondary)" }}>
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-            啟用
+            顯示在商品目錄
           </label>
         </div>
         <div className="flex gap-3 pt-1">
@@ -333,7 +334,17 @@ function ProductFormModal({
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
   const [mediaUploadsInProgress, setMediaUploadsInProgress] = useState(0);
+  type ProductField = "name" | "price" | "stock" | "limit";
+  const [formError, setFormError] = useState<{ field: ProductField | null; message: string } | null>(null);
+  const fieldRefs = useRef<Record<ProductField, HTMLInputElement | null>>({ name: null, price: null, stock: null, limit: null });
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const showFieldError = (field: ProductField, message: string) => {
+    setFormError({ field, message });
+    fieldRefs.current[field]?.focus();
+  };
+  const fieldError = (field: ProductField) => formError?.field === field ? (
+    <p id={`shop-product-${field}-error`} role="alert" className="mt-1 text-sm" style={{ color: "var(--danger)" }}>{formError.message}</p>
+  ) : null;
 
   const uploadProductImages = async (files: File[]) => {
     const remaining = Math.max(0, 20 - media.length);
@@ -362,26 +373,44 @@ function ProductFormModal({
   return (
     <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={onClose} size="md">
       <div className="space-y-3">
-        <Field label="商品名稱">
-          <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full" />
-        </Field>
+        <div>
+          <Field label="商品名稱">
+            <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
+              ref={(node) => { fieldRefs.current.name = node; }}
+              aria-invalid={formError?.field === "name" || undefined}
+              aria-describedby={formError?.field === "name" ? "shop-product-name-error" : undefined} />
+          </Field>
+          {fieldError("name")}
+        </div>
         <Field label="商品描述（選填）">
           <textarea value={description} onChange={(e) => setDescription(e.target.value)}
             className="input w-full min-h-28 resize-y" rows={4}
             placeholder="可分行填寫規格、取貨方式或注意事項" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="售價">
-            <input value={price} onChange={(e) => setPrice(e.target.value)} className="input w-full" inputMode="numeric" />
-          </Field>
-          <Field label="庫存">
-            <input value={stock} onChange={(e) => setStock(e.target.value)} disabled={unlimited}
-              className="input w-full" inputMode="numeric" />
-          </Field>
+          <div>
+            <Field label="售價（新台幣元）">
+              <input type="number" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} className="input w-full" inputMode="numeric"
+                ref={(node) => { fieldRefs.current.price = node; }}
+                aria-invalid={formError?.field === "price" || undefined}
+                aria-describedby={formError?.field === "price" ? "shop-product-price-error" : undefined} />
+            </Field>
+            {fieldError("price")}
+          </div>
+          <div>
+            <Field label="可訂購數量（件）">
+              <input type="number" min={0} step={1} value={stock} onChange={(e) => setStock(e.target.value)} disabled={unlimited}
+                className="input w-full" inputMode="numeric"
+                ref={(node) => { fieldRefs.current.stock = node; }}
+                aria-invalid={formError?.field === "stock" || undefined}
+                aria-describedby={formError?.field === "stock" ? "shop-product-stock-error" : undefined} />
+            </Field>
+            {fieldError("stock")}
+          </div>
         </div>
         <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
           <input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} />
-          無限量供應
+          不限制總訂購數量
         </label>
         <div>
           <Field label="每人限購數量（留空表示不限購）">
@@ -391,11 +420,15 @@ function ProductFormModal({
               step={1}
               inputMode="numeric"
               value={maxQuantityPerUser}
+              ref={(node) => { fieldRefs.current.limit = node; }}
+              aria-invalid={formError?.field === "limit" || undefined}
+              aria-describedby={formError?.field === "limit" ? "shop-product-limit-error" : undefined}
               onChange={(e) => setMaxQuantityPerUser(e.target.value)}
               className="input w-full"
               placeholder="例如：1"
             />
           </Field>
+          {fieldError("limit")}
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
             同一帳號累計計算；取消或退款的訂單不計入。
           </p>
@@ -494,14 +527,26 @@ function ProductFormModal({
           )}
         </div>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {editing ? "尺寸 / 顏色等規格於商品詳情頁管理。" : "建立後可於商品詳情頁新增尺寸 / 顏色等規格。"}
+          {editing ? "尺寸、顏色等規格可在商品詳情設定。" : "先建立草稿，再設定尺寸、顏色等規格；按「上架」後才會開放訂購。"}
         </p>
+        {formError?.field === null && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{formError.message}</p>}
         <div className="flex gap-3 pt-1">
           <button disabled={busy || mediaUploadsInProgress > 0} onClick={async () => {
-            if (!name.trim()) { toast.error("請輸入商品名稱"); return; }
+            setFormError(null);
+            if (!name.trim()) { showFieldError("name", "請填寫商品名稱。"); return; }
+            const priceValue = Number(price);
+            const stockValue = Number(stock);
+            if (!price.trim() || !Number.isInteger(priceValue) || priceValue < 0) {
+              showFieldError("price", "售價請填寫 0 或正整數，單位為新台幣元。");
+              return;
+            }
+            if (!unlimited && (!stock.trim() || !Number.isInteger(stockValue) || stockValue < 0)) {
+              showFieldError("stock", "可訂購數量請填寫 0 或正整數；不限量時請勾選「不限制總訂購數量」。");
+              return;
+            }
             const maxQuantity = maxQuantityPerUser.trim() ? Number(maxQuantityPerUser) : null;
             if (maxQuantity !== null && (!Number.isInteger(maxQuantity) || maxQuantity < 1)) {
-              toast.error("每人限購數量須為大於 0 的整數");
+              showFieldError("limit", "每人限購數量請填寫正整數，或留空表示不限購。");
               return;
             }
             setBusy(true);
@@ -512,8 +557,8 @@ function ProductFormModal({
                 image_url: imageUrl,
                 media: media.flatMap(({ image_url, kind }, sort_order) =>
                   image_url && image_url !== imageUrl ? [{ image_url, kind, sort_order }] : []),
-                price: Number(price) || 0,
-                stock_quantity: Number(stock) || 0,
+                price: priceValue,
+                stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
                 is_unlimited: unlimited,
                 max_quantity_per_user: maxQuantity,
                 sale_end: saleEnd ? new Date(saleEnd).toISOString() : null,
@@ -534,11 +579,11 @@ function ProductFormModal({
               onSaved(savedProduct);
               toast.success(editing ? "商品已更新" : "商品已建立");
             } catch (e) {
-              toast.error(apiErrorMessage(e, "儲存失敗"));
+              setFormError({ field: null, message: apiErrorMessage(e, "商品尚未儲存，請重試；你填寫的內容已保留。") });
             } finally { setBusy(false); }
           }} className="btn flex-1"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-            {mediaUploadsInProgress > 0 ? "照片上傳中…" : busy ? "儲存中…" : "儲存"}
+            {mediaUploadsInProgress > 0 ? "照片上傳中…" : busy ? "儲存中…" : editing ? "儲存商品" : "建立草稿商品"}
           </button>
           <button onClick={onClose} className="btn btn-ghost px-5">取消</button>
         </div>
@@ -1196,8 +1241,8 @@ function StatsView() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { label: "訂購金額", value: data.total_amount },
-              { label: "班聯已確認", value: data.paid_amount },
-              { label: "班聯未確認", value: data.unpaid_amount },
+              { label: "班聯已確認收款", value: data.paid_amount },
+              { label: "班聯尚未確認收款", value: data.unpaid_amount },
             ].map(({ label, value }) => (
               <div key={label} className="card p-4 text-center">
                 <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
@@ -1210,7 +1255,8 @@ function StatsView() {
           <div className="grid gap-3 sm:hidden">
             {data.rows.length === 0 ? (
               <div className="card p-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-                目前範圍沒有訂單；可清除篩選或改選其他活動。
+                <p>目前範圍沒有訂單；可清除篩選或改選其他活動。</p>
+                {hasAdvancedFilters && <button type="button" className="btn btn-ghost mt-3 min-h-11" onClick={resetFilters}>查看全部統計</button>}
               </div>
             ) : data.rows.map((r) => (
               <div key={r.key} className="card p-4 space-y-3">
@@ -1251,7 +1297,10 @@ function StatsView() {
               <tbody>
                 {data.rows.length === 0 ? (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-sm"
-                    style={{ color: "var(--text-muted)" }}>目前範圍沒有訂單；可清除篩選或改選其他活動。</td></tr>
+                    style={{ color: "var(--text-muted)" }}>
+                    <p>目前範圍沒有訂單；可清除篩選或改選其他活動。</p>
+                    {hasAdvancedFilters && <button type="button" className="btn btn-ghost mt-3 min-h-11" onClick={resetFilters}>查看全部統計</button>}
+                  </td></tr>
                 ) : (
                   data.rows.map((r) => (
                     <tr key={r.key} style={{ borderBottom: "1px solid var(--border)" }}>
@@ -1287,8 +1336,9 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function ShopAdminPage() {
   const { can } = usePermissions();
-
-  const [tab, setTab] = useState<"catalog" | "stats" | "promotions">("catalog");
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get("view");
+  const tab = requestedView === "stats" || requestedView === "promotions" ? requestedView : "catalog";
   const [clearOrdersOpen, setClearOrdersOpen] = useState(false);
   const [clearingOrders, setClearingOrders] = useState(false);
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
@@ -1575,9 +1625,9 @@ export default function ShopAdminPage() {
     <div className="shop-admin-page w-full min-w-0 space-y-5 max-w-7xl mx-auto px-4 py-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品管理</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : "商品管理"}</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            管理商品、查看訂購統計與設定優惠。
+            {tab === "stats" ? "按活動核對訂購金額與班聯收款進度。" : tab === "promotions" ? "設定折扣條件、優惠碼與適用商品。" : "選擇商品主題，新增商品、設定規格並上架。"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2"><Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link><Link href="/shop/council-orders" className="btn btn-ghost min-h-11">全校收款與訂單</Link></div>
@@ -1587,13 +1637,13 @@ export default function ShopAdminPage() {
         <div className="flex gap-0.5 p-1 rounded-xl w-fit"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           {([["catalog", "商品目錄"], ["stats", "訂購統計"], ["promotions", "優惠設定"]] as const).map(([k, label]) => (
-            <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}
-              className="min-h-11 px-4 py-1.5 rounded-lg text-xs font-medium"
+            <Link key={k} href={k === "catalog" ? "/shop/admin" : `/shop/admin?view=${k}`} scroll={false} aria-current={tab === k ? "page" : undefined}
+              className="inline-flex min-h-11 items-center px-4 py-1.5 rounded-lg text-sm font-medium"
               style={tab === k
                 ? { background: "var(--primary-dim)", color: "var(--primary)" }
                 : { color: "var(--text-muted)" }}>
               {label}
-            </button>
+            </Link>
           ))}
         </div>
 

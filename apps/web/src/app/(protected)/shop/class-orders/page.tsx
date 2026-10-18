@@ -975,9 +975,9 @@ export default function ClassOrdersPage() {
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代收款與代訂</h1>
+          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班級收款與代訂</h1>
           <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
-            替本班同學快速登記班聯商品，再集中核對應收與收款狀態。
+            班代（議員）可替本班同學訂購商品，並依活動與座號登記收款。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

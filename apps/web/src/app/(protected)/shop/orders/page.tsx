@@ -5,7 +5,6 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { OrderListItem, ShopDelegatedOrderOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
-import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
@@ -95,7 +94,7 @@ export default function OrdersPage() {
           <Link href="/shop" className="shop-orders-back" aria-label="返回商品頁">
             <ArrowLeft size={17} aria-hidden="true" />
           </Link>
-          <h1>我的預購與代訂</h1>
+          <h1>我的預購</h1>
         </div>
       </header>
 
@@ -111,12 +110,10 @@ export default function OrdersPage() {
             <button type="button" onClick={() => void load()} className="shop-order-details">重新載入</button>
           </div>
         ) : activityGroups.length === 0 ? (
-          <SmartEmptyState
-            reason="new"
-            subject="預購品項"
-            createHref="/shop"
-            message="目前沒有預購品項，先到商品頁挑選商品。"
-          />
+          <div className="shop-public-empty">
+            <p>目前沒有預購品項，先到商品頁挑選商品。</p>
+            <Link href="/shop" className="btn btn-primary mt-4 min-h-11">去選購商品</Link>
+          </div>
         ) : (
           <div className="shop-order-activity-list">
             {activityGroups.map((group) => (

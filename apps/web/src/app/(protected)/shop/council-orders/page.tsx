@@ -33,17 +33,17 @@ function CloseBadge({ status, partial = false }: { status: CloseStatusItem | und
   if (!status && !partial) return <span className="text-xs" style={{ color: "var(--text-secondary)" }}>狀態待確認</span>;
   if (partial) return (
     <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
-      部分結單
+      部分商品停止訂購
     </span>
   );
   if (!status?.is_closed) return (
     <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(34,197,94,0.12)", color: "#16a34a" }}>
-      開放中
+      開放訂購
     </span>
   );
   return (
     <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
-      已結單
+      已停止訂購
     </span>
   );
 }

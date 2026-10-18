@@ -59,26 +59,42 @@ const TOOLS: BackofficeTool[] = [
   {
     href: "/shop/admin",
     icon: Store,
-    label: "商品與活動設定",
-    desc: "商品目錄、活動與訂購設定",
+    label: "商品管理",
+    desc: "新增商品、設定規格與開放訂購",
     perms: ["shop:manage"],
     workspace: "council",
   },
   {
     href: "/shop/council-orders",
     icon: BarChart3,
-    label: "全校訂單與收款",
-    desc: "統籌各班訂購、收款進度與結單狀態",
+    label: "全校收款與訂單",
+    desc: "確認各班繳款、核對商品總量與查找訂單",
     perms: ["shop:view_all", "shop:manage_orders", "shop:manage"],
     workspace: "council",
   },
   {
     href: "/shop/class-orders",
     icon: Ticket,
-    label: "議員收款與代訂",
+    label: "班級收款與代訂",
     desc: "替本班同學登記商品並追蹤收款",
     perms: ["class:shop_collect"],
     workspace: "representative",
+  },
+  {
+    href: "/shop/admin?view=stats",
+    icon: BarChart3,
+    label: "訂購統計",
+    desc: "依活動、班級、年級或個人核對金額與收款",
+    perms: ["shop:manage"],
+    workspace: "council",
+  },
+  {
+    href: "/admin/people?section=classes",
+    icon: Users,
+    label: "班級與議員設定",
+    desc: "核對班級名冊、指定班代（議員）與更正班級",
+    perms: ["class:manage"],
+    workspace: "council",
   },
   {
     href: "/partner-map/admin",
@@ -115,7 +131,7 @@ export default function BackofficePage() {
   const workspaces: { id: BackofficeWorkspace; label: string; description: string }[] = [
     {
       id: "representative",
-      label: "議員工作台",
+      label: "班代（議員）工作",
       description: "處理本班同學的商品登記與收款。",
     },
     {

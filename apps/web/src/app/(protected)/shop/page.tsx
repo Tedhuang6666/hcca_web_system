@@ -181,7 +181,7 @@ function registrationLockMessage({
   deadlinePassed: boolean;
 }) {
   if (registrationLocked) return "班級幹部已登記收款，商品登記已鎖定";
-  if (classClosed) return "本班已結單，請聯繫班級幹部";
+  if (classClosed) return "本班已停止訂購，如需更改請聯繫班代";
   if (deadlinePassed) return "商品登記已截止";
   return "登入後即可登記商品";
 }
@@ -743,7 +743,7 @@ function ProductCard({
   const locked = classClosed || deadlinePassed;
   const disabled = (soldOut || locked) && registeredQuantity === 0;
   const statusLabel = classClosed
-    ? "本班已結單"
+    ? "本班已停止訂購"
     : deadlinePassed
       ? "登記已截止"
       : registeredQuantity > 0
@@ -1416,7 +1416,7 @@ export default function ShopPage() {
           <h1>商品預購</h1>
           <p className="shop-public-hero-copy">{delegationToken
             ? "使用學生授權的連結，替學生選購本次活動商品。"
-            : "先選活動，再查看商品與這次登記進度。也可以邀請家長幫忙選購。"}</p>
+            : "先選活動，再挑選商品與數量。"}</p>
         </div>
       </header>
 
@@ -1767,7 +1767,7 @@ export default function ShopPage() {
               <div className="shop-public-alert mt-6">
                 <CircleAlert size={18} aria-hidden="true" />
                 <p>
-                  <strong>您的班級已結單</strong>
+                  <strong>本班已停止訂購這個主題的商品</strong>
                   {closeStatus[selectedCategory.id].closed_at && (
                     <span className="ml-1 text-xs">
                       （{new Date(closeStatus[selectedCategory.id].closed_at!).toLocaleString("zh-TW")}）
@@ -1831,16 +1831,16 @@ export default function ShopPage() {
             aria-haspopup="dialog" aria-expanded={delegationOpen} disabled={authLoading}
             onClick={() => setDelegationOpen(true)}>
             <UsersRound size={19} aria-hidden="true" />
-            <span>{authLoading ? "確認身分中…" : "代訂"}</span>
+            <span>{authLoading ? "確認身分中…" : "家人代訂"}</span>
           </button>
           {isLoggedIn && <Link
             href="/shop/orders"
             className="shop-public-order-shortcut"
             data-order-flight-target
-            aria-label="開啟我的訂購"
+            aria-label="開啟我的預購"
           >
             <ClipboardList size={19} aria-hidden="true" />
-            <span>我的訂購</span>
+            <span>我的預購</span>
           </Link>}
         </nav>,
         document.body,
