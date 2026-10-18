@@ -73,7 +73,8 @@ def test_sensitive_tokens_use_keyed_or_password_hashes() -> None:
     assert api_key._verify_key(raw, key_hash)
     assert not api_key._verify_key(f"{raw}x", key_hash)
     assert backup_hash.startswith("argon2:$argon2id$")
-    assert "ABCD" not in backup_hash
+    assert mfa._matches_backup_code(backup_hash, "ABCDEFGH")
+    assert not mfa._matches_backup_code(backup_hash, "ABCDEFGX")
 
 
 @pytest.mark.asyncio
