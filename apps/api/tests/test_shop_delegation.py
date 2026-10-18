@@ -319,7 +319,13 @@ async def test_parent_can_view_student_order_and_edit_only_own_delegated_items(
     assert {item["id"] for item in detail.json()["items"]} == {own_item["id"], student_item["id"]}
     assert (await oc.get(f"/shop/orders/{order_id}")).status_code == 404
     assert (
-        await pc.patch(f"/shop/orders/{order_id}", json={"user_id": str(student.id), "items": []})
+        await pc.patch(
+            f"/shop/orders/{order_id}",
+            json={
+                "user_id": str(student.id),
+                "items": [{"product_id": str(product.id), "quantity": 1}],
+            },
+        )
     ).status_code == 403
 
     changed = await pc.patch(
@@ -388,7 +394,10 @@ async def test_reusable_link_combines_coupon_using_student_identity(delegation_s
     assert updated.json()["subtotal_price"] == 200
     assert len(updated.json()["items"]) == 1
     assert updated.json()["discount_amount"] == 0
-    assert (await pc.get(f"/shop/orders/{order['id']}")).status_code == 404
+    delegated_detail = await pc.get(f"/shop/orders/{order['id']}")
+    assert delegated_detail.status_code == 200
+    assert len(delegated_detail.json()["items"]) == 1
+    assert delegated_detail.json()["items"][0]["delegation_link_id"] == link["id"]
     assert (await pc.get("/shop/registrations")).json() == []
 
 
