@@ -19,6 +19,7 @@ from api.models.shop import (
     ShopOrderPromotion,
     ShopPromotion,
     ShopPromotionProductPrice,
+    ShopPromotionStudentTarget,
 )
 from api.models.user import User
 from api.schemas.shop import (
@@ -88,7 +89,7 @@ def _validate_discount(discount_type: ShopDiscountType, discount_value: int) -> 
         raise ValueError("指定商品價格優惠不使用折扣數值")
 
 
-async def _target_users(session: AsyncSession, identifiers: list[str]) -> list[User]:
+def _normalize_target_identifiers(identifiers: list[str]) -> list[tuple[str, str]]:
     normalized: list[tuple[str, str]] = []
     seen: set[str] = set()
     for raw_identifier in identifiers:
@@ -107,9 +108,14 @@ async def _target_users(session: AsyncSession, identifiers: list[str]) -> list[U
                 raise ValueError(f"Email 格式不正確：{identifier}")
             normalized.append(("email", key))
         else:
+            if len(identifier) > 20:
+                raise ValueError("學號長度不可超過 20 個字元")
             normalized.append(("student_id", key))
         seen.add(key)
+    return normalized
 
+
+async def _target_users(session: AsyncSession, normalized: list[tuple[str, str]]) -> list[User]:
     if not normalized:
         return []
 
@@ -129,6 +135,8 @@ async def _target_users(session: AsyncSession, identifiers: list[str]) -> list[U
     for kind, identifier in normalized:
         user = by_email.get(identifier) if kind == "email" else by_student_id.get(identifier)
         if user is None:
+            if kind == "student_id":
+                continue
             label = "Email" if kind == "email" else "學號"
             raise ValueError(f"找不到指定的{label}：{identifier}")
         if user.id not in target_ids:
@@ -230,9 +238,11 @@ def _resolve_activity_scope(
 
 
 def _promotion_targets_user(user_id: uuid.UUID):
+    student_id = select(func.lower(User.student_id)).where(User.id == user_id).scalar_subquery()
     return or_(
         ShopPromotion.target_user_id == user_id,
         ShopPromotion.target_users.any(User.id == user_id),
+        ShopPromotion.student_id_targets.any(ShopPromotionStudentTarget.student_id == student_id),
     )
 
 
@@ -241,16 +251,25 @@ def _promotion_can_target_user(user_id: uuid.UUID):
         and_(
             ShopPromotion.target_user_id.is_(None),
             ~ShopPromotion.target_users.any(),
+            ~ShopPromotion.student_id_targets.any(),
         ),
         _promotion_targets_user(user_id),
     )
 
 
-def _promotion_allows_user(promotion: ShopPromotion, user_id: uuid.UUID) -> bool:
+def _promotion_allows_user(
+    promotion: ShopPromotion, user_id: uuid.UUID, student_id: str | None
+) -> bool:
     targets = list(promotion.target_users or [])
-    if promotion.target_user_id is None and not targets:
+    target_student_ids = {target.student_id for target in (promotion.student_id_targets or [])}
+    if promotion.target_user_id is None and not targets and not target_student_ids:
         return True
-    return promotion.target_user_id == user_id or any(user.id == user_id for user in targets)
+    normalized_student_id = student_id.strip().lower() if student_id else None
+    return (
+        promotion.target_user_id == user_id
+        or any(user.id == user_id for user in targets)
+        or normalized_student_id in target_student_ids
+    )
 
 
 def _promotion_eligible_subtotal(
@@ -286,6 +305,7 @@ def _promotion_issue(
     promotion: ShopPromotion,
     *,
     user_id: uuid.UUID,
+    student_id: str | None,
     subtotal: int,
     now: datetime,
     product_subtotals: dict[uuid.UUID, int] | None = None,
@@ -312,7 +332,7 @@ def _promotion_issue(
         and promotion.id not in current_ids
     ):
         return "usage_limit", "此優惠已達可使用次數上限。", 0, 0
-    if not _promotion_allows_user(promotion, user_id):
+    if not _promotion_allows_user(promotion, user_id, student_id):
         return "account_not_eligible", "此優惠限符合資格的帳號使用，您的帳號目前不符合資格。", 0, 0
     target_ids = {product.id for product in (promotion.target_products or [])}
     selected_ids = set(product_subtotals or {})
@@ -374,8 +394,10 @@ async def preview_promotion(
 ) -> PromotionPreviewResult:
     now = datetime.now(UTC)
     normalized_code = normalize_promotion_code(code)
+    student_id = await session.scalar(select(User.student_id).where(User.id == user_id))
     load_targets = (
         selectinload(ShopPromotion.target_users),
+        selectinload(ShopPromotion.student_id_targets),
         selectinload(ShopPromotion.target_products),
     )
     current_ids = set(current_promotion_ids or ())
@@ -420,6 +442,7 @@ async def preview_promotion(
         issue = _promotion_issue(
             promotion,
             user_id=user_id,
+            student_id=student_id,
             subtotal=subtotal,
             now=now,
             product_subtotals=product_subtotals,
@@ -464,6 +487,7 @@ async def preview_promotion(
             if _promotion_issue(
                 candidate,
                 user_id=user_id,
+                student_id=student_id,
                 subtotal=subtotal,
                 now=now,
                 product_subtotals=product_subtotals,
@@ -517,6 +541,7 @@ async def preview_promotion(
         if _promotion_issue(
             promotion,
             user_id=user_id,
+            student_id=student_id,
             subtotal=subtotal,
             now=now,
             product_subtotals=product_subtotals,
@@ -550,6 +575,7 @@ async def preview_promotion(
         issue = _promotion_issue(
             promotion,
             user_id=user_id,
+            student_id=student_id,
             subtotal=subtotal,
             now=now,
             product_subtotals=product_subtotals,
@@ -599,7 +625,11 @@ async def create_promotion(
     identifiers = list(data.target_identifiers)
     if data.target_email:
         identifiers.append(data.target_email)
-    target_users = await _target_users(session, identifiers)
+    normalized_identifiers = _normalize_target_identifiers(identifiers)
+    target_users = await _target_users(session, normalized_identifiers)
+    target_student_ids = [
+        identifier for kind, identifier in normalized_identifiers if kind == "student_id"
+    ]
     target_products = await _target_products(session, data.target_product_ids)
     activity_id = _resolve_activity_scope(data.activity_id, target_products, infer_activity=True)
     if activity_id is not None and await session.get(Activity, activity_id) is None:
@@ -624,6 +654,9 @@ async def create_promotion(
         code=code,
         target_user_id=target_users[0].id if len(target_users) == 1 else None,
         target_users=target_users,
+        student_id_targets=[
+            ShopPromotionStudentTarget(student_id=student_id) for student_id in target_student_ids
+        ],
         target_products=target_products,
         product_price_overrides=product_price_overrides,
         discount_type=data.discount_type,
@@ -648,6 +681,7 @@ async def list_promotions(
     query = select(ShopPromotion).options(
         selectinload(ShopPromotion.target_user),
         selectinload(ShopPromotion.target_users),
+        selectinload(ShopPromotion.student_id_targets),
         selectinload(ShopPromotion.target_products),
     )
     if not include_inactive:
@@ -669,7 +703,11 @@ async def list_public_promotions(
     ]
     if user_id is None:
         filters.append(
-            and_(ShopPromotion.target_user_id.is_(None), ~ShopPromotion.target_users.any())
+            and_(
+                ShopPromotion.target_user_id.is_(None),
+                ~ShopPromotion.target_users.any(),
+                ~ShopPromotion.student_id_targets.any(),
+            )
         )
     else:
         filters.append(_promotion_can_target_user(user_id))
@@ -677,15 +715,14 @@ async def list_public_promotions(
         select(ShopPromotion)
         .options(
             selectinload(ShopPromotion.target_users),
+            selectinload(ShopPromotion.student_id_targets),
             selectinload(ShopPromotion.target_products),
         )
         .where(*filters)
         .order_by(ShopPromotion.created_at.desc())
     )
     promotions = list((await session.execute(query)).scalars().all())
-    if user_id is None:
-        return promotions
-    return [promotion for promotion in promotions if _promotion_allows_user(promotion, user_id)]
+    return promotions
 
 
 async def get_promotion(session: AsyncSession, promotion_id: uuid.UUID) -> ShopPromotion | None:
@@ -694,6 +731,7 @@ async def get_promotion(session: AsyncSession, promotion_id: uuid.UUID) -> ShopP
         .options(
             selectinload(ShopPromotion.target_user),
             selectinload(ShopPromotion.target_users),
+            selectinload(ShopPromotion.student_id_targets),
             selectinload(ShopPromotion.target_products),
         )
         .where(ShopPromotion.id == promotion_id)
@@ -733,6 +771,7 @@ async def update_promotion(
         ]
     requested_activity_id = payload.pop("activity_id", promotion.activity_id)
     target_users: list[User] | None = None
+    target_student_ids: list[str] | None = None
     target_products: list[Product] | None = None
     if "target_identifiers" in payload or "target_email" in payload:
         identifiers = payload.pop("target_identifiers", None)
@@ -741,7 +780,11 @@ async def update_promotion(
             identifiers = []
         if target_email:
             identifiers = [*identifiers, target_email]
-        target_users = await _target_users(session, identifiers)
+        normalized_identifiers = _normalize_target_identifiers(identifiers)
+        target_users = await _target_users(session, normalized_identifiers)
+        target_student_ids = [
+            identifier for kind, identifier in normalized_identifiers if kind == "student_id"
+        ]
     if "target_product_ids" in payload:
         product_ids = payload.pop("target_product_ids", None) or []
         target_products = await _target_products(session, product_ids)
@@ -757,6 +800,10 @@ async def update_promotion(
     if target_users is not None:
         promotion.target_users = target_users
         promotion.target_user_id = target_users[0].id if len(target_users) == 1 else None
+    if target_student_ids is not None:
+        promotion.student_id_targets = [
+            ShopPromotionStudentTarget(student_id=student_id) for student_id in target_student_ids
+        ]
     if target_products is not None:
         promotion.target_products = target_products
     if activity_was_explicit or target_products_changed:
@@ -851,6 +898,7 @@ async def resolve_promotion(
 ) -> PromotionResult:
     now = datetime.now(UTC)
     normalized_code = normalize_promotion_code(code)
+    student_id = await session.scalar(select(User.student_id).where(User.id == user_id))
     current_ids = set(current_promotion_ids or ())
     if current_promotion_id is not None:
         current_ids.add(current_promotion_id)
@@ -877,6 +925,7 @@ async def resolve_promotion(
             select(ShopPromotion)
             .options(
                 selectinload(ShopPromotion.target_users),
+                selectinload(ShopPromotion.student_id_targets),
                 selectinload(ShopPromotion.target_products),
             )
             .where(
@@ -891,6 +940,7 @@ async def resolve_promotion(
                 select(ShopPromotion)
                 .options(
                     selectinload(ShopPromotion.target_users),
+                    selectinload(ShopPromotion.student_id_targets),
                     selectinload(ShopPromotion.target_products),
                 )
                 .where(func.upper(ShopPromotion.code) == normalized_code)
@@ -901,6 +951,7 @@ async def resolve_promotion(
         issue = _promotion_issue(
             promotion,
             user_id=user_id,
+            student_id=student_id,
             subtotal=subtotal,
             now=now,
             product_subtotals=product_subtotals,
@@ -937,6 +988,7 @@ async def resolve_promotion(
                 select(ShopPromotion)
                 .options(
                     selectinload(ShopPromotion.target_users),
+                    selectinload(ShopPromotion.student_id_targets),
                     selectinload(ShopPromotion.target_products),
                 )
                 .where(
@@ -957,6 +1009,7 @@ async def resolve_promotion(
         if _promotion_issue(
             promotion,
             user_id=user_id,
+            student_id=student_id,
             subtotal=subtotal,
             now=now,
             product_subtotals=product_subtotals,
@@ -1039,6 +1092,20 @@ def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
     target_users = list(promotion.target_users or [])
     if not target_users and promotion.target_user is not None:
         target_users = [promotion.target_user]
+    serialized_targets = [
+        ShopPromotionTargetOut(email=user.email, student_id=user.student_id)
+        for user in target_users
+    ]
+    known_student_ids = {
+        target.student_id.strip().lower() for target in serialized_targets if target.student_id
+    }
+    for target in promotion.student_id_targets or []:
+        normalized_student_id = target.student_id.strip().lower()
+        if normalized_student_id not in known_student_ids:
+            serialized_targets.append(
+                ShopPromotionTargetOut(email=None, student_id=target.student_id)
+            )
+            known_student_ids.add(normalized_student_id)
     return ShopPromotionOut(
         id=promotion.id,
         name=promotion.name,
@@ -1046,10 +1113,7 @@ def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
         code=promotion.code,
         target_user_id=promotion.target_user_id,
         target_email=promotion.target_user.email if promotion.target_user else None,
-        target_users=[
-            ShopPromotionTargetOut(email=user.email, student_id=user.student_id)
-            for user in target_users
-        ],
+        target_users=serialized_targets,
         target_products=[
             ShopPromotionProductTargetOut(id=product.id, name=product.name)
             for product in (promotion.target_products or [])

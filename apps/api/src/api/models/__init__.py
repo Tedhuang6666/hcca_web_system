@@ -326,6 +326,7 @@ from api.models.shop import (  # noqa: F401
     ShopOrderPromotion,
     ShopPromotion,
     ShopPromotionProductPrice,
+    ShopPromotionStudentTarget,
 )
 from api.models.short_link import ShortLink  # noqa: F401
 from api.models.site import (  # noqa: F401
