@@ -131,6 +131,8 @@ _RULES: tuple[_Rule, ...] = (
     ),
 )
 
+_SHORT_LINK_RESOLVE_PATH = re.compile(r"^/short-links/resolve/[\w-]{1,80}$")
+
 
 def _decoded_variants(value: str) -> list[str]:
     """原值 + 一/二次 URL 解碼，攔下 %2e%2e / 雙重編碼規避。"""
@@ -151,7 +153,10 @@ def scan_request(
     path: str, query: str, user_agent: str, referer: str
 ) -> tuple[str, Severity] | None:
     """純函式特徵掃描；命中回 (rule_name, severity)，否則 None。可單測。"""
-    path_hay = _decoded_variants(path)
+    # 短網址 slug 是使用者提供的資料，不是路由指令。若掃描器請求先經 Next.js
+    # /[slug] handler 再由 web container 解析，將 slug 當路徑掃描會封鎖整個 web IP。
+    path_for_scan = "/short-links/resolve" if _SHORT_LINK_RESOLVE_PATH.fullmatch(path) else path
+    path_hay = _decoded_variants(path_for_scan)
     any_hay = path_hay + _decoded_variants(query) + [user_agent, referer]
     for name, severity, pattern, rule_scope in _RULES:
         haystacks = path_hay if rule_scope == "path" else any_hay
