@@ -76,6 +76,33 @@ describe("route manifest", () => {
     expect(getRoutePolicy("/shop/class-orders").shell).toBe("app");
   });
 
+  it("allows public product paths with a topic or a single product segment", () => {
+    for (const pathname of ["/shop/校慶商品/紀念袋", "/shop/入場券"]) {
+      expect(getRoutePolicy(pathname)).toMatchObject({
+        public: true,
+        requiresAuth: false,
+        shell: "bare",
+        indexable: false,
+      });
+    }
+
+    for (const pathname of [
+      "/shop/admin",
+      "/shop/class-orders",
+      "/shop/council-orders",
+      "/shop/orders",
+    ]) {
+      expect(getRoutePolicy(pathname).requiresAuth).toBe(true);
+    }
+
+    expect(getRoutePolicy("/shop/cart")).toMatchObject({
+      public: true,
+      requiresAuth: false,
+      shell: "bare",
+      indexable: false,
+    });
+  });
+
   it("keeps shared survey detail links public and indexable", () => {
     const sharedSurveyPath = "/surveys/550e8400-e29b-41d4-a716-446655440000";
 
