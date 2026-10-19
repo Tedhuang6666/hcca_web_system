@@ -23,6 +23,7 @@ import { usePeopleManagementEmbed } from "@/components/admin/PeopleManagementEmb
 import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirect";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import Modal from "@/components/ui/Modal";
 import ClassCorrectionRequestsPanel from "@/components/admin/ClassCorrectionRequestsPanel";
 import type {
   ClassMemberOut,
@@ -43,6 +44,13 @@ const roleHelp: Record<string, string> = {
   class_leader: "檢視本班成員，處理班級日常事務。",
   vice_leader: "協助班長處理班級事務，檢視本班成員。",
 };
+
+function roleHolderSummary(role: ClassRoleOut) {
+  return [
+    ...role.holders.map((holder) => holder.display_name),
+    ...(role.person_holders ?? []).map((holder) => `${holder.display_name}${holder.status === "pending_user" ? "（待註冊）" : ""}`),
+  ].join("、");
+}
 
 function classTitle(c: SchoolClassListItem | SchoolClassOut | null) {
   if (!c) return "未選擇班級";
@@ -553,7 +561,7 @@ function RoleBoard({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{label}</h2>
               <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                {role.holders.length ? role.holders.map((holder) => holder.display_name).join("、") : "尚未任命"}
+                {roleHolderSummary(role) || "尚未任命"}
               </span>
             </div>
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{roleHelp[role.role_key]}</p>
@@ -580,7 +588,7 @@ function RoleBoard({
             </div>
             <details className="mt-3">
               <summary className="min-h-11 cursor-pointer py-2 text-sm" style={{ color: "var(--text-secondary)" }}>找不到人？搜尋其他帳號</summary>
-              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>選取後會加入本班並任命；尚未登入的同學，請先請他使用校內帳號登入。</p>
+              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>選取帳號後會加入本班並任命；尚未註冊的同學可從班級成員資料先登記任命。</p>
               {busyRole === null && <UserPicker placeholder={`搜尋帳號並任命${label}`} onPick={(user) => void assign(role.role_key, user)} />}
             </details>
           </section>
@@ -590,43 +598,226 @@ function RoleBoard({
   );
 }
 
+type MemberRow = {
+  key: string;
+  seat: number | null;
+  studentId: string | null;
+  name: string;
+  userId: string | null;
+  personId: string | null;
+  email: string;
+  source: string;
+  user: UserSummary | null;
+};
+
+function MemberDetailDialog({
+  member,
+  roles,
+  onAssign,
+  onAssignPerson,
+  onClose,
+}: {
+  member: MemberRow;
+  roles: ClassRoleOut[];
+  onAssign: (roleKey: string, user: UserSummary) => Promise<boolean>;
+  onAssignPerson: (
+    roleKey: string,
+    identity: { person_id?: string; student_id?: string; display_name?: string },
+  ) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [busyRole, setBusyRole] = useState<string | null>(null);
+  const [personName, setPersonName] = useState(member.name === "尚未連結帳號" ? "" : member.name);
+
+  const assign = async (roleKey: string) => {
+    if (busyRole !== null) return;
+    if (!member.user && !member.personId && (!member.studentId || !personName.trim())) return;
+    setBusyRole(roleKey);
+    try {
+      const success = member.user
+        ? await onAssign(roleKey, member.user)
+        : await onAssignPerson(roleKey, member.personId
+          ? { person_id: member.personId }
+          : { student_id: member.studentId!, display_name: personName.trim() });
+      if (success) onClose();
+    } finally {
+      setBusyRole(null);
+    }
+  };
+
+  return (
+    <Modal title={member.name} onClose={onClose} size="2xl">
+      <div className="space-y-5">
+        <section className="grid gap-3 rounded-md p-4 sm:grid-cols-2" style={{ background: "var(--bg-elevated)" }}>
+          <div>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>座號</p>
+            <p className="mt-1 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
+              {member.seat ? `${member.seat} 號` : "未編座號"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>學號</p>
+            <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>{member.studentId || "未提供"}</p>
+          </div>
+          <div>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>校內帳號</p>
+            <p className="mt-1 font-medium" style={{ color: member.user ? "var(--success)" : "var(--text-secondary)" }}>
+              {member.user ? "已連結" : "待連結"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Email</p>
+            <p className="mt-1 break-all font-medium" style={{ color: "var(--text-primary)" }}>{member.user?.email || member.email || "未提供"}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>資料來源</p>
+            <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>{member.source}</p>
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級職位</h3>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>可直接從成員資料任命，不必切換分頁。</p>
+          </div>
+          {!member.user && (
+            <p className="mb-3 rounded-md p-3 text-sm" role="status"
+              style={{ background: "var(--warning-dim)", color: "var(--text-secondary)" }}>
+              可以先登記任命；職位權限會在同學註冊並連結帳號後生效。
+            </p>
+          )}
+          {!member.user && !member.personId && (
+            <label className="mb-3 block space-y-1 text-sm">
+              <span style={{ color: "var(--text-secondary)" }}>成員姓名（建立人員資料）</span>
+              <input className="input min-h-11 w-full" value={personName}
+                onChange={(event) => setPersonName(event.target.value)}
+                placeholder="輸入名冊上的姓名" />
+            </label>
+          )}
+          {!member.user && !member.personId && !member.studentId && (
+            <p className="mb-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+              這筆名冊資料尚未提供學號，請先補齊學號再登記職位。
+            </p>
+          )}
+          {roles.length > 0 ? (
+            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {roles.map((role) => {
+                const label = role.role_key === "class_representative" ? "班代（議員）" : role.label;
+                const alreadyAssigned = member.user
+                  ? role.holders.some((holder) => holder.user_id === member.user?.id)
+                  : member.personId
+                    ? (role.person_holders ?? []).some((holder) => holder.person_id === member.personId)
+                    : false;
+                const canAssign = Boolean(member.user || member.personId || (member.studentId && personName.trim()));
+                return (
+                  <div key={role.role_key} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{label}</p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{roleHelp[role.role_key] ?? "可擔任本班職位。"}</p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                        目前任職：{roleHolderSummary(role) || "尚未任命"}
+                      </p>
+                    </div>
+                    <button type="button" className="btn btn-primary min-h-11 shrink-0 disabled:opacity-50"
+                      disabled={alreadyAssigned || busyRole !== null || !canAssign}
+                      onClick={() => void assign(role.role_key)}>
+                      {busyRole === role.role_key ? "登記中…" : alreadyAssigned ? "已任命" : member.user ? `任命${label}` : `登記任命${label}`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-md p-4 text-sm" role="status" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+              目前沒有可任命的班級職位。
+            </p>
+          )}
+        </section>
+      </div>
+    </Modal>
+  );
+}
+
 function MembershipPanel({
   memberships,
   members,
   entries,
+  candidates,
+  roles,
   onAdd,
   onEnd,
+  onAssignRole,
+  onAssignPersonRole,
   onManageRoles,
 }: {
   memberships: ClassMembershipOut[];
   members: ClassMemberOut[];
   entries: ClassRosterEntryOut[];
+  candidates: Array<{ seat_number?: number; user: UserSummary }>;
+  roles: ClassRoleOut[];
   onAdd: (user: UserSummary) => Promise<void>;
   onEnd: (userId: string) => Promise<void>;
+  onAssignRole: (roleKey: string, user: UserSummary) => Promise<boolean>;
+  onAssignPersonRole: (
+    roleKey: string,
+    identity: { person_id?: string; student_id?: string; display_name?: string },
+  ) => Promise<boolean>;
   onManageRoles: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [onlyUnlinked, setOnlyUnlinked] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [selectedMember, setSelectedMember] = useState<MemberRow | null>(null);
+  const candidatesById = new Map(candidates.map(({ user }) => [user.id, user]));
+  const membersByStudentId = new Map(members
+    .filter((member) => member.student_id)
+    .map((member) => [member.student_id!, member]));
+  const pendingPeopleByStudentId = new Map(roles.flatMap((role) => role.person_holders ?? [])
+    .filter((holder) => holder.student_id)
+    .map((holder) => [holder.student_id!, holder]));
   const memberIds = new Set(entries.map((entry) => entry.user_id).filter(Boolean));
   const studentIds = new Set(entries.map((entry) => entry.student_id));
   const rows = [
-    ...entries.map((entry) => ({
-      key: entry.id,
-      seat: entry.seat_number,
-      studentId: entry.student_id,
-      name: entry.user?.display_name ?? members.find((member) => member.student_id === entry.student_id)?.display_name ?? "尚未連結帳號",
-      userId: entry.user_id,
-      source: "座號名冊",
-    })),
-    ...members.filter((member) => !memberIds.has(member.id) && !studentIds.has(member.student_id ?? "")).map((member) => ({
-      key: member.id,
-      seat: member.seat_number,
-      studentId: member.student_id,
-      name: member.display_name,
-      userId: member.user_id ?? null,
-      source: member.source === "range" ? "學號區間" : member.source === "manual" ? "手動加入" : "人員歸屬",
-    })),
+    ...entries.map((entry) => {
+      const matchedMember = membersByStudentId.get(entry.student_id);
+      const pendingPerson = pendingPeopleByStudentId.get(entry.student_id);
+      const userId = entry.user_id ?? entry.user?.id ?? matchedMember?.user_id ?? null;
+      const user = userId
+        ? entry.user?.id === userId
+          ? entry.user
+          : candidatesById.get(userId)
+            ?? (matchedMember?.user_id === userId ? { ...matchedMember, id: userId } : null)
+        : null;
+      return {
+        key: entry.id,
+        seat: entry.seat_number ?? null,
+        studentId: entry.student_id,
+        name: entry.user?.display_name ?? matchedMember?.display_name ?? pendingPerson?.display_name ?? user?.display_name ?? "尚未連結帳號",
+        userId,
+        personId: matchedMember && !matchedMember.user_id && matchedMember.source === "person_affiliation"
+          ? matchedMember.id
+          : pendingPerson?.person_id ?? null,
+        email: entry.user?.email || matchedMember?.email || pendingPerson?.email || user?.email || "",
+        user,
+        source: "座號名冊",
+      };
+    }),
+    ...members.filter((member) => !memberIds.has(member.id) && !studentIds.has(member.student_id ?? "")).map((member) => {
+      const user = member.user_id
+        ? candidatesById.get(member.user_id) ?? { ...member, id: member.user_id }
+        : null;
+      return {
+        key: member.id,
+        seat: member.seat_number ?? null,
+        studentId: member.student_id,
+        name: member.display_name,
+        userId: member.user_id ?? null,
+        personId: !member.user_id && member.source === "person_affiliation" ? member.id : null,
+        email: member.email,
+        user,
+        source: member.source === "range" ? "學號區間" : member.source === "manual" ? "手動加入" : "人員歸屬",
+      };
+    }),
   ];
   rows.sort((a, b) => (a.seat ?? Infinity) - (b.seat ?? Infinity));
   const needle = query.trim().toLocaleLowerCase();
@@ -660,13 +851,18 @@ function MembershipPanel({
           const membership = memberships.find((item) => item.user_id === row.userId && item.status === "active");
           const canEnd = membership && !studentIds.has(row.studentId ?? "") && row.source !== "學號區間" && row.source !== "手動加入";
           return (
-            <li key={row.key} className="flex items-center gap-3 py-3">
-              <span className="w-10 shrink-0 text-center text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>{row.seat ? `${row.seat} 號` : "—"}</span>
-              <div className="min-w-0 flex-1">
-                <p className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{row.name}</p>
-                <p className="break-all text-xs" style={{ color: "var(--text-muted)" }}>{row.studentId ?? "未提供學號"} · {row.source}</p>
-              </div>
-              <span className="shrink-0 text-xs" style={{ color: row.userId ? "var(--success)" : "var(--text-secondary)" }}>{row.userId ? "已連結" : "待連結"}</span>
+            <li key={row.key} className="flex items-center gap-2 py-2">
+              <button type="button" className="flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-md px-2 text-left transition-colors hover:bg-[var(--bg-elevated)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+                aria-label={`檢視${row.seat ? `${row.seat} 號 ` : " "}${row.name}的資料與職位`}
+                aria-haspopup="dialog"
+                onClick={() => setSelectedMember(row)}>
+                <span className="w-10 shrink-0 text-center text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>{row.seat ? `${row.seat} 號` : "—"}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{row.name}</span>
+                  <span className="block break-all text-xs" style={{ color: "var(--text-muted)" }}>{row.studentId ?? "未提供學號"} · {row.source}</span>
+                </span>
+                <span className="shrink-0 text-xs" style={{ color: row.userId ? "var(--success)" : "var(--text-secondary)" }}>{row.userId ? "已連結" : "待連結"}</span>
+              </button>
               {canEnd && <button type="button" className="min-h-11 shrink-0 px-2 text-xs disabled:opacity-50" style={{ color: "var(--danger)" }} disabled={busy !== null}
                 aria-label={`將 ${row.name} 移出本班`}
                 onClick={async () => {
@@ -678,6 +874,13 @@ function MembershipPanel({
         })}
       </ul>
       {visible.length === 0 && <p className="py-8 text-center text-sm" role="status" style={{ color: "var(--text-muted)" }}>{rows.length ? "沒有符合的成員，請調整搜尋條件。" : "尚未建立班級名冊，可新增成員或匯入座號名冊。"}</p>}
+      {selectedMember && <MemberDetailDialog
+        member={selectedMember}
+        roles={roles}
+        onAssign={onAssignRole}
+        onAssignPerson={onAssignPersonRole}
+        onClose={() => setSelectedMember(null)}
+      />}
     </div>
   );
 }
@@ -993,7 +1196,7 @@ function ClassWorkspace({
   useEffect(load, [load]);
 
   const roleHolderCount = useMemo(
-    () => roles.reduce((sum, role) => sum + role.holders.length, 0),
+    () => roles.reduce((sum, role) => sum + role.holders.length + (role.person_holders?.length ?? 0), 0),
     [roles],
   );
   const candidates = useMemo(() => {
@@ -1039,6 +1242,23 @@ function ClassWorkspace({
     try {
       await classApi.assignRole(classId, roleKey, { user_id: user.id });
       toast.success(`已任命 ${user.display_name}`);
+      load();
+      return true;
+    } catch (error) {
+      toast.error(getErrorMessage(error, "任命失敗"));
+      return false;
+    }
+  };
+
+  const assignPersonRole = async (
+    roleKey: string,
+    identity: { person_id?: string; student_id?: string; display_name?: string },
+  ) => {
+    try {
+      const affiliation = await classApi.assignPersonRole(classId, roleKey, identity);
+      toast.success(affiliation.status === "pending_user"
+        ? "職位任命已登記，成員註冊帳號後生效"
+        : "職位任命已更新");
       load();
       return true;
     } catch (error) {
@@ -1211,9 +1431,13 @@ function ClassWorkspace({
             memberships={memberships}
             members={members}
             entries={rosterEntries}
+            candidates={candidates}
+            roles={roles}
             onManageRoles={() => setTab("roles")}
             onAdd={addMembership}
             onEnd={endMembership}
+            onAssignRole={assignRole}
+            onAssignPersonRole={assignPersonRole}
           />
         </div>
       )}

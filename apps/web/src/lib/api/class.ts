@@ -2,6 +2,7 @@ import type {
   ClassConfirmationCreate, ClassConfirmationOut,
   ClassCadreOut, ClassCorrectionRequestCreate, ClassCorrectionRequestOut, ClassCorrectionRequestReview,
   ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassRosterBulkCreate,
+  ClassRolePersonAssign, ClassRolePersonAssignOut,
   ClassRosterBulkOut, ClassRosterEntryOut, ClassRosterPdfImportOut, ClassStudentRangeOut,
   MyClassContext, SchoolClassBulkActionKind, SchoolClassBulkActionOut, SchoolClassBulkCreate,
   SchoolClassBulkCreateOut, SchoolClassListItem, SchoolClassOut,
@@ -91,6 +92,14 @@ export const classApi = {
   roles: (id: string) => get<ClassRoleOut[]>(`/classes/${id}/roles`),
   assignRole: (id: string, roleKey: string, body: { user_id: string; start_date?: string | null; end_date?: string | null }) =>
     post<{ user_position_id: string; position_id: string }>(`/classes/${id}/roles/${roleKey}/assign`, body),
+  assignPersonRole: (
+    id: string,
+    roleKey: string,
+    body: ClassRolePersonAssign,
+  ) => post<ClassRolePersonAssignOut>(
+    `/classes/${id}/roles/${roleKey}/assign-person`,
+    body,
+  ),
   addMember: (id: string, userId: string) =>
     post<ClassManualMemberOut>(`/classes/${id}/members`, { user_id: userId }),
   removeMember: (id: string, userId: string) => del<void>(`/classes/${id}/members/${userId}`),

@@ -150,6 +150,29 @@ class ClassRoleHolderOut(BaseModel):
     end_date: date | None = None
 
 
+class ClassRolePersonAssign(BaseModel):
+    person_id: uuid.UUID | None = None
+    student_id: str | None = Field(None, min_length=1, max_length=20)
+    display_name: str | None = Field(None, min_length=1, max_length=100)
+
+
+class ClassRolePersonAssignOut(BaseModel):
+    person_affiliation_id: uuid.UUID
+    person_id: uuid.UUID
+    status: str
+
+
+class ClassRolePersonHolderOut(BaseModel):
+    affiliation_id: uuid.UUID
+    person_id: uuid.UUID
+    display_name: str
+    email: str
+    student_id: str | None = None
+    start_date: date
+    end_date: date | None = None
+    status: str
+
+
 class ClassRoleOut(BaseModel):
     id: uuid.UUID
     class_id: uuid.UUID
@@ -158,6 +181,7 @@ class ClassRoleOut(BaseModel):
     position_id: uuid.UUID
     permission_codes: list[str] = []
     holders: list[ClassRoleHolderOut] = []
+    person_holders: list[ClassRolePersonHolderOut] = Field(default_factory=list)
 
 
 class ClassRoleAssign(BaseModel):
@@ -392,6 +416,9 @@ __all__ = [
     "ClassRoleBindingOut",
     "ClassRoleHolderOut",
     "ClassRoleOut",
+    "ClassRolePersonAssign",
+    "ClassRolePersonAssignOut",
+    "ClassRolePersonHolderOut",
     "ClassStudentRangeCreate",
     "ClassStudentRangeOverride",
     "ClassStudentRangeOut",

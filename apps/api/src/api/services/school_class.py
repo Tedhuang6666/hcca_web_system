@@ -42,6 +42,7 @@ from api.schemas.school_class import (
     ClassMemberOut,
     ClassMembershipCreate,
     ClassRoleAssign,
+    ClassRolePersonAssign,
     ClassRosterBulkCreate,
     ClassRosterBulkOut,
     ClassRosterEntryCreate,
@@ -284,6 +285,37 @@ async def list_class_roles(session: AsyncSession, sc: SchoolClass) -> list[dict]
             }
             for up in holders_result.scalars().all()
         ]
+        person_holders_result = await session.execute(
+            select(PersonAffiliation)
+            .join(PersonAffiliation.person)
+            .options(selectinload(PersonAffiliation.person))
+            .where(
+                PersonAffiliation.class_id == sc.id,
+                PersonAffiliation.position_id == binding.position_id,
+                PersonAffiliation.kind == PersonAffiliationKind.CLASS_ROLE,
+                PersonAffiliation.status.in_(
+                    [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
+                ),
+                PersonAffiliation.start_date <= today,
+                (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
+                Person.user_id.is_(None),
+            )
+            .order_by(PersonAffiliation.start_date.desc())
+        )
+        person_holders = [
+            {
+                "affiliation_id": affiliation.id,
+                "person_id": affiliation.person_id,
+                "display_name": affiliation.person.display_name,
+                "email": affiliation.person.email or "",
+                "student_id": affiliation.person.student_id,
+                "start_date": affiliation.start_date,
+                "end_date": affiliation.end_date,
+                "status": affiliation.status,
+            }
+            for affiliation in person_holders_result.scalars().all()
+            if affiliation.person is not None
+        ]
         label = CLASS_ROLE_DEFINITIONS.get(binding.role_key, (binding.role_key, [], 0))[0]
         rows.append(
             {
@@ -297,6 +329,7 @@ async def list_class_roles(session: AsyncSession, sc: SchoolClass) -> list[dict]
                     for permission in (binding.position.permissions if binding.position else [])
                 ],
                 "holders": holders,
+                "person_holders": person_holders,
             }
         )
     rows.sort(
@@ -915,6 +948,105 @@ async def assign_class_role(
             )
     await session.flush()
     return up
+
+
+async def assign_class_person_role(
+    session: AsyncSession,
+    sc: SchoolClass,
+    *,
+    role_key: str,
+    data: ClassRolePersonAssign,
+) -> PersonAffiliation:
+    await ensure_class_default_roles(session, sc)
+    binding = await session.scalar(
+        select(ClassRoleBinding).where(
+            ClassRoleBinding.class_id == sc.id,
+            ClassRoleBinding.role_key == role_key,
+        )
+    )
+    if binding is None:
+        raise ValueError("找不到此班級職位")
+
+    person: Person | None
+    roster_entry: ClassRosterEntry | None = None
+    if data.person_id is not None:
+        person = await session.get(Person, data.person_id)
+        if person is None:
+            raise ValueError("找不到此人員主檔")
+        if data.student_id and data.student_id.strip() != person.student_id:
+            raise ValueError("人員主檔與學號不相符")
+    else:
+        student_id = (data.student_id or "").strip()
+        if not student_id:
+            raise ValueError("請提供人員主檔或學號")
+        roster_entry = await session.scalar(
+            select(ClassRosterEntry).where(
+                ClassRosterEntry.class_id == sc.id,
+                ClassRosterEntry.student_id == student_id,
+            )
+        )
+        if roster_entry is None:
+            raise ValueError("此學號不在本班座號名冊")
+        person = await session.scalar(select(Person).where(Person.student_id == student_id))
+        if person is None:
+            display_name = (data.display_name or "").strip()
+            if not display_name:
+                raise ValueError("請輸入未註冊同學的姓名")
+            person = Person(
+                student_id=student_id,
+                display_name=display_name,
+                note="由班級工作台從座號名冊建立",
+            )
+            session.add(person)
+            await session.flush()
+
+    if person.user_id is not None:
+        raise ValueError("此同學已連結校內帳號，請使用帳號任命")
+
+    member_affiliation = await session.scalar(
+        select(PersonAffiliation.id).where(
+            PersonAffiliation.person_id == person.id,
+            PersonAffiliation.class_id == sc.id,
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+            PersonAffiliation.status.in_(
+                [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
+            ),
+            PersonAffiliation.start_date <= local_today(),
+            (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= local_today()),
+        )
+    )
+    if roster_entry is None and person.student_id:
+        roster_entry = await session.scalar(
+            select(ClassRosterEntry).where(
+                ClassRosterEntry.class_id == sc.id,
+                ClassRosterEntry.student_id == person.student_id,
+            )
+        )
+    if member_affiliation is None and roster_entry is None:
+        raise ValueError("此人員不是本班成員")
+
+    if member_affiliation is None:
+        await person_svc.create_affiliation(
+            session,
+            data=PersonAffiliationCreate(
+                person_id=person.id,
+                kind=PersonAffiliationKind.CLASS_MEMBER,
+                class_id=sc.id,
+                source=PersonAffiliationSource.CLASS_WORKSPACE,
+            ),
+        )
+
+    return await person_svc.create_affiliation(
+        session,
+        data=PersonAffiliationCreate(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_ROLE,
+            class_id=sc.id,
+            position_id=binding.position_id,
+            role_key=role_key,
+            source=PersonAffiliationSource.CLASS_WORKSPACE,
+        ),
+    )
 
 
 async def get_or_create_council_representative_position(

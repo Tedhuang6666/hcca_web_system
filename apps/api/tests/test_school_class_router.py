@@ -12,6 +12,7 @@ from collections.abc import Callable
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.person import Person
 from api.models.school_class import SchoolClass
 from api.models.user import User
 from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
@@ -263,6 +264,84 @@ async def test_assign_class_role_returns_position(
     body = response.json()
     assert "user_position_id" in body
     assert "position_id" in body
+
+
+async def test_assign_class_role_to_unregistered_roster_member_is_pending_until_signup(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session, admin_user)
+    ac = authed_client_factory(admin_user)
+    roster = await ac.post(
+        f"/classes/{sc.id}/roster",
+        json={"seat_number": 8, "student_id": "510008"},
+    )
+    assert roster.status_code == 201
+
+    assignment = await ac.post(
+        f"/classes/{sc.id}/roles/class_leader/assign-person",
+        json={"student_id": "510008", "display_name": "待註冊同學"},
+    )
+    assert assignment.status_code == 201
+    body = assignment.json()
+    assert body["status"] == "pending_user"
+    assert body["person_id"]
+
+    members = await ac.get(f"/classes/{sc.id}/members")
+    assert any(
+        row["id"] == body["person_id"] and row["display_name"] == "待註冊同學"
+        for row in members.json()
+    )
+    roles = await ac.get(f"/classes/{sc.id}/roles")
+    leader = next(row for row in roles.json() if row["role_key"] == "class_leader")
+    assert leader["holders"] == []
+    assert len(leader["person_holders"]) == 1
+    holder = leader["person_holders"][0]
+    assert holder["affiliation_id"] == body["person_affiliation_id"]
+    assert holder["person_id"] == body["person_id"]
+    assert holder["display_name"] == "待註冊同學"
+    assert holder["student_id"] == "510008"
+    assert holder["status"] == "pending_user"
+
+
+async def test_assign_class_person_role_requires_class_manager(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session, admin_user)
+    admin = authed_client_factory(admin_user)
+    roster = await admin.post(
+        f"/classes/{sc.id}/roster",
+        json={"seat_number": 8, "student_id": "510008"},
+    )
+    assert roster.status_code == 201
+
+    response = await authed_client_factory(member_user).post(
+        f"/classes/{sc.id}/roles/class_leader/assign-person",
+        json={"student_id": "510008", "display_name": "待註冊同學"},
+    )
+    assert response.status_code == 403
+
+
+async def test_assign_class_person_role_rejects_people_outside_the_class(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session, admin_user)
+    person = Person(display_name="其他班同學", student_id="510100")
+    db_session.add(person)
+    await db_session.flush()
+
+    response = await authed_client_factory(admin_user).post(
+        f"/classes/{sc.id}/roles/class_leader/assign-person",
+        json={"person_id": str(person.id)},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "此人員不是本班成員"
 
 
 async def test_assign_class_role_unknown_or_removed_role_key_returns_422(
