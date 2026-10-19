@@ -66,7 +66,7 @@ function openCollectWorkspace() {
 }
 
 describe("班代工作流程", () => {
-  it("opens batch ordering first, then sorts the collection roster by seat number", async () => {
+  it("opens single-student ordering first, then sorts the collection roster by seat number", async () => {
     api.members.mockResolvedValue([
       { id: "b", display_name: "示範乙", seat_number: 2 },
       { id: "a", display_name: "示範甲", seat_number: 1 },
@@ -74,7 +74,8 @@ describe("班代工作流程", () => {
     render(<ClassOrdersPage />);
 
     expect(screen.getByRole("button", { name: "幫同學訂購" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "批次給多人" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "逐位代訂" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "批次給多人" })).toHaveAttribute("aria-pressed", "false");
     openCollectWorkspace();
     const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
     const rows = within(table).getAllByRole("row").slice(1);
@@ -101,6 +102,7 @@ describe("班代工作流程", () => {
 
   it("applies a searched product and variant to multiple classmates", async () => {
     render(<ClassOrdersPage />);
+    fireEvent.click(screen.getByRole("button", { name: "批次給多人" }));
     await screen.findByRole("checkbox", { name: /1 號/ });
     fireEvent.click(screen.getByRole("button", { name: "選取顯示的 2 位" }));
     await chooseProduct("shirt");
@@ -120,6 +122,7 @@ describe("班代工作流程", () => {
 
   it("searches within a product that has many specifications", async () => {
     render(<ClassOrdersPage />);
+    fireEvent.click(screen.getByRole("button", { name: "批次給多人" }));
     await screen.findByRole("checkbox", { name: /1 號/ });
     fireEvent.click(screen.getByRole("button", { name: "選取顯示的 2 位" }));
     const productSearch = screen.getByRole("searchbox", { name: "搜尋商品" });
