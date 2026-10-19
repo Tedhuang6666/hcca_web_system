@@ -30,6 +30,8 @@ from api.schemas.school_class import (
     ClassMembershipOut,
     ClassRoleAssign,
     ClassRoleOut,
+    ClassRolePersonAssign,
+    ClassRolePersonAssignOut,
     ClassRosterBulkCreate,
     ClassRosterBulkOut,
     ClassRosterEntryCreate,
@@ -536,6 +538,35 @@ async def assign_class_role(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     return {"user_position_id": up.id, "position_id": up.position_id}
+
+
+@router.post(
+    "/{class_id}/roles/{role_key}/assign-person",
+    response_model=ClassRolePersonAssignOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="登記未註冊班級成員的職位任命",
+)
+async def assign_class_person_role(
+    class_id: uuid.UUID,
+    role_key: str,
+    payload: ClassRolePersonAssign,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRolePersonAssignOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        affiliation = await class_svc.assign_class_person_role(
+            session, sc, role_key=role_key, data=payload
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
+    return ClassRolePersonAssignOut(
+        person_affiliation_id=affiliation.id,
+        person_id=affiliation.person_id,
+        status=affiliation.status,
+    )
 
 
 # ── 學號區間 ──────────────────────────────────────────────────────────────────

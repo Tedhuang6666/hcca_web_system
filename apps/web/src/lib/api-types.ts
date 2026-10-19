@@ -2868,6 +2868,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/classes/{class_id}/roles/{role_key}/assign-person": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登記未註冊班級成員的職位任命 */
+        post: operations["assign_class_person_role_classes__class_id__roles__role_key__assign_person_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/classes/{class_id}/roster": {
         parameters: {
             query?: never;
@@ -14666,6 +14683,8 @@ export interface components {
              * @default []
              */
             permission_codes: string[];
+            /** Person Holders */
+            person_holders?: components["schemas"]["ClassRolePersonHolderOut"][];
             /**
              * Position Id
              * Format: uuid
@@ -14673,6 +14692,58 @@ export interface components {
             position_id: string;
             /** Role Key */
             role_key: string;
+        };
+        /** ClassRolePersonAssign */
+        ClassRolePersonAssign: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Person Id */
+            person_id?: string | null;
+            /** Student Id */
+            student_id?: string | null;
+        };
+        /** ClassRolePersonAssignOut */
+        ClassRolePersonAssignOut: {
+            /**
+             * Person Affiliation Id
+             * Format: uuid
+             */
+            person_affiliation_id: string;
+            /**
+             * Person Id
+             * Format: uuid
+             */
+            person_id: string;
+            /** Status */
+            status: string;
+        };
+        /** ClassRolePersonHolderOut */
+        ClassRolePersonHolderOut: {
+            /**
+             * Affiliation Id
+             * Format: uuid
+             */
+            affiliation_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /** End Date */
+            end_date?: string | null;
+            /**
+             * Person Id
+             * Format: uuid
+             */
+            person_id: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Status */
+            status: string;
+            /** Student Id */
+            student_id?: string | null;
         };
         /** ClassRosterBulkCreate */
         ClassRosterBulkCreate: {
@@ -37136,6 +37207,42 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_class_person_role_classes__class_id__roles__role_key__assign_person_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+                role_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassRolePersonAssign"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassRolePersonAssignOut"];
                 };
             };
             /** @description Validation Error */
