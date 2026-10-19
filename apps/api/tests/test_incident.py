@@ -50,6 +50,20 @@ async def test_auto_resolve_stale_incident_records_resolution_event(
     incident = await _create_incident(db_session)
     now = datetime.now(UTC)
     incident.last_seen_at = now - timedelta(hours=25)
+    recent_incident = SystemIncident(
+        id=uuid4(),
+        error_id="recent-error",
+        fingerprint="recent-fingerprint",
+        severity=IncidentSeverity.P3,
+        status=IncidentStatus.OPEN,
+        service="web",
+        environment="test",
+        title="Recent issue",
+        summary="Seen within the inactivity window",
+        first_seen_at=now - timedelta(days=1),
+        last_seen_at=now - timedelta(hours=23),
+    )
+    db_session.add(recent_incident)
     await db_session.commit()
 
     resolved = await auto_resolve_stale_incidents(
@@ -61,6 +75,7 @@ async def test_auto_resolve_stale_incident_records_resolution_event(
 
     assert [item.id for item in resolved] == [incident.id]
     assert incident.status == IncidentStatus.RESOLVED
+    assert recent_incident.status == IncidentStatus.OPEN
     assert incident.resolved_at == now
     assert incident.resolution_note == "系統自動結案：已連續 24 小時未再觀測到相同錯誤。"
     events = await list_incident_events(db_session, incident.id)

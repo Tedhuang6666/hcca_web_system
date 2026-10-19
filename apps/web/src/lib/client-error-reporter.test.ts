@@ -117,6 +117,60 @@ describe("client error reporter", () => {
     uninstall();
   });
 
+  it("filters inline CSP reports created by browser extensions", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+
+    const event = new Event("securitypolicyviolation");
+    Object.defineProperties(event, {
+      disposition: { value: "enforce" },
+      effectiveDirective: { value: "style-src-elem" },
+      blockedURI: { value: "inline" },
+      sourceFile: { value: "chrome-extension://extension-id/content.js" },
+    });
+    window.dispatchEvent(event);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    uninstall();
+  });
+
+  it("suppresses a Next chunk failure when cache recovery reloads the page", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const originalCaches = Object.getOwnPropertyDescriptor(window, "caches");
+    Object.defineProperty(window, "caches", {
+      configurable: true,
+      value: { delete: vi.fn().mockResolvedValue(true) },
+    });
+    vi.useFakeTimers();
+    sessionStorage.removeItem("hcca:chunk-reload-at");
+    const uninstall = installGlobalClientErrorReporter();
+
+    try {
+      const script = document.createElement("script");
+      script.src = "/_next/static/chunks/app.js";
+      document.body.append(script);
+      script.dispatchEvent(new Event("error"));
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem("hcca:chunk-reload-at")).not.toBeNull();
+
+      script.dispatchEvent(new Event("error"));
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      uninstall();
+      vi.useRealTimers();
+      sessionStorage.removeItem("hcca:chunk-reload-at");
+      if (originalCaches) {
+        Object.defineProperty(window, "caches", originalCaches);
+      } else {
+        Reflect.deleteProperty(window, "caches");
+      }
+    }
+  });
+
   it("sends bounded browser context with each report", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error_id: "client-error-1" }), { status: 202 }),

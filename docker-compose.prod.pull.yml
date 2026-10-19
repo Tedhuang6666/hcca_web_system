@@ -1,12 +1,10 @@
 # Canonical production topology: pulls prebuilt images from GHCR.
 # Run with:
 #   docker compose --env-file .env.production -f docker-compose.prod.pull.yml pull
-#   docker compose --env-file .env.production -f docker-compose.prod.pull.yml up -d db api web proxy
+#   docker compose --env-file .env.production -f docker-compose.prod.pull.yml --profile email --profile workers up -d
 #
 # 穩定核心：db / pgbouncer / role-specific redis / api / web / proxy（上面那行）。
-# celery-worker / celery-beat 已歸到 "workers" profile，預設不啟動，
-# 連 `up -d`（不指定服務）也不會把它們拉起來。確定要常駐 Celery 時才加：
-#   docker compose --env-file .env.production -f docker-compose.prod.pull.yml --profile workers up -d
+# 直接呼叫 Compose 時需啟用 workers profile；正式部署腳本預設啟動，確保事件自動結案排程運作。
 
 x-api-common: &api-common
   image: ${API_IMAGE:?set API_IMAGE to an immutable GHCR image tag}

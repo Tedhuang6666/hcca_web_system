@@ -213,11 +213,15 @@ function isIgnoredResource(url: string | null): boolean {
   }
 }
 
-function isIgnoredCspViolation(blockedUri: string | null): boolean {
-  if (!blockedUri) return false;
-  if (/^(?:chrome-extension|edge-extension|moz-extension|ms-browser-extension|safari-web-extension):/i.test(blockedUri)) {
+function isIgnoredCspViolation(
+  blockedUri: string | null,
+  sourceFile: string | null,
+): boolean {
+  const extensionUri = /^(?:chrome-extension|edge-extension|moz-extension|ms-browser-extension|safari-web-extension):/i;
+  if (extensionUri.test(blockedUri ?? "") || extensionUri.test(sourceFile ?? "")) {
     return true;
   }
+  if (!blockedUri) return false;
   try {
     const parsed = new URL(blockedUri, window.location.href);
     return IGNORED_RESOURCE_HOSTS.has(parsed.hostname)
@@ -263,27 +267,31 @@ function isNextChunk(url: string | null): boolean {
   }
 }
 
-function recoverFromChunkFailure(url: string | null): void {
-  if (!isNextChunk(url)) return;
+function recoverFromChunkFailure(url: string | null): boolean {
+  if (!isNextChunk(url)) return false;
 
   try {
     const previousReloadAt = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? 0);
-    if (previousReloadAt && Date.now() - previousReloadAt <= CHUNK_RELOAD_COOLDOWN_MS) return;
+    if (previousReloadAt && Date.now() - previousReloadAt <= CHUNK_RELOAD_COOLDOWN_MS) {
+      return false;
+    }
     sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
 
     const reload = () => window.location.reload();
     if (!("caches" in window)) {
       reload();
-      return;
+      return true;
     }
     navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_STATIC_CACHE" });
     void window.caches
       .delete(STATIC_CACHE_NAME)
       .catch(() => undefined)
       .finally(() => window.setTimeout(reload, 50));
+    return true;
   } catch {
     // Storage or Cache Storage may be blocked by private browsing modes.
     window.location.reload();
+    return true;
   }
 }
 
@@ -349,7 +357,13 @@ export function installGlobalClientErrorReporter(): () => void {
     const resource = target instanceof Element;
     const failedResource = resource ? resourceUrl(target) : null;
     if (isIgnoredWindowError(details.message) || isIgnoredResource(failedResource)) return;
-    if (resource && target instanceof HTMLScriptElement) recoverFromChunkFailure(failedResource);
+    if (
+      resource
+      && target instanceof HTMLScriptElement
+      && recoverFromChunkFailure(failedResource)
+    ) {
+      return;
+    }
     const safeResource = normalizedTransientResourceUrl(failedResource);
     const resourceOrigin = safeHttpOrigin(failedResource);
     reportClientError({
@@ -377,7 +391,7 @@ export function installGlobalClientErrorReporter(): () => void {
   const onSecurityPolicyViolation = (event: SecurityPolicyViolationEvent) => {
     if (event.disposition === "report") return;
     const blockedUri = event.blockedURI || null;
-    if (isIgnoredCspViolation(blockedUri)) return;
+    if (isIgnoredCspViolation(blockedUri, event.sourceFile || null)) return;
     const directive = event.effectiveDirective || "resource";
     const source = cspSourceIdentity(blockedUri);
     const state = event.disposition === "enforce" ? "blocked" : "violated";

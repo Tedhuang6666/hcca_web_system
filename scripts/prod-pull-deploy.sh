@@ -3,12 +3,12 @@
 #   ./scripts/prod-pull-deploy.sh
 #
 # 流程：git pull → 設定檢查 → compose pull → 預部署 DB 備份 → 維護頁切換 → smoke test。
-# 預設「不」啟動 celery-worker / celery-beat（重背景任務）；要一起開：
-#   WITH_WORKERS=1 ./scripts/prod-pull-deploy.sh
+# 預設啟動 celery-worker / celery-beat，確保排程任務（包含事件自動結案）會執行；要停用：
+#   WITH_WORKERS=0 ./scripts/prod-pull-deploy.sh
 #
 # 可用環境變數覆寫：
 #   ENV_FILE=.env.production COMPOSE_FILE=docker-compose.prod.pull.yml
-#   WITH_WORKERS=1     # 連 celery-worker / celery-beat 一起起
+#   WITH_WORKERS=0     # 停用 celery-worker / celery-beat
 #   MAINTENANCE_MODE=1 # 先顯示純靜態維護頁，再停止舊 API/Web（預設）
 #   MAINTENANCE_MODE=0 # 僅適用於不含 migration 的部署；含 migration 時會自動拒絕
 #   DRAIN_SECONDS=10   # 新版切流後等待舊連線排空的秒數
@@ -25,7 +25,8 @@ compose=(docker compose --env-file "$env_file" -f "$compose_file")
 
 # 穩定核心 + 寄信 worker（email-worker 在 email profile，需明確帶入）
 profiles=(--profile email)
-if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
+with_workers="${WITH_WORKERS:-1}"
+if [[ "$with_workers" == "1" ]]; then
   profiles+=(--profile workers)
 fi
 
@@ -118,7 +119,7 @@ echo "✓ 預部署備份完成：$backup_file"
 
 if [[ "${DEPLOY_STRATEGY:-bluegreen}" == "bluegreen" ]]; then
   step "啟動 blue-green 部署"
-  API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" WITH_WORKERS="${WITH_WORKERS:-0}" \
+  API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" WITH_WORKERS="$with_workers" \
     MAINTENANCE_MODE="${MAINTENANCE_MODE:-1}" DRAIN_SECONDS="${DRAIN_SECONDS:-10}" \
     ENV_FILE="$env_file" COMPOSE_FILE="docker-compose.bluegreen.yml" \
     ./scripts/zero-downtime-deploy.sh "${DEPLOY_SLOT:-auto}"
