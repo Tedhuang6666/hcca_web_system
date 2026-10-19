@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ShopLayout from "@/app/(protected)/shop/layout";
 
 const state = vi.hoisted(() => ({ pathname: "/shop", search: "", permissions: [] as string[] }));
+const auth = vi.hoisted(() => ({ refresh: vi.fn() }));
+const authCache = vi.hoisted(() => ({
+  cacheCurrentUser: vi.fn((user: { permissions: string[] }) => {
+    state.permissions = user.permissions;
+  }),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => state.pathname,
   useSearchParams: () => new URLSearchParams(state.search),
@@ -11,6 +17,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({ isAdmin: false, isReady: true, permissions: new Set(state.permissions) }),
 }));
+vi.mock("@/lib/api/auth", () => ({ authApi: auth }));
+vi.mock("@/lib/auth-cache", () => authCache);
 vi.mock("@/components/ModuleBoundary", () => ({ default: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/components/layout/PageTransition", () => ({ default: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/contexts/PublicModuleStatusContext", () => ({ default: ({ children }: { children: ReactNode }) => children }));
@@ -20,6 +28,12 @@ beforeEach(() => {
   state.pathname = "/shop";
   state.search = "";
   state.permissions = [];
+  auth.refresh.mockReset();
+  auth.refresh.mockImplementation(async () => ({
+    id: "representative",
+    permissions: [...state.permissions],
+  }));
+  authCache.cacheCurrentUser.mockClear();
 });
 
 function openNavigation() {
@@ -39,7 +53,7 @@ describe("商品工作導覽", () => {
     expect(nav.getAllByRole("link")).toHaveLength(2);
   });
 
-  it("shows only class collection to a representative and keeps a return to the catalog", () => {
+  it("shows only class collection to a representative and keeps a return to the catalog", async () => {
     state.pathname = "/shop/class-orders";
     state.permissions = ["class:shop_collect"];
     const nav = openNavigation();
@@ -47,7 +61,24 @@ describe("商品工作導覽", () => {
     expect(nav.queryByRole("link", { name: "訂購統計" })).not.toBeInTheDocument();
     expect(nav.queryByRole("link", { name: "班級與議員設定" })).not.toBeInTheDocument();
     expect(nav.getByRole("link", { name: "商品目錄" })).toHaveAttribute("href", "/shop");
-    expect(screen.getByText("工作內容")).toBeVisible();
+    expect(await screen.findByText("工作內容")).toBeVisible();
+  });
+
+  it("refreshes a stale permission snapshot before opening the class workspace", async () => {
+    state.pathname = "/shop/class-orders";
+    auth.refresh.mockResolvedValue({
+      id: "representative",
+      permissions: ["class:shop_collect"],
+    });
+
+    render(<ShopLayout><p>工作內容</p></ShopLayout>);
+
+    expect(await screen.findByText("工作內容")).toBeVisible();
+    expect(auth.refresh).toHaveBeenCalledTimes(1);
+    expect(authCache.cacheCurrentUser).toHaveBeenCalledWith({
+      id: "representative",
+      permissions: ["class:shop_collect"],
+    });
   });
 
   it("opens statistics directly and highlights only that task", () => {

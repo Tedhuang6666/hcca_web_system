@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import ModuleBoundary from "@/components/ModuleBoundary";
@@ -9,6 +10,8 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import PublicModuleStatusProvider from "@/contexts/PublicModuleStatusContext";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
 import { usePermissions } from "@/hooks/usePermissions";
+import { authApi } from "@/lib/api/auth";
+import { cacheCurrentUser } from "@/lib/auth-cache";
 import { BarChart2, ChevronDown, ClipboardList, ListChecks, PackageSearch, ShoppingBag, UsersRound } from "lucide-react";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
@@ -193,6 +196,8 @@ function ShopWorkspaceDenied({ section }: { section: "class" | "oversight" | "ma
 function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isAdmin, isReady, permissions } = usePermissions();
+  const [classPermissionCheck, setClassPermissionCheck] = useState<"idle" | "checking" | "done">("idle");
+  const classPermissionRefreshStarted = useRef(false);
   const tabs = getShopTabs(isAdmin, permissions);
   const groups = groupShopTabs(tabs);
   const requiredSection = pathname.startsWith("/shop/class-orders")
@@ -209,7 +214,27 @@ function ProtectedShopLayout({ children }: { children: React.ReactNode }) {
       "shop:view_all", "shop:manage_orders", "shop:manage",
     ].some((permission) => permissions.has(permission)))
     || (requiredSection === "manage" && permissions.has("shop:manage"));
-  const waitingForPermissions = requiredSection !== null && !isReady;
+  useEffect(() => {
+    if (requiredSection !== "class") {
+      classPermissionRefreshStarted.current = false;
+      setClassPermissionCheck("idle");
+      return;
+    }
+    if (!isReady || classPermissionRefreshStarted.current) return;
+
+    classPermissionRefreshStarted.current = true;
+    setClassPermissionCheck("checking");
+    void authApi.refresh().then(
+      (user) => {
+        cacheCurrentUser(user);
+        setClassPermissionCheck("done");
+      },
+      () => setClassPermissionCheck("done"),
+    );
+  }, [isReady, requiredSection]);
+
+  const waitingForPermissions = (requiredSection !== null && !isReady)
+    || (requiredSection === "class" && classPermissionCheck !== "done");
 
   return (
     <ModuleBoundary id="shop" skeleton={<ListPageSkeleton />}>

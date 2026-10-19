@@ -9,12 +9,15 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core import cache as cache_svc
 from api.models.person import Person
 from api.models.school_class import SchoolClass
 from api.models.user import User
+from api.routers import school_class as class_router
 from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
 from api.services import school_class as class_svc
 
@@ -264,6 +267,51 @@ async def test_assign_class_role_returns_position(
     body = response.json()
     assert "user_position_id" in body
     assert "position_id" in body
+
+
+async def test_assign_class_representative_refreshes_cached_permissions(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., User],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sc = await _make_class(db_session, admin_user)
+    representative = await make_user(email="class-representative-cache@school.edu")
+    permission_cache: dict[str, list[str]] = {}
+    invalidated_user_ids: list[str] = []
+
+    async def fake_cache_get(key: str) -> list[str] | None:
+        return permission_cache.get(key)
+
+    async def fake_cache_set(key: str, value: list[str], ttl: int = 60) -> None:
+        permission_cache[key] = value
+
+    async def record_permission_invalidation(user_id: str) -> None:
+        invalidated_user_ids.append(user_id)
+        permission_cache.pop(f"perm:{user_id}", None)
+
+    monkeypatch.setattr(cache_svc, "cache_get", fake_cache_get)
+    monkeypatch.setattr(cache_svc, "cache_set", fake_cache_set)
+    monkeypatch.setattr(
+        class_router, "cache_invalidate_user_permissions", record_permission_invalidation
+    )
+
+    representative_client = authed_client_factory(representative)
+    initial_auth = await representative_client.get("/auth/me")
+    assert initial_auth.status_code == 200
+    assert "class:shop_collect" not in initial_auth.json()["permissions"]
+
+    assigned = await authed_client_factory(admin_user).post(
+        f"/classes/{sc.id}/roles/class_representative/assign",
+        json={"user_id": str(representative.id)},
+    )
+    assert assigned.status_code == 201
+    assert invalidated_user_ids == [str(representative.id)]
+
+    refreshed_auth = await representative_client.get("/auth/me")
+    assert refreshed_auth.status_code == 200
+    assert "class:shop_collect" in refreshed_auth.json()["permissions"]
 
 
 async def test_assign_class_role_to_unregistered_roster_member_is_pending_until_signup(
