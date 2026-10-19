@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -537,6 +538,7 @@ async def assign_class_role(
         up = await class_svc.assign_class_role(session, sc, role_key=role_key, data=payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await cache_invalidate_user_permissions(str(up.user_id))
     return {"user_position_id": up.id, "position_id": up.position_id}
 
 
