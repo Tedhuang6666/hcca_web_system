@@ -549,13 +549,13 @@ function ProductModal({
             </div>
           )}
         </div>
+        <button ref={closeButtonRef} onClick={onClose} className="shop-product-dialog-close topbar-icon-btn" aria-label="關閉">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
         <div className="shop-product-dialog-content">
-          <button ref={closeButtonRef} onClick={onClose} className="shop-product-dialog-close topbar-icon-btn" aria-label="關閉">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
           {productLoading && (
             <div className="shop-product-dialog-state" role="status" aria-live="polite">
               <h3 id="product-modal-title">載入商品詳情</h3>
@@ -574,147 +574,145 @@ function ProductModal({
           )}
           {product && !productLoading && !productLoadError && (
             <>
-              <div className="shop-product-dialog-heading">
-                <h3 id="product-modal-title">{product.name}</h3>
-                {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
-                {product.description && <p className="whitespace-pre-line">{product.description}</p>}
-                {!product.is_unlimited && product.status === "active" && (
-                  <p className="shop-product-dialog-stock">剩餘 {product.stock_quantity} 件</p>
-                )}
-                {product.max_quantity_per_user != null && (
-                  <p className="shop-product-dialog-stock">
-                    每人限購 {product.max_quantity_per_user} 件
-                    {remainingForUser != null && ` · 此帳號尚可選 ${remainingForUser} 件`}
-                  </p>
-                )}
-              </div>
-
-              {variantGroups.map((g) => (
-                <div key={g.id} className="shop-product-dialog-section">
-                  <label>{g.name}</label>
-                  <div className="shop-product-options">
-                    {(g.options ?? [])
-                      .filter((o) => o.is_active)
-                      .map((o) => {
-                        const sel = picked[g.id] === o.id;
-                        return (
-                          <button
-                            key={o.id}
-                            onClick={() => {
-                              setSelectedMediaIndex(null);
-                              const nextPicked = { ...picked, [g.id]: o.id };
-                              setPicked(nextPicked);
-                              const nextKey = Object.values(nextPicked).sort().join(",");
-                              const registered = registeredItems
-                                .filter((item) => registrationVariantKey(item.selected_options) === nextKey)
-                                .reduce((total, item) => total + item.quantity, 0);
-                              setQty(registered || 1);
-                              setRegistrationUpdateMessage("");
-                            }}
-                            disabled={authLoading || loading}
-                            className="shop-product-option"
-                            aria-pressed={sel}>
-                            {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
-                            <span>{o.value}</span>
-                            {o.price_delta !== 0 && (
-                              <span className="shop-product-option-price">
-                                {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                  </div>
+              <div className="shop-product-dialog-scroll">
+                <div className="shop-product-dialog-heading">
+                  <h3 id="product-modal-title">{product.name}</h3>
+                  {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
+                  {product.description && <p className="whitespace-pre-line">{product.description}</p>}
+                  {!product.is_unlimited && product.status === "active" && (
+                    <p className="shop-product-dialog-stock">剩餘 {product.stock_quantity} 件</p>
+                  )}
+                  {product.max_quantity_per_user != null && (
+                    <p className="shop-product-dialog-stock">
+                      每人限購 {product.max_quantity_per_user} 件
+                      {remainingForUser != null && ` · 此帳號尚可選 ${remainingForUser} 件`}
+                    </p>
+                  )}
                 </div>
-              ))}
 
-              <div className="shop-product-dialog-section">
-                <label>數量</label>
-                {maxSelectedQuantity === 0 ? (
-                  <p className="text-sm" style={{ color: "var(--public-secondary)" }}>
-                    {registeredQuantity > 0 ? "目前已達可登記數量。" : "目前沒有可登記數量。"}
-                  </p>
-                ) : product.max_quantity_per_user === 1 ? (
-                  <p className="text-sm" style={{ color: "var(--public-secondary)" }}>
-                    每人限購 1 件
-                  </p>
-                ) : (
-                  <div className="shop-product-quantity">
-                    <button
-                      type="button"
-                      onClick={() => changeSelectedQuantity(Math.max(selectedRegistrationQuantity > 0 ? 0 : 1, qty - 1))}
-                      disabled={qty <= (selectedRegistrationQuantity > 0 ? 0 : 1) || !canEdit || loading}
-                      aria-label="減少數量">−</button>
-                    <span>{qty}</span>
-                    <button
-                      type="button"
-                      onClick={() => changeSelectedQuantity(Math.min(maxSelectedQuantity, qty + 1))}
-                      disabled={qty >= maxSelectedQuantity || !canEdit || loading}
-                      aria-label="增加數量">＋</button>
+                {variantGroups.map((g) => (
+                  <div key={g.id} className="shop-product-dialog-section">
+                    <label>{g.name}</label>
+                    <div className="shop-product-options">
+                      {(g.options ?? [])
+                        .filter((o) => o.is_active)
+                        .map((o) => {
+                          const sel = picked[g.id] === o.id;
+                          return (
+                            <button
+                              key={o.id}
+                              onClick={() => {
+                                setSelectedMediaIndex(null);
+                                const nextPicked = { ...picked, [g.id]: o.id };
+                                setPicked(nextPicked);
+                                const nextKey = Object.values(nextPicked).sort().join(",");
+                                const registered = registeredItems
+                                  .filter((item) => registrationVariantKey(item.selected_options) === nextKey)
+                                  .reduce((total, item) => total + item.quantity, 0);
+                                setQty(registered || 1);
+                                setRegistrationUpdateMessage("");
+                              }}
+                              disabled={authLoading || loading}
+                              className="shop-product-option"
+                              aria-pressed={sel}>
+                              {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
+                              <span>{o.value}</span>
+                              {o.price_delta !== 0 && (
+                                <span className="shop-product-option-price">
+                                  {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                    </div>
                   </div>
-                )}
+                ))}
+
+                {!isLoggedIn ? (
+                  <p className="shop-product-purchase-hint" role="status">
+                    {authLoading ? "正在確認登入狀態…" : "登入後即可登記商品。"}
+                  </p>
+                ) : authorizationRequired ? (
+                  <p className="shop-product-purchase-hint" role="status">
+                    代訂需要學生授權。請輸入學生提供的七位數驗證碼，或開啟學生傳來的連結。
+                    <button type="button" className="shop-product-delegation-action" onClick={onRequestDelegation}>
+                      前往代訂，輸入驗證碼
+                    </button>
+                  </p>
+                ) : registrationLoadError ? (
+                  <p className="shop-product-purchase-hint" role="alert">
+                    目前無法讀取商品登記，請重新載入頁面後再修改。
+                  </p>
+                ) : (registrationLocked || classClosed || deadlinePassed) ? (
+                  <p className="shop-product-purchase-hint" role="status">
+                    {registrationLockMessage({ registrationLocked, classClosed, deadlinePassed })}
+                  </p>
+                ) : null}
               </div>
-
-              {registrationUpdateMessage ? (
-                <p className="shop-product-registration-status" role="status" aria-live="polite">
-                  {registrationUpdateMessage}
-                </p>
-              ) : null}
-
-              {!isLoggedIn ? (
-                <p className="shop-product-purchase-hint" role="status">
-                  {authLoading ? "正在確認登入狀態…" : "登入後即可登記商品。"}
-                </p>
-              ) : authorizationRequired ? (
-                <p className="shop-product-purchase-hint" role="status">
-                  代訂需要學生授權。請輸入學生提供的七位數驗證碼，或開啟學生傳來的連結。
-                  <button type="button" className="shop-product-delegation-action" onClick={onRequestDelegation}>
-                    前往代訂，輸入驗證碼
-                  </button>
-                </p>
-              ) : registrationLoadError ? (
-                <p className="shop-product-purchase-hint" role="alert">
-                  目前無法讀取商品登記，請重新載入頁面後再修改。
-                </p>
-              ) : (registrationLocked || classClosed || deadlinePassed) ? (
-                <p className="shop-product-purchase-hint" role="status">
-                  {registrationLockMessage({ registrationLocked, classClosed, deadlinePassed })}
-                </p>
-              ) : null}
-              <div className="shop-product-dialog-actions">
-                {isLoggedIn && selectedRegistrationQuantity > 0 ? (
+              <div className="shop-product-purchase-bar">
+                {registrationUpdateMessage ? (
+                  <p className="shop-product-registration-status" role="status" aria-live="polite">
+                    {registrationUpdateMessage}
+                  </p>
+                ) : null}
+                <div className="shop-product-dialog-section shop-product-quantity-section">
+                  <label>數量</label>
+                  {maxSelectedQuantity === 0 ? (
+                    <p>{registeredQuantity > 0 ? "目前已達可登記數量。" : "目前沒有可登記數量。"}</p>
+                  ) : product.max_quantity_per_user === 1 ? (
+                    <p>每人限購 1 件</p>
+                  ) : (
+                    <div className="shop-product-quantity">
+                      <button
+                        type="button"
+                        onClick={() => changeSelectedQuantity(Math.max(selectedRegistrationQuantity > 0 ? 0 : 1, qty - 1))}
+                        disabled={qty <= (selectedRegistrationQuantity > 0 ? 0 : 1) || !canEdit || loading}
+                        aria-label="減少數量">−</button>
+                      <span>{qty}</span>
+                      <button
+                        type="button"
+                        onClick={() => changeSelectedQuantity(Math.min(maxSelectedQuantity, qty + 1))}
+                        disabled={qty >= maxSelectedQuantity || !canEdit || loading}
+                        aria-label="增加數量">＋</button>
+                    </div>
+                  )}
+                </div>
+                <div className="shop-product-dialog-actions">
+                  {isLoggedIn && selectedRegistrationQuantity > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => void setVariantQuantity(selectedOptionIds, 0)}
+                      disabled={!canEdit || loading}
+                      className="shop-product-remove">
+                      移除這項登記
+                    </button>
+                  ) : isLoggedIn ? (
+                    <button
+                      type="button"
+                      onClick={submit}
+                      disabled={loading || !canRegister || qty > maxSelectedQuantity}
+                      className="shop-product-submit"
+                      aria-busy={loading}>
+                      {loading
+                        ? "處理中…"
+                        : `登記購買 · NT$${(unitPrice * qty).toLocaleString()}`}
+                    </button>
+                  ) : (
+                    <Link
+                      href={`/login?next=${encodeURIComponent(`/shop?product=${productId}`)}`}
+                      className="shop-product-submit">
+                      登入後登記商品
+                    </Link>
+                  )}
                   <button
                     type="button"
-                    onClick={() => void setVariantQuantity(selectedOptionIds, 0)}
-                    disabled={!canEdit || loading}
-                    className="shop-product-remove">
-                    移除這項登記
+                    onClick={onClose}
+                    disabled={loading}
+                    className="shop-product-cancel">
+                    {selectedRegistrationQuantity > 0 ? "完成" : "取消"}
                   </button>
-                ) : isLoggedIn ? (
-                  <button
-                    type="button"
-                    onClick={submit}
-                    disabled={loading || !canRegister || qty > maxSelectedQuantity}
-                    className="shop-product-submit"
-                    aria-busy={loading}>
-                    {loading
-                      ? "處理中…"
-                      : `登記購買 · NT$${(unitPrice * qty).toLocaleString()}`}
-                  </button>
-                ) : (
-                  <Link
-                    href={`/login?next=${encodeURIComponent(`/shop?product=${productId}`)}`}
-                    className="shop-product-submit">
-                    登入後登記商品
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={loading}
-                  className="shop-product-cancel">
-                  {selectedRegistrationQuantity > 0 ? "完成" : "取消"}
-                </button>
+                </div>
               </div>
             </>
           )}
