@@ -136,7 +136,7 @@ export default function ClassOrdersPage() {
   const [activityFilter, setActivityFilter] = useState("all");
   const [ledgerActivityKey, setLedgerActivityKey] = useState("");
   const [composerActivityKey, setComposerActivityKey] = useState<string | null>(null);
-  const [recipientMode, setRecipientMode] = useState<"single" | "batch">("batch");
+  const [recipientMode, setRecipientMode] = useState<"single" | "batch">("single");
   const [batchStudentIds, setBatchStudentIds] = useState<string[]>([]);
   const [recipientFilter, setRecipientFilter] = useState("");
   const [orderProductSearch, setOrderProductSearch] = useState("");
