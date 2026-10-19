@@ -3,11 +3,23 @@ import { serverApiUrl } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
+const SHORT_LINK_SLUG_PATTERN = /^[\p{L}\p{N}_-]{1,80}$/u;
+
+function notFoundResponse(): Response {
+  return new Response("找不到這個班聯短網址。", {
+    status: 404,
+    headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
 async function resolveShortLink(slug: string): Promise<Response> {
+  const normalizedSlug = slug.normalize("NFC");
+  if (!SHORT_LINK_SLUG_PATTERN.test(normalizedSlug)) return notFoundResponse();
+
   let lookup: Response;
   try {
     lookup = await fetch(
-      serverApiUrl(`/short-links/resolve/${encodeURIComponent(slug)}`),
+      serverApiUrl(`/short-links/resolve/${encodeURIComponent(normalizedSlug)}`),
       { cache: "no-store", signal: AbortSignal.timeout(5_000) },
     );
   } catch {
@@ -22,10 +34,7 @@ async function resolveShortLink(slug: string): Promise<Response> {
   }
 
   if (lookup.status === 404) {
-    return new Response("找不到這個班聯短網址。", {
-      status: 404,
-      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" },
-    });
+    return notFoundResponse();
   }
   if (!lookup.ok) {
     return new Response("短網址服務暫時無法使用，請稍後重試。", {
