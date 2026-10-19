@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ShopPage from "@/app/(protected)/shop/page";
 import type { OrderOut, ShopDelegationContextOut } from "@/lib/types";
@@ -9,11 +10,18 @@ const api = vi.hoisted(() => ({
   previewDelegationPromotion: vi.fn(), applyDelegationPromotion: vi.fn(),
   setCurrentRegistrationProduct: vi.fn(), getProduct: vi.fn(), listDelegationLinks: vi.fn(), exchangeDelegationCode: vi.fn(),
 }));
+const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("@/lib/api", () => ({
   authApi: { me: api.me, refresh: api.me }, shopApi: api, classApi: { myClass: vi.fn().mockResolvedValue(null) },
   apiErrorMessage: (error: Error) => error.message,
 }));
 vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; children: ReactNode }) => (
+    <a href={href} {...props}>{children}</a>
+  ),
+}));
 vi.mock("@/lib/api-cache", () => ({ cacheGet: () => null, cacheHas: () => false, cacheSet: vi.fn() }));
 
 const product = {
@@ -158,7 +166,7 @@ describe("原商品頁的家人代訂模式", () => {
     expect(api.accessDelegation).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "關閉" }));
     api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
-    fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
+    fireEvent.click(screen.getByRole("link", { name: "查看商品：紀念袋" }));
     expect(await screen.findByText(/代訂需要學生授權。請輸入學生提供的七位數驗證碼/)).toBeVisible();
     expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeDisabled();
     expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
@@ -166,6 +174,18 @@ describe("原商品頁的家人代訂模式", () => {
     expect(await screen.findByRole("dialog", { name: "代訂商品" })).toBeVisible();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("textbox", { name: "學生提供的七位數代訂驗證碼" })).toBeVisible();
+  });
+
+  it("opens a product from its direct single-product URL", async () => {
+    window.history.replaceState({}, "", "/shop/%E7%B4%80%E5%BF%B5%E8%A2%8B");
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.getCurrentRegistrations.mockResolvedValue([]);
+    api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
+    render(<ShopPage productSlug="紀念袋" />);
+
+    expect(await screen.findByRole("button", { name: "關閉" })).toBeVisible();
+    expect(api.getProduct).toHaveBeenCalledWith("bag");
   });
 
   it("shows students a scoped create entry while guests receive login guidance", async () => {

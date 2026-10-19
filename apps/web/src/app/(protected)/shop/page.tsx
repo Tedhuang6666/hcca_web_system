@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -37,6 +38,7 @@ import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-del
 import { useWS } from "@/hooks/useWS";
 import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 import Modal from "@/components/ui/Modal";
+import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -200,6 +202,7 @@ function ProductModal({
   registrationLocked,
   authorizationRequired = false,
   editingDescription,
+  productHref,
   onClose,
   onRegistrationChange,
   onProductAdded,
@@ -216,6 +219,7 @@ function ProductModal({
   registrationLocked: boolean;
   authorizationRequired?: boolean;
   editingDescription?: string;
+  productHref: string | null;
   onClose: () => void;
   onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
   onProductAdded: () => void;
@@ -700,7 +704,7 @@ function ProductModal({
                     </button>
                   ) : (
                     <Link
-                      href={`/login?next=${encodeURIComponent(`/shop?product=${productId}`)}`}
+                      href={`/login?next=${encodeURIComponent(productHref ?? `/shop?product=${productId}`)}`}
                       className="shop-product-submit">
                       登入後登記商品
                     </Link>
@@ -729,11 +733,13 @@ function ProductCard({
   product,
   classClosed,
   registeredQuantity,
+  href,
   onClick,
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
   registeredQuantity: number;
+  href: string | null;
   onClick: () => void;
 }) {
   const soldOut = product.status === "sold_out";
@@ -749,15 +755,10 @@ function ProductCard({
         : soldOut
           ? "已售完"
           : null;
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="shop-public-product-card group"
-      style={{
-        opacity: disabled ? 0.6 : 1,
-      }}
-      aria-label={`查看商品：${product.name}`}>
+  const className = "shop-public-product-card group";
+  const style = { opacity: disabled ? 0.6 : 1 };
+  const content = (
+    <>
       <div className="shop-public-product-media">
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -804,19 +805,59 @@ function ProductCard({
           {!disabled && <ArrowUpRight size={16} aria-hidden="true" />}
         </span>
       </div>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault();
+            return;
+          }
+          onClick();
+        }}
+        aria-disabled={disabled || undefined}
+        tabIndex={disabled ? -1 : undefined}
+        className={className}
+        style={style}
+        aria-label={`查看商品：${product.name}`}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={className}
+      style={style}
+      aria-label={`查看商品：${product.name}`}>
+      {content}
     </button>
   );
 }
 
 // ── 購買頁 ────────────────────────────────────────────────────────────────────
 
-export default function ShopPage() {
+type ShopPageProps = {
+  topicSlug?: string;
+  productSlug?: string;
+};
+
+export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {}) {
+  const router = useRouter();
   const catalogCacheKey = "shop/catalog/all:v2";
 
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
   const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
+  const [routeProductNotFound, setRouteProductNotFound] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isStudent, setIsStudent] = useState(false);
   const [canOrderForSelf, setCanOrderForSelf] = useState(false);
@@ -869,7 +910,14 @@ export default function ShopPage() {
 
   const closeProduct = useCallback(() => {
     setOpenProduct(null);
-  }, []);
+    if (productSlug) {
+      router.push("/shop");
+      return;
+    }
+    if (new URLSearchParams(window.location.search).has("product")) {
+      router.replace("/shop");
+    }
+  }, [productSlug, router]);
 
   const closeDelegation = useCallback(() => {
     setDelegationOpen(false);
@@ -1157,16 +1205,46 @@ export default function ShopPage() {
 
   useEffect(() => {
     const productId = new URLSearchParams(window.location.search).get("product");
-    if (!productId || catalog.length === 0) return;
-    const category = catalog.find((item) =>
-      item.products.some((product) => product.id === productId)
-      || item.series.some((series) => series.products.some((product) => product.id === productId))
-    );
-    if (!category) return;
-    setSelectedCategoryId(category.id);
+    if (!productId && !productSlug) {
+      setRouteProductNotFound(false);
+      return;
+    }
+    if (catalog.length === 0) {
+      if (!loading && productSlug) setRouteProductNotFound(true);
+      return;
+    }
+
+    const routeProduct = productSlug
+      ? resolveShopProductPath(catalog, topicSlug ? [topicSlug, productSlug] : [productSlug])
+      : null;
+    const entry = productId
+      ? catalog.flatMap((category) => [
+          ...category.products.map((product) => ({ category, product })),
+          ...category.series.flatMap((series) => series.products.map((product) => ({ category, product }))),
+        ]).find(({ product }) => product.id === productId) ?? null
+      : routeProduct;
+    if (!entry) {
+      setRouteProductNotFound(Boolean(productSlug));
+      return;
+    }
+
+    setRouteProductNotFound(false);
+    setSelectedCategoryId(entry.category.id);
     setSelectedSeriesId(null);
-    setOpenProduct(productId);
-  }, [catalog, setSelectedCategoryId]);
+    setOpenProduct(entry.product.id);
+  }, [catalog, loading, productSlug, topicSlug, setSelectedCategoryId]);
+
+  const openProductHref = useMemo(() => {
+    if (!openProduct) return null;
+    for (const category of catalog) {
+      const product = [
+        ...category.products,
+        ...category.series.flatMap((series) => series.products),
+      ].find((candidate) => candidate.id === openProduct);
+      if (product) return shopProductHref(catalog, category, product);
+    }
+    return null;
+  }, [catalog, openProduct]);
 
   const selectedCategory =
     catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
@@ -1423,6 +1501,13 @@ export default function ShopPage() {
         <div className="public-site shop-delegation-panel">{delegationPanel}</div>
       </Modal>}
       {delegationToken && (!delegationOpen || delegationContext?.can_edit) && delegationPanel}
+
+      {routeProductNotFound && !loading && (
+        <div className="shop-public-alert" role="alert">
+          <p>找不到這項商品，商品網址可能已失效。</p>
+          <Link href="/shop">返回商品目錄</Link>
+        </div>
+      )}
 
       {myClass && (
         <section
@@ -1785,6 +1870,7 @@ export default function ShopPage() {
                         product={product}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
+                        href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
                         onClick={() => setOpenProduct(product.id)}
                       />
                     ))}
@@ -1811,6 +1897,7 @@ export default function ShopPage() {
                           product={product}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
+                          href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
                           onClick={() => setOpenProduct(product.id)}
                         />
                       ))}
@@ -1891,6 +1978,7 @@ export default function ShopPage() {
             : selectedCategoryRegistration?.items.some((item) => item.delegation_link_id)
               ? "這裡修改本人登記的數量。家人代訂品項可在訂單明細修改；優惠按全部品項合計。"
               : undefined}
+          productHref={openProductHref}
           onClose={closeProduct}
           onRegistrationChange={handleRegistrationChange}
           onProductAdded={flyProductIntoOrder}

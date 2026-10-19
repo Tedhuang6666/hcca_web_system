@@ -27,10 +27,16 @@ export const MODULE_MANIFEST = {
 
 export const MODULE_IDS = Object.keys(MODULE_MANIFEST) as Array<keyof typeof MODULE_MANIFEST>;
 
+export const SHOP_PRODUCT_ROUTE_PATTERNS = [
+  /^\/shop\/(?!(?:admin|cart|class-orders|council-orders|orders)(?:\/|$))[^/]+$/,
+  /^\/shop\/(?!(?:admin|cart|class-orders|council-orders|orders)(?:\/|$))[^/]+\/[^/]+$/,
+] as const;
+
 export const PUBLIC_ROUTE_MANIFEST = {
   prefixes: ["/about", "/articles", "/auth", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/officers", "/pages", "/public", "/shop/cart", "/unsubscribe"],
   exact: ["/", "/announcements", "/documents", "/partner-map", "/petitions/public", "/profile/complete", "/regulations", "/surveys", "/raffle", "/blocked", "/contact", "/shop", "/system-info"],
   patterns: [
+    ...SHOP_PRODUCT_ROUTE_PATTERNS,
     /^\/shop\/orders\/[^/]+$/,
     /^\/announcements\/(?!new$)[^/]+$/,
     /^\/documents\/(?!new$|delegations$)[^/]+$/,

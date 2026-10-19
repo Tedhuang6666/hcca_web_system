@@ -1,4 +1,4 @@
-import { PUBLIC_ROUTE_MANIFEST } from "./route-manifest";
+import { PUBLIC_ROUTE_MANIFEST, SHOP_PRODUCT_ROUTE_PATTERNS } from "./route-manifest";
 
 export type RouteShell = "bare" | "app";
 export type RouteCspStrategy = "nonce";
@@ -170,6 +170,7 @@ export function requiresAuthentication(pathname: string): boolean {
 
 export function isBareRoute(pathname: string): boolean {
   if (pathname === "/shop" || pathname === "/shop/cart" || matchesPrefix(pathname, ["/shop/orders"])) return true;
+  if (SHOP_PRODUCT_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname))) return true;
   return BARE_ROUTE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
