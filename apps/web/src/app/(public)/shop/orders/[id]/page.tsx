@@ -200,7 +200,7 @@ export default function OrderDetailPage() {
       const seating = await Promise.all([...quantitiesByProduct.entries()].map(async ([productId, sources]) => {
         try {
           const product = await shopApi.getProduct(productId);
-          imageUrls.set(productId, product.image_url ?? null);
+          imageUrls.set(productId, product.image_url || product.media[0]?.image_url || null);
           if (!product.requires_seating) return null;
           const zones = await seatingApi.listZones(productId);
           const zoneIds = new Set(zones.map((zone) => zone.id));
@@ -217,7 +217,6 @@ export default function OrderDetailPage() {
             })),
           } satisfies SeatingItem;
         } catch {
-          imageUrls.set(productId, null);
           return null;
         }
       }));

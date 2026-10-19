@@ -116,6 +116,22 @@ describe("公開訂單詳情", () => {
     expect(api.getOrder).toHaveBeenCalledWith("added");
   });
 
+  it("uses the first product media image when the primary image is empty", async () => {
+    api.getProduct.mockResolvedValue({
+      requires_seating: false,
+      image_url: "",
+      media: [{ image_url: "/uploads/bag-gallery.png" }],
+    });
+    api.orderAssignments.mockRejectedValue(new Error("座位資料暫時無法載入"));
+    const { container } = render(<OrderDetailPage />);
+
+    expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();
+    expect(container.querySelector('img[alt=""]')).toHaveAttribute(
+      "src",
+      expect.stringContaining("bag-gallery.png"),
+    );
+  });
+
   it("asks visitors to log in before requesting private order data", async () => {
     api.me.mockResolvedValue(null);
     render(<OrderDetailPage />);
