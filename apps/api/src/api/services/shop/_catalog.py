@@ -20,6 +20,7 @@ from api.models.shop import (
     ProductStatus,
     ProductVariantGroup,
     ProductVariantOption,
+    ShopDelegationLink,
     ShopPromotion,
 )
 from api.schemas.shop import (
@@ -120,6 +121,11 @@ async def delete_category(session: AsyncSession, category: ProductCategory) -> N
     )
     if result.scalar_one_or_none() is not None or direct_product is not None:
         raise ValueError("主題下仍有系列或商品，無法刪除（請先刪除或移動內容）")
+    delegation_link_id = await session.scalar(
+        select(ShopDelegationLink.id).where(ShopDelegationLink.category_id == category.id).limit(1)
+    )
+    if delegation_link_id is not None:
+        raise ValueError("主題仍有代訂授權連結，無法刪除（請先刪除或移動連結）")
     await session.delete(category)
     await session.flush()
 

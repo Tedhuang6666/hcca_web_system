@@ -1,6 +1,6 @@
 # Production compose file.
 # Run with:
-#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+#   docker compose --env-file .env.production -f docker-compose.prod.yml --profile email --profile workers up -d --build
 
 # 所有容器共用的 log rotation（防 log 無限長大塞爆磁碟）；與主機 daemon.json 雙保險。
 x-logging: &default-logging

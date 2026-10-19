@@ -17,7 +17,14 @@ from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
 from api.models.person import PersonAffiliationKind
 from api.models.receivable import Receivable, ReceivableSource
-from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory
+from api.models.shop import (
+    Order,
+    OrderItem,
+    OrderStatus,
+    Product,
+    ProductCategory,
+    ShopDelegationLink,
+)
 from api.models.user import User
 from api.schemas.person import PersonAffiliationCreate
 from api.schemas.school_class import (
@@ -224,6 +231,37 @@ async def test_delete_empty_category_succeeds(
     ac = authed_client_factory(member_user)
     resp = await ac.delete(f"/shop/categories/{category.id}")
     assert resp.status_code == 204
+
+
+async def test_delete_category_with_delegation_link_returns_409(
+    db_session: AsyncSession, member_user: User, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    category = await _make_category(db_session, member_user)
+    link = ShopDelegationLink(
+        user_id=member_user.id,
+        category_id=category.id,
+        name="測試授權",
+        token_hash="a" * 64,
+    )
+    db_session.add(link)
+    await db_session.flush()
+
+    ac = authed_client_factory(member_user)
+    resp = await ac.delete(f"/shop/categories/{category.id}")
+
+    assert resp.status_code == 409
+    assert "代訂授權連結" in resp.json()["detail"]
+    assert (
+        await db_session.scalar(select(ProductCategory.id).where(ProductCategory.id == category.id))
+        == category.id
+    )
+    assert (
+        await db_session.scalar(
+            select(ShopDelegationLink.id).where(ShopDelegationLink.id == link.id)
+        )
+        == link.id
+    )
 
 
 # ── 系列 ──────────────────────────────────────────────────────────────────────
