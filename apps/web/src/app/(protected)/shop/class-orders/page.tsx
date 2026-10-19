@@ -176,7 +176,7 @@ export default function ClassOrdersPage() {
   );
   const orderProductResults = useMemo(() => {
     const needle = orderProductSearch.trim().toLocaleLowerCase("zh-Hant");
-    if (!needle) return [];
+    if (!needle) return formProducts;
     return formProducts.filter((product) =>
       [product.name, product.category, product.series]
         .some((value) => value.toLocaleLowerCase("zh-Hant").includes(needle)),
@@ -1206,20 +1206,20 @@ export default function ClassOrdersPage() {
                 <span style={{ color: "var(--text-muted)" }}>搜尋商品</span>
                 <input className="input min-h-11" type="search" value={orderProductSearch}
                   onChange={(event) => setOrderProductSearch(event.target.value)}
-                  placeholder="輸入商品名稱、分類或系列" />
+                  placeholder="輸入關鍵字篩選，或直接選擇商品" />
               </label>
               <div className="max-h-56 overflow-y-auto rounded-md"
                 role="group" aria-label="商品搜尋結果"
                 style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-                {!orderProductSearch.trim() ? (
+                {orderProductResults.length === 0 ? (
                   <p role="status" className="px-3 py-4 text-sm" style={{ color: "var(--text-muted)" }}>
-                    輸入關鍵字，從 {formProducts.length} 項可訂商品中搜尋。
+                    {orderProductSearch.trim()
+                      ? "找不到符合的商品，請試試商品名稱、分類或系列。"
+                      : "目前沒有可訂商品。"}
                   </p>
-                ) : orderProductResults.length === 0 ? (
-                  <p role="status" className="px-3 py-4 text-sm" style={{ color: "var(--text-muted)" }}>找不到符合的商品，請試試商品名稱、分類或系列。</p>
                 ) : (
                   <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
-                    {orderProductResults.slice(0, 12).map((product) => (
+                    {orderProductResults.map((product) => (
                       <li key={product.id}>
                         <button type="button" aria-pressed={orderProductId === product.id}
                           onClick={() => {
@@ -1243,7 +1243,7 @@ export default function ClassOrdersPage() {
               </div>
               {orderProductResults.length > 12 && (
                 <p role="status" className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  符合 {orderProductResults.length} 項，先顯示前 12 項；請輸入更多關鍵字縮小範圍。
+                  共 {orderProductResults.length} 項可訂商品；可捲動列表瀏覽，或輸入關鍵字縮小範圍。
                 </p>
               )}
               {selectedOrderProduct && (
