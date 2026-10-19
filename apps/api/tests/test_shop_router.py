@@ -790,6 +790,81 @@ async def test_registration_automatically_applies_account_item_quantity_promotio
     assert outsider_order.json()["discount_amount"] == 0
 
 
+async def test_unregistered_student_id_promotion_applies_after_account_registration(
+    db_session, client, authed_client_factory
+) -> None:
+    creator = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    other_buyer = await _bare_user(db_session, student_id="410998")
+    target_student_id = "410999"
+    product = await _make_active_product(db_session, creator, price=100, stock=20)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+
+    created = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "新生註冊優惠",
+            "target_identifiers": [target_student_id],
+            "target_product_ids": [str(product.id)],
+            "discount_type": "percentage",
+            "discount_value": 20,
+            "min_order_price": 0,
+        },
+    )
+    assert created.status_code == 201
+    promotion_id = created.json()["id"]
+    assert created.json()["target_users"] == [
+        {"email": None, "student_id": target_student_id}
+    ]
+    code_promotion = await manager_client.post(
+        "/shop/promotions",
+        json={
+            "name": "新生優惠碼",
+            "code": "FIRSTREG",
+            "target_identifiers": [target_student_id],
+            "discount_type": "percentage",
+            "discount_value": 10,
+            "min_order_price": 0,
+        },
+    )
+    assert code_promotion.status_code == 201
+    assert (await client.get("/shop/promotions/available")).json() == []
+    assert (
+        await authed_client_factory(other_buyer).get("/shop/promotions/available")
+    ).json() == []
+
+    buyer = await _bare_user(db_session, student_id=target_student_id)
+    buyer_client = authed_client_factory(buyer)
+    available = await buyer_client.get("/shop/promotions/available")
+    assert available.status_code == 200
+    assert {row["id"] for row in available.json()} == {
+        promotion_id,
+        code_promotion.json()["id"],
+    }
+
+    order = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert order.status_code == 200
+    assert order.json()["promotion_id"] == promotion_id
+    assert order.json()["discount_amount"] == 20
+    assert order.json()["total_price"] == 80
+
+    preview = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"code": "FIRSTREG"}
+    )
+    assert preview.status_code == 200
+    assert preview.json()["reason_code"] == "applied"
+
+    applied = await buyer_client.put(
+        "/shop/registrations/current/promotion", json={"code": "FIRSTREG"}
+    )
+    assert applied.status_code == 200
+    assert applied.json()["promotion_code"] == "FIRSTREG"
+
+
 async def test_shop_manager_can_edit_and_delete_unused_promotion(
     db_session, authed_client_factory
 ) -> None:

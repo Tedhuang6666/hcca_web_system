@@ -704,6 +704,13 @@ class ShopPromotion(Base, TimestampMixin):
     target_users: Mapped[list[User]] = relationship(
         "User", secondary=shop_promotion_users, lazy="selectin"
     )
+    student_id_targets: Mapped[list[ShopPromotionStudentTarget]] = relationship(
+        "ShopPromotionStudentTarget",
+        back_populates="promotion",
+        cascade="all, delete-orphan",
+        order_by="ShopPromotionStudentTarget.student_id",
+        lazy="selectin",
+    )
     target_products: Mapped[list[Product]] = relationship(
         "Product", secondary=shop_promotion_products, lazy="selectin"
     )
@@ -715,6 +722,24 @@ class ShopPromotion(Base, TimestampMixin):
         lazy="selectin",
     )
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
+
+
+class ShopPromotionStudentTarget(Base):
+    """優惠指定的學號，可在對應帳號註冊前先建立。"""
+
+    __tablename__ = "shop_promotion_student_targets"
+    __table_args__ = (Index("ix_shop_promotion_student_targets_student_id", "student_id"),)
+
+    promotion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    student_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+
+    promotion: Mapped[ShopPromotion] = relationship(
+        "ShopPromotion", back_populates="student_id_targets"
+    )
 
 
 __all__ = [
@@ -735,4 +760,5 @@ __all__ = [
     "ShopOrderPromotion",
     "ShopPromotion",
     "ShopPromotionProductPrice",
+    "ShopPromotionStudentTarget",
 ]

@@ -29238,7 +29238,7 @@ export interface components {
         /** ShopPromotionTargetOut */
         ShopPromotionTargetOut: {
             /** Email */
-            email: string;
+            email?: string | null;
             /** Student Id */
             student_id?: string | null;
         };

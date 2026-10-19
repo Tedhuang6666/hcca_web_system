@@ -156,6 +156,7 @@ export default function ShopPromotionPanel() {
       name: promotion.name,
       target_identifiers: (promotion.target_users ?? [])
         .map((user) => user.student_id || user.email)
+        .filter((identifier): identifier is string => Boolean(identifier))
         .join("\n"),
       target_product_ids: (promotion.target_products ?? []).map((product) => product.id),
       product_prices: Object.fromEntries(
@@ -300,7 +301,7 @@ export default function ShopPromotionPanel() {
               onChange={(e) => update("target_identifiers", e.target.value)}
               placeholder={"每行一個 Email 或學號\nstudent@example.edu.tw\n1101234"} />
             <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
-              留空代表所有帳號可用；輸入名單後僅列入的帳號可用，無論自動優惠或優惠碼。
+              留空代表所有帳號可用。學號可先指定，對應帳號註冊後即可使用；Email 必須是已註冊帳號。輸入名單後僅名單內帳號可用，適用自動優惠與優惠碼。
             </span>
           </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
@@ -446,9 +447,14 @@ export default function ShopPromotionPanel() {
             {promotions.map((promotion) => {
               const targetUsers = promotion.target_users ?? [];
               const targetLabel = targetUsers.length > 0
-                ? targetUsers.map((user) => user.student_id
-                  ? `${user.email}（學號 ${user.student_id}）`
-                  : user.email).join("、")
+                ? targetUsers.map((user) => {
+                  if (user.student_id) {
+                    return user.email
+                      ? `${user.email}（學號 ${user.student_id}）`
+                      : `學號 ${user.student_id}`;
+                  }
+                  return user.email ?? "指定帳號";
+                }).join("、")
                 : promotion.target_email || "所有可使用帳號";
               const benefitLabel = promotion.discount_type === "price_override"
                 ? (promotion.product_price_overrides ?? [])

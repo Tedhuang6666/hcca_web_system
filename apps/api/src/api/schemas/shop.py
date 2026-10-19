@@ -628,7 +628,7 @@ class ShopPromotionUpdate(BaseModel):
 
 
 class ShopPromotionTargetOut(BaseModel):
-    email: str
+    email: str | None = None
     student_id: str | None = None
 
 
