@@ -99,15 +99,22 @@ export function resolveShopProductPath(
 ): ProductEntry | null {
   if (segments.length !== 1 && segments.length !== 2) return null;
 
+  let decodedSegments: string[];
+  try {
+    decodedSegments = segments.map((segment) => decodeURIComponent(segment));
+  } catch {
+    return null;
+  }
+
   const entries = productEntries(catalog);
-  if (segments.length === 1) {
-    if (RESERVED_SHOP_SEGMENTS.has(segments[0])) return null;
-    const matches = entries.filter(({ product }) => slugify(product.name) === segments[0]);
+  if (decodedSegments.length === 1) {
+    if (RESERVED_SHOP_SEGMENTS.has(decodedSegments[0])) return null;
+    const matches = entries.filter(({ product }) => slugify(product.name) === decodedSegments[0]);
     return matches.length === 1 ? matches[0] : null;
   }
 
   return entries.find(({ category, product }) => {
     const expected = [topicSegment(category, catalog), productSegment(product, category)];
-    return expected.every((segment, index) => segment === segments[index]);
+    return expected.every((segment, index) => segment === decodedSegments[index]);
   }) ?? null;
 }

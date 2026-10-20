@@ -90,8 +90,19 @@ describe("shop product URLs", () => {
       .toMatchObject({ category: { id: "theme-1" }, product: { id: "bag-1" } });
   });
 
+  it("resolves percent-encoded single and nested product paths", () => {
+    expect(resolveShopProductPath(catalog, [encodeURIComponent("入場券")]))
+      .toMatchObject({ category: { id: "theme-2" }, product: { id: "ticket-1" } });
+    expect(resolveShopProductPath(catalog, [
+      encodeURIComponent("校慶商品"),
+      encodeURIComponent("紀念袋"),
+    ]))
+      .toMatchObject({ category: { id: "theme-1" }, product: { id: "bag-1" } });
+  });
+
   it("returns null for unknown or ambiguous path shapes", () => {
     expect(resolveShopProductPath(catalog, ["不存在"])).toBeNull();
     expect(resolveShopProductPath(catalog, ["校慶商品", "紀念袋", "其他"])).toBeNull();
+    expect(resolveShopProductPath(catalog, ["%E0%A4%A"])).toBeNull();
   });
 });
