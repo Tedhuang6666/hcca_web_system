@@ -943,6 +943,68 @@
   text-decoration: none;
 }
 
+.shop-public-product-entry {
+  min-width: 0;
+}
+
+.shop-product-card-offers {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--public-border);
+  padding-top: 1rem;
+}
+
+.shop-product-card-offer {
+  display: grid;
+  gap: 0.4rem;
+  overflow-wrap: anywhere;
+  color: var(--public-text);
+  font-size: 0.875rem;
+}
+
+.shop-product-card-offer p {
+  margin: 0;
+  color: var(--public-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.shop-product-card-offer .shop-price {
+  font-size: 1rem;
+}
+
+.shop-product-card-offer .shop-product-card-saving {
+  color: var(--public-accent-text);
+  font-weight: 700;
+}
+
+.shop-product-card-offer button {
+  min-height: 44px;
+  margin-top: 0.25rem;
+  border: 1px solid var(--public-accent);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  background: var(--public-accent-soft);
+  color: var(--public-accent-text);
+  font-weight: 700;
+}
+
+.shop-product-card-offer button:hover:not(:disabled) {
+  background: var(--public-accent);
+  color: var(--primary-fg);
+}
+
+.shop-product-card-offer button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.shop-product-card-offer button:focus-visible {
+  outline: 3px solid var(--public-focus);
+  outline-offset: 3px;
+}
+
 .shop-public-product-card:disabled,
 .shop-public-product-card[aria-disabled="true"] {
   cursor: not-allowed;
