@@ -362,6 +362,25 @@ async def update_person(db: AsyncSession, person: Person, *, data: PersonUpdate)
     return person
 
 
+def _apply_roster_student_name(person: Person, user: User) -> bool:
+    """已確認的學生本名優先於登入供應者姓名，且只能套用到本人帳號。"""
+    if (
+        not person.student_id
+        or person.user_id is None
+        or person.user_id != user.id
+        or user.student_id not in (None, person.student_id)
+        or not person.legal_name
+    ):
+        return False
+    name = person.legal_name.strip()
+    if not name:
+        return False
+    changed = person.display_name != name or user.display_name != name
+    person.display_name = name
+    user.display_name = name
+    return changed
+
+
 async def ensure_person_for_user(
     db: AsyncSession,
     user: User,
@@ -381,13 +400,17 @@ async def ensure_person_for_user(
             if not person.display_name:
                 person.display_name = user.display_name
                 changed = True
-            if changed:
+            name_changed = _apply_roster_student_name(person, user)
+            if changed or name_changed:
                 await db.flush()
+            if changed:
                 await sync_pending_affiliations_for_person(db, person)
             return person
 
     person = await db.scalar(select(Person).where(Person.user_id == user.id))
     if person is not None:
+        if _apply_roster_student_name(person, user):
+            await db.flush()
         return person
 
     person = Person(
@@ -453,6 +476,7 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
             person.display_name = user.display_name
         if not person.email:
             person.email = user.email
+        _apply_roster_student_name(person, user)
         people_by_user_id[user.id] = person
 
     await db.flush()
