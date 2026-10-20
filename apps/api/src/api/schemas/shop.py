@@ -578,7 +578,7 @@ class ShopPromotionCreate(BaseModel):
     target_product_ids: list[uuid.UUID] = Field(
         default_factory=list,
         max_length=100,
-        description="優惠適用商品；一般折扣要求同時登記，指定商品價格則可任選",
+        description="優惠適用商品；套組為每項各一件，一般折扣要求同時登記，指定商品價格可任選",
     )
     product_price_overrides: list[ShopPromotionProductPriceCreate] = Field(
         default_factory=list,
@@ -587,7 +587,9 @@ class ShopPromotionCreate(BaseModel):
     )
     code: str | None = Field(None, max_length=80, description="優惠碼；留空時符合條件即自動套用")
     discount_type: ShopDiscountType
-    discount_value: int = Field(..., ge=0, description="百分比或固定金額折扣；指定商品價格時填 0")
+    discount_value: int = Field(
+        ..., ge=0, description="百分比、固定折抵金額或每套組合價；指定商品價格時填 0"
+    )
     min_order_price: int = Field(0, ge=0)
     min_quantity: int = Field(1, ge=1, le=100)
     starts_at: datetime | None = None

@@ -56,6 +56,7 @@ class ShopDiscountType(enum.StrEnum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
     PRICE_OVERRIDE = "price_override"
+    BUNDLE_PRICE = "bundle_price"
 
 
 # ── 分類階層：主題 → 系列 ──────────────────────────────────────────────────────

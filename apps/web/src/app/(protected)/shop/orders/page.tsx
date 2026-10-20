@@ -8,6 +8,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
+import ShopPrice from "@/components/shop/ShopPrice";
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -134,7 +135,9 @@ export default function OrdersPage() {
                       )}
                     </div>
                     <div className="shop-order-activity-amounts">
-                      <strong>合計 NT${group.amount.toLocaleString("zh-TW")}</strong>
+                      {group.orders.some((order) => order.discount_amount > 0)
+                        ? <strong>合計 <ShopPrice original={group.amount + group.orders.reduce((sum, order) => sum + order.discount_amount, 0)} current={group.amount} /></strong>
+                        : <strong>合計 NT${group.amount.toLocaleString("zh-TW")}</strong>}
                       <span>
                         已繳 NT${group.received.toLocaleString("zh-TW")} · {group.received > 0 && group.outstanding > 0 ? "待補繳" : "待繳"} NT${group.outstanding.toLocaleString("zh-TW")}
                       </span>

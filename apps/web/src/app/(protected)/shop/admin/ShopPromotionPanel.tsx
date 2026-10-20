@@ -95,6 +95,19 @@ export default function ShopPromotionPanel() {
       return;
     }
     const productPriceOverrides: { product_id: string; unit_price: number }[] = [];
+    if (form.discount_type === "bundle_price") {
+      const originalPrice = products.filter((row) => form.target_product_ids.includes(row.id))
+        .reduce((sum, row) => sum + row.price, 0);
+      const bundlePrice = Number(form.discount_value);
+      if (form.target_product_ids.length < 2) {
+        toast.error("套組至少要選擇兩項不同商品，每項各一件");
+        return;
+      }
+      if (!Number.isSafeInteger(bundlePrice) || bundlePrice <= 0 || bundlePrice >= originalPrice) {
+        toast.error("套組價必須大於 0，且低於各商品原價合計");
+        return;
+      }
+    }
     if (form.discount_type === "price_override") {
       if (form.target_product_ids.length === 0) {
         toast.error("請至少選擇一項適用商品");
@@ -328,13 +341,15 @@ export default function ShopPromotionPanel() {
               <option value="percentage">按百分比折抵</option>
               <option value="fixed">固定金額折抵</option>
               <option value="price_override">指定商品優惠價</option>
+              <option value="bundle_price">商品套組組合價</option>
             </select>
           </label>
           {form.discount_type !== "price_override" ? (
             <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-              {form.discount_type === "percentage" ? "折抵百分比（%）" : "折抵金額"}
+              {form.discount_type === "percentage" ? "折抵百分比（%）" : form.discount_type === "bundle_price" ? "每套組合價（NT$）" : "折抵金額"}
               <input className="input mt-1 w-full" type="number" min="1" max={form.discount_type === "percentage" ? 100 : undefined} value={form.discount_value} onChange={(e) => update("discount_value", e.target.value)} />
               {form.discount_type === "percentage" && <span className="mt-1 block font-normal">例如填 10，表示減價 10%，也就是打 9 折。</span>}
+              {form.discount_type === "bundle_price" && <span className="mt-1 block font-normal">所選商品各一件為一套；完整套數重複優惠，未成套商品與規格加價另計。</span>}
             </label>
           ) : (
             <p className="self-center text-xs" style={{ color: "var(--text-muted)" }}>
@@ -357,6 +372,8 @@ export default function ShopPromotionPanel() {
             <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
               {form.discount_type === "price_override"
                 ? "使用者任選一項已設定商品即可使用；只有實際登記的指定商品會改用優惠單價。"
+                : form.discount_type === "bundle_price"
+                  ? "選擇至少兩項商品，例如衣服 + 褲子。每項各一件為一套，學生可分別選擇尺寸、顏色。"
                 : "折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。"}
             </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
@@ -460,6 +477,8 @@ export default function ShopPromotionPanel() {
                 ? (promotion.product_price_overrides ?? [])
                   .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
                   .join("、")
+                : promotion.discount_type === "bundle_price"
+                  ? `每套 NT$${promotion.discount_value.toLocaleString()}`
                 : promotion.discount_type === "percentage"
                   ? `減價 ${promotion.discount_value}%`
                   : `折抵 NT$${promotion.discount_value.toLocaleString()}`;

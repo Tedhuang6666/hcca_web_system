@@ -1022,6 +1022,140 @@
   font-weight: 500;
 }
 
+.shop-price {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-price del {
+  color: var(--public-secondary);
+  font-size: 0.8em;
+  font-weight: 400;
+}
+
+.shop-price-current {
+  color: var(--public-accent-text);
+  font-weight: 700;
+}
+
+.shop-registration-price,
+.shop-bundle-heading,
+.shop-bundle-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.shop-registration-price {
+  padding-block: 1rem;
+  margin-bottom: 1.5rem;
+  border-block: 1px solid var(--public-border);
+}
+
+.shop-registration-price p,
+.shop-bundle-heading p,
+.shop-bundle-footer p {
+  margin: 0.25rem 0 0;
+  color: var(--public-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.shop-bundles {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.shop-bundle-offer {
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--public-border);
+  border-radius: 12px;
+  background: var(--public-surface);
+}
+
+.shop-bundle-heading h3 {
+  margin: 0;
+  color: var(--public-text);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.shop-bundle-price {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.shop-bundle-price > .shop-price {
+  font-size: 1.375rem;
+}
+
+.shop-bundle-price > strong {
+  color: var(--public-accent-text);
+  font-size: 0.875rem;
+}
+
+.shop-bundle-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  margin-block: 1.25rem;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--public-border);
+}
+
+.shop-bundle-products button {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.75rem;
+  text-align: start;
+  color: var(--public-text);
+}
+
+.shop-bundle-products button span:last-child {
+  color: var(--public-secondary);
+  font-size: 0.875rem;
+}
+
+.shop-bundle-footer p {
+  flex: 1 1 18rem;
+  max-width: 65ch;
+}
+
+.shop-bundle-start {
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  background: var(--public-accent);
+  color: var(--primary-fg);
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.shop-bundle-start:disabled,
+.shop-bundle-products button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.shop-bundle-products button:hover:not(:disabled) {
+  background: var(--public-accent-soft);
+}
+
+.shop-bundle-offer button:focus-visible {
+  outline: 2px solid var(--public-accent);
+  outline-offset: 3px;
+}
+
 .shop-public-product-deadline {
   color: var(--public-muted);
   font-size: 0.74rem;

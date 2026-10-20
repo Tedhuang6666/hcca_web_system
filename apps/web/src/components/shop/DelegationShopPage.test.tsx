@@ -59,6 +59,61 @@ beforeEach(() => {
 });
 
 describe("原商品頁的家人代訂模式", () => {
+  it("套組可逐項選購，選齊後顯示原價刪除線與實付合計", async () => {
+    const pants = { ...product, id: "pants", name: "長褲", price: 200 };
+    const promotion = {
+      id: "bundle", name: "衣褲套組", activity_id: "festival", code: null,
+      discount_type: "bundle_price" as const, discount_value: 250, min_order_price: 0, min_quantity: 1,
+      target_products: [{ id: "bag", name: "紀念袋" }, { id: "pants", name: "長褲" }],
+    };
+    api.accessDelegation.mockResolvedValue({ ...context, registration: null,
+      catalog: [{ ...context.catalog?.[0], products: [product, pants] }], promotions: [promotion],
+    });
+    api.getDelegationProduct.mockImplementation((_token, id) => Promise.resolve({
+      ...(id === "pants" ? pants : product), variant_groups: [], media: [],
+    }));
+    api.setDelegationProduct.mockImplementation((_token, id) => Promise.resolve({
+      ...order, subtotal_price: id === "pants" ? 300 : 100,
+      total_price: id === "pants" ? 250 : 100, discount_amount: id === "pants" ? 50 : 0,
+      applied_promotions: id === "pants" ? [{ promotion_id: "bundle", name: "衣褲套組", discount_amount: 50 }] : [],
+      items: [
+        { ...order.items[1], id: "new-bag", quantity: 1, subtotal: 100 },
+        ...(id === "pants" ? [{ ...order.items[1], id: "new-pants", product_id: "pants", product_name: "長褲", quantity: 1, unit_price: 200, subtotal: 200 }] : []),
+      ],
+    }));
+    const { container } = render(<ShopPage />);
+    const bundle = await screen.findByRole("article", { name: "衣褲套組" });
+    expect(within(bundle).getByText("每套省 NT$50")).toBeVisible();
+    expect(bundle.querySelector("del")).toHaveTextContent("NT$300");
+    fireEvent.click(within(bundle).getByRole("button", { name: "開始選購套組" }));
+    await screen.findByRole("heading", { name: "紀念袋", level: 3 });
+    expect(screen.getByRole("button", { name: "下一項：長褲" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "登記購買 · NT$100" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "下一項：長褲" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "下一項：長褲" }));
+    await screen.findByRole("heading", { name: "長褲", level: 3 });
+    fireEvent.click(screen.getByRole("button", { name: "登記購買 · NT$200" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "完成套組選購" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "完成套組選購" }));
+    expect(await screen.findByText("共省 NT$50", { exact: false })).toBeVisible();
+    const summary = container.querySelector(".shop-registration-price");
+    expect(summary?.querySelector("del")).toHaveTextContent("NT$300");
+    expect(summary).toHaveTextContent("NT$250");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("單品優惠價會同時顯示原價與優惠價", async () => {
+    api.accessDelegation.mockResolvedValue({ ...context, registration: null, promotions: [{
+      id: "sale", name: "商品九折", activity_id: "festival", code: null,
+      discount_type: "percentage", discount_value: 10, min_order_price: 0, min_quantity: 1,
+      target_products: [],
+    }] });
+    const { container } = render(<ShopPage />);
+    await screen.findByRole("button", { name: /紀念袋/ });
+    const price = container.querySelector(".shop-public-product-price");
+    expect(price?.querySelector("del")).toHaveTextContent("NT$100");
+    expect(price).toHaveTextContent("NT$90");
+  });
   it.each([
     { email: "g0991001@hchs.hc.edu.tw", is_school_email: true },
     { email: "private@example.test", is_school_email: false },
