@@ -1,5 +1,6 @@
 """家人代訂的真實資料庫／HTTP 授權與來源隔離回歸。"""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -107,13 +108,31 @@ async def test_code_requires_login_and_does_not_allow_parent_to_create_authoriza
     ).status_code == 403
 
 
+async def test_alumni_school_account_cannot_create_shop_delegation(
+    make_user, authed_client_factory
+):
+    alumnus = await make_user(
+        email="g0110001@hchs.hc.edu.tw", student_id="110001", display_name="校友"
+    )
+    ac = authed_client_factory(alumnus)
+
+    profile = await ac.get("/auth/me")
+    response = await ac.post(
+        "/shop/delegation-links",
+        json={"name": "校友代訂", "category_id": str(uuid.uuid4())},
+    )
+
+    assert profile.json()["can_create_shop_delegation"] is False
+    assert response.status_code == 403
+
+
 @pytest.mark.parametrize("private_primary", [False, True])
 async def test_school_identity_can_create_and_use_links_without_stored_student_id(
     delegation_setup, db_session, private_primary
 ):
     student, parent, category, product, sc, pc, oc, old_link = delegation_setup
     student.student_id = None
-    school_email = "g0991001@hchs.hc.edu.tw"
+    school_email = "g0510001@hchs.hc.edu.tw"
     student.email = "private@example.test" if private_primary else school_email
     if private_primary:
         db_session.add(

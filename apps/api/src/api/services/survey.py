@@ -39,7 +39,13 @@ from api.schemas.survey import (
     SurveySubmit,
     SurveyUpdate,
 )
+from api.services.electronic_credential import get_settings
 from api.services.permission import get_user_org_ids
+from api.services.student_identity_rules import (
+    SCHOOL_EMAIL_DOMAIN,
+    is_alumni_school_account,
+    is_g0_school_account_email,
+)
 
 # 可編輯題目／基本資料的問卷狀態：草稿與開放中皆可（已截止／封存則鎖定）
 _EDITABLE_STATUSES = {SurveyStatus.DRAFT, SurveyStatus.OPEN}
@@ -312,6 +318,10 @@ async def check_survey_access(
     org_ids = set(_load_str_list(survey.allowed_org_ids_json))
     user_ids = set(_load_str_list(survey.allowed_user_ids_json))
     domains = {d.lower().lstrip("@") for d in _load_str_list(survey.allowed_domains_json)}
+    if user and SCHOOL_EMAIL_DOMAIN in domains and is_g0_school_account_email(user.email):
+        current_prefixes = (await get_settings(session)).student_id_prefixes
+        if is_alumni_school_account(user.email, current_prefixes):
+            raise PermissionError("此問卷限現行在校學生帳號填答")
     if user is None:
         if domains:
             raise PermissionError(_domain_access_message(domains))

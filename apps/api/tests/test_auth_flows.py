@@ -198,10 +198,12 @@ async def test_get_me_flags_superuser_and_owner(
 @pytest.mark.parametrize(
     ("email", "student_id", "linked_email", "owns_identity", "expected"),
     [
-        ("g0991001@hchs.hc.edu.tw", "991001", None, True, True),
-        ("g0991001@hchs.hc.edu.tw", None, None, True, True),
-        ("private@example.test", "991001", "g0991001@hchs.hc.edu.tw", True, True),
-        ("private@example.test", None, "g0991001@hchs.hc.edu.tw", True, True),
+        ("g0510001@hchs.hc.edu.tw", "510001", None, True, True),
+        ("g0510001@hchs.hc.edu.tw", None, None, True, True),
+        ("private@example.test", "510001", "g0510001@hchs.hc.edu.tw", True, True),
+        ("private@example.test", None, "g0510001@hchs.hc.edu.tw", True, True),
+        ("g0110001@hchs.hc.edu.tw", "110001", None, True, False),
+        ("private@example.test", None, "g0110001@hchs.hc.edu.tw", True, False),
         ("private@example.test", None, "teacher@hchs.hc.edu.tw", True, False),
         ("teacher@hchs.hc.edu.tw", None, None, True, False),
         ("private@example.test", None, "g0991001@hchs.hc.edu.tw", False, False),

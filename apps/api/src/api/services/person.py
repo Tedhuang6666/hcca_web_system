@@ -44,6 +44,11 @@ from api.schemas.person import (
 from api.schemas.school_class import ClassRosterSummary
 from api.services._base import apply_updates
 from api.services.discord_bot import enqueue_role_sync
+from api.services.electronic_credential import get_settings
+from api.services.student_identity_rules import (
+    is_alumni_school_account,
+    is_g0_school_account_email,
+)
 
 
 def _class_label(sc: SchoolClass | None) -> str | None:
@@ -387,10 +392,15 @@ async def ensure_person_for_user(
     *,
     source: PersonAffiliationSource = PersonAffiliationSource.MANUAL,
 ) -> Person:
+    current_prefixes = None
+    if is_g0_school_account_email(user.email):
+        current_prefixes = (await get_settings(db)).student_id_prefixes
+
     if user.student_id:
         person = await db.scalar(select(Person).where(Person.student_id == user.student_id))
         if person is not None:
             changed = False
+            status_changed = False
             if person.user_id is None:
                 person.user_id = user.id
                 changed = True
@@ -400,8 +410,15 @@ async def ensure_person_for_user(
             if not person.display_name:
                 person.display_name = user.display_name
                 changed = True
+            if (
+                current_prefixes is not None
+                and is_alumni_school_account(user.email, current_prefixes)
+                and person.status != PersonStatus.ALUMNI
+            ):
+                person.status = PersonStatus.ALUMNI
+                status_changed = True
             name_changed = _apply_roster_student_name(person, user)
-            if changed or name_changed:
+            if changed or status_changed or name_changed:
                 await db.flush()
             if changed:
                 await sync_pending_affiliations_for_person(db, person)
@@ -409,7 +426,11 @@ async def ensure_person_for_user(
 
     person = await db.scalar(select(Person).where(Person.user_id == user.id))
     if person is not None:
-        if _apply_roster_student_name(person, user):
+        changed = _apply_roster_student_name(person, user)
+        if current_prefixes is not None and is_alumni_school_account(user.email, current_prefixes):
+            changed = person.status != PersonStatus.ALUMNI or changed
+            person.status = PersonStatus.ALUMNI
+        if changed:
             await db.flush()
         return person
 
@@ -418,7 +439,12 @@ async def ensure_person_for_user(
         student_id=user.student_id,
         display_name=user.display_name,
         email=user.email,
-        status=PersonStatus.ACTIVE,
+        status=(
+            PersonStatus.ALUMNI
+            if current_prefixes is not None
+            and is_alumni_school_account(user.email, current_prefixes)
+            else PersonStatus.ACTIVE
+        ),
         note=f"由 {source} 自動建立",
     )
     db.add(person)
@@ -431,6 +457,10 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
     users = list((await db.scalars(select(User).order_by(User.created_at, User.id))).all())
     if not users:
         return
+
+    current_prefixes = None
+    if any(is_g0_school_account_email(user.email) for user in users):
+        current_prefixes = (await get_settings(db)).student_id_prefixes
 
     user_ids = [user.id for user in users]
     people = list(
@@ -461,7 +491,14 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
                 student_id=user.student_id,
                 display_name=user.display_name,
                 email=user.email,
-                status=PersonStatus.ACTIVE if user.is_active else PersonStatus.INACTIVE,
+                status=(
+                    PersonStatus.ALUMNI
+                    if current_prefixes is not None
+                    and is_alumni_school_account(user.email, current_prefixes)
+                    else PersonStatus.ACTIVE
+                    if user.is_active
+                    else PersonStatus.INACTIVE
+                ),
                 note="由既有使用者資料自動建立",
             )
             db.add(person)
@@ -476,6 +513,8 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
             person.display_name = user.display_name
         if not person.email:
             person.email = user.email
+        if current_prefixes is not None and is_alumni_school_account(user.email, current_prefixes):
+            person.status = PersonStatus.ALUMNI
         _apply_roster_student_name(person, user)
         people_by_user_id[user.id] = person
 
