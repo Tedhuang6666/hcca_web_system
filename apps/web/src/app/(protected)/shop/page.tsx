@@ -36,7 +36,6 @@ import DelegationInstructions from "@/components/shop/DelegationInstructions";
 import ParentDelegationEntry from "@/components/shop/ParentDelegationEntry";
 import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-delegation-link";
 import { useWS } from "@/hooks/useWS";
-import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 import Modal from "@/components/ui/Modal";
 import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url";
 
@@ -1519,12 +1518,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             : <CircleCheck size={18} style={{ color: "var(--success)" }} aria-hidden />}
           <div>
             <p>
-              <strong>
-                我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}
-              </strong>
+              <strong>我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}</strong>
+              {" · "}
+              {myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}
+              {"。如有錯誤，請聯絡班聯會處理。"}
             </p>
-            <p>{myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}</p>
-            {isLoggedIn && <ClassCorrectionRequest currentClass={myClass} />}
           </div>
         </section>
       )}
@@ -1535,15 +1533,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           <div>
             {classLoadFailed ? (
               <div role="alert">
-                <p><strong>暫時無法確認你的班級</strong></p>
+                <p>暫時無法確認你的班級與座號資料；如有錯誤，請聯絡班聯會處理。</p>
                 <button type="button" className="shop-class-correction-toggle" onClick={loadCatalog}>重新確認班級</button>
               </div>
             ) : (
-              <>
-                <p><strong>還沒找到你的班級</strong></p>
-                <p>選擇目前就讀的班級，請管理員協助確認。</p>
-                <ClassCorrectionRequest currentClass={null} />
-              </>
+              <p>目前尚未顯示你的班級與座號；如有錯誤，請聯絡班聯會處理。</p>
             )}
           </div>
         </section>
