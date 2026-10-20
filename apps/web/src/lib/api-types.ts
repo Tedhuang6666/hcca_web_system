@@ -2758,7 +2758,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 移除手動加入的班級成員 */
+        /** 將成員轉出本班（支援帳號、人員或名冊 ID） */
         delete: operations["remove_manual_member_classes__class_id__members__user_id__delete"];
         options?: never;
         head?: never;

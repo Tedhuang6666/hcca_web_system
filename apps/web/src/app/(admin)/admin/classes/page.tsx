@@ -600,6 +600,7 @@ function RoleBoard({
 
 type MemberRow = {
   key: string;
+  rosterEntryId: string | null;
   seat: number | null;
   studentId: string | null;
   name: string;
@@ -615,6 +616,8 @@ function MemberDetailDialog({
   roles,
   onAssign,
   onAssignPerson,
+  onSaveSeat,
+  onRemove,
   onClose,
 }: {
   member: MemberRow;
@@ -625,12 +628,20 @@ function MemberDetailDialog({
     identity: { person_id?: string; student_id?: string; display_name?: string },
   ) => Promise<boolean>;
   onClose: () => void;
+  onSaveSeat: (member: MemberRow, seat: number) => Promise<void>;
+  onRemove: (member: MemberRow) => Promise<void>;
 }) {
   const [busyRole, setBusyRole] = useState<string | null>(null);
+  const [seat, setSeat] = useState(member.seat === null ? "" : String(member.seat));
+  const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [error, setError] = useState("");
+  const busy = busyRole !== null || saving || removing;
   const [personName, setPersonName] = useState(member.name === "尚未連結帳號" ? "" : member.name);
 
   const assign = async (roleKey: string) => {
-    if (busyRole !== null) return;
+    if (busy) return;
     if (!member.user && !member.personId && (!member.studentId || !personName.trim())) return;
     setBusyRole(roleKey);
     try {
@@ -646,8 +657,38 @@ function MemberDetailDialog({
   };
 
   return (
-    <Modal title={member.name} onClose={onClose} size="2xl">
+    <Modal title={member.name} onClose={() => { if (!busy) onClose(); }} size="2xl">
       <div className="space-y-5">
+        <form className="space-y-3" onSubmit={async (event) => {
+          event.preventDefault();
+          if (busy) return;
+          setSaving(true);
+          setError("");
+          try {
+            await onSaveSeat(member, Number(seat));
+            onClose();
+          } catch (error) {
+            setError(getErrorMessage(error, "儲存座號失敗，請稍後再試。"));
+          } finally {
+            setSaving(false);
+          }
+        }}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="min-w-0 flex-1 space-y-1 text-sm">
+              <span style={{ color: "var(--text-secondary)" }}>設定座號</span>
+              <input className="input min-h-11 w-full" type="number" inputMode="numeric"
+                min={1} max={999} step={1} required value={seat}
+                disabled={busy || !member.studentId}
+                onChange={(event) => setSeat(event.target.value)} />
+            </label>
+            <button className="btn btn-primary min-h-11 disabled:opacity-50" type="submit"
+              disabled={busy || !member.studentId || !seat}>
+              {saving ? "儲存中…" : "儲存座號"}
+            </button>
+          </div>
+          {!member.studentId && <p className="text-sm" style={{ color: "var(--text-muted)" }}>請先在人員資料補上學號，再設定座號。</p>}
+        </form>
+        {error && <p className="text-sm" role="alert" style={{ color: "var(--danger)" }}>{error}</p>}
         <section className="grid gap-3 rounded-md p-4 sm:grid-cols-2" style={{ background: "var(--bg-elevated)" }}>
           <div>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>座號</p>
@@ -719,7 +760,7 @@ function MemberDetailDialog({
                       </p>
                     </div>
                     <button type="button" className="btn btn-primary min-h-11 shrink-0 disabled:opacity-50"
-                      disabled={alreadyAssigned || busyRole !== null || !canAssign}
+                      disabled={alreadyAssigned || busy || !canAssign}
                       onClick={() => void assign(role.role_key)}>
                       {busyRole === role.role_key ? "登記中…" : alreadyAssigned ? "已任命" : member.user ? `任命${label}` : `登記任命${label}`}
                     </button>
@@ -733,30 +774,58 @@ function MemberDetailDialog({
             </p>
           )}
         </section>
+        <section className="space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>轉出分班</h3>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            轉出後會移除本班座號名冊並結束本班幹部任命；人員主檔與歷史歸屬會保留。
+          </p>
+          {confirmRemove ? <div className="space-y-3">
+            <p className="text-sm" role="status" style={{ color: "var(--text-primary)" }}>確定將 {member.name} 轉出本班？</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50"
+                disabled={busy} onClick={() => setConfirmRemove(false)}>取消轉出</button>
+              <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50"
+                style={{ color: "var(--danger)" }} disabled={busy}
+                onClick={async () => {
+                  if (busy) return;
+                  setRemoving(true);
+                  setError("");
+                  try {
+                    await onRemove(member);
+                    onClose();
+                  } catch (error) {
+                    setError(getErrorMessage(error, "轉出失敗，請稍後再試。"));
+                  } finally { setRemoving(false); }
+                }}>{removing ? "轉出中…" : "確認轉出"}</button>
+            </div>
+          </div> : <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50"
+            style={{ color: "var(--danger)" }} disabled={busy}
+            onClick={() => setConfirmRemove(true)}>轉出本班</button>}
+        </section>
       </div>
     </Modal>
   );
 }
 
 function MembershipPanel({
-  memberships,
   members,
   entries,
   candidates,
   roles,
   onAdd,
-  onEnd,
+  onRemove,
+  onSaveSeat,
   onAssignRole,
   onAssignPersonRole,
   onManageRoles,
 }: {
-  memberships: ClassMembershipOut[];
   members: ClassMemberOut[];
   entries: ClassRosterEntryOut[];
   candidates: Array<{ seat_number?: number; user: UserSummary }>;
   roles: ClassRoleOut[];
   onAdd: (user: UserSummary) => Promise<void>;
-  onEnd: (userId: string) => Promise<void>;
+  onRemove: (member: MemberRow) => Promise<void>;
+  onSaveSeat: (member: MemberRow, seat: number) => Promise<void>;
   onAssignRole: (roleKey: string, user: UserSummary) => Promise<boolean>;
   onAssignPersonRole: (
     roleKey: string,
@@ -766,7 +835,6 @@ function MembershipPanel({
 }) {
   const [query, setQuery] = useState("");
   const [onlyUnlinked, setOnlyUnlinked] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberRow | null>(null);
   const candidatesById = new Map(candidates.map(({ user }) => [user.id, user]));
   const membersByStudentId = new Map(members
@@ -790,6 +858,7 @@ function MembershipPanel({
         : null;
       return {
         key: entry.id,
+        rosterEntryId: entry.id,
         seat: entry.seat_number ?? null,
         studentId: entry.student_id,
         name: entry.user?.display_name ?? matchedMember?.display_name ?? pendingPerson?.display_name ?? user?.display_name ?? "尚未連結帳號",
@@ -808,6 +877,7 @@ function MembershipPanel({
         : null;
       return {
         key: member.id,
+        rosterEntryId: member.roster_entry_id ?? null,
         seat: member.seat_number ?? null,
         studentId: member.student_id,
         name: member.display_name,
@@ -848,8 +918,6 @@ function MembershipPanel({
       </div>
       <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
         {visible.map((row) => {
-          const membership = memberships.find((item) => item.user_id === row.userId && item.status === "active");
-          const canEnd = membership && !studentIds.has(row.studentId ?? "") && row.source !== "學號區間" && row.source !== "手動加入";
           return (
             <li key={row.key} className="flex items-center gap-2 py-2">
               <button type="button" className="flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-md px-2 text-left transition-colors hover:bg-[var(--bg-elevated)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
@@ -863,12 +931,9 @@ function MembershipPanel({
                 </span>
                 <span className="shrink-0 text-xs" style={{ color: row.userId ? "var(--success)" : "var(--text-secondary)" }}>{row.userId ? "已連結" : "待連結"}</span>
               </button>
-              {canEnd && <button type="button" className="min-h-11 shrink-0 px-2 text-xs disabled:opacity-50" style={{ color: "var(--danger)" }} disabled={busy !== null}
+              <button type="button" className="min-h-11 shrink-0 px-2 text-xs" style={{ color: "var(--danger)" }}
                 aria-label={`將 ${row.name} 移出本班`}
-                onClick={async () => {
-                  setBusy(row.key);
-                  try { await onEnd(membership.user_id); } finally { setBusy(null); }
-                }}>移出本班</button>}
+                onClick={() => setSelectedMember(row)}>移出本班</button>
             </li>
           );
         })}
@@ -879,6 +944,8 @@ function MembershipPanel({
         roles={roles}
         onAssign={onAssignRole}
         onAssignPerson={onAssignPersonRole}
+        onSaveSeat={onSaveSeat}
+        onRemove={onRemove}
         onClose={() => setSelectedMember(null)}
       />}
     </div>
@@ -1277,14 +1344,24 @@ function ClassWorkspace({
     }
   };
 
-  const endMembership = async (userId: string) => {
-    try {
-      await classApi.endMembership(classId, userId);
-      toast.success("已將成員移出本班");
-      load();
-    } catch (error) {
-      toast.error(getErrorMessage(error, "更新名冊失敗"));
+  const removeMember = async (member: MemberRow) => {
+    await classApi.removeMember(classId, member.userId ?? member.personId ?? member.key);
+    toast.success("已將成員轉出本班");
+    load();
+    onClassChanged();
+  };
+
+  const saveMemberSeat = async (member: MemberRow, seatNumber: number) => {
+    if (!member.studentId || !Number.isInteger(seatNumber) || seatNumber < 1 || seatNumber > 999) {
+      throw new ApiError(422, "請輸入 1 到 999 的整數座號，並確認已填寫學號。");
     }
+    if (member.rosterEntryId) {
+      await classApi.updateRoster(classId, member.rosterEntryId, { seat_number: seatNumber });
+    } else {
+      await classApi.addRoster(classId, { seat_number: seatNumber, student_id: member.studentId });
+    }
+    toast.success("座號已更新");
+    load();
   };
 
   const addRange = async (start: string, end: string) => {
@@ -1428,14 +1505,14 @@ function ClassWorkspace({
       {tab === "members" && (
         <div key="members" className="tab-panel-transition">
           <MembershipPanel
-            memberships={memberships}
             members={members}
             entries={rosterEntries}
             candidates={candidates}
             roles={roles}
             onManageRoles={() => setTab("roles")}
             onAdd={addMembership}
-            onEnd={endMembership}
+            onRemove={removeMember}
+            onSaveSeat={saveMemberSeat}
             onAssignRole={assignRole}
             onAssignPersonRole={assignPersonRole}
           />
