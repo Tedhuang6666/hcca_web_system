@@ -22,6 +22,16 @@ import "./shop-public.css";
 
 function PublicShopChrome({ children }: { children: React.ReactNode }) {
   const { isAdmin, permissions } = usePermissions();
+  useEffect(() => {
+    let active = true;
+    void authApi.refresh().then((user) => {
+      if (active) cacheCurrentUser(user);
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <PublicModuleStatusProvider>
       <div className="public-site min-h-screen text-[var(--public-text)]">
