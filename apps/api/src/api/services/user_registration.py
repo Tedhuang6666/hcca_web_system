@@ -35,8 +35,10 @@ from api.services import audit as audit_svc
 from api.services import person as person_svc
 from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
-
-SCHOOL_EMAIL_DOMAIN = "hchs.hc.edu.tw"
+from api.services.student_identity_rules import (
+    SCHOOL_EMAIL_DOMAIN,
+    student_id_from_school_email,
+)
 
 
 class UserRegistrationError(Exception):
@@ -960,14 +962,6 @@ async def _merge_class_records(
         by_class[row.class_id] = row
         by_seat[(row.class_id, row.seat_number)] = row
     await db.flush()
-
-
-def student_id_from_school_email(email: str) -> str | None:
-    local_part, separator, domain = email.strip().lower().partition("@")
-    if separator and domain == SCHOOL_EMAIL_DOMAIN and local_part.startswith("g0"):
-        student_id = local_part[2:]
-        return student_id or None
-    return None
 
 
 async def pre_register_user(

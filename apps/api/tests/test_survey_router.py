@@ -686,6 +686,40 @@ async def test_domain_restricted_survey_hides_non_target_and_accepts_linked_scho
     assert survey_id in {item["id"] for item in visible_in_list.json()}
 
 
+async def test_domain_restricted_survey_blocks_alumni_but_keeps_student_and_teacher_access(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    survey_id, question_id = await _make_open_survey_with_question(
+        admin_ac,
+        org.id,
+        allowed_domains=["hchs.hc.edu.tw"],
+    )
+    alumnus = await make_user(email="g0110001@hchs.hc.edu.tw", student_id="110001")
+    current_student = await make_user(email="g0510001@hchs.hc.edu.tw", student_id="510001")
+    teacher = await make_user(email="teacher@hchs.hc.edu.tw")
+    alumni_ac = authed_client_factory(alumnus)
+
+    denied_detail = await alumni_ac.get(f"/surveys/{survey_id}")
+    denied_submit = await alumni_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question_id, "answer_text": "不應送出"}]},
+    )
+
+    assert denied_detail.status_code == 403
+    assert denied_submit.status_code == 403
+    hidden_from_list = await alumni_ac.get("/surveys", params={"status": "open"})
+    assert survey_id not in {item["id"] for item in hidden_from_list.json()}
+    assert (
+        await authed_client_factory(current_student).get(f"/surveys/{survey_id}")
+    ).status_code == 200
+    assert (await authed_client_factory(teacher).get(f"/surveys/{survey_id}")).status_code == 200
+
+
 async def test_list_public_surveys_excludes_drafts(
     authed_client_factory: Callable[[User], AsyncClient],
     admin_user: User,

@@ -46,6 +46,7 @@ async def test_confirmation_requires_login(client: AsyncClient) -> None:
         ("g0510001@hchs.hc.edu.tw", "510001", False, True),
         ("g0510001@example.com", "510001", False, False),
         ("teacher@hchs.hc.edu.tw", None, False, False),
+        ("g0110001@hchs.hc.edu.tw", "110001", False, False),
         ("g0210001@hchs.hc.edu.tw", "210001", False, False),
         ("g0510001@hchs.hc.edu.tw", "410001", False, False),
         ("g0510001@hchs.hc.edu.tw", "510001", True, False),

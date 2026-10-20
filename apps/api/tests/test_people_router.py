@@ -16,9 +16,11 @@ from api.models.person import (
     PersonAffiliationKind,
     PersonAffiliationSource,
     PersonAffiliationStatus,
+    PersonStatus,
 )
 from api.models.school_class import ClassRosterEntry, SchoolClass
 from api.models.user import User
+from api.services import person as person_svc
 
 
 async def _make_person(db_session: AsyncSession, **overrides) -> Person:
@@ -83,6 +85,41 @@ async def test_list_people_includes_existing_user_without_person(
     assert row["display_name"] == "既有帳號"
     assert row["student_id"] == "SLEGACY001"
     assert row["user_id"] == str(existing_user.id)
+
+
+async def test_list_people_marks_non_current_g0_accounts_as_alumni(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., User],
+) -> None:
+    alumnus = await make_user(
+        email="g0110001@hchs.hc.edu.tw", student_id="110001", display_name="舊屆學生"
+    )
+    current_student = await make_user(
+        email="g0510001@hchs.hc.edu.tw", student_id="510001", display_name="在校學生"
+    )
+    teacher = await make_user(email="teacher@hchs.hc.edu.tw", display_name="校內師長")
+
+    response = await authed_client_factory(admin_user).get("/people")
+
+    assert response.status_code == 200
+    people_by_user_id = {row["user_id"]: row for row in response.json()}
+    assert people_by_user_id[str(alumnus.id)]["status"] == PersonStatus.ALUMNI
+    assert people_by_user_id[str(current_student.id)]["status"] == PersonStatus.ACTIVE
+    assert people_by_user_id[str(teacher.id)]["status"] == PersonStatus.ACTIVE
+
+
+async def test_ensure_person_for_user_marks_non_current_g0_account_as_alumni(
+    db_session: AsyncSession,
+    make_user: Callable[..., User],
+) -> None:
+    alumnus = await make_user(
+        email="g0210001@hchs.hc.edu.tw", student_id="210001", display_name="另一屆校友"
+    )
+
+    person = await person_svc.ensure_person_for_user(db_session, alumnus)
+
+    assert person.status == PersonStatus.ALUMNI
 
 
 async def test_create_person_duplicate_student_id_conflicts(
