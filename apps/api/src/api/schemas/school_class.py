@@ -389,6 +389,7 @@ class ClassMemberOut(BaseModel):
 
     id: uuid.UUID
     user_id: uuid.UUID | None = None
+    roster_entry_id: uuid.UUID | None = None
     display_name: str
     student_id: str | None
     email: str

@@ -14503,6 +14503,8 @@ export interface components {
             is_cadre: boolean;
             /** Manual Member Id */
             manual_member_id?: string | null;
+            /** Roster Entry Id */
+            roster_entry_id?: string | null;
             /** Seat Number */
             seat_number?: number | null;
             /**
@@ -14561,6 +14563,17 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /** ClassOrderCreate */
+        ClassOrderCreate: {
+            /** Items */
+            items: components["schemas"]["OrderItemCreate"][];
+            /** Notes */
+            notes?: string | null;
+            /** Roster Entry Id */
+            roster_entry_id?: string | null;
+            /** User Id */
+            user_id?: string | null;
         };
         /** ClassOrderUpsert */
         ClassOrderUpsert: {
@@ -54771,7 +54784,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ClassOrderUpsert"];
+                "application/json": components["schemas"]["ClassOrderCreate"];
             };
         };
         responses: {

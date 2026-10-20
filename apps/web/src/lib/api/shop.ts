@@ -1,5 +1,5 @@
 import type {
-  ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
+  ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
@@ -125,11 +125,7 @@ export const shopApi = {
   },
   getOrder: (id: string) => get<OrderOut>(`/shop/orders/${id}`),
   clearAllOrders: () => del<ShopOrdersClearOut>("/shop/orders"),
-  createClassOrder: (body: {
-    user_id: string;
-    items: { product_id: string; quantity: number; option_ids: string[] }[];
-    notes?: string | null;
-  }) => post<OrderOut[]>("/shop/orders/class", body),
+  createClassOrder: (body: ClassOrderCreate) => post<OrderOut[]>("/shop/orders/class", body),
   updateOrder: (id: string, body: {
     user_id: string;
     items: { product_id: string; quantity: number; option_ids: string[] }[];

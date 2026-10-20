@@ -1395,8 +1395,16 @@ async def get_cadre_class_ids(session: AsyncSession, user_id: uuid.UUID) -> set[
 
 
 async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[ClassMemberOut]:
-    """依手動成員與學號區間列出班級成員，並標示是否為幹部。"""
+    """合併座號名冊、人員、手動成員與學號區間，包含尚未登入的同學。"""
     roster_entries = await list_roster_entries(session, sc)
+    roster_people = {
+        person.student_id: person
+        for person in await session.scalars(
+            select(Person)
+            .options(selectinload(Person.user))
+            .where(Person.student_id.in_([entry.student_id for entry in roster_entries]))
+        )
+    }
     roster_users = {entry.student_id: entry.user for entry in roster_entries if entry.user}
     cadre_ids = {c.user_id for c in sc.cadres}
     members_by_id: dict[uuid.UUID, ClassMemberOut] = {}
@@ -1444,22 +1452,24 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             manual_member_id=member.id,
         )
     for entry in roster_entries:
-        member_id = entry.user.id if entry.user else member_ids_by_student_id.get(entry.student_id)
-        if member_id is None:
-            continue
+        person = roster_people.get(entry.student_id)
+        user = entry.user or (person.user if person else None)
+        member_id = user.id if user else member_ids_by_student_id.get(entry.student_id, entry.id)
         if member_id in members_by_id:
             members_by_id[member_id].seat_number = entry.seat_number
+            members_by_id[member_id].roster_entry_id = entry.id
             continue
-        if entry.user is None:
-            continue
-        members_by_id[entry.user.id] = ClassMemberOut(
-            id=entry.user.id,
-            user_id=entry.user.id,
-            display_name=entry.user.display_name,
+        members_by_id[member_id] = ClassMemberOut(
+            id=member_id,
+            user_id=user.id if user else None,
+            roster_entry_id=entry.id,
+            display_name=(
+                user.display_name if user else person.display_name if person else "尚未登入同學"
+            ),
             student_id=entry.student_id,
-            email=entry.user.email,
+            email=user.email if user else "",
             seat_number=entry.seat_number,
-            is_cadre=entry.user.id in cadre_ids,
+            is_cadre=user.id in cadre_ids if user else False,
             source="roster",
         )
     result = await session.execute(select(User).where(User.student_id.is_not(None)))
@@ -1491,3 +1501,50 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
     members = list(members_by_id.values())
     members.sort(key=lambda m: (m.seat_number is None, m.seat_number or 0, m.student_id or ""))
     return members
+
+
+async def prepare_roster_order_recipient(
+    session: AsyncSession, *, roster_entry_id: uuid.UUID, actor: User
+) -> tuple[User, SchoolClass]:
+    """在本班代購時才預建帳號；鎖住名冊，避免同時替同一座號重複建帳。"""
+    from api.services.user_registration import pre_register_user
+
+    entry = await session.scalar(
+        select(ClassRosterEntry).where(ClassRosterEntry.id == roster_entry_id).with_for_update()
+    )
+    if entry is None:
+        raise LookupError("找不到此座號名冊資料")
+    sc = await session.get(SchoolClass, entry.class_id)
+    cadre_ids = await get_cadre_class_ids(session, actor.id)
+    if sc is None or not sc.is_active or (not actor.is_superuser and sc.id not in cadre_ids):
+        raise PermissionError("無權替此學生訂購")
+
+    person = await session.scalar(select(Person).where(Person.student_id == entry.student_id))
+    user = await session.get(User, entry.user_id) if entry.user_id else None
+    if user is None and person is not None and person.user_id is not None:
+        user = await session.get(User, person.user_id)
+    if user is None:
+        user = await session.scalar(select(User).where(User.student_id == entry.student_id))
+    if user is None:
+        user = await pre_register_user(
+            session,
+            student_id=entry.student_id,
+            email=None,
+            linked_emails=[],
+            display_name=person.display_name if person else f"{entry.seat_number} 號同學",
+            position_ids=[],
+            custom_permission_org_id=None,
+            custom_permission_codes=[],
+            start_date=local_today(),
+            end_date=None,
+            actor=actor,
+        )
+    if not user.is_active:
+        raise PermissionError("此學生帳號已停用")
+    entry.user_id = user.id
+    await session.flush()
+    target_class = await resolve_user_class(session, user)
+    if target_class is None or target_class.id != sc.id:
+        raise PermissionError("此學生目前不屬於本班")
+    await person_svc.ensure_person_for_user(session, user)
+    return user, sc

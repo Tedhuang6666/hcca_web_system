@@ -10,6 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -36,6 +37,7 @@ from api.schemas.activity import ActivityOut
 from api.schemas.shop import (
     CatalogCategoryOut,
     ClassCollectionUpdate,
+    ClassOrderCreate,
     ClassOrderUpsert,
     ClassPaymentOut,
     ClassPaymentUpdate,
@@ -1074,25 +1076,45 @@ async def class_order_summary(
     summary="班級幹部替本班學生建立商品訂單",
 )
 async def create_class_order(
-    payload: ClassOrderUpsert,
+    payload: ClassOrderCreate,
     session: DbDep,
     current_user: CurrentUser,
 ) -> list[OrderOut]:
-    target = await session.get(User, payload.user_id)
-    if target is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
-    target_class = await class_svc.resolve_user_class(session, target)
-    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-    if target_class is None or (not current_user.is_superuser and target_class.id not in cadre_ids):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權替此學生訂購")
+    from api.services.user_registration import UserRegistrationError
+
     try:
+        if payload.roster_entry_id is not None:
+            target, target_class = await class_svc.prepare_roster_order_recipient(
+                session, roster_entry_id=payload.roster_entry_id, actor=current_user
+            )
+        else:
+            target = await session.get(User, payload.user_id)
+            if target is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
+            target_class = await class_svc.resolve_user_class(session, target)
+            cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+            if target_class is None or (
+                not current_user.is_superuser and target_class.id not in cadre_ids
+            ):
+                raise PermissionError("無權替此學生訂購")
         orders = await shop_svc.create_direct_order(
             session,
             user_id=target.id,
             class_id=target_class.id,
-            data=payload,
+            data=ClassOrderUpsert(user_id=target.id, items=payload.items, notes=payload.notes),
             assisted_by_id=current_user.id,
         )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except UserRegistrationError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="學生帳號或訂單資料已更新，請重新整理後再試",
+        ) from e
     except StaleDataError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="庫存發生並發衝突") from e
     except ValueError as e:

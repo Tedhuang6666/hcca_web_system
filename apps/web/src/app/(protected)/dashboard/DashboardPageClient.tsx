@@ -578,6 +578,9 @@ function getPrimaryAction(
   can: (code: string) => boolean,
   isOperator: boolean,
 ): DashboardAction {
+  if (can("class:shop_collect") && !can("shop:manage")) {
+    return { href: "/shop/class-orders", label: "班代代訂與收款", detail: "依座號替同學代訂、登記收款", icon: ListChecks };
+  }
   if (profile === "vendor") {
     return { href: "/partner-map/admin", label: "管理特約資訊", detail: "商家、優惠與曝光", icon: ShoppingCart };
   }

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.models.shop import OrderStatus, ProductStatus, ShopDiscountType
 
@@ -401,6 +401,19 @@ class ClassOrderUpsert(BaseModel):
     user_id: uuid.UUID
     items: list[OrderItemCreate] = Field(..., min_length=1)
     notes: str | None = Field(None, max_length=500)
+
+
+class ClassOrderCreate(BaseModel):
+    user_id: uuid.UUID | None = None
+    roster_entry_id: uuid.UUID | None = None
+    items: list[OrderItemCreate] = Field(..., min_length=1)
+    notes: str | None = Field(None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_recipient(self) -> Self:
+        if (self.user_id is None) == (self.roster_entry_id is None):
+            raise ValueError("請擇一提供學生帳號或座號名冊資料")
+        return self
 
 
 class OrderPromotionOut(BaseModel):

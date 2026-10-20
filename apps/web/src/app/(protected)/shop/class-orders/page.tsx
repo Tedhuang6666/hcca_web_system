@@ -125,6 +125,7 @@ export default function ClassOrdersPage() {
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [productDetail, setProductDetail] = useState<ProductOut | null>(null);
   const loadVersion = useRef(0);
+  const membersLoadVersion = useRef(0);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -377,6 +378,25 @@ export default function ClassOrdersPage() {
     };
   }), [assistedOrderDrafts, activityLabel]);
 
+  const loadMembers = useCallback(async () => {
+    const version = ++membersLoadVersion.current;
+    setMembersLoading(true);
+    setMembersLoadFailed(false);
+    try {
+      const schoolClass = await classApi.myClass();
+      const data = schoolClass ? await classApi.members(schoolClass.id) : [];
+      if (version !== membersLoadVersion.current) return;
+      setMyClassId(schoolClass?.id ?? null);
+      setMembers(data);
+    } catch {
+      if (version !== membersLoadVersion.current) return;
+      setMembers([]);
+      setMembersLoadFailed(true);
+    } finally {
+      if (version === membersLoadVersion.current) setMembersLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     const version = ++loadVersion.current;
     setLoading(true);
@@ -400,6 +420,7 @@ export default function ClassOrdersPage() {
         filteredOrdersPromise,
         activityOrdersPromise,
         shopApi.classSummary(scope),
+        loadMembers(),
       ]);
       if (version !== loadVersion.current) return;
       setOrders(orderItems);
@@ -414,7 +435,7 @@ export default function ClassOrdersPage() {
     } finally {
       if (version === loadVersion.current) setLoading(false);
     }
-  }, [activityFilter, assistedFilter, paidFilter, productFilter, memberFilter]);
+  }, [activityFilter, assistedFilter, paidFilter, productFilter, memberFilter, loadMembers]);
 
   const loadCloseStatus = useCallback(async (catIds: string[], classId: string) => {
     if (!catIds.length) return;
@@ -429,33 +450,14 @@ export default function ClassOrdersPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    setMembersLoading(true);
-    setMembersLoadFailed(false);
     shopApi.catalog()
       .then((cats) => { setCatalog(cats); return cats; })
       .catch(() => { setCatalogFailed(true); setCatalog([]); return []; });
-    classApi.myClass()
-      .then(async (schoolClass) => {
-        if (!schoolClass) {
-          setMyClassId(null);
-          setMembers([]);
-          return;
-        }
-        setMyClassId(schoolClass.id);
-        const [data, cats] = await Promise.all([
-          classApi.members(schoolClass.id),
-          shopApi.catalog().catch(() => [] as CatalogCategoryOut[]),
-        ]);
-        setMembers(data);
-        const catIds = cats.map((c: CatalogCategoryOut) => c.id);
-        if (catIds.length) await loadCloseStatus(catIds, schoolClass.id);
-      })
-      .catch(() => {
-        setMembers([]);
-        setMembersLoadFailed(true);
-      })
-      .finally(() => setMembersLoading(false));
-  }, [loadCloseStatus]);
+  }, []);
+
+  useEffect(() => {
+    if (myClassId && catalog.length) void loadCloseStatus(catalog.map((cat) => cat.id), myClassId);
+  }, [catalog, myClassId, loadCloseStatus]);
 
   useEffect(() => {
     let active = true;
@@ -844,8 +846,11 @@ export default function ClassOrdersPage() {
         let failedRequest: unknown = null;
         for (const draft of draftsToSubmit) {
           try {
+            const member = members.find((item) => item.id === draft.student_id);
             await shopApi.createClassOrder({
-              user_id: draft.student_id,
+              ...(member?.roster_entry_id && !member.user_id
+                ? { roster_entry_id: member.roster_entry_id }
+                : { user_id: draft.student_id }),
               items: draft.items.map((item) => ({
                 product_id: item.product_id,
                 quantity: item.quantity,
@@ -975,9 +980,9 @@ export default function ClassOrdersPage() {
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班級收款與代訂</h1>
+          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代代訂與收款</h1>
           <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
-            班代（議員）可替本班同學訂購商品，並依活動與座號登記收款。
+            本班同學無須先登入，也能由班代代訂；依座號選人、登記商品與收款。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1108,7 +1113,29 @@ export default function ClassOrdersPage() {
               onClick={() => setComposerActivityKey(null)}>改看全部活動商品</button>
           )}
           {(editOrder || recipientMode === "single") && (
-          <label className="mb-5 grid max-w-lg gap-1 text-sm">
+          <div className="mb-5 grid max-w-lg gap-2 text-sm">
+            {!editOrder && (
+              <label className="grid gap-1">
+                <span className="font-semibold">搜尋同學</span>
+                <input type="search" className="input min-h-11" placeholder="輸入座號或姓名"
+                  value={recipientFilter} onChange={(event) => setRecipientFilter(event.target.value)}
+                  disabled={creating || membersLoading || membersLoadFailed || currentDraftItemCount > 0 || Boolean(orderProductId)} />
+              </label>
+            )}
+            {!editOrder && recipientFilter.trim() && (
+              <div className="shop-recipient-results" role="group" aria-label="同學搜尋結果">
+                {filteredRecipients.length === 0 ? <p role="status">找不到符合的同學，請換個座號或姓名。</p>
+                  : filteredRecipients.map((member) => (
+                    <button type="button" key={member.id} aria-pressed={studentId === member.id}
+                      disabled={creating || currentDraftItemCount > 0 || Boolean(orderProductId)}
+                      onClick={() => { setStudentId(member.id); setRecipientFilter(""); }}>
+                      <strong>{member.seat_number == null ? "未編座號" : `${member.seat_number} 號`}</strong>
+                      <span>{member.display_name}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          <label className="grid gap-1">
             <span className="font-semibold">同班學生</span>
             {editOrder ? (
               <input className="input min-h-11" readOnly value={selectedStudent?.display_name ?? "訂購同學"} />
@@ -1125,6 +1152,11 @@ export default function ClassOrdersPage() {
               </select>
             )}
           </label>
+          {membersLoadFailed && <p role="alert">無法載入本班名冊，請重新整理後再試。</p>}
+          {!membersLoading && !membersLoadFailed && members.length === 0 && (
+            <p role="status">目前沒有本班名冊，請聯絡班聯會確認班級與座號資料。</p>
+          )}
+          </div>
           )}
           {!editOrder && recipientMode === "single" && (
             <p id="student-selection-hint" className="mb-4 text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -1388,7 +1420,8 @@ export default function ClassOrdersPage() {
             <input className="input min-h-11" disabled={creating || !recipientIds.length} value={notes} maxLength={500}
               onChange={(event) => setNotes(event.target.value)} placeholder="尺寸確認等" />
           </label>
-          <div className="shop-composer-actions mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <div className="shop-composer-actions mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end"
+            data-pending={pendingDraftStudentCount > 0 || Boolean(editOrder)}>
             {!editOrder && (
               <button type="button" onClick={queueCurrentDraft}
                 disabled={!canQueueCurrentDraft || creating || catalogFailed}

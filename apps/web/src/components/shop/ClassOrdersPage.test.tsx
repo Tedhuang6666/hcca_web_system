@@ -66,6 +66,83 @@ function openCollectWorkspace() {
 }
 
 describe("班代工作流程", () => {
+  it("reloads the roster after a first order so collection stays on the same seat", async () => {
+    api.members.mockResolvedValue([
+      { id: "roster-member", user_id: null, roster_entry_id: "seat-7", display_name: "未登入同學", seat_number: 7 },
+    ]);
+    api.createClassOrder.mockImplementation(async () => {
+      api.members.mockResolvedValue([
+        { id: "new-user", user_id: "new-user", roster_entry_id: "seat-7", display_name: "未登入同學", seat_number: 7 },
+      ]);
+      api.listClassOrders.mockResolvedValue([{
+        id: "first-order", user_id: "new-user", user_name: "未登入同學", status: "pending",
+        category_id: "category", activity_id: null, total_price: 100,
+        is_paid: false, is_class_collected: false, items: [],
+      }]);
+      return [];
+    });
+    render(<ClassOrdersPage />);
+    await screen.findByRole("option", { name: "7 號 · 未登入同學" });
+    fireEvent.change(screen.getByRole("combobox", { name: "同班學生" }), { target: { value: "roster-member" } });
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /送出.*訂單/ }));
+    await screen.findByText(/已完成 1 位同學的訂購/);
+    await waitFor(() => expect(api.members).toHaveBeenCalledTimes(2));
+    openCollectWorkspace();
+    const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent("7 號");
+    expect(within(rows[0]).getByRole("button", { name: "設為已收" })).toBeEnabled();
+  });
+
+  it("retries a failed roster load using refresh", async () => {
+    api.members.mockRejectedValueOnce(new Error("roster unavailable"));
+    render(<ClassOrdersPage />);
+    await screen.findByText("無法載入本班名冊，請重新整理後再試。");
+    expect(screen.getByRole("combobox", { name: "同班學生" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    await screen.findByRole("option", { name: "1 號 · 示範甲" });
+    expect(screen.getByRole("combobox", { name: "同班學生" })).toBeEnabled();
+  });
+
+  it("finds an unregistered classmate by seat and submits their roster entry", async () => {
+    api.members.mockResolvedValue([
+      { id: "roster-member", user_id: null, roster_entry_id: "seat-7", display_name: "尚未登入同學", seat_number: 7 },
+      { id: "a", user_id: "a", display_name: "示範甲", seat_number: 1 },
+    ]);
+    render(<ClassOrdersPage />);
+    const search = await screen.findByRole("searchbox", { name: "搜尋同學" });
+    await screen.findByRole("option", { name: "7 號 · 尚未登入同學" });
+    fireEvent.change(search, { target: { value: "7" } });
+    fireEvent.click(within(screen.getByRole("group", { name: "同學搜尋結果" })).getByRole("button", { name: /7 號/ }));
+    expect(screen.getByRole("combobox", { name: "同班學生" })).toHaveValue("roster-member");
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /送出.*訂單/ }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledWith({
+      roster_entry_id: "seat-7", notes: null,
+      items: [{ product_id: "product", quantity: 1, option_ids: [] }],
+    }));
+  });
+
+  it("submits a mixed batch with both roster entries and registered accounts", async () => {
+    api.members.mockResolvedValue([
+      { id: "a", user_id: "a", display_name: "示範甲", seat_number: 1 },
+      { id: "r", user_id: null, roster_entry_id: "seat-2", display_name: "未登入同學", seat_number: 2 },
+    ]);
+    render(<ClassOrdersPage />);
+    fireEvent.click(screen.getByRole("button", { name: "批次給多人" }));
+    await screen.findByRole("checkbox", { name: /2 號/ });
+    fireEvent.click(screen.getByRole("button", { name: "選取顯示的 2 位" }));
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /送出.*訂單/ }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(2));
+    expect(api.createClassOrder.mock.calls.map(([body]) => body)).toEqual([
+      { user_id: "a", notes: null, items: [{ product_id: "product", quantity: 1, option_ids: [] }] },
+      { roster_entry_id: "seat-2", notes: null, items: [{ product_id: "product", quantity: 1, option_ids: [] }] },
+    ]);
+  });
+
   it("opens single-student ordering first, then sorts the collection roster by seat number", async () => {
     api.members.mockResolvedValue([
       { id: "b", display_name: "示範乙", seat_number: 2 },
@@ -212,7 +289,8 @@ describe("班代工作流程", () => {
     openCollectWorkspace();
     await screen.findByRole("option", { name: "園遊會" });
     fireEvent.change(screen.getByRole("combobox", { name: "收款活動" }), { target: { value: "none" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "設為已收" }).find((button) => !button.hasAttribute("disabled"))!);
+    const collectButtons = await screen.findAllByRole("button", { name: "設為已收" });
+    fireEvent.click(collectButtons.find((button) => !button.hasAttribute("disabled"))!);
     await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledTimes(1));
     expect(api.setClassCollected).toHaveBeenCalledWith("one", true);
   });

@@ -89,7 +89,7 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
   return [
     { href: "/shop", label: "商品目錄", icon: ShoppingBag, end: true },
     { href: "/shop/orders", label: "我的預購", icon: ClipboardList },
-    ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "班級收款與代訂", icon: ListChecks }] : []),
+    ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "班代代訂與收款", icon: ListChecks }] : []),
     ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校收款與訂單", icon: BarChart2 }] : []),
     ...(canManage ? [
       { href: "/shop/admin", label: "商品管理", icon: PackageSearch },
@@ -111,8 +111,12 @@ function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
       tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
     },
     {
+      label: "班代工作",
+      tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
+    },
+    {
       label: "收款與管理",
-      tabs: tabs.filter((tab) => tab.href !== "/shop" && tab.href !== "/shop/orders"),
+      tabs: tabs.filter((tab) => !["/shop", "/shop/orders", "/shop/class-orders"].includes(tab.href)),
     },
   ].filter((group) => group.tabs.length > 0);
 }
@@ -152,9 +156,9 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
       aria-label="商品工作區"
       className="shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4"
     >
-      {groups.map((group) => group.label === "預購" ? (
-        <section key={group.label} className="shop-workspace-group" aria-label="預購功能">
-          <h2 className="sr-only">預購</h2>
+      {groups.map((group) => group.label !== "收款與管理" ? (
+        <section key={group.label} className={`shop-workspace-group${group.label === "班代工作" ? " shop-representative-entry" : ""}`} aria-label={`${group.label}功能`}>
+          <h2 className="sr-only">{group.label}</h2>
           {links(group)}
         </section>
       ) : (

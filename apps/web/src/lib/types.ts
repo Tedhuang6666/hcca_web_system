@@ -103,6 +103,7 @@ export type {
   ClassMemberOut,
   ClassMembershipCreate,
   ClassMembershipOut,
+  ClassOrderCreate,
   ClassOrderUpsert,
   ClassPaymentOut,
   ClassRoleAssign,
