@@ -183,7 +183,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { id: "email", href: "/email", iconKey: "email", label: "電子郵件", perm: "email:*" },
   { id: "examPaperAdmin", href: "/exam-papers/admin", iconKey: "examPaperAdmin", label: "題庫管理", perm: "exam:manage" },
-  { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "商品管理與統計", perm: "shop:manage" },
+  { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "商品設定", perm: "shop:manage" },
   {
     id: "merchandiseSubmissionsAdmin",
     href: "/merchandise-submissions/admin",

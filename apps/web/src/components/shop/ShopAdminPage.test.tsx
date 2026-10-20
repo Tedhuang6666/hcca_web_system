@@ -36,17 +36,18 @@ async function openStats() {
 }
 
 describe("商品管理與統計", () => {
-  it("opens statistics from its URL and follows navigation back to the catalog", async () => {
+  it("opens statistics from its URL and offers a clear return to product setup", async () => {
     navigation.search = "view=stats";
     const page = render(<ShopAdminPage />);
     expect(screen.getByRole("heading", { name: "訂購統計", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "訂購統計" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "商品目錄" })).toHaveAttribute("href", "/shop/admin");
+    expect(screen.getByRole("link", { name: "返回商品設定" })).toHaveAttribute("href", "/shop/admin");
+    expect(screen.getByRole("link", { name: "返回班聯工作" })).toHaveAttribute("href", "/shop/council-orders");
     await screen.findAllByText("初始班級");
     navigation.search = "";
     page.rerender(<ShopAdminPage />);
-    expect(screen.getByRole("heading", { name: "商品管理", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "商品目錄" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { name: "商品設定", level: 1 })).toBeVisible();
+    expect(screen.getByRole("link", { name: "設定優惠" })).toHaveAttribute("href", "/shop/admin?view=promotions");
+    expect(screen.queryByRole("link", { name: "訂購統計" })).not.toBeInTheDocument();
   });
 
   it("loads products beyond the first page without requesting class-management access", async () => {
