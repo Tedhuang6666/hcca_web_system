@@ -183,6 +183,28 @@ describe("班代工作流程", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("目前沒有可收款的活動");
   });
 
+  it("defaults collection to the activity with the most uncollected orders", async () => {
+    api.catalog.mockResolvedValue([
+      { id: "empty-category", name: "空活動", activity_id: "empty", series: [], products: [] },
+      { id: "busy-category", name: "待收活動", activity_id: "busy", series: [], products: [
+        { id: "busy-product", name: "活動商品", status: "active", price: 100 },
+      ] },
+    ]);
+    api.listClassOrders.mockResolvedValue([
+      { id: "busy-one", user_id: "a", status: "pending", activity_id: "busy", category_id: "busy-category", activity_name: "待收活動", total_price: 100, is_class_collected: false },
+      { id: "busy-two", user_id: "b", status: "pending", activity_id: "busy", category_id: "busy-category", activity_name: "待收活動", total_price: 100, is_class_collected: false },
+    ]);
+    render(<ClassOrdersPage />);
+
+    openCollectWorkspace();
+    const activitySelect = await screen.findByRole("combobox", { name: "收款活動" });
+    await waitFor(() => expect(activitySelect).toHaveValue("busy"));
+    expect(within(activitySelect).getByRole("option", { name: "空活動" })).toBeInTheDocument();
+
+    fireEvent.change(activitySelect, { target: { value: "empty" } });
+    expect(activitySelect).toHaveValue("empty");
+  });
+
   it("shows an error message when collection data cannot be loaded", async () => {
     api.listClassOrders.mockRejectedValue(new Error("service unavailable"));
     api.catalog.mockResolvedValue([]);
