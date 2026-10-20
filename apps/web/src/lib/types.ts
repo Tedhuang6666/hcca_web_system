@@ -106,6 +106,7 @@ export type {
   ClassOrderCreate,
   ClassOrderUpsert,
   ClassPaymentOut,
+  ClassRepresentativeOverviewItemOut,
   ClassRoleAssign,
   ClassRoleBindingOut,
   ClassRoleHolderOut,

@@ -10,7 +10,7 @@ import re
 import uuid
 from datetime import date, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
@@ -142,6 +142,77 @@ async def list_classes(
     q = q.order_by(SchoolClass.academic_year.desc(), SchoolClass.class_code)
     result = await session.execute(q)
     return list(result.scalars().unique().all())
+
+
+async def list_class_representative_overview(session: AsyncSession) -> list[dict[str, object]]:
+    """彙總目前啟用班級的班代任命，不補建預設職位。"""
+    classes_result = await session.execute(
+        select(SchoolClass)
+        .where(SchoolClass.is_active.is_(True))
+        .order_by(SchoolClass.academic_year.desc(), SchoolClass.class_code)
+    )
+    classes = list(classes_result.scalars().all())
+    if not classes:
+        return []
+
+    class_ids = [school_class.id for school_class in classes]
+    representatives_by_class: dict[uuid.UUID, list[str]] = {class_id: [] for class_id in class_ids}
+    today = local_today()
+
+    user_holders_result = await session.execute(
+        select(ClassRoleBinding.class_id, User.display_name)
+        .join(UserPosition, UserPosition.position_id == ClassRoleBinding.position_id)
+        .join(User, User.id == UserPosition.user_id)
+        .where(
+            ClassRoleBinding.class_id.in_(class_ids),
+            ClassRoleBinding.role_key == ClassRoleKey.CLASS_REPRESENTATIVE,
+            UserPosition.start_date <= today,
+            (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
+        )
+        .order_by(UserPosition.start_date.desc())
+    )
+    for class_id, display_name in user_holders_result.all():
+        representatives_by_class[class_id].append(display_name)
+
+    person_holders_result = await session.execute(
+        select(PersonAffiliation.class_id, Person.display_name)
+        .join(
+            ClassRoleBinding,
+            and_(
+                ClassRoleBinding.class_id == PersonAffiliation.class_id,
+                ClassRoleBinding.position_id == PersonAffiliation.position_id,
+                ClassRoleBinding.role_key == ClassRoleKey.CLASS_REPRESENTATIVE,
+            ),
+        )
+        .join(Person, Person.id == PersonAffiliation.person_id)
+        .where(
+            PersonAffiliation.class_id.in_(class_ids),
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_ROLE,
+            PersonAffiliation.status.in_(
+                [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
+            ),
+            PersonAffiliation.start_date <= today,
+            (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
+            Person.user_id.is_(None),
+        )
+        .order_by(PersonAffiliation.start_date.desc())
+    )
+    for class_id, display_name in person_holders_result.all():
+        if class_id is not None:
+            representatives_by_class[class_id].append(display_name)
+
+    return [
+        {
+            "id": school_class.id,
+            "academic_year": school_class.academic_year,
+            "class_code": school_class.class_code,
+            "grade": school_class.grade,
+            "label": school_class.label,
+            "is_active": school_class.is_active,
+            "representatives": representatives_by_class[school_class.id],
+        }
+        for school_class in classes
+    ]
 
 
 async def list_recipient_options(session: AsyncSession) -> list[SchoolClass]:

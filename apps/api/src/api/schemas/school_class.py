@@ -292,6 +292,10 @@ class SchoolClassListItem(BaseModel):
     is_active: bool
 
 
+class ClassRepresentativeOverviewItemOut(SchoolClassListItem):
+    representatives: list[str]
+
+
 class MySchoolClassOut(SchoolClassListItem):
     seat_number: int | None = None
 
