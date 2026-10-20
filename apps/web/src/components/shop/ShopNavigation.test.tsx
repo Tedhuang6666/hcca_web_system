@@ -59,7 +59,7 @@ beforeEach(() => {
 function openNavigation() {
   render(<ShopLayout><p>工作內容</p></ShopLayout>);
   const nav = within(screen.getByRole("navigation", { name: "商品工作區" }));
-  const menu = nav.queryByText("收款與管理", { exact: true });
+  const menu = nav.queryByText("其他工具", { exact: true });
   if (menu) fireEvent.click(menu);
   return nav;
 }
@@ -127,14 +127,17 @@ describe("商品工作導覽", () => {
     });
   });
 
-  it("opens statistics directly and highlights only that task", () => {
+  it("shows one product setup entry even when statistics is open", () => {
     state.pathname = "/shop/admin";
     state.search = "view=stats";
     state.permissions = ["shop:manage"];
     const nav = openNavigation();
-    expect(nav.getByRole("link", { name: "訂購統計" })).toHaveAttribute("href", "/shop/admin?view=stats");
-    expect(nav.getByRole("link", { name: "訂購統計" })).toHaveAttribute("aria-current", "page");
-    expect(nav.getByRole("link", { name: "商品管理" })).not.toHaveAttribute("aria-current");
+    expect(nav.queryByRole("link", { name: "訂購統計" })).not.toBeInTheDocument();
+    expect(nav.getByRole("link", { name: "商品設定" })).toHaveAttribute("aria-current", "page");
+    expect(nav.getByRole("link", { name: "班聯工作" })).toHaveAttribute("href", "/shop/council-orders");
+    expect(nav.getByRole("link", { name: "班聯工作" }).closest("details")).toBeNull();
+    expect(nav.queryByRole("region", { name: "預購功能" })).not.toBeInTheDocument();
+    expect(nav.getByRole("link", { name: "我的預購" })).toHaveAttribute("href", "/shop/orders");
     expect(nav.queryByRole("link", { name: "班級與議員設定" })).not.toBeInTheDocument();
   });
 
@@ -142,6 +145,6 @@ describe("商品工作導覽", () => {
     state.permissions = ["class:manage"];
     const nav = openNavigation();
     expect(nav.getByRole("link", { name: "班級與議員設定" })).toHaveAttribute("href", "/admin/people?section=classes");
-    expect(nav.queryByRole("link", { name: "全校收款與訂單" })).not.toBeInTheDocument();
+    expect(nav.queryByRole("link", { name: "班聯工作" })).not.toBeInTheDocument();
   });
 });

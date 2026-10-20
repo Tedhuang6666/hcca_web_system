@@ -1625,28 +1625,17 @@ export default function ShopAdminPage() {
     <div className="shop-admin-page w-full min-w-0 space-y-5 max-w-7xl mx-auto px-4 py-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : "商品管理"}</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : "商品設定"}</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
             {tab === "stats" ? "按活動核對訂購金額與班聯收款進度。" : tab === "promotions" ? "設定折扣條件、優惠碼與適用商品。" : "選擇商品主題，新增商品、設定規格並上架。"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2"><Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link><Link href="/shop/council-orders" className="btn btn-ghost min-h-11">全校收款與訂單</Link></div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-0.5 p-1 rounded-xl w-fit"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          {([["catalog", "商品目錄"], ["stats", "訂購統計"], ["promotions", "優惠設定"]] as const).map(([k, label]) => (
-            <Link key={k} href={k === "catalog" ? "/shop/admin" : `/shop/admin?view=${k}`} scroll={false} aria-current={tab === k ? "page" : undefined}
-              className="inline-flex min-h-11 items-center px-4 py-1.5 rounded-lg text-sm font-medium"
-              style={tab === k
-                ? { background: "var(--primary-dim)", color: "var(--primary)" }
-                : { color: "var(--text-muted)" }}>
-              {label}
-            </Link>
-          ))}
+        <div className="flex flex-wrap gap-2">
+          {tab !== "catalog" && <Link href="/shop/admin" className="btn btn-secondary min-h-11">返回商品設定</Link>}
+          {tab === "catalog" && <Link href="/shop/admin?view=promotions" className="btn btn-secondary min-h-11">設定優惠</Link>}
+          {tab === "catalog" && <Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link>}
+          {tab === "stats" && <Link href="/shop/council-orders" className="btn btn-ghost min-h-11">返回班聯工作</Link>}
         </div>
-
       </div>
 
       {tab === "stats" ? (

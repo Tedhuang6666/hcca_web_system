@@ -100,11 +100,8 @@ function getShopTabs(isAdmin: boolean, permissions: Set<string>): ModuleTab[] {
     { href: "/shop", label: "商品目錄", icon: ShoppingBag, end: true },
     { href: "/shop/orders", label: "我的預購", icon: ClipboardList },
     ...(canCollectForClass ? [{ href: "/shop/class-orders", label: "班代代訂與收款", icon: ListChecks }] : []),
-    ...(canViewAll ? [{ href: "/shop/council-orders", label: "全校收款與訂單", icon: BarChart2 }] : []),
-    ...(canManage ? [
-      { href: "/shop/admin", label: "商品管理", icon: PackageSearch },
-      { href: "/shop/admin?view=stats", label: "訂購統計", icon: BarChart2 },
-    ] : []),
+    ...(canViewAll ? [{ href: "/shop/council-orders", label: "班聯工作", icon: BarChart2 }] : []),
+    ...(canManage ? [{ href: "/shop/admin", label: "商品設定", icon: PackageSearch }] : []),
     ...(canManageClasses ? [{ href: "/admin/people?section=classes", label: "班級與議員設定", icon: UsersRound }] : []),
   ];
 }
@@ -115,18 +112,17 @@ type ShopNavigationGroup = {
 };
 
 function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
+  const councilTab = tabs.find((tab) => tab.href === "/shop/council-orders");
+  const classTab = tabs.find((tab) => tab.href === "/shop/class-orders");
   return [
     {
       label: "預購",
       tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
     },
+    { label: councilTab ? "班聯工作" : "班代工作", tabs: councilTab ? [councilTab] : classTab ? [classTab] : [] },
     {
-      label: "班代工作",
-      tabs: tabs.filter((tab) => tab.href === "/shop/class-orders"),
-    },
-    {
-      label: "收款與管理",
-      tabs: tabs.filter((tab) => !["/shop", "/shop/orders", "/shop/class-orders"].includes(tab.href)),
+      label: "其他工具",
+      tabs: tabs.filter((tab) => !["/shop", "/shop/orders", councilTab ? "/shop/council-orders" : "/shop/class-orders"].includes(tab.href)),
     },
   ].filter((group) => group.tabs.length > 0);
 }
@@ -135,6 +131,13 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   if (groups.length === 0) return null;
+  const managementPage = pathname.startsWith("/shop/council-orders") || pathname.startsWith("/shop/admin");
+  const preorderTabs = groups.find((group) => group.label === "預購")?.tabs ?? [];
+  const visibleGroups = managementPage
+    ? groups.filter((group) => group.label !== "預購").map((group) => group.label === "其他工具"
+      ? { ...group, tabs: [...group.tabs, ...preorderTabs] }
+      : group)
+    : groups;
 
   const isActive = (tab: ModuleTab) => {
     const [tabPath, tabQuery] = tab.href.split("?", 2);
@@ -144,8 +147,7 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
     const matchesPath = tab.end
       ? pathname === tabPath
       : pathname === tabPath || pathname.startsWith(`${tabPath}/`);
-    return matchesPath && queryMatches
-      && !(tab.href === "/shop/admin" && searchParams.get("view") === "stats");
+    return matchesPath && queryMatches;
   };
   const links = (group: ShopNavigationGroup) => (
     <div className="shop-workspace-links">
@@ -166,8 +168,8 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
       aria-label="商品工作區"
       className="shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4"
     >
-      {groups.map((group) => group.label !== "收款與管理" ? (
-        <section key={group.label} className={`shop-workspace-group${group.label === "班代工作" ? " shop-representative-entry" : ""}`} aria-label={`${group.label}功能`}>
+      {visibleGroups.map((group) => group.label !== "其他工具" ? (
+        <section key={group.label} className={`shop-workspace-group${group.label === "班代工作" || group.label === "班聯工作" ? " shop-role-entry" : ""}`} aria-label={`${group.label}功能`}>
           <h2 className="sr-only">{group.label}</h2>
           {links(group)}
         </section>
@@ -175,7 +177,7 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
         <details key={`${group.label}:${pathname}:${searchParams.toString()}`} className="shop-workspace-menu">
           <summary>
             <span>{group.label}</span>
-            <strong>{group.tabs.find(isActive)?.label ?? "切換工作"}</strong>
+            {group.tabs.find(isActive) && <strong>{group.tabs.find(isActive)?.label}</strong>}
             <ChevronDown size={16} aria-hidden />
           </summary>
           {links(group)}

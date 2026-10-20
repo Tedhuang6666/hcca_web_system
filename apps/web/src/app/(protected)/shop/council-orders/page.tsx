@@ -57,6 +57,7 @@ export default function CouncilOrdersPage() {
     || permissions.has("shop:manage")
     || permissions.has("shop:manage_orders");
   const canManageOrderClosures = canConfirmClassPayment || permissions.has("shop:view_all");
+  const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
   const [tab, setTab] = useState<Tab>("summary");
   const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
 
@@ -371,6 +372,7 @@ export default function CouncilOrdersPage() {
   }, []);
 
   const visibleActivityGroups = activityGroups.filter((group) => activityId === "all" || group.activityId === activityId);
+  const actionActivityGroups = activityId === "all" ? [] : visibleActivityGroups;
   const visibleCategoryIds = new Set(visibleActivityGroups.flatMap((group) => group.categories.map((category) => category.id)));
   const hasFilters = activityId !== "all" || Boolean(grade || classId || categoryId || productId || isPaid || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
   const resetFilters = () => {
@@ -394,16 +396,19 @@ export default function CouncilOrdersPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            <BarChart2 size={22} /> 全校收款與訂單
+            <BarChart2 size={22} /> 班聯工作
           </h1>
           <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-            先選活動，再確認各班繳款、查看商品數量或查找訂單。
+            選好活動後，先核對班級繳款；需要時再查看商品數量或訂單。
           </p>
         </div>
-        <button type="button" onClick={() => { if (tab === "summary") loadSummary(); else if (tab === "quantities") loadQuantities(); else loadOrders(); }}
-          disabled={loading || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
-          <RefreshCw size={15} /> 重新整理
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canViewAdvancedStats && <Link href="/shop/admin?view=stats" className="btn btn-ghost min-h-11">進階訂購統計</Link>}
+          <button type="button" onClick={() => { if (tab === "summary") loadSummary(); else if (tab === "quantities") loadQuantities(); else loadOrders(); }}
+            disabled={loading || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
+            <RefreshCw size={15} /> 重新整理
+          </button>
+        </div>
       </header>
 
       <nav className="shop-task-switch" aria-label="班聯統籌工作">
@@ -528,9 +533,12 @@ export default function CouncilOrdersPage() {
             </div>
           )}
 
-          {canManageOrderClosures && !loading && groupBy === "class" && summary && summary.rows.length > 0 && catalog.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {visibleActivityGroups.map((group) => (
+          {canManageOrderClosures && !loading && groupBy === "class" && summary && summary.rows.length > 0 && actionActivityGroups.length > 0 && (
+            <details className="mb-3 rounded-lg px-3 py-2" style={{ border: "1px solid var(--border)" }}>
+              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">批次管理訂購</summary>
+              <p className="mb-3 text-xs" style={{ color: "var(--text-secondary)" }}>只影響目前清單中的班級；執行前會再次確認。</p>
+              <div className="flex flex-wrap gap-2">
+              {actionActivityGroups.map((group) => (
                 <div key={group.key} className="flex flex-wrap items-center gap-1.5 rounded-md px-2 py-1"
                   style={{ border: "1px solid var(--border)" }}>
                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{group.label}</span>
@@ -546,7 +554,13 @@ export default function CouncilOrdersPage() {
                   </button>
                 </div>
               ))}
-            </div>
+              </div>
+            </details>
+          )}
+          {groupBy === "class" && activityId === "all" && summary && summary.rows.length > 0 && (
+            <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+              目前顯示全部活動彙總。選擇一個活動後，可確認班級收款與管理訂購。
+            </p>
           )}
 
           <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
@@ -559,7 +573,7 @@ export default function CouncilOrdersPage() {
                 <table className="shop-mobile-table w-full min-w-[720px] text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? visibleActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canManageOrderClosures ? ["班聯操作"] : [])].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canManageOrderClosures && actionActivityGroups.length ? ["班聯操作"] : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
                     </tr>
@@ -572,7 +586,7 @@ export default function CouncilOrdersPage() {
                         <td data-label="應繳" className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
                         <td data-label="班聯已確認" className="px-4 py-3 text-xs" style={{ color: "var(--success)" }}>{money(row.paid_amount)}</td>
                         <td data-label="班聯未確認" className="px-4 py-3 text-xs" style={{ color: "var(--danger)" }}>{money(row.unpaid_amount)}</td>
-                        {groupBy === "class" && visibleActivityGroups.map((group) => {
+                        {groupBy === "class" && actionActivityGroups.map((group) => {
                           const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
                           const closedCount = statuses.filter((item) => item?.is_closed).length;
                           return (
@@ -583,9 +597,9 @@ export default function CouncilOrdersPage() {
                             />
                           </td>
                         );})}
-                        {groupBy === "class" && canManageOrderClosures && <td className="px-4 py-3">
+                        {groupBy === "class" && canManageOrderClosures && actionActivityGroups.length > 0 && <td className="px-4 py-3">
                           <div className="flex min-w-56 flex-col gap-2">
-                            {visibleActivityGroups.map((group) => {
+                            {actionActivityGroups.map((group) => {
                               const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
                               const closedCount = statuses.filter((item) => item?.is_closed).length;
                               const isClosed = closedCount === group.categories.length;
@@ -595,31 +609,30 @@ export default function CouncilOrdersPage() {
                                   style={{ borderColor: "var(--border)" }}>
                                   <span className="w-full text-[11px]" style={{ color: "var(--text-muted)" }}>{group.label}</span>
                                   {row.key !== "none" && <>
-                                    {canConfirmClassPayment && <>
-                                      <button type="button" disabled={mutationBusy}
-                                        onClick={() => updateClassPayment(row, group, true)}
-                                        className="rounded px-2 py-1 text-xs disabled:opacity-50"
-                                        style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
-                                        確認班聯收到款項
-                                      </button>
-                                      <button type="button" disabled={mutationBusy}
-                                        onClick={() => updateClassPayment(row, group, false)}
-                                        className="rounded px-2 py-1 text-xs disabled:opacity-50"
-                                        style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                                        撤銷收款確認
-                                      </button>
-                                    </>}
+                                    {canConfirmClassPayment && <button type="button" disabled={mutationBusy}
+                                      onClick={() => updateClassPayment(row, group, true)}
+                                      className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50">
+                                      確認收款
+                                    </button>}
+                                    <details className="min-w-0">
+                                      <summary className="flex min-h-11 cursor-pointer items-center text-xs underline underline-offset-2"
+                                        style={{ color: "var(--text-secondary)" }}>其他操作</summary>
+                                      <div className="flex flex-wrap gap-2 pb-1">
+                                        {canConfirmClassPayment && <button type="button" disabled={mutationBusy}
+                                          onClick={() => updateClassPayment(row, group, false)}
+                                          className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
+                                          撤銷收款確認
+                                        </button>}
+                                        {group.categories.length > 0 && <button type="button" disabled={mutationBusy || !statuses.every(Boolean)}
+                                          onClick={() => handleToggleClose(group, row.key, isClosed, row.label)}
+                                          className="btn btn-ghost flex min-h-11 items-center gap-1 px-3 text-xs disabled:opacity-50"
+                                          title={`${isClosed ? "重新開放訂購" : "停止訂購"}：${group.label}`}>
+                                          {isBusy ? "處理中" : isClosed ? <LockOpen size={14} /> : <Lock size={14} />}
+                                          {isClosed ? "重新開放訂購" : "停止訂購"}
+                                        </button>}
+                                      </div>
+                                    </details>
                                   </>}
-                                  {group.categories.length > 0 && row.key !== "none" && (
-                                    <button type="button" disabled={mutationBusy || !statuses.every(Boolean)}
-                                      onClick={() => handleToggleClose(group, row.key, isClosed, row.label)}
-                                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs disabled:opacity-50"
-                                      style={{ border: "1px solid var(--border)", color: isClosed ? "#16a34a" : "#ef4444" }}
-                                      title={`${isClosed ? "重新開放訂購" : "停止訂購"}：${group.label}`}>
-                                      {isBusy ? "處理中" : isClosed ? <LockOpen size={10} /> : <Lock size={10} />}
-                                      {isClosed ? "重新開放訂購" : "停止訂購"}
-                                    </button>
-                                  )}
                                 </div>
                               );
                             })}

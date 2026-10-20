@@ -142,8 +142,8 @@
   color: var(--primary-text);
 }
 
-.shop-representative-entry { border-color: var(--border-strong); background: var(--primary-dim); }
-.shop-representative-entry .shop-workspace-tab { color: var(--primary-text); }
+.shop-role-entry { border-color: var(--border-strong); background: var(--primary-dim); }
+.shop-role-entry .shop-workspace-tab { color: var(--primary-text); }
 
 @media (max-width: 640px) {
   .shop-workspace-group {
@@ -171,8 +171,8 @@
     padding-inline: 0.65rem;
   }
 
-  .shop-representative-entry .shop-workspace-links { grid-template-columns: minmax(0, 1fr); }
-  .shop-representative-entry .shop-workspace-tab { min-height: 48px; background: var(--primary-dim); border: 1px solid var(--border-strong); }
+  .shop-role-entry .shop-workspace-links { grid-template-columns: minmax(0, 1fr); }
+  .shop-role-entry .shop-workspace-tab { min-height: 48px; background: var(--primary-dim); border: 1px solid var(--border-strong); }
   .shop-class-orders-page .shop-task-switch { position: sticky; top: 0; z-index: 10; background: var(--card-bg); }
   .shop-class-orders-page .shop-composer-actions[data-pending="true"] { position: sticky; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 10; border-top: 1px solid var(--border); }
 }

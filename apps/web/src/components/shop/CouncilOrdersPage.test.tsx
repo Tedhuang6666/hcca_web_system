@@ -27,6 +27,7 @@ beforeEach(() => {
   api.listOrders.mockResolvedValue([]);
   api.getCloseStatus.mockResolvedValue({ statuses: { shirts: { is_closed: false }, bags: { is_closed: false }, cards: { is_closed: false } } });
   api.closeCategory.mockResolvedValue({});
+  api.setClassPaid.mockResolvedValue({ updated_orders: 1 });
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
@@ -37,6 +38,23 @@ async function openPage() {
 }
 
 describe("全校收款與訂單", () => {
+  it("shows totals first, then scoped payment actions after selecting an activity", async () => {
+    await openPage();
+    expect(screen.getByText(/選擇一個活動後，可確認班級收款/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "確認收款" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    await screen.findByText("批次管理訂購");
+    expect(screen.getAllByRole("button", { name: "確認收款" }).length).toBeGreaterThan(0);
+    const otherActions = screen.getAllByText("其他操作")[0].closest("details");
+    expect(otherActions).not.toHaveAttribute("open");
+    fireEvent.click(screen.getAllByText("其他操作")[0]);
+    expect(otherActions).toHaveAttribute("open");
+    expect(screen.getAllByRole("button", { name: "撤銷收款確認" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "停止訂購" }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "確認收款" })[0]);
+    await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledWith("class", true, "festival"));
+  });
+
   it("clears dependent product and category filters when changing activity", async () => {
     await openPage();
     fireEvent.change(screen.getByRole("combobox", { name: "商品主題" }), { target: { value: "shirts" } });
@@ -65,6 +83,7 @@ describe("全校收款與訂單", () => {
   it("requires batch confirmation and reports a partial failure", async () => {
     await openPage();
     fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.click(await screen.findByText("批次管理訂購"));
     const stop = await screen.findByRole("button", { name: "整批停止訂購" });
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     fireEvent.click(stop);
@@ -80,6 +99,9 @@ describe("全校收款與訂單", () => {
   it("does not present an unavailable closure status as open", async () => {
     api.getCloseStatus.mockRejectedValue(new Error("offline"));
     await openPage();
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    await screen.findByText("批次管理訂購");
+    fireEvent.click(screen.getAllByText("其他操作")[0]);
     expect(screen.getAllByText("狀態待確認").length).toBeGreaterThan(0);
     for (const button of screen.getAllByRole("button", { name: "停止訂購" })) expect(button).toBeDisabled();
   });
