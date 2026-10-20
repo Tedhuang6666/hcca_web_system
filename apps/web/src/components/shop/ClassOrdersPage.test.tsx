@@ -57,15 +57,30 @@ async function chooseProduct(id = "product") {
   await waitFor(() => expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled());
 }
 
+function taskSwitch() {
+  return screen.getByRole("navigation", { name: "班代工作" });
+}
+
 function openOrderWorkspace() {
-  fireEvent.click(screen.getByRole("button", { name: "幫同學訂購" }));
+  fireEvent.click(within(taskSwitch()).getByRole("button", { name: "代訂" }));
 }
 
 function openCollectWorkspace() {
-  fireEvent.click(screen.getByRole("button", { name: "依活動與座號收款" }));
+  fireEvent.click(within(taskSwitch()).getByRole("button", { name: "確認收款" }));
 }
 
 describe("班代工作流程", () => {
+  it("只提供代訂與確認收款兩個頁面", async () => {
+    render(<ClassOrdersPage />);
+
+    const navigation = taskSwitch();
+    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "代訂", "確認收款",
+    ]);
+    fireEvent.click(within(navigation).getByRole("button", { name: "確認收款" }));
+    expect(await screen.findByRole("heading", { name: "確認收款" })).toBeVisible();
+  });
+
   it("reloads the roster after a first order so collection stays on the same seat", async () => {
     api.members.mockResolvedValue([
       { id: "roster-member", user_id: null, roster_entry_id: "seat-7", display_name: "未登入同學", seat_number: 7 },
@@ -150,7 +165,7 @@ describe("班代工作流程", () => {
     ]);
     render(<ClassOrdersPage />);
 
-    expect(screen.getByRole("button", { name: "幫同學訂購" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(taskSwitch()).getByRole("button", { name: "代訂" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "逐位代訂" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "批次給多人" })).toHaveAttribute("aria-pressed", "false");
     openCollectWorkspace();
@@ -271,9 +286,9 @@ describe("班代工作流程", () => {
     openOrderWorkspace();
     await chooseStudent();
     await chooseProduct();
-    fireEvent.click(screen.getByRole("button", { name: "依活動與座號收款" }));
+    openCollectWorkspace();
     expect(screen.queryByRole("combobox", { name: "商品" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "幫同學訂購" }));
+    openOrderWorkspace();
     expect(screen.getByRole("combobox", { name: "同班學生" })).toHaveValue("a");
     expect(screen.getByRole("button", { name: /^送出示範甲的訂單/ })).toBeEnabled();
   });

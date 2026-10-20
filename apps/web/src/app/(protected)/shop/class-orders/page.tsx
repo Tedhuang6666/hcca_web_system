@@ -980,9 +980,9 @@ export default function ClassOrdersPage() {
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代代訂與收款</h1>
+          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代代訂與確認收款</h1>
           <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
-            本班同學無須先登入，也能由班代代訂；依座號選人、登記商品與收款。
+            依座號替同學代訂，並確認收到的款項。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1013,7 +1013,7 @@ export default function ClassOrdersPage() {
 
       <nav className="shop-task-switch" aria-label="班代工作">
         {([
-          ["order", "幫同學訂購"], ["collect", "依活動與座號收款"], ["details", "訂單與商品明細"],
+          ["order", "代訂"], ["collect", "確認收款"],
         ] as const).map(([key, label]) => (
           <button key={key} type="button" aria-pressed={workspace === key}
             onClick={() => { setWorkspace(key); if (key === "order") setFormOpen(true); }}>
@@ -1567,8 +1567,8 @@ export default function ClassOrdersPage() {
         <section aria-labelledby="seat-collection-heading" className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>依活動與座號收款</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>依活動查看每位同學的品項與款項；已收款後追加品項，會顯示待補收金額。</p>
+              <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>確認收款</h2>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>依活動與座號核對品項和款項，收到後標記；追加登記會顯示待補收金額。</p>
             </div>
             {activityRows.length > 0 && (
               <label className="grid gap-1 text-sm" style={{ color: "var(--text-secondary)" }}>
