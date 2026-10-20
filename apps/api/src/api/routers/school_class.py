@@ -29,6 +29,7 @@ from api.schemas.school_class import (
     ClassMemberOut,
     ClassMembershipCreate,
     ClassMembershipOut,
+    ClassRepresentativeOverviewItemOut,
     ClassRoleAssign,
     ClassRoleOut,
     ClassRolePersonAssign,
@@ -81,6 +82,17 @@ async def list_classes(
     is_active: bool | None = Query(None, description="篩選是否為當前學年度班級"),
 ) -> list[SchoolClass]:
     return await class_svc.list_classes(session, academic_year=academic_year, is_active=is_active)
+
+
+@router.get(
+    "/representative-overview",
+    response_model=list[ClassRepresentativeOverviewItemOut],
+    summary="彙總目前班級的班代任命狀態",
+)
+async def list_class_representative_overview(
+    session: DbDep, _: ManagerUser
+) -> list[dict[str, object]]:
+    return await class_svc.list_class_representative_overview(session)
 
 
 @router.get(

@@ -50,6 +50,45 @@ async def test_list_classes_requires_permission(
     assert response.status_code == 403
 
 
+async def test_class_representative_overview_requires_permission(
+    authed_client_factory: Callable[[User], AsyncClient], member_user: User
+) -> None:
+    ac = authed_client_factory(member_user)
+    response = await ac.get("/classes/representative-overview")
+    assert response.status_code == 403
+
+
+async def test_class_representative_overview_lists_active_classes_and_holders(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., User],
+    db_session: AsyncSession,
+) -> None:
+    appointed_class = await _make_class(db_session, admin_user)
+    appointed_class.label = "高一一班"
+    unappointed_class = await _make_class(db_session, admin_user)
+    inactive_class = await _make_class(db_session, admin_user)
+    inactive_class.is_active = False
+    representative = await make_user(
+        email="class-overview-representative@school.edu", display_name="班代同學"
+    )
+    ac = authed_client_factory(admin_user)
+    assigned = await ac.post(
+        f"/classes/{appointed_class.id}/roles/class_representative/assign",
+        json={"user_id": str(representative.id)},
+    )
+    assert assigned.status_code == 201
+
+    response = await ac.get("/classes/representative-overview")
+
+    assert response.status_code == 200
+    overview = {item["id"]: item for item in response.json()}
+    assert overview[str(appointed_class.id)]["label"] == "高一一班"
+    assert overview[str(appointed_class.id)]["representatives"] == ["班代同學"]
+    assert overview[str(unappointed_class.id)]["representatives"] == []
+    assert str(inactive_class.id) not in overview
+
+
 async def test_import_roster_file_requires_permission(
     authed_client_factory: Callable[[User], AsyncClient], member_user: User
 ) -> None:

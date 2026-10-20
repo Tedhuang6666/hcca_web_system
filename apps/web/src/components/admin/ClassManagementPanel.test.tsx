@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClassesAdminPage from "@/app/(admin)/admin/classes/page";
 
-const api = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), members: vi.fn(), memberships: vi.fn(), roster: vi.fn(), roles: vi.fn(), assignRole: vi.fn(), assignPersonRole: vi.fn(), listForSearch: vi.fn(), updateRoster: vi.fn(), addRoster: vi.fn(), removeMember: vi.fn() }));
+const api = vi.hoisted(() => ({ list: vi.fn(), representativeOverview: vi.fn(), get: vi.fn(), members: vi.fn(), memberships: vi.fn(), roster: vi.fn(), roles: vi.fn(), assignRole: vi.fn(), assignPersonRole: vi.fn(), listForSearch: vi.fn(), updateRoster: vi.fn(), addRoster: vi.fn(), removeMember: vi.fn() }));
 vi.mock("@/lib/api", () => ({ classApi: api, usersApi: api, ApiError: class extends Error {} }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ can: () => true }) }));
 vi.mock("@/components/admin/PeopleManagementEmbedContext", () => ({ usePeopleManagementEmbed: () => true }));
@@ -14,6 +14,7 @@ const schoolClass = { id: "class", academic_year: 115, class_code: "101", grade:
 beforeEach(() => {
   vi.resetAllMocks();
   api.list.mockResolvedValue([schoolClass]);
+  api.representativeOverview.mockResolvedValue([{ ...schoolClass, label: "高一一班", representatives: [] }]);
   api.get.mockResolvedValue(schoolClass);
   api.members.mockResolvedValue([{ ...student, user_id: student.id, seat_number: 7, source: "roster" }]);
   api.memberships.mockResolvedValue([]);
@@ -27,6 +28,33 @@ beforeEach(() => {
 });
 
 describe("班級管理工作台", () => {
+  it("shows missing class representatives and opens the class appointment tab", async () => {
+    api.representativeOverview.mockResolvedValue([
+      { ...schoolClass, label: "高一一班", representatives: [] },
+      { ...schoolClass, id: "appointed-class", class_code: "102", label: "高一二班", representatives: ["班代同學"] },
+    ]);
+    render(<ClassesAdminPage />);
+
+    expect(await screen.findByText("1 / 2 班已任命")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "前往 高一一班 設定班代" }));
+
+    expect(await screen.findByRole("heading", { name: "班長" })).toBeVisible();
+    expect(api.roles).toHaveBeenCalledWith("class");
+  });
+
+  it("recovers when the representative overview cannot load", async () => {
+    api.representativeOverview.mockRejectedValueOnce(new Error("offline"));
+    render(<ClassesAdminPage />);
+
+    expect(await screen.findByText("無法載入班代任命狀態。")).toBeInTheDocument();
+    api.representativeOverview.mockResolvedValueOnce([
+      { ...schoolClass, label: "高一一班", representatives: [] },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "重新載入" }));
+
+    expect(await screen.findByRole("button", { name: "前往 高一一班 設定班代" })).toBeVisible();
+  });
+
   it("edits a linked member's seat from their details", async () => {
     api.updateRoster.mockResolvedValue({});
     render(<ClassesAdminPage />);

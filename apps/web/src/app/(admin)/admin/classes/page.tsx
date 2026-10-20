@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   BookUser,
+  CircleAlert,
+  CircleCheck,
   CheckSquare,
   FileUp,
   GraduationCap,
@@ -29,6 +32,7 @@ import type {
   ClassMemberOut,
   ClassMembershipOut,
   ClassRoleOut,
+  ClassRepresentativeOverviewItemOut,
   ClassRosterEntryOut,
   ClassStudentRangeOut,
   SchoolClassBulkCreate,
@@ -59,6 +63,117 @@ function classTitle(c: SchoolClassListItem | SchoolClassOut | null) {
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
+}
+
+function RepresentativeOverview({
+  items,
+  loading,
+  loadError,
+  onRetry,
+  onSelect,
+}: {
+  items: ClassRepresentativeOverviewItemOut[];
+  loading: boolean;
+  loadError: boolean;
+  onRetry: () => void;
+  onSelect: (classId: string) => void;
+}) {
+  const appointedCount = items.filter((item) => item.representatives.length > 0).length;
+  const missing = items.filter((item) => item.representatives.length === 0);
+
+  return (
+    <section className="overflow-hidden rounded-md" style={{ border: "1px solid var(--border)" }}>
+      <div className="grid md:grid-cols-[minmax(240px,0.8fr)_1.2fr]">
+        <div className="p-5 md:p-6" style={{ background: "var(--card-bg)", borderBottom: "1px solid var(--border)" }}>
+          <p className="text-xs font-semibold tracking-wide" style={{ color: "var(--text-muted)" }}>
+            班級幹部 · 目前啟用班級
+          </p>
+          <div className="mt-4 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>班代任命進度</h2>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                名單會依目前有效任命即時整理。
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未任命</p>
+              <p className="text-4xl font-semibold tabular-nums leading-none" style={{ color: "var(--danger)" }}>
+                {loading || loadError ? "—" : missing.length}
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 h-2 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+            <div
+              className="h-full rounded-full transition-[width] duration-300"
+              style={{
+                width: `${items.length ? (appointedCount / items.length) * 100 : 0}%`,
+                background: "var(--primary)",
+              }}
+            />
+          </div>
+          <p className="mt-2 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
+            {loading || loadError ? "任命資料尚未載入" : `${appointedCount} / ${items.length} 班已任命`}
+          </p>
+        </div>
+
+        <div className="min-w-0 p-5 md:p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>待任命班級</h3>
+            {!loading && !loadError && missing.length > 0 && (
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>選擇班級即可前往任命</span>
+            )}
+          </div>
+
+          {loading ? (
+            <p className="mt-4 text-sm" role="status" style={{ color: "var(--text-muted)" }}>正在整理班代任命狀態…</p>
+          ) : loadError ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3" role="alert">
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>無法載入班代任命狀態。</p>
+              <button type="button" className="btn btn-ghost min-h-11" onClick={onRetry}>重新載入</button>
+            </div>
+          ) : items.length === 0 ? (
+            <p className="mt-4 text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+              目前沒有啟用中的班級；建立班級後會顯示在這裡。
+            </p>
+          ) : missing.length === 0 ? (
+            <div className="mt-4 flex items-center gap-2 rounded-md px-3 py-3 text-sm" role="status"
+              style={{ background: "color-mix(in srgb, var(--primary) 8%, transparent)", color: "var(--text-primary)" }}>
+              <CircleCheck size={18} aria-hidden style={{ color: "var(--primary)" }} />
+              目前啟用的 {items.length} 個班級都已任命班代。
+            </div>
+          ) : (
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="尚未任命班代的班級">
+              {missing.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(item.id)}
+                    aria-label={`前往 ${classTitle(item)} 設定班代`}
+                    className="group flex min-h-14 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+                    style={{
+                      border: "1px solid color-mix(in srgb, var(--danger) 28%, var(--border))",
+                      background: "color-mix(in srgb, var(--danger) 5%, var(--card-bg))",
+                    }}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <CircleAlert size={17} aria-hidden className="shrink-0" style={{ color: "var(--danger)" }} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                          {classTitle(item)}
+                        </span>
+                        <span className="block text-xs" style={{ color: "var(--text-muted)" }}>尚未任命班代</span>
+                      </span>
+                    </span>
+                    <ArrowUpRight size={16} aria-hidden className="shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" style={{ color: "var(--text-muted)" }} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function UserPicker({
@@ -1222,9 +1337,11 @@ function RosterPanel({
 
 function ClassWorkspace({
   classId,
+  initialTab,
   onClassChanged,
 }: {
   classId: string;
+  initialTab: TabKey;
   onClassChanged: () => void;
 }) {
   const [detail, setDetail] = useState<SchoolClassOut | null>(null);
@@ -1232,7 +1349,7 @@ function ClassWorkspace({
   const [memberships, setMemberships] = useState<ClassMembershipOut[]>([]);
   const [rosterEntries, setRosterEntries] = useState<ClassRosterEntryOut[]>([]);
   const [roles, setRoles] = useState<ClassRoleOut[]>([]);
-  const [tab, setTab] = useState<TabKey>("members");
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -1310,6 +1427,7 @@ function ClassWorkspace({
       await classApi.assignRole(classId, roleKey, { user_id: user.id });
       toast.success(`已任命 ${user.display_name}`);
       load();
+      onClassChanged();
       return true;
     } catch (error) {
       toast.error(getErrorMessage(error, "任命失敗"));
@@ -1327,6 +1445,7 @@ function ClassWorkspace({
         ? "職位任命已登記，成員註冊帳號後生效"
         : "職位任命已更新");
       load();
+      onClassChanged();
       return true;
     } catch (error) {
       toast.error(getErrorMessage(error, "任命失敗"));
@@ -1602,7 +1721,11 @@ function ClassManagementPanel() {
   const { can } = usePermissions();
   const allowed = can("class:manage");
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
+  const [representativeOverview, setRepresentativeOverview] = useState<ClassRepresentativeOverviewItemOut[]>([]);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewLoadError, setOverviewLoadError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<TabKey>("members");
   // 手機版 master-detail：選班級後切到工作台、未選顯示清單（桌機 xl 以上恆並排）。
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
@@ -1611,10 +1734,22 @@ function ClassManagementPanel() {
   const [loadError, setLoadError] = useState(false);
   const [showCorrectionRequests, setShowCorrectionRequests] = useState(false);
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+
+  const loadRepresentativeOverview = useCallback(() => {
+    setOverviewLoading(true);
+    setOverviewLoadError(false);
+    classApi
+      .representativeOverview()
+      .then(setRepresentativeOverview)
+      .catch(() => setOverviewLoadError(true))
+      .finally(() => setOverviewLoading(false));
+  }, []);
 
   const loadClasses = useCallback(() => {
     setLoading(true);
     setLoadError(false);
+    loadRepresentativeOverview();
     classApi
       .list()
       .then((items) => {
@@ -1629,7 +1764,7 @@ function ClassManagementPanel() {
         toast.error(getErrorMessage(error, "載入班級清單失敗"));
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadRepresentativeOverview]);
 
   useEffect(() => {
     if (allowed) loadClasses();
@@ -1657,6 +1792,18 @@ function ClassManagementPanel() {
     }
   };
 
+  const openRepresentativeAssignment = (classId: string) => {
+    setSelectedId(classId);
+    setWorkspaceTab("roles");
+    setMobileDetailOpen(true);
+    const workspace = workspaceRef.current;
+    if (typeof workspace?.scrollIntoView === "function") {
+      const reduceMotion = typeof window.matchMedia === "function"
+        && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      workspace.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+    }
+  };
+
   if (!allowed) {
     return (
       <div className="py-24 text-center" style={{ color: "var(--text-muted)" }}>
@@ -1670,10 +1817,10 @@ function ClassManagementPanel() {
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              班級、名冊與議員設定
+              班級、名冊與班代設定
             </h1>
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              選擇班級後，可核對同學與座號、設定班代（議員）或處理班級更正。
+              查看班代任命進度、班級名冊與班級幹部設定。
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1706,13 +1853,20 @@ function ClassManagementPanel() {
           <ClassCorrectionRequestsPanel />
         ) : (
         <>
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
+        <RepresentativeOverview
+          items={representativeOverview}
+          loading={overviewLoading}
+          loadError={overviewLoadError}
+          onRetry={loadRepresentativeOverview}
+          onSelect={openRepresentativeAssignment}
+        />
+        <div ref={workspaceRef} className="grid scroll-mt-4 grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
           <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
             <ClassList
               classes={classes}
               selectedId={selectedId}
               selectedIds={selectedClassIds}
-              onSelect={(id) => { setSelectedId(id); setMobileDetailOpen(true); }}
+              onSelect={(id) => { setSelectedId(id); setWorkspaceTab("members"); setMobileDetailOpen(true); }}
               onSelectionChange={setSelectedClassIds}
               onBulkAction={runBulkAction}
               bulkBusy={bulkBusy}
@@ -1731,8 +1885,9 @@ function ClassManagementPanel() {
             </div>
             {selectedId ? (
               <ClassWorkspace
-                key={`${selectedId}:${workspaceVersion}`}
+                key={`${selectedId}:${workspaceVersion}:${workspaceTab}`}
                 classId={selectedId}
+                initialTab={workspaceTab}
                 onClassChanged={loadClasses}
               />
             ) : (

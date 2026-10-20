@@ -2643,6 +2643,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/classes/representative-overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 彙總目前班級的班代任命狀態 */
+        get: operations["list_class_representative_overview_classes_representative_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/classes/roster/import": {
         parameters: {
             query?: never;
@@ -14613,6 +14630,26 @@ export interface components {
              * @description 班聯會是否已收到款項
              */
             is_paid: boolean;
+        };
+        /** ClassRepresentativeOverviewItemOut */
+        ClassRepresentativeOverviewItemOut: {
+            /** Academic Year */
+            academic_year: number;
+            /** Class Code */
+            class_code: string;
+            /** Grade */
+            grade: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Label */
+            label: string | null;
+            /** Representatives */
+            representatives: string[];
         };
         /** ClassRoleAssign */
         ClassRoleAssign: {
@@ -36679,6 +36716,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchoolClassListItem"][];
+                };
+            };
+        };
+    };
+    list_class_representative_overview_classes_representative_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassRepresentativeOverviewItemOut"][];
                 };
             };
         };
