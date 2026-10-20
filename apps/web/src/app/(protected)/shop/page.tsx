@@ -39,6 +39,9 @@ import { useWS } from "@/hooks/useWS";
 import Modal from "@/components/ui/Modal";
 import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url";
 import { cleanupAnimatedElement } from "@/lib/shop-product-flight";
+import ShopPrice from "@/components/shop/ShopPrice";
+import BundleOffer from "@/components/shop/BundleOffer";
+import { productOfferPrice } from "@/lib/shop-promotion-price";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -207,6 +210,9 @@ function ProductModal({
   onRegistrationChange,
   onProductAdded,
   onRequestDelegation,
+  promotions,
+  activityId,
+  bundleStep,
 }: {
   productId: string;
   shoppingApi: Pick<typeof shopApi, "getProduct" | "setCurrentRegistrationProduct">;
@@ -224,6 +230,9 @@ function ProductModal({
   onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
   onProductAdded: () => void;
   onRequestDelegation: () => void;
+  promotions: ShopPromotionPublicOut[];
+  activityId: string | null;
+  bundleStep?: { name: string; nextLabel: string; onContinue: () => void };
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -321,7 +330,7 @@ function ProductModal({
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
-  }, [onClose]);
+  }, [onClose, productId]);
 
   if (!mounted) return null;
 
@@ -340,6 +349,8 @@ function ProductModal({
     return sum + (opt?.price_delta ?? 0);
   }, 0);
   const unitPrice = (product?.price ?? 0) + delta;
+  const offerPrice = product ? productOfferPrice(product, promotions, activityId, registration, delta) : unitPrice;
+  const offerTotal = product ? productOfferPrice(product, promotions, activityId, registration, delta, qty) : unitPrice * qty;
   const allPicked = variantGroups.every((g) => picked[g.id]);
   const registeredItems = registration?.items.filter((item) => item.product_id === product?.id) ?? [];
   const registeredQuantity = registeredItems.reduce((total, item) => total + item.quantity, 0);
@@ -581,6 +592,8 @@ function ProductModal({
               <div className="shop-product-dialog-scroll">
                 <div className="shop-product-dialog-heading">
                   <h3 id="product-modal-title">{product.name}</h3>
+                  <ShopPrice original={unitPrice} current={offerPrice} />
+                  {bundleStep && <p className="shop-product-purchase-hint">正在選購「{bundleStep.name}」，每項各一件；選齊後享套組價。</p>}
                   {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
                   {product.description && <p className="whitespace-pre-line">{product.description}</p>}
                   {!product.is_unlimited && product.status === "active" && (
@@ -700,7 +713,7 @@ function ProductModal({
                       aria-busy={loading}>
                       {loading
                         ? "處理中…"
-                        : `登記購買 · NT$${(unitPrice * qty).toLocaleString()}`}
+                        : `登記購買 · NT$${offerTotal.toLocaleString()}`}
                     </button>
                   ) : (
                     <Link
@@ -716,6 +729,10 @@ function ProductModal({
                     className="shop-product-cancel">
                     {selectedRegistrationQuantity > 0 ? "完成" : "取消"}
                   </button>
+                  {bundleStep && isLoggedIn && <button type="button" className="shop-product-submit"
+                    disabled={loading || !canEdit || registeredQuantity === 0} onClick={bundleStep.onContinue}>
+                    {bundleStep.nextLabel}
+                  </button>}
                 </div>
               </div>
             </>
@@ -735,12 +752,14 @@ function ProductCard({
   registeredQuantity,
   href,
   onClick,
+  offerPrice,
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
   registeredQuantity: number;
   href: string | null;
   onClick: () => void;
+  offerPrice: number;
 }) {
   const soldOut = product.status === "sold_out";
   const deadlinePassed = Boolean(product.sale_end && new Date(product.sale_end).getTime() <= Date.now());
@@ -786,10 +805,7 @@ function ProductCard({
         </h4>
         <div className="shop-public-product-meta">
           <span className="shop-public-product-price">
-            NT${product.price.toLocaleString()}
-            {product.has_variants && (
-              <small> 起</small>
-            )}
+            <ShopPrice original={product.price} current={offerPrice} suffix={product.has_variants ? " 起" : undefined} />
           </span>
           {!product.is_unlimited && !soldOut && (
             <span className="shop-public-product-deadline">剩 {product.stock_quantity}</span>
@@ -873,6 +889,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [registrationLoadError, setRegistrationLoadError] = useState(false);
   const [registrations, setRegistrations] = useState<OrderOut[]>([]);
   const [availablePromotions, setAvailablePromotions] = useState<ShopPromotionPublicOut[]>([]);
+  const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [selectedPromotionScope, setSelectedPromotionScope] = useState(GENERAL_ACTIVITY_SCOPE);
   const [promotionPreview, setPromotionPreview] = useState<ShopPromotionPreviewOut | null>(null);
@@ -910,6 +927,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const closeProduct = useCallback(() => {
     setOpenProduct(null);
+    setActiveBundleId(null);
     if (productSlug) {
       router.push("/shop");
       return;
@@ -1392,6 +1410,25 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const visibleSeries = selectedCategory?.series.filter(
     (series) => !selectedSeriesId || series.id === selectedSeriesId,
   ) ?? [];
+
+  const catalogProducts = new Map(catalog.flatMap((category) => [
+    ...category.products, ...category.series.flatMap((series) => series.products),
+  ]).map((product) => [product.id, product]));
+  const bundlePromotions = availablePromotions.filter((promotion) => (
+    promotion.discount_type === "bundle_price"
+    && (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
+    && promotion.target_products?.some((target) => selectedCategory?.products.some((product) => product.id === target.id)
+      || selectedCategory?.series.some((series) => series.products.some((product) => product.id === target.id)))
+  ));
+  const activeBundle = bundlePromotions.find((promotion) => promotion.id === activeBundleId);
+  const nextBundleProduct = activeBundle?.target_products?.find((target) => target.id !== openProduct
+    && !selectedCategoryRegistration?.items.some((item) => item.product_id === target.id));
+  const selectBundleProduct = (promotion: ShopPromotionPublicOut, productId: string) => {
+    setActiveBundleId(promotion.id);
+    if (selectedCategory) setSelectedPromotionScope(catalogScopeKey(selectedCategory));
+    if (promotion.code) setCouponCode(promotion.code);
+    openPromotionProduct(productId);
+  };
   const visibleProductCount = (
     (selectedSeriesId ? 0 : selectedCategory?.products.length ?? 0)
     + visibleSeries.reduce((count, series) => count + series.products.length, 0)
@@ -1649,7 +1686,12 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               )?.discount_amount;
               const isApplied = appliedDiscount != null || promotionRegistration?.promotion_id === promotion.id;
               const estimatedBase = targetIds.size > 0 ? matchingSubtotal : promotionRegistration?.subtotal_price ?? 0;
-              const estimatedDiscount = promotion.discount_type === "price_override"
+              const bundleOriginal = targetProducts.reduce((sum, target) => sum + (catalogProductPrices.get(target.id) ?? 0), 0);
+              const bundleCount = targetProducts.length ? Math.min(...targetProducts.map((target) => matchingItems
+                .filter((item) => item.product_id === target.id).reduce((sum, item) => sum + item.quantity, 0))) : 0;
+              const estimatedDiscount = promotion.discount_type === "bundle_price"
+                ? Math.max(0, bundleOriginal - promotion.discount_value) * bundleCount
+                : promotion.discount_type === "price_override"
                 ? (promotion.product_price_overrides ?? []).reduce((total, price) => {
                   const productBasePrice = catalogProductPrices.get(price.product_id);
                   if (productBasePrice === undefined) return total;
@@ -1705,7 +1747,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                   <h3>{promotion.name}</h3>
                   <p className="shop-public-promotion-description">適用活動：{promotionScope}</p>
                   <p className="shop-public-promotion-value">
-                    {promotion.discount_type === "price_override"
+                    {promotion.discount_type === "bundle_price"
+                      ? <ShopPrice original={bundleOriginal} current={promotion.discount_value} suffix="／套" />
+                      : promotion.discount_type === "price_override"
                       ? `指定商品優惠價：${(promotion.product_price_overrides ?? [])
                         .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
                         .join("、")}`
@@ -1720,7 +1764,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                     )}
                     {promotion.min_quantity > 1 && <span>滿 {promotion.min_quantity} 件</span>}
                     {targetProducts.length > 0 && (
-                      <span>{promotion.discount_type === "price_override" ? "任一指定品項：" : "折扣計指定品項："}{targetProducts.map((product) => product.name).join(" + ")}</span>
+                      <span>{promotion.discount_type === "bundle_price" ? "每項各一件：" : promotion.discount_type === "price_override" ? "任一指定品項：" : "折扣計指定品項："}{targetProducts.map((product) => product.name).join(" + ")}</span>
                     )}
                     {promotion.min_order_price === 0 && promotion.min_quantity <= 1 && targetProducts.length === 0 && <span>無最低消費門檻</span>}
                   </div>
@@ -1818,6 +1862,23 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               <h2>{selectedCategory.name}</h2>
               <p>{visibleProductCount} 件商品</p>
             </header>
+            {selectedCategoryRegistration && selectedCategoryRegistration.items.length > 0 && (
+              <div className="shop-registration-price" role="status" aria-live="polite">
+                <div><strong>目前登記合計</strong>
+                  {selectedCategoryRegistration.discount_amount > 0 && <p>
+                    {selectedCategoryRegistration.applied_promotions?.map((promotion) => promotion.name).join("、") || "已套用優惠"}
+                    {` · 共省 NT$${selectedCategoryRegistration.discount_amount.toLocaleString()}`}
+                  </p>}
+                </div>
+                <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
+              </div>
+            )}
+            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-label="商品套組優惠">
+              {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id} promotion={promotion}
+                products={catalogProducts} registration={selectedCategoryRegistration}
+                disabled={registrationLocked || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
+            </section>}
             {selectedCategory.series.length > 0 && (
               <div className="shop-public-series-filter-wrap">
                 <span>商品系列</span>
@@ -1863,6 +1924,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                       <ProductCard
                         key={product.id}
                         product={product}
+                        offerPrice={productOfferPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                         href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
@@ -1890,6 +1952,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         <ProductCard
                           key={product.id}
                           product={product}
+                          offerPrice={productOfferPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                           href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
@@ -1955,6 +2018,20 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       {openProduct && (!delegationToken || delegationContext?.can_edit) && (
         <ProductModal
           productId={openProduct}
+          promotions={availablePromotions}
+          activityId={selectedCategory?.activity_id ?? null}
+          bundleStep={activeBundle ? {
+            name: activeBundle.name,
+            nextLabel: nextBundleProduct ? `下一項：${nextBundleProduct.name}` : "完成套組選購",
+            onContinue: () => {
+              if (nextBundleProduct) openPromotionProduct(nextBundleProduct.id);
+              else {
+                setActiveBundleId(null);
+                closeProduct();
+                if (activeBundle.code && selectedCategory) void inspectAndApplyPromotion(activeBundle.code, catalogScopeKey(selectedCategory));
+              }
+            },
+          } : undefined}
           shoppingApi={shoppingApi}
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           isLoggedIn={isLoggedIn}

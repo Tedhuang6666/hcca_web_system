@@ -28,6 +28,13 @@ beforeEach(() => {
 });
 
 describe("我的預購", () => {
+  it("優惠套用後在活動合計顯示刪除線原價與實付價", async () => {
+    api.listOrders.mockResolvedValue([{ ...order, subtotal_price: 200, discount_amount: 50, total_price: 150 }]);
+    render(<OrdersPage />);
+    const activity = await screen.findByRole("region", { name: "校慶預購" });
+    expect(activity.querySelector("del")).toHaveTextContent("NT$200");
+    expect(within(activity).getByLabelText("原價 NT$200，優惠價 NT$150")).toBeVisible();
+  });
   it("shows activity items and supplemental payment without order numbers or counts", async () => {
     api.catalog.mockResolvedValue([{
       products: [{ id: "bag", image_url: "/uploads/bag.png" }],

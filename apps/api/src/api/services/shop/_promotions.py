@@ -89,6 +89,24 @@ def _validate_discount(discount_type: ShopDiscountType, discount_value: int) -> 
         raise ValueError("指定商品價格優惠不使用折扣數值")
 
 
+def _validate_bundle_price(
+    discount_type: ShopDiscountType, discount_value: int, products: list[Product]
+) -> None:
+    if discount_type != ShopDiscountType.BUNDLE_PRICE:
+        return
+    if len(products) < 2:
+        raise ValueError("套組優惠至少要選擇兩項不同商品，每項各一件")
+    if _product_activity_id(products[0]) is None:
+        category_ids = {
+            product.category_id or (product.series.category_id if product.series else None)
+            for product in products
+        }
+        if len(category_ids) > 1:
+            raise ValueError("未綁定活動的套組商品必須屬於同一商品分類")
+    if not 0 < discount_value < sum(product.price for product in products):
+        raise ValueError("套組價必須大於 0，且低於各商品原價合計")
+
+
 def _normalize_target_identifiers(identifiers: list[str]) -> list[tuple[str, str]]:
     normalized: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -635,6 +653,7 @@ async def create_promotion(
     if activity_id is not None and await session.get(Activity, activity_id) is None:
         raise ValueError("找不到指定活動")
     _validate_discount(data.discount_type, data.discount_value)
+    _validate_bundle_price(data.discount_type, data.discount_value, target_products)
     product_price_overrides = _build_product_price_override_rows(
         data.discount_type,
         target_products,
@@ -849,6 +868,9 @@ async def update_promotion(
         payload.setdefault("discount_value", 0)
     apply_updates(promotion, ShopPromotionUpdate.model_validate(payload))
     _validate_discount(promotion.discount_type, promotion.discount_value)
+    _validate_bundle_price(
+        promotion.discount_type, promotion.discount_value, effective_target_products
+    )
     if promotion.starts_at and promotion.ends_at and promotion.starts_at >= promotion.ends_at:
         raise ValueError("優惠開始時間必須早於結束時間")
     await session.flush()
@@ -869,6 +891,15 @@ def _discount_amount(
     eligible_subtotal = _promotion_eligible_subtotal(promotion, subtotal, product_subtotals)
     if eligible_subtotal <= 0:
         return 0
+    if promotion.discount_type == ShopDiscountType.BUNDLE_PRICE:
+        products = list(promotion.target_products or [])
+        quantities = product_quantities or {}
+        if len(products) < 2:
+            return 0
+        bundle_count = min(quantities.get(product.id, 0) for product in products)
+        # 套組只折抵基本售價；未成套商品與規格加價仍按原價計算。
+        savings = max(0, sum(product.price for product in products) - promotion.discount_value)
+        return min(eligible_subtotal, savings * bundle_count)
     if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE:
         products_by_id = {product.id: product for product in (promotion.target_products or [])}
         quantities = product_quantities or {}

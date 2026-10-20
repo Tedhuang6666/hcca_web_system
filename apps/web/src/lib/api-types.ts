@@ -29069,7 +29069,7 @@ export interface components {
          * ShopDiscountType
          * @enum {string}
          */
-        ShopDiscountType: "percentage" | "fixed" | "price_override";
+        ShopDiscountType: "percentage" | "fixed" | "price_override" | "bundle_price";
         /** ShopOrderCloseCreate */
         ShopOrderCloseCreate: {
             /** Class Id */
@@ -29127,7 +29127,7 @@ export interface components {
             discount_type: components["schemas"]["ShopDiscountType"];
             /**
              * Discount Value
-             * @description 百分比或固定金額折扣；指定商品價格時填 0
+             * @description 百分比、固定折抵金額或每套組合價；指定商品價格時填 0
              */
             discount_value: number;
             /** Ends At */
@@ -29170,7 +29170,7 @@ export interface components {
             target_identifiers?: string[];
             /**
              * Target Product Ids
-             * @description 優惠適用商品；一般折扣要求同時登記，指定商品價格則可任選
+             * @description 優惠適用商品；套組為每項各一件，一般折扣要求同時登記，指定商品價格可任選
              */
             target_product_ids?: string[];
         };

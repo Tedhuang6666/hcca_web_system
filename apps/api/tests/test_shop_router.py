@@ -50,6 +50,113 @@ from api.services import shop as shop_svc
 
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n data"
 
+
+async def test_bundle_price_counts_complete_sets_and_keeps_variant_surcharges(
+    db_session, client, authed_client_factory
+) -> None:
+    manager = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    category = await _make_category(db_session, manager)
+    shirt = await _make_active_product(db_session, manager, category=category, price=300)
+    pants = await _make_active_product(db_session, manager, category=category, price=500)
+    group = await shop_svc.add_variant_group(
+        db_session,
+        shirt,
+        data=ProductVariantGroupCreate(
+            name="尺寸", options=[ProductVariantOptionCreate(value="加大", price_delta=50)]
+        ),
+    )
+    payload = {
+        "name": "衣褲套組",
+        "discount_type": "bundle_price",
+        "discount_value": 650,
+        "target_product_ids": [str(shirt.id), str(pants.id)],
+    }
+    assert (await client.post("/shop/promotions", json=payload)).status_code == 401
+    buyer_client = authed_client_factory(buyer)
+    assert (await buyer_client.post("/shop/promotions", json=payload)).status_code == 403
+    await _grant_permission(db_session, manager, "shop:manage")
+    created = await authed_client_factory(manager).post("/shop/promotions", json=payload)
+    assert created.status_code == 201
+    assert created.json()["discount_type"] == "bundle_price"
+    assert (await client.get("/shop/promotions/available")).json()[0]["discount_value"] == 650
+
+    first = await buyer_client.put(
+        f"/shop/registrations/current/products/{shirt.id}",
+        json={"variants": [{"option_ids": [str(group.options[0].id)], "quantity": 3}]},
+    )
+    assert first.status_code == 200
+    assert first.json()["total_price"] == 1050
+    preview = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview", json={"category_id": str(category.id)}
+    )
+    assert preview.status_code == 200
+    assert preview.json()["reason_code"] == "items_not_matched"
+    for quantity, expected_subtotal, expected_discount, expected_total in [
+        (2, 2050, 300, 1750),
+        (1, 1550, 150, 1400),
+        (0, 1050, 0, 1050),
+    ]:
+        updated = await buyer_client.put(
+            f"/shop/registrations/current/products/{pants.id}",
+            json={"variants": [{"option_ids": [], "quantity": quantity}] if quantity else []},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["subtotal_price"] == expected_subtotal
+        assert updated.json()["discount_amount"] == expected_discount
+        assert updated.json()["total_price"] == expected_total
+
+
+async def test_bundle_price_validates_targets_price_and_account_scope(
+    db_session, authed_client_factory
+) -> None:
+    manager = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    other = await _bare_user(db_session)
+    category = await _make_category(db_session, manager)
+    first = await _make_active_product(db_session, manager, category=category, price=100)
+    second = await _make_active_product(db_session, manager, category=category, price=200)
+    await _grant_permission(db_session, manager, "shop:manage")
+    manager_client = authed_client_factory(manager)
+    payload = {
+        "name": "限定套組",
+        "discount_type": "bundle_price",
+        "discount_value": 250,
+        "target_product_ids": [str(first.id), str(second.id)],
+        "target_identifiers": [buyer.email],
+    }
+    for invalid in [
+        {"target_product_ids": [str(first.id)]},
+        {"discount_value": 0},
+        {"discount_value": 300},
+        {"discount_value": 400},
+    ]:
+        response = await manager_client.post("/shop/promotions", json={**payload, **invalid})
+        assert response.status_code == 422
+    different_category = await _make_active_product(db_session, manager, price=200)
+    cross_category = await manager_client.post(
+        "/shop/promotions",
+        json={**payload, "target_product_ids": [str(first.id), str(different_category.id)]},
+    )
+    assert cross_category.status_code == 422
+    assert "同一商品分類" in cross_category.json()["detail"]
+    created = await manager_client.post("/shop/promotions", json=payload)
+    assert created.status_code == 201
+    for user, expected_discount in [(buyer, 50), (other, 0)]:
+        ac = authed_client_factory(user)
+        for product in [first, second]:
+            updated = await ac.put(
+                f"/shop/registrations/current/products/{product.id}",
+                json={"variants": [{"option_ids": [], "quantity": 1}]},
+            )
+            assert updated.status_code == 200
+        assert updated.json()["discount_amount"] == expected_discount
+    invalid_update = await manager_client.patch(
+        f"/shop/promotions/{created.json()['id']}", json={"target_product_ids": []}
+    )
+    assert invalid_update.status_code == 422
+
+
 # ── 測試輔助 ──────────────────────────────────────────────────────────────────
 
 

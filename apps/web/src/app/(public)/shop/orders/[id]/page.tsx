@@ -1,4 +1,5 @@
 "use client";
+import ShopPrice from "@/components/shop/ShopPrice";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -443,7 +444,7 @@ export default function OrderDetailPage() {
           )}
           <div className="shop-order-grand-total">
             <dt>應付總額</dt>
-            <dd>NT${detailTotal.toLocaleString()}</dd>
+            <dd><ShopPrice original={subtotalPrice} current={detailTotal} /></dd>
           </div>
         </dl>
       </section>
