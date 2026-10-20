@@ -59,6 +59,36 @@ beforeEach(() => {
 });
 
 describe("原商品頁的家人代訂模式", () => {
+  it.each([false, true])("商品卡片直接顯示套組並可選購（系列商品：%s）", async (inSeries) => {
+    const pants = { ...product, id: "pants", name: "長褲", price: 200 };
+    const products = [product, pants];
+    const category = { ...context.catalog?.[0], products: inSeries ? [] : products,
+      series: inSeries ? [{ id: "series", name: "紀念系列", products }] : [],
+    };
+    api.accessDelegation.mockResolvedValue({ ...context, registration: null, catalog: [category], promotions: [{
+      id: "bundle", name: "衣褲套組", activity_id: "festival", code: null,
+      discount_type: "bundle_price", discount_value: 250, min_order_price: 0, min_quantity: 1,
+      target_products: products.map((row) => ({ id: row.id, name: row.name })),
+    }] });
+    render(<ShopPage />);
+    const card = await screen.findByRole("article", { name: "紀念袋商品" });
+    expect(within(card).getByText("搭配長褲，每項各一件")).toBeVisible();
+    expect(card.querySelector("del")).toHaveTextContent("NT$300");
+    expect(within(card).getByLabelText("原價 NT$300，優惠價 NT$250／套")).toBeVisible();
+    expect(within(card).getByText("每套省 NT$50")).toBeVisible();
+    expect(card.querySelector("a button, button button")).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "選購此套組" }));
+    expect(await screen.findByText("正在選購「衣褲套組」，每項各一件；選齊後享套組價。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "下一項：長褲" })).toBeVisible();
+    const dialog = screen.getByRole("dialog");
+    const close = within(dialog).getByRole("button", { name: "關閉" });
+    await waitFor(() => expect(close).toHaveFocus());
+    within(card).getByRole("button", { name: "選購此套組" }).focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(within(dialog).getByRole("button", { name: "取消" })).toHaveFocus();
+  });
   it("套組可逐項選購，選齊後顯示原價刪除線與實付合計", async () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     const promotion = {

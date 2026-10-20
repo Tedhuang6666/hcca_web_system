@@ -42,6 +42,7 @@ import { cleanupAnimatedElement } from "@/lib/shop-product-flight";
 import ShopPrice from "@/components/shop/ShopPrice";
 import BundleOffer from "@/components/shop/BundleOffer";
 import { productOfferPrice } from "@/lib/shop-promotion-price";
+import ProductCardOffers from "@/components/shop/ProductCardOffers";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -301,6 +302,8 @@ function ProductModal({
   }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    const previousFocus = document.activeElement;
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const frame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
@@ -316,7 +319,10 @@ function ProductModal({
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
@@ -329,8 +335,9 @@ function ProductModal({
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     };
-  }, [onClose, productId]);
+  }, [onClose, productId, mounted]);
 
   if (!mounted) return null;
 
@@ -753,6 +760,10 @@ function ProductCard({
   href,
   onClick,
   offerPrice,
+  promotions,
+  products,
+  offersLocked,
+  onSelectBundle,
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
@@ -760,6 +771,10 @@ function ProductCard({
   href: string | null;
   onClick: () => void;
   offerPrice: number;
+  promotions: ShopPromotionPublicOut[];
+  products: Map<string, CatalogProductOut>;
+  offersLocked: boolean;
+  onSelectBundle: (promotion: ShopPromotionPublicOut) => void;
 }) {
   const soldOut = product.status === "sold_out";
   const deadlinePassed = Boolean(product.sale_end && new Date(product.sale_end).getTime() <= Date.now());
@@ -824,8 +839,8 @@ function ProductCard({
     </>
   );
 
-  if (href) {
-    return (
+  return <article className="shop-public-product-entry" aria-label={`${product.name}商品`}>
+    {href ? (
       <Link
         href={href}
         onClick={(event) => {
@@ -842,20 +857,20 @@ function ProductCard({
         aria-label={`查看商品：${product.name}`}>
         {content}
       </Link>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={className}
-      style={style}
-      aria-label={`查看商品：${product.name}`}>
-      {content}
-    </button>
-  );
+    ) : (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={className}
+        style={style}
+        aria-label={`查看商品：${product.name}`}>
+        {content}
+      </button>
+    )}
+    <ProductCardOffers product={product} promotions={promotions} products={products}
+      disabled={disabled || offersLocked} onSelectBundle={onSelectBundle} />
+  </article>;
 }
 
 // ── 購買頁 ────────────────────────────────────────────────────────────────────
@@ -1414,6 +1429,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const catalogProducts = new Map(catalog.flatMap((category) => [
     ...category.products, ...category.series.flatMap((series) => series.products),
   ]).map((product) => [product.id, product]));
+  const categoryPromotions = availablePromotions.filter((promotion) => (
+    (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
+  ));
   const bundlePromotions = availablePromotions.filter((promotion) => (
     promotion.discount_type === "bundle_price"
     && (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
@@ -1924,6 +1942,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                       <ProductCard
                         key={product.id}
                         product={product}
+                        promotions={categoryPromotions}
+                        products={catalogProducts}
+                        offersLocked={registrationLocked}
+                        onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
                         offerPrice={productOfferPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
@@ -1952,6 +1974,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         <ProductCard
                           key={product.id}
                           product={product}
+                          promotions={categoryPromotions}
+                          products={catalogProducts}
+                          offersLocked={registrationLocked}
+                          onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
                           offerPrice={productOfferPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
