@@ -272,8 +272,49 @@ export default function ClassOrdersPage() {
     return Array.from(rows.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
   }, [activityOrders, activityLabel, catalog]);
 
+  const defaultLedgerActivityKey = useMemo(() => {
+    const uncollectedOrderCounts = new Map<string, number>();
+    const orderCounts = new Map<string, number>();
+    const activeProductCounts = new Map<string, number>();
+
+    for (const order of activityOrders) {
+      if (!isCollectableOrder(order)) continue;
+      const key = orderScopeKey(order);
+      orderCounts.set(key, (orderCounts.get(key) ?? 0) + 1);
+      if (!order.is_class_collected) {
+        uncollectedOrderCounts.set(key, (uncollectedOrderCounts.get(key) ?? 0) + 1);
+      }
+    }
+    for (const product of activeProducts) {
+      const key = orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId });
+      activeProductCounts.set(key, (activeProductCounts.get(key) ?? 0) + 1);
+    }
+
+    let selectedRow = activityRows[0];
+    for (const row of activityRows.slice(1)) {
+      if (!selectedRow) {
+        selectedRow = row;
+        continue;
+      }
+      const uncollectedCount = uncollectedOrderCounts.get(row.key) ?? 0;
+      const selectedUncollectedCount = uncollectedOrderCounts.get(selectedRow.key) ?? 0;
+      const orderCount = orderCounts.get(row.key) ?? 0;
+      const selectedOrderCount = orderCounts.get(selectedRow.key) ?? 0;
+      const productCount = activeProductCounts.get(row.key) ?? 0;
+      const selectedProductCount = activeProductCounts.get(selectedRow.key) ?? 0;
+
+      if (uncollectedCount > selectedUncollectedCount
+        || (uncollectedCount === selectedUncollectedCount && orderCount > selectedOrderCount)
+        || (uncollectedCount === selectedUncollectedCount && orderCount === selectedOrderCount
+          && productCount > selectedProductCount)) {
+        selectedRow = row;
+      }
+    }
+    return selectedRow?.key ?? "none";
+  }, [activeProducts, activityOrders, activityRows]);
+
   const activeLedgerKey = activityRows.some((row) => row.key === ledgerActivityKey)
-    ? ledgerActivityKey : (activityRows[0]?.key ?? "none");
+    ? ledgerActivityKey : defaultLedgerActivityKey;
   const ledgerActivity = activityRows.find((row) => row.key === activeLedgerKey);
   const seatRows = useMemo(() => {
     const ordersByMember = new Map<string, OrderListItem[]>();
