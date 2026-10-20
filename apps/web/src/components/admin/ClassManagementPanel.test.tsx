@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClassesAdminPage from "@/app/(admin)/admin/classes/page";
 
-const api = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), members: vi.fn(), memberships: vi.fn(), roster: vi.fn(), roles: vi.fn(), assignRole: vi.fn(), assignPersonRole: vi.fn(), listForSearch: vi.fn() }));
+const api = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), members: vi.fn(), memberships: vi.fn(), roster: vi.fn(), roles: vi.fn(), assignRole: vi.fn(), assignPersonRole: vi.fn(), listForSearch: vi.fn(), updateRoster: vi.fn(), addRoster: vi.fn(), removeMember: vi.fn() }));
 vi.mock("@/lib/api", () => ({ classApi: api, usersApi: api, ApiError: class extends Error {} }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ can: () => true }) }));
 vi.mock("@/components/admin/PeopleManagementEmbedContext", () => ({ usePeopleManagementEmbed: () => true }));
@@ -27,6 +27,58 @@ beforeEach(() => {
 });
 
 describe("班級管理工作台", () => {
+  it("edits a linked member's seat from their details", async () => {
+    api.updateRoster.mockResolvedValue({});
+    render(<ClassesAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視7 號 測試同學的資料與職位" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "設定座號" }), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存座號" }));
+    await waitFor(() => expect(api.updateRoster).toHaveBeenCalledWith("class", "linked", { seat_number: 12 }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("can assign a seat to a member without a roster entry", async () => {
+    api.roster.mockResolvedValue([]);
+    api.members.mockResolvedValue([{ ...student, user_id: student.id, source: "range" }]);
+    api.addRoster.mockResolvedValue({});
+    render(<ClassesAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視 測試同學的資料與職位" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "設定座號" }), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存座號" }));
+    await waitFor(() => expect(api.addRoster).toHaveBeenCalledWith("class", { seat_number: 12, student_id: "510007" }));
+  });
+
+  it("keeps the dialog and seat input when saving fails", async () => {
+    api.updateRoster.mockRejectedValue(new Error("conflict"));
+    render(<ClassesAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "檢視7 號 測試同學的資料與職位" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "設定座號" }), { target: { value: "8" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存座號" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("儲存座號失敗");
+    expect(screen.getByRole("spinbutton", { name: "設定座號" })).toHaveValue(8);
+    expect(screen.getByRole("button", { name: "儲存座號" })).toBeEnabled();
+  });
+
+  it("requires confirmation before transferring an unregistered roster member", async () => {
+    api.removeMember.mockResolvedValue(undefined);
+    render(<ClassesAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "將 尚未連結帳號 移出本班" }));
+    fireEvent.click(screen.getByRole("button", { name: "轉出本班" }));
+    expect(api.removeMember).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "確認轉出" }));
+    await waitFor(() => expect(api.removeMember).toHaveBeenCalledWith("class", "unlinked"));
+  });
+
+  it("retains transfer confirmation after a failure", async () => {
+    api.removeMember.mockRejectedValue(new Error("offline"));
+    render(<ClassesAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "將 測試同學 移出本班" }));
+    fireEvent.click(screen.getByRole("button", { name: "轉出本班" }));
+    fireEvent.click(screen.getByRole("button", { name: "確認轉出" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("轉出失敗");
+    expect(screen.getByRole("button", { name: "確認轉出" })).toBeEnabled();
+  });
+
   it("opens the complete member list and lets staff find unlinked students", async () => {
     render(<ClassesAdminPage />);
     expect(await screen.findByRole("textbox", { name: "搜尋班級成員" })).toBeInTheDocument();

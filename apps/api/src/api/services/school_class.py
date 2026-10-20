@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1117,6 +1117,166 @@ def _user_in_class_ranges(user: User, sc: SchoolClass) -> bool:
     )
 
 
+async def _excluded_range_memberships(
+    session: AsyncSession, *, class_id: uuid.UUID | None = None, user_id: uuid.UUID | None = None
+) -> set[tuple[uuid.UUID, uuid.UUID]]:
+    """已結束且未重新加入的歸屬，優先於學號區間的自動推導。"""
+    query = (
+        select(PersonAffiliation, Person.user_id)
+        .join(Person, Person.id == PersonAffiliation.person_id)
+        .where(
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+            PersonAffiliation.class_id.is_not(None),
+            Person.user_id.is_not(None),
+        )
+    )
+    if class_id is not None:
+        query = query.where(PersonAffiliation.class_id == class_id)
+    if user_id is not None:
+        query = query.where(Person.user_id == user_id)
+    ended = set()
+    active = set()
+    today = local_today()
+    for affiliation, linked_user_id in (await session.execute(query)).all():
+        identity = (affiliation.class_id, linked_user_id)
+        if affiliation.status == PersonAffiliationStatus.ENDED:
+            ended.add(identity)
+        elif (
+            affiliation.status == PersonAffiliationStatus.ACTIVE
+            and affiliation.start_date <= today
+            and (affiliation.end_date is None or affiliation.end_date >= today)
+        ):
+            active.add(identity)
+    return ended - active
+
+
+async def remove_class_member(session: AsyncSession, sc: SchoolClass, member_id: uuid.UUID) -> bool:
+    """以成員／人員／名冊 ID 轉出，清除當班來源並保留已結束的歸屬。"""
+    target_person = await session.get(Person, member_id)
+    member = next(
+        (
+            item
+            for item in await list_class_members(session, sc)
+            if item.id == member_id
+            or item.roster_entry_id == member_id
+            or (target_person and target_person.user_id and item.user_id == target_person.user_id)
+        ),
+        None,
+    )
+    if member is None:
+        # 手動更正至別班的帳號可能仍有舊座號，仍允許清除指定班級的名冊。
+        entry = await session.scalar(
+            select(ClassRosterEntry).where(
+                ClassRosterEntry.class_id == sc.id,
+                (ClassRosterEntry.id == member_id) | (ClassRosterEntry.user_id == member_id),
+            )
+        )
+        if entry is None:
+            return False
+        member = ClassMemberOut(
+            id=entry.id,
+            user_id=entry.user_id,
+            roster_entry_id=entry.id,
+            display_name="尚未登入同學",
+            student_id=entry.student_id,
+            email="",
+        )
+    user = await session.get(User, member.user_id) if member.user_id else None
+    if user is not None:
+        person = await person_svc.ensure_person_for_user(
+            session, user, source=PersonAffiliationSource.CLASS_WORKSPACE
+        )
+    else:
+        person = await session.get(Person, member.id)
+        if person is None and member.student_id:
+            person = await session.scalar(
+                select(Person).where(Person.student_id == member.student_id)
+            )
+        if person is None:
+            person = Person(student_id=member.student_id, display_name=member.display_name)
+            session.add(person)
+            await session.flush()
+        if person.user_id is not None:
+            user = await session.get(User, person.user_id)
+    # 即使只有學號區間來源，也留下明確的轉出紀錄。
+    await person_svc.create_affiliation(
+        session,
+        data=PersonAffiliationCreate(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            class_id=sc.id,
+            source=PersonAffiliationSource.CLASS_WORKSPACE,
+        ),
+    )
+    affiliations = await session.scalars(
+        select(PersonAffiliation).where(
+            PersonAffiliation.person_id == person.id,
+            PersonAffiliation.class_id == sc.id,
+            PersonAffiliation.kind.in_(
+                [PersonAffiliationKind.CLASS_MEMBER, PersonAffiliationKind.CLASS_ROLE]
+            ),
+            PersonAffiliation.status != PersonAffiliationStatus.ENDED,
+        )
+    )
+    for affiliation in affiliations:
+        affiliation.status = PersonAffiliationStatus.ENDED
+        affiliation.end_date = (
+            local_today() - timedelta(days=1)
+            if affiliation.kind == PersonAffiliationKind.CLASS_ROLE
+            else max(local_today(), affiliation.start_date)
+        )
+    entries = await session.scalars(
+        select(ClassRosterEntry).where(
+            ClassRosterEntry.class_id == sc.id,
+            (ClassRosterEntry.user_id == user.id)
+            | (ClassRosterEntry.student_id == member.student_id)
+            if user
+            else ClassRosterEntry.student_id == member.student_id,
+        )
+    )
+    for entry in entries:
+        await session.delete(entry)
+    if user is not None:
+        memberships = await session.scalars(
+            select(ClassMembership).where(
+                ClassMembership.class_id == sc.id,
+                ClassMembership.user_id == user.id,
+                ClassMembership.status == ClassMembershipStatus.ACTIVE,
+            )
+        )
+        for membership in memberships:
+            membership.status = ClassMembershipStatus.ENDED
+            membership.end_date = max(local_today(), membership.start_date)
+        manual = await session.scalar(
+            select(ClassManualMember).where(
+                ClassManualMember.class_id == sc.id, ClassManualMember.user_id == user.id
+            )
+        )
+        if manual is not None:
+            await session.delete(manual)
+        await remove_cadre(session, sc.id, user.id)
+        positions = await session.scalars(
+            select(UserPosition)
+            .join(ClassRoleBinding, ClassRoleBinding.position_id == UserPosition.position_id)
+            .where(
+                ClassRoleBinding.class_id == sc.id,
+                UserPosition.user_id == user.id,
+                (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= local_today()),
+            )
+        )
+        for position in positions:
+            # 任期迄日包含當日，轉出必須立即停止本班職位權限。
+            position.end_date = local_today() - timedelta(days=1)
+        from api.core.cache import cache_invalidate
+        from api.services.discord_bot import enqueue_role_sync
+
+        await cache_invalidate(f"perm:{user.id}")
+        await enqueue_role_sync(session, user.id)
+    await session.flush()
+    await session.refresh(sc, attribute_names=["manual_members", "roster_entries", "cadres"])
+    return True
+
+
 async def is_class_member(session: AsyncSession, sc: SchoolClass, user: User) -> bool:
     if any(member.user_id == user.id for member in sc.manual_members):
         return True
@@ -1128,7 +1288,8 @@ async def is_class_member(session: AsyncSession, sc: SchoolClass, user: User) ->
     if not sc.ranges:
         refreshed = await get_class(session, sc.id)
         sc = refreshed or sc
-    return _user_in_class_ranges(user, sc)
+    excluded = await _excluded_range_memberships(session, class_id=sc.id, user_id=user.id)
+    return (sc.id, user.id) not in excluded and _user_in_class_ranges(user, sc)
 
 
 # ── 班級幹部 ──────────────────────────────────────────────────────────────────
@@ -1268,12 +1429,15 @@ async def resolve_user_class(session: AsyncSession, user: User) -> SchoolClass |
         return roster_class
     if not user.student_id:
         return None
+    excluded = await _excluded_range_memberships(session, user_id=user.id)
     result = await session.execute(
         select(SchoolClass)
         .options(selectinload(SchoolClass.ranges))
         .where(SchoolClass.is_active.is_(True))
     )
     for sc in result.scalars().unique():
+        if (sc.id, user.id) in excluded:
+            continue
         for rng in sc.ranges:
             if student_id_in_range(user.student_id, rng.student_id_start, rng.student_id_end):
                 return sc
@@ -1472,9 +1636,10 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             is_cadre=user.id in cadre_ids if user else False,
             source="roster",
         )
+    excluded = await _excluded_range_memberships(session, class_id=sc.id)
     result = await session.execute(select(User).where(User.student_id.is_not(None)))
     for u in result.scalars():
-        if u.id in members_by_id or not _user_in_class_ranges(u, sc):
+        if u.id in members_by_id or (sc.id, u.id) in excluded or not _user_in_class_ranges(u, sc):
             continue
         members_by_id[u.id] = ClassMemberOut(
             id=u.id,

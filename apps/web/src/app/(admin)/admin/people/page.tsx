@@ -34,6 +34,7 @@ import { getPeopleDirectoryStats } from "@/lib/api/people";
 import { today } from "@/lib/dateUtils";
 import { AccountDetailPanel } from "@/components/admin/AccountDetailPanel";
 import { AccountDirectoryPanel } from "@/components/admin/AccountDirectoryPanel";
+import PersonClassRosterEditor from "@/components/admin/PersonClassRosterEditor";
 import type {
   AdminUserDetail,
   OrgRead,
@@ -863,6 +864,10 @@ function PersonDetailPanel({
               ))}
             </div>
           )}
+          {canAssignClass && <PersonClassRosterEditor
+            key={`${person.id}-${(person.class_roster ?? []).map((entry) => `${entry.class_id}:${entry.seat_number}`).join(",")}`}
+            person={person} classes={classes} onChanged={onChanged}
+          />}
         </Panel>
         {person.user_id && (
           <div className="xl:col-span-2">
@@ -953,15 +958,28 @@ function AffiliationRow({
   muted: boolean;
   onChanged: () => Promise<void>;
 }) {
+  const { can, isAdmin } = usePermissions();
+  const [ending, setEnding] = useState(false);
+  const isClassMembership = item.kind === "class_member" && Boolean(item.class_id);
+  const canTransferClass = isAdmin || can("class:manage");
   const end = async () => {
-    if (!confirm(`確定結束「${item.title ?? KIND_LABEL[item.kind]}」？`)) return;
+    if (ending) return;
+    const message = isClassMembership
+      ? `確定轉出「${item.class_label ?? "本班"}」？本班座號名冊及幹部任命會一併結束，歷史歸屬會保留。`
+      : `確定結束「${item.title ?? KIND_LABEL[item.kind]}」？`;
+    if (!confirm(message)) return;
+    setEnding(true);
     try {
-      await peopleApi.endAffiliation(item.id);
-      toast.success("身分已結束");
+      if (isClassMembership && item.class_id) {
+        await classApi.removeMember(item.class_id, item.person_id);
+      } else {
+        await peopleApi.endAffiliation(item.id);
+      }
+      toast.success(isClassMembership ? "已將人員轉出分班" : "身分已結束");
       await onChanged();
     } catch (error) {
-      toast.error(errorMessage(error, "結束身分失敗"));
-    }
+      toast.error(errorMessage(error, isClassMembership ? "轉出分班失敗" : "結束身分失敗"));
+    } finally { setEnding(false); }
   };
   const color = roleTone(item.kind);
   return (
@@ -989,10 +1007,10 @@ function AffiliationRow({
           {item.synced_user_position_id ? " · 已同步 RBAC" : ""}
         </p>
       </div>
-      {!muted && (
+      {!muted && (!isClassMembership || canTransferClass) && (
         <div className="flex min-h-[44px] items-center justify-end">
-          <IconButton onClick={end} tone="danger">
-            <X size={14} /> 結束
+          <IconButton onClick={end} tone="danger" disabled={ending}>
+            <X size={14} /> {ending ? "處理中…" : isClassMembership ? "轉出分班" : "結束"}
           </IconButton>
         </div>
       )}

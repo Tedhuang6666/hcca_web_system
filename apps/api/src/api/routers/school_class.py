@@ -641,13 +641,14 @@ async def list_manual_members(
 @router.delete(
     "/{class_id}/members/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="移除手動加入的班級成員",
+    summary="將成員轉出本班（支援帳號、人員或名冊 ID）",
 )
 async def remove_manual_member(
     class_id: uuid.UUID, user_id: uuid.UUID, session: DbDep, _: ManagerUser
 ) -> None:
-    if not await class_svc.remove_manual_member(session, class_id, user_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此手動成員")
+    sc = await _get_class_or_404(class_id, session)
+    if not await class_svc.remove_class_member(session, sc, user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級成員")
 
 
 # ── 班級幹部 ──────────────────────────────────────────────────────────────────
