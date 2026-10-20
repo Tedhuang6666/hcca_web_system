@@ -38,6 +38,7 @@ import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-del
 import { useWS } from "@/hooks/useWS";
 import Modal from "@/components/ui/Modal";
 import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url";
+import { cleanupAnimatedElement } from "@/lib/shop-product-flight";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -148,6 +149,7 @@ function flyProductIntoOrder() {
       - sourceBounds.left - sourceBounds.width / 2;
     const deltaY = targetBounds.top + targetBounds.height / 2
       - sourceBounds.top - sourceBounds.height / 2;
+    const animationDuration = 560;
     const animation = flyer.animate([
       { transform: "translate3d(0, 0, 0) scale(1)", opacity: 1 },
       {
@@ -157,12 +159,11 @@ function flyProductIntoOrder() {
       },
       { transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(0.18)`, opacity: 0.2 },
     ], {
-      duration: 560,
+      duration: animationDuration,
       easing: "cubic-bezier(0.16, 1, 0.3, 1)",
       fill: "forwards",
     });
-    animation.addEventListener("finish", () => flyer.remove(), { once: true });
-    animation.addEventListener("cancel", () => flyer.remove(), { once: true });
+    cleanupAnimatedElement(flyer, animation, animationDuration + 300);
   });
 }
 
