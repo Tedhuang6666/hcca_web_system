@@ -45,6 +45,16 @@ function openNavigation() {
 }
 
 describe("商品工作導覽", () => {
+  it("keeps the representative entry visible on the catalog without opening a menu", () => {
+    state.permissions = ["class:shop_collect"];
+    render(<ShopLayout><p>商品</p></ShopLayout>);
+    const nav = within(screen.getByRole("navigation", { name: "商品工作區" }));
+    const entry = nav.getByRole("link", { name: "班代代訂與收款" });
+    expect(entry).toBeVisible();
+    expect(entry).toHaveAttribute("href", "/shop/class-orders");
+    expect(entry.closest("details")).toBeNull();
+  });
+
   it("gives students the catalog and their preorders without management shortcuts", () => {
     state.search = "product=shirt";
     const nav = openNavigation();
@@ -57,7 +67,7 @@ describe("商品工作導覽", () => {
     state.pathname = "/shop/class-orders";
     state.permissions = ["class:shop_collect"];
     const nav = openNavigation();
-    expect(nav.getByRole("link", { name: "班級收款與代訂" })).toHaveAttribute("aria-current", "page");
+    expect(nav.getByRole("link", { name: "班代代訂與收款" })).toHaveAttribute("aria-current", "page");
     expect(nav.queryByRole("link", { name: "訂購統計" })).not.toBeInTheDocument();
     expect(nav.queryByRole("link", { name: "班級與議員設定" })).not.toBeInTheDocument();
     expect(nav.getByRole("link", { name: "商品目錄" })).toHaveAttribute("href", "/shop");

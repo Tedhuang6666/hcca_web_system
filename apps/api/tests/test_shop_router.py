@@ -9,13 +9,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
-from api.models.person import PersonAffiliationKind
+from api.models.person import Person, PersonAffiliationKind
 from api.models.receivable import Receivable, ReceivableSource
 from api.models.shop import (
     Order,
@@ -29,6 +30,8 @@ from api.models.user import User
 from api.schemas.person import PersonAffiliationCreate
 from api.schemas.school_class import (
     ClassManualMemberCreate,
+    ClassRoleAssign,
+    ClassRosterEntryCreate,
     ClassStudentRangeCreate,
     SchoolClassCreate,
 )
@@ -1942,6 +1945,170 @@ async def test_create_class_order_by_cadre_succeeds(db_session, authed_client_fa
     orders = resp.json()
     assert orders[0]["total_price"] == 30
     assert orders[0]["assisted_by_id"] == str(cadre.id)
+
+
+@pytest.mark.parametrize("has_person", [False, True])
+async def test_roster_order_before_first_login_keeps_owner_and_seat(
+    db_session, authed_client_factory, has_person
+) -> None:
+    from api.routers.auth import _upsert_google_user
+
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.assign_class_role(
+        db_session, sc, role_key="class_representative", data=ClassRoleAssign(user_id=cadre.id)
+    )
+    if has_person:
+        db_session.add(Person(student_id="11520", display_name="名冊同學"))
+        await db_session.flush()
+    entry = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=20, student_id="11520")
+    )
+    product = await _make_active_product(db_session, cadre, price=15, stock=10)
+    ac = authed_client_factory(cadre)
+    roster = await ac.get(f"/classes/{sc.id}/members")
+    assert roster.status_code == 200
+    member = next(row for row in roster.json() if row["seat_number"] == 20)
+    assert member["user_id"] is None
+    assert member["roster_entry_id"] == str(entry.id)
+    payload = {
+        "roster_entry_id": str(entry.id),
+        "items": [{"product_id": str(product.id), "quantity": 2}],
+    }
+    response = await ac.post("/shop/orders/class", json=payload)
+    assert response.status_code == 201
+    order = response.json()[0]
+    buyer = await db_session.get(User, uuid.UUID(order["user_id"]))
+    assert buyer.student_id == "11520"
+    assert buyer.google_sub is None
+    assert buyer.is_superuser is False
+    assert buyer.is_verified is False
+    assert buyer.display_name == ("名冊同學" if has_person else "20 號同學")
+    assert order["class_id"] == str(sc.id)
+    assert order["assisted_by_id"] == str(cadre.id)
+    assert order["total_price"] == 30
+    assert order["is_paid"] is False
+    assert order["is_class_collected"] is False
+
+    # 同一名冊重送給新訂單仍沿用同一帳號；首次 Google 登入也不會另建帳號。
+    repeated = await ac.post("/shop/orders/class", json=payload)
+    assert repeated.status_code == 201
+    assert repeated.json()[0]["user_id"] == str(buyer.id)
+    logged_in = await _upsert_google_user(
+        db_session,
+        google_sub="synthetic-roster-first-login",
+        email="g011520@hchs.hc.edu.tw",
+        display_name="首次登入同學",
+        avatar_url=None,
+        client_ip="127.0.0.1",
+        user_agent="roster-order-test",
+    )
+    assert logged_in.id == buyer.id
+    own_orders = await authed_client_factory(logged_in).get("/shop/orders")
+    assert own_orders.status_code == 200
+    assert order["id"] in {row["id"] for row in own_orders.json()}
+    updated_roster = await ac.get(f"/classes/{sc.id}/members")
+    seat_rows = [row for row in updated_roster.json() if row["student_id"] == "11520"]
+    assert len(seat_rows) == 1
+    assert seat_rows[0]["seat_number"] == 20
+    assert seat_rows[0]["user_id"] == str(buyer.id)
+
+
+@pytest.mark.parametrize("actor_kind", ["student", "other_cadre", "anonymous"])
+async def test_roster_order_rejects_unauthorized_actor_without_creating_account(
+    db_session, authed_client_factory, client, actor_kind
+) -> None:
+    sc = await _make_class(db_session)
+    actor = await _bare_user(db_session, student_id="21501")
+    if actor_kind == "other_cadre":
+        other = await _make_class(db_session, start="21501", end="21540")
+        await class_svc.add_cadre(db_session, other, user_id=actor.id)
+    entry = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=20, student_id="11520")
+    )
+    product = await _make_active_product(db_session, actor)
+    ac = client if actor_kind == "anonymous" else authed_client_factory(actor)
+    response = await ac.post(
+        "/shop/orders/class",
+        json={
+            "roster_entry_id": str(entry.id),
+            "items": [{"product_id": str(product.id), "quantity": 1}],
+        },
+    )
+    assert response.status_code == (401 if actor_kind == "anonymous" else 403)
+    assert await db_session.scalar(select(User.id).where(User.student_id == "11520")) is None
+    assert entry.user_id is None
+
+
+async def test_roster_order_cannot_bypass_manual_transfer(
+    db_session, authed_client_factory
+) -> None:
+    sc = await _make_class(db_session)
+    other = await _make_class(db_session, start="21501", end="21540")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    entry = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=20, student_id="11520")
+    )
+    await class_svc.add_manual_member(
+        db_session, other, data=ClassManualMemberCreate(user_id=buyer.id)
+    )
+    product = await _make_active_product(db_session, cadre)
+    response = await authed_client_factory(cadre).post(
+        "/shop/orders/class",
+        json={
+            "roster_entry_id": str(entry.id),
+            "items": [{"product_id": str(product.id), "quantity": 1}],
+        },
+    )
+    assert response.status_code == 403
+
+
+async def test_class_order_requires_exactly_one_recipient(
+    db_session, authed_client_factory
+) -> None:
+    actor = await _bare_user(db_session)
+    ac = authed_client_factory(actor)
+    item = {"product_id": str(uuid.uuid4()), "quantity": 1}
+    for recipient in ({}, {"user_id": str(actor.id), "roster_entry_id": str(uuid.uuid4())}):
+        response = await ac.post("/shop/orders/class", json={**recipient, "items": [item]})
+        assert response.status_code == 422
+    missing = await ac.post(
+        "/shop/orders/class",
+        json={
+            "roster_entry_id": str(uuid.uuid4()),
+            "items": [item],
+        },
+    )
+    assert missing.status_code == 404
+
+
+@pytest.mark.parametrize("inactive", ["class", "student"])
+async def test_roster_order_rejects_inactive_class_or_student(
+    db_session, authed_client_factory, inactive
+) -> None:
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    student = await _bare_user(db_session, student_id="11520")
+    entry = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=20, student_id="11520")
+    )
+    if inactive == "class":
+        sc.is_active = False
+    else:
+        student.is_active = False
+    product = await _make_active_product(db_session, cadre)
+    response = await authed_client_factory(cadre).post(
+        "/shop/orders/class",
+        json={
+            "roster_entry_id": str(entry.id),
+            "items": [{"product_id": str(product.id), "quantity": 1}],
+        },
+    )
+    assert response.status_code == 403
+    assert await db_session.scalar(select(func.count(Order.id))) == 0
 
 
 async def test_cadre_can_register_multiple_products_in_one_request(

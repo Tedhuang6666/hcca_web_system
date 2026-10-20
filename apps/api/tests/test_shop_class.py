@@ -305,7 +305,15 @@ async def test_roster_entry_supports_unregistered_student_and_links_existing_use
     members = await class_svc.list_class_members(
         db_session, await class_svc.get_class(db_session, sc.id)
     )
-    assert [(member.seat_number, member.student_id) for member in members] == [(2, "11502")]
+    assert [(member.seat_number, member.student_id) for member in members] == [
+        (1, "11501"),
+        (2, "11502"),
+    ]
+    assert members[0].id == unlinked.id
+    assert members[0].roster_entry_id == unlinked.id
+    assert members[0].user_id is None
+    assert members[0].email == ""
+    assert members[1].user_id == linked_user.id
     assert await class_svc.resolve_user_class(db_session, linked_user) is not None
 
 
