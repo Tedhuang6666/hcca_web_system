@@ -3,20 +3,39 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ShopLayout from "@/app/(protected)/shop/layout";
 
-const state = vi.hoisted(() => ({ pathname: "/shop", search: "", permissions: [] as string[] }));
+const state = vi.hoisted(() => ({
+  pathname: "/shop",
+  search: "",
+  permissions: [] as string[],
+  permissionListeners: new Set<() => void>(),
+}));
 const auth = vi.hoisted(() => ({ refresh: vi.fn() }));
 const authCache = vi.hoisted(() => ({
   cacheCurrentUser: vi.fn((user: { permissions: string[] }) => {
     state.permissions = user.permissions;
+    state.permissionListeners.forEach((listener) => listener());
   }),
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => state.pathname,
   useSearchParams: () => new URLSearchParams(state.search),
 }));
-vi.mock("@/hooks/usePermissions", () => ({
-  usePermissions: () => ({ isAdmin: false, isReady: true, permissions: new Set(state.permissions) }),
-}));
+vi.mock("@/hooks/usePermissions", async () => {
+  const { useSyncExternalStore } = await import("react");
+  return {
+    usePermissions: () => {
+      const permissions = useSyncExternalStore(
+        (listener) => {
+          state.permissionListeners.add(listener);
+          return () => state.permissionListeners.delete(listener);
+        },
+        () => state.permissions,
+        () => state.permissions,
+      );
+      return { isAdmin: false, isReady: true, permissions: new Set(permissions) };
+    },
+  };
+});
 vi.mock("@/lib/api/auth", () => ({ authApi: auth }));
 vi.mock("@/lib/auth-cache", () => authCache);
 vi.mock("@/components/ModuleBoundary", () => ({ default: ({ children }: { children: ReactNode }) => children }));
@@ -28,6 +47,7 @@ beforeEach(() => {
   state.pathname = "/shop";
   state.search = "";
   state.permissions = [];
+  state.permissionListeners.clear();
   auth.refresh.mockReset();
   auth.refresh.mockImplementation(async () => ({
     id: "representative",
@@ -45,6 +65,22 @@ function openNavigation() {
 }
 
 describe("商品工作導覽", () => {
+  it("refreshes permissions on the public catalog so representatives can open class orders", async () => {
+    auth.refresh.mockResolvedValue({
+      id: "representative",
+      permissions: ["class:shop_collect"],
+    });
+
+    render(<ShopLayout><p>商品</p></ShopLayout>);
+
+    const entry = await screen.findByRole("link", { name: "班代代訂與收款" });
+    expect(entry).toHaveAttribute("href", "/shop/class-orders");
+    expect(authCache.cacheCurrentUser).toHaveBeenCalledWith({
+      id: "representative",
+      permissions: ["class:shop_collect"],
+    });
+  });
+
   it("keeps the representative entry visible on the catalog without opening a menu", () => {
     state.permissions = ["class:shop_collect"];
     render(<ShopLayout><p>商品</p></ShopLayout>);
