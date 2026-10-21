@@ -458,25 +458,60 @@ async def _create_order_from_items(
     assisted_by_id: uuid.UUID | None = None,
     coupon_code: str | None = None,
     payment_method: str = "cash_on_pickup",
-    current_promotion_id: uuid.UUID | None = None,
-    current_promotion_ids: set[uuid.UUID] | None = None,
-    reserve_promotion_usage: bool = True,
+    replace_order: Order | None = None,
 ) -> Order:
-    subtotal_price = 0
-    order_scope = None
-    specs: list[dict] = []
-    product_subtotals: dict[uuid.UUID, int] = {}
-    product_quantities: dict[uuid.UUID, int] = {}
-    now = datetime.now(UTC)
+    # 與學生／家人即時登記共用使用者鎖，避免不同商品同時送出時各自建單。
+    await session.execute(select(User.id).where(User.id == user_id).with_for_update())
+    scopes = {
+        _product_order_scope(product)
+        for item in cart_items
+        if (product := await get_product(session, item.product_id)) is not None
+    }
+    if len(scopes) != 1 or next(iter(scopes))[0] != activity_id:
+        raise ValueError("同一筆訂單只能包含同一活動的商品")
+    order_scope = next(iter(scopes))
+    order = replace_order
+    if order is None:
+        order = await get_current_registration(
+            session,
+            user_id,
+            activity_id=activity_id,
+            category_id=order_scope[1],
+            match_activity=True,
+            lock=True,
+            reuse_cancelled=True,
+        )
+    if order is not None:
+        if order.is_paid or order.is_class_collected:
+            raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+        if order.class_id is not None and order.class_id != class_id:
+            raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
+        if any(_product_order_scope(item.product) != order_scope for item in order.items):
+            raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
 
-    locked_product_ids = sorted({ci.product_id for ci in cart_items})
+    specs: list[dict] = []
+    replacing = replace_order is not None
+    cancelled = order is not None and order.status == OrderStatus.CANCELLED
+    old_items = list(order.items) if order is not None else []
+    locked_product_ids = sorted(
+        {ci.product_id for ci in cart_items} | {item.product_id for item in old_items}
+    )
     if locked_product_ids:
         await session.execute(
-            select(Product.id)
+            select(Product)
             .where(Product.id.in_(locked_product_ids))
             .order_by(Product.id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
+
+    if replacing:
+        for item in old_items:
+            product = await get_product(session, item.product_id)
+            if product is not None and not product.is_unlimited:
+                product.stock_quantity += item.quantity
+                if product.status == ProductStatus.SOLD_OUT:
+                    product.status = ProductStatus.ACTIVE
 
     requested_quantities: dict[uuid.UUID, int] = {}
     for cart_item in cart_items:
@@ -486,25 +521,27 @@ async def _create_order_from_items(
     for product_id, quantity in requested_quantities.items():
         product = await get_product(session, product_id)
         if product is not None:
-            await _assert_purchase_limit(session, product, user_id, quantity)
+            await _assert_purchase_limit(
+                session,
+                product,
+                user_id,
+                quantity,
+                excluding_order_id=order.id if replacing else None,
+            )
 
     for cart_item in cart_items:
         product = await get_product(session, cart_item.product_id)
         if product is None:
             raise ValueError("購物車含已不存在的商品")
         product_scope = _product_order_scope(product)
-        if product_scope[0] != activity_id or (
-            order_scope is not None and product_scope != order_scope
-        ):
+        if product_scope != order_scope:
             raise ValueError("同一筆訂單只能包含同一活動的商品")
-        order_scope = product_scope
-        if product.status != ProductStatus.ACTIVE:
-            raise ValueError(f"商品「{product.name}」不在上架狀態")
-        if product.sale_start and now < product.sale_start:
-            raise ValueError(f"商品「{product.name}」尚未開售")
-        if product.sale_end and now > product.sale_end:
+        sale_end = product.sale_end
+        if sale_end is not None and sale_end.tzinfo is None:
+            sale_end = sale_end.replace(tzinfo=UTC)
+        if sale_end is not None and datetime.now(UTC) >= sale_end:
             raise ValueError(f"商品「{product.name}」已截止販售")
-        await _assert_activity_open(session, product)
+        await _assert_product_registration_open(session, product, class_id=class_id)
 
         option_ids = [uuid.UUID(str(o["option_id"])) for o in (cart_item.selected_options or [])]
         selected = _resolve_selected_options(product, option_ids)
@@ -519,10 +556,6 @@ async def _create_order_from_items(
             if product.stock_quantity == 0:
                 product.status = ProductStatus.SOLD_OUT
 
-        line_subtotal = unit_price * cart_item.quantity
-        subtotal_price += line_subtotal
-        product_subtotals[product.id] = product_subtotals.get(product.id, 0) + line_subtotal
-        product_quantities[product.id] = product_quantities.get(product.id, 0) + cart_item.quantity
         specs.append(
             {
                 "product_id": product.id,
@@ -532,62 +565,65 @@ async def _create_order_from_items(
             }
         )
 
-    promotion_result = await resolve_promotions(
-        session,
-        user_id=user_id,
-        subtotal=subtotal_price,
-        code=coupon_code,
-        product_subtotals=product_subtotals,
-        product_quantities=product_quantities,
-        activity_id=activity_id,
-        current_promotion_ids=current_promotion_ids,
-    )
-    promotion = promotion_result.promotion
-    if reserve_promotion_usage:
-        for allocation in promotion_result.allocations:
-            allocation.promotion.used_count += 1
-    discount_amount = promotion_result.discount_amount
-    total_price = max(0, subtotal_price - discount_amount)
-    serial = await generate_order_serial(session)
-    order = Order(
-        serial_number=serial,
-        user_id=user_id,
-        activity_id=activity_id,
-        class_id=class_id,
-        category_id=order_scope[1] if order_scope else None,
-        assistance_scope=assistance_scope,
-        assisted_by_id=assisted_by_id,
-        status=OrderStatus.PENDING,
-        subtotal_price=subtotal_price,
-        discount_amount=discount_amount,
-        total_price=total_price,
-        promotion_id=promotion.id if promotion else None,
-        promotion_code=promotion.code if promotion else None,
-        applied_promotions=[
-            ShopOrderPromotion(
-                promotion_id=allocation.promotion.id,
-                promotion=allocation.promotion,
-                discount_amount=allocation.discount_amount,
-            )
-            for allocation in promotion_result.allocations
-        ],
-        payment_method=payment_method,
-        notes=notes,
-    )
-    session.add(order)
-    await session.flush()
+    if order is None:
+        order = Order(
+            serial_number=await generate_order_serial(session),
+            user_id=user_id,
+            activity_id=activity_id,
+            class_id=class_id,
+            category_id=order_scope[1],
+            assistance_scope=assistance_scope,
+            assisted_by_id=assisted_by_id,
+            status=OrderStatus.PENDING,
+            subtotal_price=0,
+            discount_amount=0,
+            total_price=0,
+            applied_promotions=[],
+            items=[],
+            payment_method=payment_method,
+            notes=notes,
+        )
+        session.add(order)
+        await session.flush()
+    elif replacing or cancelled:
+        for item in old_items:
+            order.items.remove(item)
+            await session.delete(item)
+        order.status = OrderStatus.PENDING if cancelled else order.status
+    order.class_id = class_id
+    order.activity_id = activity_id
+    order.category_id = order_scope[1]
+    if notes is not None:
+        order.notes = notes
     actor = await session.get(User, assisted_by_id or user_id)
     for spec in specs:
-        session.add(
-            OrderItem(
-                order_id=order.id,
-                ordered_by_id=actor.id if actor else None,
-                ordered_by_name=actor.display_name if actor else None,
-                **spec,
-            )
+        existing = next(
+            (
+                item
+                for item in order.items
+                if item.product_id == spec["product_id"]
+                and item.unit_price == spec["unit_price"]
+                and _options_signature(item.selected_options)
+                == _options_signature(spec["selected_options"])
+                and item.delegation_link_id is None
+                and item.ordered_by_id == (actor.id if actor else None)
+            ),
+            None,
         )
+        if existing is not None:
+            existing.quantity += spec["quantity"]
+        else:
+            order.items.append(
+                OrderItem(
+                    ordered_by_id=actor.id if actor else None,
+                    ordered_by_name=actor.display_name if actor else None,
+                    **spec,
+                )
+            )
+    order.subtotal_price = sum(item.quantity * item.unit_price for item in order.items)
+    await _apply_order_promotion(session, order, code=coupon_code or order.promotion_code)
     await session.flush()
-    logger.info("訂單建立 serial=%s total=%d", serial, total_price)
+    logger.info("商品登記更新 serial=%s total=%d", order.serial_number, order.total_price)
     return order
 
 
@@ -789,10 +825,14 @@ async def get_current_registration(
     match_activity: bool = False,
     category_id: uuid.UUID | None = None,
     lock: bool = False,
+    reuse_cancelled: bool = False,
 ) -> Order | None:
+    statuses = [OrderStatus.PENDING, OrderStatus.CONFIRMED]
+    if reuse_cancelled:
+        statuses.append(OrderStatus.CANCELLED)
     query = select(Order).where(
         Order.user_id == user_id,
-        Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+        Order.status.in_(statuses),
     )
     if match_activity:
         query = query.where(
@@ -806,7 +846,9 @@ async def get_current_registration(
                 & Order.items.any(OrderItem.product.has(_product_category_filter(category_id))),
             )
         )
-    query = query.order_by(Order.updated_at.desc(), Order.created_at.desc()).limit(1)
+    query = query.order_by(
+        (Order.status == OrderStatus.CANCELLED), Order.updated_at.desc(), Order.created_at.desc()
+    ).limit(1)
     if lock:
         query = query.with_for_update().execution_options(populate_existing=True)
     result = await session.execute(query)
@@ -922,11 +964,16 @@ async def set_current_registration_product(
         category_id=category_id,
         match_activity=True,
         lock=True,
+        reuse_cancelled=True,
     )
     if order is not None:
         if order.is_paid or order.is_class_collected:
             raise ValueError("班級幹部已登記收款，商品登記已鎖定")
-        if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
+        if order.status not in (
+            OrderStatus.PENDING,
+            OrderStatus.CONFIRMED,
+            OrderStatus.CANCELLED,
+        ):
             raise ValueError("目前登記狀態無法修改")
         if any(
             _product_order_scope(item.product) != (activity_id, category_id) for item in order.items
@@ -946,8 +993,11 @@ async def set_current_registration_product(
     source_id = delegation.id if delegation else None
     if delegation is not None and delegation.user_id != user.id:
         raise ValueError("代訂連結不屬於此學生")
+    cancelled = order is not None and order.status == OrderStatus.CANCELLED
     product_items = [
-        item for item in (order.items if order is not None else []) if item.product_id == product.id
+        item
+        for item in (order.items if order is not None and not cancelled else [])
+        if item.product_id == product.id
     ]
     existing_items = [item for item in product_items if item.delegation_link_id == source_id]
     other_quantity = sum(
@@ -980,7 +1030,7 @@ async def set_current_registration_product(
         excluding_order_id=order.id if order is not None else None,
     )
 
-    if order is None and requested_total == 0:
+    if (order is None or cancelled) and requested_total == 0:
         return None
 
     if not product.is_unlimited:
@@ -1010,6 +1060,12 @@ async def set_current_registration_product(
         )
         session.add(order)
         await session.flush()
+    elif cancelled:
+        # 取消時庫存已歸還；重新登記只保留這次的品項，沿用原單與應收款。
+        for item in list(order.items):
+            order.items.remove(item)
+            await session.delete(item)
+        order.status = OrderStatus.PENDING
 
     old_subtotal = order.subtotal_price
     existing_by_signature: dict[str, list[OrderItem]] = {}
@@ -1508,6 +1564,17 @@ async def replace_order_items(
     *,
     data: ClassOrderUpsert,
 ) -> Order:
+    await session.execute(select(User.id).where(User.id == order.user_id).with_for_update())
+    await session.execute(
+        select(Order)
+        .where(Order.id == order.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    refreshed = await get_order(session, order.id)
+    if refreshed is None:
+        raise ValueError("找不到此商品登記")
+    order = refreshed
     if any(item.delegation_link_id is not None for item in order.items):
         raise ValueError("此訂單含家人代訂品項，請學生由商品頁或訂單明細逐項修改")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
@@ -1547,18 +1614,13 @@ async def replace_order_items(
     if order.activity_id is None:
         order.activity_id = activity_id
         order.category_id = category.id if category else None
-
-    for item in list(order.items):
-        product = await session.get(Product, item.product_id)
-        if product and not product.is_unlimited:
-            product.stock_quantity += item.quantity
-            if product.status == ProductStatus.SOLD_OUT:
-                product.status = ProductStatus.ACTIVE
-        await session.delete(item)
-    await session.flush()
+    if not order.items and requested_scopes:
+        activity_id, category_id = next(iter(requested_scopes))
+        order.activity_id = activity_id
+        order.category_id = category_id
 
     temp_items = await _order_items_to_cart_items(session, data.items)
-    specs_order = await _create_order_from_items(
+    order = await _create_order_from_items(
         session,
         user_id=order.user_id,
         class_id=order.class_id,
@@ -1569,28 +1631,9 @@ async def replace_order_items(
         assistance_scope=order.assistance_scope,
         assisted_by_id=order.assisted_by_id,
         payment_method=order.payment_method,
-        current_promotion_id=order.promotion_id,
-        reserve_promotion_usage=False,
+        replace_order=order,
     )
-    await _sync_order_promotions(
-        session,
-        order,
-        tuple(
-            PromotionAllocation(row.promotion, row.discount_amount)
-            for row in specs_order.applied_promotions
-            if row.promotion is not None
-        ),
-    )
-    order.subtotal_price = specs_order.subtotal_price
-    order.discount_amount = specs_order.discount_amount
-    order.total_price = specs_order.total_price
     order.notes = data.notes
-    temp_result = await session.execute(
-        select(OrderItem).where(OrderItem.order_id == specs_order.id)
-    )
-    for item in temp_result.scalars().all():
-        item.order_id = order.id
-    await session.delete(specs_order)
     await receivable_svc.sync_shop_order(session, order)
     await session.flush()
     return order
