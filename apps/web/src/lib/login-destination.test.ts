@@ -1,21 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { confirmationReturnPath, loginDestination } from "./login-destination";
+import { loginDestination } from "./login-destination";
 
 describe("loginDestination", () => {
-  it("sends an unconfirmed student to confirmation and preserves query and fragment", () => {
-    const destination = loginDestination({ requires_class_confirmation: true }, "/shop?tab=orders#item");
-    const url = new URL(destination, "https://hcca.invalid");
-    expect(url.pathname).toBe("/profile/complete");
-    expect(url.searchParams.get("next")).toBe("/shop?tab=orders#item");
+  it("returns users to the original page without requiring class confirmation", () => {
+    expect(loginDestination("/shop?tab=orders#item")).toBe("/shop?tab=orders#item");
   });
-  it("returns confirmed and ineligible users to the original page", () => {
-    expect(loginDestination({ requires_class_confirmation: false }, "/surveys/1")).toBe("/surveys/1");
-    expect(loginDestination({}, "/dashboard")).toBe("/dashboard");
+  it("returns users without a requested destination to the home page", () => {
+    expect(loginDestination()).toBe("/");
   });
-  it("rejects external destinations and confirmation loops", () => {
-    expect(confirmationReturnPath("//example.com")).toBe("/");
-    expect(confirmationReturnPath("/profile/complete?next=/shop")).toBe("/");
-    expect(confirmationReturnPath("/profile/complete/")).toBe("/");
-    expect(confirmationReturnPath("/profile/../profile/complete")).toBe("/");
+  it("rejects external destinations and old confirmation routes", () => {
+    expect(loginDestination("//example.com")).toBe("/");
+    expect(loginDestination("/profile/complete?next=/shop")).toBe("/");
+    expect(loginDestination("/profile/complete/")).toBe("/");
+    expect(loginDestination("/profile/../profile/complete")).toBe("/");
+    expect(loginDestination("/dashboard")).toBe("/dashboard");
   });
 });

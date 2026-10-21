@@ -11,7 +11,6 @@ type AuthenticatedUser = {
   permissions: string[];
   is_school_email?: boolean;
   can_create_shop_delegation?: boolean;
-  requires_class_confirmation?: boolean;
 };
 
 // /auth/me is used by the shell on every navigation. Keep the session check
@@ -76,7 +75,6 @@ export const authApi = {
         is_superuser?: boolean;
         is_owner?: boolean;
         permissions: string[];
-        requires_class_confirmation?: boolean;
       };
     }>("/auth/google/one-tap", { credential, next }),
 };

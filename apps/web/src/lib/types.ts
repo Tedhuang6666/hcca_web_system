@@ -1516,8 +1516,6 @@ export type MyClassContext = import("./api-types").components["schemas"]["School
   seat_number: number | null;
 };
 
-export type { ClassConfirmationCreate, ClassConfirmationOut } from "./api-bridge";
-
 export type ClassCorrectionStatus = "pending" | "approved" | "rejected";
 
 export interface ClassCorrectionRequestCreate {

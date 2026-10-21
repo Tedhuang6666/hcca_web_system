@@ -8,8 +8,8 @@ export default function LoginClientEffects({ nextPath }: { nextPath: string }) {
   useEffect(() => {
     try {
       if (localStorage.getItem("user_id")) {
-        void authApi.me().then((user) => {
-          window.location.replace(loginDestination(user, nextPath));
+        void authApi.me().then(() => {
+          window.location.replace(loginDestination(nextPath));
         }).catch(() => {
           // 無法驗證既有 session 時保留登入選項。
         });
