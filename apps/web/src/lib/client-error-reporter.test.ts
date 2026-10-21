@@ -135,7 +135,7 @@ describe("client error reporter", () => {
     uninstall();
   });
 
-  it("suppresses a Next chunk failure when cache recovery reloads the page", () => {
+  it("suppresses a Next chunk failure when cache recovery reloads the page", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
     const originalCaches = Object.getOwnPropertyDescriptor(window, "caches");
@@ -152,6 +152,7 @@ describe("client error reporter", () => {
       script.src = "/_next/static/chunks/app.js";
       document.body.append(script);
       script.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(50);
 
       expect(fetchMock).not.toHaveBeenCalled();
       expect(sessionStorage.getItem("hcca:chunk-reload-at")).not.toBeNull();
