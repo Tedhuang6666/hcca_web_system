@@ -1,3 +1,7 @@
+export function shouldAnimateProductFlight(reducedMotion: boolean, compactPortrait: boolean) {
+  return !reducedMotion && !compactPortrait;
+}
+
 export function cleanupAnimatedElement(
   element: HTMLElement,
   animation: Animation,

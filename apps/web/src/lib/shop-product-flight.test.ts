@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cleanupAnimatedElement } from "./shop-product-flight";
+import { cleanupAnimatedElement, shouldAnimateProductFlight } from "./shop-product-flight";
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("shop product flight cleanup", () => {
+  it("skips the flight on compact portrait screens", () => {
+    expect(shouldAnimateProductFlight(false, true)).toBe(false);
+  });
+
+  it("keeps the flight on other screens unless reduced motion is requested", () => {
+    expect(shouldAnimateProductFlight(false, false)).toBe(true);
+    expect(shouldAnimateProductFlight(true, false)).toBe(false);
+  });
+
   it("removes the flyer if the browser never dispatches an animation event", () => {
     vi.useFakeTimers();
     const flyer = document.createElement("div");
