@@ -1978,10 +1978,17 @@ async def order_summary(
     orders = (await session.execute(q)).scalars().unique().all()
 
     groups: dict[str, OrderSummaryRow] = {}
+    class_sort_keys: dict[str, tuple[bool, int, str]] = {}
     for order in orders:
         if group_by == "class":
             key = str(order.class_id) if order.class_id else "none"
-            label = class_svc.class_display_label(order.school_class) or "未分班"
+            school_class = order.school_class
+            label = class_svc.class_display_label(school_class) or "未分班"
+            class_sort_keys[key] = (
+                school_class is None,
+                -school_class.academic_year if school_class is not None else 0,
+                school_class.class_code if school_class is not None else "",
+            )
         elif group_by == "grade":
             sc = order.school_class
             key = str(sc.grade) if sc else "none"
@@ -2041,7 +2048,13 @@ async def order_summary(
         else:
             row.unpaid_amount += amount
 
-    rows = sorted(groups.values(), key=lambda r: r.label)
+    if group_by == "class":
+        rows = sorted(
+            groups.values(),
+            key=lambda row: class_sort_keys.get(row.key, (True, 0, "")),
+        )
+    else:
+        rows = sorted(groups.values(), key=lambda row: row.label)
     return OrderSummaryOut(
         group_by=group_by,
         rows=rows,
