@@ -8,6 +8,7 @@ import type {
   FinanceBudgetDetail,
   FinanceBudgetExpenseOut,
   FinanceBudgetImportResult,
+  FinanceBudgetIncomeItem,
   FinanceResetOut,
   FinanceBudgetSubmission,
   FinanceExpenseClaimItemOut,
@@ -25,6 +26,26 @@ import type {
   TransferCreate,
 } from "@/lib/types";
 import { ApiError, BASE, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh, uploadWithProgress } from "./core";
+
+async function downloadDocument(path: string, filename: string, body?: object): Promise<void> {
+  const method = body ? "POST" : "GET";
+  const doFetch = () => fetch(`${BASE}${path}`, {
+    method, credentials: "include",
+    headers: { ...csrfHeaders(method), ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let response = await doFetch();
+  if (response.status === 401 && await silentRefresh()) response = await doFetch();
+  if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 async function postForm<T>(path: string, form: FormData): Promise<T> {
   const doFetch = () => uploadWithProgress(`${BASE}${path}`, {
@@ -102,6 +123,7 @@ export const financeApi = {
   importBudget: (ledgerId: string, body: {
     file: File; period_id: string; name: string; title?: string; proposing_org_id?: string;
     budget_id?: string; replace_submission_id?: string; council_approved_on: string;
+    full_snapshot?: boolean;
   }) => {
     const form = new FormData();
     form.append("file", body.file);
@@ -112,9 +134,16 @@ export const financeApi = {
     if (body.budget_id) form.append("budget_id", body.budget_id);
     if (body.replace_submission_id) form.append("replace_submission_id", body.replace_submission_id);
     form.append("council_approved_on", body.council_approved_on);
+    form.append("full_snapshot", String(body.full_snapshot ?? true));
     return postForm<FinanceBudgetImportResult>(`/finance/ledgers/${ledgerId}/budgets/import`, form);
   },
   getBudget: (budgetId: string) => get<FinanceBudgetDetail>(`/finance/budgets/${budgetId}`),
+  exportBudget: (budgetId: string) =>
+    downloadDocument(`/finance/budgets/${budgetId}/export.xlsx`, "預算總表.xlsx"),
+  exportAdvanceReceipt: (budgetId: string, expenseIds: string[]) =>
+    downloadDocument(`/finance/budgets/${budgetId}/advance-receipt.docx`, "預先代墊簽收單.docx", { expense_ids: expenseIds }),
+  updateBudgetIncomeItem: (budgetId: string, incomeId: string, body: { amount: number; note?: string | null }) =>
+    patch<FinanceBudgetIncomeItem>(`/finance/budgets/${budgetId}/income-items/${incomeId}`, body),
   renameBudget: (budgetId: string, body: { name: string }) =>
     patch<FinanceBudget>(`/finance/budgets/${budgetId}`, body),
   updateBudgetPublication: (budgetId: string, isPublic: boolean) =>
@@ -153,7 +182,7 @@ export const financeApi = {
     ),
   updateBudgetAllocation: (allocationId: string, body: {
     node_id?: string; amount?: number; quantity?: number; unit?: string;
-    unit_price?: number; note?: string | null; proposing_org_id?: string; reason: string;
+    unit_price?: number | null; note?: string | null; proposing_org_id?: string; reason: string;
   }) =>
     patch<FinanceBudgetAllocation>(`/finance/budget-allocations/${allocationId}`, body),
   addBudgetAllocationEvidence: (
@@ -164,7 +193,7 @@ export const financeApi = {
   ),
   createBudgetExpense: (budgetId: string, body: {
     allocation_id: string; department_org_id?: string; entry_date: string;
-    purpose: string; total_amount?: number; note?: string;
+    purpose: string; total_amount?: number; note?: string; advanced_by_name?: string | null;
     items?: Array<{
       name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
     }>;
@@ -174,7 +203,7 @@ export const financeApi = {
   }) => post<FinanceBudgetExpenseOut>(`/finance/budgets/${budgetId}/expenses`, body),
   updateBudgetExpense: (budgetId: string, expenseId: string, body: {
     allocation_id: string; department_org_id: string; entry_date: string;
-    purpose: string; total_amount?: number; note?: string | null;
+    purpose: string; total_amount?: number; note?: string | null; advanced_by_name?: string | null;
     items?: Array<{
       name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
     }>;

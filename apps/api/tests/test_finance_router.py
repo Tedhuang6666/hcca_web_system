@@ -5,8 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import date, timedelta
 from io import BytesIO
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 from sqlalchemy import select
 
@@ -22,6 +24,37 @@ from api.models.finance import (
 )
 from api.models.org import Org, Permission, Position, UserPosition
 from api.services.finance import _parse_budget_workbook, initialize_ledger
+
+
+def _colored_budget_workbook() -> bytes:
+    workbook = Workbook()
+    total = workbook.active
+    total.title = "預算總表"
+    total.append(["項目", "細項", "數量", "單價", "總額(含稅)", "項目總額", "備註"])
+    total.append(["行政", "影印紙", "2包", 100, 200, 200, ""])
+    total["E2"].fill = PatternFill("solid", fgColor="F4CCCC")
+    total.append(["活動", "報名費", "10人", 50, 500, 200, ""])
+    total["B3"].fill = PatternFill("solid", fgColor="FCE5CD")
+    total["E3"].fill = PatternFill("solid", fgColor="D9EAD3")
+    additions = workbook.create_sheet("本次新增")
+    additions.append(["項目", "細項", "數量", "單價", "總額(含稅)", "項目總額", "備註"])
+    additions.append(["活動", "報名費", "10人", 50, 500, 500, ""])
+    additions["E2"].fill = PatternFill("solid", fgColor="D9EAD3")
+    workbook.active = 1  # Saving while viewing additions must not double-count or omit the total.
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def test_budget_import_prefers_total_sheet_and_keeps_new_income_marker() -> None:
+    expenses, incomes, _ = _parse_budget_workbook(_colored_budget_workbook())
+    assert [row["detail"] for row in expenses] == ["影印紙"]
+    assert incomes[0]["name"] == "報名費"
+    assert incomes[0]["is_new"] is True
+    assert expenses[0]["is_new"] is False
+    expenses, incomes, _ = _parse_budget_workbook(_colored_budget_workbook(), full_snapshot=False)
+    assert expenses == []
+    assert [row["name"] for row in incomes] == ["報名費"]
 
 
 async def _grant(db_session, user, code: str) -> Org:
@@ -490,6 +523,18 @@ async def test_import_budget_xlsx_creates_categories_and_allocations(
         allocation["amount"] for allocation in detail_after_reimport.json()["allocations"]
     ) == [200, 250, 300, 500, 720]
     assert [item["name"] for item in detail_after_reimport.json()["income_items"]] == ["活動報名費"]
+    # Complete workbooks are snapshots: keep historical rows but count only the new baseline.
+    assert sum(node["allocated_amount"] for node in detail_after_reimport.json()["nodes"]) == 720
+    assert reimported.json()["submission"]["is_full_snapshot"] is True
+    public = await authed_client_factory(member_user).get(
+        f"/finance/public/budgets/{response.json()['budget']['id']}"
+    )
+    assert [item["amount"] for item in public.json()["allocations"]] == [720]
+    settlement = await authed_client_factory(member_user).get(
+        f"/finance/ledgers/{ledger.id}/periods/{period.id}/settlement"
+    )
+    assert settlement.status_code == 200
+    assert settlement.json()["budgeted_total"] == 720
     assert "臨時支出" in {node["name"] for node in detail_after_reimport.json()["nodes"]}
 
 
@@ -1422,3 +1467,161 @@ async def test_budget_drafts_can_be_edited_and_deleted_by_their_creator(
     assert deleted_allocation.status_code == 204
     deleted_submission = await creator_client.delete(f"/finance/budget-submissions/{submission_id}")
     assert deleted_submission.status_code == 204
+
+
+async def test_budget_exports_group_advances_and_enforce_budget_scope(
+    db_session, member_user, make_user, client, authed_client_factory
+) -> None:
+    org = await _grant_many(
+        db_session, [member_user], ["finance:budget", "finance:view", "finance:record"]
+    )
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    imported = await actor.post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data={
+            "period_id": str(period.id),
+            "name": "測試整合總表",
+            "council_approved_on": "2026-08-19",
+        },
+        files={"file": ("追加.xlsx", _colored_budget_workbook())},
+    )
+    assert imported.status_code == 201
+    budget_id = imported.json()["budget"]["id"]
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    allocation_id = detail["allocations"][0]["id"]
+    expense_ids = []
+    for name, amount in (("測試代墊人甲", 80), ("測試代墊人甲", 120), ("測試代墊人乙", 75)):
+        response = await actor.post(
+            f"/finance/budgets/{budget_id}/expenses",
+            json={
+                "allocation_id": allocation_id,
+                "entry_date": "2026-08-20",
+                "purpose": f"採購 {amount}",
+                "total_amount": amount,
+                "advanced_by_name": name,
+                "items": (
+                    [{"name": "分項採購", "quantity": 2, "unit": "件", "unit_price": 60}]
+                    if amount == 120
+                    else []
+                ),
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["advanced_by_name"] == name
+        expense_ids.append(response.json()["id"])
+    normal = await actor.post(
+        f"/finance/budgets/{budget_id}/expenses",
+        json={
+            "allocation_id": allocation_id,
+            "entry_date": "2026-08-20",
+            "purpose": "直接支付",
+            "total_amount": 50,
+        },
+    )
+    assert normal.status_code == 201
+
+    receipt_path = f"/finance/budgets/{budget_id}/advance-receipt.docx"
+    response = await actor.post(receipt_path, json={"expense_ids": expense_ids + [expense_ids[0]]})
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    with ZipFile(BytesIO(response.content)) as archive:
+        document = ElementTree.fromstring(archive.read("word/document.xml"))
+        for path in (
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "word/styles.xml",
+            "word/_rels/document.xml.rels",
+        ):
+            ElementTree.fromstring(archive.read(path))
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    rows = [
+        ["".join(cell.itertext()) for cell in row.findall("w:tc", ns)]
+        for row in document.findall(".//w:tbl/w:tr", ns)
+    ]
+    assert rows[0] == ["代墊人", "代墊項目", "代墊金額", "總金額", "簽名"]
+    assert sum(row[0] == "測試代墊人甲" for row in rows) == 1
+    assert sorted(row[3] for row in rows[1:] if row[3]) == ["200", "75"]
+    assert all(row[4] == "" for row in rows[1:])
+    assert len(rows) == 4  # Repeated selections produce one row each.
+    assert (
+        await actor.post(receipt_path, json={"expense_ids": [normal.json()["id"]]})
+    ).status_code == 422
+    assert (
+        await actor.post(receipt_path, json={"expense_ids": [str(uuid.uuid4())]})
+    ).status_code == 422
+    assert (await actor.post(receipt_path, json={"expense_ids": []})).status_code == 422
+    assert (await client.post(receipt_path, json={"expense_ids": expense_ids})).status_code == 401
+
+    outsider = await make_user(email="finance-export-outsider@school.edu")
+    await _grant_many(db_session, [outsider], ["finance:view", "finance:budget"])
+    outsider_client = authed_client_factory(outsider)
+    assert (
+        await outsider_client.post(receipt_path, json={"expense_ids": expense_ids})
+    ).status_code == 403
+    export_path = f"/finance/budgets/{budget_id}/export.xlsx"
+    assert (await client.get(export_path)).status_code == 401
+    assert (await outsider_client.get(export_path)).status_code == 403
+    exported = await actor.get(export_path)
+    assert exported.status_code == 200
+    workbook = load_workbook(BytesIO(exported.content))
+    assert workbook.sheetnames == ["預算總表", "本次新增"]
+    expenses, incomes, _ = _parse_budget_workbook(exported.content)
+    assert sum(row["amount"] for row in expenses) == 200
+    assert sum(row["amount"] for row in incomes) == 500
+    assert incomes[0]["is_new"] is True
+    public = (await client.get(f"/finance/public/budgets/{budget_id}")).json()
+    assert "advanced_by_name" not in str(public)
+    assert "測試代墊人甲" not in str(public)
+
+    income_id = detail["income_items"][0]["id"]
+    income_path = f"/finance/budgets/{budget_id}/income-items/{income_id}"
+    assert (await outsider_client.patch(income_path, json={"amount": 700})).status_code == 403
+    assert (await client.patch(income_path, json={"amount": 700})).status_code == 401
+    updated = await actor.patch(income_path, json={"amount": 700, "note": None})
+    assert updated.status_code == 200
+    assert updated.json()["amount"] == 700
+    assert updated.json()["note"] is None
+    assert (await actor.patch(income_path, json={"amount": 0})).status_code == 422
+    cleared = await actor.patch(
+        f"/finance/budgets/{budget_id}/expenses/{expense_ids[0]}",
+        json={
+            "allocation_id": allocation_id,
+            "entry_date": "2026-08-20",
+            "purpose": "已改為直接支付",
+            "total_amount": 80,
+            "advanced_by_name": None,
+        },
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["advanced_by_name"] is None
+
+
+async def test_additions_import_remains_additive_after_full_snapshot(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    data = {"period_id": str(period.id), "name": "總表", "council_approved_on": "2026-08-19"}
+    initial = await actor.post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data=data,
+        files={"file": ("總表.xlsx", _colored_budget_workbook())},
+    )
+    assert initial.status_code == 201
+    budget_id = initial.json()["budget"]["id"]
+    data.update({"budget_id": budget_id, "full_snapshot": "false"})
+    additional = await actor.post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data=data,
+        files={"file": ("追加.xlsx", _colored_budget_workbook())},
+    )
+    assert additional.status_code == 201
+    assert additional.json()["submission"]["is_full_snapshot"] is False
+    assert additional.json()["allocations_created"] == 0
+    assert additional.json()["income_items_created"] == 1
+    exported = await actor.get(f"/finance/budgets/{budget_id}/export.xlsx")
+    expenses, incomes, _ = _parse_budget_workbook(exported.content)
+    assert sum(row["amount"] for row in expenses) == 200
+    assert sum(row["amount"] for row in incomes) == 1000

@@ -937,6 +937,7 @@ export type FinanceBudgetSubmission = {
   reviewed_by_id?: string | null; reviewed_at?: string | null; review_note?: string | null
   council_approved_on?: string | null
   is_council_review_public: boolean
+  is_full_snapshot?: boolean
 }
 export type FinanceBudgetNode = {
   id: string; budget_id: string; parent_id?: string | null; name: string; sort_order: number
@@ -947,6 +948,7 @@ export type FinanceBudgetAllocation = {
   quantity?: number | null; unit?: string | null; unit_price?: number | null
   proposed_by_id: string; proposing_org_id: string
   evidence: FinanceBudgetAllocationEvidence[]
+  is_new?: boolean
 }
 export type FinanceBudgetAllocationEvidence = {
   id: string; storage_key: string; filename: string; content_type: string; file_size: number
@@ -955,6 +957,8 @@ export type FinanceBudgetAllocationEvidence = {
 export type FinanceBudgetIncomeItem = {
   id: string; submission_id: string; category: string; name: string; amount: number
   note?: string | null; source_row_number: number
+  is_new?: boolean
+  quantity?: number | null; unit?: string | null; unit_price?: number | null
 }
 export type FinanceBudgetDetail = FinanceBudget & {
   submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]

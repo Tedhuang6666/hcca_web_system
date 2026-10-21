@@ -5220,6 +5220,23 @@ export interface paths {
         patch: operations["update_budget_name_finance_budgets__budget_id__patch"];
         trace?: never;
     };
+    "/finance/budgets/{budget_id}/advance-receipt.docx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Advance Receipt */
+        post: operations["export_advance_receipt_finance_budgets__budget_id__advance_receipt_docx_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/finance/budgets/{budget_id}/expenses": {
         parameters: {
             query?: never;
@@ -5269,6 +5286,40 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/finance/budgets/{budget_id}/export.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Budget Workbook */
+        get: operations["export_budget_workbook_finance_budgets__budget_id__export_xlsx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/budgets/{budget_id}/income-items/{income_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Budget Income Item */
+        patch: operations["update_budget_income_item_finance_budgets__budget_id__income_items__income_id__patch"];
         trace?: never;
     };
     "/finance/budgets/{budget_id}/publication": {
@@ -13525,6 +13576,11 @@ export interface components {
             council_approved_on: string;
             /** File */
             file: string;
+            /**
+             * Full Snapshot
+             * @default true
+             */
+            full_snapshot: boolean;
             /** Name */
             name: string;
             /**
@@ -13708,6 +13764,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** BudgetAdvanceReceiptCreate */
+        BudgetAdvanceReceiptCreate: {
+            /** Expense Ids */
+            expense_ids: string[];
+        };
         /** BudgetAllocationCreate */
         BudgetAllocationCreate: {
             /** Amount */
@@ -13780,6 +13841,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is New
+             * @default false
+             */
+            is_new: boolean;
             /**
              * Node Id
              * Format: uuid
@@ -13899,10 +13965,17 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is New
+             * @default false
+             */
+            is_new: boolean;
             /** Name */
             name: string;
             /** Note */
             note: string | null;
+            /** Quantity */
+            quantity?: number | null;
             /** Source Row Number */
             source_row_number: number;
             /**
@@ -13910,6 +13983,17 @@ export interface components {
              * Format: uuid
              */
             submission_id: string;
+            /** Unit */
+            unit?: string | null;
+            /** Unit Price */
+            unit_price?: number | null;
+        };
+        /** BudgetIncomeItemUpdate */
+        BudgetIncomeItemUpdate: {
+            /** Amount */
+            amount: number;
+            /** Note */
+            note?: string | null;
         };
         /** BudgetNodeCreate */
         BudgetNodeCreate: {
@@ -14027,6 +14111,11 @@ export interface components {
             id: string;
             /** Is Council Review Public */
             is_council_review_public: boolean;
+            /**
+             * Is Full Snapshot
+             * @default false
+             */
+            is_full_snapshot: boolean;
             kind: components["schemas"]["BudgetSubmissionKind"];
             /** Note */
             note: string | null;
@@ -19207,6 +19296,8 @@ export interface components {
         FinanceAccountType: "asset" | "liability" | "equity" | "revenue" | "expense";
         /** FinanceBudgetExpenseCreate */
         FinanceBudgetExpenseCreate: {
+            /** Advanced By Name */
+            advanced_by_name?: string | null;
             /**
              * Allocation Id
              * Format: uuid
@@ -19305,6 +19396,8 @@ export interface components {
         };
         /** FinanceBudgetExpenseOut */
         FinanceBudgetExpenseOut: {
+            /** Advanced By Name */
+            advanced_by_name?: string | null;
             /**
              * Allocation Id
              * Format: uuid
@@ -19360,6 +19453,8 @@ export interface components {
          * @description 完整更新一筆支出；未提供部門時沿用所選預算明細的提出部門。
          */
         FinanceBudgetExpenseUpdate: {
+            /** Advanced By Name */
+            advanced_by_name?: string | null;
             /**
              * Allocation Id
              * Format: uuid
@@ -43172,6 +43267,41 @@ export interface operations {
             };
         };
     };
+    export_advance_receipt_finance_budgets__budget_id__advance_receipt_docx_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetAdvanceReceiptCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_budget_expense_finance_budgets__budget_id__expenses_post: {
         parameters: {
             query?: never;
@@ -43263,6 +43393,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_budget_workbook_finance_budgets__budget_id__export_xlsx_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_budget_income_item_finance_budgets__budget_id__income_items__income_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+                income_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetIncomeItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetIncomeItemOut"];
                 };
             };
             /** @description Validation Error */

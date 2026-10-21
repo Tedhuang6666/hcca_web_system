@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
 import BudgetExpenseRegister from "@/components/finance/BudgetExpenseRegister";
+import BudgetConsolidatedTable from "@/components/finance/BudgetConsolidatedTable";
+import BudgetAdvanceReceipts from "@/components/finance/BudgetAdvanceReceipts";
 import EvidencePreview from "@/components/finance/EvidencePreview";
 import { financeApi } from "@/lib/api";
 import type {
@@ -96,6 +98,7 @@ export default function BudgetWorkspace({
   const [versionsOpen, setVersionsOpen] = useState(true);
   const [settlement, setSettlement] = useState<FinanceSettlement | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [fullSnapshot, setFullSnapshot] = useState(true);
   const [councilApprovedOn, setCouncilApprovedOn] = useState("");
   const [quickExpenseNodeId, setQuickExpenseNodeId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -166,7 +169,7 @@ export default function BudgetWorkspace({
   }, [detail]);
 
   const activeSubmission = detail?.submissions.find((item) => item.id === selectedSubmissionId)
-    || detail?.submissions.find((item) => item.kind === "initial" && item.status === "approved")
+    || detail?.submissions.filter((item) => item.status === "approved").at(-1)
     || detail?.submissions.find((item) => item.status === "draft" || item.status === "returned")
     || detail?.submissions.at(-1);
   const approvedSubmission = detail?.submissions.filter((item) => item.status === "approved").at(-1);
@@ -209,6 +212,7 @@ export default function BudgetWorkspace({
         proposing_org_id: allocationOrgId || undefined,
         budget_id: existingBudget?.id,
         council_approved_on: councilApprovedOn,
+        full_snapshot: fullSnapshot,
       });
       if (!existingBudget) setBudgetName("");
       setImportFile(null);
@@ -519,9 +523,6 @@ export default function BudgetWorkspace({
   const activeAllocations = detail?.allocations.filter(
     (item) => item.submission_id === activeSubmission?.id,
   ) || [];
-  const activeIncomeItems = detail?.income_items.filter(
-    (item) => item.submission_id === activeSubmission?.id,
-  ) || [];
   const nodeById = new Map(detail?.nodes.map((node) => [node.id, node]) || []);
   const allocationGroups = Array.from(activeAllocations.reduce((groups, allocation) => {
     const path = [];
@@ -583,7 +584,7 @@ export default function BudgetWorkspace({
       <header className="finance-budget__header">
         <div>
           <h2 id="budget-heading">預算與支出</h2>
-          <p>匯入議會通過的預算後，逐筆登記支出；預算與支出會顯示在公開頁面。</p>
+          <p>整合所有預算、直接修正總表，再登記收支與產生代墊簽收單。</p>
         </div>
         {detail && (
           <div className={`finance-budget__publication-status ${detail.is_public ? "is-public" : ""}`}>
@@ -634,14 +635,15 @@ export default function BudgetWorkspace({
           <div className="finance-budget__create-fields">
             <label>會計期間<select className="input" value={periodId} onChange={(event) => setPeriodId(event.target.value)}><option value="">選擇會計期間</option>{periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select></label>
             {existingBudgetForPeriod ? (
-              <p>將匯入「{existingBudgetForPeriod.name}」的新版本；既有預算與核銷紀錄會保留。</p>
+              <p>將匯入「{existingBudgetForPeriod.name}」的新版本；歷史版本與核銷紀錄會保留。</p>
             ) : (
               <label>預算名稱<input className="input" value={budgetName} onChange={(event) => setBudgetName(event.target.value)} placeholder="例如：115 學年度上學期預算" /></label>
             )}
             <label className="btn btn-secondary finance-budget__file"><FileUp size={16} aria-hidden="true" /><span>{importFile ? importFile.name : "選擇 xlsx"}</span><input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => setImportFile(event.target.files?.[0] || null)} /></label>
+            <label>檔案內容<select className="input" value={fullSnapshot ? "full" : "additions"} onChange={(event) => setFullSnapshot(event.target.value === "full")}><option value="full">完整預算總表（含原有及新增）</option><option value="additions">只有本次新增（累加到現有預算）</option></select></label>
             <label className="finance-budget__approval-date">議會通過日期<input className="input" type="date" required value={councilApprovedOn} onChange={(event) => setCouncilApprovedOn(event.target.value)} /></label>
             <button className="btn btn-primary" disabled={isImporting || !importFile || !periodId || !councilApprovedOn || (!existingBudgetForPeriod && !budgetName.trim())} onClick={() => void importBudget()}><FileSpreadsheet size={16} aria-hidden="true" />{isImporting ? "正在匯入…" : "匯入並公開"}</button>
-            <p className="finance-budget__import-note">預算檔會直接標記為已核定並公開；同一期間再匯入時會新增版本，不覆蓋原資料。</p>
+            <p className="finance-budget__import-note">完整總表優先讀取「預算總表」分頁，更新目前預算且不重複累加；僅新增模式優先讀取「本次新增」。橘底標記新增，綠色金額為收入，紅色金額為支出。匯入後直接公開，無須另填申報。</p>
           </div>
         </details>
       )}
@@ -672,33 +674,16 @@ export default function BudgetWorkspace({
             <div className="finance-budget__utilization"><span><b>整體執行率</b><strong>{utilization}%</strong></span><div aria-hidden="true"><i style={{ width: `${utilization}%` }} /></div></div>
           </section>
 
-          {activeIncomeItems.length > 0 && <details className="finance-budget__versions"><summary>查看預算收入項目</summary><section className="finance-budget__income" aria-labelledby="budget-income-heading">
-            <header><div><h3 id="budget-income-heading">預算收入</h3><p>試算表中標成綠色的列會放在這裡，不會算成支出預算；按一下即可帶入收入登錄。</p></div><strong>NT${activeIncomeItems.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}</strong></header>
-            <ul>{activeIncomeItems.map((item) => <li key={item.id}>
-              <div><span>{item.category}</span><strong>{item.name}</strong>{item.note && <small>{item.note}</small>}</div>
-              <b>NT${item.amount.toLocaleString()}</b>
-              {canRecordIncome && <button className="btn btn-secondary" type="button" onClick={() => onRegisterIncome(item, detail.period_id)}>登錄這筆收入</button>}
-            </li>)}</ul>
-          </section></details>}
-
-          <section className="finance-budget__section" aria-labelledby="budget-ledger-heading">
-            <header><div><h3 id="budget-ledger-heading">預算執行表</h3><p>編列、已登錄核銷金額與餘額會即時更新。</p></div><span>{nodes.filter((node) => node.leaf).length} 個末層條目</span></header>
-            <div className="finance-budget__table" role="region" aria-label="預算執行表，可左右捲動" tabIndex={0}><table><thead><tr><th>預算條目</th><th>編列</th><th>已用</th><th>剩餘</th><th>執行率</th><th>操作</th></tr></thead><tbody>{nodes.map((row) => {
-              const node = detail.nodes.find((item) => item.id === row.id)!;
-              const ratio = node.allocated_amount ? Math.min(100, Math.round(node.used_amount / node.allocated_amount * 100)) : 0;
-              return <tr key={node.id} className={row.leaf ? "" : "is-group"}><td style={{ paddingLeft: `${14 + row.depth * 22}px` }}>{node.name}</td><td>{row.leaf ? `NT$${node.allocated_amount.toLocaleString()}` : "—"}</td><td>{row.leaf ? `NT$${node.used_amount.toLocaleString()}` : "—"}</td><td>{row.leaf ? `NT$${node.remaining_amount.toLocaleString()}` : "—"}</td><td>{row.leaf ? <span className="finance-budget__ratio"><i><b style={{ width: `${ratio}%` }} /></i>{ratio}%</span> : "—"}</td><td>{row.leaf && canRecordExpense && node.allocated_amount > 0 ? <button className="btn btn-secondary finance-budget__register-row" type="button" onClick={() => setQuickExpenseNodeId(node.id)}>登記支出</button> : "—"}</td></tr>;
-            })}{nodes.length === 0 && <tr><td className="finance-budget__table-empty" colSpan={6}>尚未編列任何預算條目。</td></tr>}</tbody></table></div>
-            <div className="finance-budget__mobile-list">
-              {nodes.filter((row) => row.leaf).map((row) => {
-                const node = detail.nodes.find((item) => item.id === row.id)!;
-                const ratio = node.allocated_amount
-                  ? Math.min(100, Math.round(node.used_amount / node.allocated_amount * 100))
-                  : 0;
-                return <article key={node.id}><header><strong>{row.label}</strong><b>{ratio}%</b></header><dl><div><dt>編列</dt><dd>NT${node.allocated_amount.toLocaleString()}</dd></div><div><dt>已用</dt><dd>NT${node.used_amount.toLocaleString()}</dd></div><div><dt>剩餘</dt><dd>NT${node.remaining_amount.toLocaleString()}</dd></div></dl><span className="finance-budget__mobile-progress" aria-label={`執行率 ${ratio}%`}><i style={{ width: `${ratio}%` }} /></span>{canRecordExpense && node.allocated_amount > 0 && <button className="btn btn-secondary finance-budget__register-row" type="button" onClick={() => setQuickExpenseNodeId(node.id)}>登記這筆預算</button>}</article>;
-              })}
-              {nodes.every((row) => !row.leaf) && <p className="finance-budget__mobile-empty">尚未編列任何預算條目。</p>}
-            </div>
-          </section>
+          <BudgetConsolidatedTable
+            key={detail.id}
+            detail={detail}
+            canManage={canManage}
+            canRecordIncome={canRecordIncome}
+            canRecordExpense={canRecordExpense}
+            onRegisterIncome={onRegisterIncome}
+            onRegisterExpense={setQuickExpenseNodeId}
+            onSaved={refreshDetail}
+          />
 
           <BudgetExpenseRegister
             budgetId={detail.id}
@@ -717,8 +702,10 @@ export default function BudgetWorkspace({
             onRecorded={refreshDetail}
           />
 
+          <BudgetAdvanceReceipts key={`receipt-${detail.id}`} budgetId={detail.id} expenses={detail.expenses} />
+
           <details className="finance-budget__versions">
-            <summary>預算版本與其他設定</summary>
+            <summary>歷史版本、舊制草案與公開設定</summary>
           <details
             className="finance-budget__versions"
             open={versionsOpen}

@@ -304,6 +304,9 @@ class FinanceBudgetSubmission(Base, TimestampMixin):
         String(20), nullable=False, default=BudgetSubmissionStatus.DRAFT, index=True
     )
     title: Mapped[str] = mapped_column(String(160), nullable=False)
+    is_full_snapshot: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
@@ -333,6 +336,12 @@ class FinanceBudgetIncomeItem(Base, TimestampMixin):
     category: Mapped[str] = mapped_column(String(160), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    unit_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_new: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
@@ -370,6 +379,9 @@ class FinanceBudgetAllocation(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("finance_budget_nodes.id"), nullable=False
     )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_new: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
     unit_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -439,6 +451,7 @@ class FinanceBudgetExpense(Base, TimestampMixin):
     )
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
     purpose: Mapped[str] = mapped_column(String(300), nullable=False)
+    advanced_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     recorded_by_id: Mapped[uuid.UUID] = mapped_column(
