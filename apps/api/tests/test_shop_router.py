@@ -1873,6 +1873,21 @@ async def test_council_can_confirm_whole_class_without_changing_cadre_notes(
 # ── 班級幹部檢視 ──────────────────────────────────────────────────────────────
 
 
+def _receipt_totals(pdf) -> list[str]:
+    """讀取原表單上下兩聯的總金額儲存格，不把商品單價誤認為合計。"""
+    totals = []
+
+    def visit(text, cm, tm, _font, _size):
+        x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
+        top = 792 - (tm[4] * cm[1] + tm[5] * cm[3] + cm[5])
+        if text.strip() and 302 < x < 410 and (320 < top < 345 or 665 < top < 691):
+            totals.append(text.strip())
+
+    for page in pdf.pages:
+        page.extract_text(visitor_text=visit)
+    return totals
+
+
 @pytest.mark.parametrize("permission", [None, "shop:view_all", "class:shop_collect"])
 async def test_class_receipt_rejects_users_without_payment_permission(
     db_session, client, authed_client_factory, permission
@@ -1948,14 +1963,28 @@ async def test_class_receipt_contains_only_paid_active_orders_in_class_and_activ
     assert "filename*=UTF-8''" in response.headers["content-disposition"]
     pdf = PdfReader(BytesIO(response.content))
     assert len(pdf.pages) == 1
+    assert tuple(pdf.pages[0].mediabox) == (0, 0, 612, 792)
     text = "".join(page.extract_text() for page in pdf.pages)
     assert "收執聯" in text and "存根聯" in text
-    assert text.count("總金額：新台幣 370 元整") == 2
-    assert text.count("商品金額：NT$ 400") == 2
-    assert text.count("優惠折抵：NT$ 30") == 2
+    assert _receipt_totals(pdf) == ["370", "370"]
+    assert text.count("400") == 2
+    assert text.count("優惠折抵") == 2 and text.count("-30") == 2
     assert text.count("尺寸：L") == 2
     assert text.count("紀念衫") == 2  # 相同規格與成交單價已合併。
-    assert text.count("115 年 10 月 21 日") == 2
+    date_fields = []
+
+    def visit_date(value, cm, tm, _font, _size):
+        x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
+        top = 792 - (tm[4] * cm[1] + tm[5] * cm[3] + cm[5])
+        if (
+            value.strip() in {"115", "10", "21"}
+            and 120 < x < 216
+            and (115 < top < 129 or 460 < top < 475)
+        ):
+            date_fields.append(value.strip())
+
+    pdf.pages[0].extract_text(visitor_text=visit_date)
+    assert date_fields == ["115", "10", "21", "115", "10", "21"]
     assert text.count("繳款人簽名") == 2 and text.count("班聯收款人簽名") == 2
     assert "9,999" not in text
 
@@ -2010,9 +2039,10 @@ async def test_class_receipt_without_activity_includes_only_general_goods(
         f"/shop/orders/classes/{sc.id}/receipt.pdf"
     )
     assert response.status_code == 200
-    text = "".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
-    assert text.count("活動：一般商品") == 2
-    assert text.count("總金額：新台幣 100 元整") == 2
+    pdf = PdfReader(BytesIO(response.content))
+    text = "".join(page.extract_text() for page in pdf.pages)
+    assert text.count("一般商品") == 2
+    assert _receipt_totals(pdf) == ["100", "100"]
     assert "9,999" not in text
 
 
