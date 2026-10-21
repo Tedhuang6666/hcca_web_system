@@ -38,7 +38,7 @@ import { readShopDelegationToken, shopDelegationLoginNext } from "@/lib/shop-del
 import { useWS } from "@/hooks/useWS";
 import Modal from "@/components/ui/Modal";
 import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url";
-import { cleanupAnimatedElement } from "@/lib/shop-product-flight";
+import { cleanupAnimatedElement, shouldAnimateProductFlight } from "@/lib/shop-product-flight";
 import ShopPrice from "@/components/shop/ShopPrice";
 import BundleOffer from "@/components/shop/BundleOffer";
 import { productOfferPrice } from "@/lib/shop-promotion-price";
@@ -99,10 +99,10 @@ function promotionRequirementsMet(
 }
 
 function flyProductIntoOrder() {
-  if (
-    typeof window === "undefined"
-    || window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  ) return;
+  if (typeof window === "undefined") return;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const compactPortrait = window.matchMedia("(max-width: 859px) and (orientation: portrait)").matches;
+  if (!shouldAnimateProductFlight(reducedMotion, compactPortrait)) return;
 
   window.requestAnimationFrame(() => {
     const source = document.querySelector<HTMLElement>("[data-product-flight-source]");
