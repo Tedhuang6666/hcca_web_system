@@ -647,6 +647,66 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
     assert summary.rows[0].order_count == 2
 
 
+async def test_order_summary_sorts_classes_by_school_year_and_code(
+    db_session: AsyncSession,
+) -> None:
+    from api.models.school_class import SchoolClass
+
+    actor = await _make_actor(db_session)
+    classes = [
+        SchoolClass(
+            academic_year=115,
+            class_code="101",
+            grade=1,
+            label="班級 Z",
+            created_by=actor,
+        ),
+        SchoolClass(
+            academic_year=115,
+            class_code="102",
+            grade=1,
+            label="班級 A",
+            created_by=actor,
+        ),
+        SchoolClass(
+            academic_year=114,
+            class_code="101",
+            grade=2,
+            label="班級 M",
+            created_by=actor,
+        ),
+    ]
+    buyer = await _make_user(db_session)
+    db_session.add_all(classes)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Order(
+                serial_number=f"ORD-SUMMARY-{uuid.uuid4().hex}",
+                user_id=buyer.id,
+                class_id=school_class.id,
+                status=OrderStatus.PENDING,
+                total_price=100,
+            )
+            for school_class in classes
+        ]
+        + [
+            Order(
+                serial_number=f"ORD-SUMMARY-{uuid.uuid4().hex}",
+                user_id=buyer.id,
+                class_id=None,
+                status=OrderStatus.PENDING,
+                total_price=100,
+            )
+        ]
+    )
+    await db_session.flush()
+
+    summary = await shop_svc.order_summary(db_session, group_by="class")
+
+    assert [row.label for row in summary.rows] == ["班級 Z", "班級 A", "班級 M", "未分班"]
+
+
 async def test_order_summary_filters_product_and_grade_amount(
     db_session: AsyncSession,
 ) -> None:
