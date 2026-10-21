@@ -261,6 +261,7 @@ class FinanceBudgetExpenseCreate(BaseModel):
     department_org_id: uuid.UUID | None = None
     entry_date: date
     purpose: str = Field(min_length=1, max_length=300)
+    advanced_by_name: str | None = Field(default=None, max_length=120)
     total_amount: int | None = Field(default=None, gt=0, le=2_000_000_000)
     note: str | None = Field(default=None, max_length=2000)
     items: list[FinanceBudgetExpenseItemCreate] = Field(default_factory=list, max_length=100)
@@ -269,6 +270,7 @@ class FinanceBudgetExpenseCreate(BaseModel):
     @model_validator(mode="after")
     def normalize_purpose(self) -> FinanceBudgetExpenseCreate:
         self.purpose = self.purpose.strip()
+        self.advanced_by_name = (self.advanced_by_name or "").strip() or None
         if not self.purpose:
             raise ValueError("請填寫支出用途")
         if not self.items and self.total_amount is None:
@@ -278,6 +280,15 @@ class FinanceBudgetExpenseCreate(BaseModel):
 
 class FinanceBudgetExpenseUpdate(FinanceBudgetExpenseCreate):
     """完整更新一筆支出；未提供部門時沿用所選預算明細的提出部門。"""
+
+
+class BudgetAdvanceReceiptCreate(BaseModel):
+    expense_ids: list[uuid.UUID] = Field(min_length=1, max_length=300)
+
+
+class BudgetIncomeItemUpdate(BaseModel):
+    amount: int = Field(gt=0, le=2_000_000_000)
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class BudgetSubmissionCreate(BaseModel):
@@ -437,6 +448,7 @@ class FinanceBudgetExpenseOut(BaseModel):
     allocation_name: str
     entry_date: date
     purpose: str
+    advanced_by_name: str | None = None
     total_amount: int
     note: str | None
     items: list[FinanceBudgetExpenseItemOut]
@@ -460,6 +472,7 @@ class BudgetSubmissionOut(BaseModel):
     kind: BudgetSubmissionKind
     status: BudgetSubmissionStatus
     title: str
+    is_full_snapshot: bool = False
     note: str | None
     created_by_id: uuid.UUID
     submitted_at: datetime | None
@@ -477,6 +490,10 @@ class BudgetIncomeItemOut(BaseModel):
     category: str
     name: str
     amount: int
+    quantity: float | None = None
+    unit: str | None = None
+    unit_price: int | None = None
+    is_new: bool = False
     note: str | None
     source_row_number: int
 
@@ -499,6 +516,7 @@ class BudgetAllocationOut(BaseModel):
     submission_id: uuid.UUID
     node_id: uuid.UUID
     amount: int
+    is_new: bool = False
     quantity: float | None
     unit: str | None
     unit_price: int | None

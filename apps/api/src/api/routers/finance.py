@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import mimetypes
 import uuid
 from datetime import date
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +42,7 @@ from api.models.finance import (
 )
 from api.models.user import User
 from api.schemas.finance import (
+    BudgetAdvanceReceiptCreate,
     BudgetAllocationCreate,
     BudgetAllocationEvidenceCreate,
     BudgetAllocationEvidenceOut,
@@ -49,6 +52,8 @@ from api.schemas.finance import (
     BudgetCreate,
     BudgetDetailOut,
     BudgetImportOut,
+    BudgetIncomeItemOut,
+    BudgetIncomeItemUpdate,
     BudgetNodeCreate,
     BudgetNodeOut,
     BudgetOut,
@@ -94,6 +99,7 @@ from api.schemas.finance import (
 )
 from api.services import audit as audit_svc
 from api.services import finance as service
+from api.services import finance_documents
 from api.services.permission import get_user_permission_codes_for_org
 from api.services.storage import get_storage
 
@@ -408,6 +414,7 @@ async def import_budget(
     proposing_org_id: uuid.UUID | None = Form(None),
     budget_id: uuid.UUID | None = Form(None),
     replace_submission_id: uuid.UUID | None = Form(None),
+    full_snapshot: bool = Form(True),
     file: UploadFile = File(...),
 ) -> BudgetImportOut:
     if Path(file.filename or "").suffix.lower() != ".xlsx":
@@ -437,6 +444,7 @@ async def import_budget(
             proposing_org_id,
             budget_id,
             replace_submission_id,
+            full_snapshot,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -1582,6 +1590,90 @@ async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> li
     ]
 
 
+@router.get(
+    "/budgets/{budget_id}/export.xlsx",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            }
+        }
+    },
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def export_budget_workbook(budget_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Response:
+    budget = await service.get_budget(db, budget_id)
+    detail = await service.budget_detail(db, budget)
+    content = await asyncio.to_thread(finance_documents.budget_workbook, detail)
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(budget.name)}.xlsx",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post(
+    "/budgets/{budget_id}/advance-receipt.docx",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            }
+        }
+    },
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def export_advance_receipt(
+    budget_id: uuid.UUID, body: BudgetAdvanceReceiptCreate, db: DbDep, _: CurrentUser
+) -> Response:
+    budget = await service.get_budget(db, budget_id)
+    selected = await service.budget_advance_receipt_expenses(db, budget.id, body.expense_ids)
+    content = await asyncio.to_thread(finance_documents.advance_receipt, budget.name, selected)
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote("預先代墊簽收單.docx"),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.patch(
+    "/budgets/{budget_id}/income-items/{income_id}",
+    response_model=BudgetIncomeItemOut,
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_BUDGET))],
+)
+async def update_budget_income_item(
+    budget_id: uuid.UUID,
+    income_id: uuid.UUID,
+    body: BudgetIncomeItemUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> BudgetIncomeItemOut:
+    item, previous = await service.update_budget_income_item(db, budget_id, income_id, body)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_income_item",
+        entity_id=str(item.id),
+        action="finance.budget_income_update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"修正預算收入：{item.name}；{previous} → {item.amount}",
+    )
+    await db.commit()
+    return BudgetIncomeItemOut.model_validate(item)
+
+
 @router.get("/public/budgets", response_model=list[PublicBudgetListItem])
 async def list_public_budgets(db: DbDep) -> list[PublicBudgetListItem]:
     return [
@@ -1639,7 +1731,11 @@ async def get_public_budget_detail(
     )
     approved_submissions = [item for item in detail["submissions"] if item.status == "approved"]
     visible_submissions = [review_submission] if review_submission else approved_submissions
-    visible_submission_ids = {item.id for item in visible_submissions}
+    visible_submission_ids = (
+        {item.id for item in visible_submissions}
+        if review_submission
+        else service.effective_budget_submission_ids(detail["submissions"])
+    )
     return PublicBudgetDetailOut(
         id=detail["id"],
         name=detail["name"],

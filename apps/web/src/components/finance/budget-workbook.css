@@ -1,0 +1,67 @@
+.budget-workbook { min-width: 0; }
+.budget-workbook__totals { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; margin: 0; padding: 1rem; border-block: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.budget-workbook__totals dt { color: var(--text-secondary); font-size: .78rem; }
+.budget-workbook__totals dd { margin: .3rem 0 0; font-size: 1.1rem; font-weight: 700; }
+.budget-workbook__tools { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 1rem; }
+.budget-workbook__search { display: flex; flex: 1 1 16rem; align-items: center; gap: .5rem; }
+.budget-workbook__search input { min-width: 0; }
+.budget-workbook__legend { display: flex; flex-wrap: wrap; gap: .5rem; font-size: .75rem; }
+.budget-workbook__legend span, .budget-workbook__new-label { padding: .2rem .4rem; border-radius: 4px; }
+.budget-workbook__legend .is-new, .budget-workbook__new-label { background: #fce5cd; color: #793e10; }
+.budget-workbook__legend .is-income, .budget-workbook__income { background: #d9ead3; color: #254921; }
+.budget-workbook__legend .is-expense, .budget-workbook__expense { background: #f4cccc; color: #722a2a; }
+.budget-workbook__new-row { background: #fff1e1; color: #452b16; }
+.budget-workbook__new-label { display: inline-block; margin-inline-start: .4rem; font-size: .65rem; white-space: nowrap; }
+.budget-workbook__scroll { overflow-x: auto; max-width: 100%; }
+.budget-workbook table { width: 100%; min-width: 1120px; border-collapse: collapse; font-size: .8rem; }
+.budget-workbook td:first-child { min-width: 7rem; }
+.budget-workbook th[scope="row"] { min-width: 10rem; }
+.budget-workbook th, .budget-workbook td { padding: .75rem; border-bottom: 1px solid var(--border); text-align: start; vertical-align: top; }
+.budget-workbook thead { color: var(--text-secondary); font-size: .72rem; }
+.budget-workbook td:nth-child(3), .budget-workbook td:nth-child(4), .budget-workbook td:nth-child(5), .budget-workbook td:nth-child(6) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.budget-workbook td:nth-child(7) { min-width: 10rem; overflow-wrap: anywhere; }
+.budget-workbook__income small, .budget-workbook__expense small { display: block; margin-bottom: .2rem; }
+.budget-workbook__actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.budget-workbook__actions .btn, .budget-workbook__tools .input { min-height: 44px; }
+.budget-workbook__editor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; padding-block: .5rem; }
+.budget-workbook__editor label { display: grid; align-content: start; gap: .35rem; font-size: .78rem; }
+.budget-workbook__editor .budget-workbook__actions, .budget-workbook__editor p { grid-column: 1 / -1; }
+.budget-workbook__editor p { color: var(--danger, #a32020); }
+.budget-workbook__changes { margin: .75rem 1rem; font-size: .8rem; }
+.budget-workbook__changes summary { min-height: 44px; padding-block: .75rem; cursor: pointer; }
+.budget-workbook__changes ul { margin: 0; padding: 0; list-style: none; }
+.budget-workbook__changes li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: .6rem 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.budget-workbook__changes b { margin-inline-start: .4rem; }
+.budget-workbook__empty { padding: 1rem; color: var(--text-secondary); }
+.budget-advance-receipts { min-width: 0; }
+.budget-advance-receipts > :not(header) { margin-inline: 1rem; }
+.budget-advance-receipts__footer { padding-bottom: 1rem; }
+.budget-advance-receipts__list { display: grid; gap: .5rem; }
+.budget-advance-receipts__list label { display: flex; align-items: center; gap: .75rem; min-height: 44px; padding: .6rem 0; border-bottom: 1px solid var(--border); }
+.budget-advance-receipts__list input { flex-shrink: 0; width: 1.15rem; height: 1.15rem; accent-color: var(--primary); }
+.budget-advance-receipts__list span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.budget-advance-receipts__list small { display: block; color: var(--text-secondary); }
+.budget-advance-receipts__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-top: 1rem; }
+.budget-workbook :focus-visible, .budget-advance-receipts :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (prefers-color-scheme: dark) {
+  .budget-workbook__new-row { background: #3b2b1c; color: #ffdfbf; }
+}
+@media (max-width: 767px) {
+  .budget-workbook__totals { gap: .75rem 1.5rem; }
+  .budget-workbook__scroll { overflow: visible; }
+  .budget-workbook table, .budget-workbook tbody { display: block; }
+  .budget-workbook table { min-width: 0; }
+  .budget-workbook td:first-child, .budget-workbook th[scope="row"] { min-width: 0; }
+  .budget-workbook thead { display: none; }
+  .budget-workbook tbody { border-bottom: 1px solid var(--border); padding-block: .75rem; }
+  .budget-workbook tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; padding: .5rem; }
+  .budget-workbook th, .budget-workbook td { display: block; min-width: 0; padding: .3rem; border: 0; }
+  .budget-workbook td::before, .budget-workbook th::before { display: block; margin-bottom: .25rem; color: inherit; font-size: .7rem; font-weight: 400; content: attr(data-label); }
+  .budget-workbook td:nth-child(7), .budget-workbook td:nth-child(8), .budget-workbook th { grid-column: 1 / -1; }
+  .budget-workbook td:nth-child(7) { min-width: 0; }
+  .budget-workbook__editor-row { display: block !important; }
+  .budget-workbook__editor { grid-template-columns: minmax(0, 1fr); }
+  .budget-workbook__editor-row td::before { display: none; }
+  .budget-workbook__legend { flex-basis: 100%; }
+  .budget-workbook__totals dd { font-size: 1rem; }
+}

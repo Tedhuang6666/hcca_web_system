@@ -5,6 +5,7 @@ import { FileCheck2, Paperclip, Pencil, Plus, ReceiptText, Save, Trash2, X } fro
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
 import EvidencePreview from "@/components/finance/EvidencePreview";
+import { effectiveSubmissionIds } from "./budgetWorkbook";
 import type {
   FinanceBudgetAllocation,
   FinanceBudgetExpenseOut,
@@ -79,19 +80,19 @@ export default function BudgetExpenseRegister({
   const [entryDate, setEntryDate] = useState(taiwanToday);
   const [purpose, setPurpose] = useState("");
   const [note, setNote] = useState("");
+  const [advancedByName, setAdvancedByName] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([emptyItem()]);
-  const [hasItemDetails, setHasItemDetails] = useState(true);
+  const [hasItemDetails, setHasItemDetails] = useState(false);
   const [totalAmount, setTotalAmount] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
 
   const approvedAllocations = useMemo(() => {
-    const approvedSubmissionIds = new Set(
-      submissions.filter((item) => item.status === "approved").map((item) => item.id),
-    );
+    const approvedSubmissionIds = effectiveSubmissionIds(submissions);
+    const historicalAllocationId = expenses.find((expense) => expense.id === editingExpenseId)?.allocation_id;
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     return allocations
-      .filter((allocation) => approvedSubmissionIds.has(allocation.submission_id))
+      .filter((allocation) => approvedSubmissionIds.has(allocation.submission_id) || allocation.id === historicalAllocationId)
       .map((allocation) => {
         const path: string[] = [];
         let node = nodeById.get(allocation.node_id);
@@ -106,7 +107,7 @@ export default function BudgetExpenseRegister({
           label: `${path.join(" ＞ ") || "預算明細"}${org ? `・${org.name}` : ""}・NT$${allocation.amount.toLocaleString()}`,
         };
       });
-  }, [allocations, nodes, orgs, submissions]);
+  }, [allocations, nodes, orgs, submissions, editingExpenseId, expenses]);
 
   useEffect(() => {
     if (!quickNodeId) return;
@@ -145,8 +146,9 @@ export default function BudgetExpenseRegister({
     setEntryDate(taiwanToday());
     setPurpose("");
     setNote("");
+    setAdvancedByName("");
     setItems([emptyItem()]);
-    setHasItemDetails(true);
+    setHasItemDetails(false);
     setTotalAmount("");
     setFiles([]);
   };
@@ -176,6 +178,7 @@ export default function BudgetExpenseRegister({
     setEntryDate(expense.entry_date);
     setPurpose(expense.purpose);
     setNote(expense.note || "");
+    setAdvancedByName(expense.advanced_by_name || "");
     setItems(expense.items.length > 0 ? expense.items.map((item) => ({
       name: item.name,
       unit_price: String(item.unit_price),
@@ -237,6 +240,7 @@ export default function BudgetExpenseRegister({
         department_org_id: departmentOrgId,
         entry_date: entryDate,
         purpose: purpose.trim(),
+        advanced_by_name: advancedByName.trim() || null,
         ...(!hasItemDetails ? { total_amount: Number(totalAmount) } : {}),
         note: note.trim() || undefined,
         items: hasItemDetails ? items.map((item) => ({
@@ -332,6 +336,11 @@ export default function BudgetExpenseRegister({
             <label className="finance-budget-expenses__purpose">
               支出用途
               <input className="input" required maxLength={300} value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="例如：辦公用品採購" />
+            </label>
+            <label>
+              代墊人（選填）
+              <input className="input" maxLength={120} value={advancedByName} onChange={(event) => setAdvancedByName(event.target.value)} placeholder="職稱與姓名" />
+              <small>有人先行支付時填寫，供產生代墊簽收單。</small>
             </label>
           </div>
 

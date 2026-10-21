@@ -49,6 +49,7 @@ from api.schemas.finance import (
     BudgetAllocationEvidenceCreate,
     BudgetAllocationUpdate,
     BudgetCreate,
+    BudgetIncomeItemUpdate,
     BudgetNodeCreate,
     BudgetReview,
     BudgetSubmissionCreate,
@@ -246,7 +247,9 @@ def _import_quantity(value: object) -> tuple[Decimal, str]:
     return quantity, match.group(2).strip()[:32] or "項"
 
 
-def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], list[str]]:
+def _parse_budget_workbook(
+    file_bytes: bytes, *, full_snapshot: bool = True
+) -> tuple[list[dict], list[dict], list[str]]:
     from io import BytesIO
 
     from defusedxml import ElementTree
@@ -260,7 +263,9 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], l
 
     loaded_theme = workbook.loaded_theme
     try:
-        rows = list(workbook.active.iter_rows(values_only=False))
+        sheet_name = "預算總表" if full_snapshot else "本次新增"
+        sheet = workbook[sheet_name] if sheet_name in workbook.sheetnames else workbook.active
+        rows = list(sheet.iter_rows(values_only=False))
     finally:
         workbook.close()
 
@@ -365,6 +370,15 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], l
             skipped.append(f"第 {row_number} 列「{detail}」沒有可用總額")
             continue
         note = _import_text(row[note_column].value if note_column < len(row) else None)
+        # Orange marks newly added details; the amount's green/red fill is a separate dimension.
+        is_new = any(
+            cell is not None
+            and getattr(cell, "fill", None) is not None
+            and cell.fill.fill_type == "solid"
+            and cell.fill.fgColor.type == "rgb"
+            and cell.fill.fgColor.rgb[-6:].upper() in {"FCE5CD", "F9CB9C", "F4B183"}
+            for cell in (category_cell, detail_cell)
+        )
         is_income = is_green_fill(amount_cell)
         if is_income:
             imported_income.append(
@@ -372,8 +386,12 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], l
                     "category": category[:160],
                     "name": detail[:160],
                     "amount": amount,
+                    "is_new": is_new,
                     "note": note or None,
                     "source_row_number": row_number,
+                    "quantity": quantity,
+                    "unit": unit,
+                    "unit_price": unit_price,
                 }
             )
             continue
@@ -390,6 +408,7 @@ def _parse_budget_workbook(file_bytes: bytes) -> tuple[list[dict], list[dict], l
                 "unit": unit,
                 "unit_price": unit_price,
                 "amount": amount,
+                "is_new": is_new,
                 "note": note or None,
                 "row_number": row_number,
             }
@@ -411,8 +430,11 @@ async def import_budget_from_xlsx(
     proposing_org_id: uuid.UUID | None = None,
     budget_id: uuid.UUID | None = None,
     replace_submission_id: uuid.UUID | None = None,
+    full_snapshot: bool = True,
 ) -> tuple[FinanceBudget, FinanceBudgetSubmission, int, int, int, list[str]]:
-    rows, income_rows, skipped = await asyncio.to_thread(_parse_budget_workbook, file_bytes)
+    rows, income_rows, skipped = await asyncio.to_thread(
+        _parse_budget_workbook, file_bytes, full_snapshot=full_snapshot
+    )
     ledger = await get_ledger(db, ledger_id)
     org_id = proposing_org_id or ledger.org_id
     if not await db.get(Org, org_id):
@@ -481,7 +503,7 @@ async def import_budget_from_xlsx(
         detail = await _get_or_create_import_node(
             db, budget.id, submission.id, row["detail"], category.id, sort_order
         )
-        await create_budget_allocation(
+        allocation = await create_budget_allocation(
             db,
             submission.id,
             BudgetAllocationCreate(
@@ -495,12 +517,15 @@ async def import_budget_from_xlsx(
             ),
             user_id,
         )
+        allocation.is_new = row["is_new"]
     db.add_all(FinanceBudgetIncomeItem(submission_id=submission.id, **row) for row in income_rows)
     await _refresh_budget_node_activity(db, budget.id)
     budget.is_public = True
     submission.status = BudgetSubmissionStatus.APPROVED
     submission.review_note = "依已核定預算表直接匯入公開，未在系統內重複審核。"
     submission.council_approved_on = council_approved_on
+    submission.is_full_snapshot = full_snapshot
+    submission.created_at = datetime.now(UTC)
     return budget, submission, len(categories), len(rows), len(income_rows), skipped
 
 
@@ -921,6 +946,7 @@ async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> lis
             "entry_date": expense.entry_date,
             "operator_name": operator.display_name if operator else "未知操作人",
             "purpose": expense.purpose,
+            "advanced_by_name": expense.advanced_by_name,
             "total_amount": expense.total_amount,
             "note": expense.note,
             "items": [
@@ -1000,6 +1026,7 @@ async def create_budget_expense(
         department_org_id=department_org_id,
         entry_date=body.entry_date,
         purpose=body.purpose,
+        advanced_by_name=body.advanced_by_name,
         total_amount=(
             sum(
                 _claim_item_total(item.unit_price, item.tax_rate, item.quantity)
@@ -1079,6 +1106,7 @@ async def update_budget_expense(
     expense.department_org_id = department_org_id
     expense.entry_date = body.entry_date
     expense.purpose = body.purpose
+    expense.advanced_by_name = body.advanced_by_name
     expense.total_amount = (
         sum(_claim_item_total(item.unit_price, item.tax_rate, item.quantity) for item in body.items)
         if body.items
@@ -1115,6 +1143,59 @@ async def update_budget_expense(
     )
     await db.flush()
     return expense
+
+
+def effective_budget_submission_ids(submissions: list[FinanceBudgetSubmission]) -> set[uuid.UUID]:
+    """A full workbook replaces the planning baseline; later additions remain additive."""
+    effective: set[uuid.UUID] = set()
+    for submission in submissions:
+        if submission.status != BudgetSubmissionStatus.APPROVED:
+            continue
+        if submission.is_full_snapshot:
+            effective.clear()
+        effective.add(submission.id)
+    return effective
+
+
+async def budget_advance_receipt_expenses(
+    db: AsyncSession, budget_id: uuid.UUID, expense_ids: list[uuid.UUID]
+) -> list[dict]:
+    await get_budget(db, budget_id)
+    expenses = await _budget_expense_details(db, budget_id)
+    selected_ids = set(expense_ids)
+    selected = [expense for expense in expenses if expense["id"] in selected_ids]
+    if len(selected) != len(selected_ids):
+        raise HTTPException(422, "所選支出不屬於此預算或已不存在，請重新選取")
+    if any(not expense["advanced_by_name"] for expense in selected):
+        raise HTTPException(422, "請先為所選支出填寫代墊人")
+    return selected
+
+
+async def update_budget_income_item(
+    db: AsyncSession, budget_id: uuid.UUID, income_id: uuid.UUID, body: BudgetIncomeItemUpdate
+) -> tuple[FinanceBudgetIncomeItem, int]:
+    item = await db.get(FinanceBudgetIncomeItem, income_id)
+    submission = await db.get(FinanceBudgetSubmission, item.submission_id) if item else None
+    if not item or not submission or submission.budget_id != budget_id:
+        raise HTTPException(404, "預算收入不存在")
+    submissions = list(
+        (
+            await db.scalars(
+                select(FinanceBudgetSubmission)
+                .where(FinanceBudgetSubmission.budget_id == budget_id)
+                .order_by(FinanceBudgetSubmission.created_at)
+            )
+        ).all()
+    )
+    if item.submission_id not in effective_budget_submission_ids(submissions):
+        raise HTTPException(400, "只能編輯目前核定總表的收入")
+    previous = item.amount
+    for key, value in body.model_dump(exclude_unset=True).items():
+        setattr(item, key, value)
+    if item.quantity and item.unit_price and round(item.quantity * item.unit_price) != item.amount:
+        item.unit_price = None
+    await db.flush()
+    return item, previous
 
 
 async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
@@ -1175,9 +1256,7 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
     evidence_by_allocation: dict[uuid.UUID, list[FinanceBudgetAllocationEvidence]] = {}
     for evidence in evidence_rows:
         evidence_by_allocation.setdefault(evidence.allocation_id, []).append(evidence)
-    approved_ids = {
-        item.id for item in submissions if item.status == BudgetSubmissionStatus.APPROVED
-    }
+    approved_ids = effective_budget_submission_ids(submissions)
     totals: dict[uuid.UUID, int] = {}
     for allocation in allocations:
         if allocation.submission_id in approved_ids:
@@ -1241,6 +1320,7 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
                 "submission_id": allocation.submission_id,
                 "node_id": allocation.node_id,
                 "amount": allocation.amount,
+                "is_new": allocation.is_new,
                 "quantity": allocation.quantity,
                 "unit": allocation.unit,
                 "unit_price": allocation.unit_price,
