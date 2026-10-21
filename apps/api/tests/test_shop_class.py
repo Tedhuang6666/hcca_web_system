@@ -689,7 +689,7 @@ async def test_order_summary_sorts_classes_by_school_year_and_code(
     db_session.add_all(
         [
             Order(
-                serial_number=f"ORD-SUMMARY-{uuid.uuid4().hex}",
+                serial_number=f"ORD-{uuid.uuid4().hex[:20]}",
                 user_id=buyer.id,
                 class_id=school_class.id,
                 status=OrderStatus.PENDING,
@@ -699,7 +699,7 @@ async def test_order_summary_sorts_classes_by_school_year_and_code(
         ]
         + [
             Order(
-                serial_number=f"ORD-SUMMARY-{uuid.uuid4().hex}",
+                serial_number=f"ORD-{uuid.uuid4().hex[:20]}",
                 user_id=buyer.id,
                 class_id=None,
                 status=OrderStatus.PENDING,
