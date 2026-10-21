@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.announcement import Announcement
 from api.models.audit_log import AuditLog
 from api.models.org import Org
+from api.models.school_class import ClassManualMember, SchoolClass
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 
@@ -27,6 +28,22 @@ async def _make_org(db: AsyncSession) -> Org:
     db.add(org)
     await db.flush()
     return org
+
+
+async def _add_grade_class_member(
+    db: AsyncSession, *, user: User, created_by: User, grade: int
+) -> SchoolClass:
+    school_class = SchoolClass(
+        academic_year=115,
+        class_code=str(uuid.uuid4().int)[:10],
+        grade=grade,
+        created_by=created_by.id,
+    )
+    db.add(school_class)
+    await db.flush()
+    db.add(ClassManualMember(class_id=school_class.id, user_id=user.id))
+    await db.flush()
+    return school_class
 
 
 async def test_create_survey_requires_login(client: AsyncClient) -> None:
@@ -60,6 +77,93 @@ async def test_create_survey_and_get_detail(
     assert detail.status_code == 200
     assert detail.json()["title"] == "滿意度調查"
     assert detail.json()["status"] == "draft"
+
+
+async def test_grade_limited_survey_checks_school_account_and_current_grade(
+    authed_client_factory: Callable[[User], AsyncClient],
+    make_user: Callable[..., User],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    admin_ac = authed_client_factory(admin_user)
+    created = await admin_ac.post(
+        "/surveys",
+        json={
+            "title": "高一高二意見調查",
+            "org_id": str(org.id),
+            "allowed_grades": [1, 2],
+        },
+    )
+    assert created.status_code == 201
+    survey_id = created.json()["id"]
+    assert created.json()["allowed_grades"] == [1, 2]
+
+    question = await admin_ac.post(
+        f"/surveys/{survey_id}/questions",
+        json={"question_text": "你的意見？", "question_type": "text"},
+    )
+    assert question.status_code == 201
+    assert (await admin_ac.post(f"/surveys/{survey_id}/open")).status_code == 200
+
+    high_one = await make_user(email="student-one@hchs.hc.edu.tw")
+    high_two = await make_user(email="student-two@hchs.hc.edu.tw")
+    high_three = await make_user(email="student-three@hchs.hc.edu.tw")
+    other_email = await make_user(email="student@school.edu")
+    await _add_grade_class_member(db_session, user=high_one, created_by=admin_user, grade=1)
+    await _add_grade_class_member(db_session, user=high_two, created_by=admin_user, grade=2)
+    await _add_grade_class_member(db_session, user=high_three, created_by=admin_user, grade=3)
+    linked_school_account = await make_user(email="linked-student@school.edu")
+    await _add_grade_class_member(
+        db_session, user=linked_school_account, created_by=admin_user, grade=2
+    )
+    db_session.add(
+        UserIdentity(
+            user_id=linked_school_account.id,
+            provider="google",
+            external_id=f"school-{uuid.uuid4().hex}",
+            email=f"linked-{uuid.uuid4().hex[:8]}@hchs.hc.edu.tw",
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+
+    high_one_ac = authed_client_factory(high_one)
+    high_two_ac = authed_client_factory(high_two)
+    high_three_ac = authed_client_factory(high_three)
+    other_email_ac = authed_client_factory(other_email)
+    linked_school_ac = authed_client_factory(linked_school_account)
+
+    assert (await high_one_ac.get(f"/surveys/{survey_id}")).status_code == 200
+    assert (await high_two_ac.get(f"/surveys/{survey_id}")).status_code == 200
+    assert (await linked_school_ac.get(f"/surveys/{survey_id}")).status_code == 200
+    assert survey_id in {
+        item["id"] for item in (await high_one_ac.get("/surveys", params={"status": "open"})).json()
+    }
+
+    grade_error = await high_three_ac.get(f"/surveys/{survey_id}")
+    assert grade_error.status_code == 403
+    assert grade_error.json()["detail"] == "本問卷僅限高一、高二填寫。"
+    assert survey_id not in {
+        item["id"]
+        for item in (await high_three_ac.get("/surveys", params={"status": "open"})).json()
+    }
+    denied_submit = await high_three_ac.post(
+        f"/surveys/{survey_id}/submit",
+        json={"answers": [{"question_id": question.json()["id"], "answer_text": "不符合年級"}]},
+    )
+    assert denied_submit.status_code == 403
+    assert denied_submit.json()["detail"] == "本問卷僅限高一、高二填寫。"
+
+    account_error = await other_email_ac.get(f"/surveys/{survey_id}")
+    assert account_error.status_code == 403
+    assert account_error.json()["detail"] == (
+        "本問卷僅限本校高一、高二填寫，請切換校務帳號後重新載入。"
+    )
+
+    invalid_update = await admin_ac.patch(f"/surveys/{survey_id}", json={"is_public": True})
+    assert invalid_update.status_code == 409
+    assert "僅適用登入後填答" in invalid_update.json()["detail"]
 
 
 async def test_survey_announcement_links_to_survey_and_publishes_on_open(

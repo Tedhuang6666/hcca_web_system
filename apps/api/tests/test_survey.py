@@ -29,6 +29,7 @@ from api.schemas.survey import (
     SurveyQuestionCreate,
     SurveyQuestionOut,
     SurveySubmit,
+    SurveyUpdate,
 )
 from api.services import survey as survey_svc
 
@@ -93,6 +94,40 @@ async def test_survey_out_nested_questions_keep_options(db_session: AsyncSession
 
     out = TypeAdapter(SurveyOut).validate_python(loaded, from_attributes=True)
     assert out.questions[0].options == ["A", "B"]
+
+
+def test_survey_grade_audience_validates_selected_grades() -> None:
+    org_id = uuid.uuid4()
+    with pytest.raises(ValidationError, match="年級只能選擇"):
+        SurveyCreate(title="錯誤年級", org_id=org_id, allowed_grades=[4])
+    with pytest.raises(ValidationError, match="僅適用登入後填答"):
+        SurveyCreate(title="公開年級限制", org_id=org_id, is_public=True, allowed_grades=[1, 2])
+
+    update = SurveyUpdate(allowed_grades=[2, 1])
+    assert update.allowed_grades == [1, 2]
+
+
+def test_survey_out_restores_grade_audience_from_model() -> None:
+    now = datetime.now(UTC)
+    survey = Survey(
+        id=uuid.uuid4(),
+        title="高一、高二問卷",
+        status=SurveyStatus.DRAFT,
+        is_anonymous=False,
+        allow_multiple=False,
+        is_public=False,
+        is_listed=True,
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+        created_at=now,
+        updated_at=now,
+        allowed_grades_json="[1, 2]",
+        show_announcement_popup=False,
+    )
+
+    out = TypeAdapter(SurveyOut).validate_python(survey, from_attributes=True)
+
+    assert out.allowed_grades == [1, 2]
 
 
 # ── 回應計數 ──────────────────────────────────────────────────────────────────

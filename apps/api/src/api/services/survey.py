@@ -17,6 +17,7 @@ from sqlalchemy.orm import load_only, selectinload
 
 from api.email.renderer import absolutize_url, safe_link_url
 from api.models.announcement import Announcement, AnnouncementAudience
+from api.models.school_class import SchoolClass
 from api.models.survey import (
     QuestionType,
     Survey,
@@ -41,6 +42,7 @@ from api.schemas.survey import (
 )
 from api.services.electronic_credential import get_settings
 from api.services.permission import get_user_org_ids
+from api.services.school_class import get_user_active_class_ids
 from api.services.student_identity_rules import (
     SCHOOL_EMAIL_DOMAIN,
     is_alumni_school_account,
@@ -66,6 +68,50 @@ def _load_str_list(raw: str | None) -> list[str]:
     except (json.JSONDecodeError, TypeError):
         return []
     return [str(x) for x in parsed] if isinstance(parsed, list) else []
+
+
+def _dump_grade_list(values: list[int] | None) -> str | None:
+    grades = sorted(set(values or []))
+    return json.dumps(grades) if grades else None
+
+
+def _load_grade_list(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return sorted({grade for grade in parsed if type(grade) is int and grade in (1, 2, 3)})
+
+
+async def _get_user_active_grades(session: AsyncSession, user_id: uuid.UUID) -> set[int]:
+    class_ids = await get_user_active_class_ids(session, user_id)
+    if not class_ids:
+        return set()
+    result = await session.scalars(
+        select(SchoolClass.grade).where(
+            SchoolClass.id.in_(class_ids),
+            SchoolClass.is_active.is_(True),
+        )
+    )
+    return set(result.all())
+
+
+def _grade_labels(grades: set[int] | list[int]) -> str:
+    labels = {1: "高一", 2: "高二", 3: "高三"}
+    return "、".join(labels[grade] for grade in sorted(grades))
+
+
+def _school_account_required_message(grades: set[int] | list[int], *, login: bool = False) -> str:
+    action = "請登入本校校務帳號後重新載入。" if login else "請切換校務帳號後重新載入。"
+    return f"本問卷僅限本校{_grade_labels(grades)}填寫，{action}"
+
+
+def _grade_restricted_message(grades: set[int] | list[int]) -> str:
+    return f"本問卷僅限{_grade_labels(grades)}填寫。"
 
 
 # ── 問卷 CRUD ─────────────────────────────────────────────────────────────────
@@ -149,6 +195,7 @@ async def list_surveys(
                 Survey.allowed_org_ids_json,
                 Survey.allowed_user_ids_json,
                 Survey.allowed_domains_json,
+                Survey.allowed_grades_json,
             )
         )
         .order_by(Survey.created_at.desc())
@@ -160,10 +207,11 @@ async def list_surveys(
     if activity_id:
         q = q.where(Survey.activity_id == activity_id)
     if public_only:
-        # 公開列表：僅顯示允許匿名填答、設定公開顯示且已開放/已截止的問卷。
+        # 年級限制需要登入並確認本校班級，不出現在未登入可填答的公開列表。
         q = q.where(
             Survey.is_public == True,  # noqa: E712
             Survey.is_listed == True,  # noqa: E712
+            Survey.allowed_grades_json.is_(None),
             Survey.status.in_([SurveyStatus.OPEN, SurveyStatus.CLOSED]),
         )
     if status:
@@ -201,6 +249,7 @@ async def create_survey(
         allowed_org_ids_json=_dump_str_list(data.allowed_org_ids),
         allowed_user_ids_json=_dump_str_list(data.allowed_user_ids),
         allowed_domains_json=_dump_str_list(data.allowed_domains),
+        allowed_grades_json=_dump_grade_list(data.allowed_grades),
         announcement=data.announcement,
         announcement_title=data.announcement_title,
         show_announcement_popup=data.show_announcement_popup,
@@ -221,9 +270,15 @@ async def update_survey(
     if survey.status not in _EDITABLE_STATUSES:
         raise ValueError("已截止或封存的問卷無法修改")
     fields = data.model_dump(exclude_unset=True)
+    next_is_public = fields.get("is_public", survey.is_public)
+    next_allowed_grades = fields.get("allowed_grades", _load_grade_list(survey.allowed_grades_json))
+    if next_is_public and next_allowed_grades:
+        raise ValueError("年級限制僅適用登入後填答，請先將填答方式設為「登入後填答」。")
     for key in ("allowed_org_ids", "allowed_user_ids", "allowed_domains"):
         if key in fields:
             setattr(survey, f"{key}_json", _dump_str_list(fields.pop(key)))
+    if "allowed_grades" in fields:
+        survey.allowed_grades_json = _dump_grade_list(fields.pop("allowed_grades"))
     for field, value in fields.items():
         setattr(survey, field, value)
     await sync_announcement(session, survey, author_id=updated_by_id or survey.created_by)
@@ -311,9 +366,11 @@ async def check_survey_access(
     *,
     active_org_ids: set[str] | None = None,
     linked_emails: set[str] | None = None,
+    active_grades: set[int] | None = None,
 ) -> None:
     """驗證填答者是否在問卷開放對象內；不符時拋出 PermissionError。"""
-    if survey.is_public:
+    allowed_grades = set(_load_grade_list(survey.allowed_grades_json))
+    if survey.is_public and not allowed_grades:
         return
     org_ids = set(_load_str_list(survey.allowed_org_ids_json))
     user_ids = set(_load_str_list(survey.allowed_user_ids_json))
@@ -323,15 +380,26 @@ async def check_survey_access(
         if is_alumni_school_account(user.email, current_prefixes):
             raise PermissionError("此問卷限現行在校學生帳號填答")
     if user is None:
+        if allowed_grades:
+            raise PermissionError(_school_account_required_message(allowed_grades, login=True))
         if domains:
             raise PermissionError(_domain_access_message(domains))
         raise PermissionError("此問卷需登入後才能填答")
+    emails = linked_emails
+    if allowed_grades:
+        emails = emails if emails is not None else await _linked_emails(session, user)
+        if not any(_email_domain(email) == SCHOOL_EMAIL_DOMAIN for email in emails):
+            raise PermissionError(_school_account_required_message(allowed_grades))
+        if active_grades is None:
+            active_grades = await _get_user_active_grades(session, user.id)
+        if not active_grades & allowed_grades:
+            raise PermissionError(_grade_restricted_message(allowed_grades))
     if not org_ids and not user_ids and not domains:
         return  # 未設限制名單 → 任何登入者皆可填
     if user_ids and str(user.id) in user_ids:
         return
     if domains:
-        emails = linked_emails if linked_emails is not None else await _linked_emails(session, user)
+        emails = emails if emails is not None else await _linked_emails(session, user)
         if any(_email_domain(email) in domains for email in emails):
             return
     if org_ids:
@@ -362,6 +430,7 @@ async def list_respondable_surveys(
 
     active_org_ids = {str(org_id) for org_id in await get_user_org_ids(session, user.id)}
     linked_emails = await _linked_emails(session, user)
+    active_grades: set[int] | None = None
     page: list[Survey] = []
     visible_count = 0
     candidate_offset = 0
@@ -383,6 +452,8 @@ async def list_respondable_surveys(
         for survey in candidates:
             if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
                 continue
+            if _load_grade_list(survey.allowed_grades_json) and active_grades is None:
+                active_grades = await _get_user_active_grades(session, user.id)
             try:
                 await check_survey_access(
                     session,
@@ -390,6 +461,7 @@ async def list_respondable_surveys(
                     user,
                     active_org_ids=active_org_ids,
                     linked_emails=linked_emails,
+                    active_grades=active_grades,
                 )
             except PermissionError:
                 continue

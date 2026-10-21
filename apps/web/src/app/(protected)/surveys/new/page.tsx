@@ -9,6 +9,7 @@ import type { OrgRead } from "@/lib/api";
 import type { QuestionType, ValidationRule, UserSummary } from "@/lib/types";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import UserPicker from "@/components/surveys/UserPicker";
+import SurveyGradeSelector from "@/components/surveys/SurveyGradeSelector";
 import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
@@ -92,6 +93,7 @@ type SurveyDraft = {
   allowedDomains: string;
   allowedUsers: UserSummary[];
   allowedOrgIds: string[];
+  allowedGrades: number[];
   isAnonymous: boolean;
   allowMultiple: boolean;
   closesAt: string;
@@ -219,6 +221,7 @@ export default function NewSurveyPage() {
   const [allowedDomains, setAllowedDomains] = useState("");
   const [allowedUsers, setAllowedUsers] = useState<UserSummary[]>([]);
   const [allowedOrgIds, setAllowedOrgIds] = useState<string[]>([]);
+  const [allowedGrades, setAllowedGrades] = useState<number[]>([]);
 
   // 題目列表
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
@@ -256,6 +259,7 @@ export default function NewSurveyPage() {
     allowedDomains,
     allowedUsers,
     allowedOrgIds,
+    allowedGrades,
     isAnonymous,
     allowMultiple,
     closesAt,
@@ -269,6 +273,7 @@ export default function NewSurveyPage() {
     allowMultiple,
     allowedDomains,
     allowedOrgIds,
+    allowedGrades,
     allowedUsers,
     closesAt,
     description,
@@ -289,6 +294,7 @@ export default function NewSurveyPage() {
     setAllowedDomains(draft.allowedDomains ?? "");
     setAllowedUsers(draft.allowedUsers ?? []);
     setAllowedOrgIds(draft.allowedOrgIds ?? []);
+    setAllowedGrades(draft.allowedGrades ?? []);
     setIsAnonymous(Boolean(draft.isAnonymous));
     setAllowMultiple(Boolean(draft.allowMultiple));
     setClosesAt(draft.closesAt ?? "");
@@ -499,6 +505,7 @@ export default function NewSurveyPage() {
         allowed_org_ids: allowsAnonymous ? [] : allowedOrgIds,
         allowed_user_ids: allowsAnonymous ? [] : allowedUsers.map(u => u.id),
         allowed_domains: allowsAnonymous ? [] : splitLines(allowedDomains),
+        allowed_grades: allowsAnonymous ? [] : allowedGrades,
       });
       // 第一輪：依序新增題目，建立「暫存 id → 真實 id」對應
       const idMap: Record<string, string> = {};
@@ -732,8 +739,9 @@ export default function NewSurveyPage() {
             {accessMode === "members" && (
               <>
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  限制全部留空時，任何登入者皆可填答；設定限制後，符合任一條件者可填。
+                  年級條件會額外限制填答資格；其他使用者、組織或信箱條件符合任一項即可。未設定其他條件時，所選年級的本校帳號皆可填答。
                 </p>
+                <SurveyGradeSelector value={allowedGrades} onChange={setAllowedGrades} />
                 <div>
                   <Label>限定 email 網域（一行一個，例：hchs.hc.edu.tw 即限本校）</Label>
                   <textarea value={allowedDomains} onChange={e => setAllowedDomains(e.target.value)}
