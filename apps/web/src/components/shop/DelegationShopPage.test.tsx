@@ -59,6 +59,24 @@ beforeEach(() => {
 });
 
 describe("原商品頁的家人代訂模式", () => {
+  it.each([false, true])("商品名稱下方直接顯示已套用優惠後單價（系列商品：%s）", async (inSeries) => {
+    const cardProduct = { ...product, name: "傳情卡片餅乾套組", price: 40 };
+    const products = [cardProduct];
+    api.accessDelegation.mockResolvedValue({ ...context, promotions: [], registration: {
+      ...order, subtotal_price: 800, discount_amount: 160, total_price: 640, promotion_id: "staff",
+      applied_promotions: [{ promotion_id: "staff", name: "班聯會幹部優惠", discount_amount: 160 }],
+      items: [{ ...order.items[1], quantity: 20, unit_price: 40, subtotal: 800 }],
+    }, catalog: [{ ...context.catalog?.[0], products: inSeries ? [] : products,
+      series: inSeries ? [{ id: "cards", name: "傳情商品", products }] : [],
+    }] });
+    render(<ShopPage />);
+    const card = await screen.findByRole("article", { name: "傳情卡片餅乾套組商品" });
+    const primaryPrice = card.querySelector(".shop-public-product-price");
+    expect(primaryPrice?.querySelector("del")).toHaveTextContent("NT$40");
+    expect(primaryPrice?.querySelector(".shop-price-current")).toHaveTextContent("NT$32");
+    expect(within(card).getByText("依已登記 20 件計算")).toBeVisible();
+    expect(card.querySelector(".shop-product-card-offers")).toBeNull();
+  });
   it.each([false, true])("商品卡片直接顯示套組並可選購（系列商品：%s）", async (inSeries) => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     const products = [product, pants];
