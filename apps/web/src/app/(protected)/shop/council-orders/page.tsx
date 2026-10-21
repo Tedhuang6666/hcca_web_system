@@ -84,6 +84,7 @@ export default function CouncilOrdersPage() {
   const [loadError, setLoadError] = useState("");
   const [closeBusy, setCloseBusy] = useState<string | null>(null);
   const [paymentBusy, setPaymentBusy] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState("");
   const requestVersion = useRef(0);
   const [optionsError, setOptionsError] = useState(false);
   const [optionsRetry, setOptionsRetry] = useState(0);
@@ -585,6 +586,12 @@ export default function CouncilOrdersPage() {
             </p>
           )}
 
+          {groupBy === "class" && canConfirmClassPayment && actionActivityGroups.length > 0 && (
+            <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+              確認收款後，可下載各班簽收單 PDF（收執聯、存根聯及簽名欄）。金額包含此活動整班已確認收款的有效訂單，不受下方篩選影響。
+            </p>
+          )}
+          {receiptError && <p role="alert" className="mb-3 text-sm" style={{ color: "var(--danger)" }}>{receiptError}</p>}
           <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
             {loading ? (
               <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
@@ -636,6 +643,17 @@ export default function CouncilOrdersPage() {
                                       className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50">
                                       確認收款
                                     </button>}
+                                    {canConfirmClassPayment && <AnimatedDownloadButton
+                                      request={() => {
+                                        setReceiptError("");
+                                        return shopApi.downloadClassReceipt(row.key, group.activityId);
+                                      }}
+                                      label="下載簽收單"
+                                      aria-label={`下載${row.label}的${group.label}簽收單`}
+                                      disabled={mutationBusy}
+                                      className="btn btn-ghost min-h-11 px-3 text-xs"
+                                      onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
+                                    />}
                                     <details className="min-w-0">
                                       <summary className="flex min-h-11 cursor-pointer items-center text-xs underline underline-offset-2"
                                         style={{ color: "var(--text-secondary)" }}>其他操作</summary>

@@ -151,6 +151,14 @@ export const shopApi = {
         activity_id: activityId,
       },
     ),
+  downloadClassReceipt: async (classId: string, activityId: string | null) => {
+    const query = activityId ? `?${new URLSearchParams({ activity_id: activityId })}` : "";
+    const response = await authFetch(`${BASE}/shop/orders/classes/${classId}/receipt.pdf${query}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
+  },
   downloadReport: (format: "xlsx" | "csv", params?: { activity_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.activity_id) q.set("activity_id", params.activity_id);

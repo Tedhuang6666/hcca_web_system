@@ -10575,6 +10575,23 @@ export interface paths {
         patch: operations["update_class_payment_shop_orders_classes__class_id__payment_patch"];
         trace?: never;
     };
+    "/shop/orders/classes/{class_id}/receipt.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下載班級收款簽收單（收執聯與存根聯） */
+        get: operations["download_class_receipt_shop_orders_classes__class_id__receipt_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/delegated": {
         parameters: {
             query?: never;
@@ -55030,6 +55047,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClassPaymentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_class_receipt_shop_orders_classes__class_id__receipt_pdf_get: {
+        parameters: {
+            query?: {
+                /** @description 活動；未提供時僅匯出一般商品 */
+                activity_id?: string | null;
+            };
+            header?: never;
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             /** @description Validation Error */
