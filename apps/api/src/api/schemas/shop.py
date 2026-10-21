@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.models.shop import OrderStatus, ProductStatus, ShopDiscountType
 
@@ -62,6 +62,12 @@ class ProductVariantGroupOut(BaseModel):
 
 
 # ── 主題 / 系列 ───────────────────────────────────────────────────────────────
+
+
+class ShopActivityDeadlineUpdate(BaseModel):
+    order_closes_at: AwareDatetime | None = Field(
+        ..., description="活動商品停止訂購時間；null 表示取消活動統一期限"
+    )
 
 
 class ProductCategoryCreate(BaseModel):
@@ -158,7 +164,7 @@ class ProductCreate(BaseModel):
         None, ge=1, description="每位使用者累計購買上限；留空表示不限購"
     )
     sale_start: datetime | None = Field(None, description="開售時間")
-    sale_end: datetime | None = Field(None, description="截止時間")
+    sale_end: datetime | None = Field(None, description="單品截止時間；留空沿用活動結單時間")
     requires_seating: bool = Field(False, description="是否為需劃位票種")
     seating_mode: str | None = Field(
         None, description="劃位時機：at_purchase / scheduled / admin_assign"
@@ -205,6 +211,7 @@ class ProductOut(BaseModel):
     created_by: uuid.UUID
     sale_start: datetime | None
     sale_end: datetime | None
+    effective_sale_end: datetime | None = None
     requires_seating: bool = False
     seating_mode: str | None = None
     created_at: datetime
@@ -226,6 +233,7 @@ class CatalogProductOut(BaseModel):
     is_unlimited: bool
     sale_start: datetime | None = None
     sale_end: datetime | None = None
+    effective_sale_end: datetime | None = None
     has_variants: bool = False
     requires_seating: bool = False
     seating_mode: str | None = None
@@ -244,6 +252,8 @@ class CatalogCategoryOut(BaseModel):
     name: str
     activity_id: uuid.UUID | None = None
     activity_name: str | None = None
+    order_closes_at: datetime | None = None
+    activity_status: str | None = None
     image_url: str | None = None
     sort_order: int = 0
     products: list[CatalogProductOut] = []

@@ -20,6 +20,8 @@ import type {
   OrderSummaryOut,
 } from "@/lib/types";
 import ShopPromotionPanel from "./ShopPromotionPanel";
+import ActivityDeadlines from "@/components/shop/ActivityDeadlines";
+import { deadlineFromInput, deadlineInputValue } from "@/lib/shop-deadlines";
 
 const ACTIVITY_STATUS_LABEL: Record<string, string> = {
   draft: "草稿",
@@ -295,13 +297,6 @@ function NewSeriesModal({
 
 // ── 商品 編輯 Modal ───────────────────────────────────────────────────────────
 
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function ProductFormModal({
   categoryId,
   seriesId,
@@ -329,7 +324,7 @@ function ProductFormModal({
   const [maxQuantityPerUser, setMaxQuantityPerUser] = useState(
     initial?.max_quantity_per_user == null ? "" : String(initial.max_quantity_per_user),
   );
-  const [saleEnd, setSaleEnd] = useState(toLocalInput(initial?.sale_end ?? null));
+  const [saleEnd, setSaleEnd] = useState(deadlineInputValue(initial?.sale_end ?? null));
   const [requiresSeating, setRequiresSeating] = useState(initial?.requires_seating ?? false);
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
@@ -433,9 +428,15 @@ function ProductFormModal({
             同一帳號累計計算；取消或退款的訂單不計入。
           </p>
         </div>
-        <Field label="截止時間（選填）">
+        <Field label="單品截止時間（台北時間，選填）">
           <input type="datetime-local" value={saleEnd} onChange={(e) => setSaleEnd(e.target.value)}
             className="input w-full" />
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            留空沿用活動結單時間；需要延長此品項時，設定較晚的時間。清空並儲存可恢復沿用活動設定。
+          </p>
+          {initial?.effective_sale_end && <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+            目前有效截止：{new Date(initial.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+          </p>}
         </Field>
         <section className="space-y-2 rounded-lg p-3"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
@@ -561,7 +562,7 @@ function ProductFormModal({
                 stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
                 is_unlimited: unlimited,
                 max_quantity_per_user: maxQuantity,
-                sale_end: saleEnd ? new Date(saleEnd).toISOString() : null,
+                sale_end: deadlineFromInput(saleEnd),
                 requires_seating: requiresSeating,
                 seating_mode: requiresSeating ? seatingMode : null,
               };
@@ -1571,7 +1572,7 @@ export default function ShopAdminPage() {
           )}
           <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
             NT${product.price.toLocaleString()} · {product.is_unlimited ? "無限量" : `庫存 ${product.stock_quantity}`} · {STATUS_LABEL[product.status] ?? product.status}
-            {product.sale_end && ` · 截止 ${new Date(product.sale_end).toLocaleString("zh-TW")}`}
+            {product.effective_sale_end && ` · 截止 ${new Date(product.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}${product.sale_end ? "（單品設定）" : "（沿用活動）"}`}
             {product.max_quantity_per_user != null && ` · 每人限購 ${product.max_quantity_per_user} 件`}
           </p>
         </div>
@@ -1637,6 +1638,13 @@ export default function ShopAdminPage() {
           {tab === "stats" && <Link href="/shop/council-orders" className="btn btn-ghost min-h-11">返回班聯工作</Link>}
         </div>
       </div>
+
+      {tab === "catalog" && <ActivityDeadlines onSaved={() => {
+        loadAllProducts();
+        if (productId) loadProduct(productId);
+        if (cat) loadDirectProducts(cat.id);
+        if (series) loadProducts(series.id);
+      }} />}
 
       {tab === "stats" ? (
         <StatsView key={statsRefreshKey} />

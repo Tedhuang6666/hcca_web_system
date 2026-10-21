@@ -306,7 +306,17 @@ async def remaining_product_quantity(
 async def get_or_create_cart(session: AsyncSession, user_id: uuid.UUID) -> Cart:
     result = await session.execute(
         select(Cart)
-        .options(selectinload(Cart.items).selectinload(CartItem.product))
+        .options(
+            selectinload(Cart.items)
+            .selectinload(CartItem.product)
+            .selectinload(Product.category)
+            .selectinload(ProductCategory.activity),
+            selectinload(Cart.items)
+            .selectinload(CartItem.product)
+            .selectinload(Product.series)
+            .selectinload(ProductSeries.category)
+            .selectinload(ProductCategory.activity),
+        )
         .where(Cart.user_id == user_id)
     )
     cart = result.scalar_one_or_none()
@@ -383,9 +393,15 @@ def _cart_item_availability(product: Product, quantity: int) -> tuple[bool, str 
     now = datetime.now(UTC)
     if product.status != ProductStatus.ACTIVE:
         return False, "商品已下架"
-    if product.sale_start and now < product.sale_start:
+    sale_start = product.sale_start
+    sale_end = product.effective_sale_end
+    if sale_start is not None and sale_start.tzinfo is None:
+        sale_start = sale_start.replace(tzinfo=UTC)
+    if sale_end is not None and sale_end.tzinfo is None:
+        sale_end = sale_end.replace(tzinfo=UTC)
+    if sale_start and now < sale_start:
         return False, "尚未開售"
-    if product.sale_end and now > product.sale_end:
+    if sale_end and now >= sale_end:
         return False, "已截止販售"
     if not product.is_unlimited and product.stock_quantity < quantity:
         return False, f"庫存不足（剩餘 {product.stock_quantity} 件）"
@@ -552,7 +568,7 @@ async def _create_order_from_items(
         product_scope = _product_order_scope(product)
         if product_scope != order_scope:
             raise ValueError("同一筆訂單只能包含同一活動的商品")
-        sale_end = product.sale_end
+        sale_end = product.effective_sale_end
         if sale_end is not None and sale_end.tzinfo is None:
             sale_end = sale_end.replace(tzinfo=UTC)
         if sale_end is not None and datetime.now(UTC) >= sale_end:
@@ -1163,7 +1179,7 @@ async def _assert_product_registration_open(
 
     now = datetime.now(UTC)
     sale_start = product.sale_start
-    sale_end = product.sale_end
+    sale_end = product.effective_sale_end
     if sale_start is not None and sale_start.tzinfo is None:
         sale_start = sale_start.replace(tzinfo=UTC)
     if sale_end is not None and sale_end.tzinfo is None:

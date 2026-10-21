@@ -7,6 +7,8 @@ import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
+  updateActivityDeadline: (id: string, orderClosesAt: string | null) =>
+    patch<ActivityOut>(`/shop/activities/${id}/order-deadline`, { order_closes_at: orderClosesAt }),
   listDelegationLinks: () => get<ShopDelegationOut[]>("/shop/delegation-links"),
   createDelegationLink: (body: ShopDelegationCreate) => post<ShopDelegationOut>("/shop/delegation-links", body),
   renameDelegationLink: (id: string, name: string) => patch<ShopDelegationOut>(`/shop/delegation-links/${id}`, { name }),

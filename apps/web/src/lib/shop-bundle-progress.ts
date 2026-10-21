@@ -1,10 +1,8 @@
 import type { CatalogProductOut, OrderOut, ShopPromotionPublicOut } from "@/lib/types";
+import { productOrderable } from "@/lib/shop-deadlines";
 
 export function bundleProductAvailable(product: CatalogProductOut | undefined, now = Date.now()) {
-  return Boolean(product && product.status === "active"
-    && (product.is_unlimited || product.stock_quantity > 0)
-    && (!product.sale_start || new Date(product.sale_start).getTime() <= now)
-    && (!product.sale_end || new Date(product.sale_end).getTime() > now));
+  return Boolean(product && productOrderable(product, now));
 }
 
 export function bundleProgress(
