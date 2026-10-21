@@ -77,6 +77,21 @@ function registrationVariantKey(options: readonly { option_id: string }[]) {
   return options.map((option) => option.option_id).sort().join(",");
 }
 
+function aggregateRegistrationOrders(orders: OrderOut[]): OrderOut | null {
+  if (orders.length === 0) return null;
+  const first = orders[0];
+  return {
+    ...first,
+    subtotal_price: orders.reduce((total, order) => total + order.subtotal_price, 0),
+    discount_amount: orders.reduce((total, order) => total + order.discount_amount, 0),
+    total_price: orders.reduce((total, order) => total + order.total_price, 0),
+    is_paid: orders.every((order) => order.is_paid),
+    is_class_collected: orders.every((order) => order.is_class_collected),
+    items: orders.flatMap((order) => order.items),
+    applied_promotions: orders.flatMap((order) => order.applied_promotions ?? []),
+  };
+}
+
 function promotionRequirementsMet(
   promotion: ShopPromotionPublicOut,
   registration: OrderOut | null,
@@ -212,12 +227,15 @@ function ProductModal({
   onRegistrationChange,
   onProductAdded,
   onRequestDelegation,
+  onClassMemberRegistrationChange,
+  classMemberUserId,
+  lockedVariantQuantities,
   promotions,
   activityId,
   bundleStep,
 }: {
   productId: string;
-  shoppingApi: Pick<typeof shopApi, "getProduct" | "setCurrentRegistrationProduct">;
+  shoppingApi: Pick<typeof shopApi, "getProduct" | "setCurrentRegistrationProduct" | "setClassMemberProduct">;
   classClosed: boolean;
   isLoggedIn: boolean;
   authLoading: boolean;
@@ -232,6 +250,9 @@ function ProductModal({
   onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
   onProductAdded: () => void;
   onRequestDelegation: () => void;
+  onClassMemberRegistrationChange: (orders: OrderOut[]) => void;
+  classMemberUserId: string | null;
+  lockedVariantQuantities: Map<string, number>;
   promotions: ShopPromotionPublicOut[];
   activityId: string | null;
   bundleStep?: { name: string; nextLabel: string; onContinue: () => void };
@@ -295,7 +316,12 @@ function ProductModal({
       (first?.selected_options ?? []).map((option) => [option.group_id, option.option_id]),
     );
     setPicked(nextPicked);
-    setQty(first?.quantity ?? 1);
+    const firstVariantKey = registrationVariantKey(first?.selected_options ?? []);
+    const firstVariantQuantity = registrationItemsRef.current
+      .filter((item) => item.product_id === loadedProductId
+        && registrationVariantKey(item.selected_options) === firstVariantKey)
+      .reduce((total, item) => total + item.quantity, 0);
+    setQty(firstVariantQuantity || 1);
   }, [loadedProductId, registrationId]);
 
   useEffect(() => {
@@ -366,9 +392,17 @@ function ProductModal({
   const selectedRegistrationQuantity = registeredItems
     .filter((item) => registrationVariantKey(item.selected_options) === selectedOptionIds.join(","))
     .reduce((total, item) => total + item.quantity, 0);
+  const lockedSelectedQuantity = classMemberUserId
+    ? lockedVariantQuantities.get(selectedOptionIds.join(",")) ?? 0
+    : 0;
+  const minimumSelectedQuantity = classMemberUserId
+    ? Math.max(lockedSelectedQuantity, selectedRegistrationQuantity > 0 ? 0 : 1)
+    : selectedRegistrationQuantity > 0 ? 0 : 1;
   const remainingForUser = product?.max_quantity_per_user == null
     ? null
-    : product.remaining_quantity_for_user ?? product.max_quantity_per_user;
+    : classMemberUserId
+      ? Math.max(0, product.max_quantity_per_user - registeredQuantity)
+      : product.remaining_quantity_for_user ?? product.max_quantity_per_user;
   const maxSelectableQuantity = product
     ? Math.max(
         0,
@@ -475,14 +509,21 @@ function ProductModal({
       const wasRegistered = (currentVariants.get(key)?.quantity ?? 0) > 0;
       currentVariants.delete(key);
       if (quantity > 0) currentVariants.set(key, { option_ids: [...optionIds].sort(), quantity });
-      const updated = await shoppingApi.setCurrentRegistrationProduct(product.id, {
-        variants: [...currentVariants.values()],
-      });
-      onRegistrationChange(
-        scopeKey,
-        updated?.status === "cancelled" ? null : updated,
-      );
-      if (quantity > 0 && !wasRegistered) onProductAdded();
+      if (classMemberUserId) {
+        const updatedOrders = await shoppingApi.setClassMemberProduct(classMemberUserId, product.id, {
+          variants: [...currentVariants.values()],
+        });
+        onClassMemberRegistrationChange(updatedOrders);
+      } else {
+        const updated = await shoppingApi.setCurrentRegistrationProduct(product.id, {
+          variants: [...currentVariants.values()],
+        });
+        onRegistrationChange(
+          scopeKey,
+          updated?.status === "cancelled" ? null : updated,
+        );
+      }
+      if (!classMemberUserId && quantity > 0 && !wasRegistered) onProductAdded();
       if (key === selectedOptionIds.join(",")) setQty(quantity > 0 ? quantity : 1);
       setRegistrationUpdateMessage(quantity > 0
         ? wasRegistered ? `已更新為 ${quantity} 件。` : `已登記 ${quantity} 件。`
@@ -497,7 +538,7 @@ function ProductModal({
   };
 
   const changeSelectedQuantity = (quantity: number) => {
-    if (selectedRegistrationQuantity > 0) {
+    if (selectedRegistrationQuantity > 0 || lockedSelectedQuantity > 0) {
       void setVariantQuantity(selectedOptionIds, quantity);
       return;
     }
@@ -610,7 +651,12 @@ function ProductModal({
                   {product.max_quantity_per_user != null && (
                     <p className="shop-product-dialog-stock">
                       每人限購 {product.max_quantity_per_user} 件
-                      {remainingForUser != null && ` · 此帳號尚可選 ${remainingForUser} 件`}
+                      {remainingForUser != null && ` · ${classMemberUserId ? "此同學" : "此帳號"}尚可選 ${remainingForUser} 件`}
+                    </p>
+                  )}
+                  {classMemberUserId && lockedSelectedQuantity > 0 && (
+                    <p className="shop-product-purchase-hint">
+                      已收款或鎖定 {lockedSelectedQuantity} 件，調整時會保留這個數量。
                     </p>
                   )}
                 </div>
@@ -660,10 +706,14 @@ function ProductModal({
                   </p>
                 ) : authorizationRequired ? (
                   <p className="shop-product-purchase-hint" role="status">
-                    代訂需要學生授權。請輸入學生提供的七位數驗證碼，或開啟學生傳來的連結。
-                    <button type="button" className="shop-product-delegation-action" onClick={onRequestDelegation}>
-                      前往代訂，輸入驗證碼
-                    </button>
+                    {classMemberUserId
+                      ? "正在確認班代權限，完成後即可調整。"
+                      : <>
+                        代訂需要學生授權。請輸入學生提供的七位數驗證碼，或開啟學生傳來的連結。
+                        <button type="button" className="shop-product-delegation-action" onClick={onRequestDelegation}>
+                          前往代訂，輸入驗證碼
+                        </button>
+                      </>}
                   </p>
                 ) : registrationLoadError ? (
                   <p className="shop-product-purchase-hint" role="alert">
@@ -691,8 +741,8 @@ function ProductModal({
                     <div className="shop-product-quantity">
                       <button
                         type="button"
-                        onClick={() => changeSelectedQuantity(Math.max(selectedRegistrationQuantity > 0 ? 0 : 1, qty - 1))}
-                        disabled={qty <= (selectedRegistrationQuantity > 0 ? 0 : 1) || !canEdit || loading}
+                        onClick={() => changeSelectedQuantity(Math.max(minimumSelectedQuantity, qty - 1))}
+                        disabled={qty <= minimumSelectedQuantity || !canEdit || loading}
                         aria-label="減少數量">−</button>
                       <span>{qty}</span>
                       <button
@@ -707,10 +757,19 @@ function ProductModal({
                   {isLoggedIn && selectedRegistrationQuantity > 0 ? (
                     <button
                       type="button"
-                      onClick={() => void setVariantQuantity(selectedOptionIds, 0)}
-                      disabled={!canEdit || loading}
+                      onClick={() => void setVariantQuantity(
+                        selectedOptionIds,
+                        classMemberUserId ? lockedSelectedQuantity : 0,
+                      )}
+                      disabled={!canEdit || loading || (
+                        Boolean(classMemberUserId) && selectedRegistrationQuantity <= lockedSelectedQuantity
+                      )}
                       className="shop-product-remove">
-                      移除這項登記
+                      {classMemberUserId && lockedSelectedQuantity > 0
+                        ? selectedRegistrationQuantity > lockedSelectedQuantity
+                          ? "移除可調整數量"
+                          : "已保留鎖定數量"
+                        : "移除這項登記"}
                     </button>
                   ) : isLoggedIn ? (
                     <button
@@ -758,6 +817,7 @@ function ProductCard({
   product,
   classClosed,
   registeredQuantity,
+  canAdjustRegistration,
   href,
   onClick,
   cardPrice,
@@ -769,6 +829,7 @@ function ProductCard({
   product: CatalogProductOut;
   classClosed: boolean;
   registeredQuantity: number;
+  canAdjustRegistration: boolean;
   href: string | null;
   onClick: () => void;
   cardPrice: ShopCardPrice;
@@ -834,7 +895,11 @@ function ProductCard({
           </p>
         )}
         <span className="shop-public-product-action">
-          {disabled ? statusLabel : "選擇商品"}
+          {disabled
+            ? statusLabel
+            : registeredQuantity > 0
+              ? canAdjustRegistration && !locked ? "調整規格與數量" : "查看已登記商品"
+              : "選擇商品"}
           {!disabled && <ArrowUpRight size={16} aria-hidden="true" />}
         </span>
       </div>
@@ -905,6 +970,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [authLoading, setAuthLoading] = useState(true);
   const [registrationLoadError, setRegistrationLoadError] = useState(false);
   const [registrations, setRegistrations] = useState<OrderOut[]>([]);
+  const [classMemberUserId, setClassMemberUserId] = useState<string | null>(null);
+  const [classMemberName, setClassMemberName] = useState("");
+  const [classMemberAccess, setClassMemberAccess] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [availablePromotions, setAvailablePromotions] = useState<ShopPromotionPublicOut[]>([]);
   const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
@@ -933,6 +1001,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   useEffect(() => {
     setOrderShortcutPortalReady(true);
     const query = new URLSearchParams(window.location.search);
+    setClassMemberUserId(query.get("class_member_user_id"));
+    setClassMemberName(query.get("class_member_name") ?? "");
     if (query.get("delegation") === "entry") {
       setDelegationOpen(true);
       query.delete("delegation");
@@ -1049,6 +1119,33 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     }
   }, [setSelectedCategoryId]);
 
+  const loadClassMemberOrders = useCallback(async (memberUserId: string, initial = false) => {
+    const generation = initial ? ++refreshGeneration.current : refreshGeneration.current;
+    if (initial) {
+      setClassMemberAccess((current) => current === "ready" ? "ready" : "loading");
+      setRegistrationLoadError(false);
+    }
+    try {
+      const orders = await shopApi.listClassMemberRegistrations(memberUserId);
+      if (generation !== refreshGeneration.current) return;
+      setRegistrations(orders);
+      setClassMemberAccess("ready");
+      setRegistrationLoadError(false);
+    } catch (error) {
+      if (generation !== refreshGeneration.current) return;
+      setClassMemberAccess((current) => current === "ready" ? "ready" : "error");
+      if (initial) {
+        setRegistrationLoadError(true);
+        toast.error(apiErrorMessage(error, "無法載入這位同學的商品登記"));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn || authLoading || !classMemberUserId || delegationToken) return;
+    void loadClassMemberOrders(classMemberUserId, true);
+  }, [isLoggedIn, authLoading, classMemberUserId, delegationToken, loadClassMemberOrders]);
+
   const shoppingApi = useMemo(() => {
     const mutate = async <T,>(operation: () => Promise<T>) => {
       const generation = ++refreshGeneration.current;
@@ -1064,6 +1161,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       ...shopApi,
       setCurrentRegistrationProduct: (id: string, body: Parameters<typeof shopApi.setCurrentRegistrationProduct>[1]) =>
         mutate(() => shopApi.setCurrentRegistrationProduct(id, body)),
+      setClassMemberProduct: (
+        memberUserId: string,
+        id: string,
+        body: Parameters<typeof shopApi.setClassMemberProduct>[2],
+      ) => mutate(() => shopApi.setClassMemberProduct(memberUserId, id, body)),
       applyCurrentPromotion: (code: string | null, activityId: string | null, categoryId?: string | null) =>
         mutate(() => shopApi.applyCurrentPromotion(code, activityId, categoryId)),
     };
@@ -1072,6 +1174,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       getProduct: (id: string) => shopApi.getDelegationProduct(delegationToken, id),
       setCurrentRegistrationProduct: (id: string, body: Parameters<typeof shopApi.setCurrentRegistrationProduct>[1]) =>
         mutate(() => shopApi.setDelegationProduct(delegationToken, id, body)),
+      setClassMemberProduct: (
+        memberUserId: string,
+        id: string,
+        body: Parameters<typeof shopApi.setClassMemberProduct>[2],
+      ) => mutate(() => shopApi.setClassMemberProduct(memberUserId, id, body)),
       previewCurrentPromotion: (code: string | null) => shopApi.previewDelegationPromotion(delegationToken, code),
       applyCurrentPromotion: (code: string | null) => mutate(() => shopApi.applyDelegationPromotion(delegationToken, code)),
     };
@@ -1103,7 +1210,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       setDelegationToken(currentToken);
       if (currentToken) {
         await loadDelegation(currentToken);
-      } else {
+      } else if (!new URLSearchParams(window.location.search).get("class_member_user_id")) {
         const generation = refreshGeneration.current;
         try {
           const orders = await shopApi.getCurrentRegistrations();
@@ -1141,6 +1248,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       setDelegationError("");
       setRegistrations([]);
       setOpenProduct(null);
+      const classMemberId = new URLSearchParams(window.location.search).get("class_member_user_id");
+      setClassMemberUserId(classMemberId);
+      setClassMemberName(new URLSearchParams(window.location.search).get("class_member_name") ?? "");
+      setClassMemberAccess("idle");
       setMyClass(null);
       setLoadError(false);
       setRegistrationLoadError(false);
@@ -1156,19 +1267,25 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         void shopApi.listAvailablePromotions()
           .then((promotions) => { if (generation === refreshGeneration.current) setAvailablePromotions(promotions); })
           .catch(() => { if (generation === refreshGeneration.current) setAvailablePromotions([]); });
-        if (isLoggedIn) void shopApi.getCurrentRegistrations()
-          .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
-          .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
+        if (isLoggedIn && classMemberId && classMemberId === classMemberUserId) {
+          void loadClassMemberOrders(classMemberId, true);
+        } else if (isLoggedIn && !classMemberId) {
+          void shopApi.getCurrentRegistrations()
+            .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
+            .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
+        }
       }
     };
     window.addEventListener("hashchange", changeContext);
     return () => window.removeEventListener("hashchange", changeContext);
-  }, [isLoggedIn, delegationToken, loadCatalog, loadDelegation]);
+  }, [isLoggedIn, delegationToken, classMemberUserId, loadCatalog, loadDelegation, loadClassMemberOrders]);
 
   const refreshRegistrations = useCallback(async () => {
     if (!isLoggedIn || authLoading || mutationBusy.current || document.visibilityState === "hidden") return;
     if (delegationToken) {
       await loadDelegation(delegationToken);
+    } else if (classMemberUserId) {
+      await loadClassMemberOrders(classMemberUserId);
     } else {
       const generation = refreshGeneration.current;
       try {
@@ -1176,7 +1293,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         if (generation === refreshGeneration.current) setRegistrations(orders);
       } catch { /* 保留已載入內容；下一次同步重試。 */ }
     }
-  }, [isLoggedIn, authLoading, delegationToken, loadDelegation]);
+  }, [isLoggedIn, authLoading, delegationToken, classMemberUserId, loadDelegation, loadClassMemberOrders]);
   useEffect(() => {
     if (!isLoggedIn || authLoading) return;
     const timer = window.setInterval(() => void refreshRegistrations(), 5000);
@@ -1191,14 +1308,14 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   useEffect(() => {
     const scope = orderScopeParams(selectedPromotionScope);
     const registration = registrations.find((order) => orderScopeKey(order) === selectedPromotionScope) ?? null;
-    if (!isLoggedIn || authLoading || !registration) {
+    if (classMemberUserId || !isLoggedIn || authLoading || !registration) {
       setPromotionPreview(null);
       return;
     }
     void shoppingApi.previewCurrentPromotion(registration.promotion_code ?? null, scope.activity_id ?? null, scope.category_id)
       .then(setPromotionPreview)
       .catch(() => setPromotionPreview(null));
-  }, [isLoggedIn, authLoading, registrations, selectedPromotionScope, shoppingApi]);
+  }, [isLoggedIn, authLoading, registrations, selectedPromotionScope, shoppingApi, classMemberUserId]);
 
   const activityOptions = useMemo(() => {
     const namesById = new Map<string, Set<string>>();
@@ -1290,9 +1407,13 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     setSelectedPromotionScope(catalogScopeKey(category));
   }, [catalog, selectedCategoryId]);
 
-  const selectedCategoryRegistration = registrations.find(
-    (order) => orderScopeKey(order) === (selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE),
-  ) ?? null;
+  const selectedCategoryScope = selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE;
+  const selectedCategoryRegistrationOrders = registrations.filter(
+    (order) => orderScopeKey(order) === selectedCategoryScope,
+  );
+  const selectedCategoryRegistration = classMemberUserId
+    ? aggregateRegistrationOrders(selectedCategoryRegistrationOrders)
+    : selectedCategoryRegistrationOrders[0] ?? null;
   const delegatedRegistration = delegationContext ? registrations[0] ?? null : null;
   const registeredByProduct = new Map<string, number>();
   for (const item of selectedCategoryRegistration?.items ?? []) {
@@ -1301,14 +1422,34 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       (registeredByProduct.get(item.product_id) ?? 0) + item.quantity,
     );
   }
+  const lockedVariantQuantities = new Map<string, number>();
+  if (classMemberUserId) {
+    for (const order of selectedCategoryRegistrationOrders) {
+      if (!order.is_paid && !order.is_class_collected) continue;
+      for (const item of order.items) {
+        if (item.product_id !== openProduct) continue;
+        const variantKey = registrationVariantKey(item.selected_options);
+        lockedVariantQuantities.set(
+          variantKey,
+          (lockedVariantQuantities.get(variantKey) ?? 0) + item.quantity,
+        );
+      }
+    }
+  }
   const registrationLocked = Boolean(
-    (delegationToken && !delegationContext?.can_edit) || selectedCategoryRegistration && (selectedCategoryRegistration.is_paid || selectedCategoryRegistration.is_class_collected),
+    (delegationToken && !delegationContext?.can_edit)
+    || (!classMemberUserId && selectedCategoryRegistration
+      && (selectedCategoryRegistration.is_paid || selectedCategoryRegistration.is_class_collected)),
   );
 
   const inspectAndApplyPromotion = async (
     code: string | null,
     requestedScopeKey = selectedPromotionScope,
   ) => {
+    if (classMemberUserId) {
+      setPromotionFeedback("班代調整商品總量時不會變更學生的優惠設定。");
+      return;
+    }
     const scope = orderScopeParams(requestedScopeKey);
     const registration = registrations.find(
       (order) => orderScopeKey(order) === requestedScopeKey,
@@ -1398,6 +1539,26 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     }
   };
 
+  const handleClassMemberRegistrationChange = (orders: OrderOut[]) => {
+    refreshGeneration.current += 1;
+    setRegistrations(orders);
+    setClassMemberAccess("ready");
+  };
+
+  const leaveClassMemberMode = () => {
+    setClassMemberUserId(null);
+    setClassMemberName("");
+    setClassMemberAccess("idle");
+    setRegistrationLoadError(false);
+    setRegistrations([]);
+    const generation = ++refreshGeneration.current;
+    if (isLoggedIn) {
+      void shopApi.getCurrentRegistrations()
+        .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
+        .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
+    }
+  };
+
   const claimPromotion = (promotion: ShopPromotionPublicOut) => {
     const code = promotion.code ?? "";
     const scopeId = promotion.activity_id ? activityScopeKey(promotion.activity_id) : selectedPromotionScope;
@@ -1431,7 +1592,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const catalogProducts = new Map(catalog.flatMap((category) => [
     ...category.products, ...category.series.flatMap((series) => series.products),
   ]).map((product) => [product.id, product]));
-  const categoryPromotions = availablePromotions.filter((promotion) => (
+  const categoryPromotions = classMemberUserId ? [] : availablePromotions.filter((promotion) => (
     (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
   ));
   const bundlePromotions = availablePromotions.filter((promotion) => (
@@ -1547,11 +1708,27 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       <header className="shop-public-hero">
         <div>
           <h1>商品預購</h1>
-          <p className="shop-public-hero-copy">{delegationToken
-            ? "使用學生授權的連結，替學生選購本次活動商品。"
-            : "先選活動，再挑選商品與數量。"}</p>
+          <p className="shop-public-hero-copy">{classMemberUserId
+            ? `班代調整${classMemberName || "指定同學"}的商品總量。`
+            : delegationToken
+              ? "使用學生授權的連結，替學生選購本次活動商品。"
+              : "先選活動，再挑選商品與數量。"}</p>
         </div>
       </header>
+
+      {classMemberUserId && (
+        <section className="shop-public-context" aria-label="班代調整對象">
+          <UsersRound size={18} aria-hidden="true" />
+          <div>
+            <p><strong>調整對象：{classMemberName || "指定同學"}</strong></p>
+            <p>商品數量會合併這位同學所有未鎖定訂購；已收款或鎖定的數量會保留。</p>
+            {authLoading && <p role="status">正在確認登入與班級權限…</p>}
+            {classMemberAccess === "loading" && <p role="status">正在載入同學的商品登記…</p>}
+            {classMemberAccess === "error" && <p role="alert">無法讀取同學的商品登記，請返回班代頁重新選擇同學。</p>}
+          </div>
+          <Link href="/shop" className="shop-order-details" onClick={leaveClassMemberMode}>返回本人商品頁</Link>
+        </section>
+      )}
 
       {delegationToken && delegationOpen && !delegationContext?.can_edit && <Modal
         title="確認代訂授權" size="lg" onClose={closeDelegation}>
@@ -1946,12 +2123,17 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         product={product}
                         promotions={categoryPromotions}
                         products={catalogProducts}
-                        offersLocked={registrationLocked}
+                        offersLocked={registrationLocked || Boolean(classMemberUserId && classMemberAccess !== "ready")}
+                        canAdjustRegistration={classMemberUserId
+                          ? classMemberAccess === "ready"
+                          : !registrationLocked && (delegationToken
+                            ? Boolean(delegationContext?.can_edit)
+                            : canOrderForSelf)}
                         onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                        cardPrice={shopCardPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                        cardPrice={shopCardPrice(product, classMemberUserId ? [] : availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
-                        href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
+                        href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
                         onClick={() => setOpenProduct(product.id)}
                       />
                     ))}
@@ -1978,12 +2160,17 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                           product={product}
                           promotions={categoryPromotions}
                           products={catalogProducts}
-                          offersLocked={registrationLocked}
+                          offersLocked={registrationLocked || Boolean(classMemberUserId && classMemberAccess !== "ready")}
+                          canAdjustRegistration={classMemberUserId
+                            ? classMemberAccess === "ready"
+                            : !registrationLocked && (delegationToken
+                              ? Boolean(delegationContext?.can_edit)
+                              : canOrderForSelf)}
                           onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                          cardPrice={shopCardPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                          cardPrice={shopCardPrice(product, classMemberUserId ? [] : availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
-                          href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
+                          href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
                           onClick={() => setOpenProduct(product.id)}
                         />
                       ))}
@@ -2046,7 +2233,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       {openProduct && (!delegationToken || delegationContext?.can_edit) && (
         <ProductModal
           productId={openProduct}
-          promotions={availablePromotions}
+          promotions={classMemberUserId ? [] : availablePromotions}
           activityId={selectedCategory?.activity_id ?? null}
           bundleStep={activeBundle ? {
             name: activeBundle.name,
@@ -2064,23 +2251,32 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
           isLoggedIn={isLoggedIn}
           authLoading={authLoading}
-          registrationLoadError={registrationLoadError}
+          registrationLoadError={registrationLoadError || Boolean(classMemberUserId && classMemberAccess === "error")}
           registration={selectedCategoryRegistration ? {
             ...selectedCategoryRegistration,
-            items: selectedCategoryRegistration.items.filter((item) =>
-              (item.delegation_link_id ?? null) === (delegationToken ? delegationContext?.link.id : null)),
+            items: classMemberUserId
+              ? selectedCategoryRegistration.items
+              : selectedCategoryRegistration.items.filter((item) =>
+                (item.delegation_link_id ?? null) === (delegationToken ? delegationContext?.link.id : null)),
           } : null}
           scopeKey={selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE}
           registrationLocked={registrationLocked}
-          authorizationRequired={isLoggedIn && !canOrderForSelf && !delegationToken}
-          editingDescription={delegationToken
-            ? `正在修改「${delegationContext?.link.name ?? "家人代訂"}」登記的數量。優惠按學生合計計算。`
+          authorizationRequired={classMemberUserId
+            ? classMemberAccess === "idle" || classMemberAccess === "loading"
+            : isLoggedIn && !canOrderForSelf && !delegationToken}
+          editingDescription={classMemberUserId
+            ? `正在調整${classMemberName || "指定同學"}跨所有未鎖定訂購的商品總量。已收款或鎖定的數量會保留。`
+            : delegationToken
+              ? `正在修改「${delegationContext?.link.name ?? "家人代訂"}」登記的數量。優惠按學生合計計算。`
             : selectedCategoryRegistration?.items.some((item) => item.delegation_link_id)
               ? "這裡修改本人登記的數量。家人代訂品項可在訂單明細修改；優惠按全部品項合計。"
               : undefined}
-          productHref={openProductHref}
+          productHref={classMemberUserId ? null : openProductHref}
           onClose={closeProduct}
           onRegistrationChange={handleRegistrationChange}
+          onClassMemberRegistrationChange={handleClassMemberRegistrationChange}
+          classMemberUserId={classMemberUserId}
+          lockedVariantQuantities={lockedVariantQuantities}
           onProductAdded={flyProductIntoOrder}
           onRequestDelegation={() => { closeProduct(); setDelegationOpen(true); }}
         />

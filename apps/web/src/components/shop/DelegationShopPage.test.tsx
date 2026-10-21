@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   accessDelegation: vi.fn(), getDelegationProduct: vi.fn(), setDelegationProduct: vi.fn(),
   previewDelegationPromotion: vi.fn(), applyDelegationPromotion: vi.fn(),
   setCurrentRegistrationProduct: vi.fn(), getProduct: vi.fn(), listDelegationLinks: vi.fn(), exchangeDelegationCode: vi.fn(),
+  listClassMemberRegistrations: vi.fn(), setClassMemberProduct: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("@/lib/api", () => ({
@@ -233,6 +234,54 @@ describe("原商品頁的家人代訂模式", () => {
     expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
     expect(api.getCurrentRegistrations).not.toHaveBeenCalled();
     expect(api.previewDelegationPromotion).toHaveBeenCalledWith("synthetic-test-token", null);
+  });
+
+  it("marks a registered product card as an entry to adjust its quantity directly", async () => {
+    render(<ShopPage />);
+    const card = await screen.findByRole("article", { name: "紀念袋商品" });
+
+    expect(within(card).getByText("調整規格與數量")).toBeVisible();
+    fireEvent.click(within(card).getByRole("button", { name: "查看商品：紀念袋" }));
+    fireEvent.click(await screen.findByRole("button", { name: "移除這項登記" }));
+
+    await waitFor(() => expect(api.setDelegationProduct).toHaveBeenCalledWith(
+      "synthetic-test-token", "bag", { variants: [] },
+    ));
+  });
+
+  it("edits a classmate's total across orders and keeps paid quantity as the minimum", async () => {
+    const paidOrder: OrderOut = {
+      ...order, id: "paid-order", is_paid: true, subtotal_price: 500, total_price: 500,
+      items: [{ ...order.items[0], id: "locked-item", quantity: 5, subtotal: 500 }],
+    };
+    const editableOrder: OrderOut = {
+      ...order, id: "editable-order", subtotal_price: 100, total_price: 100,
+      items: [{ ...order.items[0], id: "editable-item", quantity: 1, subtotal: 100 }],
+    };
+    window.history.replaceState({}, "", "/shop?class_member_user_id=student&class_member_name=%E7%A4%BA%E7%AF%84%E7%94%B2");
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.listClassMemberRegistrations.mockResolvedValue([paidOrder, editableOrder]);
+    api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
+    api.setClassMemberProduct.mockResolvedValue([paidOrder]);
+    render(<ShopPage />);
+
+    expect(await screen.findByText("調整對象：示範甲")).toBeVisible();
+    const card = await screen.findByRole("article", { name: "紀念袋商品" });
+    expect(await within(card).findByText("已登記 6 件")).toBeVisible();
+    fireEvent.click(within(card).getByRole("button", { name: "查看商品：紀念袋" }));
+    expect(await screen.findByText("已收款或鎖定 5 件，調整時會保留這個數量。"))
+      .toBeVisible();
+    expect(screen.getByRole("button", { name: "移除可調整數量" })).toBeEnabled();
+    const decrease = await screen.findByRole("button", { name: "減少數量" });
+    fireEvent.click(decrease);
+    await waitFor(() => expect(api.setClassMemberProduct).toHaveBeenCalledWith(
+      "student", "bag", { variants: [{ option_ids: [], quantity: 5 }] },
+    ));
+    await waitFor(() => expect(screen.getByRole("button", { name: "減少數量" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "已保留鎖定數量" })).toBeDisabled();
+    expect(api.getCurrentRegistrations).not.toHaveBeenCalled();
+    expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
   });
 
   it("requires an explicit account claim before showing an editable modal", async () => {

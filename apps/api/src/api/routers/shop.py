@@ -1006,6 +1006,29 @@ async def _class_order_scope_ids(session: AsyncSession, user: User) -> list[uuid
     return list(class_ids)
 
 
+async def _get_class_member_target(
+    session: AsyncSession,
+    current_user: User,
+    member_user_id: uuid.UUID,
+) -> tuple[User, SchoolClass, list[uuid.UUID]]:
+    target = await session.get(User, member_user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
+    target_class = await class_svc.resolve_user_class(session, target)
+    if target_class is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="此學生目前沒有可管理的班級"
+        )
+    class_ids = set(await _class_order_scope_ids(session, current_user))
+    if current_user.is_superuser:
+        class_ids.add(target_class.id)
+    elif target_class.id not in class_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="無權管理此學生的商品登記"
+        )
+    return target, target_class, list(class_ids)
+
+
 @router.get(
     "/orders/class",
     response_model=list[OrderListItem],
@@ -1039,6 +1062,70 @@ async def list_class_orders(
         offset=offset,
     )
     return [shop_svc.serialize_order_list_item(o) for o in orders]
+
+
+@router.get(
+    "/orders/class/members/{member_user_id}/registrations",
+    response_model=list[OrderOut],
+    summary="班級幹部檢視學生所有有效商品登記",
+)
+async def list_class_member_registrations(
+    member_user_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> list[OrderOut]:
+    target, _, class_ids = await _get_class_member_target(session, current_user, member_user_id)
+    orders = await shop_svc.get_class_member_registrations(session, target.id, class_ids)
+    return [shop_svc.serialize_order(order) for order in orders]
+
+
+@router.put(
+    "/orders/class/members/{member_user_id}/products/{product_id}",
+    response_model=list[OrderOut],
+    summary="班級幹部調整學生商品總量",
+)
+async def set_class_member_product(
+    member_user_id: uuid.UUID,
+    product_id: uuid.UUID,
+    payload: CurrentRegistrationUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> list[OrderOut]:
+    target, target_class, class_ids = await _get_class_member_target(
+        session, current_user, member_user_id
+    )
+    previous_orders = await shop_svc.get_class_member_registrations(session, target.id, class_ids)
+    try:
+        orders = await shop_svc.set_class_member_product(
+            session,
+            user=target,
+            actor=current_user,
+            class_id=target_class.id,
+            class_ids=class_ids,
+            product_id=product_id,
+            data=payload,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except StaleDataError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="庫存發生並發衝突") from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="商品登記已更新，請重新整理後再試",
+        ) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    active_order_ids = {order.id for order in orders}
+    for previous_order in previous_orders:
+        if previous_order.id in active_order_ids:
+            continue
+        cancelled_order = await shop_svc.get_order(session, previous_order.id)
+        if cancelled_order is not None:
+            await _broadcast_shop_order(cancelled_order)
+    for order in orders:
+        await _broadcast_shop_order(order)
+    return [shop_svc.serialize_order(order) for order in orders]
 
 
 @router.get(
