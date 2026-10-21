@@ -190,8 +190,10 @@ async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product |
         select(Product)
         .options(
             selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
-            selectinload(Product.category),
-            selectinload(Product.series).selectinload(ProductSeries.category),
+            selectinload(Product.category).selectinload(ProductCategory.activity),
+            selectinload(Product.series)
+            .selectinload(ProductSeries.category)
+            .selectinload(ProductCategory.activity),
             selectinload(Product.media),
         )
         .where(Product.id == product_id)
@@ -233,6 +235,10 @@ async def list_products(
         ),
         selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
         selectinload(Product.media),
+        selectinload(Product.category).selectinload(ProductCategory.activity),
+        selectinload(Product.series)
+        .selectinload(ProductSeries.category)
+        .selectinload(ProductCategory.activity),
     )
     if activity_id:
         q = q.where(
@@ -509,6 +515,8 @@ async def build_catalog_tree(
                 is_unlimited=product.is_unlimited,
                 sale_start=product.sale_start,
                 sale_end=product.sale_end,
+                effective_sale_end=product.sale_end
+                or (category.activity.order_closes_at if category.activity else None),
                 has_variants=len(product.variant_groups) > 0,
                 requires_seating=product.requires_seating,
                 seating_mode=product.seating_mode,
@@ -531,6 +539,8 @@ async def build_catalog_tree(
                     is_unlimited=p.is_unlimited,
                     sale_start=p.sale_start,
                     sale_end=p.sale_end,
+                    effective_sale_end=p.sale_end
+                    or (category.activity.order_closes_at if category.activity else None),
                     has_variants=len(p.variant_groups) > 0,
                     requires_seating=p.requires_seating,
                     seating_mode=p.seating_mode,
@@ -553,6 +563,8 @@ async def build_catalog_tree(
                 name=category.name,
                 activity_id=category.activity_id,
                 activity_name=category.activity.name if category.activity else None,
+                order_closes_at=category.activity.order_closes_at if category.activity else None,
+                activity_status=category.activity.status if category.activity else None,
                 image_url=category.image_url,
                 sort_order=category.sort_order,
                 products=category_products,

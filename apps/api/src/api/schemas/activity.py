@@ -50,6 +50,7 @@ class ActivityOut(BaseModel):
     org_id: uuid.UUID | None
     starts_at: datetime | None
     ends_at: datetime | None
+    order_closes_at: datetime | None = None
     status: ActivityStatus
     is_active: bool
     created_at: datetime

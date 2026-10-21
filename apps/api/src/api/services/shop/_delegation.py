@@ -161,8 +161,10 @@ async def assert_link_open(session: AsyncSession, link: ShopDelegationLink, user
     products = await session.scalars(
         select(Product)
         .options(
-            selectinload(Product.category),
-            selectinload(Product.series).selectinload(ProductSeries.category),
+            selectinload(Product.category).selectinload(ProductCategory.activity),
+            selectinload(Product.series)
+            .selectinload(ProductSeries.category)
+            .selectinload(ProductCategory.activity),
         )
         .where(
             (Product.series_id.is_(None) & Product.category_id.in_(category_ids))

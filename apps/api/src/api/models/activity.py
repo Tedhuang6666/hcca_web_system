@@ -43,6 +43,8 @@ class Activity(Base, TimestampMixin):
     )
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 商品預購結單時間，與活動本身的起訖時間分開設定。
+    order_closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=ActivityStatus.DRAFT, index=True
     )

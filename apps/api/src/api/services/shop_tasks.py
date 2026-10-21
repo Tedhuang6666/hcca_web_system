@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from api.core.celery_app import celery_app
 
@@ -20,7 +20,7 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
     """
     Celery Beat 定時任務：商品截止販售後，通知各受影響班級幹部協助結單收費。
 
-    每 5 分鐘執行一次；掃描 sale_end 落在最近 6 分鐘內（剛截止）的商品，
+    每 5 分鐘執行一次；掃描有效截止時間落在最近 6 分鐘內（剛截止）的商品，
     找出有訂單的班級，對其幹部建立站內通知。視窗略大於排程間隔以避免漏發，
     可能導致極少數情況重複通知，對結單流程無害。
     """
@@ -31,26 +31,14 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
         from api.core.database import task_session
         from api.models.notification import Notification
         from api.models.school_class import ClassCadre
-        from api.models.shop import Order, OrderItem, OrderStatus, Product
+        from api.models.shop import Order, OrderItem, OrderStatus
+        from api.services.shop._deadlines import recently_closed_product_ids
 
         notified = 0
         async with task_session() as session:
             try:
                 now = datetime.now(UTC)
-                window_start = now - timedelta(minutes=6)
-                product_ids = (
-                    (
-                        await session.execute(
-                            select(Product.id).where(
-                                Product.sale_end.is_not(None),
-                                Product.sale_end > window_start,
-                                Product.sale_end <= now,
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
+                product_ids = await recently_closed_product_ids(session, now=now)
                 if product_ids:
                     class_rows = (
                         await session.execute(

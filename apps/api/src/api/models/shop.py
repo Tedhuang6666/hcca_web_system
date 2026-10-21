@@ -227,6 +227,16 @@ class Product(Base, TimestampMixin):
         order_by="SeatingZone.sort_order",
     )
 
+    @property
+    def effective_sale_end(self) -> datetime | None:
+        """單品截止時間優先；未設定時沿用所屬活動的結單時間。"""
+        if self.sale_end is not None:
+            return self.sale_end
+        category = self.category
+        if category is None and self.series is not None:
+            category = self.series.category
+        return category.activity.order_closes_at if category and category.activity else None
+
 
 class ProductMedia(Base):
     """商品詳情圖片，包含一般商品照與模特兒宣傳照。"""

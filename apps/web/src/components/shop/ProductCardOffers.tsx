@@ -1,5 +1,6 @@
 import type { CatalogProductOut, ShopPromotionPublicOut } from "@/lib/types";
 import ShopPrice from "./ShopPrice";
+import { productOrderable } from "@/lib/shop-deadlines";
 
 export default function ProductCardOffers({ product, promotions, products, disabled, onSelectBundle }: {
   product: CatalogProductOut;
@@ -39,8 +40,7 @@ export default function ProductCardOffers({ product, promotions, products, disab
         promotion.code ? `使用優惠碼 ${promotion.code}` : "符合條件自動套用",
       ].filter(Boolean).join(" · ");
       const unavailable = isBundle && bundleProducts.some((target) => !target
-        || target.status !== "active"
-        || (target.sale_end != null && new Date(target.sale_end).getTime() <= Date.now()));
+        || !productOrderable(target, Date.now()));
       return <div className="shop-product-card-offer" key={promotion.id}>
         <strong>{promotion.name}</strong>
         {isBundle ? <>

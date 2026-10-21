@@ -67,6 +67,7 @@ from api.schemas.shop import (
     ProductVariantOptionCreate,
     ProductVariantOptionOut,
     ProductVariantOptionUpdate,
+    ShopActivityDeadlineUpdate,
     ShopClassSummaryOut,
     ShopDelegatedOrderOut,
     ShopDelegationAccess,
@@ -97,6 +98,7 @@ from api.services.permission import get_user_permission_codes
 from api.services.realtime_events import broadcast_order_updated
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _delegation_codes as delegation_code_svc
+from api.services.shop._deadlines import set_activity_order_deadline
 from api.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -280,6 +282,24 @@ async def list_shop_activities(session: DbDep, current_user: CurrentUser) -> lis
             session, current_user.id, active_only=True
         )
     return [ActivityOut.model_validate(activity) for activity in activities]
+
+
+@router.patch(
+    "/activities/{activity_id}/order-deadline",
+    response_model=ActivityOut,
+    summary="設定整個活動的商品結單時間",
+)
+async def update_shop_activity_deadline(
+    activity_id: uuid.UUID,
+    payload: ShopActivityDeadlineUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> ActivityOut:
+    await _require_shop_manager(session, current_user, activity_id)
+    activity = await set_activity_order_deadline(
+        session, activity_id, closes_at=payload.order_closes_at
+    )
+    return ActivityOut.model_validate(or_404(activity, "找不到此活動"))
 
 
 @router.post(

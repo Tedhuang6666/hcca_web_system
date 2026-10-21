@@ -46,6 +46,7 @@ import { bundleProductAvailable, bundleProgress } from "@/lib/shop-bundle-progre
 import { productOfferPrice } from "@/lib/shop-promotion-price";
 import ProductCardOffers from "@/components/shop/ProductCardOffers";
 import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
+import { categoryOrderable, defaultShopCategory, productDeadline } from "@/lib/shop-deadlines";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -421,7 +422,8 @@ function ProductModal({
     0,
     maxSelectableQuantity - (registeredQuantity - selectedRegistrationQuantity),
   );
-  const deadlinePassed = Boolean(product?.sale_end && new Date(product.sale_end).getTime() <= Date.now());
+  const deadline = product ? productDeadline(product) : null;
+  const deadlinePassed = Boolean(deadline && new Date(deadline).getTime() <= Date.now());
   const available = Boolean(
     product
       && (product.status === "active" || registeredQuantity > 0)
@@ -846,7 +848,8 @@ function ProductCard({
   bundleHint: string | null;
 }) {
   const soldOut = product.status === "sold_out";
-  const deadlinePassed = Boolean(product.sale_end && new Date(product.sale_end).getTime() <= Date.now());
+  const deadline = productDeadline(product);
+  const deadlinePassed = Boolean(deadline && new Date(deadline).getTime() <= Date.now());
   const locked = classClosed || deadlinePassed;
   const disabled = (soldOut || locked) && registeredQuantity === 0;
   const statusLabel = classClosed
@@ -896,9 +899,9 @@ function ProductCard({
           )}
         </div>
         {cardPrice.note && <p className="shop-public-product-deadline">{cardPrice.note}</p>}
-        {product.sale_end && (
+        {deadline && (
           <p className="shop-public-product-deadline">
-            截止 {new Date(product.sale_end).toLocaleString("zh-TW")}
+            截止 {new Date(deadline).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
           </p>
         )}
         <span className="shop-public-product-action">
@@ -960,6 +963,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const catalogCacheKey = "shop/catalog/all:v2";
 
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
+  const [catalogTime, setCatalogTime] = useState(Date.now);
   const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
   const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
@@ -1079,7 +1083,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         if (generation !== refreshGeneration.current) return;
         setCatalog(data);
         cacheSet(catalogCacheKey, data);
-        setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);
         try {
           const schoolClass = await classApi.myClass();
           if (generation !== refreshGeneration.current) return;
@@ -1102,7 +1105,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       })
       .catch(() => { if (generation === refreshGeneration.current) setLoadError(true); })
       .finally(() => { if (generation === refreshGeneration.current) setLoading(false); });
-  }, [setSelectedCategoryId, catalogCacheKey]);
+  }, [catalogCacheKey]);
 
   const loadDelegation = useCallback(async (token: string, claim = false) => {
     const generation = refreshGeneration.current;
@@ -1419,6 +1422,29 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const selectedCategory =
     catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
+
+  useEffect(() => {
+    const now = Date.now();
+    const transitions = catalog.flatMap((category) => [
+      ...category.products, ...category.series.flatMap((series) => series.products),
+    ]).flatMap((product) => [product.sale_start, productDeadline(product)])
+      .flatMap((value) => value && new Date(value).getTime() > now ? [new Date(value).getTime()] : []);
+    const refresh = () => setCatalogTime(Date.now());
+    const next = transitions.length ? Math.min(...transitions) : null;
+    const timer = next == null ? null : window.setTimeout(refresh, Math.min(next - now + 10, 2_147_483_647));
+    window.addEventListener("focus", refresh);
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [catalog, catalogTime]);
+
+  useEffect(() => {
+    if (loading || delegationToken || topicSlug || productSlug
+      || new URLSearchParams(window.location.search).has("product")) return;
+    setSelectedCategoryId((current) => defaultShopCategory(catalog, current, Date.now(), closeStatus)?.id ?? null);
+    setSelectedSeriesId(null);
+  }, [catalog, catalogTime, closeStatus, loading, delegationToken, topicSlug, productSlug, setSelectedCategoryId]);
 
   useEffect(() => {
     if (!catalog.length) return;
@@ -2083,7 +2109,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
             <div className="shop-public-activity-heading">
               <h2 id="shop-activity-title">選擇活動</h2>
-              <p>商品登記會依活動分開</p>
+              <p>商品登記會依活動分開，預設顯示仍可訂購的活動</p>
             </div>
             <nav className="shop-public-category-nav" aria-label="選擇商品活動">
               {catalog.map((category) => {
@@ -2101,7 +2127,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                     aria-pressed={isSelected}
                     className="shop-public-category-tab">
                     {category.name}
-                    <span className="shop-public-category-count">{productCount} 件</span>
+                    <span className="shop-public-category-count">
+                      {categoryOrderable(category, catalogTime, closeStatus[category.id]?.is_closed) ? "訂購中" : "暫停訂購"} · {productCount} 件
+                    </span>
                   </button>
                 );
               })}
@@ -2113,6 +2141,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               <h2>{selectedCategory.name}</h2>
               <p>{visibleProductCount} 件商品</p>
             </header>
+            {selectedCategory.order_closes_at && <p className="shop-public-product-deadline">
+              活動結單：{new Date(selectedCategory.order_closes_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}（單品另設期限時以商品標示為準）
+            </p>}
             {selectedCategoryRegistration && selectedCategoryRegistration.items.length > 0 && (
               <div className="shop-registration-price" role="status" aria-live="polite">
                 <div><strong>目前登記合計</strong>

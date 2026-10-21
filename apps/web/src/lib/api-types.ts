@@ -10259,6 +10259,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/activities/{activity_id}/order-deadline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 設定整個活動的商品結單時間 */
+        patch: operations["update_shop_activity_deadline_shop_activities__activity_id__order_deadline_patch"];
+        trace?: never;
+    };
     "/shop/catalog": {
         parameters: {
             query?: never;
@@ -12547,6 +12564,8 @@ export interface components {
             is_active: boolean;
             /** Name */
             name: string;
+            /** Order Closes At */
+            order_closes_at?: string | null;
             /** Org Id */
             org_id: string | null;
             /** Starts At */
@@ -14315,6 +14334,8 @@ export interface components {
             activity_id?: string | null;
             /** Activity Name */
             activity_name?: string | null;
+            /** Activity Status */
+            activity_status?: string | null;
             /**
              * Id
              * Format: uuid
@@ -14324,6 +14345,8 @@ export interface components {
             image_url?: string | null;
             /** Name */
             name: string;
+            /** Order Closes At */
+            order_closes_at?: string | null;
             /**
              * Products
              * @default []
@@ -14342,6 +14365,8 @@ export interface components {
         };
         /** CatalogProductOut */
         CatalogProductOut: {
+            /** Effective Sale End */
+            effective_sale_end?: string | null;
             /**
              * Has Variants
              * @default false
@@ -24868,7 +24893,7 @@ export interface components {
             requires_seating: boolean;
             /**
              * Sale End
-             * @description 截止時間
+             * @description 單品截止時間；留空沿用活動結單時間
              */
             sale_end?: string | null;
             /**
@@ -24947,6 +24972,8 @@ export interface components {
             created_by: string;
             /** Description */
             description: string | null;
+            /** Effective Sale End */
+            effective_sale_end?: string | null;
             /**
              * Id
              * Format: uuid
@@ -28998,6 +29025,14 @@ export interface components {
             /** Enabled */
             enabled: boolean;
         };
+        /** ShopActivityDeadlineUpdate */
+        ShopActivityDeadlineUpdate: {
+            /**
+             * Order Closes At
+             * @description 活動商品停止訂購時間；null 表示取消活動統一期限
+             */
+            order_closes_at: string | null;
+        };
         /** ShopClassProductSummaryRow */
         ShopClassProductSummaryRow: {
             /**
@@ -29711,6 +29746,11 @@ export interface components {
             allow_multiple: boolean;
             /** Allowed Domains */
             allowed_domains?: string[];
+            /**
+             * Allowed Grades
+             * @description 限填年級（1=高一、2=高二、3=高三）；空清單代表不限年級
+             */
+            allowed_grades?: number[];
             /** Allowed Org Ids */
             allowed_org_ids?: string[];
             /** Allowed User Ids */
@@ -29746,11 +29786,6 @@ export interface components {
              */
             org_id: string;
             /**
-            /**
-             * Allowed Grades
-             * @description 限填年級（1=高一、2=高二、3=高三）；空清單代表不限年級
-             */
-            allowed_grades?: number[];
              * Show Announcement Popup
              * @default false
              */
@@ -29815,6 +29850,8 @@ export interface components {
             allow_multiple: boolean;
             /** Allowed Domains */
             allowed_domains?: string[];
+            /** Allowed Grades */
+            allowed_grades?: number[];
             /** Allowed Org Ids */
             allowed_org_ids?: string[];
             /** Allowed User Ids */
@@ -29850,8 +29887,6 @@ export interface components {
              * Is Listed
              * @default true
              */
-            /** Allowed Grades */
-            allowed_grades?: number[];
             is_listed: boolean;
             /**
              * Is Public
@@ -30175,6 +30210,8 @@ export interface components {
             activity_id?: string | null;
             /** Allowed Domains */
             allowed_domains?: string[] | null;
+            /** Allowed Grades */
+            allowed_grades?: number[] | null;
             /** Allowed Org Ids */
             allowed_org_ids?: string[] | null;
             /** Allowed User Ids */
@@ -30210,8 +30247,6 @@ export interface components {
             load_signals: components["schemas"]["LoadSignalsView"];
             maintenance: components["schemas"]["MaintenanceView"];
             redis: components["schemas"]["RedisView"];
-            /** Allowed Grades */
-            allowed_grades?: number[] | null;
             /** Timestamp */
             timestamp: number;
             ws: components["schemas"]["WsView"];
@@ -54327,6 +54362,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityOut"][];
+                };
+            };
+        };
+    };
+    update_shop_activity_deadline_shop_activities__activity_id__order_deadline_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopActivityDeadlineUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
