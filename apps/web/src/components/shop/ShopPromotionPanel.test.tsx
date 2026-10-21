@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   listPromotions: vi.fn(),
   listProducts: vi.fn(),
   catalog: vi.fn(),
+  listCategories: vi.fn(),
+  listSeries: vi.fn(),
   updatePromotion: vi.fn(),
   createPromotion: vi.fn(),
 }));
@@ -48,6 +50,8 @@ beforeEach(() => {
   api.listPromotions.mockResolvedValue([pendingStudentTarget]);
   api.listProducts.mockResolvedValue([]);
   api.catalog.mockResolvedValue([]);
+  api.listCategories.mockResolvedValue([]);
+  api.listSeries.mockResolvedValue([]);
   api.updatePromotion.mockResolvedValue(pendingStudentTarget);
 });
 
@@ -72,6 +76,37 @@ describe("優惠管理的預先指定學號", () => {
       discount_type: "bundle_price", discount_value: 650, target_product_ids: ["shirt", "pants"],
     })));
   });
+
+  it("可為尚未上架的商品預先設定優惠", async () => {
+    const draftProduct = {
+      id: "draft-shirt",
+      name: "新款 T-shirt",
+      price: 300,
+      status: "draft",
+      category_id: "goods",
+      series_id: null,
+    };
+    api.listProducts.mockResolvedValue([draftProduct]);
+    api.listCategories.mockResolvedValue([
+      { id: "goods", name: "一般商品", activity_id: null },
+    ]);
+    api.createPromotion.mockResolvedValue({});
+    render(<ShopPromotionPanel />);
+
+    const productCheckbox = await screen.findByRole("checkbox", { name: /新款 T-shirt.*尚未上架/ });
+    expect(api.listProducts).toHaveBeenCalledWith({ limit: "100", offset: "0" });
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), {
+      target: { value: "新款預購優惠" },
+    });
+    fireEvent.click(productCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+
+    await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
+      name: "新款預購優惠",
+      target_product_ids: ["draft-shirt"],
+    })));
+  });
+
   it("顯示尚未註冊的學號，並在編輯時保留該學號", async () => {
     render(<ShopPromotionPanel />);
 

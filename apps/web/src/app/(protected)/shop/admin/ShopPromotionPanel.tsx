@@ -4,7 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { apiErrorMessage, shopApi } from "@/lib/api";
-import type { CatalogCategoryOut, ProductOut, ShopDiscountType, ShopPromotionOut } from "@/lib/types";
+import type {
+  CatalogCategoryOut,
+  ProductOut,
+  ProductCategoryOut,
+  ProductSeriesOut,
+  ShopDiscountType,
+  ShopPromotionOut,
+} from "@/lib/types";
 
 const GENERAL_ACTIVITY_SCOPE = "__general__";
 
@@ -40,11 +47,18 @@ const emptyForm: PromotionForm = {
   is_public: true,
 };
 
-async function listAllActiveProducts() {
+const PRODUCT_STATUS_LABEL: Record<ProductOut["status"], string> = {
+  draft: "尚未上架",
+  active: "上架中",
+  sold_out: "售罄",
+  cancelled: "已下架",
+};
+
+async function listAllProducts() {
   const products: ProductOut[] = [];
   let offset = 0;
   while (true) {
-    const page = await shopApi.listProducts({ status: "active", limit: "100", offset: String(offset) });
+    const page = await shopApi.listProducts({ limit: "100", offset: String(offset) });
     products.push(...page);
     if (page.length < 100) return products;
     offset += page.length;
@@ -55,6 +69,8 @@ export default function ShopPromotionPanel() {
   const [promotions, setPromotions] = useState<ShopPromotionOut[]>([]);
   const [products, setProducts] = useState<ProductOut[]>([]);
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
+  const [categories, setCategories] = useState<ProductCategoryOut[]>([]);
+  const [series, setSeries] = useState<ProductSeriesOut[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [editingPromotionId, setEditingPromotionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,14 +84,18 @@ export default function ShopPromotionPanel() {
     setLoading(true);
     setLoadError("");
     try {
-      const [promotionRows, productRows, catalogRows] = await Promise.all([
+      const [promotionRows, productRows, catalogRows, categoryRows, seriesRows] = await Promise.all([
         shopApi.listPromotions(),
-        listAllActiveProducts(),
+        listAllProducts(),
         shopApi.catalog(),
+        shopApi.listCategories(),
+        shopApi.listSeries(),
       ]);
       setPromotions(promotionRows);
       setProducts(productRows);
       setCatalog(catalogRows);
+      setCategories(categoryRows);
+      setSeries(seriesRows);
     } catch (error) {
       setLoadError(apiErrorMessage(error, "無法載入優惠，請重新載入後再操作。"));
     } finally {
@@ -237,27 +257,41 @@ export default function ShopPromotionPanel() {
     }));
   };
 
+  const categoryScopes = new Map(
+    categories.map((category) => [category.id, category.activity_id ?? GENERAL_ACTIVITY_SCOPE]),
+  );
+  const seriesScopes = new Map(
+    series.map((item) => [
+      item.id,
+      categoryScopes.get(item.category_id) ?? GENERAL_ACTIVITY_SCOPE,
+    ]),
+  );
   const productScopes = new Map<string, string>();
   const activityNames = new Map<string, Set<string>>();
   for (const category of catalog) {
-    const scope = category.activity_id ?? GENERAL_ACTIVITY_SCOPE;
     if (category.activity_id) {
       const names = activityNames.get(category.activity_id) ?? new Set<string>();
       names.add(category.activity_name ?? category.name);
       activityNames.set(category.activity_id, names);
     }
-    for (const product of category.products) productScopes.set(product.id, scope);
-    for (const series of category.series) {
-      for (const product of series.products) productScopes.set(product.id, scope);
-    }
+  }
+  for (const product of products) {
+    const scope = product.category_id
+      ? categoryScopes.get(product.category_id) ?? GENERAL_ACTIVITY_SCOPE
+      : product.series_id
+        ? seriesScopes.get(product.series_id) ?? GENERAL_ACTIVITY_SCOPE
+        : GENERAL_ACTIVITY_SCOPE;
+    productScopes.set(product.id, scope);
   }
   const activityOptions = [
-    ...(catalog.some((category) => category.activity_id == null)
+    ...(categories.some((category) => category.activity_id == null)
       ? [{ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" }]
       : []),
-    ...[...activityNames.entries()].map(([id, names]) => ({
+    ...[...new Set(categories.map((category) => category.activity_id).filter(
+      (activityId): activityId is string => activityId !== null,
+    ))].map((id) => ({
       id,
-      label: [...names].join("、") || "活動商品",
+      label: [...(activityNames.get(id) ?? [])].join("、") || "活動商品",
     })),
   ];
   if (!activityOptions.some((option) => option.id === form.activity_id)) {
@@ -376,13 +410,25 @@ export default function ShopPromotionPanel() {
                   ? "選擇至少兩項商品，例如衣服 + 褲子。每項各一件為一套，學生可分別選擇尺寸、顏色。"
                 : "折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。"}
             </p>
+            <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+              草稿與已下架商品也會列出，方便預先設定；商品上架且符合優惠條件後，使用者才可使用。
+            </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
               {scopedProducts.length === 0 ? (
-                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>此活動目前沒有上架商品；仍可建立適用於該活動全部商品的優惠。</p>
+                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>此活動目前沒有可選商品；仍可建立適用於該活動全部商品的優惠。</p>
               ) : scopedProducts.map((product) => (
                 <label key={product.id} className="flex min-h-10 items-center gap-2 rounded-md px-2 text-xs" style={{ color: "var(--text-secondary)" }}>
                   <input type="checkbox" checked={form.target_product_ids.includes(product.id)} onChange={() => toggleProduct(product.id)} />
                   <span>{product.name}</span>
+                  <span
+                    className="ml-auto whitespace-nowrap rounded px-1.5 py-0.5 text-[10px]"
+                    style={{
+                      background: product.status === "active" ? "var(--success-dim)" : "var(--bg-elevated)",
+                      color: product.status === "active" ? "var(--success)" : "var(--text-muted)",
+                    }}
+                  >
+                    {PRODUCT_STATUS_LABEL[product.status]}
+                  </span>
                 </label>
               ))}
             </div>
