@@ -119,10 +119,11 @@ function groupShopTabs(tabs: ModuleTab[]): ShopNavigationGroup[] {
       label: "預購",
       tabs: tabs.filter((tab) => tab.href === "/shop" || tab.href === "/shop/orders"),
     },
-    { label: councilTab ? "班聯工作" : "班代工作", tabs: councilTab ? [councilTab] : classTab ? [classTab] : [] },
+    { label: "班代工作", tabs: classTab ? [classTab] : [] },
+    { label: "班聯工作", tabs: councilTab ? [councilTab] : [] },
     {
       label: "其他工具",
-      tabs: tabs.filter((tab) => !["/shop", "/shop/orders", councilTab ? "/shop/council-orders" : "/shop/class-orders"].includes(tab.href)),
+      tabs: tabs.filter((tab) => !["/shop", "/shop/orders", "/shop/class-orders", "/shop/council-orders"].includes(tab.href)),
     },
   ].filter((group) => group.tabs.length > 0);
 }
@@ -169,7 +170,7 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
       className="shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4"
     >
       {visibleGroups.map((group) => group.label !== "其他工具" ? (
-        <section key={group.label} className={`shop-workspace-group${group.label === "班代工作" || group.label === "班聯工作" ? " shop-role-entry" : ""}`} aria-label={`${group.label}功能`}>
+        <section key={group.label} className={`shop-workspace-group${group.label === "班代工作" ? " shop-representative-entry" : group.label === "班聯工作" ? " shop-council-entry" : ""}`} aria-label={`${group.label}功能`}>
           <h2 className="sr-only">{group.label}</h2>
           {links(group)}
         </section>
