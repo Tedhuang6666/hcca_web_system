@@ -41,6 +41,8 @@ import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url"
 import { cleanupAnimatedElement, shouldAnimateProductFlight } from "@/lib/shop-product-flight";
 import ShopPrice from "@/components/shop/ShopPrice";
 import BundleOffer from "@/components/shop/BundleOffer";
+import BundleAddOn from "@/components/shop/BundleAddOn";
+import { bundleProductAvailable, bundleProgress } from "@/lib/shop-bundle-progress";
 import { productOfferPrice } from "@/lib/shop-promotion-price";
 import ProductCardOffers from "@/components/shop/ProductCardOffers";
 import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
@@ -233,6 +235,7 @@ function ProductModal({
   promotions,
   activityId,
   bundleStep,
+  bundleAddOn,
 }: {
   productId: string;
   shoppingApi: Pick<typeof shopApi, "getProduct" | "setCurrentRegistrationProduct" | "setClassMemberProduct">;
@@ -256,6 +259,7 @@ function ProductModal({
   promotions: ShopPromotionPublicOut[];
   activityId: string | null;
   bundleStep?: { name: string; nextLabel: string; onContinue: () => void };
+  bundleAddOn?: (disabled: boolean) => React.ReactNode;
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -643,6 +647,7 @@ function ProductModal({
                   <h3 id="product-modal-title">{product.name}</h3>
                   <ShopPrice original={unitPrice} current={offerPrice} />
                   {bundleStep && <p className="shop-product-purchase-hint">正在選購「{bundleStep.name}」，每項各一件；選齊後享套組價。</p>}
+                  {bundleAddOn?.(loading || !canEdit)}
                   {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
                   {product.description && <p className="whitespace-pre-line">{product.description}</p>}
                   {!product.is_unlimited && product.status === "active" && (
@@ -825,6 +830,7 @@ function ProductCard({
   products,
   offersLocked,
   onSelectBundle,
+  bundleHint,
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
@@ -837,6 +843,7 @@ function ProductCard({
   products: Map<string, CatalogProductOut>;
   offersLocked: boolean;
   onSelectBundle: (promotion: ShopPromotionPublicOut) => void;
+  bundleHint: string | null;
 }) {
   const soldOut = product.status === "sold_out";
   const deadlinePassed = Boolean(product.sale_end && new Date(product.sale_end).getTime() <= Date.now());
@@ -906,7 +913,8 @@ function ProductCard({
     </>
   );
 
-  return <article className="shop-public-product-entry" aria-label={`${product.name}商品`}>
+  return <article className="shop-public-product-entry" data-bundle-addon={Boolean(bundleHint) || undefined} aria-label={`${product.name}商品`}>
+    {bundleHint && <p className="shop-product-bundle-hint"><Gift size={16} aria-hidden="true" />{bundleHint}</p>}
     {href ? (
       <Link
         href={href}
@@ -991,12 +999,23 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [classLoadFailed, setClassLoadFailed] = useState(false);
   const [orderShortcutPortalReady, setOrderShortcutPortalReady] = useState(false);
+  const [compactShortcuts, setCompactShortcuts] = useState(false);
+  const [shortcutSlot, setShortcutSlot] = useState<HTMLDivElement | null>(null);
   const [delegationOpen, setDelegationOpen] = useState(false);
   const delegationTriggerRef = useRef<HTMLButtonElement>(null);
   const delegationReopenRef = useRef<HTMLButtonElement>(null);
   const delegationReadyRef = useRef<HTMLHeadingElement>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 767px)");
+    if (!media) return;
+    setCompactShortcuts(media.matches);
+    const update = (event: MediaQueryListEvent) => setCompactShortcuts(event.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     setOrderShortcutPortalReady(true);
@@ -1595,20 +1614,34 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const categoryPromotions = classMemberUserId ? [] : availablePromotions.filter((promotion) => (
     (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
   ));
-  const bundlePromotions = availablePromotions.filter((promotion) => (
+  const bundlePromotions = (classMemberUserId ? [] : availablePromotions).filter((promotion) => (
     promotion.discount_type === "bundle_price"
-    && (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
-    && promotion.target_products?.some((target) => selectedCategory?.products.some((product) => product.id === target.id)
-      || selectedCategory?.series.some((series) => series.products.some((product) => product.id === target.id)))
+    && promotion.target_products?.some((target) => catalogProducts.has(target.id))
   ));
   const activeBundle = bundlePromotions.find((promotion) => promotion.id === activeBundleId);
-  const nextBundleProduct = activeBundle?.target_products?.find((target) => target.id !== openProduct
-    && !selectedCategoryRegistration?.items.some((item) => item.product_id === target.id));
+  // 在目前商品尚未送出前，也能指出下一個待選品項。
+  const nextBundleProduct = activeBundle && bundleProgress(activeBundle, catalogProducts,
+    selectedCategoryRegistration).missing.find((target) => target.id !== openProduct);
   const selectBundleProduct = (promotion: ShopPromotionPublicOut, productId: string) => {
+    const category = catalog.find((item) => item.products.some((product) => product.id === productId)
+      || item.series.some((series) => series.products.some((product) => product.id === productId)));
+    if (!category) return;
     setActiveBundleId(promotion.id);
-    if (selectedCategory) setSelectedPromotionScope(catalogScopeKey(selectedCategory));
+    setSelectedPromotionScope(catalogScopeKey(category));
     if (promotion.code) setCouponCode(promotion.code);
     openPromotionProduct(productId);
+  };
+  const bundleHintFor = (product: CatalogProductOut) => {
+    if (registrationLocked || registrationLoadError || closeStatus[selectedCategory?.id ?? ""]?.is_closed
+      || !bundleProductAvailable(product)) return null;
+    const savings = categoryPromotions.filter((promotion) => promotion.discount_type === "bundle_price")
+      .map((promotion) => bundleProgress(promotion, catalogProducts, selectedCategoryRegistration))
+      .filter((progress) => progress.started && !progress.unavailable
+        && progress.missing.some((target) => target.id === product.id))
+      .map((progress) => progress.saving ?? 0);
+    if (!savings.length) return null;
+    const saving = Math.max(...savings);
+    return saving > 0 ? `加購可湊組 · 每套省 NT$${saving.toLocaleString()}` : "加購此商品可湊組";
   };
   const visibleProductCount = (
     (selectedSeriesId ? 0 : selectedCategory?.products.length ?? 0)
@@ -1716,6 +1749,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         </div>
       </header>
 
+      {!delegationToken && <div className="shop-mobile-shortcut-slot" ref={setShortcutSlot} />}
+
       {classMemberUserId && (
         <section className="shop-public-context" aria-label="班代調整對象">
           <UsersRound size={18} aria-hidden="true" />
@@ -1777,6 +1812,25 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           </div>
         </section>
       )}
+
+      {!loading && !loadError && bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
+        <div className="shop-bundles-heading">
+          <h2 id="shop-bundles-title"><Gift size={22} aria-hidden="true" />組合購買專區</h2>
+          <p>一起選購享組合價；已登記其中一項，可直接加購湊組。</p>
+        </div>
+        {bundlePromotions.map((promotion) => {
+          const category = catalog.find((item) => [...item.products, ...item.series.flatMap((series) => series.products)]
+            .some((product) => promotion.target_products?.some((target) => target.id === product.id)));
+          const registration = category ? registrations.find((order) => orderScopeKey(order) === catalogScopeKey(category)) ?? null : null;
+          return <BundleOffer key={promotion.id} promotion={promotion} products={catalogProducts}
+            scopeName={category?.activity_name ?? category?.name}
+            registration={registration}
+            disabled={authLoading || registrationLoadError || Boolean(registration?.is_paid || registration?.is_class_collected)
+              || Boolean(delegationToken && !delegationContext?.can_edit)
+              || Boolean(category && closeStatus[category.id]?.is_closed)}
+            onSelect={(productId) => selectBundleProduct(promotion, productId)} />;
+        })}
+      </section>}
 
       <details className="shop-public-promotions">
         <summary className="shop-public-promotion-toggle" aria-controls="shop-promotion-content">
@@ -2070,12 +2124,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
               </div>
             )}
-            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-label="商品套組優惠">
-              {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id} promotion={promotion}
-                products={catalogProducts} registration={selectedCategoryRegistration}
-                disabled={registrationLocked || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
-                onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
-            </section>}
             {selectedCategory.series.length > 0 && (
               <div className="shop-public-series-filter-wrap">
                 <span>商品系列</span>
@@ -2121,6 +2169,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                       <ProductCard
                         key={product.id}
                         product={product}
+                        bundleHint={bundleHintFor(product)}
                         promotions={categoryPromotions}
                         products={catalogProducts}
                         offersLocked={registrationLocked || Boolean(classMemberUserId && classMemberAccess !== "ready")}
@@ -2158,6 +2207,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         <ProductCard
                           key={product.id}
                           product={product}
+                          bundleHint={bundleHintFor(product)}
                           promotions={categoryPromotions}
                           products={catalogProducts}
                           offersLocked={registrationLocked || Boolean(classMemberUserId && classMemberAccess !== "ready")}
@@ -2201,7 +2251,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             <span>我的預購</span>
           </Link>}
         </nav>,
-        document.body,
+        compactShortcuts && shortcutSlot ? shortcutSlot : document.body,
       )}
 
       {delegationOpen && !delegationToken && <Modal title={isStudent ? "邀請家人代訂" : "代訂商品"} size="lg" onClose={closeDelegation}>
@@ -2235,6 +2285,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           productId={openProduct}
           promotions={classMemberUserId ? [] : availablePromotions}
           activityId={selectedCategory?.activity_id ?? null}
+          bundleAddOn={(disabled) => <BundleAddOn productId={openProduct} promotions={categoryPromotions}
+            products={catalogProducts} registration={selectedCategoryRegistration}
+            disabled={disabled}
+            onSelect={selectBundleProduct} />}
           bundleStep={activeBundle ? {
             name: activeBundle.name,
             nextLabel: nextBundleProduct ? `下一項：${nextBundleProduct.name}` : "完成套組選購",
