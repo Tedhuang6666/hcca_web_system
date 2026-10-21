@@ -6,11 +6,19 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.org import UserPosition
+from api.core.clock import local_today
+from api.models.org import Org, Position, UserPosition
+from api.models.person import (
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationStatus,
+)
+from api.models.school_class import ClassRoleBinding, ClassRoleKey
 from api.models.user import User
 from api.schemas.school_class import (
     ClassMembershipCreate,
     ClassRoleAssign,
+    ClassRolePersonAssign,
     ClassRosterEntryCreate,
     SchoolClassCreate,
 )
@@ -198,6 +206,192 @@ async def test_google_login_links_preimported_person_and_roster(
         user_agent="class-linking-test",
     )
     assert again.id == user.id
+
+
+async def test_google_login_restores_preassigned_class_representative_and_council_identity(
+    db_session: AsyncSession,
+    admin_user: User,
+):
+    from api.models.person import Person
+    from api.routers.auth import _upsert_google_user
+
+    sc = await make_class(db_session, admin_user)
+    council = Org(name="學生代表大會")
+    db_session.add(council)
+    await db_session.flush()
+    await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=10, student_id="510010")
+    )
+
+    pending_role = await class_svc.assign_class_person_role(
+        db_session,
+        sc,
+        role_key=ClassRoleKey.CLASS_REPRESENTATIVE,
+        data=ClassRolePersonAssign(student_id="510010", display_name="預先任命的班代"),
+    )
+    assert pending_role.status == PersonAffiliationStatus.PENDING_USER
+    person = await db_session.get(Person, pending_role.person_id)
+    assert person is not None
+    pending_council_role = await db_session.scalar(
+        select(PersonAffiliation).where(
+            PersonAffiliation.person_id == person.id,
+            PersonAffiliation.kind == PersonAffiliationKind.ORG_POSITION,
+        )
+    )
+    assert pending_council_role is None
+
+    user = await _upsert_google_user(
+        db_session,
+        google_sub="synthetic-preappointed-representative",
+        email="g0510010@hchs.hc.edu.tw",
+        display_name="登入的班代",
+        avatar_url=None,
+        client_ip="127.0.0.1",
+        user_agent="class-linking-test",
+    )
+
+    await db_session.refresh(person)
+    await db_session.refresh(pending_role)
+    assert person.user_id == user.id
+    assert pending_role.status == PersonAffiliationStatus.ACTIVE
+    assert pending_role.synced_user_position_id is not None
+
+    council_role = await db_session.scalar(
+        select(PersonAffiliation).where(
+            PersonAffiliation.person_id == person.id,
+            PersonAffiliation.kind == PersonAffiliationKind.ORG_POSITION,
+        )
+    )
+    assert council_role is not None
+    await db_session.refresh(council_role)
+    assert council_role.status == PersonAffiliationStatus.ACTIVE
+    assert council_role.synced_user_position_id is not None
+
+    old_council_position = await db_session.get(UserPosition, council_role.synced_user_position_id)
+    await db_session.delete(council_role)
+    if old_council_position is not None:
+        await db_session.delete(old_council_position)
+    await db_session.flush()
+
+    again = await _upsert_google_user(
+        db_session,
+        google_sub="synthetic-preappointed-representative",
+        email=user.email,
+        display_name=user.display_name,
+        avatar_url=None,
+        client_ip="127.0.0.1",
+        user_agent="class-linking-test",
+    )
+    assert again.id == user.id
+
+    class_binding = await db_session.scalar(
+        select(ClassRoleBinding).where(
+            ClassRoleBinding.class_id == sc.id,
+            ClassRoleBinding.role_key == ClassRoleKey.CLASS_REPRESENTATIVE,
+        )
+    )
+    council_position = await db_session.scalar(
+        select(Position).where(Position.org_id == council.id, Position.name == "議員")
+    )
+    assert class_binding is not None
+    assert council_position is not None
+    council_role = await db_session.scalar(
+        select(PersonAffiliation).where(
+            PersonAffiliation.person_id == person.id,
+            PersonAffiliation.kind == PersonAffiliationKind.ORG_POSITION,
+        )
+    )
+    assert council_role is not None
+    await db_session.refresh(council_role)
+    assert council_role.status == PersonAffiliationStatus.ACTIVE
+    assert council_role.synced_user_position_id is not None
+    council_affiliations = await db_session.scalars(
+        select(PersonAffiliation).where(
+            PersonAffiliation.person_id == person.id,
+            PersonAffiliation.kind == PersonAffiliationKind.ORG_POSITION,
+        )
+    )
+    assert len(list(council_affiliations.all())) == 1
+    granted_position_ids = set(
+        (
+            await db_session.scalars(
+                select(UserPosition.position_id).where(UserPosition.user_id == user.id)
+            )
+        ).all()
+    )
+    assert class_binding.position_id in granted_position_ids
+    assert council_position.id in granted_position_ids
+
+
+async def test_google_login_does_not_sync_roles_for_another_accounts_person(
+    db_session: AsyncSession,
+    admin_user: User,
+    make_user: Callable,
+):
+    from api.models.person import Person
+    from api.routers.auth import _upsert_google_user
+
+    sc = await make_class(db_session, admin_user)
+    council = Org(name="學生代表大會")
+    db_session.add(council)
+    await db_session.flush()
+    await class_svc.ensure_class_default_roles(db_session, sc)
+    binding = await db_session.scalar(
+        select(ClassRoleBinding).where(
+            ClassRoleBinding.class_id == sc.id,
+            ClassRoleBinding.role_key == ClassRoleKey.CLASS_REPRESENTATIVE,
+        )
+    )
+    assert binding is not None
+
+    owner = await make_user(email="linked-person-owner@school.test")
+    person = Person(
+        user_id=owner.id,
+        student_id="510011",
+        display_name="已連結其他帳號的班代",
+    )
+    db_session.add(person)
+    await db_session.flush()
+    db_session.add(
+        PersonAffiliation(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_ROLE,
+            class_id=sc.id,
+            position_id=binding.position_id,
+            role_key=ClassRoleKey.CLASS_REPRESENTATIVE,
+            start_date=local_today(),
+            status=PersonAffiliationStatus.ACTIVE,
+        )
+    )
+    await db_session.flush()
+
+    user = await _upsert_google_user(
+        db_session,
+        google_sub="synthetic-mismatched-person-account",
+        email="g0510011@hchs.hc.edu.tw",
+        display_name="另一個帳號",
+        avatar_url=None,
+        client_ip="127.0.0.1",
+        user_agent="class-linking-test",
+    )
+
+    assert user.id != owner.id
+    assert person.user_id == owner.id
+    assert (
+        await db_session.scalar(
+            select(PersonAffiliation.id).where(
+                PersonAffiliation.person_id == person.id,
+                PersonAffiliation.kind == PersonAffiliationKind.ORG_POSITION,
+            )
+        )
+        is None
+    )
+    assert (
+        await db_session.scalar(
+            select(Position.id).where(Position.org_id == council.id, Position.name == "議員")
+        )
+        is None
+    )
 
 
 async def test_person_affiliations_report_account_link_without_membership(
