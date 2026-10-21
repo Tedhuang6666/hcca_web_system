@@ -33,6 +33,7 @@ _ASYNCPG_PREPARED_STATEMENT_RE = re.compile(
     r"__asyncpg_(?:stmt_)?[A-Za-z0-9-]+__",
     re.IGNORECASE,
 )
+_PYTHON_OBJECT_ADDRESS_RE = re.compile(r"(?i)(\bat\s+)0x[0-9a-f]+")
 _WHITESPACE_RE = re.compile(r"\s+")
 _CLIENT_TRANSIENT_QUERY_RE = re.compile(r"[?#][^\s\]]*")
 _CLIENT_TRANSIENT_ASSET_RE = re.compile(r"\b[a-f0-9]{16,}\b", re.IGNORECASE)
@@ -82,6 +83,7 @@ def normalize_error_message(message: str) -> str:
         "__asyncpg_stmt_{name}__",
         sanitize_incident_text(message, 1000),
     )
+    normalized = _PYTHON_OBJECT_ADDRESS_RE.sub(r"\1{address}", normalized)
     normalized = _UUID_RE.sub("{uuid}", normalized)
     normalized = _NUMBER_RE.sub("{id}", normalized)
     return _WHITESPACE_RE.sub(" ", normalized).strip()[:500]
