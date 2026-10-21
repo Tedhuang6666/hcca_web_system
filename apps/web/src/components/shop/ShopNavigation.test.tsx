@@ -141,6 +141,18 @@ describe("商品工作導覽", () => {
     expect(nav.queryByRole("link", { name: "班級與議員設定" })).not.toBeInTheDocument();
   });
 
+  it("keeps the representative entry prominent when staff also manage council orders", () => {
+    state.pathname = "/shop/council-orders";
+    state.permissions = ["class:shop_collect", "shop:manage"];
+    const nav = openNavigation();
+    const representative = nav.getByRole("link", { name: "班代代訂與收款" });
+    const council = nav.getByRole("link", { name: "班聯工作" });
+    expect(representative.closest(".shop-representative-entry")).not.toBeNull();
+    expect(representative.closest("details")).toBeNull();
+    expect(council.closest(".shop-council-entry")).not.toBeNull();
+    expect(council).toHaveAttribute("aria-current", "page");
+  });
+
   it("exposes class setup only to staff with class management permission", () => {
     state.permissions = ["class:manage"];
     const nav = openNavigation();
