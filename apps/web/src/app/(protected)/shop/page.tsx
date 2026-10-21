@@ -43,6 +43,7 @@ import ShopPrice from "@/components/shop/ShopPrice";
 import BundleOffer from "@/components/shop/BundleOffer";
 import { productOfferPrice } from "@/lib/shop-promotion-price";
 import ProductCardOffers from "@/components/shop/ProductCardOffers";
+import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -759,7 +760,7 @@ function ProductCard({
   registeredQuantity,
   href,
   onClick,
-  offerPrice,
+  cardPrice,
   promotions,
   products,
   offersLocked,
@@ -770,7 +771,7 @@ function ProductCard({
   registeredQuantity: number;
   href: string | null;
   onClick: () => void;
-  offerPrice: number;
+  cardPrice: ShopCardPrice;
   promotions: ShopPromotionPublicOut[];
   products: Map<string, CatalogProductOut>;
   offersLocked: boolean;
@@ -820,12 +821,13 @@ function ProductCard({
         </h4>
         <div className="shop-public-product-meta">
           <span className="shop-public-product-price">
-            <ShopPrice original={product.price} current={offerPrice} suffix={product.has_variants ? " 起" : undefined} />
+            <ShopPrice original={cardPrice.original} current={cardPrice.current} suffix={!cardPrice.note && product.has_variants ? " 起" : undefined} />
           </span>
           {!product.is_unlimited && !soldOut && (
             <span className="shop-public-product-deadline">剩 {product.stock_quantity}</span>
           )}
         </div>
+        {cardPrice.note && <p className="shop-public-product-deadline">{cardPrice.note}</p>}
         {product.sale_end && (
           <p className="shop-public-product-deadline">
             截止 {new Date(product.sale_end).toLocaleString("zh-TW")}
@@ -1946,7 +1948,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         products={catalogProducts}
                         offersLocked={registrationLocked}
                         onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                        offerPrice={productOfferPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                        cardPrice={shopCardPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                         href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
@@ -1978,7 +1980,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                           products={catalogProducts}
                           offersLocked={registrationLocked}
                           onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                          offerPrice={productOfferPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                          cardPrice={shopCardPrice(product, availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                           href={delegationToken ? null : shopProductHref(catalog, selectedCategory, product)}
