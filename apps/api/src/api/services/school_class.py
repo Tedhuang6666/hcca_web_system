@@ -1120,6 +1120,40 @@ async def assign_class_person_role(
     )
 
 
+async def sync_class_representative_council_roles(session: AsyncSession, person: Person) -> None:
+    """補齊班代的議員職位，包含舊帳號登入前留下的班代任命。"""
+    result = await session.scalars(
+        select(PersonAffiliation).where(
+            PersonAffiliation.person_id == person.id,
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_ROLE,
+            PersonAffiliation.role_key == ClassRoleKey.CLASS_REPRESENTATIVE,
+            PersonAffiliation.status.in_(
+                [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
+            ),
+        )
+    )
+    class_roles = list(result.all())
+    if not class_roles:
+        return
+
+    council_position = await get_or_create_council_representative_position(session)
+    if council_position is None:
+        return
+
+    for class_role in class_roles:
+        await person_svc.create_affiliation(
+            session,
+            data=PersonAffiliationCreate(
+                person_id=person.id,
+                kind=PersonAffiliationKind.ORG_POSITION,
+                position_id=council_position.id,
+                start_date=class_role.start_date,
+                end_date=class_role.end_date,
+                source=PersonAffiliationSource.CLASS_WORKSPACE,
+            ),
+        )
+
+
 async def get_or_create_council_representative_position(
     session: AsyncSession,
 ) -> Position | None:

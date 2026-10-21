@@ -358,8 +358,10 @@ async def _upsert_google_user(
         identity_by_sub.last_login_at = now
     await db.flush()
 
-    await person_svc.ensure_person_for_user(db, user)
+    person = await person_svc.ensure_person_for_user(db, user)
     await class_svc.link_roster_accounts(db, user_id=user.id)
+    if person.user_id == user.id:
+        await class_svc.sync_class_representative_council_roles(db, person)
 
     is_suspicious, reason = await check_suspicious_login(str(user.id), client_ip)
     if is_suspicious:
