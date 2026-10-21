@@ -31,7 +31,7 @@ from api.services import shop as shop_svc
 
 @pytest.fixture
 async def registration_setup(db_session, make_user):
-    buyer = await make_user()
+    buyer = await make_user(student_id="310001")
     actor = await make_user()
     activity = Activity(name="校慶", status=ActivityStatus.ACTIVE)
     db_session.add(activity)
@@ -93,7 +93,7 @@ async def test_repeated_assistance_accumulates_same_activity_and_receivable(
     assert receivables[0].source_id == first.id
     assert receivables[0].amount == 600
 
-    other = await make_user()
+    other = await make_user(student_id="310002")
     other_order = await _append(db_session, other, products[0])
     assert other_order.id != first.id
 
@@ -257,7 +257,7 @@ async def test_concurrent_assistance_and_student_registration_share_one_order(db
         pytest.skip("需要 PostgreSQL row locks")
     factory = async_sessionmaker(bind.engine, expire_on_commit=False)
     async with factory() as session:
-        buyer = User(email=f"{uuid.uuid4()}@example.test", display_name="並發測試")
+        buyer = User(email=f"{uuid.uuid4()}@hchs.hc.edu.tw", display_name="並發測試")
         session.add(buyer)
         await session.flush()
         activity = Activity(name="並發活動", status=ActivityStatus.ACTIVE)

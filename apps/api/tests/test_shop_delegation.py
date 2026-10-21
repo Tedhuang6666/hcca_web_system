@@ -23,7 +23,7 @@ def isolate_code_namespace(monkeypatch):
 
 @pytest.fixture
 async def delegation_setup(db_session, make_user, admin_user, authed_client_factory):
-    student = await make_user(student_id="991001", display_name="學生")
+    student = await make_user(student_id="310001", display_name="學生")
     parent = await make_user(email="parent@example.test", display_name="媽媽")
     other = await make_user(email="other@example.test", display_name="其他人")
     activity = Activity(name="校慶", status=ActivityStatus.ACTIVE, is_active=True)
@@ -66,6 +66,44 @@ async def _claim(client, link):
     )
     assert result.status_code == 200
     return result.json()
+
+
+@pytest.mark.parametrize("email", ["parent@example.test", "g0210002@hchs.hc.edu.tw"])
+async def test_external_account_can_order_only_through_current_students_delegation(
+    delegation_setup, db_session, email
+):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    parent.email = email
+    await db_session.flush()
+    direct = await pc.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert direct.status_code == 403
+    await _claim(pc, link)
+    delegated = await pc.post(
+        f"/shop/delegation/products/{product.id}",
+        json={"token": link["token"], "variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert delegated.status_code == 200
+    assert delegated.json()["user_id"] == str(student.id)
+    assert delegated.json()["items"][0]["ordered_by_id"] == str(parent.id)
+
+
+async def test_expired_student_id_cannot_keep_using_delegation(delegation_setup, db_session):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    await _claim(pc, link)
+    student.student_id = "210001"
+    await db_session.flush()
+    created = await sc.post(
+        "/shop/delegation-links", json={"name": "失效學生", "category_id": str(category.id)}
+    )
+    assert created.status_code == 403
+    delegated = await pc.post(
+        f"/shop/delegation/products/{product.id}",
+        json={"token": link["token"], "variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert delegated.status_code == 410
 
 
 async def test_seven_digit_code_exchanges_for_same_scoped_link(delegation_setup):
@@ -600,7 +638,7 @@ async def test_concurrent_claim_and_revocation_use_real_postgres_locks(db_sessio
                 display_name=f"帳號{index}",
                 is_active=True,
                 is_verified=True,
-                student_id=str(uid)[:8] if index == 0 else None,
+                student_id="310001" if index == 0 else None,
             )
             for index, uid in enumerate(ids)
         ]
