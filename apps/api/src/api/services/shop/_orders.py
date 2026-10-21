@@ -63,11 +63,13 @@ from api.schemas.shop import (
 )
 from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
+from api.services.electronic_credential import get_settings, identity_for_user
 from api.services.shop._catalog import (
     generate_order_serial,
     get_product,
 )
 from api.services.shop._promotions import PromotionAllocation, resolve_promotions
+from api.services.student_identity import has_student_identity
 
 logger = logging.getLogger(__name__)
 
@@ -446,6 +448,16 @@ def _order_activity_id(order: Order) -> uuid.UUID | None:
     return next(iter(activity_ids)) if len(activity_ids) == 1 else None
 
 
+async def _assert_buyer_eligible(session: AsyncSession, user: User) -> None:
+    if await has_student_identity(session, user, current_only=True):
+        return
+    prefixes = (await get_settings(session)).student_id_prefixes
+    identity = identity_for_user(user, student_id_prefixes=prefixes)
+    if identity is not None and identity[0] == "teacher":
+        return
+    raise PermissionError("僅在校生與教師可自行訂購，其他帳號請使用學生提供的家長代訂連結")
+
+
 async def _create_order_from_items(
     session: AsyncSession,
     *,
@@ -462,6 +474,10 @@ async def _create_order_from_items(
 ) -> Order:
     # 與學生／家人即時登記共用使用者鎖，避免不同商品同時送出時各自建單。
     await session.execute(select(User.id).where(User.id == user_id).with_for_update())
+    buyer = await session.get(User, user_id)
+    if buyer is None:
+        raise ValueError("找不到訂購人")
+    await _assert_buyer_eligible(session, buyer)
     scopes = {
         _product_order_scope(product)
         for item in cart_items
@@ -922,6 +938,7 @@ async def set_class_member_product(
     """按學生的商品總量，跨其有效訂購調整未鎖定品項。"""
     if class_id not in class_ids:
         raise PermissionError("無權修改此學生的商品登記")
+    await _assert_buyer_eligible(session, user)
 
     await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     await session.execute(
@@ -1176,6 +1193,7 @@ async def set_current_registration_product(
     delegation: ShopDelegationLink | None = None,
 ) -> Order | None:
     """立即登記某商品的規格數量，並以目前有效訂單保存。"""
+    await _assert_buyer_eligible(session, user)
     await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     await session.execute(
         select(Product)
@@ -1755,25 +1773,43 @@ async def cancel_order(
     requested_by: uuid.UUID,
     reason: str | None = None,
     bypass_owner_check: bool = False,
+    bypass_registration_window: bool = False,
 ) -> Order:
+    await session.execute(select(User.id).where(User.id == order.user_id).with_for_update())
+    await session.execute(
+        select(Order)
+        .where(Order.id == order.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    refreshed = await get_order(session, order.id)
+    if refreshed is None:
+        raise ValueError("找不到此訂單")
+    order = refreshed
     if not bypass_owner_check and order.user_id != requested_by:
         raise PermissionError("只有訂購人可取消訂單")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法取消")
     if order.is_paid or order.is_class_collected:
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
-    for item in order.items:
-        product = await get_product(session, item.product_id)
-        if product is not None:
-            await _assert_product_registration_open(
-                session,
-                product,
-                class_id=order.class_id,
-                allow_sold_out=True,
-            )
+    if not bypass_registration_window:
+        for item in order.items:
+            product = await get_product(session, item.product_id)
+            if product is not None:
+                await _assert_product_registration_open(
+                    session,
+                    product,
+                    class_id=order.class_id,
+                    allow_sold_out=True,
+                )
 
     for item in order.items:
-        product = await session.get(Product, item.product_id)
+        product = await session.scalar(
+            select(Product)
+            .where(Product.id == item.product_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
         if product and not product.is_unlimited:
             product.stock_quantity += item.quantity
             if product.status == ProductStatus.SOLD_OUT:

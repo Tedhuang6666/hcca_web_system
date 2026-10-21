@@ -5,10 +5,12 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 const api = vi.hoisted(() => ({
   catalog: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
+  cancelOrder: vi.fn(),
 }));
+const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, classApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
-vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => ({ isAdmin: true, permissions: new Set<string>() }) }));
+vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => access }));
 vi.mock("sonner", () => ({ toast: notifications }));
 
 const summary = (label = "一年一班") => ({ group_by: "class", total_amount: 300, paid_amount: 0, unpaid_amount: 300,
@@ -16,6 +18,8 @@ const summary = (label = "一年一班") => ({ group_by: "class", total_amount: 
 
 beforeEach(() => {
   vi.resetAllMocks();
+  access.isAdmin = true;
+  access.permissions = new Set();
   api.catalog.mockResolvedValue([
     { id: "shirts", name: "衣服", activity_id: "festival", activity_name: "校慶", series: [], products: [{ id: "shirt", name: "紀念衫" }] },
     { id: "bags", name: "袋子", activity_id: "festival", activity_name: "校慶", series: [], products: [] },
@@ -38,6 +42,79 @@ async function openPage() {
 }
 
 describe("全校收款與訂單", () => {
+  const order = {
+    id: "old-order", serial_number: "ORD-TEST", user_name: "測試訂購人", class_label: null,
+    status: "pending", total_price: 300, is_paid: false, is_class_collected: false,
+    created_at: "2026-10-21T00:00:00Z",
+  };
+
+  async function openOrders() {
+    api.listOrders.mockResolvedValue([order]);
+    await openPage();
+    fireEvent.click(screen.getByRole("button", { name: "查找訂單" }));
+    await screen.findByText("ORD-TEST");
+  }
+
+  it("confirms cancellation with a reason and refreshes the order status", async () => {
+    await openOrders();
+    fireEvent.click(screen.getByRole("button", { name: "取消訂單 ORD-TEST" }));
+    expect(api.cancelOrder).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "取消訂單" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("取消原因（選填）"), { target: { value: " 非在校生 " } });
+    api.cancelOrder.mockResolvedValue({ ...order, status: "cancelled" });
+    api.listOrders.mockResolvedValue([{ ...order, status: "cancelled" }]);
+    fireEvent.click(screen.getByRole("button", { name: "確認取消訂單" }));
+    await waitFor(() => expect(api.cancelOrder).toHaveBeenCalledWith("old-order", "非在校生"));
+    expect(await screen.findByText("訂單 ORD-TEST 已取消。")).toHaveAttribute("role", "status");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "取消訂單 ORD-TEST" })).not.toBeInTheDocument());
+  });
+
+  it("keeps the reason and allows retry after cancellation fails", async () => {
+    await openOrders();
+    fireEvent.click(screen.getByRole("button", { name: "取消訂單 ORD-TEST" }));
+    fireEvent.change(screen.getByLabelText("取消原因（選填）"), { target: { value: "資格不符" } });
+    api.cancelOrder.mockRejectedValueOnce(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "確認取消訂單" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("取消失敗，請稍後再試。");
+    expect(screen.getByLabelText("取消原因（選填）")).toHaveValue("資格不符");
+    expect(screen.getByRole("button", { name: "確認取消訂單" })).toBeEnabled();
+  });
+
+  it("prevents another submission while cancellation is pending", async () => {
+    await openOrders();
+    fireEvent.click(screen.getByRole("button", { name: "取消訂單 ORD-TEST" }));
+    let finish!: () => void;
+    api.cancelOrder.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "確認取消訂單" }));
+    expect(screen.getByRole("button", { name: "取消中…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "返回" })).toBeDisabled();
+    await act(async () => finish());
+    expect(api.cancelOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not cancel when returning from the confirmation", async () => {
+    await openOrders();
+    fireEvent.click(screen.getByRole("button", { name: "取消訂單 ORD-TEST" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it("hides cancellation for a read-only user", async () => {
+    access.isAdmin = false;
+    access.permissions = new Set(["shop:view_all"]);
+    await openOrders();
+    expect(screen.queryByRole("button", { name: "取消訂單 ORD-TEST" })).not.toBeInTheDocument();
+  });
+
+  it("explains why a collected order cannot be cancelled", async () => {
+    api.listOrders.mockResolvedValue([{ ...order, is_class_collected: true }]);
+    await openPage();
+    fireEvent.click(screen.getByRole("button", { name: "查找訂單" }));
+    expect(await screen.findByText("已收款，請先撤銷收款再取消")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "取消訂單 ORD-TEST" })).not.toBeInTheDocument();
+  });
+
   it("shows totals first, then scoped payment actions after selecting an activity", async () => {
     await openPage();
     expect(screen.getByText(/選擇一個活動後，可確認班級收款/)).toBeVisible();

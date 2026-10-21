@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
+from api.models.electronic_credential import ElectronicCredentialSettings
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
 from api.models.person import Person, PersonAffiliationKind
@@ -49,6 +50,21 @@ from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n data"
+
+
+@pytest.fixture(autouse=True)
+async def current_shop_student_prefixes(db_session):
+    db_session.add(
+        ElectronicCredentialSettings(
+            id=1, student_id_prefixes=["115", "116", "215", "310", "410", "510"]
+        )
+    )
+    await db_session.flush()
+
+
+@pytest.fixture
+async def member_user(make_user):
+    return await make_user(email="member@hchs.hc.edu.tw")
 
 
 async def test_bundle_price_counts_complete_sets_and_keeps_variant_surcharges(
@@ -196,7 +212,7 @@ async def _make_class(db: AsyncSession, *, start: str = "11501", end: str = "115
 
 async def _bare_user(db: AsyncSession, *, student_id: str | None = None) -> User:
     user = User(
-        email=f"u-{uuid.uuid4().hex[:8]}@school.edu",
+        email=f"u-{uuid.uuid4().hex[:8]}@hchs.hc.edu.tw",
         display_name="測試使用者",
         is_active=True,
         is_verified=True,
@@ -1471,7 +1487,13 @@ async def test_class_collection_locks_user_registration(db_session, authed_clien
 
 
 async def _seed_order(
-    db: AsyncSession, buyer: User, *, class_id=None, total_price: int = 100, is_paid: bool = False
+    db: AsyncSession,
+    buyer: User,
+    *,
+    class_id=None,
+    total_price: int = 100,
+    is_paid: bool = False,
+    is_class_collected: bool = False,
 ) -> Order:
     order = Order(
         serial_number=f"ORD-TEST-{uuid.uuid4().hex[:8]}",
@@ -1480,6 +1502,7 @@ async def _seed_order(
         status=OrderStatus.PENDING,
         total_price=total_price,
         is_paid=is_paid,
+        is_class_collected=is_class_collected,
     )
     db.add(order)
     await db.flush()
@@ -1564,6 +1587,196 @@ async def test_cancel_order_twice_returns_409(db_session, authed_client_factory)
 
     second = await ac.post(f"/shop/orders/{order.id}/cancel", json={})
     assert second.status_code == 409
+
+
+@pytest.mark.parametrize(
+    ("email", "student_id", "expected"),
+    [
+        ("g0210001@hchs.hc.edu.tw", "210001", 403),
+        ("g0210001@hchs.hc.edu.tw", "310001", 403),
+        ("parent@example.test", None, 403),
+        ("alumnus@example.test", "210001", 403),
+        ("teacher@hchs.hc.edu.tw", None, 200),
+        ("g0310001@hchs.hc.edu.tw", "310001", 200),
+        ("student@example.test", "310001", 200),
+    ],
+)
+async def test_self_registration_requires_current_student_or_teacher(
+    db_session, authed_client_factory, email, student_id, expected
+):
+    buyer = await _bare_user(db_session, student_id=student_id)
+    buyer.email = email
+    product = await _make_active_product(db_session, buyer, stock=10)
+    response = await authed_client_factory(buyer).put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert response.status_code == expected
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == (expected == 200)
+    await db_session.refresh(product)
+    assert product.stock_quantity == (9 if expected == 200 else 10)
+    if expected == 403:
+        assert "家長代訂連結" in response.json()["detail"]
+
+
+async def test_anonymous_cannot_register_product(db_session, client):
+    product = await _make_active_product(db_session, await _bare_user(db_session))
+    response = await client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("prefix, expected", [("310", 200), ("210", 403)])
+async def test_personal_account_uses_verified_linked_student_identity(
+    db_session, authed_client_factory, prefix, expected
+):
+    from api.models.user_identity import UserIdentity
+
+    buyer = await _bare_user(db_session)
+    buyer.email = "personal@example.test"
+    db_session.add(
+        UserIdentity(
+            user_id=buyer.id,
+            provider="google",
+            external_id=uuid.uuid4().hex,
+            email=f"g0{prefix}001@hchs.hc.edu.tw",
+            linked_at=datetime.now(UTC),
+        )
+    )
+    product = await _make_active_product(db_session, buyer)
+    response = await authed_client_factory(buyer).put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert response.status_code == expected
+
+
+async def test_anonymous_cannot_cancel_order(db_session, client):
+    order = await _seed_order(db_session, await _bare_user(db_session))
+    response = await client.post(f"/shop/orders/{order.id}/cancel", json={})
+    assert response.status_code == 401
+
+
+async def test_external_admin_cannot_bypass_purchase_identity(
+    db_session, admin_user, authed_client_factory
+):
+    product = await _make_active_product(db_session, admin_user)
+    response = await authed_client_factory(admin_user).put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("email", ["parent@example.test", "g0210001@hchs.hc.edu.tw"])
+async def test_class_assistance_cannot_bypass_purchase_identity(
+    db_session, authed_client_factory, email
+):
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session)
+    buyer.email = email
+    await class_svc.add_manual_member(
+        db_session, sc, data=ClassManualMemberCreate(user_id=buyer.id)
+    )
+    product = await _make_active_product(db_session, cadre, stock=10)
+    ac = authed_client_factory(cadre)
+    created = await ac.post(
+        "/shop/orders/class",
+        json={"user_id": str(buyer.id), "items": [{"product_id": str(product.id), "quantity": 1}]},
+    )
+    assert created.status_code == 403
+    updated = await ac.put(
+        f"/shop/orders/class/members/{buyer.id}/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 1}]},
+    )
+    assert updated.status_code == 403
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
+    await db_session.refresh(product)
+    assert product.stock_quantity == 10
+
+
+@pytest.mark.parametrize(
+    "code", ["shop:view_all", "finance:view", "shop:manage_orders", "shop:manage", "admin:all"]
+)
+async def test_cancel_order_requires_write_permission(db_session, authed_client_factory, code):
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, code)
+    owner = await _bare_user(db_session)
+    order = await _seed_order(db_session, owner)
+    response = await authed_client_factory(manager).post(
+        f"/shop/orders/{order.id}/cancel", json={"reason": "不符訂購資格"}
+    )
+    assert response.status_code == (403 if code in {"shop:view_all", "finance:view"} else 200)
+
+
+async def test_manager_can_cancel_closed_alumni_order_and_restore_stock(
+    db_session, authed_client_factory
+):
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    product = await _make_active_product(db_session, manager, stock=2)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(
+            user_id=buyer.id, items=[OrderItemCreate(product_id=product.id, quantity=2)]
+        ),
+    )
+    order = orders[0]
+    buyer.email = "g0210001@hchs.hc.edu.tw"
+    buyer.student_id = "210001"
+    product.sale_end = datetime.now(UTC) - timedelta(days=1)
+    await db_session.flush()
+    owner_cancel = await authed_client_factory(buyer).post(
+        f"/shop/orders/{order.id}/cancel", json={}
+    )
+    assert owner_cancel.status_code == 409
+    ac = authed_client_factory(manager)
+    response = await ac.post(f"/shop/orders/{order.id}/cancel", json={"reason": "非在校生"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert "非在校生" in response.json()["notes"]
+    await db_session.refresh(product)
+    assert product.stock_quantity == 2
+    assert product.status == "active"
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+    assert receivable.status == "canceled"
+    repeated = await ac.post(f"/shop/orders/{order.id}/cancel", json={})
+    assert repeated.status_code == 409
+    await db_session.refresh(product)
+    assert product.stock_quantity == 2
+
+
+@pytest.mark.parametrize("flag", ["is_paid", "is_class_collected"])
+async def test_manager_cannot_cancel_collected_order(
+    db_session, admin_user, authed_client_factory, flag
+):
+    owner = await _bare_user(db_session)
+    order = await _seed_order(db_session, owner)
+    setattr(order, flag, True)
+    await db_session.flush()
+    response = await authed_client_factory(admin_user).post(
+        f"/shop/orders/{order.id}/cancel", json={}
+    )
+    assert response.status_code == 409
+    assert "已鎖定" in response.json()["detail"]
+
+
+async def test_cadre_cannot_cancel_other_class_order(db_session, authed_client_factory):
+    sc = await _make_class(db_session)
+    other_class = await _make_class(db_session, start="21501", end="21540")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    owner = await _bare_user(db_session, student_id="21502")
+    order = await _seed_order(db_session, owner, class_id=other_class.id)
+    response = await authed_client_factory(cadre).post(f"/shop/orders/{order.id}/cancel", json={})
+    assert response.status_code == 403
 
 
 async def test_update_order_items_by_unrelated_user_returns_403(
@@ -1871,6 +2084,7 @@ async def test_class_cadre_adjusts_member_product_total_across_orders_and_keeps_
     paid_order = await _seed_order(
         db_session, student, class_id=school_class.id, total_price=80, is_paid=True
     )
+    await db_session.refresh(paid_order, ["items"])
     paid_order.subtotal_price = 80
     paid_order.items.append(
         OrderItem(product_id=product.id, quantity=2, unit_price=40, selected_options=[])
@@ -1878,16 +2092,18 @@ async def test_class_cadre_adjusts_member_product_total_across_orders_and_keeps_
     collected_order = await _seed_order(
         db_session, student, class_id=school_class.id, total_price=40, is_class_collected=True
     )
+    await db_session.refresh(collected_order, ["items"])
     collected_order.subtotal_price = 40
     collected_order.items.append(
         OrderItem(product_id=product.id, quantity=1, unit_price=40, selected_options=[])
     )
     editable_order = await _seed_order(
-        db_session, student, class_id=school_class.id, total_price=120
+        db_session, student, class_id=school_class.id, total_price=80
     )
-    editable_order.subtotal_price = 120
+    await db_session.refresh(editable_order, ["items"])
+    editable_order.subtotal_price = 80
     editable_order.items.append(
-        OrderItem(product_id=product.id, quantity=3, unit_price=40, selected_options=[])
+        OrderItem(product_id=product.id, quantity=2, unit_price=40, selected_options=[])
     )
     await db_session.flush()
     ac = authed_client_factory(cadre)
@@ -1927,6 +2143,7 @@ async def test_class_cadre_can_remove_last_unlocked_product_quantity(
     await _add_person_class_member(db_session, student, school_class)
     product = await _make_active_product(db_session, cadre, stock=3)
     order = await _seed_order(db_session, student, class_id=school_class.id, total_price=200)
+    await db_session.refresh(order, ["items"])
     order.subtotal_price = 200
     order.items.append(
         OrderItem(product_id=product.id, quantity=2, unit_price=100, selected_options=[])

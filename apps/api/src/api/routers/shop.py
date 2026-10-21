@@ -893,6 +893,8 @@ async def update_current_registration_product(
             product_id,
             data=payload,
         )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except StaleDataError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="庫存已更新，請重新載入"
@@ -1363,13 +1365,12 @@ async def cancel_order(
     current_user: CurrentUser,
 ) -> OrderOut:
     order = await _get_order_or_404(order_id, session)
-    bypass = current_user.is_superuser
+    codes = await get_user_permission_codes(session, current_user.id)
+    is_order_manager = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    bypass = is_order_manager
     if not bypass and order.user_id != current_user.id:
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         bypass = order.class_id is not None and order.class_id in cadre_ids
-        if not bypass:
-            codes = await get_user_permission_codes(session, current_user.id)
-            bypass = bool(_ADMIN_VIEW_CODES & set(codes))
         if not bypass:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權取消此訂單")
     try:
@@ -1379,6 +1380,7 @@ async def cancel_order(
             requested_by=current_user.id,
             reason=payload.reason,
             bypass_owner_check=bypass,
+            bypass_registration_window=is_order_manager,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
@@ -1415,6 +1417,8 @@ async def update_order_items(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權修改此訂單")
     try:
         order = await shop_svc.replace_order_items(session, order, data=payload)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except StaleDataError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="庫存發生並發衝突") from e
     except ValueError as e:
@@ -1763,6 +1767,8 @@ async def _delegation_result[T](operation: Awaitable[T]) -> T:
         return await operation
     except (delegation_svc.DelegationError, delegation_code_svc.DelegationCodeError) as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except StaleDataError as error:
         raise HTTPException(status_code=409, detail="庫存已更新，請重新載入") from error
     except shop_svc.PurchaseLimitError as error:

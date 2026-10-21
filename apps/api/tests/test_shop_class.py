@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
+from api.models.electronic_credential import ElectronicCredentialSettings
 from api.models.person import PersonAffiliationKind, PersonAffiliationStatus
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductMedia
 from api.models.user import User
@@ -40,6 +41,12 @@ from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 
 # ── 測試輔助 ──────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+async def current_shop_student_prefixes(db_session):
+    db_session.add(ElectronicCredentialSettings(id=1, student_id_prefixes=["115"]))
+    await db_session.flush()
 
 
 async def test_assisted_order_merges_identical_variants_and_preserves_stock(db_session):
@@ -95,7 +102,7 @@ async def test_assisted_edit_merges_duplicate_items(db_session):
 
 async def _make_user(db: AsyncSession, *, student_id: str | None = None) -> User:
     user = User(
-        email=f"u-{uuid.uuid4().hex[:8]}@test.edu",
+        email=f"u-{uuid.uuid4().hex[:8]}@hchs.hc.edu.tw",
         display_name="測試學生",
         student_id=student_id,
     )

@@ -13,12 +13,18 @@ from api.services.student_identity_rules import (
 )
 
 
-async def has_student_identity(session: AsyncSession, user: User) -> bool:
+async def has_student_identity(
+    session: AsyncSession, user: User, *, current_only: bool = False
+) -> bool:
     if is_g0_school_account_email(user.email):
         current_prefixes = (await get_settings(session)).student_id_prefixes
         return is_current_student_id(student_id_from_school_email(user.email), current_prefixes)
     if user.student_id:
-        return True
+        if not current_only:
+            return True
+        current_prefixes = (await get_settings(session)).student_id_prefixes
+        if is_current_student_id(user.student_id, current_prefixes):
+            return True
     emails = await session.scalars(
         select(UserIdentity.email).where(
             UserIdentity.user_id == user.id,

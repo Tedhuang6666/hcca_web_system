@@ -89,7 +89,12 @@ export default function CouncilOrdersPage() {
   const [optionsRetry, setOptionsRetry] = useState(0);
   const [batchResult, setBatchResult] = useState("");
   const [batchBusy, setBatchBusy] = useState(false);
-  const mutationBusy = batchBusy || paymentBusy !== null || closeBusy !== null;
+  const [cancelTarget, setCancelTarget] = useState<OrderListItem | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  const [cancelResult, setCancelResult] = useState("");
+  const mutationBusy = batchBusy || paymentBusy !== null || closeBusy !== null || cancelBusy;
 
   // 班聯結單選擇
   const [closeTarget, setCloseTarget] = useState<{
@@ -237,6 +242,23 @@ export default function CouncilOrdersPage() {
       if (version === requestVersion.current) setLoading(false);
     }
   }, [activityId, grade, classId, isPaid, productId, categoryId, statusFilter, search, dateParams]);
+
+  const cancelOrder = async () => {
+    if (!cancelTarget || cancelBusy) return;
+    setCancelBusy(true);
+    setCancelError("");
+    setCancelResult("");
+    try {
+      await shopApi.cancelOrder(cancelTarget.id, cancelReason.trim() || undefined);
+      setCancelTarget(null);
+      setCancelResult(`訂單 ${cancelTarget.serial_number} 已取消。`);
+      await loadOrders();
+    } catch (e) {
+      setCancelError(apiErrorMessage(e, "取消失敗，請稍後再試。"));
+    } finally {
+      setCancelBusy(false);
+    }
+  };
 
   const updateClassPayment = async (
     row: OrderSummaryRow,
@@ -675,6 +697,7 @@ export default function CouncilOrdersPage() {
       {/* Tab 3：訂單明細 */}
       {tab === "orders" && (
         <section>
+          {cancelResult && <p role="status" className="mb-3 text-sm">{cancelResult}</p>}
           {(
             <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               {loading ? (
@@ -686,9 +709,10 @@ export default function CouncilOrdersPage() {
                   <table className="shop-mobile-table w-full min-w-[700px] text-sm">
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                        {["訂單編號", "學生", "班級", "狀態", "金額", "班聯收款", "建立時間"].map((h) => (
+                        {["訂單編號", "訂購人", "班級", "狀態", "金額", "班聯收款", "建立時間"].map((h) => (
                           <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                         ))}
+                        {canConfirmClassPayment && <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>操作</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -697,7 +721,7 @@ export default function CouncilOrdersPage() {
                           <td className="px-4 py-3">
                             <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
                           </td>
-                          <td data-label="學生" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
+                          <td data-label="訂購人" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
                           <td data-label="班級" className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.class_label ?? "-"}</td>
                           <td className="px-4 py-3">
                             <OrderStatusBadge status={order.status} />
@@ -714,6 +738,23 @@ export default function CouncilOrdersPage() {
                           <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
                             {new Date(order.created_at).toLocaleDateString("zh-TW")}
                           </td>
+                          {canConfirmClassPayment && <td data-label="操作" className="px-4 py-3">
+                            {(order.status === "pending" || order.status === "confirmed") && (
+                              order.is_paid || order.is_class_collected
+                                ? <span className="text-xs" style={{ color: "var(--text-secondary)" }}>已收款，請先撤銷收款再取消</span>
+                                : <button
+                                  type="button"
+                                  className="btn btn-danger-ghost min-h-11 whitespace-nowrap"
+                                  aria-label={`取消訂單 ${order.serial_number}`}
+                                  disabled={mutationBusy}
+                                  onClick={() => {
+                                    setCancelTarget(order);
+                                    setCancelReason("");
+                                    setCancelError("");
+                                  }}
+                                >取消訂單</button>
+                            )}
+                          </td>}
                         </tr>
                       ))}
                     </tbody>
@@ -726,6 +767,21 @@ export default function CouncilOrdersPage() {
       )}
 
       </div>
+
+      {cancelTarget && <Modal title="取消訂單" size="sm" mobileFullscreen={false} onClose={() => { if (!cancelBusy) setCancelTarget(null); }}>
+        <form onSubmit={(event) => { event.preventDefault(); void cancelOrder(); }} className="space-y-4">
+          <p className="text-sm">確定取消「{cancelTarget.user_name ?? "訂購人"}」的訂單 {cancelTarget.serial_number}（{money(cancelTarget.total_price)}）？取消後會回補庫存並撤銷應收款。</p>
+          <label className="block text-sm">
+            取消原因（選填）
+            <textarea className="input mt-2 w-full" rows={3} maxLength={500} value={cancelReason} disabled={cancelBusy} onChange={(event) => setCancelReason(event.target.value)} />
+          </label>
+          {cancelError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{cancelError}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className="btn btn-ghost min-h-11" disabled={cancelBusy} onClick={() => setCancelTarget(null)}>返回</button>
+            <button type="submit" className="btn btn-danger min-h-11" disabled={cancelBusy}>{cancelBusy ? "取消中…" : "確認取消訂單"}</button>
+          </div>
+        </form>
+      </Modal>}
       {/* 結單確認 Modal */}
       {closeTarget && (
         <Modal title="停止這個班級的訂購？" size="md" onClose={() => { if (!closeBusy) setCloseTarget(null); }}>
