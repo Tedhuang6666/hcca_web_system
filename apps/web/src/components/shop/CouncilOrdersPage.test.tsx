@@ -5,7 +5,7 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 const api = vi.hoisted(() => ({
   catalog: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
-  cancelOrder: vi.fn(),
+  cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(),
 }));
 const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -42,6 +42,28 @@ async function openPage() {
 }
 
 describe("全校收款與訂單", () => {
+  it("downloads the chosen class and activity and shows a retryable receipt error", async () => {
+    await openPage();
+    expect(screen.queryByRole("button", { name: /下載.*簽收單/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    const download = await screen.findByRole("button", { name: "下載一年一班的校慶簽收單" });
+    api.downloadClassReceipt.mockRejectedValueOnce(new Error("offline"));
+    fireEvent.click(download);
+    expect(await screen.findByRole("alert")).toHaveTextContent("簽收單下載失敗，請重試。");
+    expect(api.downloadClassReceipt).toHaveBeenCalledWith("class", "festival");
+    expect(download).toHaveTextContent("重試");
+    expect(api.setClassPaid).not.toHaveBeenCalled();
+  });
+
+  it("hides class receipts from read-only council users", async () => {
+    access.isAdmin = false;
+    access.permissions = new Set(["shop:view_all"]);
+    await openPage();
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    await screen.findByText("批次管理訂購");
+    expect(screen.queryByRole("button", { name: /下載.*簽收單/ })).not.toBeInTheDocument();
+  });
+
   const order = {
     id: "old-order", serial_number: "ORD-TEST", user_name: "測試訂購人", class_label: null,
     status: "pending", total_price: 300, is_paid: false, is_class_collected: false,

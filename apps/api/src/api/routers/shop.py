@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Awaitable
 from datetime import datetime
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
@@ -1466,6 +1467,48 @@ async def update_class_collection(
             await _queue_order_confirmation(session, buyer, updated)
     await _broadcast_shop_order(updated)
     return shop_svc.serialize_order(updated)
+
+
+@router.get(
+    "/orders/classes/{class_id}/receipt.pdf",
+    summary="下載班級收款簽收單（收執聯與存根聯）",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}}
+    },
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def download_class_receipt(
+    class_id: uuid.UUID,
+    session: DbDep,
+    activity_id: uuid.UUID | None = Query(None, description="活動；未提供時僅匯出一般商品"),
+) -> Response:
+    school_class = await session.get(SchoolClass, class_id)
+    if school_class is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
+    try:
+        pdf = await shop_svc.export_class_receipt_pdf(
+            session, school_class, activity_id=activity_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    filename = f"班聯收款簽收單-{school_class.class_code}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.patch(

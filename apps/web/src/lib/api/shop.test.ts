@@ -3,6 +3,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { shopApi } from "./shop";
 
 describe("shop quantity API", () => {
+  it("downloads a class receipt for one activity and preserves server errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("%PDF-1.7", {
+      headers: { "Content-Type": "application/pdf" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await shopApi.downloadClassReceipt("class-1", "activity-1")).status).toBe(200);
+    const url = new URL(String(fetchMock.mock.calls[0][0]), "http://localhost");
+    expect(url.pathname).toMatch(/\/shop\/orders\/classes\/class-1\/receipt.pdf$/);
+    expect(url.searchParams.get("activity_id")).toBe("activity-1");
+    await shopApi.downloadClassReceipt("class-1", null);
+    expect(String(fetchMock.mock.calls[1][0])).not.toContain("activity_id");
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "請先確認收款" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    }));
+    await expect(shopApi.downloadClassReceipt("class-1", null)).rejects.toThrow("請先確認收款");
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });

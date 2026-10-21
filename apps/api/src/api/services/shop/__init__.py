@@ -96,8 +96,10 @@ from api.services.shop._promotions import (
     serialize_public_promotion,
     update_promotion,
 )
+from api.services.shop._receipts import export_class_receipt_pdf
 
 __all__ = [
+    "export_class_receipt_pdf",
     # catalog
     "generate_order_serial",
     "get_category",
