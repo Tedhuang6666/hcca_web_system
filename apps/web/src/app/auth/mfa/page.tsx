@@ -55,7 +55,7 @@ export default function MFALoginPage() {
       const me = await authApi.me();
       cacheCurrentUser(me);
       await new Promise((resolve) => window.setTimeout(resolve, 420));
-      window.location.replace(loginDestination(me, next));
+      window.location.replace(loginDestination(next));
     } catch (e) {
       setVerificationError(apiErrorMessage(e, "驗證失敗，請重新輸入"));
       setCode("");
@@ -77,7 +77,7 @@ export default function MFALoginPage() {
       await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
       const me = await authApi.me();
       cacheCurrentUser(me);
-      window.location.replace(loginDestination(me, next));
+      window.location.replace(loginDestination(next));
     } catch (e) {
       setVerificationError(apiErrorMessage(e, "Passkey 驗證失敗，請改用驗證器 App"));
       codeInputRef.current?.focus();

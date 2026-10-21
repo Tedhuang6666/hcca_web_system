@@ -1,5 +1,4 @@
 import type {
-  ClassConfirmationCreate, ClassConfirmationOut,
   ClassCadreOut, ClassCorrectionRequestCreate, ClassCorrectionRequestOut, ClassCorrectionRequestReview,
   ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassRosterBulkCreate,
   ClassRepresentativeOverviewItemOut, ClassRolePersonAssign, ClassRolePersonAssignOut,
@@ -55,9 +54,6 @@ export const classApi = {
   recipientOptions: () => get<SchoolClassListItem[]>('/classes/recipient-options'),
   get: (id: string) => get<SchoolClassOut>(`/classes/${id}`),
   myClass: () => get<MyClassContext | null>("/classes/me"),
-  myConfirmation: () => get<ClassConfirmationOut>("/classes/me/confirmation"),
-  confirmClass: (body: ClassConfirmationCreate) =>
-    post<ClassConfirmationOut>("/classes/me/confirmation", body),
   myCorrectionRequests: () => get<ClassCorrectionRequestOut[]>("/classes/correction-requests/mine"),
   correctionRequests: () => get<ClassCorrectionRequestOut[]>("/classes/correction-requests"),
   createCorrectionRequest: (body: ClassCorrectionRequestCreate) =>

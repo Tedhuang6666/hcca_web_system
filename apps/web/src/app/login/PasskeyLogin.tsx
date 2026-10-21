@@ -39,7 +39,7 @@ export default function PasskeyLogin({ nextPath }: { nextPath: string }) {
       await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
       const user = await authApi.me();
       cacheCurrentUser(user);
-      window.location.replace(loginDestination(user, safeNextPath(nextPath, "/dashboard")));
+      window.location.replace(loginDestination(safeNextPath(nextPath, "/dashboard")));
     } catch (error) {
       window.history.replaceState(null, "", window.location.pathname);
       alert(apiErrorMessage(error, "生物辨識快速登入失敗，請改用 Google 或 Discord 登入"));

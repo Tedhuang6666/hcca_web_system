@@ -32,7 +32,7 @@ export default function AuthCallbackPage() {
     void authApi.me()
       .then((user) => {
         cacheCurrentUser(user);
-        window.location.replace(loginDestination(user, next));
+        window.location.replace(loginDestination(next));
       })
       .catch(() => {
         const query = new URLSearchParams({

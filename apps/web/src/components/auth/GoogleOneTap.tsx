@@ -61,7 +61,7 @@ export default function GoogleOneTap() {
         }
         if (result.user) {
           cacheCurrentUser(result.user);
-          window.location.replace(loginDestination(result.user, result.next || nextPath));
+          window.location.replace(loginDestination(result.next || nextPath));
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Google 快速登入失敗";
