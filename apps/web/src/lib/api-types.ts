@@ -29746,6 +29746,11 @@ export interface components {
              */
             org_id: string;
             /**
+            /**
+             * Allowed Grades
+             * @description 限填年級（1=高一、2=高二、3=高三）；空清單代表不限年級
+             */
+            allowed_grades?: number[];
              * Show Announcement Popup
              * @default false
              */
@@ -29845,6 +29850,8 @@ export interface components {
              * Is Listed
              * @default true
              */
+            /** Allowed Grades */
+            allowed_grades?: number[];
             is_listed: boolean;
             /**
              * Is Public
@@ -30203,6 +30210,8 @@ export interface components {
             load_signals: components["schemas"]["LoadSignalsView"];
             maintenance: components["schemas"]["MaintenanceView"];
             redis: components["schemas"]["RedisView"];
+            /** Allowed Grades */
+            allowed_grades?: number[] | null;
             /** Timestamp */
             timestamp: number;
             ws: components["schemas"]["WsView"];

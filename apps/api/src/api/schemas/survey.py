@@ -23,6 +23,26 @@ def _parse_json_list(raw: object) -> list[str]:
     return parsed if isinstance(parsed, list) else []
 
 
+def _parse_json_int_list(raw: object) -> list[int]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return [value for value in parsed if type(value) is int] if isinstance(parsed, list) else []
+
+
+def _normalize_survey_grades(grades: list[int] | None) -> list[int] | None:
+    if grades is None:
+        return None
+    if any(grade not in (1, 2, 3) for grade in grades):
+        raise ValueError("年級只能選擇高一、高二或高三")
+    if len(set(grades)) != len(grades):
+        raise ValueError("年級不可重複選擇")
+    return sorted(grades)
+
+
 def _parse_json_nested_list(raw: object) -> list[list[str]]:
     if not raw:
         return []
@@ -362,6 +382,7 @@ class SurveyOut(BaseModel):
     allowed_org_ids: list[str] = Field(default_factory=list)
     allowed_user_ids: list[str] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
+    allowed_grades: list[int] = Field(default_factory=list)
     announcement: str | None = None
     announcement_title: str | None = None
     show_announcement_popup: bool = False
@@ -399,6 +420,7 @@ class SurveyOut(BaseModel):
         result["allowed_org_ids"] = _parse_json_list(getattr(data, "allowed_org_ids_json", None))
         result["allowed_user_ids"] = _parse_json_list(getattr(data, "allowed_user_ids_json", None))
         result["allowed_domains"] = _parse_json_list(getattr(data, "allowed_domains_json", None))
+        result["allowed_grades"] = _parse_json_int_list(getattr(data, "allowed_grades_json", None))
         return result
 
 
@@ -426,6 +448,15 @@ class SurveyAudience(BaseModel):
     allowed_org_ids: list[uuid.UUID] = Field(default_factory=list)
     allowed_user_ids: list[uuid.UUID] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
+    allowed_grades: list[int] = Field(
+        default_factory=list,
+        description="限填年級（1=高一、2=高二、3=高三）；空清單代表不限年級",
+    )
+
+    @field_validator("allowed_grades")
+    @classmethod
+    def validate_allowed_grades(cls, value: list[int]) -> list[int]:
+        return _normalize_survey_grades(value) or []
 
 
 class SurveyCreate(SurveyAudience):
@@ -441,6 +472,12 @@ class SurveyCreate(SurveyAudience):
     announcement_title: str | None = Field(None, max_length=200)
     show_announcement_popup: bool = False
 
+    @model_validator(mode="after")
+    def require_login_for_grade_restriction(self) -> SurveyCreate:
+        if self.is_public and self.allowed_grades:
+            raise ValueError("年級限制僅適用登入後填答，請先將填答方式設為「登入後填答」。")
+        return self
+
 
 class SurveyUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=300)
@@ -452,10 +489,16 @@ class SurveyUpdate(BaseModel):
     allowed_org_ids: list[uuid.UUID] | None = None
     allowed_user_ids: list[uuid.UUID] | None = None
     allowed_domains: list[str] | None = None
+    allowed_grades: list[int] | None = None
     activity_id: uuid.UUID | None = None
     announcement: str | None = Field(None, max_length=3000)
     announcement_title: str | None = Field(None, max_length=200)
     show_announcement_popup: bool | None = None
+
+    @field_validator("allowed_grades")
+    @classmethod
+    def validate_allowed_grades(cls, value: list[int] | None) -> list[int] | None:
+        return _normalize_survey_grades(value)
 
 
 # ── 答案 ─────────────────────────────────────────────────────────────────────

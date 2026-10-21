@@ -116,6 +116,8 @@ class Survey(Base, TimestampMixin):
     allowed_org_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     allowed_user_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     allowed_domains_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 限定目前班級年級（JSON 整數陣列）；空值代表不限年級
+    allowed_grades_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 可選的公告內容；服務層會同步到 announcements，並導向問卷填答頁。
     announcement: Mapped[str | None] = mapped_column(Text, nullable=True)
     announcement_title: Mapped[str | None] = mapped_column(String(200), nullable=True)

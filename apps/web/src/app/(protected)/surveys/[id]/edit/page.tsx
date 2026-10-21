@@ -9,6 +9,7 @@ import type { SurveyQuestionBody, OrgRead } from "@/lib/api";
 import type { SurveyOut, SurveyQuestionOut, QuestionType, UserSummary } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import UserPicker from "@/components/surveys/UserPicker";
+import SurveyGradeSelector from "@/components/surveys/SurveyGradeSelector";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
 import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdown";
@@ -683,6 +684,7 @@ export default function EditSurveyPage() {
   const [allowedDomains, setAllowedDomains] = useState("");
   const [allowedUsers, setAllowedUsers] = useState<UserSummary[]>([]);
   const [allowedOrgIds, setAllowedOrgIds] = useState<string[]>([]);
+  const [allowedGrades, setAllowedGrades] = useState<number[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
 
   useEffect(() => {
@@ -702,6 +704,7 @@ export default function EditSurveyPage() {
         setAccessMode(!s.is_public ? "members" : s.is_listed ? "public" : "link");
         setAllowedDomains((s.allowed_domains ?? []).join("\n"));
         setAllowedOrgIds(s.allowed_org_ids ?? []);
+        setAllowedGrades(s.allowed_grades ?? []);
         if ((s.allowed_user_ids?.length ?? 0) > 0) {
           usersApi.listByIds(s.allowed_user_ids ?? [])
             .then(setAllowedUsers)
@@ -735,6 +738,7 @@ export default function EditSurveyPage() {
         allowed_domains: accessMode === "members"
           ? allowedDomains.split("\n").map(s => s.trim()).filter(Boolean)
           : [],
+        allowed_grades: accessMode === "members" ? allowedGrades : [],
       });
       toast.success("基本資料已更新");
       load();
@@ -1001,8 +1005,9 @@ export default function EditSurveyPage() {
           {accessMode === "members" && (
             <>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                限制全部留空時，任何登入者皆可填答；設定限制後，符合任一條件者可填。
+                年級條件會額外限制填答資格；其他使用者、組織或信箱條件符合任一項即可。未設定其他條件時，所選年級的本校帳號皆可填答。
               </p>
+              <SurveyGradeSelector value={allowedGrades} onChange={setAllowedGrades} />
               <div>
                 <Label>限定 email 網域（一行一個，例：hchs.hc.edu.tw 即限本校）</Label>
                 <textarea value={allowedDomains} onChange={e => setAllowedDomains(e.target.value)}
