@@ -92,6 +92,13 @@ export const shopApi = {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<OrderListItem[]>(`/shop/orders/class${qs}`);
   },
+  listClassMemberRegistrations: (memberUserId: string) =>
+    get<OrderOut[]>(`/shop/orders/class/members/${memberUserId}/registrations`),
+  setClassMemberProduct: (
+    memberUserId: string,
+    productId: string,
+    body: { variants: { option_ids: string[]; quantity: number }[] },
+  ) => put<OrderOut[]>(`/shop/orders/class/members/${memberUserId}/products/${productId}`, body),
   classSummary: (params?: {
     is_class_collected?: string;
     assisted_only?: string;

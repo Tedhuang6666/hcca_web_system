@@ -1176,6 +1176,18 @@ export default function ClassOrdersPage() {
                     {selectedStudent?.seat_number != null && <span className="mr-2 tabular-nums">{selectedStudent.seat_number} 號</span>}
                     {selectedStudent?.display_name ?? orders.find((order) => order.id === editOrder?.id)?.user_name ?? "訂購同學"}
                   </p>
+                  {selectedStudent?.user_id && <Link
+                    href={{
+                      pathname: "/shop",
+                      query: {
+                        class_member_user_id: selectedStudent.user_id,
+                        class_member_name: selectedStudent.display_name,
+                      },
+                    }}
+                    className="btn btn-ghost min-h-11 text-sm"
+                  >
+                    到商品頁調整總量
+                  </Link>}
                   {!editOrder && <button type="button" className="btn btn-ghost min-h-11 text-sm"
                     disabled={creating} onClick={() => {
                       setStudentId("");

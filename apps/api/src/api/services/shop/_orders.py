@@ -873,6 +873,237 @@ async def get_current_registrations(session: AsyncSession, user_id: uuid.UUID) -
     return orders
 
 
+async def _get_class_member_orders(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    class_ids: list[uuid.UUID],
+    *,
+    lock: bool = False,
+) -> list[Order]:
+    query = (
+        select(Order.id)
+        .where(
+            Order.user_id == user_id,
+            Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+            or_(Order.class_id.in_(class_ids), Order.class_id.is_(None)),
+        )
+        .order_by(Order.created_at.desc(), Order.updated_at.desc())
+    )
+    if lock:
+        query = query.with_for_update()
+    result = await session.execute(query)
+    orders: list[Order] = []
+    for order_id in result.scalars().all():
+        order = await get_order(session, order_id)
+        if order is not None:
+            orders.append(order)
+    return orders
+
+
+async def get_class_member_registrations(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    class_ids: list[uuid.UUID],
+) -> list[Order]:
+    """取得班代有權管理的學生所有有效訂購。"""
+    return await _get_class_member_orders(session, user_id, class_ids)
+
+
+async def set_class_member_product(
+    session: AsyncSession,
+    *,
+    user: User,
+    actor: User,
+    class_id: uuid.UUID,
+    class_ids: list[uuid.UUID],
+    product_id: uuid.UUID,
+    data: CurrentRegistrationUpdate,
+) -> list[Order]:
+    """按學生的商品總量，跨其有效訂購調整未鎖定品項。"""
+    if class_id not in class_ids:
+        raise PermissionError("無權修改此學生的商品登記")
+
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    await session.execute(
+        select(Product)
+        .where(Product.id == product_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    product = await get_product(session, product_id)
+    if product is None:
+        raise ValueError("找不到此商品")
+
+    orders = await _get_class_member_orders(session, user.id, class_ids, lock=True)
+    product_lines = [
+        (order, item) for order in orders for item in order.items if item.product_id == product.id
+    ]
+    existing_quantity = sum(item.quantity for _, item in product_lines)
+    await _assert_product_registration_open(
+        session,
+        product,
+        class_id=class_id,
+        allow_sold_out=existing_quantity > 0,
+    )
+
+    locked_quantities: dict[str, int] = {}
+    current_options: dict[str, list[dict]] = {}
+    editable_lines: dict[str, list[tuple[Order, OrderItem]]] = {}
+    for order, item in product_lines:
+        signature = _options_signature(item.selected_options or [])
+        current_options.setdefault(signature, item.selected_options or [])
+        if order.is_paid or order.is_class_collected:
+            locked_quantities[signature] = locked_quantities.get(signature, 0) + item.quantity
+        else:
+            editable_lines.setdefault(signature, []).append((order, item))
+
+    requested: dict[str, tuple[int, list[dict]]] = {}
+    for variant in data.variants:
+        if len(set(variant.option_ids)) != len(variant.option_ids):
+            raise ValueError("同一規格不能重複選擇選項")
+        signature = ",".join(sorted(str(option_id) for option_id in variant.option_ids))
+        if signature in requested:
+            raise ValueError("相同規格不能重複登記")
+        selected = current_options.get(signature)
+        if selected is None:
+            selected = _resolve_selected_options(product, variant.option_ids)
+        requested[signature] = (variant.quantity, selected)
+
+    for signature, locked_quantity in locked_quantities.items():
+        if requested.get(signature, (0, []))[0] < locked_quantity:
+            raise ValueError("已收款、已鎖定或家人代訂的數量不能減少")
+
+    requested_total = sum(quantity for quantity, _ in requested.values())
+    quantity_delta = requested_total - existing_quantity
+    if quantity_delta > 0:
+        await _assert_purchase_limit(session, product, user.id, quantity_delta)
+    if not product.is_unlimited:
+        if quantity_delta > product.stock_quantity:
+            raise ValueError(f"商品「{product.name}」庫存不足（剩餘 {product.stock_quantity} 件）")
+        product.stock_quantity -= quantity_delta
+        if product.stock_quantity == 0:
+            product.status = ProductStatus.SOLD_OUT
+        elif product.status == ProductStatus.SOLD_OUT:
+            product.status = ProductStatus.ACTIVE
+
+    affected_orders: dict[uuid.UUID, Order] = {}
+    all_signatures = set(editable_lines) | set(locked_quantities) | set(requested)
+    for signature in all_signatures:
+        entries = editable_lines.get(signature, [])
+        current_editable = sum(item.quantity for _, item in entries)
+        desired_total, selected = requested.get(
+            signature,
+            (locked_quantities.get(signature, 0), current_options.get(signature, [])),
+        )
+        desired_editable = desired_total - locked_quantities.get(signature, 0)
+        difference = desired_editable - current_editable
+
+        if difference < 0:
+            remaining = -difference
+            for order, item in sorted(
+                entries,
+                key=lambda entry: (entry[0].created_at, str(entry[0].id)),
+                reverse=True,
+            ):
+                reduction = min(remaining, item.quantity)
+                item.quantity -= reduction
+                remaining -= reduction
+                affected_orders[order.id] = order
+                if item.quantity == 0:
+                    order.items.remove(item)
+                    await session.delete(item)
+                if remaining == 0:
+                    break
+        elif difference > 0:
+            if entries:
+                order, item = min(
+                    entries,
+                    key=lambda entry: (entry[0].created_at, str(entry[0].id)),
+                )
+                item.quantity += difference
+                affected_orders[order.id] = order
+            else:
+                scope = _product_order_scope(product)
+                order = next(
+                    (
+                        candidate
+                        for candidate in orders
+                        if not candidate.is_paid
+                        and not candidate.is_class_collected
+                        and all(
+                            item.product is not None and _product_order_scope(item.product) == scope
+                            for item in candidate.items
+                        )
+                        and (
+                            candidate.items
+                            or (
+                                candidate.activity_id == scope[0]
+                                and candidate.category_id == scope[1]
+                            )
+                        )
+                    ),
+                    None,
+                )
+                if order is None:
+                    order = Order(
+                        serial_number=await generate_order_serial(session),
+                        user_id=user.id,
+                        activity_id=scope[0],
+                        category_id=scope[1],
+                        class_id=class_id,
+                        status=OrderStatus.PENDING,
+                        payment_method="school_collection"
+                        if _is_school_email(user)
+                        else "cash_on_pickup",
+                        subtotal_price=0,
+                        discount_amount=0,
+                        total_price=0,
+                        items=[],
+                        applied_promotions=[],
+                        assistance_scope="class_assisted",
+                        assisted_by_id=actor.id,
+                    )
+                    session.add(order)
+                    await session.flush()
+                    orders.append(order)
+                order.items.append(
+                    OrderItem(
+                        product_id=product.id,
+                        quantity=difference,
+                        unit_price=product.price + _options_delta(selected),
+                        selected_options=selected,
+                        ordered_by_id=actor.id,
+                        ordered_by_name=actor.display_name,
+                    )
+                )
+                affected_orders[order.id] = order
+
+    for order in affected_orders.values():
+        if order.class_id is None:
+            order.class_id = class_id
+            order.school_class = await session.get(SchoolClass, class_id)
+
+    await session.flush()
+    for order in affected_orders.values():
+        order.subtotal_price = sum(item.quantity * item.unit_price for item in order.items)
+        if not order.items:
+            order.status = OrderStatus.CANCELLED
+            order.subtotal_price = 0
+            order.discount_amount = 0
+            order.total_price = 0
+            await _sync_order_promotions(session, order, ())
+            await receivable_svc.cancel_for_source(session, "shop_order", order.id)
+        else:
+            try:
+                await _apply_order_promotion(session, order, code=order.promotion_code)
+            except ValueError:
+                await _apply_order_promotion(session, order, code=None)
+            await receivable_svc.sync_shop_order(session, order)
+
+    await session.flush()
+    return await _get_class_member_orders(session, user.id, class_ids)
+
+
 async def apply_registration_promotion(
     session: AsyncSession,
     user: User,
