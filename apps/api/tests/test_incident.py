@@ -199,6 +199,25 @@ def test_asyncpg_statement_sequence_is_normalized_for_issue_grouping() -> None:
     )
 
 
+def test_python_object_addresses_are_normalized_for_issue_grouping() -> None:
+    first = "Response validation failed: <api.models.shop.Product object at 0x7bb967e35730>"
+    second = "Response validation failed: <api.models.shop.Product object at 0x7bb967fcecc0>"
+
+    assert normalize_error_message(first) == normalize_error_message(second)
+    assert "at {address}" in normalize_error_message(first)
+    assert create_error_fingerprint(
+        service="api",
+        exception_type="ResponseValidationError",
+        path="/shop/products",
+        message=first,
+    ) == create_error_fingerprint(
+        service="api",
+        exception_type="ResponseValidationError",
+        path="/shop/products",
+        message=second,
+    )
+
+
 async def test_export_incidents_csv_contains_event_timeline(
     db_session: AsyncSession,
 ) -> None:
