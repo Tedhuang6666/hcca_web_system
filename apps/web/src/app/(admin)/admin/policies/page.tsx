@@ -281,7 +281,6 @@ function DocumentEditor({
   const [effectiveAt, setEffectiveAt] = useState(
     doc.effective_at.slice(0, 16),
   );
-  const [requiresConsent, setRequiresConsent] = useState(doc.requires_explicit_consent);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -289,7 +288,6 @@ function DocumentEditor({
     setContent(doc.content_md);
     setSummary(doc.summary_md ?? "");
     setEffectiveAt(doc.effective_at.slice(0, 16));
-    setRequiresConsent(doc.requires_explicit_consent);
   }, [doc]);
 
   const onSave = async () => {
@@ -304,7 +302,7 @@ function DocumentEditor({
         content_md: content,
         summary_md: summary || null,
         effective_at: new Date(effectiveAt).toISOString(),
-        requires_explicit_consent: requiresConsent,
+        requires_explicit_consent: false,
       });
       toast.success("已儲存");
       await onSaved();
@@ -374,15 +372,6 @@ function DocumentEditor({
               className="input mt-1"
             />
           </label>
-          <label className="flex items-end gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={requiresConsent}
-              onChange={(e) => setRequiresConsent(e.target.checked)}
-              disabled={doc.is_active}
-            />
-            <span>需明示同意（顯示同意按鈕）</span>
-          </label>
         </div>
         <label className="text-xs">
           <span className="text-[var(--text-secondary)]">摘要（Markdown，選填）</span>
@@ -436,7 +425,7 @@ function CreateModal({
         title: title.trim(),
         content_md: content,
         effective_at: new Date(effectiveAt).toISOString(),
-        requires_explicit_consent: true,
+        requires_explicit_consent: false,
       });
       toast.success("已新增（未啟用）");
       onCreated();

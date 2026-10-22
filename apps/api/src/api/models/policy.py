@@ -5,9 +5,8 @@ PolicyDocument 是「我們的隱私政策 / ToS / 無障礙聲明 / Cookie 政�
 - 新版發布 = 新增一筆 + 舊版標記 is_active=False
 - 內容 markdown、版本 semver
 
-PolicyConsent 是「使用者同意了哪一版」的法律證據：
-- 首次登入或政策更新時強制同意
-- 紀錄 ip / user_agent，將來爭議可舉證
+PolicyConsent 記錄使用者提交過同意的政策版本：
+- 紀錄 ip / user_agent，供稽核查詢
 - 同 user × policy_document 唯一（同意一次就夠）
 """
 
@@ -88,7 +87,7 @@ class PolicyDocument(Base, TimestampMixin):
     """變更摘要（給使用者看「這次改了什麼」）。"""
 
     effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    """生效日期。早於此日的同意視為對前一版。"""
+    """生效日期。"""
 
     is_active: Mapped[bool] = mapped_column(default=False, nullable=False)
     """是否為當前生效版本。同 kind 只能一個 True。"""
@@ -99,7 +98,7 @@ class PolicyDocument(Base, TimestampMixin):
     """發布者；可為 NULL（系統初次匯入）。"""
 
     requires_explicit_consent: Mapped[bool] = mapped_column(default=True, nullable=False)
-    """True：首次登入 / 更新時強制 modal；False：僅 footer 顯示。"""
+    """是否將生效版本列入待同意清單；不限制平台存取。"""
 
     def __repr__(self) -> str:
         return (

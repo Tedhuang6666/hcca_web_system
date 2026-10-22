@@ -240,7 +240,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
             <PasskeyLogin nextPath={nextPath} />
 
             <p className="mt-8 text-center text-xs leading-6" style={{ color: "var(--text-muted)" }}>
-              登入即表示你同意
+              平台政策：
               <Link
                 className="mx-1 inline-flex min-h-11 items-center underline underline-offset-4 hover:text-[var(--text-primary)]"
                 href="/legal/terms"
