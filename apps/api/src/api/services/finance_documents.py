@@ -2,18 +2,28 @@
 
 from collections import OrderedDict
 from io import BytesIO
-from xml.etree import ElementTree as ET
+from typing import Protocol
 from zipfile import ZIP_DEFLATED, ZipFile
+
+from defusedxml import ElementTree as ET
 
 from api.services.finance import effective_budget_submission_ids
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-ET.register_namespace("w", W)
 
 
-def _word(parent: ET.Element, tag: str, text: str | None = None, **attrs: str) -> ET.Element:
-    element = ET.SubElement(parent, f"{{{W}}}{tag}", {f"{{{W}}}{k}": v for k, v in attrs.items()})
+class _XmlElement(Protocol):
+    text: str | None
+
+    def makeelement(self, tag: str, attrib: dict[str, str]) -> "_XmlElement": ...
+
+    def append(self, subelement: "_XmlElement") -> None: ...
+
+
+def _word(parent: _XmlElement, tag: str, text: str | None = None, **attrs: str) -> _XmlElement:
+    element = parent.makeelement(f"{{{W}}}{tag}", {f"{{{W}}}{k}": v for k, v in attrs.items()})
     element.text = text
+    parent.append(element)
     return element
 
 
@@ -28,7 +38,8 @@ def advance_receipt(budget_name: str, expenses: list[dict]) -> bytes:
         else:
             rows.append((expense["purpose"], expense["total_amount"]))
 
-    document = ET.Element(f"{{{W}}}document")
+    # defusedxml exposes parsing/serialization; create child nodes through the safe root.
+    document = ET.fromstring(f'<w:document xmlns:w="{W}"/>', forbid_dtd=True)
     body = _word(document, "body")
     for text in (
         "班聯內部實務利用之預先代墊簽收單",

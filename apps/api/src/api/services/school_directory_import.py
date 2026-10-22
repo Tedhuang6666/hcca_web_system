@@ -10,9 +10,10 @@ import re
 import uuid
 from dataclasses import dataclass
 from io import BytesIO, StringIO
-from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,7 +76,7 @@ def parse_school_directory(file_bytes: bytes) -> list[SchoolDirectoryRow]:
             with ZipFile(BytesIO(file_bytes)) as archive:
                 if sum(item.file_size for item in archive.infolist()) > 20_000_000:
                     raise ValueError("名冊解壓後過大")
-                workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+                workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"), forbid_dtd=True)
                 sheets = workbook.find("s:sheets", _NS)
                 if sheets is None or len(sheets) != 1:
                     raise ValueError("名冊須只有一個工作表")
@@ -83,10 +84,14 @@ def parse_school_directory(file_bytes: bytes) -> list[SchoolDirectoryRow]:
                 if "xl/sharedStrings.xml" in archive.namelist():
                     strings = [
                         "".join(item.itertext())
-                        for item in ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+                        for item in ElementTree.fromstring(
+                            archive.read("xl/sharedStrings.xml"), forbid_dtd=True
+                        )
                     ]
                 table = []
-                root = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+                root = ElementTree.fromstring(
+                    archive.read("xl/worksheets/sheet1.xml"), forbid_dtd=True
+                )
                 for source_row in root.findall("s:sheetData/s:row", _NS):
                     cells = {}
                     for cell in source_row:
@@ -103,7 +108,13 @@ def parse_school_directory(file_bytes: bytes) -> list[SchoolDirectoryRow]:
                         if set(cells) - {"A", "B", "C", "D"}:
                             raise ValueError("名冊只能包含信箱、學號、班級、座號四欄")
                         table.append([cells.get(column, "") for column in ("A", "B", "C", "D")])
-        except (BadZipFile, KeyError, IndexError, ElementTree.ParseError) as exc:
+        except (
+            BadZipFile,
+            KeyError,
+            IndexError,
+            ElementTree.ParseError,
+            DefusedXmlException,
+        ) as exc:
             raise ValueError("無法讀取名冊 XLSX") from exc
     else:
         try:
