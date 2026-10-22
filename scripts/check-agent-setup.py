@@ -14,15 +14,17 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCUMENTS = (
+PUBLIC_DOCUMENTS = (
+    "README.md",
+    "apps/api/README.md",
+    "apps/web/README.md",
+)
+LOCAL_DOCUMENTS = (
     "AGENTS.md",
     "CLAUDE.md",
     "PROJECT_CONTEXT.md",
     "apps/api/AGENTS.md",
     "apps/web/AGENTS.md",
-    "README.md",
-    "apps/api/README.md",
-    "apps/web/README.md",
     "docs/README.md",
     "docs/AI_WORKFLOW.md",
     "docs/HANDOFF_CHECKLIST.md",
@@ -69,12 +71,24 @@ def validate_test_database(url: str) -> str | None:
 
 
 def check_documents(root: Path) -> list[str]:
-    errors = [error for path in DOCUMENTS for error in broken_links(root, path)]
-    for relative in (".codex/config.toml", "pyproject.toml", "apps/api/pyproject.toml"):
+    errors = [error for path in PUBLIC_DOCUMENTS for error in broken_links(root, path)]
+    errors.extend(
+        error
+        for path in LOCAL_DOCUMENTS
+        if (root / path).is_file()
+        for error in broken_links(root, path)
+    )
+    for relative in ("pyproject.toml", "apps/api/pyproject.toml"):
         try:
             tomllib.loads((root / relative).read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             errors.append(f"Invalid TOML: {relative} ({type(error).__name__})")
+    local_codex_config = root / ".codex/config.toml"
+    if local_codex_config.is_file():
+        try:
+            tomllib.loads(local_codex_config.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            errors.append(f"Invalid TOML: .codex/config.toml ({type(error).__name__})")
     try:
         package = json.loads((root / "apps/web/package.json").read_text(encoding="utf-8"))
         for script in (
@@ -95,7 +109,7 @@ def check_documents(root: Path) -> list[str]:
         .stdout.decode()
         .split("\0")
     )
-    for relative in (*DOCUMENTS, ".codex/config.toml", "scripts/check.sh", ".gitnexusignore"):
+    for relative in (*PUBLIC_DOCUMENTS, "scripts/check.sh", ".gitnexusignore"):
         if relative not in tracked:
             errors.append(f"Maintenance entrypoint is not versioned/staged: {relative}")
     return errors
@@ -165,7 +179,10 @@ def main() -> int:
     for error in errors:
         print(error, file=sys.stderr)
     if not errors:
-        print(f"Agent setup OK: {len(DOCUMENTS)} documents, links, config and tracked entrypoints.")
+        print(
+            f"Agent setup OK: {len(PUBLIC_DOCUMENTS)} public documents, local references, "
+            "config and tracked entrypoints."
+        )
     return 1 if errors else 0
 
 

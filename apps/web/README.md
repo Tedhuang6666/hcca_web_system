@@ -2,8 +2,6 @@
 
 竹嶺班聯數位整合系統前端（Next.js 16 App Router + React 19 + TypeScript）。
 
-> 完整專案說明請參閱根目錄 [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md)。
-
 ## 環境與啟動
 
 需要 Node.js `>=22.13.0` 與 npm `>=10`。請在 WSL 內執行開發伺服器。
@@ -28,8 +26,7 @@ npm run generate:types
 ```
 
 `generate:types` 讀根目錄 `openapi.json`，不需啟動 API server。先從 repo 根執行
-`bash scripts/update-openapi.sh`，再生成 types 與 bridge。完整流程見
-[AI_WORKFLOW.md](../../docs/AI_WORKFLOW.md)。
+`bash scripts/update-openapi.sh`，再生成 types 與 bridge。
 
 ## 目錄
 

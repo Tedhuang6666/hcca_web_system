@@ -69,7 +69,7 @@ if [[ "${SKIP_GIT:-0}" != "1" && -d .git ]]; then
 
   # SECURITY: 驗證 HEAD commit 的 GPG 簽章，防止未簽名的惡意 commit 被自動部署。
   # 若 commit 未簽名，預設發出警告但不中止（REQUIRE_GPG_VERIFY=1 可升為硬性要求）。
-  # 若您的倉庫尚未啟用 commit signing，請參考 docs/OPERATIONS_GUIDE.md 設定。
+  # 請確認部署倉庫已依組織規範設定 commit signing。
   if [[ "${SKIP_GPG_VERIFY:-0}" != "1" ]]; then
     if git verify-commit HEAD 2>/dev/null; then
       echo "✓ GPG 簽章驗證通過"
