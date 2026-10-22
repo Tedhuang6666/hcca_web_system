@@ -1885,7 +1885,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
               <div className="shop-bundles-heading">
                 <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
-                <p>選好規格，逐項加入套組。</p>
+                <p>選購優惠套組</p>
               </div>
               <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
                 {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
