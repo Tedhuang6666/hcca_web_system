@@ -992,6 +992,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [routeProductNotFound, setRouteProductNotFound] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const isLoggedInRef = useRef(false);
   const [isStudent, setIsStudent] = useState(false);
   const [canOrderForSelf, setCanOrderForSelf] = useState(false);
   const [currentAccount, setCurrentAccount] = useState("");
@@ -1243,6 +1244,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     }
     void authApi.refresh().then(async (user) => {
       if (!active) return;
+      isLoggedInRef.current = true;
       setIsLoggedIn(true);
       setIsStudent(user.can_create_shop_delegation ?? Boolean(user.student_id));
       setCanOrderForSelf(Boolean(user.can_create_shop_delegation || user.student_id || user.is_school_email));
@@ -1266,6 +1268,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       }
     }).catch(() => {
       if (!active) return;
+      isLoggedInRef.current = false;
       setIsLoggedIn(false);
       setRegistrations([]);
       if (token) setLoading(false);
@@ -1299,19 +1302,20 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       setRegistrationLoadError(false);
       setAvailablePromotions([]);
       setCloseStatus({});
+      const loggedIn = isLoggedInRef.current;
       if (token) {
         setCatalog([]);
-        setLoading(isLoggedIn);
-        if (isLoggedIn) void loadDelegation(token);
+        setLoading(loggedIn);
+        if (loggedIn) void loadDelegation(token);
       } else {
         loadCatalog();
         const generation = refreshGeneration.current;
         void shopApi.listAvailablePromotions()
           .then((promotions) => { if (generation === refreshGeneration.current) setAvailablePromotions(promotions); })
           .catch(() => { if (generation === refreshGeneration.current) setAvailablePromotions([]); });
-        if (isLoggedIn && classMemberId && classMemberId === classMemberUserId) {
+        if (loggedIn && classMemberId && classMemberId === classMemberUserId) {
           void loadClassMemberOrders(classMemberId, true);
-        } else if (isLoggedIn && !classMemberId) {
+        } else if (loggedIn && !classMemberId) {
           void shopApi.getCurrentRegistrations()
             .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
             .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
