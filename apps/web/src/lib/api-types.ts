@@ -23095,7 +23095,7 @@ export interface components {
         };
         /**
          * PendingConsentItem
-         * @description 使用者尚未同意的政策。前端用此清單渲染 modal。
+         * @description 使用者尚未留下同意紀錄的政策版本，供政策 API 查詢。
          */
         PendingConsentItem: {
             /**
