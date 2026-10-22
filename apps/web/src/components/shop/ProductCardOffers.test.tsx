@@ -16,15 +16,14 @@ const promotion: ShopPromotionPublicOut = {
 };
 
 describe("商品卡片內的優惠", () => {
-  it("在選購前呈現搭配品項、整套原價與組合價，並可直接選購", () => {
+  it("套組只保留簡短選購入口，不重複完整價格與條件", () => {
     const select = vi.fn();
     const { container } = render(<ProductCardOffers product={product} promotions={[promotion]}
       products={new Map([[product.id, product], [pants.id, pants]])} disabled={false} onSelectBundle={select} />);
-    expect(screen.getByText("搭配褲子，每項各一件")).toBeVisible();
-    expect(container.querySelector("del")).toHaveTextContent("NT$800");
-    expect(screen.getByLabelText("原價 NT$800，優惠價 NT$650／套")).toBeVisible();
-    expect(screen.getByText("每套省 NT$150")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "選購此套組" }));
+    expect(screen.queryByText("衣褲套組")).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/每套省|每項各一件|NT\$/);
+    expect(container.querySelector("del")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "選購套組：衣褲套組" }));
     expect(select).toHaveBeenCalledWith(promotion);
   });
 
@@ -40,10 +39,11 @@ describe("商品卡片內的優惠", () => {
   it("鎖定與套組缺貨時不能從卡片啟動選購", () => {
     const { rerender } = render(<ProductCardOffers product={product} promotions={[promotion]}
       products={new Map([[product.id, product], [pants.id, pants]])} disabled onSelectBundle={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "選購此套組" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "選購套組：衣褲套組" })).toBeDisabled();
     rerender(<ProductCardOffers product={product} promotions={[promotion]}
       products={new Map([[product.id, product]])} disabled={false} onSelectBundle={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "套組暫停供應" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "選購套組：衣褲套組" })).toBeDisabled();
+    expect(screen.getByText("套組暫停供應")).toBeVisible();
     expect(document.querySelector("del")).not.toBeInTheDocument();
   });
 
@@ -51,6 +51,17 @@ describe("商品卡片內的優惠", () => {
     const { container } = render(<ProductCardOffers product={{ ...product, id: "other" }} promotions={[promotion]}
       products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("同一商品有多個套組時，合併為專區入口", () => {
+    render(<ProductCardOffers product={product}
+      promotions={[promotion, { ...promotion, id: "second", name: "另一套組" }]}
+      products={new Map([[product.id, product], [pants.id, pants]])}
+      disabled={false} onSelectBundle={vi.fn()} />);
+    expect(screen.getByRole("link", { name: "查看 2 組套組優惠" }))
+      .toHaveAttribute("href", "#shop-bundles-title");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText("另一套組")).not.toBeInTheDocument();
   });
 
   it("多項指定商品特價各自適用，不宣稱需要合購其他品項", () => {

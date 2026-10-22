@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
-  ChevronDown,
   CircleAlert,
   CircleCheck,
   ClipboardList,
@@ -23,7 +22,6 @@ import type {
   ProductOut,
   MyClassContext,
   OrderOut,
-  ShopPromotionPreviewOut,
   ShopPromotionPublicOut,
   ShopDelegationContextOut,
 } from "@/lib/types";
@@ -41,6 +39,7 @@ import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url"
 import { cleanupAnimatedElement, shouldAnimateProductFlight } from "@/lib/shop-product-flight";
 import ShopPrice from "@/components/shop/ShopPrice";
 import BundleOffer from "@/components/shop/BundleOffer";
+import BundleCarousel from "@/components/shop/BundleCarousel";
 import BundleAddOn from "@/components/shop/BundleAddOn";
 import { bundleProductAvailable, bundleProgress } from "@/lib/shop-bundle-progress";
 import { productOfferPrice } from "@/lib/shop-promotion-price";
@@ -191,10 +190,6 @@ function flyProductIntoOrder() {
 }
 
 const GENERAL_ACTIVITY_SCOPE = "none";
-
-function activityScopeKey(activityId: string | null | undefined, categoryId?: string | null) {
-  return orderScopeKey({ activity_id: activityId, category_id: categoryId });
-}
 
 function registrationLockMessage({
   registrationLocked,
@@ -989,8 +984,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [selectedPromotionScope, setSelectedPromotionScope] = useState(GENERAL_ACTIVITY_SCOPE);
-  const [promotionPreview, setPromotionPreview] = useState<ShopPromotionPreviewOut | null>(null);
-  const [promotionBusy, setPromotionBusy] = useState(false);
   const [promotionFeedback, setPromotionFeedback] = useState("");
   const [promotionCelebration, setPromotionCelebration] = useState<{
     promotionIds: string[];
@@ -998,7 +991,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   } | null>(null);
   const promotionCelebrationToken = useRef(0);
   const promotionCelebrationTimer = useRef<number | null>(null);
-  const [claimedPromotionIds, setClaimedPromotionIds] = useState<Set<string>>(() => new Set());
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [classLoadFailed, setClassLoadFailed] = useState(false);
@@ -1328,56 +1320,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   });
 
   useEffect(() => {
-    const scope = orderScopeParams(selectedPromotionScope);
-    const registration = registrations.find((order) => orderScopeKey(order) === selectedPromotionScope) ?? null;
-    if (classMemberUserId || !isLoggedIn || authLoading || !registration) {
-      setPromotionPreview(null);
-      return;
-    }
-    void shoppingApi.previewCurrentPromotion(registration.promotion_code ?? null, scope.activity_id ?? null, scope.category_id)
-      .then(setPromotionPreview)
-      .catch(() => setPromotionPreview(null));
-  }, [isLoggedIn, authLoading, registrations, selectedPromotionScope, shoppingApi, classMemberUserId]);
-
-  const activityOptions = useMemo(() => {
-    const namesById = new Map<string, Set<string>>();
-    for (const category of catalog) {
-      const key = catalogScopeKey(category);
-      const names = namesById.get(key) ?? new Set<string>();
-      names.add(category.activity_name ?? category.name);
-      namesById.set(key, names);
-    }
-    for (const promotion of availablePromotions) {
-      if (promotion.activity_id && !namesById.has(promotion.activity_id)) {
-        namesById.set(promotion.activity_id, new Set());
-      }
-    }
-    const options = [...namesById.entries()].map(([id, names]) => ({
-      id,
-      label: names.size ? [...names].join("、") : "活動商品",
-    }));
-    if (!options.length) options.push({ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" });
-    return options;
-  }, [catalog, availablePromotions]);
-
-  const catalogProductPrices = useMemo(() => {
-    const prices = new Map<string, number>();
-    for (const category of catalog) {
-      for (const product of category.products) prices.set(product.id, product.price);
-      for (const series of category.series) {
-        for (const product of series.products) prices.set(product.id, product.price);
-      }
-    }
-    return prices;
-  }, [catalog]);
-
-  useEffect(() => {
-    if (!activityOptions.some((option) => option.id === selectedPromotionScope)) {
-      setSelectedPromotionScope(activityOptions[0]?.id ?? GENERAL_ACTIVITY_SCOPE);
-    }
-  }, [activityOptions, selectedPromotionScope]);
-
-  useEffect(() => {
     const productId = new URLSearchParams(window.location.search).get("product");
     if (!productId && !productSlug) {
       setRouteProductNotFound(false);
@@ -1513,11 +1455,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       setPromotionFeedback("目前登記已鎖定，如需更改優惠請聯繫班級幹部。");
       return;
     }
-    setPromotionBusy(true);
     setPromotionFeedback("");
     try {
       const preview = await shoppingApi.previewCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
-      setPromotionPreview(preview);
       if (!preview.eligible) {
         setPromotionFeedback(preview.reason ?? "目前尚未符合優惠條件。");
         return;
@@ -1532,8 +1472,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       const message = apiErrorMessage(error, "優惠套用失敗");
       setPromotionFeedback(message);
       toast.error(message);
-    } finally {
-      setPromotionBusy(false);
     }
   };
 
@@ -1568,7 +1506,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     }
     try {
       const preview = await shoppingApi.previewCurrentPromotion(pendingCode, activityId, scope.category_id);
-      setPromotionPreview(preview);
       if (preview.eligible) {
         const updated = await shoppingApi.applyCurrentPromotion(pendingCode, activityId, scope.category_id);
         setRegistrations((current) => [
@@ -1602,20 +1539,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
         .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
     }
-  };
-
-  const claimPromotion = (promotion: ShopPromotionPublicOut) => {
-    const code = promotion.code ?? "";
-    const scopeId = promotion.activity_id ? activityScopeKey(promotion.activity_id) : selectedPromotionScope;
-    setSelectedPromotionScope(scopeId);
-    setCouponCode(code);
-    if (promotion.code) {
-      setClaimedPromotionIds((current) => new Set(current).add(promotion.id));
-      setPromotionFeedback(`已領取「${promotion.name}」，優惠碼 ${promotion.code} 已帶入。`);
-    } else {
-      setPromotionFeedback(`「${promotion.name}」符合條件時會自動折抵；可先查看目前進度。`);
-    }
-    void inspectAndApplyPromotion(promotion.code ?? null, scopeId);
   };
 
   const openPromotionProduct = (productId: string) => {
@@ -1841,10 +1764,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
       {!loading && !loadError && bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
         <div className="shop-bundles-heading">
-          <h2 id="shop-bundles-title"><Gift size={22} aria-hidden="true" />組合購買專區</h2>
+          <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={22} aria-hidden="true" />組合購買專區</h2>
           <p>一起選購享組合價；已登記其中一項，可直接加購湊組。</p>
         </div>
-        {bundlePromotions.map((promotion) => {
+        <BundleCarousel>{bundlePromotions.map((promotion) => {
           const category = catalog.find((item) => [...item.products, ...item.series.flatMap((series) => series.products)]
             .some((product) => promotion.target_products?.some((target) => target.id === product.id)));
           const registration = category ? registrations.find((order) => orderScopeKey(order) === catalogScopeKey(category)) ?? null : null;
@@ -1855,231 +1778,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               || Boolean(delegationToken && !delegationContext?.can_edit)
               || Boolean(category && closeStatus[category.id]?.is_closed)}
             onSelect={(productId) => selectBundleProduct(promotion, productId)} />;
-        })}
+        })}</BundleCarousel>
       </section>}
 
-      <details className="shop-public-promotions">
-        <summary className="shop-public-promotion-toggle" aria-controls="shop-promotion-content">
-          <span className="shop-public-promotion-toggle-label">
-            <Gift size={17} aria-hidden="true" />
-            <div>
-              <strong>優惠碼與優惠</strong>
-              <span>
-                {availablePromotions.length > 0
-                  ? `目前有 ${availablePromotions.length} 項公開優惠，也可輸入已知優惠碼。`
-                  : "輸入已知優惠碼，查看彩蛋優惠。"}
-              </span>
-            </div>
-          </span>
-          <span className="shop-public-promotion-toggle-action">
-            {availablePromotions.length > 0 ? "查看" : "輸入"}
-            <ChevronDown size={17} aria-hidden="true" />
-          </span>
-        </summary>
-        <div id="shop-promotion-content" className="shop-public-promotions-content">
-          <div className="shop-public-promotions-heading">
-            <div>
-              <h2 id="shop-promotions-title">輸入優惠碼</h2>
-              <p>輸入你取得的優惠碼，或查看目前公開的優惠。</p>
-            </div>
-            <div className="shop-public-promotion-controls">
-              <label className="shop-public-activity-entry">
-                <span>適用活動</span>
-                <select
-                  value={selectedPromotionScope}
-                  onChange={(event) => setSelectedPromotionScope(event.target.value)}
-                  aria-label="優惠適用活動"
-                >
-                  {activityOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="shop-public-coupon-entry">
-                <span>優惠碼</span>
-                <input
-                  value={couponCode}
-                  onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                  placeholder="輸入或領取優惠碼"
-                  autoCapitalize="characters"
-                  aria-label="優惠碼"
-                />
-                <button
-                  type="button"
-                  onClick={() => void inspectAndApplyPromotion(couponCode.trim() || null)}
-                  disabled={promotionBusy || !isLoggedIn}
-                >
-                  {promotionBusy ? "檢查中…" : couponCode.trim() ? "檢查並套用" : "查看自動優惠"}
-                </button>
-              </label>
-              <p className="shop-public-promotion-scope-help">
-                優惠碼只會檢查所選活動的登記；不同活動分開套用優惠。
-              </p>
-            </div>
-          </div>
-          {promotionFeedback && <p className="shop-public-promotion-feedback" role="status" aria-live="polite">{promotionFeedback}</p>}
-          {promotionPreview?.reason && (
-            <p className="shop-public-promotion-preview" role="status">
-              {promotionPreview.promotion_name && <strong>{promotionPreview.promotion_name} · </strong>}
-              {promotionPreview.reason}
-              {promotionPreview.product_price_overrides?.length ? (
-                <span>
-                  {" "}指定商品優惠單價：{promotionPreview.product_price_overrides
-                    .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
-                    .join("、")}
-                </span>
-              ) : null}
-            </p>
-          )}
-          {availablePromotions.length === 0 ? (
-            <p className="shop-public-promotion-empty">
-              目前沒有公開優惠；如果你有優惠碼，仍可在上方輸入使用。
-            </p>
-          ) : (
-            <div className="shop-public-promotion-grid">
-              {availablePromotions.map((promotion) => {
-              const promotionRegistration = registrations.find(
-                (order) => orderScopeKey(order) === (promotion.activity_id ?? selectedPromotionScope),
-              ) ?? null;
-              const promotionScope = activityOptions.find(
-                (option) => option.id === (promotion.activity_id ?? selectedPromotionScope),
-              )?.label ?? "指定活動";
-              const targetProducts = promotion.target_products ?? [];
-              const targetIds = new Set(targetProducts.map((product) => product.id));
-              const registeredProducts = new Set((promotionRegistration?.items ?? []).map((item) => item.product_id));
-              const hasMatchingProduct = targetProducts.some((product) => registeredProducts.has(product.id));
-              const missingProducts = promotion.discount_type === "price_override"
-                ? hasMatchingProduct ? [] : targetProducts
-                : targetProducts.filter((product) => !registeredProducts.has(product.id));
-              const matchingItems = (promotionRegistration?.items ?? []).filter((item) =>
-                targetIds.size === 0 || targetIds.has(item.product_id),
-              );
-              const matchingQuantity = matchingItems.reduce((sum, item) => sum + item.quantity, 0);
-              const matchingSubtotal = matchingItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
-              const quantityShortfall = Math.max(0, promotion.min_quantity - matchingQuantity);
-              const spendShortfall = Math.max(0, promotion.min_order_price - (promotionRegistration?.subtotal_price ?? 0));
-              const appliedDiscount = promotionRegistration?.applied_promotions?.find(
-                (row) => row.promotion_id === promotion.id,
-              )?.discount_amount;
-              const isApplied = appliedDiscount != null || promotionRegistration?.promotion_id === promotion.id;
-              const estimatedBase = targetIds.size > 0 ? matchingSubtotal : promotionRegistration?.subtotal_price ?? 0;
-              const bundleOriginal = targetProducts.reduce((sum, target) => sum + (catalogProductPrices.get(target.id) ?? 0), 0);
-              const bundleCount = targetProducts.length ? Math.min(...targetProducts.map((target) => matchingItems
-                .filter((item) => item.product_id === target.id).reduce((sum, item) => sum + item.quantity, 0))) : 0;
-              const estimatedDiscount = promotion.discount_type === "bundle_price"
-                ? Math.max(0, bundleOriginal - promotion.discount_value) * bundleCount
-                : promotion.discount_type === "price_override"
-                ? (promotion.product_price_overrides ?? []).reduce((total, price) => {
-                  const productBasePrice = catalogProductPrices.get(price.product_id);
-                  if (productBasePrice === undefined) return total;
-                  const quantity = matchingItems
-                    .filter((item) => item.product_id === price.product_id)
-                    .reduce((sum, item) => sum + item.quantity, 0);
-                  return total + Math.max(0, productBasePrice - price.unit_price) * quantity;
-                }, 0)
-                : promotion.discount_type === "percentage"
-                  ? Math.floor(estimatedBase * promotion.discount_value / 100)
-                  : Math.min(estimatedBase, promotion.discount_value);
-              const progressParts = [
-                promotion.min_order_price > 0
-                  ? (promotionRegistration?.subtotal_price ?? 0) / promotion.min_order_price
-                  : 1,
-                promotion.min_quantity > 1 ? matchingQuantity / promotion.min_quantity : 1,
-              ];
-              const progressValue = Math.min(100, Math.round(Math.min(...progressParts) * 100));
-              const requirementsMet = missingProducts.length === 0 && quantityShortfall === 0 && spendShortfall === 0;
-              const progressLabel = !isLoggedIn
-                ? "登入並登記商品後即可查看"
-                : missingProducts.length > 0
-                  ? `還需登記：${missingProducts.map((product) => product.name).join("、")}`
-                  : quantityShortfall > 0
-                    ? `再登記 ${quantityShortfall} 件即可達到件數門檻！`
-                    : spendShortfall > 0
-                      ? `目前 NT$${promotionRegistration?.subtotal_price.toLocaleString() ?? 0}，再登記 NT$${spendShortfall.toLocaleString()} 即達門檻！`
-                      : isApplied
-                        ? `已套用，折抵 NT$${(appliedDiscount ?? promotionRegistration?.discount_amount ?? 0).toLocaleString()}！`
-                        : requirementsMet && promotionRegistration
-                          ? promotion.discount_type === "price_override"
-                            ? "已達優惠條件，可套用指定商品優惠價。"
-                            : `已達優惠條件，可以折抵 NT$${estimatedDiscount.toLocaleString()}！`
-                          : "登記商品後即可查看進度";
-              const actionLabel = promotion.code
-                ? claimedPromotionIds.has(promotion.id) ? "已領取優惠券" : "領取優惠券"
-                : isApplied ? "已自動套用" : "查看優惠進度";
-              const celebrationToken = promotionCelebration?.promotionIds.includes(promotion.id)
-                ? promotionCelebration.token
-                : null;
-              return (
-                <article className="shop-public-promotion-card" key={promotion.id}>
-                  <div className="shop-public-promotion-card-top">
-                    <span
-                      key={celebrationToken ?? "idle"}
-                      className={`shop-public-promotion-icon${celebrationToken ? " shop-public-promotion-icon--celebrating" : ""}`}
-                      aria-hidden="true">
-                      <Gift size={17} />
-                    </span>
-                    <span>{promotion.code ? "優惠券" : "優惠自動套用"}</span>
-                    {isApplied && <span className="shop-public-promotion-applied"><CircleCheck size={14} aria-hidden="true" />已套用</span>}
-                  </div>
-                  <h3>{promotion.name}</h3>
-                  <p className="shop-public-promotion-description">適用活動：{promotionScope}</p>
-                  <p className="shop-public-promotion-value">
-                    {promotion.discount_type === "bundle_price"
-                      ? <ShopPrice original={bundleOriginal} current={promotion.discount_value} suffix="／套" />
-                      : promotion.discount_type === "price_override"
-                      ? `指定商品優惠價：${(promotion.product_price_overrides ?? [])
-                        .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
-                        .join("、")}`
-                      : promotion.discount_type === "percentage"
-                        ? `減價 ${promotion.discount_value}%`
-                        : `折抵 NT$${promotion.discount_value.toLocaleString()}`}
-                  </p>
-                  {promotion.code && <p className="shop-public-promotion-code">{promotion.code}</p>}
-                  <div className="shop-public-promotion-conditions">
-                    {promotion.min_order_price > 0 && (
-                      <span>{`消費滿 NT$${promotion.min_order_price.toLocaleString()}`}</span>
-                    )}
-                    {promotion.min_quantity > 1 && <span>滿 {promotion.min_quantity} 件</span>}
-                    {targetProducts.length > 0 && (
-                      <span>{promotion.discount_type === "bundle_price" ? "每項各一件：" : promotion.discount_type === "price_override" ? "任一指定品項：" : "折扣計指定品項："}{targetProducts.map((product) => product.name).join(" + ")}</span>
-                    )}
-                    {promotion.min_order_price === 0 && promotion.min_quantity <= 1 && targetProducts.length === 0 && <span>無最低消費門檻</span>}
-                  </div>
-                  {promotion.min_order_price > 0 || promotion.min_quantity > 1 ? (
-                    <div className="shop-public-promotion-meter">
-                      <div role="meter" aria-label={`${promotion.name} 優惠進度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressValue}>
-                        <span style={{ width: `${progressValue}%` }} />
-                      </div>
-                      <p>{progressLabel}</p>
-                    </div>
-                  ) : <p className="shop-public-promotion-progress">{progressLabel}</p>}
-                  {promotion.description && <p className="shop-public-promotion-description">{promotion.description}</p>}
-                  {promotion.ends_at && (
-                    <p className="shop-public-promotion-description">
-                      優惠至 {new Date(promotion.ends_at).toLocaleString("zh-TW")}
-                    </p>
-                  )}
-                  <div className="shop-public-promotion-actions">
-                    <button
-                      type="button"
-                      onClick={() => claimPromotion(promotion)}
-                      disabled={promotionBusy || isApplied}
-                    >
-                      {actionLabel}
-                    </button>
-                    {missingProducts[0] && (
-                      <button type="button" className="shop-public-promotion-browse" onClick={() => openPromotionProduct(missingProducts[0].id)}>
-                        選購指定商品
-                      </button>
-                    )}
-                  </div>
-                </article>
-              );
-              })}
-            </div>
-          )}
-        </div>
-      </details>
+      {promotionFeedback && <p className="shop-bundle-feedback" role="status" aria-live="polite">{promotionFeedback}</p>}
       {promotionCelebration && (
         <span key={promotionCelebration.token} className="sr-only" role="status" aria-live="polite">
           {availablePromotions
