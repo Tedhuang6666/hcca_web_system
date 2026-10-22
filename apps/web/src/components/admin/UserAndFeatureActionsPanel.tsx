@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   Ban,
@@ -429,7 +431,7 @@ export default function UserAndFeatureActionsPanel() {
               <input value={ruleReason} onChange={(event) => setRuleReason(event.target.value)} className="input w-full" />
             </Field>
             <Field label="有效分鐘數（0 為永久）">
-              <input type="number" min={0} value={ruleTtlMinutes} onChange={(event) => setRuleTtlMinutes(Number(event.target.value))} className="input w-full" />
+              <NumberInput type="number" min={0} value={ruleTtlMinutes} onChange={(event) => setRuleTtlMinutes(Number(event.target.value))} className="input w-full" />
             </Field>
             <button type="button" onClick={() => void createRule()} disabled={working || !ruleTarget.trim()} className="btn btn-danger self-end">
               <Plus size={15} aria-hidden /> 建立規則
@@ -438,10 +440,10 @@ export default function UserAndFeatureActionsPanel() {
           {ruleType === "rate_limit_override" && (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="端點請求數">
-                <input type="number" min={1} value={ruleConfigRequests} onChange={(event) => setRuleConfigRequests(Number(event.target.value))} className="input w-full" />
+                <NumberInput type="number" min={1} value={ruleConfigRequests} onChange={(event) => setRuleConfigRequests(Number(event.target.value))} className="input w-full" />
               </Field>
               <Field label="端點視窗秒數">
-                <input type="number" min={1} value={ruleConfigWindowSeconds} onChange={(event) => setRuleConfigWindowSeconds(Number(event.target.value))} className="input w-full" />
+                <NumberInput type="number" min={1} value={ruleConfigWindowSeconds} onChange={(event) => setRuleConfigWindowSeconds(Number(event.target.value))} className="input w-full" />
               </Field>
             </div>
           )}
@@ -580,10 +582,10 @@ function FragmentRow({
             {editingRuleType === "rate_limit_override" && (
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field label="端點請求數">
-                  <input type="number" min={1} value={editingRuleRequests} onChange={(event) => onRequestsChange(Number(event.target.value))} className="input w-full" />
+                  <NumberInput type="number" min={1} value={editingRuleRequests} onChange={(event) => onRequestsChange(Number(event.target.value))} className="input w-full" />
                 </Field>
                 <Field label="端點視窗秒數">
-                  <input type="number" min={1} value={editingRuleWindowSeconds} onChange={(event) => onWindowChange(Number(event.target.value))} className="input w-full" />
+                  <NumberInput type="number" min={1} value={editingRuleWindowSeconds} onChange={(event) => onWindowChange(Number(event.target.value))} className="input w-full" />
                 </Field>
               </div>
             )}

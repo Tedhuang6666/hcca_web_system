@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
@@ -929,7 +931,7 @@ export default function PartnerMapAdminPage() {
                     </label>
                     <label className="grid min-w-0 gap-1">
                       <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
-                      <input className="input h-9" type="number" value={draft.sort_order} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, sort_order: Number(event.target.value) } }))} />
+                      <NumberInput className="input h-9" type="number" value={draft.sort_order} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, sort_order: Number(event.target.value) } }))} />
                     </label>
                     <label className="grid min-w-0 gap-1">
                       <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>

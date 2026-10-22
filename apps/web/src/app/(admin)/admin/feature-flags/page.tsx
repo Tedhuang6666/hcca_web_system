@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   Archive,
@@ -236,7 +238,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
         </label>
         <label className="flex items-center gap-2 text-xs">
           <span>%放量：</span>
-          <input
+          <NumberInput
             type="number"
             min={0}
             max={100}

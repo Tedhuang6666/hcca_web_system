@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckSquare, Edit2, Lock, LockOpen, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
@@ -1434,7 +1436,7 @@ export default function ClassOrdersPage() {
             })}
             {orderProductId && <label className="grid max-w-32 gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>{recipientMode === "batch" ? "每位數量" : "數量"}</span>
-              <input className="input min-h-11" type="number" min={1} max={100} value={quantity}
+              <NumberInput className="input min-h-11" type="number" min={1} max={100} value={quantity}
                 onChange={(e) => setQuantity(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
             </label>}
             {orderProductId && <div className="flex items-end sm:col-span-2 xl:col-span-3">
@@ -1475,7 +1477,7 @@ export default function ClassOrdersPage() {
                     </div>
                     <label className="flex items-center gap-2 text-xs">
                       {recipientMode === "batch" ? "每人數量" : "數量"}
-                      <input className="input min-h-11 w-20 text-center tabular-nums" type="number" min={1} max={100}
+                      <NumberInput className="input min-h-11 w-20 text-center tabular-nums" type="number" min={1} max={100}
                         disabled={creating} value={item.quantity} aria-label={recipientMode === "batch" ? "每人" + item.product_name + "數量" : item.product_name + "數量"}
                         onChange={(event) => updateComposerItem(item, Math.max(1, Math.min(100, Number(event.target.value) || 1)))} />
                     </label>

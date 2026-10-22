@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, discordApi } from "@/lib/api";
@@ -185,7 +187,7 @@ export default function DiscordNotificationRoutePanel({
         </label>
         <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
           <span>優先序</span>
-          <input className="input w-full" type="number" min={0} max={9999} value={draft.priority ?? 100} onChange={(event) => setDraft((current) => ({ ...current, priority: Number(event.target.value) }))} />
+          <NumberInput className="input w-full" type="number" min={0} max={9999} value={draft.priority ?? 100} onChange={(event) => setDraft((current) => ({ ...current, priority: Number(event.target.value) }))} />
         </label>
       </div>
       <button className="btn btn-primary mt-4" disabled={busy || !guildId || !draft.event_key || !draft.channel_id} onClick={() => void save()}>

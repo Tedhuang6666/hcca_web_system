@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Ban, Copy, KeyRound, Lock, Plus, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -161,7 +163,7 @@ export default function ApiKeysPage() {
             placeholder="scopes（逗號分隔，例：read:document,write:shop）"
             className="input font-mono text-xs"
           />
-          <input
+          <NumberInput
             type="number"
             min={1}
             max={10000}

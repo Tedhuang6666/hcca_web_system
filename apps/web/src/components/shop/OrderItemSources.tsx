@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useState } from "react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { OrderItemOut } from "@/lib/types";
@@ -29,7 +31,7 @@ function Source({ item, orderId, canEdit, onChange }: {
       finally { setBusy(false); }
     }}>
       <label>{label}的數量
-        <input type="number" min={0} max={100} required value={quantity} disabled={busy}
+        <NumberInput type="number" min={0} max={100} required value={quantity} disabled={busy}
           onChange={(event) => setQuantity(Number(event.target.value))} />
       </label>
       <button type="submit" disabled={busy || quantity === item.quantity || !Number.isInteger(quantity)}>

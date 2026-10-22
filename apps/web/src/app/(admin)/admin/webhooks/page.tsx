@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
@@ -211,7 +213,7 @@ export default function WebhooksPage() {
             placeholder="events（逗號分隔，例：document.approved,regulation.published）"
             className="input font-mono text-xs"
           />
-          <input
+          <NumberInput
             type="number"
             min={0}
             max={20}

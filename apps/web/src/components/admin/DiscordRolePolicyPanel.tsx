@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Combobox from "@/components/ui/Combobox";
@@ -141,7 +143,7 @@ export default function DiscordRolePolicyPanel({ guildId, orgs, positions, roles
             onChange={(event) => setDraft((current) => ({ ...current, nickname_label: event.target.value }))}
           />
           <div className="flex gap-2">
-            <input
+            <NumberInput
               className="input min-w-0 flex-1"
               type="number"
               min={0}

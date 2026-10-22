@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -35,8 +37,9 @@ const CATEGORY_OPTIONS: { value: PositionCategory; label: string; description: s
 ];
 
 function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const Input = props.type === "number" ? NumberInput : "input";
   return (
-    <input
+    <Input
       {...props}
       className={`w-full min-h-11 rounded-lg px-3 text-sm outline-none ${props.className ?? ""}`}
       style={{

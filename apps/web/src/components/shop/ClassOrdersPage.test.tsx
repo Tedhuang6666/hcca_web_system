@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClassOrdersPage from "@/app/(protected)/shop/class-orders/page";
 
@@ -72,6 +73,31 @@ function openCollectWorkspace() {
 }
 
 describe("班代工作流程", () => {
+  it("代訂與清單數量都能先刪空再輸入，並送出實際填寫的數量", async () => {
+    const user = userEvent.setup();
+    render(<ClassOrdersPage />);
+    await chooseStudent();
+    await chooseProduct();
+    const quantity = screen.getByRole("spinbutton", { name: /^數量$/ });
+
+    await user.clear(quantity);
+    expect(quantity).toHaveValue(null);
+    await user.type(quantity, "8");
+    expect(quantity).toHaveValue(8);
+    await user.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+
+    const itemQuantity = screen.getByRole("spinbutton", { name: "紀念袋數量" });
+    await user.clear(itemQuantity);
+    expect(itemQuantity).toHaveValue(null);
+    await user.type(itemQuantity, "6");
+    expect(itemQuantity).toHaveValue(6);
+    await user.click(screen.getByRole("button", { name: "送出示範甲的訂單 · 小計 NT$600" }));
+
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledWith({
+      user_id: "a", notes: null, items: [{ product_id: "product", quantity: 6, option_ids: [] }],
+    }));
+  });
+
   it("只提供代訂與確認收款兩個頁面", async () => {
     render(<ClassOrdersPage />);
 
