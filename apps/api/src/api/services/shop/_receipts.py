@@ -195,6 +195,7 @@ async def export_class_receipt_pdf(
                 select(Order)
                 .where(
                     Order.class_id == school_class.id,
+                    Order.test_product_id.is_(None),
                     Order.activity_id == activity_id
                     if activity_id is not None
                     else Order.activity_id.is_(None),

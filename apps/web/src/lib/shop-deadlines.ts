@@ -7,6 +7,7 @@ export function productDeadline(product: ProductDeadline): string | null {
 }
 
 export function productOrderable(product: CatalogProductOut, now: number): boolean {
+  if (product.status === "testing") return product.is_unlimited || product.stock_quantity > 0;
   const deadline = productDeadline(product);
   return product.status === "active"
     && (product.is_unlimited || product.stock_quantity > 0)

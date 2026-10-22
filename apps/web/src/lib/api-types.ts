@@ -10868,6 +10868,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/products/{product_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 開始測試商品 */
+        post: operations["test_product_shop_products__product_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/products/{product_id}/variant-groups": {
         parameters: {
             query?: never;
@@ -21647,6 +21664,8 @@ export interface components {
              * @default 0
              */
             subtotal_price: number;
+            /** Test Product Id */
+            test_product_id?: string | null;
             /** Total Price */
             total_price: number;
             /**
@@ -21733,6 +21752,8 @@ export interface components {
              * @default 0
              */
             subtotal_price: number;
+            /** Test Product Id */
+            test_product_id?: string | null;
             /** Total Price */
             total_price: number;
             /**
@@ -25100,7 +25121,7 @@ export interface components {
          * ProductStatus
          * @enum {string}
          */
-        ProductStatus: "draft" | "active" | "sold_out" | "cancelled";
+        ProductStatus: "draft" | "testing" | "active" | "sold_out" | "cancelled";
         /** ProductUpdate */
         ProductUpdate: {
             /** Category Id */
@@ -55886,6 +55907,37 @@ export interface operations {
         };
     };
     deactivate_product_shop_products__product_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_product_shop_products__product_id__test_post: {
         parameters: {
             query?: never;
             header?: never;

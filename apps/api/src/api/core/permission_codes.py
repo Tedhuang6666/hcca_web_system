@@ -80,6 +80,7 @@ class PermissionCode(StrEnum):
     PETITION_ADMIN = "petition:admin"
 
     SHOP_MANAGE = "shop:manage"
+    SHOP_TEST = "shop:test"
     SHOP_MANAGE_ORDERS = "shop:manage_orders"
     SHOP_VIEW_ALL = "shop:view_all"
 
@@ -548,6 +549,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.SHOP_MANAGE,
         "label": "管理商品",
         "desc": "管理主題 / 系列 / 商品 / 變體、庫存與上下架",
+    },
+    {
+        "group": "商品系統",
+        "code": PermissionCode.SHOP_TEST,
+        "label": "測試商品",
+        "desc": "查看與訂購測試中的商品；正式開放時清除測試訂單及相關紀錄",
     },
     {
         "group": "商品系統",

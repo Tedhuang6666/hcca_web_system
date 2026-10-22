@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   listCategories: vi.fn(), listProducts: vi.fn(), listActivities: vi.fn(),
   list: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(),
   listSeries: vi.fn(), createProduct: vi.fn(), getProduct: vi.fn(),
+  testProduct: vi.fn(), activateProduct: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }));
@@ -36,6 +37,38 @@ async function openStats() {
 }
 
 describe("商品管理與統計", () => {
+  it("starts testing and confirms cleanup before launch, keeping the action available after failure", async () => {
+    const product = {
+      id: "test-product", category_id: "category", series_id: null, name: "測試限定商品",
+      price: 100, stock_quantity: 4, is_unlimited: false, status: "draft",
+      image_url: null, variant_groups: [], media: [],
+    };
+    api.listCategories.mockResolvedValue([{ id: "category", name: "校慶商品", is_active: true }]);
+    api.listProducts.mockResolvedValue([product]);
+    api.getProduct.mockResolvedValue(product);
+    api.testProduct.mockResolvedValue({ ...product, status: "testing" });
+    api.activateProduct.mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ ...product, status: "active" });
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<ShopAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /校慶商品/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: /測試限定商品/ }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "開始測試" }));
+    await waitFor(() => expect(api.testProduct).toHaveBeenCalledWith("test-product"));
+    const launch = await screen.findByRole("button", { name: "正式開放並清除測試資料" });
+    fireEvent.click(launch);
+    expect(confirmation).toHaveBeenCalledWith(expect.stringContaining("測試訂單、付款／收款"));
+    expect(api.activateProduct).not.toHaveBeenCalled();
+    confirmation.mockReturnValue(true);
+    fireEvent.click(launch);
+    expect(await screen.findByRole("alert")).toHaveTextContent("商品狀態尚未更新，請重試");
+    expect(launch).toBeEnabled();
+    fireEvent.click(launch);
+    await screen.findByRole("button", { name: "下架" });
+    expect(api.activateProduct).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/僅超管或具/)).not.toBeInTheDocument();
+    confirmation.mockRestore();
+  });
   it("opens statistics from its URL and offers a clear return to product setup", async () => {
     navigation.search = "view=stats";
     const page = render(<ShopAdminPage />);

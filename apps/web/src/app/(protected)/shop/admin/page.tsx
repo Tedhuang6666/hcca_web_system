@@ -1332,7 +1332,7 @@ function StatsView() {
 // ── 主頁：一層一層的目錄管理 ──────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<string, string> = {
-  draft: "草稿", active: "上架中", sold_out: "售罄", cancelled: "已下架",
+  draft: "草稿", testing: "測試中", active: "上架中", sold_out: "售罄", cancelled: "已下架",
 };
 
 export default function ShopAdminPage() {
@@ -1343,6 +1343,8 @@ export default function ShopAdminPage() {
   const [clearOrdersOpen, setClearOrdersOpen] = useState(false);
   const [clearingOrders, setClearingOrders] = useState(false);
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
+  const [productStatusBusy, setProductStatusBusy] = useState(false);
+  const [productActionError, setProductActionError] = useState("");
   const allowed = can("shop:manage");
 
   // 一層一層的選取狀態
@@ -1495,18 +1497,31 @@ export default function ShopAdminPage() {
       toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
-  const toggleProduct = async (p: ProductOut) => {
+  const toggleProduct = async (p: ProductOut, startTesting = false) => {
+    if (productStatusBusy) return;
+    if (p.status === "testing" && !confirm(
+      `正式開放「${p.name}」？將清除這項商品的測試訂單、付款／收款等相關紀錄，並回補庫存。此操作無法復原。`,
+    )) return;
+    setProductStatusBusy(true);
+    setProductActionError("");
     try {
-      const updated = p.status === "draft" || p.status === "cancelled"
-        ? await shopApi.activateProduct(p.id)
-        : await shopApi.deactivateProduct(p.id);
+      const updated = startTesting
+        ? await shopApi.testProduct(p.id)
+        : p.status === "draft" || p.status === "cancelled" || p.status === "testing"
+          ? await shopApi.activateProduct(p.id)
+          : await shopApi.deactivateProduct(p.id);
       const updateList = (items: ProductOut[]) => items.map((item) => item.id === updated.id ? updated : item);
       setProducts(updateList);
       setDirectProducts(updateList);
       setAllProducts(updateList);
       if (productId === p.id) setProduct(updated);
+      toast.success(startTesting ? "商品已開始測試" : p.status === "testing" ? "已清除測試資料並正式開放" : "商品狀態已更新");
     } catch (e) {
-      toast.error(apiErrorMessage(e, "操作失敗"));
+      const message = apiErrorMessage(e, "商品狀態尚未更新，請重試");
+      setProductActionError(message);
+      toast.error(message);
+    } finally {
+      setProductStatusBusy(false);
     }
   };
   const selectCategory = (next: ProductCategoryOut | null) => {
@@ -1579,11 +1594,22 @@ export default function ShopAdminPage() {
       </div>
       <div className="flex flex-wrap gap-2">
         <MiniBtn tone="primary" onClick={() => setProductModal({ initial: product })}>編輯商品</MiniBtn>
-        <MiniBtn disabled={product.status !== "active"} onClick={() => void copyOrderLink(product.id)}>
+        <MiniBtn disabled={product.status !== "active" && product.status !== "testing"} onClick={() => void copyOrderLink(product.id)}>
           複製訂購連結
         </MiniBtn>
-        <MiniBtn onClick={() => toggleProduct(product)}>{product.status === "active" || product.status === "sold_out" ? "下架" : "上架"}</MiniBtn>
+        {can("shop:test") && (product.status === "draft" || product.status === "cancelled") && (
+          <MiniBtn disabled={productStatusBusy} onClick={() => void toggleProduct(product, true)}>開始測試</MiniBtn>
+        )}
+        <MiniBtn disabled={productStatusBusy} onClick={() => void toggleProduct(product)}>
+          {productStatusBusy ? "更新中…" : product.status === "testing" ? "正式開放並清除測試資料" : product.status === "active" || product.status === "sold_out" ? "下架" : "上架"}
+        </MiniBtn>
       </div>
+      {product.status === "testing" && (
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          僅超管或具「測試商品」權限者能查看與試訂。正式開放時會清除這項商品的測試訂單及相關紀錄，並回補庫存。
+        </p>
+      )}
+      {productActionError && <p role="alert" className="text-sm" style={{ color: "var(--text-danger)" }}>{productActionError}</p>}
       <VariantManager
         product={product}
         allProducts={allProducts}

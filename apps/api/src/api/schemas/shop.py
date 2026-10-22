@@ -435,6 +435,7 @@ class OrderPromotionOut(BaseModel):
 
 class OrderOut(BaseModel):
     id: uuid.UUID
+    test_product_id: uuid.UUID | None = None
     serial_number: str
     user_id: uuid.UUID
     activity_id: uuid.UUID | None = None
@@ -465,6 +466,7 @@ class OrderOut(BaseModel):
 
 class OrderListItem(BaseModel):
     id: uuid.UUID
+    test_product_id: uuid.UUID | None = None
     serial_number: str
     user_id: uuid.UUID
     user_name: str | None = None

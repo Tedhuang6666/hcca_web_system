@@ -49,6 +49,7 @@ const emptyForm: PromotionForm = {
 
 const PRODUCT_STATUS_LABEL: Record<ProductOut["status"], string> = {
   draft: "尚未上架",
+  testing: "測試中",
   active: "上架中",
   sold_out: "售罄",
   cancelled: "已下架",
