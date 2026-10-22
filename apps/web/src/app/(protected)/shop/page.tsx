@@ -1351,6 +1351,12 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     if (message.type === "order.updated") void refreshRegistrations();
   });
 
+  const routeProductEntry = useMemo(() => (
+    productSlug
+      ? resolveShopProductPath(catalog, topicSlug ? [topicSlug, productSlug] : [productSlug])
+      : null
+  ), [catalog, productSlug, topicSlug]);
+
   useEffect(() => {
     const productId = new URLSearchParams(window.location.search).get("product");
     if (!productId && !productSlug) {
@@ -1362,15 +1368,12 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       return;
     }
 
-    const routeProduct = productSlug
-      ? resolveShopProductPath(catalog, topicSlug ? [topicSlug, productSlug] : [productSlug])
-      : null;
     const entry = productId
       ? catalog.flatMap((category) => [
           ...category.products.map((product) => ({ category, product })),
           ...category.series.flatMap((series) => series.products.map((product) => ({ category, product }))),
         ]).find(({ product }) => product.id === productId) ?? null
-      : routeProduct;
+      : routeProductEntry;
     if (!entry) {
       setRouteProductNotFound(Boolean(productSlug));
       return;
@@ -1380,7 +1383,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     setSelectedCategoryId(entry.category.id);
     setSelectedSeriesId(null);
     setOpenProduct(entry.product.id);
-  }, [catalog, loading, productSlug, topicSlug, setSelectedCategoryId]);
+  }, [catalog, loading, productSlug, routeProductEntry, setSelectedCategoryId]);
 
   const openProductHref = useMemo(() => {
     if (!openProduct) return null;
@@ -1394,8 +1397,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     return null;
   }, [catalog, openProduct]);
 
-  const selectedCategory =
-    catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
+  const selectedCategory = productSlug
+    ? routeProductEntry?.category ?? null
+    : catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
 
   useEffect(() => {
     const now = Date.now();
@@ -1612,8 +1616,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     promotion.discount_type === "bundle_price"
     && promotion.target_products?.some((target) => catalogProducts.has(target.id))
   ));
-  const isChristmasLovePage = [selectedCategory?.activity_name, selectedCategory?.name]
-    .some((label) => label?.includes("聖誕傳情"));
   const activeBundle = bundlePromotions.find((promotion) => promotion.id === activeBundleId);
   // 在目前商品尚未送出前，也能指出下一個待選品項。
   const nextBundleProduct = activeBundle && bundleProgress(activeBundle, catalogProducts,
@@ -1884,7 +1886,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
               </div>
             )}
-            {!isChristmasLovePage && bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
+            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
               <div className="shop-bundles-heading">
                 <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
                 <p>選購優惠套組</p>
@@ -1952,7 +1954,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                             ? Boolean(delegationContext?.can_edit)
                             : canOrderForSelf || product.status === "testing")}
                         onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                        cardPrice={shopCardPrice(product, classMemberUserId ? [] : availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                        cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                         href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
@@ -1990,7 +1992,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                               ? Boolean(delegationContext?.can_edit)
                               : canOrderForSelf || product.status === "testing")}
                           onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                          cardPrice={shopCardPrice(product, classMemberUserId ? [] : availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                          cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                           href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
@@ -2056,7 +2058,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       {openProduct && (!delegationToken || delegationContext?.can_edit) && (
         <ProductModal
           productId={openProduct}
-          promotions={classMemberUserId ? [] : availablePromotions}
+          promotions={categoryPromotions}
           activityId={selectedCategory?.activity_id ?? null}
           bundleAddOn={(disabled) => <BundleAddOn productId={openProduct} promotions={categoryPromotions}
             products={catalogProducts} registration={selectedCategoryRegistration}

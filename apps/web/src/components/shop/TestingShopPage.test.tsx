@@ -39,6 +39,7 @@ const formalOrder: OrderOut = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  window.localStorage.clear();
   window.history.replaceState({}, "", "/shop");
   api.me.mockResolvedValue({ id: "tester", email: "tester@example.test", display_name: "測試人員" });
   api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
@@ -74,11 +75,12 @@ it("lets an authorized tester order before launch and preserves the formal regis
   expect(await screen.findByRole("button", { name: "移除這項登記" })).toBeEnabled();
 });
 
-it("hides vendor bundle cards on Christmas Love and keeps them on other activities", async () => {
+it("keeps a saved activity promotion out of a product route for another activity", async () => {
   const christmasProduct = { ...formalProduct, id: "christmas-card", name: "聖誕卡片" };
   const christmasSnack = { ...formalProduct, id: "christmas-snack", name: "聖誕點心" };
   const festivalProduct = { ...formalProduct, id: "festival-shirt", name: "校慶衣服" };
   const festivalSnack = { ...formalProduct, id: "festival-drink", name: "校慶飲料" };
+  window.localStorage.setItem("hcca:pref:shop:category:v1", JSON.stringify("christmas"));
   api.catalog.mockResolvedValue([
     { id: "christmas", name: "聖誕傳情", activity_id: "christmas", activity_name: "聖誕傳情",
       sort_order: 0, products: [christmasProduct, christmasSnack], series: [] },
@@ -94,12 +96,11 @@ it("hides vendor bundle cards on Christmas Love and keeps them on other activiti
       target_products: [festivalProduct, festivalSnack] },
   ]);
 
-  render(<ShopPage />);
+  render(<ShopPage topicSlug="校慶商品" productSlug="校慶衣服" />);
 
-  await screen.findByRole("heading", { name: "聖誕傳情", level: 2 });
-  expect(screen.queryByRole("region", { name: "一起買更划算" })).not.toBeInTheDocument();
+  await screen.findByRole("heading", { name: "校慶商品", level: 2 });
+  expect(screen.queryByRole("region", { name: "一起買更划算" })).toBeInTheDocument();
   expect(screen.queryByRole("article", { name: "聖誕傳情套組" })).not.toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: /校慶商品/ }));
   expect(await screen.findByRole("article", { name: "校慶優惠套組" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "選購套組：聖誕傳情套組" })).not.toBeInTheDocument();
 });
