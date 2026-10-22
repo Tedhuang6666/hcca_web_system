@@ -246,7 +246,7 @@ function ProductModal({
   editingDescription?: string;
   productHref: string | null;
   onClose: () => void;
-  onRegistrationChange: (scopeKey: string, order: OrderOut | null) => void;
+  onRegistrationChange: (scopeKey: string, order: OrderOut | null) => Promise<void>;
   onProductAdded: () => void;
   onRequestDelegation: () => void;
   onClassMemberRegistrationChange: (orders: OrderOut[]) => void;
@@ -254,7 +254,7 @@ function ProductModal({
   lockedVariantQuantities: Map<string, number>;
   promotions: ShopPromotionPublicOut[];
   activityId: string | null;
-  bundleStep?: { name: string; nextLabel: string; onContinue: () => void };
+  bundleStep?: { name: string; position: number; total: number; nextLabel: string; onContinue: () => void };
   bundleAddOn?: (disabled: boolean) => React.ReactNode;
 }) {
   const [product, setProduct] = useState<ProductOut | null>(null);
@@ -270,6 +270,7 @@ function ProductModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mediaSwipeRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const registrationUpdateInFlightRef = useRef(false);
+  const activeProductRef = useRef<string | null>(productId);
   const registrationItemsRef = useRef(registration?.items ?? []);
   const loadedProductId = product?.id ?? null;
   const registrationId = registration?.id ?? null;
@@ -290,6 +291,11 @@ function ProductModal({
       setProductLoading(false);
     }
   }, [productId, shoppingApi]);
+
+  useEffect(() => {
+    activeProductRef.current = productId;
+    return () => { activeProductRef.current = null; };
+  }, [productId]);
 
   useEffect(() => {
     void loadProduct();
@@ -484,15 +490,14 @@ function ProductModal({
   };
 
   const setVariantQuantity = async (optionIds: string[], quantity: number) => {
-    if (!product) return;
-    if (registrationUpdateInFlightRef.current) return;
+    if (!product || registrationUpdateInFlightRef.current) return false;
     if (!canEdit) {
       toast.error(registrationLockMessage({
         registrationLocked,
         classClosed,
         deadlinePassed,
       }));
-      return;
+      return false;
     }
     registrationUpdateInFlightRef.current = true;
     setLoading(true);
@@ -520,7 +525,7 @@ function ProductModal({
         const updated = await shoppingApi.setCurrentRegistrationProduct(product.id, {
           variants: [...currentVariants.values()],
         });
-        onRegistrationChange(
+        await onRegistrationChange(
           scopeKey,
           updated?.status === "cancelled" ? null : updated,
         );
@@ -530,9 +535,11 @@ function ProductModal({
       setRegistrationUpdateMessage(quantity > 0
         ? wasRegistered ? `已更新為 ${quantity} 件。` : `已登記 ${quantity} 件。`
         : "已從登記移除這個規格。");
+      return true;
     } catch (e) {
       setRegistrationUpdateMessage("更新失敗，登記數量維持原值。");
       toast.error(apiErrorMessage(e, "商品登記更新失敗"));
+      return false;
     } finally {
       registrationUpdateInFlightRef.current = false;
       setLoading(false);
@@ -548,7 +555,7 @@ function ProductModal({
     setRegistrationUpdateMessage("");
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!product) return;
     if (!allPicked) {
       toast.error("請選擇所有規格");
@@ -558,7 +565,8 @@ function ProductModal({
       toast.error("可登記數量已更新，請重新選擇");
       return;
     }
-    void setVariantQuantity(selectedOptionIds, qty);
+    const saved = await setVariantQuantity(selectedOptionIds, qty);
+    if (saved && activeProductRef.current === productId) bundleStep?.onContinue();
   };
 
   return createPortal(
@@ -641,11 +649,15 @@ function ProductModal({
           {product && !productLoading && !productLoadError && (
             <>
               <div className="shop-product-dialog-scroll">
+                {bundleStep && <div className="shop-product-bundle-progress" role="status">
+                  <strong>{bundleStep.name}</strong>
+                  <span>第 {bundleStep.position} / {bundleStep.total} 項</span>
+                </div>}
                 <div className="shop-product-dialog-heading">
                   <h3 id="product-modal-title">{product.name}</h3>
                   <ShopPrice original={unitPrice} current={offerPrice} />
                   {bundleStep && <p className="shop-product-purchase-hint">正在選購「{bundleStep.name}」，每項各一件；選齊後享套組價。</p>}
-                  {bundleAddOn?.(loading || !canEdit)}
+                  {!bundleStep && bundleAddOn?.(loading || !canEdit)}
                   {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
                   {product.description && <p className="whitespace-pre-line">{product.description}</p>}
                   {!product.is_unlimited && product.status === "active" && (
@@ -757,7 +769,17 @@ function ProductModal({
                   )}
                 </div>
                 <div className="shop-product-dialog-actions">
-                  {isLoggedIn && selectedRegistrationQuantity > 0 ? (
+                  {bundleStep && isLoggedIn ? (
+                    <button type="button" className="shop-product-submit"
+                      disabled={loading || !canRegister || !allPicked || qty > maxSelectedQuantity}
+                      aria-busy={loading}
+                      onClick={() => {
+                        if (selectedRegistrationQuantity > 0) bundleStep.onContinue();
+                        else void submit();
+                      }}>
+                      {loading ? "儲存中…" : bundleStep.nextLabel}
+                    </button>
+                  ) : isLoggedIn && selectedRegistrationQuantity > 0 ? (
                     <button
                       type="button"
                       onClick={() => void setVariantQuantity(
@@ -777,7 +799,7 @@ function ProductModal({
                   ) : isLoggedIn ? (
                     <button
                       type="button"
-                      onClick={submit}
+                      onClick={() => void submit()}
                       disabled={loading || !canRegister || qty > maxSelectedQuantity}
                       className="shop-product-submit"
                       aria-busy={loading}>
@@ -799,11 +821,13 @@ function ProductModal({
                     className="shop-product-cancel">
                     {selectedRegistrationQuantity > 0 ? "完成" : "取消"}
                   </button>
-                  {bundleStep && isLoggedIn && <button type="button" className="shop-product-submit"
-                    disabled={loading || !canEdit || registeredQuantity === 0} onClick={bundleStep.onContinue}>
-                    {bundleStep.nextLabel}
-                  </button>}
                 </div>
+                {bundleStep && !allPicked && <p className="shop-product-step-hint">
+                  請先選擇{variantGroups.filter((group) => !picked[group.id]).map((group) => group.name).join("、")}，再繼續下一步。
+                </p>}
+                {bundleStep && selectedRegistrationQuantity > 0 && <button type="button"
+                  className="shop-product-remove" disabled={loading || !canEdit}
+                  onClick={() => void setVariantQuantity(selectedOptionIds, 0)}>移除這項登記</button>}
               </div>
             </>
           )}
@@ -1580,7 +1604,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const categoryPromotions = classMemberUserId ? [] : availablePromotions.filter((promotion) => (
     (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
   ));
-  const bundlePromotions = (classMemberUserId ? [] : availablePromotions).filter((promotion) => (
+  const bundlePromotions = categoryPromotions.filter((promotion) => (
     promotion.discount_type === "bundle_price"
     && promotion.target_products?.some((target) => catalogProducts.has(target.id))
   ));
@@ -1711,7 +1735,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             ? `班代調整${classMemberName || "指定同學"}的商品總量。`
             : delegationToken
               ? "使用學生授權的連結，替學生選購本次活動商品。"
-              : "先選活動，再挑選商品與數量。"}</p>
+              : "挑選商品、規格與數量，即可完成預購。"}</p>
         </div>
       </header>
 
@@ -1779,25 +1803,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         </section>
       )}
 
-      {!loading && !loadError && bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
-        <div className="shop-bundles-heading">
-          <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={22} aria-hidden="true" />組合購買專區</h2>
-          <p>一起選購享組合價；已登記其中一項，可直接加購湊組。</p>
-        </div>
-        <BundleCarousel>{bundlePromotions.map((promotion) => {
-          const category = catalog.find((item) => [...item.products, ...item.series.flatMap((series) => series.products)]
-            .some((product) => promotion.target_products?.some((target) => target.id === product.id)));
-          const registration = category ? registrations.find((order) => !order.test_product_id && orderScopeKey(order) === catalogScopeKey(category)) ?? null : null;
-          return <BundleOffer key={promotion.id} promotion={promotion} products={catalogProducts}
-            scopeName={category?.activity_name ?? category?.name}
-            registration={registration}
-            disabled={authLoading || registrationLoadError || Boolean(registration?.is_paid || registration?.is_class_collected)
-              || Boolean(delegationToken && !delegationContext?.can_edit)
-              || Boolean(category && closeStatus[category.id]?.is_closed)}
-            onSelect={(productId) => selectBundleProduct(promotion, productId)} />;
-        })}</BundleCarousel>
-      </section>}
-
       {promotionFeedback && <p className="shop-bundle-feedback" role="status" aria-live="polite">{promotionFeedback}</p>}
       {promotionCelebration && (
         <span key={promotionCelebration.token} className="sr-only" role="status" aria-live="polite">
@@ -1828,7 +1833,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
             <div className="shop-public-activity-heading">
               <h2 id="shop-activity-title">選擇活動</h2>
-              <p>商品登記會依活動分開，預設顯示仍可訂購的活動</p>
             </div>
             <nav className="shop-public-category-nav" aria-label="選擇商品活動">
               {catalog.map((category) => {
@@ -1874,6 +1878,19 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
               </div>
             )}
+            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
+              <div className="shop-bundles-heading">
+                <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
+                <p>選好規格，逐項加入套組。</p>
+              </div>
+              <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
+                {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
+                  promotion={promotion} products={catalogProducts} registration={selectedCategoryRegistration}
+                  disabled={authLoading || registrationLoadError || registrationLocked
+                    || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                  onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
+              </BundleCarousel>
+            </section>}
             {selectedCategory.series.length > 0 && (
               <div className="shop-public-series-filter-wrap">
                 <span>商品系列</span>
@@ -2041,7 +2058,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             onSelect={selectBundleProduct} />}
           bundleStep={activeBundle ? {
             name: activeBundle.name,
-            nextLabel: nextBundleProduct ? `下一項：${nextBundleProduct.name}` : "完成套組選購",
+            position: (activeBundle.target_products?.findIndex((target) => target.id === openProduct) ?? 0) + 1,
+            total: activeBundle.target_products?.length ?? 0,
+            nextLabel: nextBundleProduct ? `儲存並選下一項：${nextBundleProduct.name}` : "儲存並完成套組",
             onContinue: () => {
               if (nextBundleProduct) openPromotionProduct(nextBundleProduct.id);
               else {

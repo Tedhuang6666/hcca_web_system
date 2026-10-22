@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ShopPage from "@/app/(protected)/shop/page";
 import type { OrderOut, ShopDelegationContextOut } from "@/lib/types";
 
@@ -50,6 +50,7 @@ const context: ShopDelegationContextOut = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   window.history.replaceState({}, "", "/shop#delegate=synthetic-test-token");
   api.me.mockResolvedValue({ id: "parent", display_name: "媽媽", email: "parent@synthetic.test" });
   api.accessDelegation.mockResolvedValue(context);
@@ -58,6 +59,8 @@ beforeEach(() => {
   api.previewDelegationPromotion.mockResolvedValue({ eligible: true, reason_code: "no_promotion", subtotal_price: 500, total_price: 500, discount_amount: 0 });
   api.applyDelegationPromotion.mockResolvedValue(order);
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("原商品頁的家人代訂模式", () => {
   it("一般單品登記後立即提示加購、折抵與商品描邊，能直接開啟缺少的品項", async () => {
@@ -74,8 +77,8 @@ describe("原商品頁的家人代訂模式", () => {
     let finishSave: (value: OrderOut) => void = () => {};
     api.setDelegationProduct.mockImplementation(() => new Promise<OrderOut>((resolve) => { finishSave = resolve; }));
     render(<ShopPage />);
-    const section = await screen.findByRole("region", { name: "組合購買專區" });
-    expect(section.compareDocumentPosition(screen.getByRole("navigation", { name: "選擇商品活動" }))
+    const section = await screen.findByRole("region", { name: "一起買更划算" });
+    expect(screen.getByRole("navigation", { name: "選擇商品活動" }).compareDocumentPosition(section)
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     await screen.findByRole("heading", { name: "紀念袋", level: 3 });
@@ -91,7 +94,7 @@ describe("原商品頁的家人代訂模式", () => {
     expect(screen.getByText("正在選購「衣褲套組」，每項各一件；選齊後享套組價。")).toBeVisible();
   });
 
-  it.each([false, true])("上方專區跨活動選購，已收款時停用加購（收款：%s）", async (paid) => {
+  it.each([false, true])("套組隨活動切換，已收款時停用加購（收款：%s）", async (paid) => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     const other = { ...context.catalog![0], id: "other", activity_id: "other-event", name: "其他活動",
       products: [{ ...product, id: "other-product", name: "其他商品" }] };
@@ -101,19 +104,20 @@ describe("原商品頁的家人代訂模式", () => {
         discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants], code: "SET",
       }] });
     render(<ShopPage />);
+    await screen.findByRole("heading", { name: "其他活動", level: 2 });
+    expect(screen.queryByRole("article", { name: "衣褲套組" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /校慶商品/ }));
     const bundle = await screen.findByRole("article", { name: "衣褲套組" });
     if (paid) {
-      expect(within(bundle).getByRole("button", { name: "加購湊齊套組" })).toBeDisabled();
-      fireEvent.click(screen.getByRole("button", { name: /校慶商品/ }));
+      expect(within(bundle).getByRole("button", { name: "繼續湊組" })).toBeDisabled();
       expect(screen.getByRole("article", { name: "長褲商品" })).not.toHaveAttribute("data-bundle-addon");
     } else {
-      expect(screen.getByRole("heading", { name: "其他活動", level: 2 })).toBeVisible();
-      fireEvent.click(within(bundle).getByRole("button", { name: "開始選購套組" }));
+      fireEvent.click(within(bundle).getByRole("button", { name: "選購套組" }));
       await screen.findByRole("heading", { name: "紀念袋", level: 3 });
       expect(screen.getByRole("heading", { name: "校慶商品", level: 2 })).toBeVisible();
       expect(screen.queryByLabelText("優惠適用活動")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("優惠碼")).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "登記購買 · NT$100" }));
+      fireEvent.click(screen.getByRole("button", { name: "儲存並選下一項：長褲" }));
       await waitFor(() => expect(api.applyDelegationPromotion).toHaveBeenCalledWith(
         "synthetic-test-token", "SET",
       ));
@@ -160,7 +164,8 @@ describe("原商品頁的家人代訂模式", () => {
     expect(card.querySelector("a button, button button")).toBeNull();
     fireEvent.click(within(card).getByRole("button", { name: "選購套組：衣褲套組" }));
     expect(await screen.findByText("正在選購「衣褲套組」，每項各一件；選齊後享套組價。")).toBeVisible();
-    expect(screen.getByRole("button", { name: "下一項：長褲" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "儲存並選下一項：長褲" })).toBeVisible();
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: /登記購買/ })).not.toBeInTheDocument();
     const dialog = screen.getByRole("dialog");
     const close = within(dialog).getByRole("button", { name: "關閉" });
     await waitFor(() => expect(close).toHaveFocus());
@@ -196,21 +201,55 @@ describe("原商品頁的家人代訂模式", () => {
     const bundle = await screen.findByRole("article", { name: "衣褲套組" });
     expect(within(bundle).getByText("每套省 NT$50")).toBeVisible();
     expect(bundle.querySelector("del")).toHaveTextContent("NT$300");
-    fireEvent.click(within(bundle).getByRole("button", { name: "開始選購套組" }));
+    fireEvent.click(within(bundle).getByRole("button", { name: "選購套組" }));
     await screen.findByRole("heading", { name: "紀念袋", level: 3 });
-    expect(screen.getByRole("button", { name: "下一項：長褲" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "登記購買 · NT$100" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "下一項：長褲" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "下一項：長褲" }));
+    fireEvent.click(screen.getByRole("button", { name: "儲存並選下一項：長褲" }));
     await screen.findByRole("heading", { name: "長褲", level: 3 });
-    fireEvent.click(screen.getByRole("button", { name: "登記購買 · NT$200" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "完成套組選購" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "完成套組選購" }));
+    fireEvent.click(screen.getByRole("button", { name: "儲存並完成套組" }));
     expect(await screen.findByText("共省 NT$50", { exact: false })).toBeVisible();
     const summary = container.querySelector(".shop-registration-price");
     expect(summary?.querySelector("del")).toHaveTextContent("NT$300");
     expect(summary).toHaveTextContent("NT$250");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.setDelegationProduct).toHaveBeenCalledTimes(2);
+  });
+
+  it("套組先選規格，一次儲存後前進；失敗可重試，送出中不重複登記", async () => {
+    const pants = { ...product, id: "pants", name: "長褲", price: 200 };
+    api.accessDelegation.mockResolvedValue({ ...context, registration: null,
+      catalog: [{ ...context.catalog![0], products: [product, pants] }], promotions: [{
+        id: "bundle", name: "衣褲套組", activity_id: "festival", discount_type: "bundle_price",
+        discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants],
+      }] });
+    api.getDelegationProduct.mockImplementation((_token, id) => Promise.resolve({
+      ...(id === "pants" ? pants : product), media: [], variant_groups: [{
+        id: "size", name: "尺寸", options: [{ id: "medium", value: "M", is_active: true, price_delta: 0 }],
+      }],
+    }));
+    let finishSave: (value: OrderOut) => void = () => {};
+    api.setDelegationProduct.mockRejectedValueOnce(new Error("連線失敗"))
+      .mockImplementation(() => new Promise<OrderOut>((resolve) => { finishSave = resolve; }));
+    render(<ShopPage />);
+    fireEvent.click(within(await screen.findByRole("article", { name: "衣褲套組" }))
+      .getByRole("button", { name: "選購套組" }));
+    const next = await screen.findByRole("button", { name: "儲存並選下一項：長褲" });
+    expect(next).toBeDisabled();
+    expect(screen.getByText("請先選擇尺寸，再繼續下一步。")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "M" }));
+    fireEvent.click(next);
+    expect(await screen.findByText("更新失敗，登記數量維持原值。")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "紀念袋", level: 3 })).toBeVisible();
+    fireEvent.click(next);
+    fireEvent.click(next);
+    await waitFor(() => expect(api.setDelegationProduct).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "儲存中…" })).toBeDisabled();
+    await act(async () => finishSave({ ...order, items: [{ ...order.items[1], quantity: 1,
+      selected_options: [{ group_id: "size", group_name: "尺寸", option_id: "medium", value: "M", price_delta: 0 }],
+    }] }));
+    expect(await screen.findByRole("heading", { name: "長褲", level: 3 })).toBeVisible();
+    expect(api.setDelegationProduct).toHaveBeenLastCalledWith("synthetic-test-token", "bag", {
+      variants: [{ option_ids: ["medium"], quantity: 1 }],
+    });
   });
 
   it("單品優惠價會同時顯示原價與優惠價", async () => {
