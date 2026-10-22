@@ -11,7 +11,7 @@
 - 外部整合：Google OAuth/OIDC、LINE、Discord、Email、Sentry、PostHog。
 - 部署：Docker Compose、Caddy、Prometheus、Grafana、blue-green deployment。
 
-## 文件目錄
+## 主要目錄
 
 - `apps/api/`：FastAPI、SQLAlchemy async、Alembic、Celery。
 - `apps/web/`：Next.js App Router、React、Tailwind CSS。
@@ -19,13 +19,8 @@
 - `infra/`：Caddy、Prometheus、Grafana 設定。
 - `deploy/`：部署相關資源。
 - `scripts/`：維運、部署與檢查腳本。
-- `docs/`：各式文件。
 
-## 文件入口
+## 開發入口
 
-- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)：架構地圖與目前開發上下文。
-- [AGENTS.md](AGENTS.md)：協作與程式規範。
 - [apps/api/README.md](apps/api/README.md)：API 開發方式。
 - [apps/web/README.md](apps/web/README.md)：前端開發方式。
-- [docs/README.md](docs/README.md)：現行文件與歷史報告索引。
-- [docs/HANDOFF_CHECKLIST.md](docs/HANDOFF_CHECKLIST.md)：交接驗證。

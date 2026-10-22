@@ -1,7 +1,7 @@
 # HCCA API
 
 竹嶺班聯數位整合系統後端，採 FastAPI、SQLAlchemy 2.0 async、PostgreSQL、
-Redis 與 Celery。完整架構請先看 [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md)。
+Redis 與 Celery。
 
 ## 啟動
 
@@ -18,7 +18,7 @@ API 文件位於 `http://localhost:8000/docs`。應用程式入口固定為
 
 ## 常用指令
 
-從 repo 根目錄執行；完整說明見 [AI_WORKFLOW.md](../../docs/AI_WORKFLOW.md)。
+從 repo 根目錄執行：
 
 ```bash
 bash scripts/check.sh api

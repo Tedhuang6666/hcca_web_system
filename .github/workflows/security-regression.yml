@@ -25,7 +25,6 @@ on:
       - "security/**"
       - "scripts/systemd/user/**"
       - "scripts/install-security-timers.sh"
-      - "docs/SECURITY_TESTING.md"
       - ".github/workflows/security-regression.yml"
 
 permissions:

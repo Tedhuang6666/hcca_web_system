@@ -69,25 +69,19 @@ RegulationArticleCreate
 # Local maintainer/editor files
 .claude/
 .maintainer-notes/
-.codex/*
-!.codex/config.toml
 .maintainer-tools/
 .cursor/
 .vscode/
 .mcp.json
-/docs/*
-!/docs/README.md
-!/docs/AI_WORKFLOW.md
-!/docs/HANDOFF_CHECKLIST.md
-!/docs/LOCAL_TOOLING.md
-!/docs/tooling-optimization.md
+
+# AI instructions and internal documents stay local; do not commit or upload.
+.codex/
+.agents/
+docs/
 README_FOR_CLAUDE.md
 CLAUDE.md
 AGENTS.md
-!/AGENTS.md
-!/apps/api/AGENTS.md
-!/apps/web/AGENTS.md
-!/CLAUDE.md
+PROJECT_CONTEXT.md
 MAINTAINER_CONTEXT.md
 meilisearch
 test.env
@@ -136,11 +130,6 @@ C:\Users\ted98\AppData\Local\lighthouse.*/
 CUsersted98AppDataLocallighthouse.*/
 .playwright-cli/
 output/playwright/
-.agents/*
-!.agents/skills/
-.agents/skills/*
-!.agents/skills/hcca-maintenance/
-
 # 本機瀏覽器資料與檢查產物，不應進版控或程式索引
 /C:*/
 *.tsbuildinfo
@@ -150,7 +139,3 @@ test-results/
 .impeccable/
 hcca-showcase/
 output/receipt-format/
-docs/
-.codex/
-AGENTS.md
-CLAUDE.md
