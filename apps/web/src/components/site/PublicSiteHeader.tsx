@@ -226,6 +226,7 @@ function PublicSiteHeaderContent({
               variant="small"
               className="public-brand-logo"
               sizes="42px"
+              priority
             />
           </span>
           <span className="min-w-0">
