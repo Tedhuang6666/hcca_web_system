@@ -111,8 +111,12 @@ describe("原商品頁的家人代訂模式", () => {
       fireEvent.click(within(bundle).getByRole("button", { name: "開始選購套組" }));
       await screen.findByRole("heading", { name: "紀念袋", level: 3 });
       expect(screen.getByRole("heading", { name: "校慶商品", level: 2 })).toBeVisible();
-      expect(screen.getByLabelText("優惠適用活動")).toHaveValue("festival");
-      expect(screen.getByLabelText("優惠碼")).toHaveValue("SET");
+      expect(screen.queryByLabelText("優惠適用活動")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("優惠碼")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "登記購買 · NT$100" }));
+      await waitFor(() => expect(api.applyDelegationPromotion).toHaveBeenCalledWith(
+        "synthetic-test-token", "SET",
+      ));
     }
   });
 
@@ -134,7 +138,7 @@ describe("原商品頁的家人代訂模式", () => {
     expect(within(card).getByText("依已登記 20 件計算")).toBeVisible();
     expect(card.querySelector(".shop-product-card-offers")).toBeNull();
   });
-  it.each([false, true])("商品卡片直接顯示套組並可選購（系列商品：%s）", async (inSeries) => {
+  it.each([false, true])("完整套組資訊僅在專區顯示，商品卡保留選購入口（系列商品：%s）", async (inSeries) => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     const products = [product, pants];
     const category = { ...context.catalog?.[0], products: inSeries ? [] : products,
@@ -147,18 +151,20 @@ describe("原商品頁的家人代訂模式", () => {
     }] });
     render(<ShopPage />);
     const card = await screen.findByRole("article", { name: "紀念袋商品" });
-    expect(within(card).getByText("搭配長褲，每項各一件")).toBeVisible();
-    expect(card.querySelector("del")).toHaveTextContent("NT$300");
-    expect(within(card).getByLabelText("原價 NT$300，優惠價 NT$250／套")).toBeVisible();
-    expect(within(card).getByText("每套省 NT$50")).toBeVisible();
+    const bundle = screen.getByRole("article", { name: "衣褲套組" });
+    expect(within(bundle).getByLabelText("原價 NT$300，優惠價 NT$250／套")).toBeVisible();
+    expect(screen.getAllByText("每套省 NT$50")).toHaveLength(1);
+    expect(within(card).queryByText("衣褲套組")).not.toBeInTheDocument();
+    expect(card.querySelector("del")).toBeNull();
+    expect(screen.queryByText("優惠碼與優惠")).not.toBeInTheDocument();
     expect(card.querySelector("a button, button button")).toBeNull();
-    fireEvent.click(within(card).getByRole("button", { name: "選購此套組" }));
+    fireEvent.click(within(card).getByRole("button", { name: "選購套組：衣褲套組" }));
     expect(await screen.findByText("正在選購「衣褲套組」，每項各一件；選齊後享套組價。")).toBeVisible();
     expect(screen.getByRole("button", { name: "下一項：長褲" })).toBeVisible();
     const dialog = screen.getByRole("dialog");
     const close = within(dialog).getByRole("button", { name: "關閉" });
     await waitFor(() => expect(close).toHaveFocus());
-    within(card).getByRole("button", { name: "選購此套組" }).focus();
+    within(card).getByRole("button", { name: "選購套組：衣褲套組" }).focus();
     fireEvent.keyDown(document, { key: "Tab" });
     expect(close).toHaveFocus();
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
@@ -289,7 +295,7 @@ describe("原商品頁的家人代訂模式", () => {
     }));
     expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
     expect(api.getCurrentRegistrations).not.toHaveBeenCalled();
-    expect(api.previewDelegationPromotion).toHaveBeenCalledWith("synthetic-test-token", null);
+    expect(api.previewDelegationPromotion).not.toHaveBeenCalled();
   });
 
   it("marks a registered product card as an entry to adjust its quantity directly", async () => {
