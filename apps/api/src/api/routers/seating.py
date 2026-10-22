@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,7 @@ from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.seating import Seat, SeatAssignment, SeatingZone
-from api.models.shop import Order
+from api.models.shop import Order, Product, ProductStatus
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.seating import (
@@ -34,13 +34,63 @@ from api.schemas.seating import (
 from api.services import seating as seating_svc
 from api.services.permission import get_user_permission_codes
 from api.services.realtime_events import broadcast_seat_zone_changed
-
-router = APIRouter(prefix="/seating", tags=["劃位"])
+from api.services.shop._testing import can_test_products
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 SeatingManager = Annotated[User, Depends(require_permission(PermissionCode.SEATING_MANAGE))]
 SeatingAssigner = Annotated[User, Depends(require_permission(PermissionCode.SEATING_ASSIGN))]
+
+
+async def _require_testing_access(
+    request: Request, session: DbDep, current_user: CurrentUser
+) -> None:
+    """票券的場次、座位與劃位結果沿用商品測試可見性。"""
+    if await can_test_products(session, current_user):
+        return
+    resources = dict(request.path_params)
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict):
+            resources.update({key: body[key] for key in ("product_id", "order_id") if key in body})
+    for key, value in resources.items():
+        if key not in {"product_id", "zone_id", "order_id", "assignment_id"}:
+            continue
+        try:
+            resource_id = uuid.UUID(str(value))
+        except ValueError:
+            continue  # 交給端點既有的參數驗證回應。
+        if key == "order_id":
+            testing = await session.scalar(
+                select(Order.test_product_id).where(Order.id == resource_id)
+            )
+        else:
+            product_id = resource_id
+            if key == "zone_id":
+                product_id = await session.scalar(
+                    select(SeatingZone.product_id).where(SeatingZone.id == resource_id)
+                )
+            elif key == "assignment_id":
+                product_id = await session.scalar(
+                    select(SeatingZone.product_id)
+                    .join(SeatAssignment, SeatAssignment.zone_id == SeatingZone.id)
+                    .where(SeatAssignment.id == resource_id)
+                )
+            testing = await session.scalar(
+                select(Product.id).where(
+                    Product.id == product_id, Product.status == ProductStatus.TESTING
+                )
+            )
+        if testing is not None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此票券")
+
+
+router = APIRouter(
+    prefix="/seating", tags=["劃位"], dependencies=[Depends(_require_testing_access)]
+)
 
 
 # ── 輔助 ─────────────────────────────────────────────────────────────────────

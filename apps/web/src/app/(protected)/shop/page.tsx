@@ -418,10 +418,11 @@ function ProductModal({
     maxSelectableQuantity - (registeredQuantity - selectedRegistrationQuantity),
   );
   const deadline = product ? productDeadline(product) : null;
-  const deadlinePassed = Boolean(deadline && new Date(deadline).getTime() <= Date.now());
+  const testing = product?.status === "testing";
+  const deadlinePassed = !testing && Boolean(deadline && new Date(deadline).getTime() <= Date.now());
   const available = Boolean(
     product
-      && (product.status === "active" || registeredQuantity > 0)
+      && (product.status === "active" || testing || registeredQuantity > 0)
       && (product.is_unlimited || product.stock_quantity > 0 || registeredQuantity > 0),
   );
   const canEdit = isLoggedIn
@@ -429,7 +430,7 @@ function ProductModal({
     && !authLoading
     && !registrationLoadError
     && !registrationLocked
-    && !classClosed
+    && (testing || !classClosed)
     && !deadlinePassed;
   const canRegister = available && canEdit && maxSelectedQuantity > 0;
   const variantImage = variantGroups.reduce<string | null>((current, group) => {
@@ -721,7 +722,7 @@ function ProductModal({
                   <p className="shop-product-purchase-hint" role="alert">
                     目前無法讀取商品登記，請重新載入頁面後再修改。
                   </p>
-                ) : (registrationLocked || classClosed || deadlinePassed) ? (
+                ) : (registrationLocked || (!testing && classClosed) || deadlinePassed) ? (
                   <p className="shop-product-purchase-hint" role="status">
                     {registrationLockMessage({ registrationLocked, classClosed, deadlinePassed })}
                   </p>
@@ -842,12 +843,15 @@ function ProductCard({
   onSelectBundle: (promotion: ShopPromotionPublicOut) => void;
   bundleHint: string | null;
 }) {
-  const soldOut = product.status === "sold_out";
+  const testing = product.status === "testing";
+  const soldOut = product.status === "sold_out" || (testing && !product.is_unlimited && product.stock_quantity === 0);
   const deadline = productDeadline(product);
-  const deadlinePassed = Boolean(deadline && new Date(deadline).getTime() <= Date.now());
-  const locked = classClosed || deadlinePassed;
+  const deadlinePassed = !testing && Boolean(deadline && new Date(deadline).getTime() <= Date.now());
+  const locked = (!testing && classClosed) || deadlinePassed;
   const disabled = (soldOut || locked) && registeredQuantity === 0;
-  const statusLabel = classClosed
+  const statusLabel = testing
+    ? "測試中・正式開放時清除試訂紀錄"
+    : classClosed
     ? "本班已停止訂購"
     : deadlinePassed
       ? "登記已截止"
@@ -1396,14 +1400,20 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const selectedCategoryScope = selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE;
   const selectedCategoryRegistrationOrders = registrations.filter(
-    (order) => orderScopeKey(order) === selectedCategoryScope,
+    (order) => !order.test_product_id && orderScopeKey(order) === selectedCategoryScope,
   );
   const selectedCategoryRegistration = classMemberUserId
     ? aggregateRegistrationOrders(selectedCategoryRegistrationOrders)
     : selectedCategoryRegistrationOrders[0] ?? null;
   const delegatedRegistration = delegationContext ? registrations[0] ?? null : null;
+  const testingProduct = catalog.flatMap((category) => [
+    ...category.products, ...category.series.flatMap((series) => series.products),
+  ]).some((product) => product.id === openProduct && product.status === "testing");
+  const productRegistration = testingProduct
+    ? registrations.find((order) => order.test_product_id === openProduct) ?? null
+    : selectedCategoryRegistration;
   const registeredByProduct = new Map<string, number>();
-  for (const item of selectedCategoryRegistration?.items ?? []) {
+  for (const item of registrations.filter((order) => orderScopeKey(order) === selectedCategoryScope).flatMap((order) => order.items)) {
     registeredByProduct.set(
       item.product_id,
       (registeredByProduct.get(item.product_id) ?? 0) + item.quantity,
@@ -1425,8 +1435,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   }
   const registrationLocked = Boolean(
     (delegationToken && !delegationContext?.can_edit)
-    || (!classMemberUserId && selectedCategoryRegistration
-      && (selectedCategoryRegistration.is_paid || selectedCategoryRegistration.is_class_collected)),
+    || (!classMemberUserId && productRegistration
+      && (productRegistration.is_paid || productRegistration.is_class_collected)),
   );
 
   const inspectAndApplyPromotion = async (
@@ -1439,7 +1449,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     }
     const scope = orderScopeParams(requestedScopeKey);
     const registration = registrations.find(
-      (order) => orderScopeKey(order) === requestedScopeKey,
+      (order) => !order.test_product_id && orderScopeKey(order) === requestedScopeKey,
     ) ?? null;
     if (!isLoggedIn || authLoading) {
       setPromotionFeedback("登入後登記商品即可使用這項優惠。");
@@ -1464,7 +1474,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       }
       const updated = await shoppingApi.applyCurrentPromotion(code, scope.activity_id ?? null, scope.category_id);
       setRegistrations((current) => [
-        ...current.filter((order) => orderScopeKey(order) !== requestedScopeKey),
+        ...current.filter((order) => order.test_product_id || orderScopeKey(order) !== requestedScopeKey),
         updated,
       ]);
       setPromotionFeedback(preview.reason ?? "優惠已套用。");
@@ -1477,10 +1487,17 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const handleRegistrationChange = async (scopeKey: string, order: OrderOut | null) => {
     refreshGeneration.current += 1;
+    if (testingProduct) {
+      setRegistrations((current) => [
+        ...current.filter((existing) => existing.test_product_id !== openProduct),
+        ...(order ? [order] : []),
+      ]);
+      return;
+    }
     const scope = orderScopeParams(scopeKey);
     const activityId = scope.activity_id ?? null;
     if (order) {
-      const previousOrder = registrations.find((existing) => orderScopeKey(existing) === scopeKey) ?? null;
+      const previousOrder = registrations.find((existing) => !existing.test_product_id && orderScopeKey(existing) === scopeKey) ?? null;
       const newlyQualifiedPromotions = availablePromotions
         .filter((promotion) => (promotion.activity_id ?? null) === activityId)
         .filter((promotion) => (
@@ -1491,7 +1508,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       celebratePromotionThresholds(newlyQualifiedPromotions);
     }
     setRegistrations((current) => [
-      ...current.filter((existing) => orderScopeKey(existing) !== scopeKey),
+      ...current.filter((existing) => existing.test_product_id || orderScopeKey(existing) !== scopeKey),
       ...(order ? [order] : []),
     ]);
     const pendingCode = couponCode.trim();
@@ -1509,7 +1526,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       if (preview.eligible) {
         const updated = await shoppingApi.applyCurrentPromotion(pendingCode, activityId, scope.category_id);
         setRegistrations((current) => [
-          ...current.filter((existing) => orderScopeKey(existing) !== scopeKey),
+          ...current.filter((existing) => existing.test_product_id || orderScopeKey(existing) !== scopeKey),
           updated,
         ]);
         setPromotionFeedback(preview.reason ?? "優惠已套用。");
@@ -1770,7 +1787,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         <BundleCarousel>{bundlePromotions.map((promotion) => {
           const category = catalog.find((item) => [...item.products, ...item.series.flatMap((series) => series.products)]
             .some((product) => promotion.target_products?.some((target) => target.id === product.id)));
-          const registration = category ? registrations.find((order) => orderScopeKey(order) === catalogScopeKey(category)) ?? null : null;
+          const registration = category ? registrations.find((order) => !order.test_product_id && orderScopeKey(order) === catalogScopeKey(category)) ?? null : null;
           return <BundleOffer key={promotion.id} promotion={promotion} products={catalogProducts}
             scopeName={category?.activity_name ?? category?.name}
             registration={registration}
@@ -1910,7 +1927,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                           ? classMemberAccess === "ready"
                           : !registrationLocked && (delegationToken
                             ? Boolean(delegationContext?.can_edit)
-                            : canOrderForSelf)}
+                            : canOrderForSelf || product.status === "testing")}
                         onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
                         cardPrice={shopCardPrice(product, classMemberUserId ? [] : availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
@@ -1948,7 +1965,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                             ? classMemberAccess === "ready"
                             : !registrationLocked && (delegationToken
                               ? Boolean(delegationContext?.can_edit)
-                              : canOrderForSelf)}
+                              : canOrderForSelf || product.status === "testing")}
                           onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
                           cardPrice={shopCardPrice(product, classMemberUserId ? [] : availablePromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
@@ -2039,19 +2056,21 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           isLoggedIn={isLoggedIn}
           authLoading={authLoading}
           registrationLoadError={registrationLoadError || Boolean(classMemberUserId && classMemberAccess === "error")}
-          registration={selectedCategoryRegistration ? {
-            ...selectedCategoryRegistration,
+          registration={productRegistration ? {
+            ...productRegistration,
             items: classMemberUserId
-              ? selectedCategoryRegistration.items
-              : selectedCategoryRegistration.items.filter((item) =>
+              ? productRegistration.items
+              : productRegistration.items.filter((item) =>
                 (item.delegation_link_id ?? null) === (delegationToken ? delegationContext?.link.id : null)),
           } : null}
           scopeKey={selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE}
           registrationLocked={registrationLocked}
           authorizationRequired={classMemberUserId
             ? classMemberAccess === "idle" || classMemberAccess === "loading"
-            : isLoggedIn && !canOrderForSelf && !delegationToken}
-          editingDescription={classMemberUserId
+            : isLoggedIn && !canOrderForSelf && !testingProduct && !delegationToken}
+          editingDescription={testingProduct
+            ? "測試中：正式開放時會清除這項商品的試訂、付款／收款等紀錄，並回補庫存。"
+            : classMemberUserId
             ? `正在調整${classMemberName || "指定同學"}跨所有未鎖定訂購的商品總量。已收款或鎖定的數量會保留。`
             : delegationToken
               ? `正在修改「${delegationContext?.link.name ?? "家人代訂"}」登記的數量。優惠按學生合計計算。`

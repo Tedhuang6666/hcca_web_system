@@ -69,6 +69,7 @@ from api.services.shop._catalog import (
     get_product,
 )
 from api.services.shop._promotions import PromotionAllocation, resolve_promotions
+from api.services.shop._testing import can_test_products
 from api.services.student_identity import has_student_identity
 
 logger = logging.getLogger(__name__)
@@ -488,6 +489,8 @@ async def _create_order_from_items(
     payment_method: str = "cash_on_pickup",
     replace_order: Order | None = None,
 ) -> Order:
+    if replace_order is not None and replace_order.test_product_id is not None:
+        raise ValueError("測試訂購請至商品頁調整")
     # 與學生／家人即時登記共用使用者鎖，避免不同商品同時送出時各自建單。
     await session.execute(select(User.id).where(User.id == user_id).with_for_update())
     buyer = await session.get(User, user_id)
@@ -709,9 +712,13 @@ async def create_direct_order(
     return orders
 
 
-async def clear_all_orders(session: AsyncSession) -> int:
+async def clear_all_orders(
+    session: AsyncSession, *, order_ids: list[uuid.UUID] | None = None
+) -> int:
     """清除商品訂單及其衍生資料，並回補訂單占用的庫存與優惠次數。"""
-    order_ids = list((await session.scalars(select(Order.id))).all())
+    clearing_tests = order_ids is not None
+    if order_ids is None:
+        order_ids = list((await session.scalars(select(Order.id))).all())
     if not order_ids:
         return 0
 
@@ -743,12 +750,12 @@ async def clear_all_orders(session: AsyncSession) -> int:
             promotion.used_count = max(0, promotion.used_count - int(usage_count))
 
     order_id_strings = {str(order_id) for order_id in order_ids}
-    pending_confirmations = await session.scalars(
-        select(OutboxEvent).where(
-            OutboxEvent.event_type == "shop.order_confirmed",
-            OutboxEvent.status == OutboxStatus.PENDING,
-        )
+    confirmations_query = select(OutboxEvent).where(
+        OutboxEvent.event_type == "shop.order_confirmed"
     )
+    if not clearing_tests:
+        confirmations_query = confirmations_query.where(OutboxEvent.status == OutboxStatus.PENDING)
+    pending_confirmations = await session.scalars(confirmations_query)
     for event in pending_confirmations:
         if (event.payload or {}).get("order_id") in order_id_strings:
             await session.delete(event)
@@ -858,6 +865,7 @@ async def get_current_registration(
     category_id: uuid.UUID | None = None,
     lock: bool = False,
     reuse_cancelled: bool = False,
+    test_product_id: uuid.UUID | None = None,
 ) -> Order | None:
     statuses = [OrderStatus.PENDING, OrderStatus.CONFIRMED]
     if reuse_cancelled:
@@ -865,6 +873,7 @@ async def get_current_registration(
     query = select(Order).where(
         Order.user_id == user_id,
         Order.status.in_(statuses),
+        Order.test_product_id == test_product_id,
     )
     if match_activity:
         query = query.where(
@@ -888,12 +897,15 @@ async def get_current_registration(
     return await get_order(session, order.id) if order else None
 
 
-async def get_current_registrations(session: AsyncSession, user_id: uuid.UUID) -> list[Order]:
+async def get_current_registrations(
+    session: AsyncSession, user_id: uuid.UUID, *, include_testing: bool = False
+) -> list[Order]:
     result = await session.execute(
         select(Order.id)
         .where(
             Order.user_id == user_id,
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+            True if include_testing else Order.test_product_id.is_(None),
         )
         .order_by(Order.created_at.desc(), Order.updated_at.desc())
     )
@@ -916,6 +928,7 @@ async def _get_class_member_orders(
         select(Order.id)
         .where(
             Order.user_id == user_id,
+            Order.test_product_id.is_(None),
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
             or_(Order.class_id.in_(class_ids), Order.class_id.is_(None)),
         )
@@ -1171,7 +1184,10 @@ async def _assert_product_registration_open(
     *,
     class_id: uuid.UUID | None,
     allow_sold_out: bool = False,
+    allow_testing: bool = False,
 ) -> None:
+    if allow_testing and product.status == ProductStatus.TESTING:
+        return
     if product.status != ProductStatus.ACTIVE and not (
         allow_sold_out and product.status == ProductStatus.SOLD_OUT
     ):
@@ -1209,7 +1225,6 @@ async def set_current_registration_product(
     delegation: ShopDelegationLink | None = None,
 ) -> Order | None:
     """立即登記某商品的規格數量，並以目前有效訂單保存。"""
-    await _assert_buyer_eligible(session, user)
     await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     await session.execute(
         select(Product)
@@ -1221,6 +1236,18 @@ async def set_current_registration_product(
     if product is None:
         raise ValueError("找不到此商品")
 
+    testing = product.status == ProductStatus.TESTING
+    actor = actor or user
+    if testing:
+        if (
+            delegation is not None
+            or actor.id != user.id
+            or not await can_test_products(session, actor)
+        ):
+            raise PermissionError("需要權限：shop:test")
+    else:
+        await _assert_buyer_eligible(session, user)
+
     activity_id, category_id = _product_order_scope(product)
     order = await get_current_registration(
         session,
@@ -1230,6 +1257,7 @@ async def set_current_registration_product(
         match_activity=True,
         lock=True,
         reuse_cancelled=True,
+        test_product_id=product.id if testing else None,
     )
     if order is not None:
         if order.is_paid or order.is_class_collected:
@@ -1274,6 +1302,7 @@ async def set_current_registration_product(
         product,
         class_id=class_id,
         allow_sold_out=existing_quantity + other_quantity > 0,
+        allow_testing=testing,
     )
 
     variants: dict[str, tuple[int, list[dict]]] = {}
@@ -1303,7 +1332,7 @@ async def set_current_registration_product(
         if quantity_delta > product.stock_quantity:
             raise ValueError(f"商品「{product.name}」庫存不足（剩餘 {product.stock_quantity} 件）")
         product.stock_quantity -= quantity_delta
-        if product.stock_quantity == 0:
+        if product.stock_quantity == 0 and not testing:
             product.status = ProductStatus.SOLD_OUT
         elif product.status == ProductStatus.SOLD_OUT:
             product.status = ProductStatus.ACTIVE
@@ -1312,6 +1341,7 @@ async def set_current_registration_product(
         order = Order(
             serial_number=await generate_order_serial(session),
             user_id=user.id,
+            test_product_id=product.id if testing else None,
             activity_id=activity_id,
             category_id=category_id,
             class_id=class_id,
@@ -1458,6 +1488,7 @@ async def _reconcile_unassigned_class_orders(
         .options(selectinload(Order.user))
         .where(
             Order.class_id.is_(None),
+            Order.test_product_id.is_(None),
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
         )
         .order_by(Order.id)
@@ -1522,6 +1553,7 @@ async def list_orders(
     search: str | None = None,
     limit: int = 20,
     offset: int = 0,
+    include_testing: bool = False,
 ) -> list[Order]:
     if class_ids is not None:
         if not class_ids:
@@ -1547,6 +1579,8 @@ async def list_orders(
     )
     if user_id:
         q = q.where(Order.user_id == user_id)
+    if not include_testing:
+        q = q.where(Order.test_product_id.is_(None))
     if activity_id:
         q = q.where(Order.activity_id == activity_id)
     if general_only:
@@ -1704,6 +1738,7 @@ def serialize_order(order: Order) -> OrderOut:
     category = _order_category(order)
     return OrderOut(
         id=order.id,
+        test_product_id=order.test_product_id,
         serial_number=order.serial_number,
         user_id=order.user_id,
         activity_id=_order_activity_id(order),
@@ -1752,6 +1787,7 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
     category = _order_category(order)
     return OrderListItem(
         id=order.id,
+        test_product_id=order.test_product_id,
         serial_number=order.serial_number,
         user_id=order.user_id,
         user_name=order.user.display_name if order.user else None,
@@ -1817,6 +1853,7 @@ async def cancel_order(
                     product,
                     class_id=order.class_id,
                     allow_sold_out=True,
+                    allow_testing=order.test_product_id is not None,
                 )
 
     for item in order.items:
@@ -2005,6 +2042,7 @@ async def order_summary(
         selectinload(Order.school_class),
         selectinload(Order.user),
     )
+    q = q.where(Order.test_product_id.is_(None))
     if status is not None:
         q = q.where(Order.status == status)
     else:
@@ -2256,6 +2294,7 @@ async def order_quantities(
             else Order.status == status
         )
     )
+    q = q.where(Order.test_product_id.is_(None))
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
     if activity_id is not None:

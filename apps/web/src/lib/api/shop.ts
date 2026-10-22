@@ -196,6 +196,7 @@ export const shopApi = {
   updateProduct: (id: string, body: Record<string, unknown>) =>
     patch<ProductOut>(`/shop/products/${id}`, body),
   activateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/activate`, {}),
+  testProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/test`, {}),
   deactivateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/deactivate`, {}),
   deleteProduct: (id: string) => del<void>(`/shop/products/${id}`),
 

@@ -161,7 +161,9 @@ async def cancel_for_source(db: AsyncSession, source_type: str, source_id: uuid.
         await db.flush()
 
 
-async def sync_shop_order(db: AsyncSession, order: Order) -> Receivable:
+async def sync_shop_order(db: AsyncSession, order: Order) -> Receivable | None:
+    if order.test_product_id is not None:
+        return None
     item = await db.scalar(
         select(Receivable).where(
             Receivable.source_type == ReceivableSource.SHOP_ORDER.value,

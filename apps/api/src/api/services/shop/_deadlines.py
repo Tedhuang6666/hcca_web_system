@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity
-from api.models.shop import Product, ProductCategory, ProductSeries
+from api.models.shop import Product, ProductCategory, ProductSeries, ProductStatus
 
 
 async def set_activity_order_deadline(
@@ -31,6 +31,10 @@ async def recently_closed_product_ids(session: AsyncSession, *, now: datetime) -
             ProductCategory.id == func.coalesce(Product.category_id, ProductSeries.category_id),
         )
         .outerjoin(Activity, ProductCategory.activity_id == Activity.id)
-        .where(deadline > now - timedelta(minutes=6), deadline <= now)
+        .where(
+            Product.status != ProductStatus.TESTING,
+            deadline > now - timedelta(minutes=6),
+            deadline <= now,
+        )
     )
     return list(result.all())

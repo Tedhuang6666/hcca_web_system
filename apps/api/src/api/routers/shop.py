@@ -99,6 +99,7 @@ from api.services.realtime_events import broadcast_order_updated
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _delegation_codes as delegation_code_svc
 from api.services.shop._deadlines import set_activity_order_deadline
+from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -137,8 +138,16 @@ async def _get_series_or_404(series_id: uuid.UUID, session: AsyncSession) -> Pro
     return or_404(obj, "找不到此系列")
 
 
-async def _get_product_or_404(product_id: uuid.UUID, session: AsyncSession) -> Product:
+async def _get_product_or_404(
+    product_id: uuid.UUID, session: AsyncSession, current_user: User | None
+) -> Product:
     p = await shop_svc.get_product(session, product_id)
+    if (
+        p is not None
+        and p.status == ProductStatus.TESTING
+        and not await can_test_products(session, current_user)
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商品")
     return or_404(p, "找不到此商品")
 
 
@@ -156,14 +165,35 @@ async def _get_variant_option_or_404(
     return or_404(o, "找不到此變體選項")
 
 
-async def _get_order_or_404(order_id: uuid.UUID, session: AsyncSession) -> Order:
+async def _get_order_or_404(
+    order_id: uuid.UUID, session: AsyncSession, current_user: User
+) -> Order:
     o = await shop_svc.get_order(session, order_id)
+    if (
+        o is not None
+        and o.test_product_id is not None
+        and not await can_test_products(session, current_user)
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此訂單")
     return or_404(o, "找不到此訂單")
 
 
-async def _get_promotion_or_404(promotion_id: uuid.UUID, session: AsyncSession) -> ShopPromotion:
+async def _require_promotion_visible(
+    session: AsyncSession, user: User, promotion: ShopPromotion
+) -> None:
+    if any(
+        product.status == ProductStatus.TESTING for product in promotion.target_products
+    ) and not await can_test_products(session, user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此優惠")
+
+
+async def _get_promotion_or_404(
+    promotion_id: uuid.UUID, session: AsyncSession, current_user: User
+) -> ShopPromotion:
     promotion = await shop_svc.get_promotion(session, promotion_id)
-    return or_404(promotion, "找不到此優惠")
+    promotion = or_404(promotion, "找不到此優惠")
+    await _require_promotion_visible(session, current_user, promotion)
+    return promotion
 
 
 async def _broadcast_shop_order(order: Order) -> None:
@@ -411,10 +441,14 @@ async def delete_series(series_id: uuid.UUID, session: DbDep, current_user: Curr
 @router.get("/catalog", response_model=list[CatalogCategoryOut], summary="購買頁瀏覽樹")
 async def get_catalog(
     session: DbDep,
-    _: OptionalUser,
+    current_user: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
 ) -> list[CatalogCategoryOut]:
-    return await shop_svc.build_catalog_tree(session, activity_id=activity_id)
+    return await shop_svc.build_catalog_tree(
+        session,
+        activity_id=activity_id,
+        include_testing=await can_test_products(session, current_user),
+    )
 
 
 # ── 商品 ──────────────────────────────────────────────────────────────────────
@@ -423,7 +457,7 @@ async def get_catalog(
 @router.get("/products", response_model=list[ProductOut], summary="列出商品")
 async def list_products(
     session: DbDep,
-    _: OptionalUser,
+    current_user: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     series_id: uuid.UUID | None = Query(None),
@@ -437,6 +471,7 @@ async def list_products(
         category_id=category_id,
         series_id=series_id,
         status=status_filter,
+        include_testing=await can_test_products(session, current_user),
         limit=limit,
         offset=offset,
     )
@@ -446,7 +481,7 @@ async def list_products(
 async def get_product(
     product_id: uuid.UUID, session: DbDep, current_user: OptionalUser
 ) -> ProductOut:
-    product = await _get_product_or_404(product_id, session)
+    product = await _get_product_or_404(product_id, session, current_user)
     product_out = ProductOut.model_validate(product)
     remaining = await shop_svc.remaining_product_quantity(
         session, product, current_user.id if current_user else None
@@ -460,10 +495,14 @@ async def get_product(
 @router.get("/promotions", response_model=list[ShopPromotionOut], summary="列出校商優惠")
 async def list_promotions(
     session: DbDep,
-    _: ManagerUser,
+    current_user: ManagerUser,
     include_inactive: bool = Query(False),
 ) -> list[ShopPromotionOut]:
-    promotions = await shop_svc.list_promotions(session, include_inactive=include_inactive)
+    promotions = await shop_svc.list_promotions(
+        session,
+        include_inactive=include_inactive,
+        include_testing=await can_test_products(session, current_user),
+    )
     return [shop_svc.serialize_promotion(promotion) for promotion in promotions]
 
 
@@ -477,7 +516,9 @@ async def list_available_promotions(
     current_user: OptionalUser,
 ) -> list[ShopPromotionPublicOut]:
     promotions = await shop_svc.list_public_promotions(
-        session, user_id=current_user.id if current_user else None
+        session,
+        user_id=current_user.id if current_user else None,
+        include_testing=await can_test_products(session, current_user),
     )
     return [shop_svc.serialize_public_promotion(promotion) for promotion in promotions]
 
@@ -497,6 +538,7 @@ async def create_promotion(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _require_promotion_visible(session, current_user, promotion)
     return shop_svc.serialize_promotion(promotion)
 
 
@@ -505,13 +547,14 @@ async def update_promotion(
     promotion_id: uuid.UUID,
     payload: ShopPromotionUpdate,
     session: DbDep,
-    _: ManagerUser,
+    current_user: ManagerUser,
 ) -> ShopPromotionOut:
-    promotion = await _get_promotion_or_404(promotion_id, session)
+    promotion = await _get_promotion_or_404(promotion_id, session, current_user)
     try:
         updated = await shop_svc.update_promotion(session, promotion, data=payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _require_promotion_visible(session, current_user, updated)
     return shop_svc.serialize_promotion(updated)
 
 
@@ -525,8 +568,10 @@ async def update_promotion(
         status.HTTP_409_CONFLICT: {"description": "優惠已有訂單紀錄，無法刪除"},
     },
 )
-async def delete_promotion(promotion_id: uuid.UUID, session: DbDep, _: ManagerUser) -> None:
-    promotion = await _get_promotion_or_404(promotion_id, session)
+async def delete_promotion(
+    promotion_id: uuid.UUID, session: DbDep, current_user: ManagerUser
+) -> None:
+    promotion = await _get_promotion_or_404(promotion_id, session, current_user)
     try:
         await shop_svc.delete_promotion(session, promotion)
     except ValueError as e:
@@ -580,7 +625,7 @@ async def update_product(
     session: DbDep,
     current_user: CurrentUser,
 ) -> Product:
-    product = await _get_product_or_404(product_id, session)
+    product = await _get_product_or_404(product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     target_category_id = payload.category_id
     if payload.series_id:
@@ -610,11 +655,33 @@ async def update_product(
     return product
 
 
+@router.post("/products/{product_id}/test", response_model=ProductOut, summary="開始測試商品")
+async def test_product(product_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Product:
+    if not await can_test_products(session, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：shop:test")
+    product = await _get_product_or_404(product_id, session, current_user)
+    await _require_shop_manager(session, current_user, _product_activity(product))
+    try:
+        product = await start_product_testing(session, product)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await audit_svc.record(
+        session,
+        entity_type="product",
+        entity_id=str(product.id),
+        action="shop.product_test",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        summary=f"開始測試商品「{product.name}」",
+    )
+    return product
+
+
 @router.post("/products/{product_id}/activate", response_model=ProductOut, summary="上架商品")
 async def activate_product(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
-    product = await _get_product_or_404(product_id, session)
+    product = await _get_product_or_404(product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     try:
         product = await shop_svc.activate_product(session, product)
@@ -636,7 +703,7 @@ async def activate_product(
 async def deactivate_product(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
-    product = await _get_product_or_404(product_id, session)
+    product = await _get_product_or_404(product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     try:
         product = await shop_svc.deactivate_product(session, product)
@@ -660,7 +727,7 @@ async def deactivate_product(
     summary="刪除商品",
 )
 async def delete_product(product_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> None:
-    product = await _get_product_or_404(product_id, session)
+    product = await _get_product_or_404(product_id, session, current_user)
     product_name = product.name
     await _require_shop_manager(session, current_user, _product_activity(product))
     try:
@@ -694,7 +761,7 @@ async def add_variant_group(
     session: DbDep,
     current_user: CurrentUser,
 ) -> ProductVariantGroup:
-    product = await _get_product_or_404(product_id, session)
+    product = await _get_product_or_404(product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.add_variant_group(session, product, data=payload)
 
@@ -711,7 +778,7 @@ async def update_variant_group(
     current_user: CurrentUser,
 ) -> ProductVariantGroup:
     group = await _get_variant_group_or_404(group_id, session)
-    product = await _get_product_or_404(group.product_id, session)
+    product = await _get_product_or_404(group.product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.update_variant_group(session, group, data=payload)
 
@@ -725,7 +792,7 @@ async def delete_variant_group(
     group_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> None:
     group = await _get_variant_group_or_404(group_id, session)
-    product = await _get_product_or_404(group.product_id, session)
+    product = await _get_product_or_404(group.product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     await shop_svc.delete_variant_group(session, group)
 
@@ -743,7 +810,7 @@ async def add_variant_option(
     current_user: CurrentUser,
 ) -> ProductVariantOption:
     group = await _get_variant_group_or_404(group_id, session)
-    product = await _get_product_or_404(group.product_id, session)
+    product = await _get_product_or_404(group.product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.add_variant_option(session, group, data=payload)
 
@@ -761,7 +828,7 @@ async def update_variant_option(
 ) -> ProductVariantOption:
     option = await _get_variant_option_or_404(option_id, session)
     group = await _get_variant_group_or_404(option.group_id, session)
-    product = await _get_product_or_404(group.product_id, session)
+    product = await _get_product_or_404(group.product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.update_variant_option(session, option, data=payload)
 
@@ -776,7 +843,7 @@ async def delete_variant_option(
 ) -> None:
     option = await _get_variant_option_or_404(option_id, session)
     group = await _get_variant_group_or_404(option.group_id, session)
-    product = await _get_product_or_404(group.product_id, session)
+    product = await _get_product_or_404(group.product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
     await shop_svc.delete_variant_option(session, option)
 
@@ -790,7 +857,9 @@ async def delete_variant_option(
     summary="取得各活動目前商品登記",
 )
 async def list_current_registrations(session: DbDep, current_user: CurrentUser) -> list[OrderOut]:
-    orders = await shop_svc.get_current_registrations(session, current_user.id)
+    orders = await shop_svc.get_current_registrations(
+        session, current_user.id, include_testing=await can_test_products(session, current_user)
+    )
     return [shop_svc.serialize_order(order) for order in orders]
 
 
@@ -846,6 +915,8 @@ async def preview_current_registration_promotion(
         ),
     )
     promotion = result.promotion
+    if promotion is not None:
+        await _require_promotion_visible(session, current_user, promotion)
     return ShopPromotionPreviewOut(
         eligible=result.eligible,
         promotion_name=promotion.name if promotion else None,
@@ -995,6 +1066,7 @@ async def list_orders(
         search=search if is_admin else None,
         limit=limit,
         offset=offset,
+        include_testing=await can_test_products(session, current_user),
     )
     return [shop_svc.serialize_order_list_item(o) for o in orders]
 
@@ -1359,7 +1431,7 @@ async def order_quantities(
 
 @router.get("/orders/{order_id}", response_model=OrderOut, summary="取得訂單詳情")
 async def get_order(order_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> OrderOut:
-    order = await _get_order_or_404(order_id, session)
+    order = await _get_order_or_404(order_id, session, current_user)
     if order.user_id != current_user.id and not current_user.is_superuser:
         codes = await get_user_permission_codes(session, current_user.id)
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
@@ -1385,7 +1457,7 @@ async def cancel_order(
     session: DbDep,
     current_user: CurrentUser,
 ) -> OrderOut:
-    order = await _get_order_or_404(order_id, session)
+    order = await _get_order_or_404(order_id, session, current_user)
     codes = await get_user_permission_codes(session, current_user.id)
     is_order_manager = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
     bypass = is_order_manager
@@ -1430,7 +1502,7 @@ async def update_order_items(
     session: DbDep,
     current_user: CurrentUser,
 ) -> OrderOut:
-    order = await _get_order_or_404(order_id, session)
+    order = await _get_order_or_404(order_id, session, current_user)
     if order.user_id != current_user.id and not current_user.is_superuser:
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         is_cadre_of_class = order.class_id is not None and order.class_id in cadre_ids
@@ -1459,7 +1531,7 @@ async def update_class_collection(
     session: DbDep,
     current_user: CurrentUser,
 ) -> OrderOut:
-    order = await _get_order_or_404(order_id, session)
+    order = await _get_order_or_404(order_id, session, current_user)
     was_class_collected = order.is_class_collected
     cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
     if not current_user.is_superuser and (
@@ -1593,7 +1665,7 @@ async def update_order_payment(
     session: DbDep,
     current_user: CurrentUser,
 ) -> OrderOut:
-    order = await _get_order_or_404(order_id, session)
+    order = await _get_order_or_404(order_id, session, current_user)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes(session, current_user.id)
         is_activity_manager = await activity_svc.can_manage_activity_resource(

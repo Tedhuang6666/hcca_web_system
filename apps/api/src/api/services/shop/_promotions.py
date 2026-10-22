@@ -15,6 +15,7 @@ from api.models.shop import (
     Order,
     Product,
     ProductSeries,
+    ProductStatus,
     ShopDiscountType,
     ShopOrderPromotion,
     ShopPromotion,
@@ -695,7 +696,7 @@ async def create_promotion(
 
 
 async def list_promotions(
-    session: AsyncSession, *, include_inactive: bool = False
+    session: AsyncSession, *, include_inactive: bool = False, include_testing: bool = False
 ) -> list[ShopPromotion]:
     query = select(ShopPromotion).options(
         selectinload(ShopPromotion.target_user),
@@ -705,12 +706,16 @@ async def list_promotions(
     )
     if not include_inactive:
         query = query.where(ShopPromotion.is_active.is_(True))
+    if not include_testing:
+        query = query.where(
+            ~ShopPromotion.target_products.any(Product.status == ProductStatus.TESTING)
+        )
     query = query.order_by(ShopPromotion.created_at.desc())
     return list((await session.execute(query)).scalars().all())
 
 
 async def list_public_promotions(
-    session: AsyncSession, *, user_id: uuid.UUID | None = None
+    session: AsyncSession, *, user_id: uuid.UUID | None = None, include_testing: bool = False
 ) -> list[ShopPromotion]:
     now = datetime.now(UTC)
     filters = [
@@ -720,6 +725,8 @@ async def list_public_promotions(
         or_(ShopPromotion.max_uses.is_(None), ShopPromotion.used_count < ShopPromotion.max_uses),
         ShopPromotion.is_public.is_(True),
     ]
+    if not include_testing:
+        filters.append(~ShopPromotion.target_products.any(Product.status == ProductStatus.TESTING))
     if user_id is None:
         filters.append(
             and_(

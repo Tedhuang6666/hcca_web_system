@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
 class ProductStatus(enum.StrEnum):
     DRAFT = "draft"  # 草稿（尚未上架）
+    TESTING = "testing"  # 測試中（僅授權者可查看與訂購）
     ACTIVE = "active"  # 上架中（可購買）
     SOLD_OUT = "sold_out"  # 售罄（庫存歸零）
     CANCELLED = "cancelled"  # 已下架
@@ -380,6 +381,13 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # 字號：ORD-YYYY-NNNNNN
     serial_number: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
+    # 測試訂單依商品獨立保存，正式開放時只清除該商品的測試資料。
+    test_product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),

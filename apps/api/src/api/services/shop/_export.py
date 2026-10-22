@@ -28,6 +28,7 @@ async def _fetch_order_report_rows(
         )
         .join(OrderItem, Order.id == OrderItem.order_id)
         .join(Product, OrderItem.product_id == Product.id)
+        .where(Order.test_product_id.is_(None))
         .order_by(Order.created_at.desc())
     )
     if activity_id:

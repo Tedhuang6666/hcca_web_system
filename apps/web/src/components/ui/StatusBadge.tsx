@@ -89,6 +89,12 @@ export function UrgencyBadge({ urgency }: { urgency: string }) {
 
 /* ── 商品狀態 ─────────────────────────────────────────────────────────────── */
 const PRODUCT_STATUS: Record<ProductStatus, BadgeDef> = {
+  testing: {
+    label: "測試中",
+    color: "var(--text-secondary)",
+    bg: "var(--bg-hover)",
+    border: "var(--border)",
+  },
   draft: {
     label: "草稿",
     color: "var(--text-muted)",

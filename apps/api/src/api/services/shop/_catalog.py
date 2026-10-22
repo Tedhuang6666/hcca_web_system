@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 import uuid
 
-from sqlalchemy import or_, select, text
+from sqlalchemy import delete, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import now_local
+from api.models.seating import SeatHold, SeatingZone
 from api.models.shop import (
     Order,
     OrderItem,
@@ -208,6 +209,7 @@ async def list_products(
     category_id: uuid.UUID | None = None,
     series_id: uuid.UUID | None = None,
     status: ProductStatus | None = None,
+    include_testing: bool = False,
     limit: int = 20,
     offset: int = 0,
 ) -> list[Product]:
@@ -255,6 +257,8 @@ async def list_products(
         q = q.where(Product.series_id == series_id)
     if status:
         q = q.where(Product.status == status)
+    if not include_testing:
+        q = q.where(Product.status != ProductStatus.TESTING)
     q = q.order_by(Product.created_at.desc()).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().unique().all())
@@ -327,7 +331,12 @@ async def create_product(
 async def update_product(
     session: AsyncSession, product: Product, *, data: ProductUpdate
 ) -> Product:
-    if product.status not in (ProductStatus.DRAFT, ProductStatus.ACTIVE, ProductStatus.CANCELLED):
+    if product.status not in (
+        ProductStatus.DRAFT,
+        ProductStatus.TESTING,
+        ProductStatus.ACTIVE,
+        ProductStatus.CANCELLED,
+    ):
         raise ValueError(f"商品狀態 {product.status} 不允許編輯")
     payload = data.model_dump(exclude_unset=True)
     if "series_id" in payload or "category_id" in payload:
@@ -356,8 +365,27 @@ async def update_product(
 
 
 async def activate_product(session: AsyncSession, product: Product) -> Product:
-    if product.status not in (ProductStatus.DRAFT, ProductStatus.CANCELLED):
-        raise ValueError("只有草稿或已下架商品可以上架")
+    await session.refresh(
+        product, attribute_names=["status", "stock_quantity", "version"], with_for_update=True
+    )
+    if product.status not in (ProductStatus.DRAFT, ProductStatus.TESTING, ProductStatus.CANCELLED):
+        raise ValueError("只有草稿、測試中或已下架商品可以上架")
+    if product.status == ProductStatus.TESTING:
+        from api.services.shop._orders import clear_all_orders
+
+        order_ids = list(
+            await session.scalars(
+                select(Order.id).where(Order.test_product_id == product.id).with_for_update()
+            )
+        )
+        await clear_all_orders(session, order_ids=order_ids)
+        await session.execute(
+            delete(SeatHold).where(
+                SeatHold.zone_id.in_(
+                    select(SeatingZone.id).where(SeatingZone.product_id == product.id)
+                )
+            )
+        )
     product.status = ProductStatus.ACTIVE
     await session.flush()
     return product
@@ -480,6 +508,7 @@ async def build_catalog_tree(
     session: AsyncSession,
     *,
     activity_id: uuid.UUID | None = None,
+    include_testing: bool = False,
 ) -> list[CatalogCategoryOut]:
     q = (
         select(ProductCategory)
@@ -502,6 +531,8 @@ async def build_catalog_tree(
     categories = (await session.execute(q)).scalars().unique().all()
 
     visible = {ProductStatus.ACTIVE, ProductStatus.SOLD_OUT}
+    if include_testing:
+        visible.add(ProductStatus.TESTING)
     tree: list[CatalogCategoryOut] = []
     for category in categories:
         category_products = [

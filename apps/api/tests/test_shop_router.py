@@ -3298,3 +3298,333 @@ async def test_coupon_targets_selected_unlinked_activity(db_session, authed_clie
     assert applied.json()["total_price"] == 30
     orders = (await ac.get("/shop/registrations")).json()
     assert sorted(order["total_price"] for order in orders) == [30, 100]
+
+
+async def _make_testing_product(db, creator, *, category=None, stock=3, series_id=None):
+    from api.services.shop._testing import start_product_testing
+
+    category = category or await _make_category(db, creator)
+    product = await shop_svc.create_product(
+        db,
+        data=ProductCreate(
+            category_id=category.id,
+            series_id=series_id,
+            name="測試限定商品",
+            price=100,
+            stock_quantity=stock,
+            sale_start=datetime.now(UTC) + timedelta(days=1),
+        ),
+        created_by=creator.id,
+    )
+    return await start_product_testing(db, product)
+
+
+@pytest.mark.parametrize("kind", ["guest", "member", "manager", "tester", "superuser", "admin"])
+async def test_testing_product_visibility_and_purchase_permissions(
+    db_session, client, authed_client_factory, kind
+):
+    creator = await _bare_user(db_session)
+    category = await _make_category(db_session, creator)
+    series = await shop_svc.create_series(
+        db_session, data=ProductSeriesCreate(category_id=category.id, name="測試系列")
+    )
+    product = await _make_testing_product(db_session, creator, category=category)
+    nested = await _make_testing_product(
+        db_session, creator, category=category, series_id=series.id
+    )
+    actor = await _bare_user(db_session)
+    if kind == "superuser":
+        actor.is_superuser = True
+        actor.email = f"tester-{uuid.uuid4().hex}@example.net"
+        await db_session.flush()
+    elif kind in {"manager", "tester", "admin"}:
+        await _grant_permission(
+            db_session,
+            actor,
+            {"manager": "shop:manage", "tester": "shop:test", "admin": "admin:all"}[kind],
+        )
+    ac = client if kind == "guest" else authed_client_factory(actor)
+    allowed = kind in {"tester", "superuser", "admin"}
+    detail = await ac.get(f"/shop/products/{product.id}")
+    assert detail.status_code == (200 if allowed else 404)
+    if kind == "manager":
+        assert (
+            await ac.patch(f"/shop/products/{product.id}", json={"description": "越權"})
+        ).status_code == 404
+        assert (
+            await ac.post(f"/shop/products/{product.id}/variant-groups", json={"name": "越權"})
+        ).status_code == 404
+    for url in ["/shop/products", "/shop/products?status=testing&limit=1"]:
+        rows = (await ac.get(url)).json()
+        assert bool(rows) is allowed
+    tree = (await ac.get("/shop/catalog")).json()
+    row = next(row for row in tree if row["id"] == str(category.id))
+    assert [p["id"] for p in row["products"]] == ([str(product.id)] if allowed else [])
+    assert [p["id"] for p in row["series"][0]["products"]] == ([str(nested.id)] if allowed else [])
+    response = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 3}]},
+    )
+    assert response.status_code == (200 if allowed else 401 if kind == "guest" else 403)
+    await db_session.refresh(product)
+    assert product.status == "testing"
+    assert product.stock_quantity == (0 if allowed else 3)
+    if allowed:
+        assert response.json()["test_product_id"] == str(product.id)
+        assert (await client.get(f"/shop/products/{product.id}")).status_code == 404
+        assert not await db_session.scalar(
+            select(Receivable.id).where(Receivable.source_id == uuid.UUID(response.json()["id"]))
+        )
+        current = (await ac.get("/shop/registrations")).json()
+        assert current[0]["id"] == response.json()["id"]
+        outsider = authed_client_factory(await _bare_user(db_session))
+        assert (await outsider.get(f"/shop/orders/{response.json()['id']}")).status_code == 404
+
+
+async def test_start_testing_requires_product_management_and_test_permission(
+    db_session, client, authed_client_factory
+):
+    manager = await _bare_user(db_session)
+    category = await _make_category(db_session, manager)
+    product = await shop_svc.create_product(
+        db_session,
+        data=ProductCreate(category_id=category.id, name="草稿", price=10),
+        created_by=manager.id,
+    )
+    url = f"/shop/products/{product.id}/test"
+    assert (await client.post(url)).status_code == 401
+    ac = authed_client_factory(manager)
+    await _grant_permission(db_session, manager, "shop:manage")
+    assert (await ac.post(url)).status_code == 403
+    tester = await _bare_user(db_session)
+    await _grant_permission(db_session, tester, "shop:test")
+    assert (await authed_client_factory(tester).post(url)).status_code == 403
+    await _grant_permission(db_session, manager, "shop:test")
+    assert (await ac.post(url)).json()["status"] == "testing"
+    assert (await ac.post(url)).status_code == 409
+    assert (await ac.post(f"/shop/products/{product.id}/deactivate")).status_code == 409
+    assert (
+        await ac.patch(f"/shop/products/{product.id}", json={"description": "可修改"})
+    ).status_code == 200
+
+
+async def test_launch_clears_only_product_test_orders_and_restores_stock(
+    db_session, client, authed_client_factory
+):
+    from api.models.shop import ProductStatus, ShopOrderPromotion
+    from api.schemas.shop import ShopPromotionCreate
+
+    manager = await _bare_user(db_session)
+    manager.is_superuser = True
+    buyer = await _bare_user(db_session)
+    cancelled_buyer = await _bare_user(db_session)
+    for user in (buyer, cancelled_buyer):
+        await _grant_permission(db_session, user, "shop:test")
+    category = await _make_category(db_session, manager)
+    regular = await _make_active_product(db_session, manager, category=category, stock=10)
+    product = await _make_testing_product(db_session, manager, category=category, stock=4)
+    other = await _make_testing_product(db_session, manager, category=category, stock=5)
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="測試優惠",
+            discount_type="percentage",
+            discount_value=10,
+            target_product_ids=[product.id],
+        ),
+        created_by=manager.id,
+    )
+    ac = authed_client_factory(buyer)
+
+    async def register(ac, p, quantity):
+        response = await ac.put(
+            f"/shop/registrations/current/products/{p.id}",
+            json={
+                "variants": [{"option_ids": [], "quantity": quantity}],
+            },
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    formal_order = await register(ac, regular, 2)
+    other_order = await register(ac, other, 1)
+    cancelled_client = authed_client_factory(cancelled_buyer)
+    cancelled_order = await register(cancelled_client, product, 1)
+    cancelled_response = await cancelled_client.post(
+        f"/shop/orders/{cancelled_order['id']}/cancel", json={"reason": "測試取消"}
+    )
+    assert cancelled_response.status_code == 200
+    test_order = await register(ac, product, 4)
+    assert len({formal_order["id"], test_order["id"], other_order["id"]}) == 3
+    test_id = uuid.UUID(test_order["id"])
+    test_model = await shop_svc.get_order(db_session, test_id)
+    test_model.is_paid = True
+    test_model.is_class_collected = True
+    db_session.add(
+        Receivable(
+            source_type="shop_order",
+            source_id=test_id,
+            title="模擬測試付款",
+            amount=360,
+            paid_amount=360,
+            user_id=buyer.id,
+        )
+    )
+    db_session.add(
+        OutboxEvent(
+            event_type="shop.order_confirmed",
+            payload={"order_id": str(test_id)},
+            created_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(ShopOrderPromotion)
+            .where(ShopOrderPromotion.order_id == test_id)
+        )
+        == 1
+    )
+    assert (await client.get("/shop/promotions/available")).json() == []
+    quantities = await shop_svc.order_quantities(db_session)
+    assert {str(row.product_id) for row in quantities} == {str(regular.id)}
+    from api.services.shop._export import _fetch_order_report_rows
+
+    reports = await _fetch_order_report_rows(db_session)
+    assert {row["訂單字號"] for row in reports} == {formal_order["serial_number"]}
+    # 一般商品管理員沒有測試權限，不能提早公開或清除資料。
+    limited_manager = await _bare_user(db_session)
+    await _grant_permission(db_session, limited_manager, "shop:manage")
+    launch_url = f"/shop/products/{product.id}/activate"
+    assert (await authed_client_factory(limited_manager).post(launch_url)).status_code == 404
+    launched = await authed_client_factory(manager).post(launch_url)
+    assert launched.status_code == 200, launched.text
+    assert launched.json()["status"] == "active"
+    assert launched.json()["stock_quantity"] == 4
+    await db_session.refresh(other)
+    await db_session.refresh(regular)
+    await db_session.refresh(promotion)
+    assert other.stock_quantity == 4
+    assert other.status == ProductStatus.TESTING
+    assert regular.stock_quantity == 8
+    assert promotion.used_count == 0
+    assert await shop_svc.get_order(db_session, test_id) is None
+    assert await shop_svc.get_order(db_session, uuid.UUID(cancelled_order["id"])) is None
+    assert await shop_svc.get_order(db_session, uuid.UUID(formal_order["id"])) is not None
+    assert await shop_svc.get_order(db_session, uuid.UUID(other_order["id"])) is not None
+    assert (
+        await db_session.scalar(select(Receivable.id).where(Receivable.source_id == test_id))
+        is None
+    )
+    assert await db_session.scalar(select(OutboxEvent.id)) is None
+    assert await db_session.scalar(select(func.count()).select_from(ShopOrderPromotion)) == 0
+    assert (await client.get(f"/shop/products/{product.id}")).status_code == 200
+    assert (await authed_client_factory(manager).post(launch_url)).status_code == 409
+    assert (await client.get(f"/shop/products/{product.id}")).json()["stock_quantity"] == 4
+
+
+async def test_testing_permission_revocation_hides_previous_registration(
+    db_session, authed_client_factory
+):
+    from sqlalchemy import delete
+
+    from api.core.cache import cache_invalidate_user_permissions
+
+    user = await _bare_user(db_session)
+    await _grant_permission(db_session, user, "shop:test")
+    product = await _make_testing_product(db_session, user)
+    ac = authed_client_factory(user)
+    response = await ac.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={
+            "variants": [{"option_ids": [], "quantity": 1}],
+        },
+    )
+    assert response.status_code == 200
+    await db_session.execute(delete(Permission).where(Permission.code == "shop:test"))
+    await cache_invalidate_user_permissions(str(user.id))
+    assert (await ac.get("/shop/registrations")).json() == []
+    assert (await ac.get("/shop/orders")).json() == []
+    assert (await ac.get(f"/shop/orders/{response.json()['id']}")).status_code == 404
+    assert (
+        await ac.put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={
+                "variants": [{"option_ids": [], "quantity": 2}],
+            },
+        )
+    ).status_code == 403
+
+
+async def test_testing_ticket_visibility_and_launch_releases_seat_holds(
+    db_session, authed_client_factory
+):
+    from api.models.seating import Seat, SeatHold, SeatingZone
+
+    manager = await _bare_user(db_session)
+    manager.is_superuser = True
+    outsider = await _bare_user(db_session)
+    tester = await _bare_user(db_session)
+    await _grant_permission(db_session, tester, "shop:test")
+    product = await _make_testing_product(db_session, manager)
+    other = await _make_testing_product(db_session, manager)
+    zones = [SeatingZone(product_id=p.id, name="測試場次") for p in (product, other)]
+    db_session.add_all(zones)
+    await db_session.flush()
+    for zone in zones:
+        seat = Seat(zone_id=zone.id, label="A1", x=0, y=0)
+        db_session.add(seat)
+        await db_session.flush()
+        db_session.add(
+            SeatHold(
+                seat_id=seat.id,
+                zone_id=zone.id,
+                user_id=tester.id,
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+        )
+    await db_session.flush()
+    outsider_client = authed_client_factory(outsider)
+    for url in (
+        f"/seating/products/{product.id}/zones",
+        f"/seating/zones/{zones[0].id}",
+        f"/seating/zones/{zones[0].id}/map",
+    ):
+        assert (await outsider_client.get(url)).status_code == 404
+        assert (await authed_client_factory(tester).get(url)).status_code == 200
+    await _grant_permission(db_session, outsider, "seating:manage")
+    assert (
+        await outsider_client.post(
+            "/seating/zones",
+            json={
+                "product_id": str(product.id),
+                "name": "越權場次",
+            },
+        )
+    ).status_code == 404
+    response = await authed_client_factory(manager).post(f"/shop/products/{product.id}/activate")
+    assert response.status_code == 200
+    assert list(await db_session.scalars(select(SeatHold.zone_id))) == [zones[1].id]
+
+
+async def test_expired_product_testing_permission_does_not_grant_access(
+    db_session, authed_client_factory
+):
+    user = await _bare_user(db_session)
+    await _grant_permission(db_session, user, "shop:test")
+    tenure = await db_session.scalar(select(UserPosition).where(UserPosition.user_id == user.id))
+    tenure.start_date = date.today() - timedelta(days=3)
+    tenure.end_date = date.today() - timedelta(days=1)
+    await db_session.flush()
+    product = await _make_testing_product(db_session, user)
+    ac = authed_client_factory(user)
+    assert (await ac.get(f"/shop/products/{product.id}")).status_code == 404
+    assert (
+        await ac.put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={
+                "variants": [{"option_ids": [], "quantity": 1}],
+            },
+        )
+    ).status_code == 403
