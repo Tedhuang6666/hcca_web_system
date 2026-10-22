@@ -1609,9 +1609,29 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const catalogProducts = new Map(catalog.flatMap((category) => [
     ...category.products, ...category.series.flatMap((series) => series.products),
   ]).map((product) => [product.id, product]));
-  const categoryPromotions = classMemberUserId ? [] : availablePromotions.filter((promotion) => (
-    (promotion.activity_id ?? null) === (selectedCategory?.activity_id ?? null)
-  ));
+  const catalogCategoryByProductId = new Map(catalog.flatMap((category) => [
+    ...category.products.map((product) => [product.id, category] as const),
+    ...category.series.flatMap((series) => series.products.map((product) => [product.id, category] as const)),
+  ]));
+  const activityScopeKey = (category: CatalogCategoryOut) => category.activity_id
+    ? `activity:${category.activity_id}`
+    : `category:${category.id}`;
+  const selectedActivityScope = selectedCategory ? activityScopeKey(selectedCategory) : null;
+  const categoryPromotions = classMemberUserId || !selectedCategory ? [] : availablePromotions.filter((promotion) => {
+    if (promotion.activity_id != null && promotion.activity_id !== selectedCategory.activity_id) return false;
+
+    const targets = promotion.target_products ?? [];
+    const targetScopes = new Set(targets.flatMap((target) => {
+      const category = catalogCategoryByProductId.get(target.id);
+      return category ? [activityScopeKey(category)] : [];
+    }));
+    if (targetScopes.size > 1) return false;
+
+    const [targetScope] = targetScopes;
+    if (targetScope) return targetScope === selectedActivityScope;
+    if (targets.length > 0) return promotion.activity_id != null;
+    return promotion.activity_id === selectedCategory.activity_id;
+  });
   const bundlePromotions = categoryPromotions.filter((promotion) => (
     promotion.discount_type === "bundle_price"
     && promotion.target_products?.some((target) => catalogProducts.has(target.id))
