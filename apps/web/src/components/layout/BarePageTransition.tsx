@@ -16,10 +16,10 @@ const STANDALONE_PAGE_PREFIXES = [
 ];
 
 function needsStandaloneTransition(pathname: string): boolean {
-  return pathname === "/"
-    || STANDALONE_PAGE_PREFIXES.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    );
+  // 首頁沿用 public layout 的轉場，讓共用 provider 在公開頁面間持續掛載。
+  return STANDALONE_PAGE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 export default function BarePageTransition({ children }: { children: ReactNode }) {

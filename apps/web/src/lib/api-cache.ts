@@ -70,7 +70,7 @@ export function cacheRequest<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const existing = _inFlight.get(key) as InFlightEntry<T> | undefined;
-  if (existing) {
+  if (existing && !existing.controller.signal.aborted) {
     existing.consumers += 1;
     return withRelease(existing, signal);
   }
@@ -80,7 +80,7 @@ export function cacheRequest<T>(
     controller,
     consumers: 1,
     promise: Promise.resolve().then(() => fetcher(controller.signal)).finally(() => {
-      _inFlight.delete(key);
+      if (_inFlight.get(key) === entry) _inFlight.delete(key);
     }),
   };
   _inFlight.set(key, entry);
@@ -91,8 +91,12 @@ export function cacheRequest<T>(
     const release = () => {
       if (released) return;
       released = true;
+      callerSignal?.removeEventListener("abort", release);
       current.consumers -= 1;
-      if (current.consumers <= 0) current.controller.abort();
+      if (current.consumers <= 0) {
+        if (_inFlight.get(key) === current) _inFlight.delete(key);
+        current.controller.abort();
+      }
     };
     if (callerSignal) {
       if (callerSignal.aborted) release();

@@ -32,19 +32,34 @@ export default function WebVitalsReporter() {
 
   useEffect(() => {
     if (navigationReported.current || typeof performance === "undefined") return;
-    const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-    if (!entry) return;
-    navigationReported.current = true;
-    recordClientMetric({
-      metric: "navigation_ttfb",
-      value: Math.max(0, entry.responseStart - entry.requestStart),
-      path: window.location.pathname,
-    });
-    recordClientMetric({
-      metric: "navigation_total",
-      value: Math.max(0, entry.loadEventEnd - entry.fetchStart),
-      path: window.location.pathname,
-    });
+    const path = window.location.pathname;
+    let timeoutId: number | undefined;
+    const reportNavigation = () => {
+      if (navigationReported.current) return;
+      const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      if (!entry || entry.loadEventEnd <= 0) return;
+      navigationReported.current = true;
+      recordClientMetric({
+        metric: "navigation_ttfb",
+        value: Math.max(0, entry.responseStart - entry.requestStart),
+        path,
+      });
+      recordClientMetric({
+        metric: "navigation_total",
+        value: Math.max(0, entry.loadEventEnd - entry.fetchStart),
+        path,
+      });
+    };
+    // loadEventEnd 在 load handler 全部結束後才有值；下一個 task 再讀取。
+    const afterLoad = () => {
+      timeoutId = window.setTimeout(reportNavigation, 0);
+    };
+    if (document.readyState === "complete") afterLoad();
+    else window.addEventListener("load", afterLoad, { once: true });
+    return () => {
+      window.removeEventListener("load", afterLoad);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
   }, []);
 
   useEffect(() => {
