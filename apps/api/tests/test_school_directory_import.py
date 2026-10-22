@@ -5,6 +5,7 @@ from io import BytesIO
 from zipfile import ZipFile
 
 import pytest
+from defusedxml.common import DefusedXmlException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +48,52 @@ def test_parse_xlsx_and_reject_formula() -> None:
     assert parse_school_directory(workbook()) == [row("510001", 1)]
     with pytest.raises(ValueError, match="公式"):
         parse_school_directory(workbook(formula=True))
+
+
+@pytest.mark.parametrize(
+    "part",
+    ["xl/workbook.xml", "xl/sharedStrings.xml", "xl/worksheets/sheet1.xml"],
+)
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "<!DOCTYPE root>",
+        '<!DOCTYPE root [<!ENTITY a "text"><!ENTITY b "&a;&a;">]>',
+        '<!DOCTYPE root [<!ENTITY xxe SYSTEM "file:///hcca-xml-test-must-not-be-read">]>',
+        '<!DOCTYPE root SYSTEM "https://example.invalid/must-not-be-fetched.dtd">',
+    ],
+)
+def test_reject_xml_dtds_and_entities_in_every_xlsx_part(part: str, declaration: str) -> None:
+    output = BytesIO()
+    with ZipFile(BytesIO(workbook())) as source, ZipFile(output, "w") as target:
+        parts = {name: source.read(name) for name in source.namelist()}
+        parts["xl/sharedStrings.xml"] = b"<sst/>"
+        parts[part] = declaration.encode() + parts[part]
+        for name, content in parts.items():
+            target.writestr(name, content)
+
+    with pytest.raises(ValueError, match="無法讀取名冊 XLSX") as error:
+        parse_school_directory(output.getvalue())
+    assert isinstance(error.value.__cause__, DefusedXmlException)
+
+
+def test_parse_xlsx_shared_strings() -> None:
+    output = BytesIO()
+    with ZipFile(BytesIO(workbook())) as source, ZipFile(output, "w") as target:
+        for name in source.namelist():
+            content = source.read(name)
+            if name == "xl/worksheets/sheet1.xml":
+                content = content.replace(
+                    b'<c r="A2" t="inlineStr"><is><t>g0510001@hchs.hc.edu.tw</t></is></c>',
+                    b'<c r="A2" t="s"><v>0</v></c>',
+                )
+            target.writestr(name, content)
+        target.writestr(
+            "xl/sharedStrings.xml",
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            "<si><t>g0510001@hchs.hc.edu.tw</t></si></sst>",
+        )
+    assert parse_school_directory(output.getvalue()) == [row("510001", 1)]
 
 
 @pytest.mark.parametrize(
