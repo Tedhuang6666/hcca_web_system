@@ -25,11 +25,13 @@ export async function withFallback<T>(
   try {
     return await promise;
   } catch (error) {
-    reportClientError({
-      scope: "api.withFallback",
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    if (!(error instanceof ApiError && error.status === 401)) {
+      reportClientError({
+        scope: "api.withFallback",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
     onError?.(error);
     return fallback;
   }

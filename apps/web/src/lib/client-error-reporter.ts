@@ -55,6 +55,7 @@ function limit(value: string | undefined, length: number): string {
 }
 
 const recentReports = new Map<string, number>();
+let chunkReloadPending = false;
 
 type BrowserConnection = { effectiveType?: string; type?: string };
 
@@ -125,6 +126,7 @@ function safeDiagnostics(input: ClientErrorDiagnostics | undefined): ClientError
 /** 將瀏覽器錯誤送到後端；回報失敗絕不能再製造一個未處理 rejection。 */
 export function reportClientError(input: ClientErrorInput): Promise<ClientErrorReceipt | null> {
   if (typeof window === "undefined") return Promise.resolve(null);
+  if (recoverFromChunkFailure(chunkFailureUrl(input.message))) return Promise.resolve(null);
 
   const fingerprint = `${input.dedupeKey ?? input.message}|${input.pathname ?? window.location.pathname}`;
   const now = Date.now();
@@ -141,12 +143,16 @@ export function reportClientError(input: ClientErrorInput): Promise<ClientErrorR
     recentReports.delete(oldestKey);
   }
 
-  recordClientMetric({
-    metric: "client_error",
-    value: 1,
-    path: input.pathname ?? window.location.pathname,
-    interaction_name: (input.scope || "runtime").slice(0, 120),
-  });
+  try {
+    recordClientMetric({
+      metric: "client_error",
+      value: 1,
+      path: input.pathname ?? window.location.pathname,
+      interaction_name: (input.scope || "runtime").slice(0, 120),
+    });
+  } catch {
+    // Optional metrics may read blocked browser storage; still send the original error.
+  }
 
   const diagnostics = safeDiagnostics(input.diagnostics);
   const payload = JSON.stringify({
@@ -267,8 +273,16 @@ function isNextChunk(url: string | null): boolean {
   }
 }
 
+function chunkFailureUrl(message: string): string | null {
+  if (!/Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(message)) {
+    return null;
+  }
+  return message.match(/https?:\/\/[^\s)]+|\/_next\/static\/chunks\/[^\s)]+/)?.[0] ?? null;
+}
+
 function recoverFromChunkFailure(url: string | null): boolean {
-  if (!isNextChunk(url)) return false;
+  if (!isNextChunk(url) || navigator.onLine === false) return false;
+  if (chunkReloadPending) return true;
 
   try {
     const previousReloadAt = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? 0);
@@ -276,23 +290,36 @@ function recoverFromChunkFailure(url: string | null): boolean {
       return false;
     }
     sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
-
-    const reload = () => window.location.reload();
-    if (!("caches" in window)) {
-      reload();
-      return true;
-    }
-    navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_STATIC_CACHE" });
-    void window.caches
-      .delete(STATIC_CACHE_NAME)
-      .catch(() => undefined)
-      .finally(() => window.setTimeout(reload, 50));
-    return true;
   } catch {
-    // Storage or Cache Storage may be blocked by private browsing modes.
-    window.location.reload();
-    return true;
+    // Without a persistent guard, reloading can trap private browsing in a loop.
+    return false;
   }
+
+  chunkReloadPending = true;
+  let reloadStarted = false;
+  const reload = () => {
+    if (reloadStarted) return;
+    reloadStarted = true;
+    chunkReloadPending = false;
+    window.location.reload();
+  };
+  const deadline = window.setTimeout(reload, 1_000);
+  const finish = () => {
+    window.clearTimeout(deadline);
+    if (!reloadStarted) window.setTimeout(reload, 50);
+  };
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_STATIC_CACHE" });
+    if ("caches" in window) {
+      void window.caches.delete(STATIC_CACHE_NAME).catch(() => undefined).finally(finish);
+    } else {
+      finish();
+    }
+  } catch {
+    // Cache Storage and service worker messaging are best-effort recovery steps.
+    finish();
+  }
+  return true;
 }
 
 function isIgnoredWindowError(message: string): boolean {

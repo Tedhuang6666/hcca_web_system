@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { emailApi, apiErrorMessage } from "@/lib/api";
+import { prepareEmailPreviewHtml } from "@/lib/email-preview";
 import type {
   EmailAnalyticsOut,
   EmailCampaignRecipientOut,
@@ -201,13 +202,13 @@ export default function EmailLogsPage() {
         setPreviewRecipientId(recipients[0].id);
         emailApi
           .previewMessageRecipient(id, recipients[0].id)
-          .then((r) => setDetailHtml(r.html))
+          .then(async (r) => setDetailHtml(await prepareEmailPreviewHtml(r.html)))
           .catch(() => setDetailHtml(""));
       } else {
         setPreviewRecipientId(null);
         emailApi
           .preview(detailToPreviewPayload(d))
-          .then((r) => setDetailHtml(r.html))
+          .then(async (r) => setDetailHtml(await prepareEmailPreviewHtml(r.html)))
           .catch(() => setDetailHtml(""));
       }
     } catch (e) {
@@ -232,7 +233,7 @@ export default function EmailLogsPage() {
     setDetailHtml(null);
     try {
       const result = await emailApi.previewMessageRecipient(detail.id, recipient.id);
-      setDetailHtml(result.html);
+      setDetailHtml(await prepareEmailPreviewHtml(result.html));
     } catch (e) {
       setDetailHtml("");
       toast.error(apiErrorMessage(e, "載入收件人預覽失敗"));

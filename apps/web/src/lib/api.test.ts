@@ -27,6 +27,29 @@ describe("API helpers", () => {
     expect(onError).toHaveBeenCalledWith(error);
   });
 
+  it("returns the fallback for an expired session without creating another incident", async () => {
+    vi.mocked(reportClientError).mockClear();
+    const error = new ApiError(401, "登入已過期，請重新登入");
+    const onError = vi.fn();
+
+    await expect(withFallback(Promise.reject(error), [], onError)).resolves.toEqual([]);
+
+    expect(onError).toHaveBeenCalledWith(error);
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  it.each([403, 404, 429, 500, 503])("keeps reporting unexpected API failures (%s)", async (status) => {
+    vi.mocked(reportClientError).mockClear();
+    const error = new ApiError(status, "API failure");
+
+    await expect(withFallback(Promise.reject(error), null)).resolves.toBeNull();
+
+    expect(reportClientError).toHaveBeenCalledWith(expect.objectContaining({
+      scope: "api.withFallback",
+      message: "API failure",
+    }));
+  });
+
   it("keeps request correlation fields on API errors", () => {
     const error = new ApiError(503, "服務暫時不可用", "request-1", "error-1");
 
