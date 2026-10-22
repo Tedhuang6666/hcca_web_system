@@ -11,16 +11,14 @@ import {
 
 const SAVINGS = [
   {
-    title: "政策版本檢查",
-    body: "進站時不顯示檢查中彈窗，無待同意政策會快取；省流時改由伺服器要求再補查。",
-  },
-  {
     title: "通知與待辦",
     body: "一般導覽區停用即時 WebSocket，背景輪詢從 1 分鐘降低到 5 分鐘。",
+    icon: Radio,
   },
   {
     title: "系統狀態與公告",
     body: "模組維護狀態與緊急公告使用短期快取，減少每次進站的背景請求。",
+    icon: Gauge,
   },
 ];
 
@@ -108,9 +106,9 @@ export default function DataSaverSettingsPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        {SAVINGS.map((item, index) => {
-          const Icon = index === 0 ? Gauge : Radio;
+      <section className="grid gap-3 sm:grid-cols-2">
+        {SAVINGS.map((item) => {
+          const Icon = item.icon;
           return (
             <article
               key={item.title}

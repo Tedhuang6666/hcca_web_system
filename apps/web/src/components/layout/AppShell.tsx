@@ -19,7 +19,6 @@ import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncement
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 const UrgentAnnouncementPopup = dynamic(() => import("@/components/announcements/UrgentAnnouncementPopup"), { ssr: false });
 const PasskeySetupPrompt = dynamic(() => import("@/components/auth/PasskeySetupPrompt"), { ssr: false });
-import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isBareRoute, isPublicRoute, requiresAuthentication } from "@/lib/route-access";
 import { ApiError } from "@/lib/api-helpers";
 import { authApi } from "@/lib/api/auth";
@@ -308,7 +307,6 @@ function AppShellContent({
     || Array.from(permissions).some(
       (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
     );
-  const suppressPolicyConsent = pathname.startsWith("/legal");
   const inboxCounts = useInboxCounts(isLoggedIn && hasTaskAccess);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
@@ -403,9 +401,6 @@ function AppShellContent({
         {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
         {isLoggedIn && <UrgentAnnouncementPopup />}
         <CommandMenu />
-        <PolicyConsentBanner
-          isAuthenticated={isLoggedIn && !suppressPolicyConsent && !isPublicRoute(pathname)}
-        />
       </div>
       {isLoggedIn && <PasskeySetupPrompt />}
       </InboxCountsProvider>

@@ -75,7 +75,7 @@ class PolicyConsentOut(BaseModel):
 
 
 class PendingConsentItem(BaseModel):
-    """使用者尚未同意的政策。前端用此清單渲染 modal。"""
+    """使用者尚未留下同意紀錄的政策版本，供政策 API 查詢。"""
 
     model_config = ConfigDict(from_attributes=True)
 
