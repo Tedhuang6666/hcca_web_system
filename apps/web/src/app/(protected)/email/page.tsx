@@ -17,6 +17,7 @@ import RecipientPicker from "@/components/email/RecipientPicker";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, emailApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
+import { prepareEmailPreviewHtml } from "@/lib/email-preview";
 import type {
   EmailAttachmentOut,
   EmailBlock,
@@ -147,14 +148,11 @@ function ComposeInner() {
       setSanitizedPreviewHtml("");
       return;
     }
-    import("dompurify").then(({ default: DOMPurify }) => {
-      setSanitizedPreviewHtml(
-        DOMPurify.sanitize(previewHtml, {
-          WHOLE_DOCUMENT: true,
-          FORBID_TAGS: ["base", "embed", "form", "iframe", "meta", "object", "script"],
-        }),
-      );
-    });
+    let cancelled = false;
+    prepareEmailPreviewHtml(previewHtml)
+      .then((html) => { if (!cancelled) setSanitizedPreviewHtml(html); })
+      .catch(() => { if (!cancelled) setSanitizedPreviewHtml(""); });
+    return () => { cancelled = true; };
   }, [previewHtml]);
 
   const loadPlatformResources = useCallback(() => {
