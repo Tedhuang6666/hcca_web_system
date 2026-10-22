@@ -150,3 +150,7 @@ test-results/
 .impeccable/
 hcca-showcase/
 output/receipt-format/
+docs/
+.codex/
+AGENTS.md
+CLAUDE.md
