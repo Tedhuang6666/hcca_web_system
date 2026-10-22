@@ -239,9 +239,20 @@ async def get_user_active_class_ids(session: AsyncSession, user_id: uuid.UUID) -
         )
         .where(SchoolClass.is_active.is_(True))
     )
+    # 三種歸屬來源已批次載入；轉出排除也一次取得，避免逐班補查空的 ranges。
+    excluded = await _excluded_range_memberships(session, user_id=user.id)
     class_ids: set[uuid.UUID] = set()
     for school_class in result.scalars().unique():
-        if await is_class_member(session, school_class, user):
+        explicit_member = any(
+            member.user_id == user.id for member in school_class.manual_members
+        ) or any(
+            entry.user_id == user.id
+            or (entry.user_id is None and entry.student_id == user.student_id)
+            for entry in school_class.roster_entries
+        )
+        if explicit_member or (
+            (school_class.id, user.id) not in excluded and _user_in_class_ranges(user, school_class)
+        ):
             class_ids.add(school_class.id)
     return class_ids
 
