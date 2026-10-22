@@ -1612,6 +1612,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     promotion.discount_type === "bundle_price"
     && promotion.target_products?.some((target) => catalogProducts.has(target.id))
   ));
+  const isChristmasLovePage = [selectedCategory?.activity_name, selectedCategory?.name]
+    .some((label) => label?.includes("聖誕傳情"));
   const activeBundle = bundlePromotions.find((promotion) => promotion.id === activeBundleId);
   // 在目前商品尚未送出前，也能指出下一個待選品項。
   const nextBundleProduct = activeBundle && bundleProgress(activeBundle, catalogProducts,
@@ -1882,7 +1884,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
               </div>
             )}
-            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
+            {!isChristmasLovePage && bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
               <div className="shop-bundles-heading">
                 <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
                 <p>選購優惠套組</p>

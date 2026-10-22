@@ -73,3 +73,33 @@ it("lets an authorized tester order before launch and preserves the formal regis
   fireEvent.click(screen.getByRole("link", { name: "查看商品：測試限定商品" }));
   expect(await screen.findByRole("button", { name: "移除這項登記" })).toBeEnabled();
 });
+
+it("hides vendor bundle cards on Christmas Love and keeps them on other activities", async () => {
+  const christmasProduct = { ...formalProduct, id: "christmas-card", name: "聖誕卡片" };
+  const christmasSnack = { ...formalProduct, id: "christmas-snack", name: "聖誕點心" };
+  const festivalProduct = { ...formalProduct, id: "festival-shirt", name: "校慶衣服" };
+  const festivalSnack = { ...formalProduct, id: "festival-drink", name: "校慶飲料" };
+  api.catalog.mockResolvedValue([
+    { id: "christmas", name: "聖誕傳情", activity_id: "christmas", activity_name: "聖誕傳情",
+      sort_order: 0, products: [christmasProduct, christmasSnack], series: [] },
+    { id: "festival", name: "校慶商品", activity_id: "festival", activity_name: "校慶",
+      sort_order: 1, products: [festivalProduct, festivalSnack], series: [] },
+  ]);
+  api.listAvailablePromotions.mockResolvedValue([
+    { id: "christmas-bundle", name: "聖誕傳情套組", activity_id: "christmas",
+      discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
+      target_products: [christmasProduct, christmasSnack] },
+    { id: "festival-bundle", name: "校慶優惠套組", activity_id: "festival",
+      discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
+      target_products: [festivalProduct, festivalSnack] },
+  ]);
+
+  render(<ShopPage />);
+
+  await screen.findByRole("heading", { name: "聖誕傳情", level: 2 });
+  expect(screen.queryByRole("region", { name: "一起買更划算" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("article", { name: "聖誕傳情套組" })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: /校慶商品/ }));
+  expect(await screen.findByRole("article", { name: "校慶優惠套組" })).toBeVisible();
+});
