@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -557,7 +559,7 @@ function ItemEditor({
         </label>
         <label>
           <FieldCaption>顯示排序</FieldCaption>
-          <input
+          <NumberInput
             type="number"
             value={draft.sort_order ?? 0}
             onChange={(event) =>
@@ -722,7 +724,7 @@ function ItemEditor({
                 </label>
                 <label>
                   <FieldCaption>最多字數</FieldCaption>
-                  <input
+                  <NumberInput
                     type="number"
                     min="1"
                     max="2000"
@@ -1388,7 +1390,7 @@ export default function MerchandiseSubmissionsAdminPage() {
             </label>
             <label>
               <FieldCaption>單檔上限（MB）</FieldCaption>
-              <input
+              <NumberInput
                 type="number"
                 min="1"
                 max="250"
@@ -1577,7 +1579,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                     </label>
                     <label>
                       <FieldCaption>最多字數</FieldCaption>
-                      <input
+                      <NumberInput
                         type="number"
                         min="1"
                         max="2000"

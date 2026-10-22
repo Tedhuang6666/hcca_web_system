@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardCheck, GripVertical, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -211,7 +213,7 @@ export default function PartnerApplicationsAdminPage() {
                   <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>欄位名稱</span><input className="input w-full" value={field.label} onChange={(event) => updateField(index, { label: event.target.value })} /></label>
                   <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>欄位代碼</span><input className="input w-full font-mono" value={field.key} onChange={(event) => updateField(index, { key: event.target.value })} /></label>
                   <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>型別</span><select className="input w-full" value={field.field_type} onChange={(event) => updateField(index, { field_type: event.target.value as PartnerApplicationFieldType })}>{Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>排序</span><input className="input w-full" type="number" min={0} value={field.sort_order} onChange={(event) => updateField(index, { sort_order: Number(event.target.value) })} /></label>
+                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>排序</span><NumberInput className="input w-full" type="number" min={0} value={field.sort_order} onChange={(event) => updateField(index, { sort_order: Number(event.target.value) })} /></label>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>提示文字</span><input className="input w-full" placeholder="選填" value={field.placeholder ?? ""} onChange={(event) => updateField(index, { placeholder: event.target.value || null })} /></label>

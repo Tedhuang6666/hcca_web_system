@@ -1,4 +1,6 @@
 "use client";
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -963,7 +965,7 @@ export default function NewSurveyPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>{isLinearScale ? "起始刻度" : "起始分數"}</Label>
-                    <input type="number" min={0} max={100} value={newQ.min_value}
+                    <NumberInput type="number" min={0} max={100} value={newQ.min_value}
                       onChange={e => setNewQ(p => ({
                         ...p,
                         min_value: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10),
@@ -972,7 +974,7 @@ export default function NewSurveyPage() {
                   </div>
                   <div>
                     <Label>{isLinearScale ? "最大刻度" : "最大分數"}</Label>
-                    <input type="number" min={(newQ.min_value ?? 0) + (isLinearScale ? 1 : 0)} max={100} value={newQ.max_value}
+                    <NumberInput type="number" min={(newQ.min_value ?? 0) + (isLinearScale ? 1 : 0)} max={100} value={newQ.max_value}
                       onChange={e => setNewQ(p => ({
                         ...p,
                         max_value: e.target.value === "" ? (p.min_value ?? 0) + 1 : Number.parseInt(e.target.value, 10),

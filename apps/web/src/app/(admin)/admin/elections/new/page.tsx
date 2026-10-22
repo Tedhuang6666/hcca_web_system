@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -211,7 +213,7 @@ export default function NewElectionPage() {
         {candidates.map((candidate, index) => (
           <div key={index} className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
             <div className="grid grid-cols-[80px_70px_1fr] items-center gap-3">
-              <input type="number" min={1} className="input" aria-label="候選號次" value={candidate.number} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, number: Number(e.target.value) } : item))} />
+              <NumberInput type="number" min={1} className="input" aria-label="候選號次" value={candidate.number} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, number: Number(e.target.value) } : item))} />
               <input type="color" className="input h-10 p-1" aria-label="候選識別色" value={candidate.color} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, color: e.target.value } : item))} />
               <strong>{candidate.number} 號候選人／組合</strong>
             </div>

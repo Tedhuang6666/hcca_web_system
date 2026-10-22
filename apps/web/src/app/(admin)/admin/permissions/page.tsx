@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -125,8 +127,9 @@ function SmallButton({
 }
 
 function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const Input = props.type === "number" ? NumberInput : "input";
   return (
-    <input
+    <Input
       {...props}
       className={`w-full text-sm px-3 py-2 rounded-lg outline-none ${props.className ?? ""}`}
       style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}

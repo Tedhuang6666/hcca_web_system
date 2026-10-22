@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -404,7 +406,7 @@ export default function ProductSeatingPage() {
                 onChange={(e) => setForm({ ...form, seating_opens_at: e.target.value })} />
             </label>
             <label className="block text-sm">選位暫時保留時間（分鐘）
-              <input type="number" min={1} max={120} className="input mt-1 w-full" value={form.hold_minutes}
+              <NumberInput type="number" min={1} max={120} className="input mt-1 w-full" value={form.hold_minutes}
                 onChange={(e) => setForm({ ...form, hold_minutes: Number(e.target.value) || 10 })} />
             </label>
           </div>

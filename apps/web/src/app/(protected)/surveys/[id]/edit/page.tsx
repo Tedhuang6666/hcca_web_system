@@ -1,4 +1,6 @@
 "use client";
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -482,12 +484,12 @@ function QuestionRow({
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label>最少排序項數</Label>
-            <input type="number" min={1} max={Math.max(1, parsedOptions.length)} value={minValue}
+            <NumberInput type="number" min={1} max={Math.max(1, parsedOptions.length)} value={minValue}
               onChange={e => setMinValue(parseInt(e.target.value) || 1)} className="input" />
           </div>
           <div>
             <Label>最多排序項數</Label>
-            <input type="number" min={1} max={Math.max(1, parsedOptions.length)} value={maxValue}
+            <NumberInput type="number" min={1} max={Math.max(1, parsedOptions.length)} value={maxValue}
               onChange={e => setMaxValue(parseInt(e.target.value) || 1)} className="input" />
           </div>
           <p className="col-span-2 text-xs" style={{ color: "var(--text-muted)" }}>
@@ -500,13 +502,13 @@ function QuestionRow({
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label>{isLinearScale ? "起始刻度" : "起始分數"}</Label>
-            <input type="number" min={0} max={100} value={minValue}
+            <NumberInput type="number" min={0} max={100} value={minValue}
               onChange={e => setMinValue(e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10))}
               className="input" />
           </div>
           <div>
             <Label>{isLinearScale ? "最大刻度" : "最大分數"}</Label>
-            <input type="number" min={minValue + (isLinearScale ? 1 : 0)} max={100} value={maxValue}
+            <NumberInput type="number" min={minValue + (isLinearScale ? 1 : 0)} max={100} value={maxValue}
               onChange={e => setMaxValue(e.target.value === "" ? minValue + 1 : Number.parseInt(e.target.value, 10))}
               className="input" />
           </div>
@@ -1139,7 +1141,7 @@ export default function EditSurveyPage() {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label>{newIsLinearScale ? "起始刻度" : "起始分數"}</Label>
-              <input type="number" min={0} max={100} value={newMinValue}
+              <NumberInput type="number" min={0} max={100} value={newMinValue}
                 onChange={event => setNewMinValue(
                   event.target.value === "" ? 0 : Number.parseInt(event.target.value, 10),
                 )}
@@ -1147,7 +1149,7 @@ export default function EditSurveyPage() {
             </div>
             <div>
               <Label>{newIsLinearScale ? "最大刻度" : "最大分數"}</Label>
-              <input type="number" min={newMinValue + (newIsLinearScale ? 1 : 0)} max={100} value={newMaxValue}
+              <NumberInput type="number" min={newMinValue + (newIsLinearScale ? 1 : 0)} max={100} value={newMaxValue}
                 onChange={event => setNewMaxValue(
                   event.target.value === "" ? newMinValue + 1 : Number.parseInt(event.target.value, 10),
                 )}

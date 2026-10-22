@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import Image from "next/image";
 import {
   closestCenter,
@@ -234,8 +236,9 @@ function Field({
 }
 
 function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const Input = props.type === "number" ? NumberInput : "input";
   return (
-    <input
+    <Input
       {...props}
       className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${props.className ?? ""}`}
       style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}

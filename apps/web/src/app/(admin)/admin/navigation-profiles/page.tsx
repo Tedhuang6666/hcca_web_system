@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -262,7 +264,7 @@ function Editor({
           <input className="input" value={draft.audience ?? ""} onChange={(event) => set("audience", event.target.value)} />
         </Field>
         <Field label="優先序">
-          <input
+          <NumberInput
             className="input"
             type="number"
             value={draft.priority}

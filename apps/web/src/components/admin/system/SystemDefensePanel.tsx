@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -548,7 +550,7 @@ export default function SystemDefensePanel() {
         <Panel title="全域限流" icon={<Gauge size={18} aria-hidden />}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="請求數">
-              <input
+              <NumberInput
                 type="number"
                 value={rateLimit.global_requests}
                 min={1}
@@ -561,7 +563,7 @@ export default function SystemDefensePanel() {
               />
             </Field>
             <Field label="視窗秒數">
-              <input
+              <NumberInput
                 type="number"
                 value={rateLimit.global_window_seconds}
                 min={1}
@@ -628,7 +630,7 @@ export default function SystemDefensePanel() {
               placeholder="新增端點，例如 /api/documents"
               className="input font-mono"
             />
-            <input
+            <NumberInput
               type="number"
               min={1}
               value={overrideRequests}
@@ -636,7 +638,7 @@ export default function SystemDefensePanel() {
               aria-label="端點請求數"
               className="input"
             />
-            <input
+            <NumberInput
               type="number"
               min={1}
               value={overrideWindowSeconds}
@@ -678,7 +680,7 @@ export default function SystemDefensePanel() {
               placeholder="原因"
               className="input"
             />
-            <input
+            <NumberInput
               type="number"
               value={ipTtl}
               onChange={(e) => setIpTtl(Number(e.target.value))}

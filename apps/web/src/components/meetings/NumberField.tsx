@@ -1,3 +1,5 @@
+import NumberInput from "@/components/ui/NumberInput";
+
 export default function NumberField({
   label,
   value,
@@ -10,7 +12,7 @@ export default function NumberField({
   return (
     <label className="grid gap-1 text-sm">
       <span className="text-xs text-[var(--muted)]">{label}</span>
-      <input
+      <NumberInput
         type="number"
         min={0}
         value={value}

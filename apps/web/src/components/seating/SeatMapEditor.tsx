@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { DecorationKind, LayoutDecoration, SeatInput, SeatOut, SeatStatus, ZoneOut } from "@/lib/types";
@@ -1019,7 +1021,7 @@ export default function SeatMapEditor({
           </select>
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             加價
-            <input type="number" className="input w-20 text-xs" value={selectedSeats[0]?.price_delta ?? 0}
+            <NumberInput type="number" className="input w-20 text-xs" value={selectedSeats[0]?.price_delta ?? 0}
               onChange={(e) => applyToSelected({ price_delta: Number(e.target.value) || 0 })} />
           </label>
           <input className="input w-16 text-xs" placeholder="排代號" value={selectedSeats[0]?.row_label ?? ""}
@@ -1078,22 +1080,22 @@ export default function SeatMapEditor({
             onChange={(e) => patchDeco({ label: e.target.value })} />
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             寬
-            <input type="number" className="input w-16 text-xs" min={10} step={GRID} value={activeDeco.width}
+            <NumberInput type="number" className="input w-16 text-xs" min={10} step={GRID} value={activeDeco.width}
               onChange={(e) => patchDeco({ width: snapSize(Number(e.target.value) || 10) })} />
           </label>
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             高
-            <input type="number" className="input w-16 text-xs" min={10} step={GRID} value={activeDeco.height}
+            <NumberInput type="number" className="input w-16 text-xs" min={10} step={GRID} value={activeDeco.height}
               onChange={(e) => patchDeco({ height: snapSize(Number(e.target.value) || 10) })} />
           </label>
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             X
-            <input type="number" className="input w-16 text-xs" step={GRID} value={activeDeco.x}
+            <NumberInput type="number" className="input w-16 text-xs" step={GRID} value={activeDeco.x}
               onChange={(e) => patchDeco({ x: snap(Number(e.target.value)) })} />
           </label>
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             Y
-            <input type="number" className="input w-16 text-xs" step={GRID} value={activeDeco.y}
+            <NumberInput type="number" className="input w-16 text-xs" step={GRID} value={activeDeco.y}
               onChange={(e) => patchDeco({ y: snap(Number(e.target.value)) })} />
           </label>
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }} title="自訂顏色">

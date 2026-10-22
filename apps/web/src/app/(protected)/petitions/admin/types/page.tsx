@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi, usersApi, withFallback } from "@/lib/api";
@@ -215,7 +217,7 @@ export default function PetitionTypesAdminPage() {
         </label>
         <label className="block">
           <span className="text-sm font-medium">排序</span>
-          <input className="input w-full mt-1" type="number" min={0} value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} />
+          <NumberInput className="input w-full mt-1" type="number" min={0} value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} />
         </label>
         <button className="btn btn-primary">新增</button>
         <textarea className="input md:col-span-4 w-full" placeholder="描述（選填）" value={description} onChange={(e) => setDescription(e.target.value)} />

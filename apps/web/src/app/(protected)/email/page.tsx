@@ -1,5 +1,7 @@
 "use client";
 
+import NumberInput from "@/components/ui/NumberInput";
+
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -1716,7 +1718,7 @@ function ComposeInner() {
                   <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
                     段內行距
                   </span>
-                  <input
+                  <NumberInput
                     type="number"
                     className="input"
                     min={1.2}
@@ -1732,7 +1734,7 @@ function ComposeInner() {
                   <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
                     段落間距（px）
                   </span>
-                  <input
+                  <NumberInput
                     type="number"
                     className="input"
                     min={0}
