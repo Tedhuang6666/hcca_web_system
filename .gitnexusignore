@@ -28,4 +28,5 @@ package-lock.json
 openapi.json
 apps/web/src/lib/api-types.ts
 apps/web/src/lib/api-bridge.ts
+apps/web/public/maplibre/maplibre-gl-worker.mjs
 apps/api/alembic/versions/

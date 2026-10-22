@@ -186,7 +186,9 @@ async function discoverStaticRoutes(directory = appDirectory, segments = [], pub
 }
 
 async function runLighthouse(chrome, url, strategy, cookieHeader) {
-  const mobile = strategy === "mobile";
+  // formFactor changes scoring, but does not select desktop network/CPU or UA
+  // emulation. Use the complete preset so both strategies match Lighthouse CLI.
+  const config = strategy === "desktop" ? lighthouseModule.desktopConfig : undefined;
   const result = await lighthouse(url, {
     port: chrome.port,
     logLevel: "error",
@@ -194,11 +196,7 @@ async function runLighthouse(chrome, url, strategy, cookieHeader) {
     onlyCategories: ["performance"],
     extraHeaders: { Cookie: cookieHeader },
     throttlingMethod: "simulate",
-    formFactor: mobile ? "mobile" : "desktop",
-    screenEmulation: mobile
-      ? { mobile: true, width: 412, height: 823, deviceScaleFactor: 1.75, disabled: false }
-      : { mobile: false, width: 1350, height: 940, deviceScaleFactor: 1, disabled: false },
-  });
+  }, config);
   const report = result?.lhr;
   const score = report?.categories?.performance?.score;
   if (!report || typeof score !== "number") {

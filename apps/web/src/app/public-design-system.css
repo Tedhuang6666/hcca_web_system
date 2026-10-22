@@ -140,6 +140,11 @@
   animation: none;
 }
 
+/* 首屏文字直接顯示，避免等待逐項淡入才成為 LCP 候選。 */
+.public-site .public-hero-copy > * {
+  animation: none;
+}
+
 .public-eyebrow {
   background: transparent;
   color: var(--primary-text);
