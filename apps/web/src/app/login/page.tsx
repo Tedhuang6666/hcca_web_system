@@ -139,9 +139,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 登入竹嶺班聯數位整合平台
               </h1>
               <p className="mt-3 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-                登入後即可使用需要帳號的校園服務；公告、法規與其他公開資訊仍可直接瀏覽。
-                <br />
-                請使用 Google 帳戶登入；已完成綁定者也可使用 Discord。
+                登入後即可使用更完整的系統功能
               </p>
             </div>
 
