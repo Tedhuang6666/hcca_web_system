@@ -1,9 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 import FormShell from "./FormShell";
 import styles from "./InteractionMotion.module.css";
+
+const GuidedFormAnimationContext = createContext(true);
 
 export type GuidedFormStepDefinition = {
   label: string;
@@ -33,10 +35,12 @@ type GuidedFormStepProps = {
 };
 
 export function GuidedFormStep({ children, step, activeStep, className }: GuidedFormStepProps) {
+  const animate = useContext(GuidedFormAnimationContext);
   return (
     <section
       className={`${styles.guidedStep} ${step === activeStep ? "block" : "hidden"} md:block ${className ?? ""}`}
       data-active={step === activeStep ? "true" : "false"}
+      data-animate={animate ? "true" : "false"}
     >
       {children}
     </section>
@@ -57,10 +61,14 @@ export default function GuidedForm({
   finalAction,
   secondarySaveAction,
 }: GuidedFormProps) {
+  const [initialStep] = useState(activeStep);
+  const [hasChangedStep, setHasChangedStep] = useState(false);
+  if (!hasChangedStep && activeStep !== initialStep) setHasChangedStep(true);
   const isLastStep = activeStep === steps.length - 1;
   const active = steps[activeStep];
 
   return (
+    <GuidedFormAnimationContext.Provider value={hasChangedStep}>
     <FormShell
       className="guided-form-shell"
       footerClassName="md:hidden"
@@ -125,5 +133,6 @@ export default function GuidedForm({
       {children}
       {finalAction}
     </FormShell>
+    </GuidedFormAnimationContext.Provider>
   );
 }

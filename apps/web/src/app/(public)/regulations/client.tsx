@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { regulationsApi, regulationHref } from "@/lib/api/regulations";
 import { useFetch } from "@/hooks/useFetch";
 import type {
@@ -17,7 +16,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedState } from "@/hooks/usePersistedState";
 
-const SmartEmptyState = dynamic(() => import("@/components/ui/SmartEmptyState"), { ssr: false });
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
   { key: "all",                label: "全部" },

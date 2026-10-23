@@ -1,7 +1,10 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, preconnect } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Share2, Tag } from "lucide-react";
@@ -386,6 +389,7 @@ export default function PartnerMapClient({
   initialContactBusinesses,
   initialTags,
 }: PartnerMapPageProps = {}) {
+  preconnect("https://tile.openstreetmap.org");
   const [items, setItems] = useState<UnifiedMapItem[]>(initialItems ?? []);
   const [contactBusinesses, setContactBusinesses] = useState<PartnerBusinessDirectoryItem[]>(
     initialContactBusinesses ?? [],

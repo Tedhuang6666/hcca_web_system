@@ -186,7 +186,7 @@
   transform-origin: left center;
 }
 
-.guidedStep[data-active="true"] {
+.guidedStep[data-active="true"][data-animate="true"] {
   animation: guided-step-extract 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -280,7 +280,7 @@
 }
 
 @media (min-width: 768px) {
-  .guidedStep[data-active="true"] {
+  .guidedStep[data-active="true"][data-animate="true"] {
     animation: none;
   }
 }
@@ -301,7 +301,7 @@
   .uploadRow:global(.is-success),
   .smartEmptyMark,
   .guidedRailSegment[data-active="true"],
-  .guidedStep[data-active="true"] {
+  .guidedStep[data-active="true"][data-animate="true"] {
     animation: none;
     opacity: 1;
     transform: none;
