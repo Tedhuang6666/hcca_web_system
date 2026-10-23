@@ -70,6 +70,15 @@ describe("proxy search metadata routes", () => {
     expect(csp).toContain("worker-src 'self' blob: https://hcca.tw https://www.hcca.tw");
   });
 
+  it("allows raster map tiles as images without granting script access", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const response = await proxy(new NextRequest("https://hcca.tw/partner-map", { headers: { RSC: "1" } }));
+    const directives = (response.headers.get("Content-Security-Policy") ?? "").split(";");
+    expect(directives.find(value => value.trim().startsWith("img-src "))).toContain("https://tile.openstreetmap.org");
+    expect(directives.find(value => value.trim().startsWith("script-src "))).not.toContain("tile.openstreetmap.org");
+    expect(directives.find(value => value.trim().startsWith("script-src "))).toContain("'nonce-");
+  });
+
   it("keeps security headers on cacheable public assets", async () => {
     const request = new NextRequest("https://hcca.tw/brand/hcca-emblem-192.png");
 

@@ -1,7 +1,8 @@
 "use client";
-import Link from "next/link";
+import Link from "@/components/ui/IntentLink";
 import { Inbox, Filter, Lock, Sparkles, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import styles from "./InteractionMotion.module.css";
 
 export type EmptyReason = "new" | "filtered" | "denied" | "none";
@@ -55,18 +56,8 @@ export default function SmartEmptyState({
   message,
   icon,
 }: SmartEmptyStateProps) {
-  // usePermissions 在 client only；用動態 require 避免 SSR 問題
-  let canCreate = true;
-  if (createPerm && typeof window !== "undefined") {
-    try {
-      const raw = window.sessionStorage.getItem("permissions");
-      const isAdmin = window.sessionStorage.getItem("is_superuser") === "true";
-      const perms: string[] = raw ? JSON.parse(raw) : [];
-      canCreate = isAdmin || perms.includes("admin:all") || perms.includes(createPerm);
-    } catch {
-      canCreate = false;
-    }
-  }
+  const { can } = usePermissions();
+  const canCreate = !createPerm || can(createPerm);
 
   const Icon = icon ?? DEFAULTS[reason].icon;
   const title = DEFAULTS[reason].title(subject);

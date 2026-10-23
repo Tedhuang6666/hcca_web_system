@@ -13,5 +13,5 @@ export function partnerMapStyleUrl(theme: MapTheme): string {
 }
 
 export function mapTileUrl(): string {
-  return "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  return "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 }

@@ -1,10 +1,6 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
-import "maplibre-gl/dist/maplibre-gl.css";
-
 import { useEffect, useRef, useState } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import {
   Coffee,
   BookOpen,
@@ -28,17 +24,21 @@ import {
 } from "lucide-react";
 import { divIcon } from "leaflet";
 import type { StyleSpecification } from "maplibre-gl";
-import { MapContainer, Marker, Popup, ZoomControl, useMap } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { UnifiedMapItem } from "@/lib/partner-map-types";
 import { businessOpenState } from "@/lib/business-hours";
 import {
   MAP_MAX_ZOOM,
+  MAP_TILE_ATTRIBUTION,
+  mapTileUrl,
   PARTNER_MAP_STYLE_ATTRIBUTION,
   partnerMapStyleUrl,
 } from "@/lib/map-tiles";
 import { defaultPartnerIconKey, getPartnerIcon, isPartnerIconKey } from "./partner-map-icons";
 import styles from "./PartnerLeafletMap.module.css";
+import { mapMarkerSvg } from "./partner-map-marker-svg";
+import { useVectorBasemap } from "./useVectorBasemap";
 import {
   markerColor,
   markerKind,
@@ -184,7 +184,7 @@ export function markerIcon(item: UnifiedMapItem): LucideIcon {
 
 function storeIcon(item: UnifiedMapItem) {
   const Icon = markerIcon(item);
-  const iconMarkup = renderToStaticMarkup(<Icon size={14} strokeWidth={2.2} aria-hidden="true" />);
+  const iconMarkup = mapMarkerSvg(Icon, 14, 2.2);
   const openState = businessOpenState(item.business_hours);
   const sourceClass = item.source === "recommended" ? "is-recommended" : "is-partner";
   const offerBadge = item.has_discount_offer
@@ -206,7 +206,7 @@ function storeIcon(item: UnifiedMapItem) {
 
 function landmarkIcon(kind: "school" | "station") {
   if (kind === "station") {
-    const iconMarkup = renderToStaticMarkup(<TrainFront size={19} strokeWidth={2.4} aria-hidden="true" />);
+    const iconMarkup = mapMarkerSvg(TrainFront, 19, 2.4);
     return divIcon({
       className: "partner-map-marker-shell",
       iconSize: [36, 42],
@@ -216,7 +216,7 @@ function landmarkIcon(kind: "school" | "station") {
     });
   }
 
-  const iconMarkup = renderToStaticMarkup(<School size={22} strokeWidth={2.3} aria-hidden="true" />);
+  const iconMarkup = mapMarkerSvg(School, 22, 2.3);
   return divIcon({
     className: "partner-map-marker-shell",
     iconSize: [36, 42],
@@ -257,6 +257,7 @@ export default function PartnerLeafletMap({
   onBoundsChange: (bounds: PartnerMapBoundsState) => void;
 }) {
   const theme = useMapTheme();
+  const vectorBasemap = useVectorBasemap();
   const hsinchuStation: LatLngExpression = [24.801645, 120.971703];
 
   return (
@@ -268,7 +269,16 @@ export default function PartnerLeafletMap({
         zoomControl={false}
         className={`h-full w-full partner-map-leaflet partner-map-theme-${theme} ${styles.mapSurface}`}
         scrollWheelZoom>
-        <MapStyleLayer theme={theme} />
+        {vectorBasemap ? <MapStyleLayer theme={theme} /> : (
+          <TileLayer
+            url={mapTileUrl()}
+            attribution={MAP_TILE_ATTRIBUTION}
+            maxNativeZoom={19}
+            maxZoom={MAP_MAX_ZOOM}
+            updateWhenIdle
+            keepBuffer={1}
+          />
+        )}
         <ZoomControl position="bottomright" />
         <ThemeClassSync theme={theme} />
         <BoundsReporter onBoundsChange={onBoundsChange} />
