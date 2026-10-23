@@ -154,9 +154,19 @@ interface Props {
 
 export default function GongwenEditor({ value, onChange, placeholder, minRows = 5, className, onBlur }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const blurTimeoutRef = useRef<number | null>(null);
   const [focused, setFocused] = useState(false);
   const [cursor, setCursor] = useState(0);
   const suggestions = useMemo(() => writingSuggestions(value, cursor), [cursor, value]);
+
+  const clearBlurTimeout = useCallback(() => {
+    if (blurTimeoutRef.current !== null) {
+      window.clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearBlurTimeout, [clearBlurTimeout]);
 
   // ── 歷史紀錄（Undo/Redo）─────────────────────────────────────────────────────
   const historyRef = useRef<string[]>([value]);
@@ -418,11 +428,16 @@ export default function GongwenEditor({ value, onChange, placeholder, minRows = 
         onKeyUp={() => setCursor(ref.current?.selectionStart ?? value.length)}
         onClick={() => setCursor(ref.current?.selectionStart ?? value.length)}
         onFocus={(e) => {
+          clearBlurTimeout();
           setFocused(true);
           setCursor(e.currentTarget.selectionStart);
         }}
         onBlur={() => {
-          window.setTimeout(() => setFocused(false), 120);
+          clearBlurTimeout();
+          blurTimeoutRef.current = window.setTimeout(() => {
+            blurTimeoutRef.current = null;
+            setFocused(false);
+          }, 120);
 
           const currentValue = ref.current?.value ?? value;
           const normalizedValue = normalizeNumberedDocument(currentValue);
