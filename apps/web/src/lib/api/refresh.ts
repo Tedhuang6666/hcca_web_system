@@ -24,7 +24,12 @@ async function refreshOnce(): Promise<RefreshStatus> {
     headers: csrfHeaders("POST"),
     signal: controller.signal,
   })
-    .then((response): RefreshStatus => response.ok ? "ok" : response.status >= 500 ? "unavailable" : "invalid")
+    .then((response): RefreshStatus => {
+      // Cookies and status are available at this point. Drain the acknowledgement
+      // without making the refresh result depend on an unused response body.
+      void response.arrayBuffer().catch(() => undefined);
+      return response.ok ? "ok" : response.status >= 500 ? "unavailable" : "invalid";
+    })
     .catch((): RefreshStatus => "unavailable")
     .finally(() => clearTimeout(timeout));
 }

@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { announcementsApi } from "@/lib/api";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { usePublicWS } from "@/hooks/usePublicWS";
 import type { AnnouncementOut } from "@/lib/types";
-import AnnouncementMarkdown from "./AnnouncementMarkdown";
+
+const AnnouncementMarkdown = dynamic(() => import("./AnnouncementMarkdown"), {
+  loading: () => <p role="status">正在載入公告內容…</p>,
+});
 
 const URGENT_CACHE_KEY = "hcca:urgent-announcement-cache";
 const URGENT_CACHE_TTL_MS = 10 * 60 * 1000;

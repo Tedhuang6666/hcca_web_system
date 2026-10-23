@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { announcementsApi } from "@/lib/api";
 import type { AnnouncementMediaOut } from "@/lib/types";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
-import AnnouncementMarkdown from "./AnnouncementMarkdown";
+const AnnouncementMarkdown = dynamic(() => import("./AnnouncementMarkdown"), {
+  loading: () => <p role="status">正在載入預覽…</p>,
+});
 
 export default function AnnouncementEditor({
   value,

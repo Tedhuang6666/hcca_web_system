@@ -6,7 +6,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import QRCode from "qrcode";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   DndContext,
@@ -827,7 +826,9 @@ function ShareModal({ surveyId, title, onClose }: {
 
   useEffect(() => {
     if (!shareUrl) return;
-    QRCode.toDataURL(shareUrl, { width: 240, margin: 1 })
+    import("qrcode").then(({ default: QRCode }) =>
+      QRCode.toDataURL(shareUrl, { width: 240, margin: 1 }),
+    )
       .then(setQr)
       .catch(() => setQr(""));
   }, [shareUrl]);

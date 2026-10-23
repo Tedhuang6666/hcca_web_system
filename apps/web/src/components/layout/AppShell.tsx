@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { PermissionProvider } from "@/contexts/PermissionContext";
+import { SessionSnapshotProvider } from "@/contexts/SessionSnapshotContext";
 import { InboxCountsProvider } from "@/contexts/InboxCountsContext";
 import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -16,7 +17,7 @@ import PageTransition from "./PageTransition";
 import { LoadingState } from "@/components/ui/LoadingState";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
-const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
+import CommandMenu from "./CommandMenu";
 const UrgentAnnouncementPopup = dynamic(() => import("@/components/announcements/UrgentAnnouncementPopup"), { ssr: false });
 const PasskeySetupPrompt = dynamic(() => import("@/components/auth/PasskeySetupPrompt"), { ssr: false });
 import { isBareRoute, isPublicRoute, requiresAuthentication } from "@/lib/route-access";
@@ -85,7 +86,6 @@ function SessionGate({
   const authCheckStarted = useRef(false);
   const authVerified = useRef(Boolean(initialUser));
   const redirectedFrom = useRef<string | null>(null);
-  const cachedInitialUser = useRef<ServerSessionUser | null>(null);
   const permissionRefreshInFlight = useRef(false);
 
   useEffect(() => {
@@ -105,10 +105,6 @@ function SessionGate({
     // Shell，避免底部導覽列跟著整個 AppShellContent 被卸載又重新掛載。
     const isInitialAuthCheck = !authCheckStarted.current;
     authCheckStarted.current = true;
-    if (initialUser && cachedInitialUser.current !== initialUser) {
-      cacheCurrentUser(initialUser);
-      cachedInitialUser.current = initialUser;
-    }
     if (isInitialAuthCheck && !initialUser) {
       const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
       // localStorage 只用來辨認上次登入者；沒有權限快照時不能把空集合當成拒絕。
@@ -420,15 +416,17 @@ export default function AppShell({
   const pathname = usePathname();
 
   if (isBareRoute(pathname) && !requiresAuthentication(pathname)) {
-    return <>{children}</>;
+    return <SessionSnapshotProvider user={initialUser ?? null}>{children}</SessionSnapshotProvider>;
   }
 
   return (
-    <SessionGate
-      initialUser={initialUser}
-      initialImportantAnnouncement={initialImportantAnnouncement}
-    >
-      {children}
-    </SessionGate>
+    <SessionSnapshotProvider user={requiresAuthentication(pathname) ? initialUser : null}>
+      <SessionGate
+        initialUser={initialUser}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </SessionGate>
+    </SessionSnapshotProvider>
   );
 }

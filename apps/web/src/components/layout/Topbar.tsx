@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/ui/IntentLink";
 import Image from "next/image";
 import { ArrowLeft, Search, WifiOff } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
