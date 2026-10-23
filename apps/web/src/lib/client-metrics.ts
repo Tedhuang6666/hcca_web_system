@@ -140,6 +140,9 @@ function postBatch(endpoint: string, metrics: unknown[], preferBeacon: boolean):
       // metrics amplify the original incident.
       metricBackoffUntil = Date.now() + METRIC_BACKOFF_MS;
     }
+    // Read the small acknowledgement so keepalive responses release their stream.
+    // With a proxied response, leaving it unread can keep the request in flight.
+    return response.arrayBuffer();
   }).catch(() => {
     metricBackoffUntil = Date.now() + METRIC_BACKOFF_MS;
   });

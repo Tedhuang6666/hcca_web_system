@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/ui/IntentLink";
 
 import PageTransition from "@/components/layout/PageTransition";
 import PublicEmblem from "@/components/site/PublicEmblem";

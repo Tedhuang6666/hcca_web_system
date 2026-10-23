@@ -14,7 +14,7 @@ import UserPicker from "@/components/surveys/UserPicker";
 import SurveyGradeSelector from "@/components/surveys/SurveyGradeSelector";
 import OptionImageFields from "@/components/surveys/OptionImageFields";
 import SurveyImageField from "@/components/surveys/SurveyImageField";
-import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdown";
+import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdownField";
 import SurveyQuestionTypePicker from "@/components/surveys/SurveyQuestionTypePicker";
 import {
   DEFAULT_MULTI_FIELD_LABELS,

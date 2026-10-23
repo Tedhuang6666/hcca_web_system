@@ -18,7 +18,8 @@ function hasCsrfCookie(): boolean {
 async function ensureCsrfCookie(): Promise<boolean> {
   if (typeof document === "undefined" || hasCsrfCookie()) return true;
   try {
-    await fetch(`${BASE}/ready`, { credentials: "include", cache: "no-store" });
+    const response = await fetch(`${BASE}/ready`, { credentials: "include", cache: "no-store" });
+    await response.arrayBuffer();
   } catch {
     return false;
   }

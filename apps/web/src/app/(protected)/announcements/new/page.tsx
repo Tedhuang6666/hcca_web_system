@@ -9,7 +9,7 @@ import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
 import AnnouncementAudiencePicker, {
   type AudienceValue,
 } from "@/components/announcements/AnnouncementAudiencePicker";
-import { contentFromMarkdown } from "@/components/announcements/AnnouncementMarkdown";
+import { contentFromMarkdown } from "@/components/announcements/announcementContent";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 

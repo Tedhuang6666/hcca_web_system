@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { startRegistration } from "@simplewebauthn/browser";
 import { toast } from "sonner";
 
 import Modal from "@/components/ui/Modal";
@@ -83,6 +82,7 @@ export default function PasskeySetupPrompt() {
     if (!options) return;
     setBusy(true);
     try {
+      const { startRegistration } = await import("@simplewebauthn/browser");
       const credential = await startRegistration({
         optionsJSON: options.options as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
       });

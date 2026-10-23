@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useSessionSnapshot } from "@/contexts/SessionSnapshotContext";
 import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 
 type PermissionState = {
@@ -16,10 +17,8 @@ const EMPTY_PERMISSION_STATE: PermissionState = {
   isReady: false,
 };
 
-// Keep one stable snapshot for useSyncExternalStore. It gives React the same
-// server snapshot during hydration, then switches to the browser cache after
-// the hydrated tree is subscribed, preventing permission-driven text changes
-// from interrupting streaming hydration.
+// Cache an immutable view of browser storage. Server snapshots belong to the
+// request's provider and never enter this module-level browser cache during SSR.
 let clientPermissionState = EMPTY_PERMISSION_STATE;
 
 function equalPermissionState(left: PermissionState, right: PermissionState): boolean {
@@ -36,9 +35,9 @@ function equalPermissionState(left: PermissionState, right: PermissionState): bo
 }
 
 function refreshClientPermissionState(onChange: () => void) {
-  const next = readPermissionState();
-  if (equalPermissionState(clientPermissionState, next)) return;
-  clientPermissionState = next;
+  getClientPermissionState();
+  // Every subscriber must be notified, including when another subscriber has
+  // already refreshed the shared snapshot for this same cache event.
   onChange();
 }
 
@@ -58,11 +57,9 @@ function subscribeToPermissionState(onChange: () => void) {
 }
 
 function getClientPermissionState() {
+  const next = readPermissionState();
+  if (!equalPermissionState(clientPermissionState, next)) clientPermissionState = next;
   return clientPermissionState;
-}
-
-function getServerPermissionState() {
-  return EMPTY_PERMISSION_STATE;
 }
 
 function readPermissionState(): PermissionState {
@@ -95,10 +92,27 @@ function readPermissionState(): PermissionState {
  *   if (can("document:create")) { ... }
  */
 export function usePermissions() {
+  const sessionSnapshot = useSessionSnapshot();
+  const initialUser = sessionSnapshot?.user;
+  const serverState = useMemo<PermissionState>(() => initialUser ? {
+    permissions: new Set(initialUser.permissions),
+    isAdmin: Boolean(initialUser.is_superuser || initialUser.is_owner),
+    isOwner: Boolean(initialUser.is_owner),
+    isReady: true,
+  } : EMPTY_PERMISSION_STATE, [initialUser]);
+  const getServerSnapshot = useCallback(() => serverState, [serverState]);
+  const getSnapshot = useCallback(() => {
+    // Until the verified user seeds the browser cache, ignore an older user's
+    // cached permissions. Keep the server reference when values match so late
+    // Suspense boundaries can hydrate without an initial permission transition.
+    if (sessionSnapshot && !sessionSnapshot.initialized) return serverState;
+    const current = getClientPermissionState();
+    return sessionSnapshot && equalPermissionState(serverState, current) ? serverState : current;
+  }, [sessionSnapshot, serverState]);
   const permissionState = useSyncExternalStore(
     subscribeToPermissionState,
-    getClientPermissionState,
-    getServerPermissionState,
+    getSnapshot,
+    getServerSnapshot,
   );
   const { permissions, isAdmin, isOwner, isReady } = permissionState;
 
