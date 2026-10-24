@@ -44,9 +44,7 @@ async function openPage() {
 describe("全校收款與訂單", () => {
   it("downloads the chosen class and activity and shows a retryable receipt error", async () => {
     await openPage();
-    expect(screen.queryByRole("button", { name: /下載.*簽收單/ })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
-    const download = await screen.findByRole("button", { name: "下載一年一班的校慶簽收單" });
+    const download = await screen.findByRole("button", { name: "下載一年一班的校慶簽收單 PDF" });
     api.downloadClassReceipt.mockRejectedValueOnce(new Error("offline"));
     fireEvent.click(download);
     expect(await screen.findByRole("alert")).toHaveTextContent("簽收單下載失敗，請重試。");
@@ -137,21 +135,23 @@ describe("全校收款與訂單", () => {
     expect(screen.queryByRole("button", { name: "取消訂單 ORD-TEST" })).not.toBeInTheDocument();
   });
 
-  it("shows totals first, then scoped payment actions after selecting an activity", async () => {
+  it("shows class and activity scoped payment actions without selecting an activity", async () => {
     await openPage();
-    expect(screen.getByText(/選擇一個活動後，可確認班級收款/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: "確認收款" })).not.toBeInTheDocument();
+    const festivalPayment = await screen.findByRole("button", { name: "確認一年一班的校慶收款" });
+    expect(await screen.findByRole("button", { name: "確認一年一班的冬季活動收款" })).toBeVisible();
+    const otherActions = festivalPayment.closest("div")?.parentElement?.querySelector("details");
+    expect(otherActions).not.toHaveAttribute("open");
+    fireEvent.click(otherActions!.querySelector("summary")!);
+    expect(otherActions).toHaveAttribute("open");
+    expect(screen.getByRole("button", { name: "撤銷一年一班的校慶收款確認" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "停止訂購" })).not.toBeInTheDocument();
+    fireEvent.click(festivalPayment);
+    await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledWith("class", true, "festival"));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("一年一班"));
     fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
     await screen.findByText("批次管理訂購");
-    expect(screen.getAllByRole("button", { name: "確認收款" }).length).toBeGreaterThan(0);
-    const otherActions = screen.getAllByText("其他操作")[0].closest("details");
-    expect(otherActions).not.toHaveAttribute("open");
     fireEvent.click(screen.getAllByText("其他操作")[0]);
-    expect(otherActions).toHaveAttribute("open");
-    expect(screen.getAllByRole("button", { name: "撤銷收款確認" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "停止訂購" }).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getAllByRole("button", { name: "確認收款" })[0]);
-    await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledWith("class", true, "festival"));
   });
 
   it("clears dependent product and category filters when changing activity", async () => {
