@@ -395,6 +395,7 @@ export default function CouncilOrdersPage() {
   }, []);
 
   const visibleActivityGroups = activityGroups.filter((group) => activityId === "all" || group.activityId === activityId);
+  const paymentActivityGroups = visibleActivityGroups;
   const actionActivityGroups = activityId === "all" ? [] : visibleActivityGroups;
   const visibleCategoryIds = new Set(visibleActivityGroups.flatMap((group) => group.categories.map((category) => category.id)));
   const hasFilters = activityId !== "all" || Boolean(grade || classId || categoryId || productId || isPaid || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
@@ -422,7 +423,7 @@ export default function CouncilOrdersPage() {
             <BarChart2 size={22} /> 班聯工作
           </h1>
           <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-            選好活動後，先核對班級繳款；需要時再查看商品數量或訂單。
+            可直接在班級列確認指定活動收款並下載簽收單 PDF；也能依活動篩選，再查看商品數量或訂單。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -582,13 +583,13 @@ export default function CouncilOrdersPage() {
           )}
           {groupBy === "class" && activityId === "all" && summary && summary.rows.length > 0 && (
             <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              目前顯示全部活動彙總。選擇一個活動後，可確認班級收款與管理訂購。
+              目前顯示全部活動彙總；每班操作都會標示活動名稱，確認收款與簽收單只套用該班該活動。
             </p>
           )}
 
-          {groupBy === "class" && canConfirmClassPayment && actionActivityGroups.length > 0 && (
+          {groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 && (
             <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              確認收款後，可下載各班簽收單 PDF（收執聯、存根聯及簽名欄）。金額包含此活動整班已確認收款的有效訂單，不受下方篩選影響。
+              各班操作只處理標示活動中的有效訂單，不受商品、日期或收款篩選影響。確認收款後，可下載該班列印用簽收單 PDF（收執聯、存根聯及簽名欄）。
             </p>
           )}
           {receiptError && <p role="alert" className="mb-3 text-sm" style={{ color: "var(--danger)" }}>{receiptError}</p>}
@@ -602,7 +603,7 @@ export default function CouncilOrdersPage() {
                 <table className="shop-mobile-table w-full min-w-[720px] text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canManageOrderClosures && actionActivityGroups.length ? ["班聯操作"] : [])].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canManageOrderClosures && (actionActivityGroups.length > 0 || canConfirmClassPayment && paymentActivityGroups.length > 0) ? ["班聯操作"] : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
                     </tr>
@@ -626,13 +627,14 @@ export default function CouncilOrdersPage() {
                             />
                           </td>
                         );})}
-                        {groupBy === "class" && canManageOrderClosures && actionActivityGroups.length > 0 && <td className="px-4 py-3">
+                        {groupBy === "class" && canManageOrderClosures && (actionActivityGroups.length > 0 || canConfirmClassPayment && paymentActivityGroups.length > 0) && <td className="px-4 py-3">
                           <div className="flex min-w-56 flex-col gap-2">
-                            {actionActivityGroups.map((group) => {
+                            {paymentActivityGroups.map((group) => {
                               const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
                               const closedCount = statuses.filter((item) => item?.is_closed).length;
                               const isClosed = closedCount === group.categories.length;
                               const isBusy = closeBusy === `${group.key}:${row.key}`;
+                              const canManageThisActivity = actionActivityGroups.some((item) => item.key === group.key);
                               return (
                                 <div key={group.key} className="flex flex-wrap items-center gap-1 border-t pt-1.5 first:border-t-0 first:pt-0"
                                   style={{ borderColor: "var(--border)" }}>
@@ -640,6 +642,7 @@ export default function CouncilOrdersPage() {
                                   {row.key !== "none" && <>
                                     {canConfirmClassPayment && <button type="button" disabled={mutationBusy}
                                       onClick={() => updateClassPayment(row, group, true)}
+                                      aria-label={`確認${row.label}的${group.label}收款`}
                                       className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50">
                                       確認收款
                                     </button>}
@@ -648,8 +651,8 @@ export default function CouncilOrdersPage() {
                                         setReceiptError("");
                                         return shopApi.downloadClassReceipt(row.key, group.activityId);
                                       }}
-                                      label="下載簽收單"
-                                      aria-label={`下載${row.label}的${group.label}簽收單`}
+                                      label="下載簽收單 PDF"
+                                      aria-label={`下載${row.label}的${group.label}簽收單 PDF`}
                                       disabled={mutationBusy}
                                       className="btn btn-ghost min-h-11 px-3 text-xs"
                                       onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
@@ -660,10 +663,11 @@ export default function CouncilOrdersPage() {
                                       <div className="flex flex-wrap gap-2 pb-1">
                                         {canConfirmClassPayment && <button type="button" disabled={mutationBusy}
                                           onClick={() => updateClassPayment(row, group, false)}
+                                          aria-label={`撤銷${row.label}的${group.label}收款確認`}
                                           className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
                                           撤銷收款確認
                                         </button>}
-                                        {group.categories.length > 0 && <button type="button" disabled={mutationBusy || !statuses.every(Boolean)}
+                                        {canManageThisActivity && group.categories.length > 0 && <button type="button" disabled={mutationBusy || !statuses.every(Boolean)}
                                           onClick={() => handleToggleClose(group, row.key, isClosed, row.label)}
                                           className="btn btn-ghost flex min-h-11 items-center gap-1 px-3 text-xs disabled:opacity-50"
                                           title={`${isClosed ? "重新開放訂購" : "停止訂購"}：${group.label}`}>
