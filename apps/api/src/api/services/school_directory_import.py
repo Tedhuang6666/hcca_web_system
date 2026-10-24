@@ -33,7 +33,7 @@ from api.models.school_class import (
 )
 from api.models.user import User
 from api.models.user_identity import UserIdentity
-from api.services.school_class_import import import_roster_pdf
+from api.services.school_class_import import ParsedRosterRow, import_roster_rows
 
 _HEADERS = ("信箱", "學號", "班級", "座號")
 _NS = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -273,22 +273,15 @@ async def import_school_directory(
             entry.class_id = destination.id
     await session.flush()
 
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(("display_name", "class_code", "seat_number", "student_id"))
-    names = {}
+    roster_rows = []
     for row in rows:
         person = selected.get(row.student_id)
         user = linked.get(row.student_id)
-        names[row.student_id] = (
-            person.display_name if person else user.display_name if user else "尚未提供姓名"
-        )
-        # 舊 PDF／CSV parser 會切開姓名中的空白；人名不經過這個中間格式。
-        writer.writerow(("尚未提供姓名", row.class_code, row.seat_number, row.student_id))
-    result = await import_roster_pdf(
+        name = person.display_name if person else user.display_name if user else "尚未提供姓名"
+        roster_rows.append(ParsedRosterRow(name, row.class_code, row.seat_number, row.student_id))
+    result = await import_roster_rows(
         session,
-        file_bytes=output.getvalue().encode(),
-        filename=None,
+        rows=roster_rows,
         academic_year=academic_year,
         created_by=created_by,
     )
@@ -301,7 +294,6 @@ async def import_school_directory(
     for person in imported_people:
         if person.student_id is not None:
             person.email = desired[person.student_id].email
-            person.display_name = names[person.student_id]
     today = local_today()
     affiliations = list(
         (

@@ -5,12 +5,11 @@ import { FileCheck2, Paperclip, Pencil, Plus, ReceiptText, Save, Trash2, X } fro
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
 import EvidencePreview from "@/components/finance/EvidencePreview";
-import { effectiveSubmissionIds } from "./budgetWorkbook";
 import type {
   FinanceBudgetAllocation,
+  FinanceBudgetCurrentPlan,
   FinanceBudgetExpenseOut,
   FinanceBudgetNode,
-  FinanceBudgetSubmission,
   OrgRead,
 } from "@/lib/types";
 
@@ -18,7 +17,7 @@ type Props = {
   budgetId: string;
   ledgerId: string;
   allocations: FinanceBudgetAllocation[];
-  submissions: FinanceBudgetSubmission[];
+  currentPlan: FinanceBudgetCurrentPlan;
   nodes: FinanceBudgetNode[];
   expenses: FinanceBudgetExpenseOut[];
   orgs: OrgRead[];
@@ -61,7 +60,7 @@ export default function BudgetExpenseRegister({
   budgetId,
   ledgerId,
   allocations,
-  submissions,
+  currentPlan,
   nodes,
   expenses,
   orgs,
@@ -88,11 +87,13 @@ export default function BudgetExpenseRegister({
   const formRef = useRef<HTMLFormElement>(null);
 
   const approvedAllocations = useMemo(() => {
-    const approvedSubmissionIds = effectiveSubmissionIds(submissions);
-    const historicalAllocationId = expenses.find((expense) => expense.id === editingExpenseId)?.allocation_id;
+    const currentAllocationIds = new Set(currentPlan.allocation_ids);
+    const historicalAllocationId = editingExpenseId
+      ? currentPlan.historical_expense_allocations[editingExpenseId]
+      : undefined;
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     return allocations
-      .filter((allocation) => approvedSubmissionIds.has(allocation.submission_id) || allocation.id === historicalAllocationId)
+      .filter((allocation) => currentAllocationIds.has(allocation.id) || allocation.id === historicalAllocationId)
       .map((allocation) => {
         const path: string[] = [];
         let node = nodeById.get(allocation.node_id);
@@ -107,7 +108,7 @@ export default function BudgetExpenseRegister({
           label: `${path.join(" ＞ ") || "預算明細"}${org ? `・${org.name}` : ""}・NT$${allocation.amount.toLocaleString()}`,
         };
       });
-  }, [allocations, nodes, orgs, submissions, editingExpenseId, expenses]);
+  }, [allocations, nodes, orgs, currentPlan, editingExpenseId]);
 
   useEffect(() => {
     if (!quickNodeId) return;

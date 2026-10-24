@@ -368,7 +368,7 @@ async def db_session(_build_schema_once: None) -> AsyncGenerator[AsyncSession, N
 async def _bind_standalone_app_sessions_to_test_db(db_session, monkeypatch):
     """讓不經 get_db override 的 app session 也使用本 test 的資料庫交易。"""
     from api.dependencies import api_key_auth
-    from api.routers import discord_internal
+    from api.routers import discord_internal, ws
     from api.services import line_bot
 
     factory = async_sessionmaker(
@@ -381,6 +381,7 @@ async def _bind_standalone_app_sessions_to_test_db(db_session, monkeypatch):
     monkeypatch.setattr(api_key_auth, "AsyncSessionLocal", factory)
     monkeypatch.setattr(discord_internal, "AsyncSessionLocal", factory)
     monkeypatch.setattr(line_bot, "AsyncSessionLocal", factory)
+    monkeypatch.setattr(ws, "AsyncSessionLocal", factory)
 
 
 def _make_override_get_db(

@@ -5,7 +5,7 @@ import { Download, Pencil, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
 import type { FinanceBudgetDetail, FinanceBudgetIncomeItem } from "@/lib/types";
-import { budgetVersionChanges, consolidatedBudgetRows } from "./budgetWorkbook";
+import { consolidatedBudgetRows } from "./budgetWorkbook";
 import "./budget-workbook.css";
 
 type Props = {
@@ -30,7 +30,7 @@ export default function BudgetConsolidatedTable({ detail, canManage, canRecordIn
   const [error, setError] = useState("");
   const [draft, setDraft] = useState({ amount: "", quantity: "", unit: "", unitPrice: "", note: "", reason: "" });
   const rows = useMemo(() => consolidatedBudgetRows(detail), [detail]);
-  const changes = useMemo(() => budgetVersionChanges(detail), [detail]);
+  const changes = detail.current_plan.changes;
   const visible = rows.filter((row) => (
     (filter === "all" || (filter === "income" && row.income) || (filter === "expense" && !row.income) || (filter === "new" && row.isNew))
     && `${row.category} ${row.name} ${row.note || ""}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())

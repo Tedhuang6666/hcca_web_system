@@ -60,7 +60,7 @@ async def test_import_hchs_cadre_directory_creates_roles_and_is_idempotent(
     monkeypatch.setattr(
         cadre_import.class_import_svc, "parse_contact_directory_pdf", lambda _: rows
     )
-    monkeypatch.setattr(cadre_import.class_import_svc, "import_roster_pdf", fake_roster_import)
+    monkeypatch.setattr(cadre_import.class_import_svc, "import_roster_rows", fake_roster_import)
     monkeypatch.setattr(cadre_import, "cache_invalidate_user_permissions", ignore_cache)
 
     result = await cadre_import.import_hchs_cadre_directory(

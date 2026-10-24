@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 from api.models.notification import Notification
@@ -49,8 +50,11 @@ def test_render_digest_html_escapes_and_lists_notifications() -> None:
     assert "共有" not in html  # 未超過 50 則不顯示截斷提示
 
 
-async def test_process_digest_no_subscribers_is_safe() -> None:
+async def test_process_digest_no_subscribers_is_safe(db_session, monkeypatch) -> None:
+    @asynccontextmanager
+    async def isolated_task_session():
+        yield db_session
+
+    monkeypatch.setattr("api.services.digest_tasks.task_session", isolated_task_session)
     result = await _process_digest("daily", window_hours=24)
-    assert set(result.keys()) == {"sent", "skipped"}
-    assert result["sent"] >= 0
-    assert result["skipped"] >= 0
+    assert result == {"sent": 0, "skipped": 0}

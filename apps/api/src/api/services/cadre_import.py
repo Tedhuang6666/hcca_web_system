@@ -346,10 +346,9 @@ async def import_hchs_cadre_directory(
         users_created += int(created)
         users_reused += int(not created)
 
-    roster = await class_import_svc.import_roster_pdf(
+    roster = await class_import_svc.import_roster_rows(
         session,
-        file_bytes=file_bytes,
-        filename=filename,
+        rows=list(directory),
         academic_year=academic_year,
         created_by=actor.id,
     )

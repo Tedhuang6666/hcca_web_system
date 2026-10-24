@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -29,6 +28,7 @@ from api.routers.documents_helpers import (
 )
 from api.schemas.document import AttachmentLinkCreate, AttachmentOut
 from api.services import document as doc_svc
+from api.services.file_delivery import FileDisposition, deliver_stored_file
 from api.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
@@ -50,28 +50,21 @@ class AttachmentRenameRequest(BaseModel):
 async def _serve_attachment(
     storage: StorageBackend,
     att: DocumentAttachment,
-    disposition: str,
+    disposition: FileDisposition,
 ) -> FileResponse | RedirectResponse:
     """依儲存後端提供附件：本機後端直接 serve 檔案，遠端後端重導向至 presigned URL。
 
     disposition 為 "attachment"（下載）或 "inline"（預覽）。集中此邏輯以免
     將後端類型寫死在各端點（見 [services/storage.py](../services/storage.py)）。
     """
-    filename = att.display_name or att.filename
-    encoded_filename = quote(filename.encode("utf-8"))
-    local = storage.local_path(att.storage_key)
-    if local is not None:
-        if not local.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在")
-        headers = {"Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}"}
-        media_type = att.content_type or "application/octet-stream"
-        if disposition == "attachment":
-            return FileResponse(
-                path=str(local), filename=filename, media_type=media_type, headers=headers
-            )
-        return FileResponse(path=str(local), media_type=media_type, headers=headers)
-    url = await storage.get_url(att.storage_key, disposition=disposition, download_name=filename)
-    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    return await deliver_stored_file(
+        storage,
+        att.storage_key,
+        filename=att.display_name or att.filename,
+        content_type=att.content_type or "application/octet-stream",
+        disposition=disposition,
+        missing_detail="附件檔案不存在",
+    )
 
 
 @router.get(

@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 import uuid
 from typing import Annotated
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse
 from itsdangerous import BadData, URLSafeTimedSerializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +44,10 @@ from api.services.discord_embeds import EmbedField, Severity
 from api.services.discord_notification_routes import (
     build_merchandise_submission_fields,
     emit_routed_notification,
+)
+from api.services.file_delivery import deliver_stored_file
+from api.services.file_delivery import (
+    presigned_storage_redirect as _presigned_storage_redirect,  # noqa: F401
 )
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage, validate_storage_key
@@ -85,23 +88,6 @@ _DISCORD_IMAGE_SERIALIZER = URLSafeTimedSerializer(
 
 def _upload_preview_url(storage_key: str) -> str:
     return f"/merchandise-submissions/uploads/{storage_key}"
-
-
-def _presigned_storage_redirect(url: str) -> RedirectResponse:
-    """只重導向至目前 S3 bucket 所產生的 HTTPS 預簽網址。"""
-    parsed = urlsplit(url)
-    region = settings.S3_REGION
-    bucket = settings.S3_BUCKET
-    allowed_hosts = {
-        f"{bucket}.s3.{region}.amazonaws.com",
-        f"s3.{region}.amazonaws.com",
-    }
-    if region == "us-east-1":
-        allowed_hosts.update({f"{bucket}.s3.amazonaws.com", "s3.amazonaws.com"})
-    if parsed.scheme != "https" or parsed.hostname not in allowed_hosts:
-        logger.error("Rejected untrusted presigned storage URL host=%s", parsed.hostname)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="無效的檔案儲存網址")
-    return RedirectResponse(url)
 
 
 def _discord_image_url(file) -> str:
@@ -362,19 +348,12 @@ async def preview_submission_file(storage_key: str, session: DbDep, current_user
         filename = stored_file.filename
         content_type = stored_file.content_type
 
-    storage = get_storage()
-    local_path = storage.local_path(storage_key)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖稿")
-        return FileResponse(
-            local_path,
-            media_type=content_type,
-            filename=filename,
-            content_disposition_type="inline",
-        )
-    return _presigned_storage_redirect(
-        await storage.get_url(storage_key, disposition="inline", download_name=filename)
+    return await deliver_stored_file(
+        get_storage(),
+        storage_key,
+        content_type=content_type,
+        filename=filename,
+        missing_detail="找不到投稿圖稿",
     )
 
 
@@ -391,23 +370,12 @@ async def preview_submission_image_for_discord(file_id: uuid.UUID, token: str, s
     if stored_file is None or not stored_file.content_type.lower().startswith("image/"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖片")
 
-    storage = get_storage()
-    local_path = storage.local_path(stored_file.storage_key)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖片")
-        return FileResponse(
-            local_path,
-            media_type=stored_file.content_type,
-            filename=stored_file.filename,
-            content_disposition_type="inline",
-        )
-    return _presigned_storage_redirect(
-        await storage.get_url(
-            stored_file.storage_key,
-            disposition="inline",
-            download_name=stored_file.filename,
-        )
+    return await deliver_stored_file(
+        get_storage(),
+        stored_file.storage_key,
+        content_type=stored_file.content_type,
+        filename=stored_file.filename,
+        missing_detail="找不到投稿圖片",
     )
 
 

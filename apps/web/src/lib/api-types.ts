@@ -13949,6 +13949,7 @@ export interface components {
         BudgetDetailOut: {
             /** Allocations */
             allocations: components["schemas"]["BudgetAllocationOut"][];
+            current_plan: components["schemas"]["BudgetPlanOut"];
             /** Expenses */
             expenses?: components["schemas"]["FinanceBudgetExpenseOut"][];
             /**
@@ -14099,6 +14100,47 @@ export interface components {
              */
             period_id: string;
         };
+        /** BudgetPlanOut */
+        BudgetPlanOut: {
+            /** Allocation Ids */
+            allocation_ids: string[];
+            /** Changes */
+            changes: components["schemas"]["BudgetVersionChangeOut"][];
+            /** Historical Expense Allocations */
+            historical_expense_allocations: {
+                [key: string]: string;
+            };
+            /** Rows */
+            rows: components["schemas"]["BudgetPlanRowOut"][];
+            /** Submission Ids */
+            submission_ids: string[];
+        };
+        /** BudgetPlanRowOut */
+        BudgetPlanRowOut: {
+            /** Amount */
+            amount: number;
+            /** Category */
+            category: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Income */
+            income: boolean;
+            /** Is New */
+            is_new: boolean;
+            /** Name */
+            name: string;
+            /** Note */
+            note: string | null;
+            /** Quantity */
+            quantity: number | null;
+            /** Unit */
+            unit: string | null;
+            /** Unit Price */
+            unit_price: number | null;
+        };
         /** BudgetPublicationUpdate */
         BudgetPublicationUpdate: {
             /** Is Public */
@@ -14181,6 +14223,15 @@ export interface components {
         };
         /** BudgetUpdate */
         BudgetUpdate: {
+            /** Name */
+            name: string;
+        };
+        /** BudgetVersionChangeOut */
+        BudgetVersionChangeOut: {
+            /** After */
+            after: number;
+            /** Before */
+            before: number;
             /** Name */
             name: string;
         };

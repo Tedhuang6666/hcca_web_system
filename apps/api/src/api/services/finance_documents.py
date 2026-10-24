@@ -7,7 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from defusedxml import ElementTree as ET
 
-from api.services.finance import effective_budget_submission_ids
+from api.schemas.finance import BudgetPlanOut, BudgetPlanRowOut
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -133,80 +133,42 @@ def advance_receipt(budget_name: str, expenses: list[dict]) -> bytes:
     return output.getvalue()
 
 
-def budget_workbook(detail: dict) -> bytes:
+def budget_workbook(plan: BudgetPlanOut) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
-    effective_ids = effective_budget_submission_ids(detail["submissions"])
-    nodes = {node["id"]: node for node in detail["nodes"]}
-    rows = []
-    for allocation in detail["allocations"]:
-        if allocation["submission_id"] not in effective_ids:
-            continue
-        node = nodes.get(allocation["node_id"], {})
-        parent = nodes.get(node.get("parent_id"), {})
-        rows.append(
-            {
-                "category": parent.get("name", node.get("name", "未分類")),
-                "name": node.get("name", "未命名細項"),
-                "quantity": f"{allocation['quantity']:g}{allocation['unit'] or ''}"
-                if allocation["quantity"]
-                else "1式",
-                "unit_price": allocation["unit_price"] or "*",
-                "amount": allocation["amount"],
-                "note": allocation["note"],
-                "is_new": allocation["is_new"],
-                "income": False,
-            }
-        )
-    for income in detail["income_items"]:
-        if income.submission_id in effective_ids:
-            rows.append(
-                {
-                    "category": income.category,
-                    "name": income.name,
-                    "quantity": f"{income.quantity:g}{income.unit or ''}"
-                    if income.quantity
-                    else "1式",
-                    "unit_price": income.unit_price or "*",
-                    "amount": income.amount,
-                    "note": income.note,
-                    "is_new": income.is_new,
-                    "income": True,
-                }
-            )
     workbook = Workbook()
     workbook.remove(workbook.active)
     for sheet_name, selected in (
-        ("預算總表", rows),
-        ("本次新增", [r for r in rows if r["is_new"]]),
+        ("預算總表", plan.rows),
+        ("本次新增", [row for row in plan.rows if row.is_new]),
     ):
         sheet = workbook.create_sheet(sheet_name)
         sheet.append(["項目", "細項", "數量", "單價", "總額(含稅)", "項目總額", "備註"])
-        groups: dict[str, list[dict]] = OrderedDict()
+        groups: dict[str, list[BudgetPlanRowOut]] = OrderedDict()
         for row in selected:
-            groups.setdefault(row["category"], []).append(row)
+            groups.setdefault(row.category, []).append(row)
         for category, entries in groups.items():
             start = sheet.max_row + 1
-            balance = sum(r["amount"] * (1 if r["income"] else -1) for r in entries)
+            balance = sum(row.amount * (1 if row.income else -1) for row in entries)
             for index, row in enumerate(entries):
                 sheet.append(
                     [
                         category if index == 0 else None,
-                        row["name"],
-                        row["quantity"],
-                        row["unit_price"],
-                        row["amount"],
+                        row.name,
+                        f"{row.quantity:g}{row.unit or ''}" if row.quantity else "1式",
+                        row.unit_price or "*",
+                        row.amount,
                         abs(balance) if index == 0 else None,
-                        row["note"],
+                        row.note,
                     ]
                 )
-                if row["is_new"]:
+                if row.is_new:
                     for cell in sheet[sheet.max_row]:
                         cell.fill = PatternFill("solid", fgColor="FCE5CD")
                 sheet.cell(sheet.max_row, 5).fill = PatternFill(
-                    "solid", fgColor="D9EAD3" if row["income"] else "F4CCCC"
+                    "solid", fgColor="D9EAD3" if row.income else "F4CCCC"
                 )
             end = sheet.max_row
             if end > start:
@@ -215,8 +177,8 @@ def budget_workbook(detail: dict) -> bytes:
             sheet.cell(start, 6).fill = PatternFill(
                 "solid", fgColor="D9EAD3" if balance >= 0 else "F4CCCC"
             )
-        for row in sheet:
-            for cell in row:
+        for sheet_row in sheet:
+            for cell in sheet_row:
                 if isinstance(cell.value, str):
                     cell.data_type = "s"
                 cell.font = Font(name="微軟正黑體", size=11, bold=cell.row == 1)

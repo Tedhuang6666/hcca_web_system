@@ -30,7 +30,6 @@ from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
-from api.models.notification import Notification
 from api.models.org import Position, UserPosition
 from api.models.petition import (
     PetitionAttachment,
@@ -88,6 +87,7 @@ from api.services import context as context_svc
 from api.services import petition as petition_svc
 from api.services import petition_notification as petition_notification_svc
 from api.services.discord_bot import enqueue_petition_private_channel
+from api.services.file_delivery import deliver_stored_file
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
@@ -248,31 +248,19 @@ async def _notify(
             attachment.display_name or attachment.filename for attachment in attachments
         )
     if user_id is not None:
-        try:
-            from api.services.notification import create_notification
+        from api.services.notification import create_notification
 
-            await create_notification(
-                session,
-                user_id=user_id,
-                type=type,
-                title=title,
-                body=notification_body,
-                link=link,
-                related_id=related_id,
-                email_allowed=email_allowed,
-                email_attachment_ids=attachment_ids or None,
-            )
-        except Exception:
-            session.add(
-                Notification(
-                    user_id=user_id,
-                    type=type,
-                    title=title,
-                    body=notification_body,
-                    link=link,
-                    related_id=related_id,
-                )
-            )
+        await create_notification(
+            session,
+            user_id=user_id,
+            type=type,
+            title=title,
+            body=notification_body,
+            link=link,
+            related_id=related_id,
+            email_allowed=email_allowed,
+            email_attachment_ids=attachment_ids or None,
+        )
     elif external_email and email_allowed:
         try:
             from api.services.outbox import emit as outbox_emit
@@ -1859,25 +1847,14 @@ async def download_attachment(
         att.visibility == PetitionAttachmentVisibility.INTERNAL and not include_internal
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此附件")
-    # 依儲存後端提供附件：本機後端直接 serve，遠端後端重導向至 presigned URL。
-    # 勿把後端類型（uploads/ 路徑）寫死在路由層 —— 檔案缺失或走 S3 時 FileResponse
-    # 會丟 FileNotFoundError（unhandled 500），算進 /petitions 5xx 導致斷路器跳閘。
-    storage = get_storage()
-    filename = att.display_name or att.filename
-    encoded_filename = quote(filename.encode("utf-8"))
-    media_type = att.content_type or "application/octet-stream"
-    local = storage.local_path(att.storage_key)
-    if local is not None:
-        if not local.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在")
-        return FileResponse(
-            path=str(local),
-            filename=filename,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
-        )
-    url = await storage.get_url(att.storage_key, disposition="attachment", download_name=filename)
-    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    return await deliver_stored_file(
+        get_storage(),
+        att.storage_key,
+        filename=att.display_name or att.filename,
+        content_type=att.content_type or "application/octet-stream",
+        disposition="attachment",
+        missing_detail="附件檔案不存在",
+    )
 
 
 @router.get(

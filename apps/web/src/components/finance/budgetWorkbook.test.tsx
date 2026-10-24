@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { FinanceBudgetDetail, FinanceBudgetExpenseOut } from "@/lib/types";
-import { budgetVersionChanges, consolidatedBudgetRows, effectiveSubmissionIds } from "./budgetWorkbook";
+import { consolidatedBudgetRows } from "./budgetWorkbook";
 import BudgetConsolidatedTable from "./BudgetConsolidatedTable";
 import BudgetAdvanceReceipts from "./BudgetAdvanceReceipts";
+import BudgetExpenseRegister from "./BudgetExpenseRegister";
 import { financeApi } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({ financeApi: {
@@ -24,19 +25,29 @@ const detail: FinanceBudgetDetail = {
   ],
   income_items: [{ id: "income", submission_id: "latest", category: "活動", name: "報名費", amount: 1000, source_row_number: 3 }],
   expenses: [],
+  current_plan: {
+    submission_ids: ["latest"], allocation_ids: ["new-paper"], historical_expense_allocations: {},
+    rows: [
+      { id: "new-paper", category: "行政", name: "影印紙", income: false, amount: 400, quantity: 4, unit: "包", unit_price: 100, note: null, is_new: true },
+      { id: "income", category: "活動", name: "報名費", income: true, amount: 1000, quantity: null, unit: null, unit_price: null, note: null, is_new: false },
+    ],
+    changes: [{ name: "行政／影印紙（支出）", before: 200, after: 400 }, { name: "活動／報名費（收入）", before: 0, after: 1000 }],
+  },
 };
 
 describe("integrated budget workbook", () => {
-  it("uses the latest full workbook and reports amount changes", () => {
-    expect([...effectiveSubmissionIds(detail.submissions)]).toEqual(["latest"]);
-    expect(consolidatedBudgetRows(detail).map((row) => row.amount)).toEqual([400, 1000]);
-    expect(budgetVersionChanges(detail).map((change) => [change.before, change.after])).toEqual([[200, 400], [0, 1000]]);
+  it("uses server-selected rows and retains their editing references", () => {
+    const rows = consolidatedBudgetRows(detail);
+    expect(rows.map((row) => row.amount)).toEqual([400, 1000]);
+    expect(rows[0].allocation?.id).toBe("new-paper");
+    expect(rows[1].incomeItem?.id).toBe("income");
+    expect(rows.some((row) => row.id === "old-paper")).toBe(false);
   });
 
-  it("keeps additions and ignores rejected or unapproved snapshots", () => {
-    const submissions = [initial, { ...latest, is_full_snapshot: false }, { ...latest, id: "draft", status: "draft" as const }];
-    expect([...effectiveSubmissionIds(submissions)]).toEqual(["initial", "latest"]);
-    expect(consolidatedBudgetRows({ ...detail, submissions }).filter((row) => !row.income).reduce((sum, row) => sum + row.amount, 0)).toBe(600);
+  it("renders server version changes without replaying submission history", () => {
+    render(<BudgetConsolidatedTable detail={{ ...detail, submissions: [] }} canManage={false} canRecordExpense={false} canRecordIncome={false} onRegisterIncome={vi.fn()} onRegisterExpense={vi.fn()} onSaved={vi.fn()} />);
+    expect(screen.getByText("與上一版相比，2 項金額變更")).toBeInTheDocument();
+    expect(screen.getByText("行政／影印紙（支出）")).toBeInTheDocument();
   });
 
   it("filters new rows and directly saves income with an explicit null note", async () => {
@@ -65,5 +76,28 @@ describe("integrated budget workbook", () => {
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
     fireEvent.click(screen.getByRole("button", { name: "下載 Word 簽收單" }));
     await vi.waitFor(() => expect(financeApi.exportAdvanceReceipt).toHaveBeenCalledWith("budget", ["one"]));
+  });
+
+  it("uses server allocation choices and exposes only the granted historical edit", () => {
+    const expense: FinanceBudgetExpenseOut = {
+      id: "historical-expense", budget_id: "budget", allocation_id: "old-paper",
+      department_org_id: "org", department_name: "財務", allocation_node_id: "paper",
+      allocation_name: "影印紙", entry_date: "2026-08-20", purpose: "歷史支出", total_amount: 90,
+      advanced_by_name: null, note: null, items: [], evidence: [], created_at: "2026-08-20T00:00:00Z",
+    };
+    render(<BudgetExpenseRegister
+      budgetId="budget" ledgerId="ledger"
+      allocations={[...detail.allocations, { ...detail.allocations[0], id: "unrelated-old", amount: 600 }]}
+      currentPlan={{ ...detail.current_plan, historical_expense_allocations: { "historical-expense": "old-paper" } }}
+      nodes={detail.nodes} expenses={[expense]} orgs={[]} canRecord quickNodeId={null}
+      onQuickRegistrationHandled={vi.fn()} isPublic onRecorded={vi.fn().mockResolvedValue(undefined)}
+    />);
+    fireEvent.click(screen.getByRole("button", { name: "登記支出" }));
+    const choiceValues = () => within(screen.getByLabelText("對應預算明細"))
+      .getAllByRole("option").map((option) => (option as HTMLOptionElement).value);
+    expect(choiceValues()).toEqual(["", "new-paper"]);
+    fireEvent.click(screen.getByRole("button", { name: "編輯支出" }));
+    expect(choiceValues()).toEqual(["", "old-paper", "new-paper"]);
+    expect(screen.getByLabelText("對應預算明細")).toHaveValue("old-paper");
   });
 });

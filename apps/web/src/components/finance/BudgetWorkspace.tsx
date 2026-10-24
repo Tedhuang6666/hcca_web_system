@@ -689,7 +689,7 @@ export default function BudgetWorkspace({
             budgetId={detail.id}
             ledgerId={ledgerId}
             allocations={detail.allocations}
-            submissions={detail.submissions}
+            currentPlan={detail.current_plan}
             nodes={detail.nodes}
             expenses={detail.expenses}
             orgs={orgs}

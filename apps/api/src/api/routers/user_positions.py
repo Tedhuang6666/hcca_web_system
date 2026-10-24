@@ -7,21 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.cache import cache_invalidate
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.org import UserPosition
-from api.models.person import PersonAffiliation, PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
 from api.schemas.org import UserPositionCreate, UserPositionRead, UserPositionUpdate
-from api.schemas.person import PersonAffiliationUpdate
 from api.services import audit as audit_svc
 from api.services import org as org_svc
-from api.services import person as person_svc
-from api.services import user_session as user_session_svc
-from api.services.discord_bot import enqueue_role_sync
+from api.services import user_position as tenure_svc
 from api.services.permission import get_user_permission_codes
 
 router = APIRouter(prefix="/user-positions", tags=["任期管理"])
@@ -82,19 +77,7 @@ async def create_user_position(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="end_date 不能早於 start_date",
         )
-    up = await org_svc.create_user_position(db, data)
-    assigned_user = await db.get(User, up.user_id)
-    if assigned_user is not None:
-        await person_svc.record_affiliation_for_user_position(
-            db,
-            user=assigned_user,
-            kind=PersonAffiliationKind.ORG_POSITION,
-            position_id=up.position_id,
-            start_date=up.start_date,
-            end_date=up.end_date,
-            synced_user_position_id=up.id,
-            source=PersonAffiliationSource.RBAC_SYNC,
-        )
+    up = await tenure_svc.assign(db, **data.model_dump())
     await audit_svc.record(
         db,
         entity_type="user_position",
@@ -105,9 +88,6 @@ async def create_user_position(
         meta=data.model_dump(mode="json"),
         summary="新增使用者任期記錄",
     )
-    await cache_invalidate(f"perm:{up.user_id}")
-    await user_session_svc.revoke_all(db, up.user_id, reason="permission_changed")
-    await enqueue_role_sync(db, up.user_id)
     ups = await org_svc.get_active_positions_by_date(db, up.user_id)
     matched = next((x for x in ups if x.id == up.id), None)
     return UserPositionRead.from_orm_with_details(matched or up)
@@ -138,16 +118,7 @@ async def update_user_position(
         "start_date": up.start_date.isoformat(),
         "end_date": up.end_date.isoformat() if up.end_date else None,
     }
-    up = await org_svc.update_user_position(db, up, data)
-    affiliation = await db.scalar(
-        select(PersonAffiliation).where(PersonAffiliation.synced_user_position_id == up.id)
-    )
-    if affiliation is not None:
-        await person_svc.update_affiliation(
-            db,
-            affiliation,
-            data=PersonAffiliationUpdate(end_date=up.end_date),
-        )
+    up = await tenure_svc.update_term(db, up, data.model_dump(exclude_unset=True))
     await audit_svc.record(
         db,
         entity_type="user_position",
@@ -164,9 +135,6 @@ async def update_user_position(
         },
         summary="更新使用者任期",
     )
-    await cache_invalidate(f"perm:{up.user_id}")
-    await user_session_svc.revoke_all(db, up.user_id, reason="permission_changed")
-    await enqueue_role_sync(db, up.user_id)
     return up
 
 
@@ -200,14 +168,4 @@ async def delete_user_position(
         },
         summary="刪除使用者任期記錄",
     )
-    await cache_invalidate(f"perm:{up.user_id}")
-    user_id = up.user_id
-    await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
-    affiliation = await db.scalar(
-        select(PersonAffiliation).where(PersonAffiliation.synced_user_position_id == up.id)
-    )
-    if affiliation is not None:
-        await person_svc.end_affiliation(db, affiliation)
-    await db.delete(up)
-    await db.flush()
-    await enqueue_role_sync(db, user_id)
+    await tenure_svc.remove(db, up)

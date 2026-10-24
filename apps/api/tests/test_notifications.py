@@ -15,10 +15,12 @@ from api.dependencies.auth import get_current_active_user
 from api.email.renderer import make_unsubscribe_token
 from api.main import app
 from api.models.notification import Notification
+from api.models.outbox import OutboxEvent
 from api.models.user import User
 from api.models.web_push import WebPushSubscription
 from api.services import notification_tasks
 from api.services.notification import create_notification
+from api.services.outbox import _dispatch
 
 
 def _override_user(user: User) -> None:
@@ -156,6 +158,17 @@ async def test_same_type_notifications_are_sent_as_one_email_batch(
         body="案件二",
     )
 
+    scheduled.assert_not_called()
+    intents = list(
+        await db_session.scalars(
+            select(OutboxEvent).where(OutboxEvent.event_type == "notification.email_batch")
+        )
+    )
+    assert len(intents) == 2
+    for intent in intents:
+        await _dispatch(db_session, intent)
+    assert scheduled.call_count == 2
+
     result = await notification_tasks._send_notification_batch(user.id, "petition_updated")
 
     assert result == {"sent": 1, "notifications": 2}
@@ -163,7 +176,6 @@ async def test_same_type_notifications_are_sent_as_one_email_batch(
     assert sent[0]["to"] == [user.email]
     assert "案件一" in sent[0]["context"]["body_text"]
     assert "案件二" in sent[0]["context"]["body_text"]
-    assert scheduled.call_count == 2
     assert await notification_tasks._send_notification_batch(user.id, "petition_updated") == {
         "sent": 0
     }

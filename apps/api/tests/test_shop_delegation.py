@@ -400,6 +400,42 @@ async def test_parent_can_view_student_order_and_edit_only_own_delegated_items(
     assert student_order.json()["id"] == order_id
 
 
+async def test_self_and_delegated_previews_use_the_same_student_registration(
+    delegation_setup, db_session
+):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="共同登記優惠",
+            activity_id=category.activity_id,
+            target_identifiers=[student.email],
+            code="SHARED",
+            discount_type="fixed",
+            discount_value=50,
+            min_order_price=300,
+        ),
+        created_by=student.id,
+    )
+    await _set(sc, product, 1)
+    await _claim(pc, link)
+    await _set(pc, product, 2, link["token"])
+
+    own = await sc.post(
+        "/shop/registrations/current/promotion/preview",
+        json={"activity_id": str(category.activity_id), "code": "SHARED"},
+    )
+    delegated = await pc.post(
+        "/shop/delegation/promotion/preview",
+        json={"token": link["token"], "code": "SHARED"},
+    )
+    assert own.status_code == delegated.status_code == 200
+    assert own.json() == delegated.json()
+    assert delegated.json()["eligible"] is True
+    assert delegated.json()["subtotal_price"] == 300
+    assert delegated.json()["total_price"] == 250
+
+
 async def test_reusable_link_combines_coupon_using_student_identity(delegation_setup, db_session):
     student, parent, category, product, sc, pc, oc, link = delegation_setup
     await shop_svc.create_promotion(

@@ -53,6 +53,7 @@ from api.schemas.partner_map import (
 )
 from api.services import audit as audit_svc
 from api.services import partner_map as map_svc
+from api.services.file_delivery import deliver_stored_file
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/partner-map", tags=["特約地圖"])
@@ -249,17 +250,13 @@ async def _business_image_or_404(
 
 
 async def _serve_business_image(image: PartnerBusinessImage) -> FileResponse | RedirectResponse:
-    storage = get_storage()
-    local = storage.local_path(image.storage_key)
-    if local is not None:
-        if not local.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="宣傳圖不存在")
-        return FileResponse(
-            str(local),
-            media_type=image.content_type,
-            headers={"Cache-Control": _IMAGE_CACHE_CONTROL},
-        )
-    return RedirectResponse(await storage.get_url(image.storage_key, disposition="inline"))
+    return await deliver_stored_file(
+        get_storage(),
+        image.storage_key,
+        content_type=image.content_type,
+        local_headers={"Cache-Control": _IMAGE_CACHE_CONTROL},
+        missing_detail="宣傳圖不存在",
+    )
 
 
 async def _tag_or_404(db: AsyncSession, tag_id: uuid.UUID) -> PartnerTag:
@@ -426,17 +423,13 @@ async def preview_business_flyer(
     business = await _business_or_404(db, business_id)
     if business.status != PartnerBusinessStatus.ACTIVE.value or not business.flyer_storage_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此店家照片")
-    storage = get_storage()
-    local = storage.local_path(business.flyer_storage_key)
-    if local is not None:
-        if not local.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="店家照片不存在")
-        return FileResponse(
-            str(local),
-            media_type=business.flyer_content_type or "image/*",
-            headers={"Cache-Control": _IMAGE_CACHE_CONTROL},
-        )
-    return RedirectResponse(await storage.get_url(business.flyer_storage_key, disposition="inline"))
+    return await deliver_stored_file(
+        get_storage(),
+        business.flyer_storage_key,
+        content_type=business.flyer_content_type or "image/*",
+        local_headers={"Cache-Control": _IMAGE_CACHE_CONTROL},
+        missing_detail="店家照片不存在",
+    )
 
 
 @router.get(

@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.user import User
 from api.services import school_class as class_svc
 from api.services.school_class_import import (
+    ParsedRosterRow,
     import_roster_pdf,
+    import_roster_rows,
     parse_contact_directory_text,
     parse_roster_csv_text,
     parse_roster_pdf_text,
@@ -39,6 +41,35 @@ def test_parse_roster_csv_text_accepts_import_file_headers() -> None:
     assert len(rows) == 1
     assert rows[0].display_name == "王○勛"
     assert rows[0].student_id == "510001"
+
+
+def test_csv_preserves_names_with_spaces_and_commas() -> None:
+    rows = parse_roster_csv_text(
+        'display_name,class_code,seat_number,student_id\n"測試 姓名, A",101,1,510001\n'
+    )
+    assert rows == [ParsedRosterRow("測試 姓名, A", "101", 1, "510001")]
+
+
+async def test_import_parsed_rows_preserves_name_without_a_file_roundtrip(
+    db_session: AsyncSession,
+) -> None:
+    from sqlalchemy import select
+
+    from api.models.person import Person
+
+    actor = User(email=f"parsed-{uuid.uuid4().hex[:8]}@test.edu", display_name="匯入管理員")
+    db_session.add(actor)
+    await db_session.flush()
+    result = await import_roster_rows(
+        db_session,
+        rows=[ParsedRosterRow("測試 姓名, A", "101", 1, "510001")],
+        academic_year=115,
+        created_by=actor.id,
+    )
+    person = await db_session.scalar(select(Person).where(Person.student_id == "510001"))
+    assert person is not None
+    assert person.display_name == "測試 姓名, A"
+    assert result.people_created == result.roster_created == 1
 
 
 def test_parse_contact_directory_text_removes_interleaved_birthday_prefix() -> None:

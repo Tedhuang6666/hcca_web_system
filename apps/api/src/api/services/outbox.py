@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import uuid
@@ -9,9 +10,11 @@ from datetime import UTC, datetime, timedelta
 from html import escape as html_escape
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import event, or_, select
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session, SessionTransaction
 
 from api.core.prometheus_metrics import record_outbox_delivery
 from api.models.outbox import OutboxEvent, OutboxStatus
@@ -21,6 +24,48 @@ logger = logging.getLogger(__name__)
 _MAX_RETRY = 5
 _CLAIM_BATCH_SIZE = 50
 _LEASE_SECONDS = 300
+_WAKE_AFTER_COMMIT = "notification_outbox_wake_after_commit"
+_after_commit_tasks: set[asyncio.Task[None]] = set()
+
+
+def request_processing_after_commit(session: AsyncSession) -> None:
+    """通知意圖隨主交易提交後，喚醒既有 worker；輪詢仍是失敗恢復入口。"""
+    session.info[_WAKE_AFTER_COMMIT] = True
+
+
+async def _enqueue_after_commit() -> None:
+    from api.services.outbox_tasks import process_outbox
+
+    try:
+        await asyncio.to_thread(process_outbox.delay)
+    except Exception:
+        # 意圖已提交，broker 不可用不能回頭使已成功的業務交易看起來失敗。
+        logger.warning("Outbox 即時喚醒失敗，保留事件由週期處理恢復", exc_info=True)
+
+
+@event.listens_for(Session, "after_commit")
+def _wake_notification_outbox(session: Session) -> None:
+    if session.in_nested_transaction() or not session.info.get(_WAKE_AFTER_COMMIT):
+        return
+    bind = session.get_bind()
+    if isinstance(bind, Connection) and bind.in_transaction():
+        # 外部 Connection 的交易尚未提交；Session.commit 可能只 RELEASE SAVEPOINT。
+        # 此時不可讓 worker 讀取尚未提交的資料，外部提交後仍有耐久事件供輪詢。
+        return
+    session.info.pop(_WAKE_AFTER_COMMIT, None)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    task = loop.create_task(_enqueue_after_commit())
+    _after_commit_tasks.add(task)
+    task.add_done_callback(_after_commit_tasks.discard)
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _clear_notification_outbox_wake(session: Session, transaction: SessionTransaction) -> None:
+    if transaction.parent is None:
+        session.info.pop(_WAKE_AFTER_COMMIT, None)
 
 
 def _retry_delay(retry_count: int) -> timedelta:
@@ -57,7 +102,15 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
     etype = event.event_type
     payload = event.payload
 
-    if etype == "document.approved":
+    if etype in {
+        "notification.websocket",
+        "notification.web_push",
+        "notification.email_batch",
+    }:
+        from api.services.notification import deliver_notification
+
+        await deliver_notification(db, etype, payload)
+    elif etype == "document.approved":
         enqueue_email(
             payload.get("creator_email", ""),
             f"【核准】公文 {payload.get('serial', '')} 已核准",

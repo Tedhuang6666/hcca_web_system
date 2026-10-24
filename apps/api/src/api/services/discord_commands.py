@@ -20,7 +20,7 @@ from api.core.maintenance import get_load_shed_force_mode, get_maintenance_state
 from api.core.metrics import get_celery_stats, get_db_pool_stats, get_redis_stats
 from api.models.announcement import Announcement
 from api.models.discord_account import DEFAULT_DM_CATEGORIES, DiscordNotificationPreference
-from api.models.document import Document, DocumentStatus
+from api.models.document import Document
 from api.models.org import Position, UserPosition
 from api.models.petition import PetitionStatus
 from api.models.regulation import Regulation, RegulationArticle
@@ -43,14 +43,12 @@ from api.services.discord_bot import (
     bot_health_snapshot,
     create_open_url,
     emit_moderation_log,
-    emit_public_document_notice,
     enqueue_all_role_sync,
     enqueue_petition_private_channel,
     enqueue_role_sync,
     get_user_by_discord_id,
 )
 from api.services.discord_regulation import lookup_citation, parse_citations
-from api.services.notification import create_notification
 from api.services.permission import (
     active_tenure_filter,
     get_user_permission_codes,
@@ -407,22 +405,20 @@ async def execute(
             raise DiscordCommandError("找不到此公文。")
         try:
             if operation == "document_approve":
-                updated = await document_svc.approve_step(
+                updated = await document_svc.approve_document(
                     db, document, approver_id=user.id, comment="Discord 核准"
                 )
-            elif arguments.get("mode") == RejectMode.TO_PREVIOUS:
-                updated = await document_svc.reject_to_previous_step(
-                    db,
-                    document,
-                    approver_id=user.id,
-                    comment=str(arguments["comment"]),
-                )
             else:
-                updated = await document_svc.reject_step(
+                updated = await document_svc.reject_document(
                     db,
                     document,
                     approver_id=user.id,
                     comment=str(arguments["comment"]),
+                    mode=(
+                        RejectMode.TO_PREVIOUS
+                        if arguments.get("mode") == RejectMode.TO_PREVIOUS
+                        else RejectMode.TO_CREATOR
+                    ),
                 )
         except (PermissionError, ValueError) as exc:
             raise DiscordCommandError(str(exc)) from exc
@@ -436,17 +432,6 @@ async def execute(
             action=f"discord.{operation.replace('_', '.')}",
             summary=f"Discord {'核准' if operation == 'document_approve' else '退回'}公文「{updated.title}」",
         )
-        if updated.status == DocumentStatus.APPROVED:
-            await create_notification(
-                db,
-                user_id=updated.created_by,
-                type="document_approved",
-                title=f"公文已核准：{updated.title}",
-                body=f"字號：{updated.serial_number}",
-                link=f"/documents/{updated.id}",
-                related_id=updated.id,
-            )
-            await emit_public_document_notice(db, updated)
         return {"title": updated.title}
 
     if operation == "petition_create":

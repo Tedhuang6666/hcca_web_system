@@ -9,7 +9,6 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.cache import cache_invalidate
 from api.core.clock import local_today
 from api.models.org import Position, UserPosition
 from api.models.person import (
@@ -755,55 +754,9 @@ async def end_affiliations_for_position(db: AsyncSession, position_id: uuid.UUID
 async def sync_affiliation_to_rbac(
     db: AsyncSession, affiliation: PersonAffiliation
 ) -> UserPosition | None:
-    if affiliation.kind not in {
-        PersonAffiliationKind.CLASS_ROLE,
-        PersonAffiliationKind.ORG_POSITION,
-    }:
-        return None
-    if affiliation.position_id is None:
-        return None
-    person = await db.get(Person, affiliation.person_id)
-    if person is None or person.user_id is None:
-        affiliation.status = PersonAffiliationStatus.PENDING_USER
-        await db.flush()
-        return None
+    from api.services.user_position import reconcile_affiliation
 
-    if affiliation.synced_user_position_id is not None:
-        up = await db.get(UserPosition, affiliation.synced_user_position_id)
-        if up is not None:
-            up.start_date = affiliation.start_date
-            up.end_date = affiliation.end_date
-            await db.flush()
-            await cache_invalidate(f"perm:{up.user_id}")
-            await enqueue_role_sync(db, up.user_id)
-            return up
-
-    up = await db.scalar(
-        select(UserPosition).where(
-            UserPosition.user_id == person.user_id,
-            UserPosition.position_id == affiliation.position_id,
-            UserPosition.start_date == affiliation.start_date,
-            UserPosition.end_date.is_(None)
-            if affiliation.end_date is None
-            else UserPosition.end_date == affiliation.end_date,
-        )
-    )
-    if up is None:
-        up = UserPosition(
-            user_id=person.user_id,
-            position_id=affiliation.position_id,
-            start_date=affiliation.start_date,
-            end_date=affiliation.end_date,
-        )
-        db.add(up)
-        await db.flush()
-    affiliation.synced_user_position_id = up.id
-    if affiliation.status == PersonAffiliationStatus.PENDING_USER:
-        affiliation.status = PersonAffiliationStatus.ACTIVE
-    await db.flush()
-    await cache_invalidate(f"perm:{person.user_id}")
-    await enqueue_role_sync(db, person.user_id)
-    return up
+    return await reconcile_affiliation(db, affiliation)
 
 
 async def sync_pending_affiliations_for_person(db: AsyncSession, person: Person) -> int:
