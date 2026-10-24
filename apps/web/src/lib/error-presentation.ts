@@ -4,6 +4,7 @@ export type ErrorPresentation = {
   title: string;
   description: string;
   action: string;
+  recovery: "retry" | "login" | "back" | "home";
   tone: "neutral" | "warning" | "danger";
 };
 
@@ -21,6 +22,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "目前沒有網路連線",
       description: "請確認網路後再試一次；尚未送出的內容不會被系統視為完成。",
       action: "重新連線並重試",
+      recovery: "retry",
       tone: "warning",
     };
   }
@@ -29,6 +31,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "登入狀態已失效",
       description: "請重新登入後返回原本頁面。",
       action: "前往登入",
+      recovery: "login",
       tone: "warning",
     };
   }
@@ -37,6 +40,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "目前沒有這項權限",
       description: "如果你認為這是誤判，請聯絡組織管理員並提供錯誤編號。",
       action: "返回上一頁",
+      recovery: "back",
       tone: "warning",
     };
   }
@@ -45,6 +49,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "找不到這個內容",
       description: "連結可能已變更、內容已撤下，或你沒有存取這筆資料。",
       action: "返回首頁",
+      recovery: "home",
       tone: "neutral",
     };
   }
@@ -53,6 +58,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "資料已被更新",
       description: "其他人可能先完成了這項操作。重新載入後確認目前狀態，再決定下一步。",
       action: "重新載入",
+      recovery: "retry",
       tone: "warning",
     };
   }
@@ -61,6 +67,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "請檢查輸入內容",
       description: "有欄位未符合格式或必要條件；返回表單即可修正。",
       action: "返回並修正",
+      recovery: "retry",
       tone: "warning",
     };
   }
@@ -69,6 +76,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "操作太頻繁",
       description: "請稍候片刻再試，系統沒有重複送出這次操作。",
       action: "稍後重試",
+      recovery: "retry",
       tone: "warning",
     };
   }
@@ -77,6 +85,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "服務暫時忙碌或維護中",
       description: "這個模組目前無法完成請求；其他功能仍可繼續使用。",
       action: "重新整理",
+      recovery: "retry",
       tone: "warning",
     };
   }
@@ -85,6 +94,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
       title: "服務暫時無法回應",
       description: "請稍後再試；如果持續發生，請把錯誤編號提供給支援人員。",
       action: "重新整理",
+      recovery: "retry",
       tone: "danger",
     };
   }
@@ -92,6 +102,7 @@ export function errorPresentation(error: unknown): ErrorPresentation {
     title: "頁面載入失敗",
     description: "發生未預期的問題。請重試，或先返回上一個安全位置。",
     action: "重新嘗試",
+    recovery: "retry",
     tone: "danger",
   };
 }

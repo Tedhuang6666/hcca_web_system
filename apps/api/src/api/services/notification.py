@@ -6,6 +6,7 @@ notifications router。
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Iterable
@@ -15,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
-from api.core.ws_manager import manager as ws_manager
+from api.core.ws_manager import publish_room_from_worker
 from api.email.renderer import make_unsubscribe_token
 from api.email.sender import send_branded_email
 from api.models.notification import Notification
@@ -82,20 +83,19 @@ async def create_notification(
     email_attachment_ids: list[uuid.UUID] | None = None,
 ) -> None:
     """依使用者偏好建立通知；email_allowed 可讓事件停用 Email 管道。"""
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    from api.services.outbox import emit, request_processing_after_commit
+
+    user = await db.get(User, user_id)
     if user is None:
         return
-
     channel = normalize_preferences(user.notification_preferences).get(
         type, {"inapp": True, "email": False}
     )
     digest_enabled = get_digest_frequency(user.notification_preferences) != "off"
-    # 摘要與即時聚合都需要資料列作為寄信來源；只有開啟站內管道的通知才會
-    # 在收件匣與未讀數顯示。
     email_enabled = channel["email"] and email_allowed
-    should_queue = channel["inapp"] or email_enabled
     notification: Notification | None = None
-    if should_queue:
+    queued = False
+    if channel["inapp"] or email_enabled:
         notification = Notification(
             user_id=user_id,
             type=type,
@@ -104,110 +104,132 @@ async def create_notification(
             link=link,
             related_id=related_id,
             is_inapp_visible=channel["inapp"],
+            # 禁止寄信的站內通知也不能被另一筆同類聚合／摘要信撈入。
+            email_queued_at=None if email_enabled else datetime.now(UTC),
         )
         db.add(notification)
         await db.flush()
         if channel["inapp"]:
-            try:
-                unread = await db.scalar(
-                    select(func.count(Notification.id))
-                    .where(Notification.user_id == user_id)
-                    .where(Notification.is_inapp_visible.is_(True))
-                    .where(Notification.is_read == False)  # noqa: E712
-                )
-                await ws_manager.broadcast_to_room(
-                    f"user:{user_id}",
-                    {
-                        "type": "notification.created",
-                        "notification": _notification_payload(notification),
-                        "unread": int(unread or 0),
-                    },
-                )
-            except Exception:
-                logger.warning(
-                    "通知 WebSocket 推送失敗 user=%s type=%s", user_id, type, exc_info=True
-                )
-            try:
-                await send_to_user(
-                    db,
-                    user_id,
-                    {"title": title, "body": body or "", "url": link or "/notifications"},
-                )
-            except Exception:
-                logger.warning(
-                    "通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True
-                )
-
-    if email_enabled and user.email and should_queue:
-        if email_attachment_ids and notification is not None:
-            try:
-                from api.services.outbox import emit
-
-                notification.email_queued_at = datetime.now(UTC)
+            for event_type in ("notification.websocket", "notification.web_push"):
                 await emit(
-                    db,
-                    event_type="notification.email_with_attachments",
-                    payload={
-                        "user_id": str(user_id),
-                        "type": type,
-                        "title": title,
-                        "body": body or "",
-                        "link": link,
-                        "related_id": str(related_id) if related_id else None,
-                        "attachment_ids": [str(item) for item in email_attachment_ids],
-                    },
+                    db, event_type=event_type, payload={"notification_id": str(notification.id)}
                 )
-            except Exception:
-                logger.warning(
-                    "含附件通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True
-                )
-                raise
+            queued = True
+
+    if email_enabled and user.email and notification is not None:
+        if email_attachment_ids:
+            notification.email_queued_at = datetime.now(UTC)
+            await emit(
+                db,
+                event_type="notification.email_with_attachments",
+                payload={
+                    "user_id": str(user_id),
+                    "type": type,
+                    "title": title,
+                    "body": body or "",
+                    "link": link,
+                    "related_id": str(related_id) if related_id else None,
+                    "attachment_ids": [str(item) for item in email_attachment_ids],
+                },
+            )
+            queued = True
         elif not digest_enabled:
-            try:
-                send_notification_email_batch.apply_async(
-                    args=[str(user_id), type],
-                    countdown=NOTIFICATION_EMAIL_BATCH_DELAY_SECONDS,
-                )
-            except Exception:
-                logger.warning("通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
+            await emit(
+                db,
+                event_type="notification.email_batch",
+                payload={"notification_id": str(notification.id)},
+            )
+            queued = True
 
     if channel.get("line"):
-        try:
-            from api.models.line_account import LineAccountLink
-            from api.services.outbox import emit
+        from api.models.line_account import LineAccountLink
 
-            line_user_id = await db.scalar(
-                select(LineAccountLink.line_user_id).where(
-                    LineAccountLink.user_id == user_id,
-                    LineAccountLink.is_active.is_(True),
-                )
+        line_user_id = await db.scalar(
+            select(LineAccountLink.line_user_id).where(
+                LineAccountLink.user_id == user_id,
+                LineAccountLink.is_active.is_(True),
             )
-            if line_user_id:
-                await emit(
-                    db,
-                    event_type="line.push",
-                    payload={
-                        "line_user_id": line_user_id,
-                        "title": title,
-                        "body": body,
-                        "link": link,
-                    },
-                )
-        except Exception:
-            logger.warning("通知 LINE 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
-
-    if channel.get("discord"):
-        try:
-            await emit_personal_notification(
+        )
+        if line_user_id:
+            await emit(
                 db,
-                user_id=user_id,
-                notification_type=type,
-                title=title,
-                body=body,
-                link=link,
+                event_type="line.push",
+                payload={"line_user_id": line_user_id, "title": title, "body": body, "link": link},
             )
-        except Exception:
-            logger.warning("通知 Discord 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
+            queued = True
+    if channel.get("discord"):
+        await emit_personal_notification(
+            db,
+            user_id=user_id,
+            notification_type=type,
+            title=title,
+            body=body,
+            link=link,
+        )
+    if queued:
+        request_processing_after_commit(db)
+
+
+async def deliver_notification(
+    db: AsyncSession, event_type: str, payload: dict[str, object]
+) -> None:
+    """只在 outbox worker 的獨立交易中讀取已提交通知，再執行外部管道。"""
+    try:
+        notification_id = uuid.UUID(str(payload["notification_id"]))
+    except (KeyError, TypeError, ValueError):
+        logger.warning("通知傳遞事件缺少有效 notification_id type=%s", event_type)
+        return
+    notification = await db.get(Notification, notification_id)
+    if notification is None:
+        return
+    user = await db.get(User, notification.user_id)
+    if user is None or not user.is_active:
+        return
+    channel = normalize_preferences(user.notification_preferences).get(
+        notification.type, {"inapp": True, "email": False}
+    )
+    if event_type == "notification.email_batch":
+        if (
+            not channel["email"]
+            or not user.email
+            or notification.email_queued_at is not None
+            or get_digest_frequency(user.notification_preferences) != "off"
+        ):
+            return
+        await asyncio.to_thread(
+            send_notification_email_batch.apply_async,
+            args=[str(user.id), notification.type],
+            countdown=NOTIFICATION_EMAIL_BATCH_DELAY_SECONDS,
+        )
+        return
+    if not notification.is_inapp_visible or not channel["inapp"]:
+        return
+    if event_type == "notification.websocket":
+        unread = await db.scalar(
+            select(func.count(Notification.id)).where(
+                Notification.user_id == user.id,
+                Notification.is_inapp_visible.is_(True),
+                Notification.is_read.is_(False),
+            )
+        )
+        await publish_room_from_worker(
+            f"user:{user.id}",
+            {
+                "type": "notification.created",
+                "notification": _notification_payload(notification),
+                "unread": int(unread or 0),
+            },
+        )
+    elif event_type == "notification.web_push":
+        await send_to_user(
+            db,
+            user.id,
+            {
+                "title": notification.title,
+                "body": notification.body or "",
+                "url": notification.link or "/notifications",
+            },
+        )
 
 
 async def notify_users(

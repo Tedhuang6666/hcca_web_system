@@ -55,15 +55,12 @@ from api.schemas.document import (
     DocumentEmailResendOut,
     DocumentOut,
     RecallRequest,
-    RejectMode,
     RejectRequest,
     SubmitRequest,
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
-from api.services.discord_bot import emit_public_document_notice
-from api.services.notification import create_notification
 from api.services.permission import get_user_permission_codes_for_org, user_is_org_leader
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
@@ -219,7 +216,7 @@ async def batch_approve_documents(
             )
             continue
         try:
-            updated = await doc_svc.approve_step(
+            updated = await doc_svc.approve_document(
                 session,
                 doc,
                 approver_id=current_user.id,
@@ -238,9 +235,6 @@ async def batch_approve_documents(
                 },
                 summary=f"批量核准公文「{updated.title}」",
             )
-            if updated.status == DocumentStatus.APPROVED:
-                await doc_svc.queue_document_recipient_emails(session, updated)
-                await emit_public_document_notice(session, updated)
             bg.add_task(ws_broadcast_bg, updated)
             results.append(batch_result(doc_id, ok=True, doc=updated))
         except (PermissionError, ValueError) as exc:
@@ -271,20 +265,13 @@ async def batch_reject_documents(
             )
             continue
         try:
-            if payload.mode == RejectMode.TO_PREVIOUS:
-                updated = await doc_svc.reject_to_previous_step(
-                    session,
-                    doc,
-                    approver_id=current_user.id,
-                    comment=payload.comment,
-                )
-            else:
-                updated = await doc_svc.reject_step(
-                    session,
-                    doc,
-                    approver_id=current_user.id,
-                    comment=payload.comment,
-                )
+            updated = await doc_svc.reject_document(
+                session,
+                doc,
+                approver_id=current_user.id,
+                comment=payload.comment,
+                mode=payload.mode,
+            )
             await audit_svc.record(
                 session,
                 entity_type="document",
@@ -422,21 +409,10 @@ async def submit_document(
                 detail="只有部門最高權限者、建立者 + document:submit、document:admin 或活動總召可以送審",
             )
     try:
-        updated = await doc_svc.submit_document(session, doc, approver_ids=payload.approver_ids)
+        updated = await doc_svc.submit_for_approval(session, doc, approver_ids=payload.approver_ids)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
-    if updated.approvals:
-        approver = updated.approvals[0].delegate or updated.approvals[0].approver
-        await create_notification(
-            session,
-            user_id=approver.id,
-            type="document_pending",
-            title=f"公文待你審核：{updated.title}",
-            body=f"字號：{updated.serial_number}",
-            link=f"/documents/{updated.id}",
-            related_id=updated.id,
-        )
     _ph = get_posthog_client()
     if _ph:
         _ph.capture(
@@ -468,7 +444,7 @@ async def approve_document(
 ) -> Document:
     doc = await get_doc_or_404(doc_id, session)
     try:
-        updated = await doc_svc.approve_step(
+        updated = await doc_svc.approve_document(
             session, doc, approver_id=current_user.id, comment=payload.comment
         )
     except PermissionError as e:
@@ -486,34 +462,6 @@ async def approve_document(
         meta={"step": updated.current_step, "final": updated.status == DocumentStatus.APPROVED},
         summary=f"核准公文「{updated.title}」步驟 {updated.current_step}",
     )
-
-    if updated.status == DocumentStatus.APPROVED:
-        await doc_svc.queue_document_recipient_emails(session, updated)
-        await create_notification(
-            session,
-            user_id=updated.created_by,
-            type="document_approved",
-            title=f"公文已核准：{updated.title}",
-            body=f"字號：{updated.serial_number}",
-            link=f"/documents/{updated.id}",
-            related_id=updated.id,
-        )
-        await emit_public_document_notice(session, updated)
-    else:
-        next_step = next(
-            (a for a in updated.approvals if a.step_order == updated.current_step), None
-        )
-        if next_step:
-            recipient = next_step.delegate or next_step.approver
-            await create_notification(
-                session,
-                user_id=recipient.id,
-                type="document_pending",
-                title=f"公文待你審核：{updated.title}",
-                body=f"字號：{updated.serial_number}",
-                link=f"/documents/{updated.id}",
-                related_id=updated.id,
-            )
 
     _ph = get_posthog_client()
     if _ph and updated.status == DocumentStatus.APPROVED:
@@ -550,14 +498,13 @@ async def reject_document(
     """
     doc = await get_doc_or_404(doc_id, session)
     try:
-        if payload.mode == RejectMode.TO_PREVIOUS:
-            updated = await doc_svc.reject_to_previous_step(
-                session, doc, approver_id=current_user.id, comment=payload.comment
-            )
-        else:
-            updated = await doc_svc.reject_step(
-                session, doc, approver_id=current_user.id, comment=payload.comment
-            )
+        updated = await doc_svc.reject_document(
+            session,
+            doc,
+            approver_id=current_user.id,
+            comment=payload.comment,
+            mode=payload.mode,
+        )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
@@ -574,31 +521,6 @@ async def reject_document(
         summary=f"退件公文「{updated.title}」（{payload.mode}）",
     )
 
-    if payload.mode == RejectMode.TO_CREATOR:
-        await create_notification(
-            session,
-            user_id=updated.created_by,
-            type="document_rejected",
-            title=f"公文被退件：{updated.title}",
-            body=f"字號：{updated.serial_number}",
-            link=f"/documents/{updated.id}",
-            related_id=updated.id,
-        )
-    else:
-        prev_step = next(
-            (a for a in updated.approvals if a.step_order == updated.current_step), None
-        )
-        if prev_step:
-            recipient = prev_step.delegate or prev_step.approver
-            await create_notification(
-                session,
-                user_id=recipient.id,
-                type="document_pending",
-                title=f"公文退回待你重審：{updated.title}",
-                body=f"字號：{updated.serial_number}",
-                link=f"/documents/{updated.id}",
-                related_id=updated.id,
-            )
     bg.add_task(ws_broadcast_bg, updated)
     return updated
 
@@ -940,28 +862,11 @@ async def issue_document_directly(
     if doc.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可直接發文")
     try:
-        updated = await doc_svc.issue_document_directly(
+        updated = await doc_svc.issue_document(
             session, doc, issued_by=current_user.id, comment=payload.comment
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
-    loaded = await doc_svc.get_document(session, updated.id)
-    if loaded is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="無法讀取剛更新的公文"
-        )
-
-    await create_notification(
-        session,
-        user_id=loaded.created_by,
-        type="document_approved",
-        title=f"公文已直接發文：{loaded.title}",
-        body=f"字號：{loaded.serial_number}",
-        link=f"/documents/{loaded.id}",
-        related_id=loaded.id,
-    )
-    await doc_svc.queue_document_recipient_emails(session, loaded)
-    await emit_public_document_notice(session, loaded)
-    bg.add_task(ws_broadcast_bg, loaded)
-    return loaded
+    bg.add_task(ws_broadcast_bg, updated)
+    return updated

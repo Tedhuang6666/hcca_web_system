@@ -965,6 +965,19 @@ export type FinanceBudgetDetail = FinanceBudget & {
   submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]
   income_items: FinanceBudgetIncomeItem[]
   expenses: FinanceBudgetExpenseOut[]
+  current_plan: FinanceBudgetCurrentPlan
+}
+export type FinanceBudgetPlanRow = {
+  id: string; category: string; name: string; income: boolean; amount: number
+  quantity: number | null; unit: string | null; unit_price: number | null
+  note: string | null; is_new: boolean
+}
+export type FinanceBudgetCurrentPlan = {
+  submission_ids: string[]
+  allocation_ids: string[]
+  historical_expense_allocations: Record<string, string>
+  rows: FinanceBudgetPlanRow[]
+  changes: { name: string; before: number; after: number }[]
 }
 export type FinanceBudgetImportResult = {
   budget: FinanceBudget

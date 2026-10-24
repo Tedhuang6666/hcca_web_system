@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 import redis.asyncio as aioredis
 from fastapi import WebSocket
+from redis.asyncio.client import PubSub
 
 from api.core.config import settings
 
@@ -306,7 +307,7 @@ class _RedisBroker:
 
     def __init__(self, mgr: ConnectionManager) -> None:
         self._mgr = mgr
-        self._pubsub = None
+        self._pubsub: PubSub | None = None
         self._redis_client: aioredis.Redis | None = None
         self._task: asyncio.Task | None = None
         self._stopping = asyncio.Event()
@@ -421,6 +422,31 @@ class _RedisBroker:
 
 
 _broker: _RedisBroker | None = None
+
+
+async def publish_room_from_worker(room: str, message: dict) -> None:
+    """背景工作直接發布至 API 的房間頻道，不依賴 FastAPI lifespan 初始化。
+
+    Celery 不持有瀏覽器連線，也不應在每個 asyncio.run 中啟動訂閱 listener。
+    獨立的短生命週期 publisher 讓 Redis 故障向上傳播，由 outbox 保留重試。
+    """
+    if settings.WS_PUBSUB_BACKEND != "redis":
+        await manager.broadcast_to_room(room, message)
+        return
+    client = aioredis.from_url(
+        str(settings.REDIS_REALTIME_URL or settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=1,
+        socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+        socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+    )
+    try:
+        await client.publish(
+            _PUBSUB_CHANNEL, json.dumps({"target": "room", "room": room, "message": message})
+        )
+    finally:
+        await client.aclose()
 
 
 async def setup_broker() -> None:

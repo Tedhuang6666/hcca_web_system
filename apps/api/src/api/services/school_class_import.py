@@ -186,16 +186,43 @@ def parse_roster_csv_text(text: str) -> list[ParsedRosterRow]:
                 return item.strip()
         return ""
 
-    lines: list[str] = []
+    rows: list[ParsedRosterRow] = []
     for line_number, row in enumerate(reader, start=2):
         display_name = value(row, "display_name", "student_name", "姓名")
         class_code = value(row, "class_code", "班級")
-        seat_number = value(row, "seat_number", "座號")
+        seat = value(row, "seat_number", "座號")
         student_id = value(row, "student_id", "學號")
-        if not all((display_name, class_code, seat_number, student_id)):
+        if not all((display_name, class_code, seat, student_id)):
             raise ValueError(f"CSV 第 {line_number} 行缺少姓名、班級、座號或學號")
-        lines.append(f"{display_name} {class_code} {seat_number} {student_id}")
-    return parse_roster_pdf_text("\n".join(lines))
+        try:
+            seat_number = int(seat)
+        except ValueError as exc:
+            raise ValueError(f"CSV 第 {line_number} 行座號格式不正確") from exc
+        rows.append(ParsedRosterRow(display_name, class_code, seat_number, student_id))
+    _validate_roster_rows(rows)
+    return rows
+
+
+def _validate_roster_rows(rows: list[ParsedRosterRow]) -> None:
+    if not rows:
+        raise ValueError("名冊沒有可匯入的資料")
+    seats: set[tuple[str, int]] = set()
+    student_ids: set[str] = set()
+    for index, row in enumerate(rows, start=1):
+        if (
+            not row.display_name.strip()
+            or re.fullmatch(r"\d{3}", row.class_code) is None
+            or not 1 <= row.seat_number <= 999
+            or re.fullmatch(r"\d{5,20}", row.student_id) is None
+        ):
+            raise ValueError(f"第 {index} 筆名冊的姓名、班級、座號或學號格式不正確")
+        key = (row.class_code, row.seat_number)
+        if key in seats:
+            raise ValueError(f"名冊重複座號：{row.class_code} 班 {row.seat_number} 號")
+        if row.student_id in student_ids:
+            raise ValueError(f"名冊重複學號：{row.student_id}")
+        seats.add(key)
+        student_ids.add(row.student_id)
 
 
 def parse_roster_file(file_bytes: bytes) -> list[ParsedRosterRow]:
@@ -419,6 +446,21 @@ async def import_roster_pdf(
     if resolved_year is None:
         raise ValueError("無法從檔名判斷學年度，請手動填寫學年度")
 
+    return await import_roster_rows(
+        session, rows=rows, academic_year=resolved_year, created_by=created_by
+    )
+
+
+async def import_roster_rows(
+    session: AsyncSession,
+    *,
+    rows: list[ParsedRosterRow],
+    academic_year: int,
+    created_by: uuid.UUID,
+) -> ClassRosterPdfImportOut:
+    """校驗並匯入已解析名冊；不同檔案來源共用批次寫入與身分關聯。"""
+    _validate_roster_rows(rows)
+    resolved_year = academic_year
     class_codes = sorted({row.class_code for row in rows})
     existing_result = await session.execute(
         select(SchoolClass).where(

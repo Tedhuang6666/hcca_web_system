@@ -12,7 +12,7 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +100,7 @@ from api.schemas.finance import (
 from api.services import audit as audit_svc
 from api.services import finance as service
 from api.services import finance_documents
+from api.services.file_delivery import deliver_stored_file
 from api.services.permission import get_user_permission_codes_for_org
 from api.services.storage import get_storage
 
@@ -1515,21 +1516,14 @@ async def download_evidence(entry_id: uuid.UUID, db: DbDep, _: CurrentUser):
     if not entry or not entry.evidence_url:
         raise HTTPException(404, "憑證不存在")
     service.validate_evidence_key(entry.evidence_url, entry.ledger_id)
-    storage = get_storage()
-    local_path = storage.local_path(entry.evidence_url)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(404, "憑證檔案不存在")
-        return FileResponse(
-            local_path,
-            filename=local_path.name,
-            media_type=mimetypes.guess_type(local_path.name)[0] or "application/octet-stream",
-            content_disposition_type="inline",
-            headers=_inline_evidence_headers("private, no-store"),
-        )
-    return RedirectResponse(
-        await storage.get_url(entry.evidence_url, disposition="inline"),
+    return await deliver_stored_file(
+        get_storage(),
+        entry.evidence_url,
+        filename=entry.evidence_url.rsplit("/", 1)[-1],
+        content_type=mimetypes.guess_type(entry.evidence_url)[0] or "application/octet-stream",
+        disposition="inline",
         headers=_inline_evidence_headers("private, no-store"),
+        missing_detail="憑證檔案不存在",
     )
 
 
@@ -1607,7 +1601,7 @@ async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> li
 async def export_budget_workbook(budget_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Response:
     budget = await service.get_budget(db, budget_id)
     detail = await service.budget_detail(db, budget)
-    content = await asyncio.to_thread(finance_documents.budget_workbook, detail)
+    content = await asyncio.to_thread(finance_documents.budget_workbook, detail["current_plan"])
     return Response(
         content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1734,7 +1728,7 @@ async def get_public_budget_detail(
     visible_submission_ids = (
         {item.id for item in visible_submissions}
         if review_submission
-        else service.effective_budget_submission_ids(detail["submissions"])
+        else set(detail["current_plan"].submission_ids)
     )
     return PublicBudgetDetailOut(
         id=detail["id"],
@@ -1801,23 +1795,14 @@ async def download_budget_expense_evidence(
     ):
         raise HTTPException(404, "支出憑證不存在")
     service.validate_evidence_key(evidence.storage_key, budget.ledger_id)
-    storage = get_storage()
-    local_path = storage.local_path(evidence.storage_key)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(404, "支出憑證檔案不存在")
-        return FileResponse(
-            local_path,
-            filename=evidence.filename,
-            media_type=evidence.content_type,
-            content_disposition_type="inline",
-            headers=_inline_evidence_headers("private, no-store"),
-        )
-    return RedirectResponse(
-        await storage.get_url(
-            evidence.storage_key, disposition="inline", download_name=evidence.filename
-        ),
+    return await deliver_stored_file(
+        get_storage(),
+        evidence.storage_key,
+        filename=evidence.filename,
+        content_type=evidence.content_type,
+        disposition="inline",
         headers=_inline_evidence_headers("private, no-store"),
+        missing_detail="支出憑證檔案不存在",
     )
 
 
@@ -1860,23 +1845,14 @@ async def download_public_budget_expense_evidence(
     if not approved_allocation:
         raise HTTPException(404, "公開憑證不存在")
     service.validate_evidence_key(evidence.storage_key, budget.ledger_id)
-    storage = get_storage()
-    local_path = storage.local_path(evidence.storage_key)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(404, "公開憑證檔案不存在")
-        return FileResponse(
-            local_path,
-            filename=evidence.filename,
-            media_type=evidence.content_type,
-            content_disposition_type="inline",
-            headers=_inline_evidence_headers("public, max-age=300"),
-        )
-    return RedirectResponse(
-        await storage.get_url(
-            evidence.storage_key, disposition="inline", download_name=evidence.filename
-        ),
+    return await deliver_stored_file(
+        get_storage(),
+        evidence.storage_key,
+        filename=evidence.filename,
+        content_type=evidence.content_type,
+        disposition="inline",
         headers=_inline_evidence_headers("public, max-age=300"),
+        missing_detail="公開憑證檔案不存在",
     )
 
 
@@ -1938,21 +1914,14 @@ async def download_public_expense_claim_evidence(
         raise HTTPException(404, "公開憑證不存在")
 
     service.validate_evidence_key(storage_key, budget.ledger_id)
-    storage = get_storage()
-    local_path = storage.local_path(storage_key)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(404, "公開憑證檔案不存在")
-        return FileResponse(
-            local_path,
-            filename=filename,
-            media_type=content_type,
-            content_disposition_type="inline",
-            headers=_inline_evidence_headers("public, max-age=300"),
-        )
-    return RedirectResponse(
-        await storage.get_url(storage_key, disposition="inline", download_name=filename),
+    return await deliver_stored_file(
+        get_storage(),
+        storage_key,
+        filename=filename,
+        content_type=content_type,
+        disposition="inline",
         headers=_inline_evidence_headers("public, max-age=300"),
+        missing_detail="公開憑證檔案不存在",
     )
 
 
@@ -1972,23 +1941,14 @@ async def download_budget_evidence(evidence_id: uuid.UUID, db: DbDep, user: Curr
     if not (can_manage or can_review or (can_propose and allocation.proposed_by_id == user.id)):
         raise HTTPException(403, "沒有檢視這份內部預算憑證的權限")
     service.validate_evidence_key(evidence.storage_key, budget.ledger_id)
-    storage = get_storage()
-    local_path = storage.local_path(evidence.storage_key)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(404, "預算憑證檔案不存在")
-        return FileResponse(
-            local_path,
-            filename=evidence.filename,
-            media_type=evidence.content_type,
-            content_disposition_type="inline",
-            headers=_inline_evidence_headers("private, no-store"),
-        )
-    return RedirectResponse(
-        await storage.get_url(
-            evidence.storage_key, disposition="inline", download_name=evidence.filename
-        ),
+    return await deliver_stored_file(
+        get_storage(),
+        evidence.storage_key,
+        filename=evidence.filename,
+        content_type=evidence.content_type,
+        disposition="inline",
         headers=_inline_evidence_headers("private, no-store"),
+        missing_detail="預算憑證檔案不存在",
     )
 
 
@@ -2016,21 +1976,12 @@ async def download_item_evidence(evidence_id: uuid.UUID, db: DbDep, user: Curren
             PermissionCode.FINANCE_BUDGET,
         )
     service.validate_evidence_key(evidence.storage_key, entry.ledger_id)
-    storage = get_storage()
-    local_path = storage.local_path(evidence.storage_key)
-    if local_path is not None:
-        if not local_path.is_file():
-            raise HTTPException(404, "憑證檔案不存在")
-        return FileResponse(
-            local_path,
-            filename=evidence.filename,
-            media_type=evidence.content_type or mimetypes.guess_type(evidence.filename)[0],
-            content_disposition_type="inline",
-            headers=_inline_evidence_headers("private, no-store"),
-        )
-    return RedirectResponse(
-        await storage.get_url(
-            evidence.storage_key, disposition="inline", download_name=evidence.filename
-        ),
+    return await deliver_stored_file(
+        get_storage(),
+        evidence.storage_key,
+        filename=evidence.filename,
+        content_type=evidence.content_type or mimetypes.guess_type(evidence.filename)[0],
+        disposition="inline",
         headers=_inline_evidence_headers("private, no-store"),
+        missing_detail="憑證檔案不存在",
     )

@@ -526,12 +526,40 @@ class BudgetAllocationOut(BaseModel):
     evidence: list[BudgetAllocationEvidenceOut] = Field(default_factory=list)
 
 
+class BudgetPlanRowOut(BaseModel):
+    id: uuid.UUID
+    category: str
+    name: str
+    income: bool
+    amount: int
+    quantity: float | None
+    unit: str | None
+    unit_price: int | None
+    note: str | None
+    is_new: bool
+
+
+class BudgetVersionChangeOut(BaseModel):
+    name: str
+    before: int
+    after: int
+
+
+class BudgetPlanOut(BaseModel):
+    submission_ids: list[uuid.UUID]
+    allocation_ids: list[uuid.UUID]
+    historical_expense_allocations: dict[uuid.UUID, uuid.UUID]
+    rows: list[BudgetPlanRowOut]
+    changes: list[BudgetVersionChangeOut]
+
+
 class BudgetDetailOut(BudgetOut):
     submissions: list[BudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[BudgetAllocationOut]
     income_items: list[BudgetIncomeItemOut] = Field(default_factory=list)
     expenses: list[FinanceBudgetExpenseOut] = Field(default_factory=list)
+    current_plan: BudgetPlanOut
 
 
 class BudgetImportOut(BaseModel):

@@ -32,7 +32,6 @@ from api.core.permission_codes import (
 from api.core.security import revoke_user
 from api.dependencies.permissions import require_permission
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
-from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.school_class import ClassRosterEntry, SchoolClass
 from api.models.user import User
 from api.models.user_identity import UserIdentity
@@ -43,6 +42,7 @@ from api.services import cadre_import as cadre_import_svc
 from api.services import mfa as mfa_svc
 from api.services import org as org_svc
 from api.services import person as person_svc
+from api.services import user_position as tenure_svc
 from api.services import user_registration as user_registration_svc
 from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
@@ -1056,41 +1056,15 @@ async def add_user_position(
     db: DbDep,
     admin_user: AdminUser,
 ) -> UserDetail:
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
-
-    pos_check = await db.execute(
-        select(Position).options(selectinload(Position.org)).where(Position.id == body.position_id)
-    )
-    position = pos_check.scalar_one_or_none()
-    if not position:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
-    if position.org and not position.org.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="此職位所屬組織已停用，無法新增任期",
-        )
-
-    user_position = UserPosition(
+    user_position = await tenure_svc.assign(
+        db,
         user_id=user_id,
         position_id=body.position_id,
         start_date=body.start_date,
         end_date=body.end_date,
     )
-    db.add(user_position)
-    await db.flush()
-    await person_svc.record_affiliation_for_user_position(
-        db,
-        user=user,
-        kind=PersonAffiliationKind.ORG_POSITION,
-        position_id=body.position_id,
-        start_date=user_position.start_date,
-        end_date=user_position.end_date,
-        synced_user_position_id=user_position.id,
-        source=PersonAffiliationSource.RBAC_SYNC,
-    )
+    user = user_position.user
+    position = user_position.position
     await audit_svc.record(
         db,
         entity_type="user_position",
@@ -1108,9 +1082,6 @@ async def add_user_position(
         },
         summary=f"指派「{position.name}」給「{user.display_name}」",
     )
-    await enqueue_role_sync(db, user_id)
-    await cache_invalidate_user_permissions(str(user_id))
-    await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     return await _enrich_user(db, user)
 
 
@@ -1153,11 +1124,7 @@ async def remove_user_position(
         },
         summary="移除使用者職位任期",
     )
-    await db.delete(up)
-    await db.flush()
-    await enqueue_role_sync(db, user_id)
-    await cache_invalidate_user_permissions(str(user_id))
-    await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
+    await tenure_svc.remove(db, up)
 
 
 @router.patch(
@@ -1188,21 +1155,11 @@ async def update_user_position(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="至少需提供 start_date 或 end_date",
         )
-    start_date = body.start_date or up.start_date
-    end_date = body.end_date if "end_date" in body.model_fields_set else up.end_date
-    if end_date is not None and end_date < start_date:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="任期結束日不可早於開始日",
-        )
-
     before = {
         "start_date": up.start_date.isoformat(),
         "end_date": up.end_date.isoformat() if up.end_date else None,
     }
-    up.start_date = start_date
-    up.end_date = end_date
-    await db.flush()
+    up = await tenure_svc.update_term(db, up, body.model_dump(exclude_unset=True))
     await audit_svc.record(
         db,
         entity_type="user_position",
@@ -1222,9 +1179,6 @@ async def update_user_position(
         },
         summary="更新使用者職位任期",
     )
-    await enqueue_role_sync(db, up.user_id)
-    await cache_invalidate_user_permissions(str(up.user_id))
-    await user_session_svc.revoke_all(db, up.user_id, reason="permission_changed")
     if up.user is None:
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one()

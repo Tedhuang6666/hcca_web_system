@@ -22,8 +22,22 @@ from api.models.petition import (
 from api.models.user import User
 from api.schemas.petition import PetitionCreate, PetitionStatusUpdate
 from api.services import petition as petition_svc
+from api.services.outbox import _dispatch
 
 # ── 測試輔助 ──────────────────────────────────────────────────────────────────
+
+
+async def _email_intents_for_user(db, user: User) -> list[OutboxEvent]:
+    notification_ids = {
+        str(value)
+        for value in await db.scalars(
+            select(Notification.id).where(Notification.user_id == user.id)
+        )
+    }
+    events = await db.scalars(
+        select(OutboxEvent).where(OutboxEvent.event_type == "notification.email_batch")
+    )
+    return [event for event in events if event.payload.get("notification_id") in notification_ids]
 
 
 async def _grant_org_permission(db, user: User, org: Org, code: str) -> None:
@@ -1505,6 +1519,7 @@ async def test_petition_updates_email_logged_in_submitter(
         "api.services.notification.send_notification_email_batch.apply_async", fake_schedule
     )
     ac = authed_client_factory(handler)
+    previous_intents = {event.id for event in await _email_intents_for_user(db_session, owner)}
 
     if scenario == "needs_info":
         response = await ac.patch(
@@ -1528,13 +1543,24 @@ async def test_petition_updates_email_logged_in_submitter(
         )
         assert response.status_code == 200
         if scenario == "public_request":
-            scheduled.clear()
+            previous_intents = {
+                event.id for event in await _email_intents_for_user(db_session, owner)
+            }
             response = await ac.post(
                 f"/petitions/{case_obj.id}/public-request",
                 json={"title": "公開版陳情", "content": "已完成處理。"},
             )
 
     assert response.status_code == 200
+    assert scheduled == []
+    intents = [
+        event
+        for event in await _email_intents_for_user(db_session, owner)
+        if event.id not in previous_intents
+    ]
+    assert len(intents) == int(should_email)
+    for intent in intents:
+        await _dispatch(db_session, intent)
     assert len(scheduled) == int(should_email)
     if should_email:
         assert scheduled[0]["args"][0] == str(owner.id)
@@ -1557,6 +1583,7 @@ async def test_petition_transfer_does_not_email_submitter(
         "api.services.notification.send_notification_email_batch.apply_async",
         lambda **kwargs: scheduled.append(kwargs),
     )
+    previous_intents = {event.id for event in await _email_intents_for_user(db_session, owner)}
 
     response = await authed_client_factory(handler).patch(
         f"/petitions/{case_obj.id}/transfer",
@@ -1565,6 +1592,9 @@ async def test_petition_transfer_does_not_email_submitter(
 
     assert response.status_code == 200
     assert scheduled == []
+    assert {
+        event.id for event in await _email_intents_for_user(db_session, owner)
+    } == previous_intents
 
 
 async def test_add_internal_note_succeeds(db_session, authed_client_factory) -> None:

@@ -66,6 +66,7 @@ from api.schemas.finance import (
     ManualJournalUpdate,
     TransferCreate,
 )
+from api.services.finance_budget_plan import ApprovedBudgetPlan
 
 DEFAULT_ACCOUNTS = (
     ("1101", "零用金", FinanceAccountType.ASSET),
@@ -581,7 +582,7 @@ async def update_budget_submission(
 async def delete_budget_submission(db: AsyncSession, submission_id: uuid.UUID) -> None:
     submission = await _editable_submission(db, submission_id)
     budget_id = submission.budget_id
-    db.delete(submission)
+    await db.delete(submission)
     await db.flush()
     await _refresh_budget_node_activity(db, budget_id)
 
@@ -721,7 +722,7 @@ async def delete_budget_draft_allocation(
     if not allocation or allocation.submission_id != submission.id:
         raise HTTPException(404, "預算配置不存在")
     budget_id = submission.budget_id
-    db.delete(allocation)
+    await db.delete(allocation)
     await db.flush()
     await _refresh_budget_node_activity(db, budget_id)
 
@@ -1012,6 +1013,9 @@ async def create_budget_expense(
     )
     if not allocation:
         raise HTTPException(400, "支出必須對應此預算中已核准的明細")
+    plan = await ApprovedBudgetPlan.load(db, budget.id)
+    if not plan.permits_expense(allocation):
+        raise HTTPException(400, "新增支出只能選擇目前核定總表的明細")
 
     department_org_id = body.department_org_id or allocation.proposing_org_id
     if not await db.get(Org, department_org_id):
@@ -1095,6 +1099,9 @@ async def update_budget_expense(
     )
     if not allocation:
         raise HTTPException(400, "支出必須對應此預算中已核准的明細")
+    plan = await ApprovedBudgetPlan.load(db, budget.id)
+    if not plan.permits_expense(allocation, original_allocation_id=expense.allocation_id):
+        raise HTTPException(400, "只能選擇目前核定明細或此支出原本的歷史明細")
 
     department_org_id = body.department_org_id or allocation.proposing_org_id
     if not await db.get(Org, department_org_id):
@@ -1145,18 +1152,6 @@ async def update_budget_expense(
     return expense
 
 
-def effective_budget_submission_ids(submissions: list[FinanceBudgetSubmission]) -> set[uuid.UUID]:
-    """A full workbook replaces the planning baseline; later additions remain additive."""
-    effective: set[uuid.UUID] = set()
-    for submission in submissions:
-        if submission.status != BudgetSubmissionStatus.APPROVED:
-            continue
-        if submission.is_full_snapshot:
-            effective.clear()
-        effective.add(submission.id)
-    return effective
-
-
 async def budget_advance_receipt_expenses(
     db: AsyncSession, budget_id: uuid.UUID, expense_ids: list[uuid.UUID]
 ) -> list[dict]:
@@ -1178,16 +1173,8 @@ async def update_budget_income_item(
     submission = await db.get(FinanceBudgetSubmission, item.submission_id) if item else None
     if not item or not submission or submission.budget_id != budget_id:
         raise HTTPException(404, "預算收入不存在")
-    submissions = list(
-        (
-            await db.scalars(
-                select(FinanceBudgetSubmission)
-                .where(FinanceBudgetSubmission.budget_id == budget_id)
-                .order_by(FinanceBudgetSubmission.created_at)
-            )
-        ).all()
-    )
-    if item.submission_id not in effective_budget_submission_ids(submissions):
+    plan = await ApprovedBudgetPlan.load(db, budget_id)
+    if item.submission_id not in plan.submission_ids:
         raise HTTPException(400, "只能編輯目前核定總表的收入")
     previous = item.amount
     for key, value in body.model_dump(exclude_unset=True).items():
@@ -1256,11 +1243,8 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
     evidence_by_allocation: dict[uuid.UUID, list[FinanceBudgetAllocationEvidence]] = {}
     for evidence in evidence_rows:
         evidence_by_allocation.setdefault(evidence.allocation_id, []).append(evidence)
-    approved_ids = effective_budget_submission_ids(submissions)
-    totals: dict[uuid.UUID, int] = {}
-    for allocation in allocations:
-        if allocation.submission_id in approved_ids:
-            totals[allocation.node_id] = totals.get(allocation.node_id, 0) + allocation.amount
+    plan = ApprovedBudgetPlan(submissions)
+    totals = plan.allocated_amounts(allocations)
     used_rows = (
         await db.execute(
             select(
@@ -1345,6 +1329,7 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
         ],
         "income_items": income_items,
         "expenses": expenses,
+        "current_plan": plan.project(allocations, nodes, income_items, expenses),
         "nodes": [
             {
                 "id": node.id,

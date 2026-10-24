@@ -15,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.merchandise_submission import MerchandiseSubmissionFile
 from api.models.notification import Notification
 from api.models.org import Org
+from api.models.outbox import OutboxEvent
 from api.models.user import User
 from api.routers import merchandise_submissions as merchandise_submissions_router
 from api.services.merchandise_submission_ai import AI_DETECTION_VERSION
+from api.services.outbox import _dispatch
 
 
 def test_presigned_storage_redirect_accepts_configured_s3_host(monkeypatch) -> None:
@@ -313,6 +315,27 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         )
         assert approve_response.status_code == 200
         assert approve_response.json()["status"] == "approved"
+
+        schedule_email.assert_not_called()
+        notification_ids = {
+            str(value)
+            for value in await db_session.scalars(
+                select(Notification.id).where(
+                    Notification.user_id == member_user.id,
+                    Notification.type == "merchandise_submission_status",
+                )
+            )
+        }
+        intents = [
+            event
+            for event in await db_session.scalars(
+                select(OutboxEvent).where(OutboxEvent.event_type == "notification.email_batch")
+            )
+            if event.payload.get("notification_id") in notification_ids
+        ]
+        assert len(intents) == 3
+        for intent in intents:
+            await _dispatch(db_session, intent)
 
     assert schedule_email.call_count == 3
     assert all(

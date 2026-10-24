@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, or_, select, union
@@ -954,6 +955,28 @@ async def get_class_member_registrations(
     return await _get_class_member_orders(session, user_id, class_ids)
 
 
+async def _settle_registration_orders(session: AsyncSession, orders: Iterable[Order]) -> None:
+    """數量異動後，以同一交易更新金額、優惠配置與應收款。"""
+    await session.flush()
+    for order in orders:
+        order.subtotal_price = sum(item.quantity * item.unit_price for item in order.items)
+        if not order.items:
+            order.status = OrderStatus.CANCELLED
+            order.subtotal_price = 0
+            order.discount_amount = 0
+            order.total_price = 0
+            await _sync_order_promotions(session, order, ())
+            await receivable_svc.cancel_for_source(session, "shop_order", order.id)
+        else:
+            try:
+                await _apply_order_promotion(session, order, code=order.promotion_code)
+            except ValueError:
+                # 調整品項後原優惠可能已不適用，仍套用符合條件的自動優惠。
+                await _apply_order_promotion(session, order, code=None)
+            await receivable_svc.sync_shop_order(session, order)
+    await session.flush()
+
+
 async def set_class_member_product(
     session: AsyncSession,
     *,
@@ -1129,24 +1152,7 @@ async def set_class_member_product(
             order.class_id = class_id
             order.school_class = await session.get(SchoolClass, class_id)
 
-    await session.flush()
-    for order in affected_orders.values():
-        order.subtotal_price = sum(item.quantity * item.unit_price for item in order.items)
-        if not order.items:
-            order.status = OrderStatus.CANCELLED
-            order.subtotal_price = 0
-            order.discount_amount = 0
-            order.total_price = 0
-            await _sync_order_promotions(session, order, ())
-            await receivable_svc.cancel_for_source(session, "shop_order", order.id)
-        else:
-            try:
-                await _apply_order_promotion(session, order, code=order.promotion_code)
-            except ValueError:
-                await _apply_order_promotion(session, order, code=None)
-            await receivable_svc.sync_shop_order(session, order)
-
-    await session.flush()
+    await _settle_registration_orders(session, affected_orders.values())
     return await _get_class_member_orders(session, user.id, class_ids)
 
 
@@ -1404,25 +1410,7 @@ async def set_current_registration_product(
             )
         )
 
-    await session.flush()
-    subtotal = sum(item.quantity * item.unit_price for item in order.items)
-    if not order.items:
-        order.status = OrderStatus.CANCELLED
-        order.subtotal_price = 0
-        order.discount_amount = 0
-        order.total_price = 0
-        await _sync_order_promotions(session, order, ())
-        await receivable_svc.cancel_for_source(session, "shop_order", order.id)
-    else:
-        order.subtotal_price = subtotal
-        try:
-            await _apply_order_promotion(session, order, code=order.promotion_code)
-        except ValueError:
-            # A coupon can stop matching after a user changes the registered products.
-            await _apply_order_promotion(session, order, code=None)
-        await receivable_svc.sync_shop_order(session, order)
-
-    await session.flush()
+    await _settle_registration_orders(session, (order,))
     logger.info(
         "商品登記更新 serial=%s product=%s quantity=%d subtotal_before=%d",
         order.serial_number,

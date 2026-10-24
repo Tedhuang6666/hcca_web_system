@@ -5,6 +5,7 @@
   _template.py  - 公文內容範本 CRUD + 從範本建立草稿
   _access.py    - 可見性 / 存取控制 / 查詢輔助
   _lifecycle.py - 公文 CRUD / 狀態機 / 審核 / 代行授權 / 受文者
+  _approval.py  - 完整審核動作 / 下一關通知 / 正式發文遞送
 """
 
 from api.services.document._access import (
@@ -32,6 +33,12 @@ from api.services.document._access import (
     is_sensitive_document,
     list_documents,
     user_has_full_document_access,
+)
+from api.services.document._approval import (
+    approve_document,
+    issue_document,
+    reject_document,
+    submit_for_approval,
 )
 from api.services.document._delivery import queue_document_recipient_emails
 from api.services.document._lifecycle import (
@@ -86,6 +93,11 @@ from api.services.document._template import (
 )
 
 __all__ = [
+    # complete approval actions
+    "approve_document",
+    "reject_document",
+    "submit_for_approval",
+    "issue_document",
     # serial
     "generate_serial_from_template",
     "build_org_serial_prefix",

@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
+import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 from sqlalchemy import select
 
 from api.core.clock import local_today
 from api.models.finance import (
+    BudgetSubmissionStatus,
     ChartAccount,
     ExpenseClaimItem,
     ExpensePaymentStatus,
     ExpenseProcurementStatus,
+    FinanceBudgetAllocation,
+    FinanceBudgetSubmission,
     FinanceLedger,
     FiscalPeriod,
     FundAccount,
@@ -1461,12 +1465,39 @@ async def test_budget_drafts_can_be_edited_and_deleted_by_their_creator(
     assert (
         await viewer_client.delete(f"/finance/budget-submissions/{submission_id}")
     ).status_code == 403
+    remaining_allocation = await creator_client.post(
+        f"/finance/budget-submissions/{submission_id}/allocations",
+        json={
+            "node_id": node.json()["id"],
+            "amount": 300,
+            "proposing_org_id": str(org.id),
+        },
+    )
+    assert remaining_allocation.status_code == 201
     deleted_allocation = await creator_client.delete(
         f"/finance/budget-submissions/{submission_id}/allocations/{allocation_id}"
     )
     assert deleted_allocation.status_code == 204
+    assert await db_session.get(FinanceBudgetAllocation, uuid.UUID(allocation_id)) is None
+    detail = await creator_client.get(f"/finance/budgets/{budget.json()['id']}")
+    assert [item["id"] for item in detail.json()["allocations"]] == [
+        remaining_allocation.json()["id"]
+    ]
     deleted_submission = await creator_client.delete(f"/finance/budget-submissions/{submission_id}")
     assert deleted_submission.status_code == 204
+    assert await db_session.get(FinanceBudgetSubmission, uuid.UUID(submission_id)) is None
+    assert (
+        await db_session.scalar(
+            select(FinanceBudgetAllocation.id).where(
+                FinanceBudgetAllocation.submission_id == uuid.UUID(submission_id)
+            )
+        )
+        is None
+    )
+    after_delete = (await creator_client.get(f"/finance/budgets/{budget.json()['id']}")).json()
+    assert after_delete["submissions"] == []
+    assert after_delete["allocations"] == []
+    assert after_delete["nodes"] == []
 
 
 async def test_budget_exports_group_advances_and_enforce_budget_scope(
@@ -1625,3 +1656,175 @@ async def test_additions_import_remains_additive_after_full_snapshot(
     expenses, incomes, _ = _parse_budget_workbook(exported.content)
     assert sum(row["amount"] for row in expenses) == 200
     assert sum(row["amount"] for row in incomes) == 1000
+
+
+def _budget_workbook_with_expense_amount(amount: int) -> bytes:
+    workbook = load_workbook(BytesIO(_colored_budget_workbook()))
+    workbook["預算總表"]["C2"] = f"{amount // 100}包"
+    workbook["預算總表"]["E2"] = amount
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+async def test_current_budget_plan_drives_detail_public_export_and_settlement(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    endpoint = f"/finance/ledgers/{ledger.id}/budgets/import"
+    form = {"period_id": str(period.id), "name": "共同預算", "council_approved_on": "2026-08-19"}
+    initial = await actor.post(
+        endpoint, data=form, files={"file": ("初始.xlsx", _colored_budget_workbook())}
+    )
+    assert initial.status_code == 201
+    budget_id = initial.json()["budget"]["id"]
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    old_allocation_id = detail["allocations"][0]["id"]
+    expense = await actor.post(
+        f"/finance/budgets/{budget_id}/expenses",
+        json={
+            "allocation_id": old_allocation_id,
+            "entry_date": "2026-08-20",
+            "purpose": "歷史核銷",
+            "total_amount": 90,
+        },
+    )
+    assert expense.status_code == 201
+    form["budget_id"] = budget_id
+    replacement = await actor.post(
+        endpoint,
+        data=form,
+        files={"file": ("新版總表.xlsx", _budget_workbook_with_expense_amount(400))},
+    )
+    assert replacement.status_code == 201
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    assert detail["current_plan"]["changes"] == [
+        {"name": "行政／影印紙（支出）", "before": 200, "after": 400}
+    ]
+    additions = await actor.post(
+        endpoint,
+        data={**form, "full_snapshot": "false"},
+        files={"file": ("追加收入.xlsx", _colored_budget_workbook())},
+    )
+    assert additions.status_code == 201
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    plan = detail["current_plan"]
+    assert plan["submission_ids"] == [
+        replacement.json()["submission"]["id"],
+        additions.json()["submission"]["id"],
+    ]
+    assert len(detail["allocations"]) == 2  # Full history remains available to the editor.
+    assert old_allocation_id not in plan["allocation_ids"]
+    assert plan["historical_expense_allocations"] == {expense.json()["id"]: old_allocation_id}
+    assert plan["changes"] == [{"name": "活動／報名費（收入）", "before": 500, "after": 1000}]
+    planned_expenses = sum(row["amount"] for row in plan["rows"] if not row["income"])
+    planned_income = sum(row["amount"] for row in plan["rows"] if row["income"])
+    assert planned_expenses == sum(node["allocated_amount"] for node in detail["nodes"]) == 400
+    assert planned_income == 1000
+    public = (await actor.get(f"/finance/public/budgets/{budget_id}")).json()
+    assert {item["id"] for item in public["allocations"]} == set(plan["allocation_ids"])
+    assert public["expenses"][0]["id"] == expense.json()["id"]
+    exported = await actor.get(f"/finance/budgets/{budget_id}/export.xlsx")
+    assert exported.status_code == 200
+    expenses, incomes, _ = _parse_budget_workbook(exported.content)
+    assert sum(row["amount"] for row in expenses) == planned_expenses
+    assert sum(row["amount"] for row in incomes) == planned_income
+    settlement = await actor.get(f"/finance/ledgers/{ledger.id}/periods/{period.id}/settlement")
+    assert settlement.status_code == 200
+    assert settlement.json()["budgeted_total"] == planned_expenses
+    assert settlement.json()["settled_total"] == 90
+
+
+async def test_expense_can_keep_its_original_history_but_cannot_choose_other_old_allocations(
+    db_session, member_user, make_user, client, authed_client_factory
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    endpoint = f"/finance/ledgers/{ledger.id}/budgets/import"
+    form = {"period_id": str(period.id), "name": "共同預算", "council_approved_on": "2026-08-19"}
+    imported = await actor.post(
+        endpoint, data=form, files={"file": ("初始.xlsx", _colored_budget_workbook())}
+    )
+    assert imported.status_code == 201
+    budget_id = imported.json()["budget"]["id"]
+    expense_path = f"/finance/budgets/{budget_id}/expenses"
+    original = (await actor.get(f"/finance/budgets/{budget_id}")).json()["allocations"][0]["id"]
+    body = {
+        "allocation_id": original,
+        "entry_date": "2026-08-20",
+        "purpose": "先前登錄的支出",
+        "total_amount": 90,
+    }
+    expense = await actor.post(expense_path, json=body)
+    assert expense.status_code == 201
+    historical_ids = [original]
+    for amount in (300, 400):
+        replacement = await actor.post(
+            endpoint,
+            data={**form, "budget_id": budget_id},
+            files={"file": ("新版.xlsx", _budget_workbook_with_expense_amount(amount))},
+        )
+        assert replacement.status_code == 201
+        detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+        historical_ids.append(detail["current_plan"]["allocation_ids"][0])
+    _, unrelated_old, current = historical_ids
+    assert (await actor.post(expense_path, json=body)).status_code == 400
+    update_path = f"{expense_path}/{expense.json()['id']}"
+    assert (
+        await actor.patch(update_path, json={**body, "allocation_id": unrelated_old})
+    ).status_code == 400
+    preserved = await actor.patch(update_path, json={**body, "purpose": "補正歷史支出"})
+    assert preserved.status_code == 200
+    assert preserved.json()["allocation_id"] == original
+    assert (
+        await actor.post(expense_path, json={**body, "allocation_id": current})
+    ).status_code == 201
+    assert (await client.post(expense_path, json=body)).status_code == 401
+    outsider = await make_user(email="budget-other-ledger@school.edu")
+    await _grant_many(db_session, [outsider], ["finance:budget", "finance:view"])
+    assert (await authed_client_factory(outsider).patch(update_path, json=body)).status_code == 403
+
+
+@pytest.mark.parametrize("status", ["draft", "submitted", "returned", "rejected"])
+async def test_unapproved_full_snapshot_does_not_replace_current_plan(
+    db_session, member_user, authed_client_factory, status
+) -> None:
+    org = await _grant_many(db_session, [member_user], ["finance:budget", "finance:view"])
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    imported = await actor.post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data={"period_id": str(period.id), "name": "共同預算", "council_approved_on": "2026-08-19"},
+        files={"file": ("初始.xlsx", _colored_budget_workbook())},
+    )
+    assert imported.status_code == 201
+    budget_id = imported.json()["budget"]["id"]
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    submission = FinanceBudgetSubmission(
+        budget_id=uuid.UUID(budget_id),
+        kind="supplemental",
+        title="尚未核定的完整總表",
+        status=BudgetSubmissionStatus(status),
+        is_full_snapshot=True,
+        created_by_id=member_user.id,
+        created_at=datetime.now(UTC) + timedelta(seconds=1),
+    )
+    db_session.add(submission)
+    await db_session.flush()
+    db_session.add(
+        FinanceBudgetAllocation(
+            submission_id=submission.id,
+            node_id=uuid.UUID(detail["allocations"][0]["node_id"]),
+            amount=900,
+            proposed_by_id=member_user.id,
+            proposing_org_id=org.id,
+        )
+    )
+    await db_session.flush()
+    after = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    assert after["current_plan"] == detail["current_plan"]
+    assert len(after["submissions"]) == 2
+    assert len(after["allocations"]) == 2

@@ -36,6 +36,7 @@ from api.schemas.recommended_vendor import (
 )
 from api.services import audit as audit_svc
 from api.services import recommended_vendor as vendor_svc
+from api.services.file_delivery import deliver_stored_file
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/recommended-vendors", tags=["推薦商家"])
@@ -156,13 +157,12 @@ async def preview_public_menu(menu_id: uuid.UUID, db: DbDep) -> FileResponse | R
         or not menu.storage_key
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此菜單")
-    storage = get_storage()
-    local = storage.local_path(menu.storage_key)
-    if local is not None:
-        if not local.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="菜單檔案不存在")
-        return FileResponse(str(local), media_type=menu.content_type or "application/octet-stream")
-    return RedirectResponse(await storage.get_url(menu.storage_key, disposition="inline"))
+    return await deliver_stored_file(
+        get_storage(),
+        menu.storage_key,
+        content_type=menu.content_type or "application/octet-stream",
+        missing_detail="菜單檔案不存在",
+    )
 
 
 @router.get("", response_model=list[RecommendedVendorListItem], summary="列出推薦商家")

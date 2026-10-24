@@ -5,21 +5,25 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Copy, Home, RefreshCw, Undo2 } from "lucide-react";
 import { useState } from "react";
 
-import { errorCode, errorPresentation } from "@/lib/error-presentation";
+import { usePageError } from "@/hooks/usePageError";
 
 export default function RouteErrorState({
   error,
   reset,
   homeHref = "/",
+  scope = "route.error",
+  embedded = false,
 }: {
-  error: Error & { digest?: string; status?: number; errorId?: string };
+  error: Error & { digest?: string; status?: number; errorId?: string | null };
   reset: () => void;
   homeHref?: string;
+  scope?: string;
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
-  const presentation = errorPresentation(error);
-  const code = errorCode(error);
+  const { presentation, code } = usePageError(error, scope);
+  const Container = embedded ? "div" : "main";
 
   async function copyCode() {
     try {
@@ -32,13 +36,17 @@ export default function RouteErrorState({
   }
 
   function primaryAction() {
-    if (error.status === 401) {
+    if (presentation.recovery === "login") {
       const next = `${window.location.pathname}${window.location.search}`;
       router.push(`/login?next=${encodeURIComponent(next)}`);
       return;
     }
-    if (error.status === 403) {
+    if (presentation.recovery === "back") {
       window.history.back();
+      return;
+    }
+    if (presentation.recovery === "home") {
+      router.push(homeHref);
       return;
     }
     reset();
@@ -46,7 +54,7 @@ export default function RouteErrorState({
 
   const tone = presentation.tone === "danger" ? "var(--danger)" : presentation.tone === "warning" ? "var(--warning)" : "var(--primary)";
   return (
-    <main className="flex min-h-[55vh] items-center justify-center p-6" role="alert">
+    <Container className="flex min-h-[55vh] items-center justify-center p-6" role="alert">
       <section className="w-full max-w-lg rounded-xl border p-6" style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}>
@@ -70,12 +78,12 @@ export default function RouteErrorState({
         </div>
         <div className="mt-5 flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "var(--bg-muted)" }}>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>錯誤編號：<code className="font-mono">{code}</code></span>
-          <button type="button" onClick={copyCode} className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium" style={{ color: "var(--primary)" }}>
+          <button type="button" onClick={copyCode} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium" style={{ color: "var(--primary)" }}>
             {copied ? <Check size={14} aria-hidden={true} /> : <Copy size={14} aria-hidden={true} />}
             {copied ? "已複製" : "複製"}
           </button>
         </div>
       </section>
-    </main>
+    </Container>
   );
 }

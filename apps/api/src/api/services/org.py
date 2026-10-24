@@ -21,8 +21,6 @@ from api.schemas.org import (
     PermissionCreate,
     PositionCreate,
     PositionUpdate,
-    UserPositionCreate,
-    UserPositionUpdate,
 )
 
 # ── Org ──────────────────────────────────────────────────────────────────────
@@ -291,24 +289,6 @@ async def get_user_positions(db: AsyncSession, user_id: uuid.UUID) -> list[UserP
         .order_by(UserPosition.start_date.desc())
     )
     return list(result.scalars().all())
-
-
-async def create_user_position(db: AsyncSession, data: UserPositionCreate) -> UserPosition:
-    up = UserPosition(**data.model_dump())
-    db.add(up)
-    await db.flush()
-    await db.refresh(up)
-    return up
-
-
-async def update_user_position(
-    db: AsyncSession, up: UserPosition, data: UserPositionUpdate
-) -> UserPosition:
-    if data.end_date is not None:
-        up.end_date = data.end_date
-    await db.flush()
-    await db.refresh(up)
-    return up
 
 
 async def get_active_positions_by_date(

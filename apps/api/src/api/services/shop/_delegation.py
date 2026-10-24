@@ -31,10 +31,10 @@ from api.schemas.shop import (
     ShopDelegationCreate,
     ShopDelegationOut,
     ShopPromotionPreviewOut,
-    ShopPromotionProductTargetOut,
 )
 from api.services import school_class as class_svc
 from api.services.shop import _catalog, _delegation_codes, _orders, _promotions
+from api.services.shop._registration_preview import preview_registration_promotion
 from api.services.student_identity import has_student_identity
 
 
@@ -410,54 +410,14 @@ async def set_product(
 async def preview(
     session: AsyncSession, user: User, link: ShopDelegationLink, code: str | None
 ) -> ShopPromotionPreviewOut:
-    order = await _orders.get_current_registration(
-        session,
-        user.id,
-        activity_id=link.activity_id,
-        category_id=None if link.activity_id else link.category_id,
-        match_activity=True,
-    )
-    subtotal = order.subtotal_price if order else 0
-    result = await _promotions.preview_promotion(
+    result = await preview_registration_promotion(
         session,
         user_id=user.id,
-        subtotal=subtotal,
         code=code,
-        product_subtotals=_orders._promotion_product_subtotals(order.items) if order else {},
-        product_quantities=_orders._promotion_product_quantities(order.items) if order else {},
         activity_id=link.activity_id,
-        current_promotion_ids={row.promotion_id for row in order.applied_promotions}
-        if order
-        else set(),
+        category_id=None if link.activity_id else link.category_id,
     )
-    promotion = result.promotion
-    return ShopPromotionPreviewOut.model_validate(
-        dict(
-            eligible=result.eligible,
-            reason_code=result.reason_code,
-            reason=result.reason,
-            subtotal_price=subtotal,
-            discount_amount=result.discount_amount,
-            total_price=max(0, subtotal - result.discount_amount),
-            shortfall=result.shortfall,
-            quantity_shortfall=result.quantity_shortfall,
-            promotion_name=promotion.name if promotion else None,
-            promotion_code=promotion.code if promotion else None,
-            min_order_price=promotion.min_order_price if promotion else None,
-            min_quantity=promotion.min_quantity if promotion else None,
-            discount_type=promotion.discount_type if promotion else None,
-            discount_value=promotion.discount_value if promotion else None,
-            target_products=[
-                ShopPromotionProductTargetOut(id=p.id, name=p.name)
-                for p in (promotion.target_products or [])
-            ]
-            if promotion
-            else [],
-            product_price_overrides=_promotions.serialize_product_price_overrides(promotion)
-            if promotion
-            else [],
-        )
-    )
+    return result.output
 
 
 async def update_owned_item(

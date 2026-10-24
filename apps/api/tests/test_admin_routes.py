@@ -149,7 +149,7 @@ async def test_admin_can_update_user_position_dates(
     admin, member, _, _, assignment = await _seed_admin_data(db_session)
     _override_user(admin)
     invalidate = AsyncMock()
-    monkeypatch.setattr("api.routers.admin.cache_invalidate_user_permissions", invalidate)
+    monkeypatch.setattr("api.services.user_position.cache_invalidate_user_permissions", invalidate)
     start = date.today() - timedelta(days=7)
     end = date.today() + timedelta(days=30)
 

@@ -86,7 +86,6 @@ from api.schemas.shop import (
     ShopPromotionOut,
     ShopPromotionPreviewOut,
     ShopPromotionPreviewRequest,
-    ShopPromotionProductTargetOut,
     ShopPromotionPublicOut,
     ShopPromotionUpdate,
 )
@@ -883,65 +882,16 @@ async def preview_current_registration_promotion(
     session: DbDep,
     current_user: CurrentUser,
 ) -> ShopPromotionPreviewOut:
-    order = await shop_svc.get_current_registration(
-        session,
-        current_user.id,
-        activity_id=payload.activity_id,
-        category_id=payload.category_id,
-        match_activity=True,
-    )
-    subtotal = order.subtotal_price if order else 0
-    product_subtotals: dict[uuid.UUID, int] = {}
-    product_quantities: dict[uuid.UUID, int] = {}
-    if order:
-        for item in order.items:
-            product_subtotals[item.product_id] = (
-                product_subtotals.get(item.product_id, 0) + item.quantity * item.unit_price
-            )
-            product_quantities[item.product_id] = (
-                product_quantities.get(item.product_id, 0) + item.quantity
-            )
-    result = await shop_svc.preview_promotion(
+    result = await shop_svc.preview_registration_promotion(
         session,
         user_id=current_user.id,
-        subtotal=subtotal,
         code=payload.code,
-        product_subtotals=product_subtotals,
-        product_quantities=product_quantities,
         activity_id=payload.activity_id,
-        current_promotion_id=order.promotion_id if order else None,
-        current_promotion_ids=(
-            {row.promotion_id for row in order.applied_promotions} if order else set()
-        ),
+        category_id=payload.category_id,
     )
-    promotion = result.promotion
-    if promotion is not None:
-        await _require_promotion_visible(session, current_user, promotion)
-    return ShopPromotionPreviewOut(
-        eligible=result.eligible,
-        promotion_name=promotion.name if promotion else None,
-        promotion_code=promotion.code if promotion else None,
-        reason_code=result.reason_code,
-        reason=result.reason,
-        subtotal_price=subtotal,
-        discount_amount=result.discount_amount,
-        total_price=max(0, subtotal - result.discount_amount),
-        min_order_price=promotion.min_order_price if promotion else None,
-        shortfall=result.shortfall,
-        discount_type=promotion.discount_type if promotion else None,
-        discount_value=promotion.discount_value if promotion else None,
-        min_quantity=promotion.min_quantity if promotion else None,
-        quantity_shortfall=result.quantity_shortfall,
-        target_products=[
-            ShopPromotionProductTargetOut(id=product.id, name=product.name)
-            for product in (promotion.target_products or [])
-        ]
-        if promotion
-        else [],
-        product_price_overrides=shop_svc.serialize_product_price_overrides(promotion)
-        if promotion
-        else [],
-    )
+    if result.promotion is not None:
+        await _require_promotion_visible(session, current_user, result.promotion)
+    return result.output
 
 
 @router.put(
