@@ -7,6 +7,7 @@ import type { OrderOut } from "@/lib/types";
 const api = vi.hoisted(() => ({
   me: vi.fn(), catalog: vi.fn(), getCurrentRegistrations: vi.fn(), listAvailablePromotions: vi.fn(),
   getProduct: vi.fn(), setCurrentRegistrationProduct: vi.fn(),
+  previewCurrentPromotion: vi.fn(), applyCurrentPromotion: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({
   authApi: { refresh: api.me }, shopApi: api,
@@ -45,10 +46,29 @@ beforeEach(() => {
   api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
     sort_order: 0, products: [testingProduct, formalProduct], series: [] }]);
   api.getCurrentRegistrations.mockResolvedValue([formalOrder]);
+  api.previewCurrentPromotion.mockResolvedValue({ eligible: false, reason_code: "no_promotion",
+    subtotal_price: 200, discount_amount: 0, total_price: 200, shortfall: 0, quantity_shortfall: 0 });
   api.listAvailablePromotions.mockResolvedValue([]);
   api.getProduct.mockImplementation((id: string) => Promise.resolve({
     ...(id === "testing" ? testingProduct : formalProduct), variant_groups: [], media: [],
   }));
+});
+
+it("refreshes the latest automatic promotion on an existing registration", async () => {
+  const discountedOrder: OrderOut = {
+    ...formalOrder, promotion_id: "cadre-promotion", discount_amount: 40, total_price: 160,
+    applied_promotions: [{ promotion_id: "cadre-promotion", name: "幹部優惠", code: null, discount_amount: 40 }],
+  };
+  api.previewCurrentPromotion.mockResolvedValue({ eligible: true, reason_code: "applied",
+    promotion_name: "幹部優惠", promotion_code: null, subtotal_price: 200,
+    discount_amount: 40, total_price: 160, shortfall: 0, quantity_shortfall: 0 });
+  api.applyCurrentPromotion.mockResolvedValue(discountedOrder);
+
+  render(<ShopPage />);
+
+  expect(await screen.findByText(/共省 NT\$40/)).toBeVisible();
+  expect(api.previewCurrentPromotion).toHaveBeenCalledWith(null, "festival", null);
+  expect(api.applyCurrentPromotion).toHaveBeenCalledWith(null, "festival", null);
 });
 
 it("lets an authorized tester order before launch and preserves the formal registration in the same activity", async () => {
