@@ -29,6 +29,7 @@ import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { orderScopeKey, catalogScopeKey } from "@/lib/shop-order-scope";
+import { refreshAutomaticRegistrationPromotions } from "@/lib/shop-registration-promotions";
 import DelegationLinks from "@/components/shop/DelegationLinks";
 import DelegationInstructions from "@/components/shop/DelegationInstructions";
 import ParentDelegationEntry from "@/components/shop/ParentDelegationEntry";
@@ -943,6 +944,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [delegationBusy, setDelegationBusy] = useState(false);
   const refreshGeneration = useRef(0);
   const mutationBusy = useRef(false);
+  const currentRegistrationRefresh = useRef<Promise<OrderOut[]> | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [registrationLoadError, setRegistrationLoadError] = useState(false);
   const [registrations, setRegistrations] = useState<OrderOut[]>([]);
@@ -971,6 +973,17 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const delegationReadyRef = useRef<HTMLHeadingElement>(null);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+
+  const loadCurrentRegistrations = useCallback(() => {
+    if (currentRegistrationRefresh.current) return currentRegistrationRefresh.current;
+    const refresh = shopApi.getCurrentRegistrations().then(refreshAutomaticRegistrationPromotions);
+    currentRegistrationRefresh.current = refresh;
+    void refresh.then(
+      () => { if (currentRegistrationRefresh.current === refresh) currentRegistrationRefresh.current = null; },
+      () => { if (currentRegistrationRefresh.current === refresh) currentRegistrationRefresh.current = null; },
+    );
+    return refresh;
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia?.("(max-width: 767px)");
@@ -1158,7 +1171,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       } else if (!new URLSearchParams(window.location.search).get("class_member_user_id")) {
         const generation = refreshGeneration.current;
         try {
-          const orders = await shopApi.getCurrentRegistrations();
+          const orders = await loadCurrentRegistrations();
           if (active && generation === refreshGeneration.current) setRegistrations(orders);
         }
         catch (error) {
@@ -1175,7 +1188,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       if (token) setLoading(false);
     }).finally(() => { if (active) setAuthLoading(false); });
     return () => { active = false; };
-  }, [loadCatalog, loadDelegation]);
+  }, [loadCatalog, loadDelegation, loadCurrentRegistrations]);
 
   useEffect(() => {
     const changeContext = () => {
@@ -1217,7 +1230,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         if (loggedIn && classMemberId && classMemberId === classMemberUserId) {
           void loadClassMemberOrders(classMemberId, true);
         } else if (loggedIn && !classMemberId) {
-          void shopApi.getCurrentRegistrations()
+          void loadCurrentRegistrations()
             .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
             .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
         }
@@ -1225,7 +1238,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     };
     window.addEventListener("hashchange", changeContext);
     return () => window.removeEventListener("hashchange", changeContext);
-  }, [isLoggedIn, delegationToken, classMemberUserId, loadCatalog, loadDelegation, loadClassMemberOrders]);
+  }, [isLoggedIn, delegationToken, classMemberUserId, loadCatalog, loadDelegation, loadClassMemberOrders, loadCurrentRegistrations]);
 
   const refreshRegistrations = useCallback(async () => {
     if (!isLoggedIn || authLoading || mutationBusy.current || document.visibilityState === "hidden") return;
@@ -1236,11 +1249,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     } else {
       const generation = refreshGeneration.current;
       try {
-        const orders = await shopApi.getCurrentRegistrations();
+        const orders = await loadCurrentRegistrations();
         if (generation === refreshGeneration.current) setRegistrations(orders);
       } catch { /* 保留已載入內容；下一次同步重試。 */ }
     }
-  }, [isLoggedIn, authLoading, delegationToken, classMemberUserId, loadDelegation, loadClassMemberOrders]);
+  }, [isLoggedIn, authLoading, delegationToken, classMemberUserId, loadDelegation, loadClassMemberOrders, loadCurrentRegistrations]);
   useEffect(() => {
     if (!isLoggedIn || authLoading) return;
     const timer = window.setInterval(() => void refreshRegistrations(), 5000);
@@ -1371,7 +1384,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     setRegistrations([]);
     const generation = ++refreshGeneration.current;
     if (isLoggedIn) {
-      void shopApi.getCurrentRegistrations()
+      void loadCurrentRegistrations()
         .then((orders) => { if (generation === refreshGeneration.current) setRegistrations(orders); })
         .catch(() => { if (generation === refreshGeneration.current) setRegistrationLoadError(true); });
     }
