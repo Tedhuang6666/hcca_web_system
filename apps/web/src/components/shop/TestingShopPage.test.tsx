@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import ShopPage from "@/app/(protected)/shop/page";
@@ -150,4 +150,56 @@ it("keeps unscoped bundle offers with another category's products out of the sel
   await screen.findByRole("heading", { name: "聖誕傳情", level: 2 });
   expect(await screen.findByRole("article", { name: "聖誕傳情套組" })).toBeVisible();
   expect(screen.queryByRole("article", { name: "校慶優惠套組" })).not.toBeInTheDocument();
+});
+
+it("shows a shared deadline once and keeps a product's extended deadline visible", async () => {
+  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶預購", activity_id: "festival",
+    sort_order: 0, order_closes_at: "2099-10-31T00:00:00Z", series: [], products: [
+      { ...formalProduct, sale_end: "2099-10-31T00:00:00Z" },
+      { ...formalProduct, id: "extended", name: "延長預購商品", sale_end: "2099-11-02T00:00:00Z" },
+    ] }]);
+  render(<ShopPage />);
+
+  await screen.findByRole("heading", { name: "校慶預購" });
+  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+  expect(screen.getByText(/活動結單：/)).toBeVisible();
+  expect(within(screen.getByRole("article", { name: "正式商品商品" })).queryByText(/^截止/)).not.toBeInTheDocument();
+  expect(within(screen.getByRole("article", { name: "延長預購商品商品" })).getByText(/^截止/)).toBeVisible();
+});
+
+it("keeps multiple activities switchable in the compact catalog", async () => {
+  api.catalog.mockResolvedValue([
+    { id: "goods", name: "校慶預購", sort_order: 0, products: [formalProduct], series: [] },
+    { id: "winter", name: "冬季預購", sort_order: 1,
+      products: [{ ...formalProduct, id: "winter-product", name: "冬季商品" }], series: [] },
+  ]);
+  render(<ShopPage />);
+
+  const picker = await screen.findByRole("navigation", { name: "選擇商品活動" });
+  fireEvent.click(within(picker).getByRole("button", { name: /冬季預購/ }));
+  expect(await screen.findByRole("link", { name: "查看商品：冬季商品" })).toBeVisible();
+  expect(screen.queryByRole("link", { name: "查看商品：正式商品" })).not.toBeInTheDocument();
+});
+
+it("keeps the purchase action available while product descriptions are collapsed", async () => {
+  api.getProduct.mockResolvedValue({ ...testingProduct, description: "衣服尺寸與保養方式", variant_groups: [], media: [] });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：測試限定商品" }));
+
+  const description = await screen.findByText("衣服尺寸與保養方式");
+  expect(description.closest("details")).not.toHaveAttribute("open");
+  expect(await screen.findByRole("button", { name: "登記購買 · NT$100" })).toBeVisible();
+  fireEvent.click(screen.getByText("商品說明"));
+  expect(description).toBeVisible();
+});
+
+it("opens products in place while retaining links for a separate tab", async () => {
+  render(<ShopPage />);
+  const product = await screen.findByRole("link", { name: "查看商品：測試限定商品" });
+  expect(product.getAttribute("href")).toMatch(/^\/shop\//);
+  fireEvent.click(product, { ctrlKey: true });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(product);
+  expect(await screen.findByRole("dialog")).toBeVisible();
+  expect(window.location.pathname).toBe("/shop");
 });

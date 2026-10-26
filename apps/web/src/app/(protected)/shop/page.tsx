@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
+  ChevronDown,
   CircleAlert,
   CircleCheck,
   ClipboardList,
@@ -608,7 +609,10 @@ function ProductModal({
                   {bundleStep && <p className="shop-product-purchase-hint">正在選購「{bundleStep.name}」，每項各一件；選齊後享套組價。</p>}
                   {!bundleStep && bundleAddOn?.(loading || !canEdit)}
                   {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
-                  {product.description && <p className="whitespace-pre-line">{product.description}</p>}
+                  {product.description && <details className="shop-product-description">
+                    <summary>商品說明<ChevronDown size={16} aria-hidden="true" /></summary>
+                    <p className="whitespace-pre-line">{product.description}</p>
+                  </details>}
                   {!product.is_unlimited && product.status === "active" && (
                     <p className="shop-product-dialog-stock">剩餘 {product.stock_quantity} 件</p>
                   )}
@@ -802,6 +806,7 @@ function ProductCard({
   offersLocked,
   onSelectBundle,
   bundleHint,
+  categoryDeadline,
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
@@ -815,6 +820,7 @@ function ProductCard({
   offersLocked: boolean;
   onSelectBundle: (promotion: ShopPromotionPublicOut) => void;
   bundleHint: string | null;
+  categoryDeadline: string | null;
 }) {
   const testing = product.status === "testing";
   const soldOut = product.status === "sold_out" || (testing && !product.is_unlimited && product.stock_quantity === 0);
@@ -865,9 +871,10 @@ function ProductCard({
         )}
       </div>
       <div className="shop-public-product-info">
-        <h4>
-          {product.name}
-        </h4>
+        <div className="shop-public-product-heading">
+          <h4>{product.name}</h4>
+          {!disabled && <ArrowUpRight size={16} aria-hidden="true" />}
+        </div>
         <div className="shop-public-product-meta">
           <span className="shop-public-product-price">
             <ShopPrice original={cardPrice.original} current={cardPrice.current} suffix={!cardPrice.note && product.has_variants ? " 起" : undefined} />
@@ -877,12 +884,12 @@ function ProductCard({
           )}
         </div>
         {cardPrice.note && <p className="shop-public-product-deadline">{cardPrice.note}</p>}
-        {deadline && (
+        {deadline && (!categoryDeadline || new Date(deadline).getTime() !== new Date(categoryDeadline).getTime()) && (
           <p className="shop-public-product-deadline">
             截止 {new Date(deadline).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
           </p>
         )}
-        <span className="shop-public-product-action">
+        <span className={registeredQuantity > 0 ? "shop-public-product-action" : "sr-only"}>
           {disabled
             ? statusLabel
             : registeredQuantity > 0
@@ -904,6 +911,8 @@ function ProductCard({
             event.preventDefault();
             return;
           }
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
           onClick();
         }}
         aria-disabled={disabled || undefined}
@@ -979,7 +988,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [classLoadFailed, setClassLoadFailed] = useState(false);
   const [orderShortcutPortalReady, setOrderShortcutPortalReady] = useState(false);
-  const [compactShortcuts, setCompactShortcuts] = useState(false);
   const [shortcutSlot, setShortcutSlot] = useState<HTMLDivElement | null>(null);
   const [delegationOpen, setDelegationOpen] = useState(false);
   const delegationTriggerRef = useRef<HTMLButtonElement>(null);
@@ -997,15 +1005,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       () => { if (currentRegistrationRefresh.current === refresh) currentRegistrationRefresh.current = null; },
     );
     return refresh;
-  }, []);
-
-  useEffect(() => {
-    const media = window.matchMedia?.("(max-width: 767px)");
-    if (!media) return;
-    setCompactShortcuts(media.matches);
-    const update = (event: MediaQueryListEvent) => setCompactShortcuts(event.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
@@ -1579,9 +1578,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               ? "使用學生授權的連結，替學生選購本次活動商品。"
               : "挑選商品、規格與數量，即可完成預購。"}</p>
         </div>
+        {!delegationToken && <div className="shop-mobile-shortcut-slot" ref={setShortcutSlot} />}
       </header>
-
-      {!delegationToken && <div className="shop-mobile-shortcut-slot" ref={setShortcutSlot} />}
 
       {classMemberUserId && (
         <section className="shop-public-context" aria-label="班代調整對象">
@@ -1611,22 +1609,31 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       )}
 
       {myClass && (
-        <section
-          className="shop-public-context"
+        <details
+          className="shop-class-summary"
           aria-label="我的班級"
           data-closed={Object.values(closeStatus).some((status) => status.is_closed) || undefined}>
-          {Object.values(closeStatus).some((status) => status.is_closed)
-            ? <CircleAlert size={18} style={{ color: "var(--danger)" }} aria-hidden />
-            : <CircleCheck size={18} style={{ color: "var(--success)" }} aria-hidden />}
-          <div>
-            <p>
-              <strong>我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}</strong>
-              {" · "}
-              {myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}
-              {"。如有錯誤，請聯絡班聯會處理。"}
-            </p>
+          <summary>
+            <span>我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}
+              {myClass.seat_number ? ` · ${myClass.seat_number} 號` : " · 座號尚未登錄"}
+            </span>
+            {Object.values(closeStatus).some((status) => status.is_closed) && <strong>部分活動已結單</strong>}
+            <ChevronDown size={16} aria-hidden="true" />
+          </summary>
+          <div className="shop-public-context">
+            {Object.values(closeStatus).some((status) => status.is_closed)
+              ? <CircleAlert size={18} style={{ color: "var(--danger)" }} aria-hidden />
+              : <CircleCheck size={18} style={{ color: "var(--success)" }} aria-hidden />}
+            <div>
+              <p>
+                <strong>我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}</strong>
+                {" · "}
+                {myClass.seat_number ? `座號：${myClass.seat_number} 號` : "座號尚未登錄"}
+                {"。如有錯誤，請聯絡班聯會處理。"}
+              </p>
+            </div>
           </div>
-        </section>
+        </details>
       )}
 
       {isLoggedIn && isStudent && !delegationToken && !myClass && !loading && (
@@ -1672,7 +1679,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         </div>
       ) : selectedCategory && (
         <div>
-          <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
+          {catalog.length > 1 && <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
             <div className="shop-public-activity-heading">
               <h2 id="shop-activity-title">選擇活動</h2>
             </div>
@@ -1692,49 +1699,22 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                     aria-pressed={isSelected}
                     className="shop-public-category-tab">
                     {category.name}
-                    <span className="shop-public-category-count">
-                      {categoryOrderable(category, catalogTime, closeStatus[category.id]?.is_closed) ? "訂購中" : "暫停訂購"} · {productCount} 件
-                    </span>
+                    <span className="shop-public-category-count">{productCount}</span>
+                    {!categoryOrderable(category, catalogTime, closeStatus[category.id]?.is_closed) && <span className="shop-public-category-count">暫停訂購</span>}
                   </button>
                 );
               })}
             </nav>
-          </section>
+          </section>}
 
           <section className="shop-public-catalog">
             <header className="shop-public-category-heading">
               <h2>{selectedCategory.name}</h2>
               <p>{visibleProductCount} 件商品</p>
             </header>
-            {hasShopLookbook(selectedCategory) && <ShopLookbook key={selectedCategory.id} />}
-            <div id="shop-product-selection" tabIndex={-1} />
             {selectedCategory.order_closes_at && <p className="shop-public-product-deadline">
               活動結單：{new Date(selectedCategory.order_closes_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}（單品另設期限時以商品標示為準）
             </p>}
-            {selectedCategoryRegistration && selectedCategoryRegistration.items.length > 0 && (
-              <div className="shop-registration-price" role="status" aria-live="polite">
-                <div><strong>目前登記合計</strong>
-                  {selectedCategoryRegistration.discount_amount > 0 && <p>
-                    {selectedCategoryRegistration.applied_promotions?.map((promotion) => promotion.name).join("、") || "已套用優惠"}
-                    {` · 共省 NT$${selectedCategoryRegistration.discount_amount.toLocaleString()}`}
-                  </p>}
-                </div>
-                <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
-              </div>
-            )}
-            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
-              <div className="shop-bundles-heading">
-                <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
-                <p>選購優惠套組</p>
-              </div>
-              <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
-                {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
-                  promotion={promotion} products={catalogProducts} registration={selectedCategoryRegistration}
-                  disabled={authLoading || registrationLoadError || registrationLocked
-                    || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
-                  onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
-              </BundleCarousel>
-            </section>}
             {selectedCategory.series.length > 0 && (
               <div className="shop-public-series-filter-wrap">
                 <span>商品系列</span>
@@ -1772,7 +1752,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 </p>
               </div>
             )}
-            <div className="shop-public-series-list">
+            <div id="shop-product-selection" className="shop-public-series-list" tabIndex={-1}>
               {!selectedSeriesId && selectedCategory.products.length > 0 && (
                 <section className="shop-public-series">
                   <div className={`shop-public-product-grid${selectedCategory.products.length === 1 ? " shop-public-product-grid--featured" : ""}`}>
@@ -1780,6 +1760,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                       <ProductCard
                         key={product.id}
                         product={product}
+                        categoryDeadline={selectedCategory.order_closes_at ?? null}
                         bundleHint={bundleHintFor(product)}
                         promotions={categoryPromotions}
                         products={catalogProducts}
@@ -1818,6 +1799,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         <ProductCard
                           key={product.id}
                           product={product}
+                          categoryDeadline={selectedCategory.order_closes_at ?? null}
                           bundleHint={bundleHintFor(product)}
                           promotions={categoryPromotions}
                           products={catalogProducts}
@@ -1840,6 +1822,31 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 </section>
               ))}
             </div>
+            {selectedCategoryRegistration && selectedCategoryRegistration.items.length > 0 && (
+              <div className="shop-registration-price" role="status" aria-live="polite">
+                <div><strong>目前登記合計</strong>
+                  {selectedCategoryRegistration.discount_amount > 0 && <p>
+                    {selectedCategoryRegistration.applied_promotions?.map((promotion) => promotion.name).join("、") || "已套用優惠"}
+                    {` · 共省 NT$${selectedCategoryRegistration.discount_amount.toLocaleString()}`}
+                  </p>}
+                </div>
+                <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
+              </div>
+            )}
+            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
+              <div className="shop-bundles-heading">
+                <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
+                <p>選購優惠套組</p>
+              </div>
+              <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
+                {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
+                  promotion={promotion} products={catalogProducts} registration={selectedCategoryRegistration}
+                  disabled={authLoading || registrationLoadError || registrationLocked
+                    || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                  onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
+              </BundleCarousel>
+            </section>}
+            {hasShopLookbook(selectedCategory) && <ShopLookbook key={selectedCategory.id} />}
           </section>
         </div>
       )}
@@ -1862,7 +1869,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             <span>我的預購</span>
           </Link>}
         </nav>,
-        compactShortcuts && shortcutSlot ? shortcutSlot : document.body,
+        shortcutSlot ?? document.body,
       )}
 
       {delegationOpen && !delegationToken && <Modal title={isStudent ? "邀請家人代訂" : "代訂商品"} size="lg" onClose={closeDelegation}>

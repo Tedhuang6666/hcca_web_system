@@ -81,14 +81,16 @@ describe("商品工作導覽", () => {
     });
   });
 
-  it("keeps the representative entry visible on the catalog without opening a menu", () => {
+  it("keeps representative tools in a discoverable menu on the catalog", () => {
     state.permissions = ["class:shop_collect"];
     render(<ShopLayout><p>商品</p></ShopLayout>);
     const nav = within(screen.getByRole("navigation", { name: "商品工作區" }));
     const entry = nav.getByRole("link", { name: "班代代訂與收款" });
+    expect(entry).not.toBeVisible();
+    fireEvent.click(nav.getByText("其他工具", { exact: true }));
     expect(entry).toBeVisible();
     expect(entry).toHaveAttribute("href", "/shop/class-orders");
-    expect(entry.closest("details")).toBeNull();
+    expect(entry.closest("details")).toHaveAttribute("open");
   });
 
   it("gives students the catalog and their preorders without management shortcuts", () => {

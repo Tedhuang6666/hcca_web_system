@@ -134,7 +134,14 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
   if (groups.length === 0) return null;
   const managementPage = pathname.startsWith("/shop/council-orders") || pathname.startsWith("/shop/admin");
   const preorderTabs = groups.find((group) => group.label === "預購")?.tabs ?? [];
-  const visibleGroups = managementPage
+  const storefront = pathname === "/shop" || pathname === "/shop/cart"
+    || pathname === "/shop/orders" || pathname.startsWith("/shop/orders/");
+  const visibleGroups = storefront
+    ? [
+      { label: "預購", tabs: preorderTabs },
+      { label: "其他工具", tabs: groups.filter((group) => group.label !== "預購").flatMap((group) => group.tabs) },
+    ].filter((group) => group.tabs.length > 0)
+    : managementPage
     ? groups.filter((group) => group.label !== "預購").map((group) => group.label === "其他工具"
       ? { ...group, tabs: [...group.tabs, ...preorderTabs] }
       : group)
@@ -167,7 +174,7 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
   return (
     <nav
       aria-label="商品工作區"
-      className="shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4"
+      className={`shop-workspace-navigation mx-auto mb-5 w-full max-w-7xl px-4 pt-4${storefront ? " shop-storefront-navigation" : ""}`}
     >
       {visibleGroups.map((group) => group.label !== "其他工具" ? (
         <section key={group.label} className={`shop-workspace-group${group.label === "班代工作" ? " shop-representative-entry" : group.label === "班聯工作" ? " shop-council-entry" : ""}`} aria-label={`${group.label}功能`}>
