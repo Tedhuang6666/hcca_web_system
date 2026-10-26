@@ -1,7 +1,7 @@
 .shop-public-page {
   width: min(100%, 72rem);
   margin: 0 auto;
-  padding: clamp(1.5rem, 3vw, 2.5rem) 1rem clamp(4rem, 8vw, 7rem);
+  padding: clamp(1rem, 2vw, 1.75rem) 1rem clamp(4rem, 8vw, 7rem);
 }
 
 /* Task controls share the public and protected shop tokens. */
@@ -187,10 +187,9 @@
 
 .shop-public-hero {
   display: grid;
-  gap: 2rem;
-  align-items: end;
-  border-bottom: 1px solid var(--public-border);
-  padding-bottom: 1.25rem;
+  gap: 1rem;
+  align-items: center;
+  padding-block: 0.5rem 1.25rem;
 }
 
 .shop-public-hero h1 {
@@ -200,7 +199,7 @@
   font-size: clamp(2rem, 5vw, 3rem);
   font-weight: 720;
   letter-spacing: -0.035em;
-  line-height: 0.98;
+  line-height: 1.15;
 }
 
 .shop-public-hero-copy {
@@ -237,41 +236,15 @@
   color: var(--primary-fg);
 }
 
+/* Shortcuts live beside the title, keeping the product grid unobstructed. */
 .shop-public-shortcuts {
-  position: fixed;
-  z-index: 40;
-  right: max(1rem, env(safe-area-inset-right));
-  bottom: max(1rem, env(safe-area-inset-bottom));
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.65rem;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.shop-mobile-shortcut-slot { display: none; }
+.shop-mobile-shortcut-slot { display: block; min-width: 0; }
 
-@media (max-width: 767px) {
-  .shop-mobile-shortcut-slot {
-    display: block;
-    margin-block: 1rem 1.5rem;
-  }
-
-  .shop-mobile-shortcut-slot .shop-public-shortcuts {
-    position: static;
-    flex-direction: row;
-    align-items: stretch;
-    gap: 0.75rem;
-  }
-
-  .shop-mobile-shortcut-slot .shop-public-order-shortcut {
-    flex: 1;
-    justify-content: center;
-    min-width: 0;
-    border: 1px solid var(--public-border);
-    border-radius: 8px;
-    box-shadow: none;
-  }
-}
 
 .shop-public-order-shortcut {
   --public-accent: var(--primary);
@@ -281,15 +254,15 @@
   min-height: 3.1rem;
   align-items: center;
   gap: 0.55rem;
-  border: 2px solid var(--primary-fg);
-  border-radius: 999px;
+  border: 0;
+  border-radius: 12px;
   background: var(--public-accent);
   padding: 0.65rem 1rem;
   color: var(--primary-fg);
   font-size: 0.82rem;
   font-weight: 750;
   text-decoration: none;
-  box-shadow: 0 0.35rem 1.2rem rgb(0 0 0 / 0.24);
+  box-shadow: none;
   transition: background-color var(--transition), transform var(--transition);
 }
 
@@ -373,9 +346,9 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 1rem 2rem;
   align-items: center;
-  margin-top: 1.25rem;
-  border-block: 1px solid var(--public-border);
-  padding-block: 1rem;
+  margin-top: 0.25rem;
+  border-bottom: 1px solid var(--public-border);
+  padding-block: 0.5rem;
 }
 
 .shop-public-activity-heading h2 {
@@ -412,7 +385,7 @@
   align-items: center;
   gap: 0.5rem;
   border: 1px solid var(--public-border);
-  border-radius: 999px;
+  border-radius: 8px;
   background: transparent;
   padding: 0.55rem 0.9rem;
   color: var(--public-secondary);
@@ -452,8 +425,7 @@
   align-items: end;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid var(--public-border);
-  padding-bottom: 1.25rem;
+  padding-bottom: 0.25rem;
 }
 
 .shop-public-category-heading h2 {
@@ -515,7 +487,7 @@
 .shop-public-series-list {
   display: grid;
   gap: clamp(2rem, 4vw, 3.25rem);
-  margin-top: clamp(1.75rem, 3vw, 2.5rem);
+  margin-top: 1.25rem;
 }
 
 .shop-public-series {
@@ -637,9 +609,9 @@
 
 .shop-public-product-media {
   position: relative;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 12px;
   background: var(--public-soft);
 }
 
@@ -681,13 +653,13 @@
 }
 
 .shop-public-product-info h4 {
-  overflow: hidden;
+  min-width: 0;
   margin: 0;
   color: var(--public-text);
   font-size: 0.98rem;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .shop-public-product-meta {
@@ -739,7 +711,7 @@
 
 .shop-registration-price {
   padding-block: 1rem;
-  margin-bottom: 1.5rem;
+  margin-block: 2rem 0;
   border-block: 1px solid var(--public-border);
 }
 
@@ -756,7 +728,7 @@
 .shop-bundles {
   display: grid;
   gap: 0.75rem;
-  margin-block: 1.25rem 1.75rem;
+  margin-block: 3rem;
 }
 
 .shop-bundles-heading {
@@ -1598,11 +1570,7 @@
   }
 }
 
-@media (min-width: 1100px) {
-  .shop-public-product-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
+
 
 @media (max-width: 859px) {
   .shop-product-dialog-overlay {
@@ -2580,4 +2548,89 @@
 
 .shop-order-item-sources input {
   max-width: 7rem;
+}
+
+/* 商品頁沿用公開站色彩，以照片、名稱與價格建立閱讀順序。 */
+.shop-storefront-navigation {
+  max-width: 72rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0;
+  padding-top: 0.5rem;
+}
+
+.shop-storefront-navigation .shop-workspace-group {
+  flex: 0 1 auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.shop-storefront-navigation .shop-workspace-links { display: flex; }
+.shop-storefront-navigation .shop-workspace-tab { background: transparent; }
+.shop-storefront-navigation .shop-workspace-menu { flex: 0 0 auto; border: 0; background: transparent; }
+.shop-storefront-navigation .shop-workspace-menu > summary { min-height: 44px; }
+.shop-storefront-navigation .shop-workspace-menu[open] { flex-basis: 100%; }
+
+.shop-class-summary { margin-block: 0.25rem 1rem; border-bottom: 1px solid var(--public-border); }
+.shop-class-summary > summary,
+.shop-product-description > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  color: var(--public-secondary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  list-style: none;
+}
+.shop-class-summary > summary::-webkit-details-marker,
+.shop-product-description > summary::-webkit-details-marker { display: none; }
+.shop-class-summary > summary strong { color: var(--danger); font-size: 0.8125rem; }
+.shop-class-summary > summary svg { margin-left: auto; flex-shrink: 0; }
+.shop-class-summary[open] > summary svg,
+.shop-product-description[open] > summary svg { transform: rotate(180deg); }
+.shop-class-summary .shop-public-context { margin-top: 0; border: 0; padding-top: 0.25rem; }
+.shop-class-summary summary:focus-visible,
+.shop-product-description summary:focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: 3px;
+}
+
+.shop-public-product-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.shop-public-product-heading svg { flex-shrink: 0; color: var(--public-secondary); }
+.shop-public-series-list:focus-visible { outline: 2px solid var(--public-focus); outline-offset: 6px; }
+#shop-product-selection { scroll-margin-top: 6rem; }
+.shop-public-series-filter button { min-height: 44px; }
+.shop-product-description > p { margin-block: 0.25rem 0.75rem; }
+
+@media (max-width: 767px) {
+  .shop-public-hero { gap: 0.75rem; }
+  .shop-public-hero-copy { margin-top: 0.5rem; }
+  .shop-public-shortcuts { gap: 0.5rem; }
+  .shop-public-order-shortcut { min-height: 44px; padding: 0.5rem 0.75rem; font-size: 0.8125rem; }
+  .shop-public-activity-picker { display: block; }
+  .shop-public-activity-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .shop-public-product-meta { flex-wrap: wrap; gap: 0.25rem; }
+  .shop-public-product-info { padding-top: 0.75rem; }
+  .shop-public-product-info h4 { font-size: 0.9375rem; }
+  .shop-product-dialog-overlay { padding: 0; }
+  .shop-product-dialog {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    grid-template-rows: minmax(0, min(35dvh, 18rem)) minmax(0, 1fr);
+  }
+  .shop-product-dialog-media { border-radius: 0; }
+  .shop-product-dialog-content {
+    --shop-product-dialog-content-padding-block: max(1rem, env(safe-area-inset-bottom));
+    --shop-product-dialog-content-padding-inline: max(1rem, env(safe-area-inset-right), env(safe-area-inset-left));
+  }
+  .shop-product-purchase-bar { border-radius: 0; }
+}
+
+@media (max-width: 767px) and (max-height: 580px) and (orientation: landscape) {
+  .shop-product-dialog { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); grid-template-rows: minmax(0, 1fr); }
 }

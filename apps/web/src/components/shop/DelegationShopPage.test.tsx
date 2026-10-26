@@ -78,7 +78,8 @@ describe("原商品頁的家人代訂模式", () => {
     api.setDelegationProduct.mockImplementation(() => new Promise<OrderOut>((resolve) => { finishSave = resolve; }));
     render(<ShopPage />);
     const section = await screen.findByRole("region", { name: "一起買更划算" });
-    expect(screen.getByRole("navigation", { name: "選擇商品活動" }).compareDocumentPosition(section)
+    expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看商品：紀念袋" }).compareDocumentPosition(section)
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     await screen.findByRole("heading", { name: "紀念袋", level: 3 });
