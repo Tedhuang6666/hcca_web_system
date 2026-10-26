@@ -40,6 +40,7 @@ import type {
   SchoolClassOut,
   UserSummary,
 } from "@/lib/types";
+import { classTitle, roleHolderSummary } from "@/lib/classes-admin";
 
 type TabKey = "roles" | "members" | "roster" | "ranges";
 
@@ -49,17 +50,7 @@ const roleHelp: Record<string, string> = {
   vice_leader: "協助班長處理班級事務，檢視本班成員。",
 };
 
-function roleHolderSummary(role: ClassRoleOut) {
-  return [
-    ...role.holders.map((holder) => holder.display_name),
-    ...(role.person_holders ?? []).map((holder) => `${holder.display_name}${holder.status === "pending_user" ? "（待註冊）" : ""}`),
-  ].join("、");
-}
 
-function classTitle(c: SchoolClassListItem | SchoolClassOut | null) {
-  if (!c) return "未選擇班級";
-  return c.label || `${c.academic_year} 學年度 ${c.class_code} 班`;
-}
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;

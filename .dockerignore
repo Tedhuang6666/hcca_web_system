@@ -10,6 +10,11 @@
 **/node_modules
 **/coverage
 **/.turbo
+docs/
+hcca-showcase/
+output/
+playwright-report/
+test-results/
 
 .env
 .env.*

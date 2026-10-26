@@ -18,6 +18,9 @@ PUBLIC_DOCUMENTS = (
     "README.md",
     "apps/api/README.md",
     "apps/web/README.md",
+    "infra/README.md",
+    "observability/README.md",
+    "apps/discord-bot/README.md",
 )
 LOCAL_DOCUMENTS = (
     "AGENTS.md",

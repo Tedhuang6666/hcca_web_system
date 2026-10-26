@@ -22,6 +22,8 @@ import type {
 import ShopPromotionPanel from "./ShopPromotionPanel";
 import ActivityDeadlines from "@/components/shop/ActivityDeadlines";
 import { deadlineFromInput, deadlineInputValue } from "@/lib/shop-deadlines";
+import { parseSmartOptionsText, uniqueSmartOptions } from "@/lib/shop-admin-options";
+import type { SmartOptionDraft, SmartSourceGroup } from "@/lib/shop-admin-options";
 
 const ACTIVITY_STATUS_LABEL: Record<string, string> = {
   draft: "草稿",
@@ -652,42 +654,9 @@ function OptionModal({
   );
 }
 
-type SmartOptionDraft = {
-  value: string;
-  price_delta: number;
-  image_url: string | null;
-};
 
-type SmartSourceGroup = ProductVariantGroupOut & {
-  source_label: string;
-};
 
-function parseSmartOptionsText(text: string): SmartOptionDraft[] {
-  return text
-    .split(/\r?\n|,/)
-    .map((raw) => raw.trim())
-    .filter(Boolean)
-    .map((raw) => {
-      const match = raw.match(/^(.+?)(?:\s*[:：]\s*|\s+)([+-]?\d+)$/);
-      if (!match) return { value: raw, price_delta: 0, image_url: null };
-      return {
-        value: match[1].trim(),
-        price_delta: Number(match[2]) || 0,
-        image_url: null,
-      };
-    })
-    .filter((option) => option.value);
-}
 
-function uniqueSmartOptions(options: SmartOptionDraft[]) {
-  const seen = new Set<string>();
-  return options.filter((option) => {
-    const key = option.value.trim().toLowerCase();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
 
 function VariantGroupModal({
   productId,

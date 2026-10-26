@@ -1,0 +1,356 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   公開內頁：公告 / 幹部 / 關於 等列表與詳情的動態
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 列表頁頁首依序浮現 */
+.public-page-head > * {
+  animation: public-rise 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.public-page-head > *:nth-child(1) { animation-delay: 40ms; }
+.public-page-head > *:nth-child(2) { animation-delay: 130ms; }
+.public-page-head > *:nth-child(3) { animation-delay: 230ms; }
+
+/* 公開卡片連結：沿用 card-hover 視覺，補上箭頭/標題位移與光感 */
+.public-card-link {
+  transition:
+    transform var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+.public-card-link:hover {
+  transform: translateY(-3px);
+  border-color: var(--public-accent, var(--primary));
+  box-shadow: var(--shadow-md);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   即時開票看板 — 固定深藍底，金光自由發揮
+   ══════════════════════════════════════════════════════════════════════════ */
+.live-board {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.live-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48rem 32rem at 10% -8%, rgba(232, 201, 112, 0.18), transparent 58%),
+    radial-gradient(42rem 32rem at 94% 6%, rgba(86, 142, 214, 0.2), transparent 62%),
+    radial-gradient(40rem 30rem at 60% 116%, rgba(232, 201, 112, 0.1), transparent 70%);
+  animation: public-aurora 22s ease-in-out infinite alternate;
+}
+
+/* 看板區塊進場 */
+.live-rise {
+  animation: public-rise-pop 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.live-stat {
+  animation: public-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.live-stat:nth-child(1) { animation-delay: 80ms; }
+.live-stat:nth-child(2) { animation-delay: 160ms; }
+.live-stat:nth-child(3) { animation-delay: 240ms; }
+.live-stat:nth-child(4) { animation-delay: 320ms; }
+
+.live-stat {
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.live-stat:hover {
+  transform: translateY(-3px);
+  border-color: rgba(232, 201, 112, 0.4);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* 進度條流光（套在填色條上） */
+.live-bar {
+  position: relative;
+  overflow: hidden;
+}
+.live-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background-size: 220% 100%;
+  animation: public-shimmer-x 2.4s linear infinite;
+}
+
+/* 領先候選卡：金色呼吸光暈 */
+.live-leader {
+  animation: live-leader-glow 2.8s ease-in-out infinite;
+}
+@keyframes live-leader-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(232, 201, 112, 0.4) inset, 0 0 0 0 rgba(232, 201, 112, 0); }
+  50%      { box-shadow: 0 0 0 1px rgba(232, 201, 112, 0.7) inset, 0 0 32px 0 rgba(232, 201, 112, 0.22); }
+}
+
+/* 領先徽章脈動 */
+.live-badge {
+  animation: live-badge-pop 2s ease-in-out infinite;
+}
+@keyframes live-badge-pop {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+/* 即時連線亮點 */
+.live-dot-on {
+  position: relative;
+}
+.live-dot-on::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: live-dot-pulse 1.8s ease-out infinite;
+}
+@keyframes live-dot-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+  100% { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); }
+}
+
+/* 載入中：金徽呼吸 */
+.live-loading-mark {
+  animation: public-float 3.4s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   即時開票看板：候選列、動畫、結算畫面、控制台鎖定遮罩
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 開票看板為獨立深色頁，標題不可套用全域深色字（否則深底看不見） */
+.live-board h1,
+.live-board h2,
+.live-board h3,
+.live-board h4,
+.live-board strong {
+  color: inherit;
+}
+
+/* 候選列換位：FLIP 排序時的平滑滑動 */
+.live-candidate-row {
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* 加票：選票飄入候選人區域 */
+.live-fly-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  overflow: visible;
+}
+.live-ballot {
+  position: absolute;
+  top: 4px;
+  right: 18%;
+  width: 56px;
+  height: 42px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #fffdf5, #f1e2b6);
+  border: 1.5px solid #e8c970;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(232, 201, 112, 0.22);
+  opacity: 0;
+  animation: live-ballot-fly 1.3s cubic-bezier(0.25, 0.8, 0.3, 1) calc(var(--i, 0) * 130ms) forwards;
+}
+/* 選票上的勾選痕跡（放大、加粗） */
+.live-ballot::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 11px;
+  width: 22px;
+  height: 12px;
+  border-left: 4px solid #b8962f;
+  border-bottom: 4px solid #b8962f;
+  transform: rotate(-45deg);
+}
+@keyframes live-ballot-fly {
+  0%   { transform: translate(150px, -140px) rotate(-38deg) scale(0.5); opacity: 0; }
+  16%  { opacity: 1; }
+  58%  { transform: translate(0, 26px) rotate(5deg) scale(1.18); opacity: 1; }
+  100% { transform: translate(0, 96px) rotate(0deg) scale(0.7); opacity: 0; }
+}
+
+/* 加票：大型金色「+N」浮標，飄入後上升淡出 */
+.live-vote-gain {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.28rem 0.85rem;
+  background: #e8c970;
+  color: #173654;
+  font-weight: 900;
+  font-size: clamp(1.5rem, 3.4vw, 2.1rem);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  box-shadow: 0 10px 26px rgba(232, 201, 112, 0.55);
+  pointer-events: none;
+  animation: live-vote-gain 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes live-vote-gain {
+  0%   { transform: translateY(18px) scale(0.5); opacity: 0; }
+  22%  { transform: translateY(0) scale(1.2); opacity: 1; }
+  55%  { transform: translateY(-8px) scale(1); opacity: 1; }
+  100% { transform: translateY(-46px) scale(0.95); opacity: 0; }
+}
+
+/* 票數增加：金光脈衝 + 數字彈跳 */
+.live-vote-bump {
+  animation: live-vote-bump 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes live-vote-bump {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.live-row-flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(120% 120% at 50% 50%, rgba(232, 201, 112, 0.32), transparent 60%);
+  animation: live-row-flash 900ms ease-out forwards;
+}
+@keyframes live-row-flash {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 超越：紅黑名次徽章上升 + 「超前」標籤滑入 */
+.live-overtake-badge {
+  animation: live-overtake 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes live-overtake {
+  0%   { transform: translateY(8px) scale(0.9); opacity: 0; }
+  30%  { transform: translateY(0) scale(1.12); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* 領先冠軍光暈 */
+.live-leader-glow {
+  animation: live-leader-glow 2.6s ease-in-out infinite;
+}
+@keyframes live-leader-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 201, 112, 0); }
+  50%      { box-shadow: 0 0 28px 0 rgba(232, 201, 112, 0.35); }
+}
+
+/* 進度條光掃 */
+.live-bar-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.live-bar-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.45), transparent 70%);
+  background-size: 220% 100%;
+  animation: public-shimmer-x 2.4s linear infinite;
+}
+
+/* 結算畫面整體進場 */
+.live-result-enter {
+  animation: live-result-enter 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes live-result-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 冠軍頭像登場 */
+.live-winner-pop {
+  animation: live-winner-pop 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes live-winner-pop {
+  from { transform: scale(0.94); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* 結算金色獎章旋轉光環 */
+.live-trophy-ring {
+  animation: live-trophy-spin 14s linear infinite;
+}
+@keyframes live-trophy-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 彩帶 */
+.live-confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 60;
+}
+.live-confetti i {
+  position: absolute;
+  top: -12vh;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0.9;
+  animation: live-confetti-fall var(--dur, 3.4s) linear var(--delay, 0s) forwards;
+}
+@keyframes live-confetti-fall {
+  0%   { transform: translateY(-12vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(112vh) rotate(680deg); opacity: 0.9; }
+}
+
+/* 控制台票匭鎖定：淡紅遮罩 */
+.lock-guard {
+  position: relative;
+}
+.lock-guard[data-locked="true"] > .lock-guard-content {
+  filter: saturate(0.7);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+.lock-guard-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  padding: 1rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--danger) 45%, transparent);
+  backdrop-filter: blur(1px);
+  animation: live-result-enter 240ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-candidate-row,
+  .live-vote-bump,
+  .live-overtake-badge,
+  .live-leader-glow,
+  .live-bar-sheen::after,
+  .live-result-enter,
+  .live-winner-pop,
+  .live-trophy-ring,
+  .live-confetti i,
+  .live-row-flash::after,
+  .live-ballot,
+  .live-vote-gain {
+    animation: none !important;
+    transition: none !important;
+  }
+  .live-ballot { display: none; }
+}

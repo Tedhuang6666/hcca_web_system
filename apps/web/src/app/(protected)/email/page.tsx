@@ -3,7 +3,6 @@
 import NumberInput from "@/components/ui/NumberInput";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -14,9 +13,9 @@ import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type { RichTextareaHandle } from "@/components/ui/RichTextarea";
 const RichTextarea = dynamic(() => import("@/components/ui/RichTextarea"), { ssr: false });
 import RecipientPicker from "@/components/email/RecipientPicker";
+import SafeImagePreview from "@/components/email/SafeImagePreview";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, emailApi, apiErrorMessage } from "@/lib/api";
-import { uploadUrl } from "@/lib/config";
 import { prepareEmailPreviewHtml } from "@/lib/email-preview";
 import type {
   EmailAttachmentOut,
@@ -36,30 +35,6 @@ import type {
   RecipientSelector,
 } from "@/lib/types";
 
-function SafeImagePreview({
-  url,
-  alt,
-  className,
-  height,
-}: {
-  url: string;
-  alt: string;
-  className: string;
-  height: number;
-}) {
-  const src = uploadUrl(url);
-  if (!src) return null;
-  return (
-    <Image
-      src={src}
-      alt={alt}
-      width={640}
-      height={height}
-      unoptimized
-      className={className}
-    />
-  );
-}
 import {
   AUTOSAVE_KEY,
   BUTTON_STYLE_OPTIONS,

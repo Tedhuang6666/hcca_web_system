@@ -32,6 +32,7 @@ import type {
   SubmissionCustomField,
   UserSummary,
 } from "@/lib/types";
+import { formatScanTime, isPreviewableImage, mergeFields, toIso, toLocal } from "@/lib/merchandise-submission-editor";
 
 type ItemDraft = Omit<MerchandiseSubmissionItemCreate, "template_images" | "custom_fields"> & {
   id?: string;
@@ -56,12 +57,6 @@ const reviewStatusLabels: Record<string, string> = {
   rejected: "未採用",
 };
 
-function isPreviewableImage(file: { content_type: string; filename: string }) {
-  return (
-    file.content_type.startsWith("image/") ||
-    /\.(jpe?g|png|webp)$/i.test(file.filename)
-  );
-}
 
 function AuthenticatedPreviewImage({
   src,
@@ -181,13 +176,6 @@ const AI_TONE_STYLES: Record<
   },
 };
 
-function formatScanTime(value: string | null) {
-  if (!value) return "尚未掃描";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString("zh-TW", { dateStyle: "medium", timeStyle: "short" });
-}
 
 function AIEvidencePanel({
   file,
@@ -415,25 +403,8 @@ function emptyField(index: number): SubmissionCustomField {
   };
 }
 
-function mergeFields(
-  globalFields: SubmissionCustomField[],
-  itemFields: SubmissionCustomField[],
-): SubmissionCustomField[] {
-  const fields = new Map(globalFields.map((field) => [field.key, field]));
-  for (const field of itemFields) fields.set(field.key, field);
-  return [...fields.values()];
-}
 
-function toLocal(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
 
-function toIso(value: string): string | null {
-  return value ? new Date(value).toISOString() : null;
-}
 
 function FieldCaption({ children }: { children: React.ReactNode }) {
   return (

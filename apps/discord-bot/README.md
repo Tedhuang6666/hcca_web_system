@@ -59,6 +59,10 @@ docker compose --env-file .env.discord-bot -f docker-compose.bot.yml run --rm di
 Bot 每 20 秒回報一次 inventory 作為心跳。API 暫時中斷時，Discord 連線會保持運作，
 Bot 會持續重試，恢復後自動重新連結，不需重啟。
 
+程式入口是 `src/hcca_discord_bot/main.py`。`commands.py` 與 `extended_commands.py` 保留
+cog 載入入口；平台、社群管理、學餐、工具及法規 listener 分別放在領域模組。Bot 只透過
+`command_common.py` 使用平台 API，不直接連接資料庫。
+
 ## Discord Developer Portal
 
 1. 在 [Discord Developer Portal](https://discord.com/developers/applications) 建立 Application，

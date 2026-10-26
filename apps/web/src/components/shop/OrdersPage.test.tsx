@@ -5,8 +5,14 @@ import type { OrderListItem } from "@/lib/types";
 
 const api = vi.hoisted(() => ({
   listOrders: vi.fn(), listDelegatedOrders: vi.fn(), catalog: vi.fn(), getProduct: vi.fn(),
+  myClass: vi.fn(), recipientOptions: vi.fn(), myCorrectionRequests: vi.fn(),
+  createCorrectionRequest: vi.fn(),
 }));
-vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
+vi.mock("@/lib/api", () => ({
+  shopApi: api,
+  classApi: api,
+  apiErrorMessage: (_: unknown, fallback: string) => fallback,
+}));
 vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
 
 const order: OrderListItem = {
@@ -25,6 +31,9 @@ beforeEach(() => {
   api.listDelegatedOrders.mockResolvedValue([]);
   api.catalog.mockResolvedValue([]);
   api.getProduct.mockResolvedValue({ image_url: null });
+  api.myClass.mockResolvedValue(null);
+  api.recipientOptions.mockResolvedValue([{ id: "class", label: "一年一班" }]);
+  api.myCorrectionRequests.mockResolvedValue([]);
 });
 
 describe("我的預購", () => {
@@ -71,6 +80,16 @@ describe("我的預購", () => {
     expect(await screen.findByText("目前沒有預購品項，先到商品頁挑選商品。")).toBeVisible();
     expect(screen.getByRole("link", { name: "去選購商品" })).toHaveAttribute("href", "/shop");
     expect(screen.queryByRole("region", { name: "校慶預購" })).not.toBeInTheDocument();
+  });
+
+  it("connects the class correction request to the student's order page", async () => {
+    render(<OrdersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "申請加入班級" }));
+    expect(await screen.findByLabelText("你目前就讀的班級")).toBeVisible();
+    expect(api.myClass).toHaveBeenCalledOnce();
+    expect(api.recipientOptions).toHaveBeenCalledOnce();
+    expect(api.myCorrectionRequests).toHaveBeenCalledOnce();
   });
 
   it("includes student orders where the current user added delegated items", async () => {

@@ -9,7 +9,6 @@ on:
       - "docker-compose.yml"
       - "pyproject.toml"
       - "uv.lock"
-      - "package-lock.json"
       - ".github/workflows/trivy.yml"
   pull_request:
     branches: [main]
@@ -19,7 +18,6 @@ on:
       - "docker-compose.yml"
       - "pyproject.toml"
       - "uv.lock"
-      - "package-lock.json"
       - ".github/workflows/trivy.yml"
   schedule:
     - cron: "37 6 * * 5"
