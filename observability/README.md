@@ -12,6 +12,11 @@ OTEL_ENABLED=true docker compose --profile observability up -d
 OTEL_ENABLED=true docker compose --env-file .env.production -f docker-compose.prod.yml --profile monitoring up -d
 ~~~
 
+Prometheus 設定依 Compose 環境分為 `prometheus/development/` 與
+`prometheus/production/`，保留各環境的 worker、exporter 與 alert rule 差異。
+Alert rules 放在 `prometheus/rules/` 的環境子目錄。Grafana 的 datasource、dashboard
+與 provisioning 共用 `grafana/`，兩份 Compose 都掛載同一來源。
+
 服務預設只綁定本機：
 
 - Grafana：http://localhost:3001

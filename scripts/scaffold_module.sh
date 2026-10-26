@@ -145,8 +145,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
-from api.dependencies.auth import require_permission
-from api.models.permission import PermissionCode
+from api.core.permission_codes import PermissionCode
+from api.dependencies.permissions import require_permission
 from api.schemas.'"${SLUG}"' import '"${CLASS}"'Create, '"${CLASS}"'Out
 from api.services import '"${SLUG}"' as svc
 
@@ -177,8 +177,12 @@ write_if_missing "$TEST_FILE" \
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from httpx import AsyncClient
+
+from api.models.user import User
 
 
 @pytest.mark.asyncio
@@ -189,9 +193,13 @@ async def test_list_'"${PLURAL}"'_requires_auth(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_'"${PLURAL}"'_empty(authed_client: AsyncClient) -> None:
+async def test_list_'"${PLURAL}"'_empty(
+    admin_user: User,
+    authed_client_factory: Callable[[User], AsyncClient],
+) -> None:
     """有權限時應回空列表。"""
-    resp = await authed_client.get("/'"${PLURAL}"'")
+    client = authed_client_factory(admin_user)
+    resp = await client.get("/'"${PLURAL}"'")
     assert resp.status_code == 200
     assert resp.json() == []'
 
@@ -206,7 +214,7 @@ echo "     import:  from api.routers import ${PLURAL}"
 echo "     掛載:    app.include_router(${PLURAL}.router)"
 echo ""
 echo "  3. 建立 Alembic migration（在 WSL 內執行）："
-echo "     uv run --project apps/api alembic -c apps/api/alembic.ini revision --autogenerate \\"
+echo "     uv run --locked --directory apps/api alembic revision --autogenerate \\"
 echo "       -m \"add ${PLURAL} table\""
 echo ""
 echo "  4. 補齊 ${MODEL_FILE} 的完整欄位定義"
@@ -215,6 +223,5 @@ echo "  6. 補齊 ${SERVICE_FILE} 的 create / update / delete 函式"
 echo "  7. 補齊 ${ROUTER_FILE} 的 POST / PATCH / DELETE 端點"
 echo "  8. 補充 ${TEST_FILE} 的 CRUD 測試案例"
 echo ""
-echo "  若要同時生成前端頁面骨架，執行："
-echo "    ./scripts/scaffold_frontend.sh ${SLUG} \"${LABEL}\""
+echo "  前端入口依既有路由與模組註冊流程手動建立；目前沒有前端 scaffold 指令。"
 echo ""

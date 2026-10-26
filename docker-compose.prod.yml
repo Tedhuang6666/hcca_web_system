@@ -545,9 +545,8 @@ services:
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./infra/prometheus/rules:/etc/prometheus/rules:ro
-      - ./observability/prometheus/rules:/etc/prometheus/observability-rules:ro
+      - ./observability/prometheus/production/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
       - prometheusdata:/prometheus
     depends_on:
       api:
@@ -565,8 +564,8 @@ services:
     ports:
       - "127.0.0.1:3001:3000"
     volumes:
-      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
     depends_on:
       - prometheus

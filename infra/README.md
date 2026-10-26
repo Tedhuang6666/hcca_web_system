@@ -1,12 +1,13 @@
 # infra/
 
-正式環境的 reverse proxy、監控與 dashboard provisioning。
+正式環境的 reverse proxy。監控設定與 dashboard 採用共用的
+[observability 設定](../observability/README.md)，由各環境 Compose 掛載。
 
 | 子目錄 | 內容 | 對應 ADR |
 |---|---|---|
 | `caddy/` | reverse proxy + LB 設定 | [ADR-002](../docs/adr/002-ha-two-replica.md) |
-| `prometheus/` | metrics 抓取設定 | [ADR-001](../docs/adr/001-cloudflare-edge.md) |
-| `grafana/` | dashboard 與資料源 provisioning | — |
+| `../observability/prometheus/` | Prometheus 環境設定與 alert rules | — |
+| `../observability/grafana/` | Grafana dashboard 與 datasource provisioning | — |
 
 ## 套用方式
 
@@ -26,7 +27,8 @@ bash scripts/zero-downtime-deploy.sh blue
 bash dev.sh
 ```
 
-零停機部署細節請看 [docs/ZERO_DOWNTIME_DEPLOY.md](../docs/ZERO_DOWNTIME_DEPLOY.md)。
+正式部署入口請看版本庫中的 [production Compose 設定](../docker-compose.prod.yml) 與
+[智慧部署腳本](../scripts/deploy-smart.sh)。
 
 ## 預設 ports
 

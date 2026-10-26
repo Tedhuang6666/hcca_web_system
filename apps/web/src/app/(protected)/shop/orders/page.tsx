@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { shopApi, apiErrorMessage } from "@/lib/api";
-import type { OrderListItem, ShopDelegatedOrderOut } from "@/lib/types";
+import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
+import type { MyClassContext, OrderListItem, ShopDelegatedOrderOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { useWS } from "@/hooks/useWS";
+import ClassCorrectionRequest from "@/components/shop/ClassCorrectionRequest";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import ShopPrice from "@/components/shop/ShopPrice";
@@ -17,10 +18,25 @@ export default function OrdersPage() {
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [productImages, setProductImages] = useState<Record<string, string | null>>({});
   const [delegatedOrderIds, setDelegatedOrderIds] = useState<Set<string>>(() => new Set());
+  const [myClass, setMyClass] = useState<MyClassContext | null>(null);
+  const [classContextStatus, setClassContextStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     setUserRoom(userId ? `user:${userId}` : null);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void classApi.myClass().then((nextClass) => {
+      if (!cancelled) {
+        setMyClass(nextClass);
+        setClassContextStatus("ready");
+      }
+    }).catch(() => {
+      if (!cancelled) setClassContextStatus("error");
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const load = useCallback(async () => {
@@ -98,6 +114,14 @@ export default function OrdersPage() {
           <h1>我的預購</h1>
         </div>
       </header>
+
+      {classContextStatus === "ready" ? (
+        <ClassCorrectionRequest currentClass={myClass} />
+      ) : classContextStatus === "error" ? (
+        <p className="shop-class-correction-status" role="status">
+          無法確認班級資料，請重新載入頁面後再申請班級更正。
+        </p>
+      ) : null}
 
       <section className="shop-orders-list" aria-labelledby="shop-orders-list-title">
         <h2 id="shop-orders-list-title">預購品項</h2>

@@ -7,5 +7,7 @@ providers:
     type: file
     disableDeletion: true
     editable: false
+    updateIntervalSeconds: 30
+    editable: false
     options:
       path: /var/lib/grafana/dashboards

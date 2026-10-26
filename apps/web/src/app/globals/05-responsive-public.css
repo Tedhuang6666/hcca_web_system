@@ -1,0 +1,347 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   響應式設計
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 平板（< 1024px）────────────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  .btn, .topbar-icon-btn, .sidebar-nav-item { min-height: 44px; }
+  .topbar-icon-btn { width: 2.75rem; height: 2.75rem; }
+  .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .page-header { flex-wrap: wrap; gap: 0.75rem; }
+}
+
+/* ── 手機（< 768px）─────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  html { -webkit-text-size-adjust: 100%; }
+  .page-body { padding: 1rem; }
+  .card { border-radius: var(--radius-md); }
+  .btn-block-mobile { width: 100%; justify-content: center; }
+  .hide-mobile { display: none !important; }
+  .form-grid { grid-template-columns: 1fr !important; }
+  input, select, textarea { font-size: 16px !important; }
+  .page-header { flex-direction: column; align-items: flex-start; }
+  .page-header > *:last-child { width: 100%; }
+  .table-header th { padding: 0.5rem 0.625rem; font-size: 0.625rem; }
+  .table-row td { padding: 0.625rem 0.625rem; font-size: 0.8125rem; }
+  .float-btn { right: 1rem; bottom: 1rem; }
+}
+
+/* ── 超小屏（< 480px）──────────────────────────────────────────────────── */
+@media (max-width: 479px) {
+  body { font-size: 0.875rem; }
+  .badge { font-size: 0.625rem; padding: 0.15em 0.45em; }
+  :root { --sidebar-w: 200px; }
+}
+
+/* ── 平板（768-1023px）：側邊欄改為抽屜，保留完整主內容寬度 ─────────── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root { --sidebar-w: 280px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   公開站視覺強化 — 霧金治理風的動態語言
+   與系統內 dashboard-hero / ambient-drift 同一套設計語彙。
+   全部進場動畫使用 fill-mode: both，於 prefers-reduced-motion 下會被全域
+   media query 收斂為瞬間到位（見檔首），故可安全停在最終狀態；無限循環動畫
+   亦同步靜止。捲動揭示由 useScrollReveal hook 驅動。
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Hero：極光光暈 + 細點紋理 ─────────────────────────────────────────── */
+.public-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.public-hero::before {
+  content: "";
+  position: absolute;
+  inset: -30% -12% auto -12%;
+  z-index: -2;
+  height: 150%;
+  pointer-events: none;
+  background:
+    radial-gradient(38rem 24rem at 16% 4%, color-mix(in srgb, var(--public-accent) 26%, transparent), transparent 68%),
+    radial-gradient(34rem 26rem at 86% 26%, color-mix(in srgb, var(--info) 18%, transparent), transparent 70%),
+    radial-gradient(30rem 22rem at 60% 110%, color-mix(in srgb, var(--public-accent) 14%, transparent), transparent 72%);
+  filter: blur(6px);
+  animation: public-aurora 18s ease-in-out infinite alternate;
+}
+
+.public-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(color-mix(in srgb, var(--public-accent) 42%, transparent) 0.6px, transparent 0.6px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(circle at 50% 0%, black, transparent 72%);
+  -webkit-mask-image: radial-gradient(circle at 50% 0%, black, transparent 72%);
+}
+
+@keyframes public-aurora {
+  0%   { transform: translate3d(-2%, -1%, 0) scale(1);    opacity: 0.9; }
+  50%  { transform: translate3d(2%, 1.5%, 0) scale(1.06); opacity: 1; }
+  100% { transform: translate3d(-1%, 2%, 0) scale(1.02);  opacity: 0.92; }
+}
+
+/* 深色模式：金光在近黑底用低透明度會發灰，改用較高亮度 + screen 混色發光 */
+[data-theme="dark"] .public-hero::before {
+  background:
+    radial-gradient(38rem 24rem at 16% 4%, rgba(212, 180, 94, 0.5), transparent 64%),
+    radial-gradient(34rem 26rem at 86% 26%, rgba(120, 162, 232, 0.4), transparent 68%),
+    radial-gradient(30rem 22rem at 60% 112%, rgba(212, 180, 94, 0.32), transparent 72%);
+  filter: blur(10px);
+  mix-blend-mode: screen;
+}
+[data-theme="dark"] .public-hero::after {
+  opacity: 0.72;
+  background-image: radial-gradient(rgba(212, 180, 94, 0.62) 0.7px, transparent 0.7px);
+  mix-blend-mode: screen;
+}
+
+/* ── Hero 進場：標題群組依序上升、招牌縮放浮現 ───────────────────────── */
+.public-hero-copy > * {
+  animation: public-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.public-hero-copy > .public-eyebrow      { animation-delay: 60ms; }
+.public-hero-copy > h1                    { animation-delay: 150ms; }
+.public-hero-copy > .public-hero-subtitle { animation-delay: 280ms; }
+.public-hero-copy > .public-hero-actions  { animation-delay: 400ms; }
+
+.public-signboard {
+  animation: public-rise-pop 820ms cubic-bezier(0.22, 1, 0.36, 1) 220ms both;
+}
+
+.public-home-pending {
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background:
+    radial-gradient(38rem 24rem at 50% 0%, color-mix(in srgb, var(--public-accent) 18%, transparent), transparent 70%),
+    var(--public-bg);
+}
+
+.public-home-pending-card {
+  width: min(100%, 30rem);
+  border: 1px solid var(--public-border);
+  border-radius: 8px;
+  background: var(--public-surface);
+  box-shadow: var(--shadow-lg);
+  padding: 2rem;
+  animation: public-rise-pop 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.public-home-pending-card h1 {
+  margin-top: 0.75rem;
+  color: var(--public-text);
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.public-home-pending-card p:last-child {
+  margin-top: 0.75rem;
+  color: var(--public-secondary);
+  line-height: 1.8;
+}
+
+.public-home-pending-mark {
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 1.25rem;
+  border: 3px solid color-mix(in srgb, var(--public-accent) 18%, transparent);
+  border-top-color: var(--public-accent);
+  border-radius: 999px;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes public-rise {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes public-rise-pop {
+  from { opacity: 0; transform: translateY(34px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── 招牌頂線流光 + 會徽輕浮動 ─────────────────────────────────────────── */
+.public-signboard-topline {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--public-accent) 40%, transparent),
+    var(--public-accent),
+    color-mix(in srgb, var(--public-accent) 40%, transparent),
+    transparent
+  );
+  background-size: 220% 100%;
+  animation: public-shimmer-x 3.6s linear infinite;
+}
+
+.public-signboard-emblem img,
+.public-signboard-emblem span,
+.public-signboard-emblem svg {
+  animation: public-float 6.5s ease-in-out infinite;
+}
+
+@keyframes public-shimmer-x {
+  to { background-position: -220% 0; }
+}
+@keyframes public-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+
+/* ── 入口卡片：上浮 + 金邊光暈 + 斜向光掃 + 圖示彈跳 ─────────────────── */
+.public-feature-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.public-feature-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 55%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-18deg);
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in srgb, #ffffff 42%, transparent),
+    transparent
+  );
+}
+
+.public-feature-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--public-accent);
+  box-shadow:
+    0 18px 40px rgba(26, 26, 46, 0.14),
+    0 0 0 1px color-mix(in srgb, var(--public-accent) 40%, transparent);
+}
+[data-theme="dark"] .public-feature-card:hover {
+  box-shadow:
+    0 20px 46px rgba(0, 0, 0, 0.44),
+    0 0 0 1px color-mix(in srgb, var(--public-accent) 46%, transparent);
+}
+
+.public-feature-card:hover::after {
+  animation: public-sheen 760ms ease;
+}
+
+.public-feature-icon {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.3s ease,
+    color 0.3s ease;
+}
+.public-feature-card:hover .public-feature-icon {
+  transform: translateY(-2px) rotate(-7deg) scale(1.1);
+  background: var(--public-accent);
+  color: var(--primary-fg);
+}
+
+@keyframes public-sheen {
+  from { left: -75%; opacity: 0; }
+  20%  { opacity: 1; }
+  to   { left: 130%; opacity: 0; }
+}
+
+/* ── 主要 CTA：微浮 + 金光 + 光掃 + 箭頭前推 ───────────────────────────── */
+.public-cta-primary {
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-gold);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.3s ease,
+    background 0.2s ease;
+}
+.public-cta-primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 50%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-20deg);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+}
+.public-cta-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(201, 168, 76, 0.42);
+}
+.public-cta-primary:hover::after {
+  animation: public-sheen 720ms ease;
+}
+.public-cta-primary svg {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.public-cta-primary:hover svg {
+  transform: translateX(4px);
+}
+
+.public-cta-secondary {
+  transition: transform 0.2s ease, border-color var(--transition), background var(--transition);
+}
+.public-cta-secondary:hover {
+  transform: translateY(-2px);
+  border-color: var(--public-accent);
+}
+
+/* ── 側欄小卡 / 連結列：細緻位移回饋 ───────────────────────────────────── */
+.public-mini-item,
+.public-link-row {
+  transition:
+    transform 0.2s ease,
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow 0.2s ease;
+}
+.public-mini-item:hover {
+  transform: translateX(3px);
+  border-color: var(--public-accent);
+}
+.public-link-row:hover {
+  transform: translateX(3px);
+  box-shadow: var(--shadow-sm);
+}
+.public-link-row svg {
+  transition: transform 0.2s ease;
+}
+.public-link-row:hover svg {
+  transform: translate(2px, -2px);
+}
+
+/* ── 區段標題裝飾線（kicker 前的金色短線） ─────────────────────────────── */
+.public-section-kicker::before {
+  content: "";
+  display: inline-block;
+  width: 1.6rem;
+  height: 2px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  border-radius: 99px;
+  background: var(--public-accent);
+}
+
+/* 公開站面板：與入口卡片一致的上浮回饋 */
+.public-panel {
+  transition:
+    transform var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+.public-about-panel:hover,
+.public-side-panel:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}

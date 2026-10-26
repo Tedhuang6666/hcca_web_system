@@ -1,15 +1,5 @@
 # ==============================================================================
-# Stage 1: deps — 安裝 Node.js 依賴
-# ==============================================================================
-FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS deps
-
-WORKDIR /app
-
-COPY apps/web/package.json apps/web/package-lock.json* apps/web/.npmrc* ./
-RUN npm ci --omit=dev
-
-# ==============================================================================
-# Stage 2: builder — 建置 Next.js 生產版本
+# Stage 1: builder — 安裝依賴並建置 Next.js 生產版本
 # ==============================================================================
 FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS builder
 
@@ -48,7 +38,7 @@ ENV NEXT_PUBLIC_BUILD_TIME=$NEXT_PUBLIC_BUILD_TIME
 RUN npm run build
 
 # ==============================================================================
-# Stage 3: runtime — 最小化生產映像檔
+# Stage 2: runtime — 最小化生產映像檔
 # ==============================================================================
 FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS runtime
 

@@ -48,8 +48,9 @@ Router -> Service -> Model
 主要目錄：
 
 - `src/api/main.py`：FastAPI factory、middleware、router 掛載。
-- `src/api/routers/`：HTTP 與依賴注入。
-- `src/api/services/`：業務邏輯與 Celery tasks。
+- `src/api/routers/`：HTTP 與依賴注入；`finance.py` 聚合總帳、預算、報帳／付款及公開查詢路由。
+- `src/api/services/`：業務邏輯與 Celery tasks；`finance.py` 維持服務匯出相容，財務實作分在 `finance_core.py`、`finance_budget.py`、`finance_journal.py`。
+- `src/api/services/shop/`：商品目錄、訂單、班級收款、訂單查詢與序列化分模組，`_orders.py` 保留相容匯出。
 - `src/api/models/`：SQLAlchemy ORM。
 - `src/api/schemas/`：Pydantic schema。
 - `alembic/`：資料庫遷移。

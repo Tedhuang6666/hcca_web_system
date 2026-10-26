@@ -51,6 +51,7 @@ import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
 import { categoryOrderable, defaultShopCategory, productDeadline } from "@/lib/shop-deadlines";
 import ShopLookbook from "@/components/shop/ShopLookbook";
 import { hasShopLookbook, lookbookPhotoUrl, productLookbook } from "@/lib/shop-lookbook";
+import { registrationLockMessage, registrationVariantKey } from "@/lib/shop-registration";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -80,9 +81,6 @@ function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?
   );
 }
 
-function registrationVariantKey(options: readonly { option_id: string }[]) {
-  return options.map((option) => option.option_id).sort().join(",");
-}
 
 function flyProductIntoOrder() {
   if (typeof window === "undefined") return;
@@ -160,20 +158,6 @@ function flyProductIntoOrder() {
 
 const GENERAL_ACTIVITY_SCOPE = "none";
 
-function registrationLockMessage({
-  registrationLocked,
-  classClosed,
-  deadlinePassed,
-}: {
-  registrationLocked: boolean;
-  classClosed: boolean;
-  deadlinePassed: boolean;
-}) {
-  if (registrationLocked) return "班級幹部已登記收款，商品登記已鎖定";
-  if (classClosed) return "本班已停止訂購，如需更改請聯繫班代";
-  if (deadlinePassed) return "商品登記已截止";
-  return "登入後即可登記商品";
-}
 
 // ── 商品變體選購 Modal ────────────────────────────────────────────────────────
 

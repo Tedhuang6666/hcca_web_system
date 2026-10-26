@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,8 +15,6 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.clock import local_today
-from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any
@@ -31,7 +28,6 @@ from api.email.renderer import (
 from api.email.sender import enqueue_rendered, render_generic_message, render_generic_subject
 from api.models.email_message import (
     EmailAttachment,
-    EmailAttachmentMode,
     EmailCampaignRecipient,
     EmailMessage,
     EmailRecipientListMember,
@@ -43,7 +39,12 @@ from api.models.email_message import (
 from api.models.user import User
 from api.schemas.email_platform import EmailConditionalRule
 from api.services import audit as audit_svc
-from api.services.email_dispatch import send_now as dispatch_send_now
+from api.services.email_dispatch import (
+    render_attachments as _render_attachments,
+)
+from api.services.email_dispatch import (
+    send_now as dispatch_send_now,
+)
 from api.services.permission import get_user_permission_codes
 from api.services.recipient import resolve_recipients, spec_to_resolve_kwargs
 from api.services.storage import get_storage
@@ -604,27 +605,6 @@ async def _ensure_can_send(db: AsyncSession, user: User, sel: RecipientSelector)
         )
 
 
-async def _check_quota(db: AsyncSession, user: User, count: int) -> None:
-    """每日寄送人次配額檢查。"""
-    if user.is_superuser:
-        return
-    today = local_today()
-    day_start = datetime(today.year, today.month, today.day, tzinfo=UTC)
-    used = await db.scalar(
-        select(func.coalesce(func.sum(EmailMessage.recipient_count), 0)).where(
-            EmailMessage.sender_id == user.id,
-            EmailMessage.status.in_([EmailStatus.QUEUED, EmailStatus.SENT]),
-            EmailMessage.created_at >= day_start,
-        )
-    )
-    quota = settings.EMAIL_DAILY_QUOTA_PER_USER
-    if int(used or 0) + count > quota:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"超過每日寄送上限（{quota} 人次），今日已使用 {int(used or 0)} 人次",
-        )
-
-
 def _apply_compose(msg: EmailMessage, payload: EmailComposePayload) -> None:
     definitions = _normalize_definitions(payload.variable_definitions)
     conditional_rules = _normalize_conditional_rules(definitions, payload.conditional_rules)
@@ -659,37 +639,6 @@ def _apply_compose(msg: EmailMessage, payload: EmailComposePayload) -> None:
         }
         for row in payload.recipient_variables
     ]
-
-
-async def _render_attachments(
-    attachments: list[EmailAttachment],
-) -> tuple[list[dict[str, str]], list[dict]]:
-    resend_attachments: list[dict[str, str]] = []
-    link_blocks: list[dict] = []
-    storage = get_storage()
-    for attachment in attachments:
-        if attachment.revoked_at or (
-            attachment.expires_at and attachment.expires_at <= datetime.now(UTC)
-        ):
-            continue
-        if attachment.delivery_mode == EmailAttachmentMode.ATTACHMENT:
-            path = storage.local_path(attachment.storage_key)
-            if path and path.exists():
-                resend_attachments.append(
-                    {
-                        "filename": attachment.filename,
-                        "content": base64.b64encode(path.read_bytes()).decode(),
-                    }
-                )
-                continue
-        url = await storage.get_url(
-            attachment.storage_key,
-            expires=settings.EMAIL_ATTACHMENT_LINK_EXPIRES_SECONDS,
-            disposition="attachment",
-            download_name=attachment.filename,
-        )
-        link_blocks.append({"type": "text", "md": f"[下載附件：{attachment.filename}]({url})"})
-    return resend_attachments, link_blocks
 
 
 async def _render_requested_attachments(

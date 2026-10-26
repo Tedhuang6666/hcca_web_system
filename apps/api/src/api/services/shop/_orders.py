@@ -4,30 +4,16 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, or_, select, union
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.clock import local_today, now_local
 from api.core.config import settings
 from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.outbox import OutboxEvent, OutboxStatus
-from api.models.person import (
-    Person,
-    PersonAffiliation,
-    PersonAffiliationKind,
-    PersonAffiliationStatus,
-)
 from api.models.receivable import Receivable, ReceivableSource
-from api.models.school_class import (
-    ClassManualMember,
-    ClassRosterEntry,
-    ClassStudentRange,
-    SchoolClass,
-)
 from api.models.shop import (
     Cart,
     CartItem,
@@ -38,7 +24,6 @@ from api.models.shop import (
     ProductCategory,
     ProductSeries,
     ProductStatus,
-    ShopDelegationLink,
     ShopOrderClose,
     ShopOrderPromotion,
     ShopPromotion,
@@ -49,17 +34,7 @@ from api.schemas.shop import (
     CartItemOut,
     CartOut,
     ClassOrderUpsert,
-    CurrentRegistrationUpdate,
     OrderItemCreate,
-    OrderItemOut,
-    OrderListItem,
-    OrderOut,
-    OrderPromotionOut,
-    OrderQuantityRow,
-    OrderSummaryOut,
-    OrderSummaryRow,
-    ShopClassProductSummaryRow,
-    ShopClassSummaryOut,
     ShopOrderCloseOut,
 )
 from api.services import receivable as receivable_svc
@@ -70,7 +45,6 @@ from api.services.shop._catalog import (
     get_product,
 )
 from api.services.shop._promotions import PromotionAllocation, resolve_promotions
-from api.services.shop._testing import can_test_products
 from api.services.student_identity import has_student_identity
 
 logger = logging.getLogger(__name__)
@@ -955,207 +929,6 @@ async def get_class_member_registrations(
     return await _get_class_member_orders(session, user_id, class_ids)
 
 
-async def _settle_registration_orders(session: AsyncSession, orders: Iterable[Order]) -> None:
-    """數量異動後，以同一交易更新金額、優惠配置與應收款。"""
-    await session.flush()
-    for order in orders:
-        order.subtotal_price = sum(item.quantity * item.unit_price for item in order.items)
-        if not order.items:
-            order.status = OrderStatus.CANCELLED
-            order.subtotal_price = 0
-            order.discount_amount = 0
-            order.total_price = 0
-            await _sync_order_promotions(session, order, ())
-            await receivable_svc.cancel_for_source(session, "shop_order", order.id)
-        else:
-            try:
-                await _apply_order_promotion(session, order, code=order.promotion_code)
-            except ValueError:
-                # 調整品項後原優惠可能已不適用，仍套用符合條件的自動優惠。
-                await _apply_order_promotion(session, order, code=None)
-            await receivable_svc.sync_shop_order(session, order)
-    await session.flush()
-
-
-async def set_class_member_product(
-    session: AsyncSession,
-    *,
-    user: User,
-    actor: User,
-    class_id: uuid.UUID,
-    class_ids: list[uuid.UUID],
-    product_id: uuid.UUID,
-    data: CurrentRegistrationUpdate,
-) -> list[Order]:
-    """按學生的商品總量，跨其有效訂購調整未鎖定品項。"""
-    if class_id not in class_ids:
-        raise PermissionError("無權修改此學生的商品登記")
-    await _assert_buyer_eligible(session, user)
-
-    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
-    await session.execute(
-        select(Product)
-        .where(Product.id == product_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    product = await get_product(session, product_id)
-    if product is None:
-        raise ValueError("找不到此商品")
-
-    orders = await _get_class_member_orders(session, user.id, class_ids, lock=True)
-    product_lines = [
-        (order, item) for order in orders for item in order.items if item.product_id == product.id
-    ]
-    existing_quantity = sum(item.quantity for _, item in product_lines)
-    await _assert_product_registration_open(
-        session,
-        product,
-        class_id=class_id,
-        allow_sold_out=existing_quantity > 0,
-    )
-
-    locked_quantities: dict[str, int] = {}
-    current_options: dict[str, list[dict]] = {}
-    editable_lines: dict[str, list[tuple[Order, OrderItem]]] = {}
-    for order, item in product_lines:
-        signature = _options_signature(item.selected_options or [])
-        current_options.setdefault(signature, item.selected_options or [])
-        if order.is_paid or order.is_class_collected:
-            locked_quantities[signature] = locked_quantities.get(signature, 0) + item.quantity
-        else:
-            editable_lines.setdefault(signature, []).append((order, item))
-
-    requested: dict[str, tuple[int, list[dict]]] = {}
-    for variant in data.variants:
-        if len(set(variant.option_ids)) != len(variant.option_ids):
-            raise ValueError("同一規格不能重複選擇選項")
-        signature = ",".join(sorted(str(option_id) for option_id in variant.option_ids))
-        if signature in requested:
-            raise ValueError("相同規格不能重複登記")
-        selected = current_options.get(signature)
-        if selected is None:
-            selected = _resolve_selected_options(product, variant.option_ids)
-        requested[signature] = (variant.quantity, selected)
-
-    for signature, locked_quantity in locked_quantities.items():
-        if requested.get(signature, (0, []))[0] < locked_quantity:
-            raise ValueError("已收款、已鎖定或家人代訂的數量不能減少")
-
-    requested_total = sum(quantity for quantity, _ in requested.values())
-    quantity_delta = requested_total - existing_quantity
-    if quantity_delta > 0:
-        await _assert_purchase_limit(session, product, user.id, quantity_delta)
-    if not product.is_unlimited:
-        if quantity_delta > product.stock_quantity:
-            raise ValueError(f"商品「{product.name}」庫存不足（剩餘 {product.stock_quantity} 件）")
-        product.stock_quantity -= quantity_delta
-        if product.stock_quantity == 0:
-            product.status = ProductStatus.SOLD_OUT
-        elif product.status == ProductStatus.SOLD_OUT:
-            product.status = ProductStatus.ACTIVE
-
-    affected_orders: dict[uuid.UUID, Order] = {}
-    all_signatures = set(editable_lines) | set(locked_quantities) | set(requested)
-    for signature in all_signatures:
-        entries = editable_lines.get(signature, [])
-        current_editable = sum(item.quantity for _, item in entries)
-        desired_total, selected = requested.get(
-            signature,
-            (locked_quantities.get(signature, 0), current_options.get(signature, [])),
-        )
-        desired_editable = desired_total - locked_quantities.get(signature, 0)
-        difference = desired_editable - current_editable
-
-        if difference < 0:
-            remaining = -difference
-            for order, item in sorted(
-                entries,
-                key=lambda entry: (entry[0].created_at, str(entry[0].id)),
-                reverse=True,
-            ):
-                reduction = min(remaining, item.quantity)
-                item.quantity -= reduction
-                remaining -= reduction
-                affected_orders[order.id] = order
-                if item.quantity == 0:
-                    order.items.remove(item)
-                    await session.delete(item)
-                if remaining == 0:
-                    break
-        elif difference > 0:
-            if entries:
-                order, item = min(
-                    entries,
-                    key=lambda entry: (entry[0].created_at, str(entry[0].id)),
-                )
-                item.quantity += difference
-                affected_orders[order.id] = order
-            else:
-                scope = _product_order_scope(product)
-                order = next(
-                    (
-                        candidate
-                        for candidate in orders
-                        if not candidate.is_paid
-                        and not candidate.is_class_collected
-                        and all(
-                            item.product is not None and _product_order_scope(item.product) == scope
-                            for item in candidate.items
-                        )
-                        and (
-                            candidate.items
-                            or (
-                                candidate.activity_id == scope[0]
-                                and candidate.category_id == scope[1]
-                            )
-                        )
-                    ),
-                    None,
-                )
-                if order is None:
-                    order = Order(
-                        serial_number=await generate_order_serial(session),
-                        user_id=user.id,
-                        activity_id=scope[0],
-                        category_id=scope[1],
-                        class_id=class_id,
-                        status=OrderStatus.PENDING,
-                        payment_method="school_collection"
-                        if _is_school_email(user)
-                        else "cash_on_pickup",
-                        subtotal_price=0,
-                        discount_amount=0,
-                        total_price=0,
-                        items=[],
-                        applied_promotions=[],
-                        assistance_scope="class_assisted",
-                        assisted_by_id=actor.id,
-                    )
-                    session.add(order)
-                    await session.flush()
-                    orders.append(order)
-                order.items.append(
-                    OrderItem(
-                        product_id=product.id,
-                        quantity=difference,
-                        unit_price=product.price + _options_delta(selected),
-                        selected_options=selected,
-                        ordered_by_id=actor.id,
-                        ordered_by_name=actor.display_name,
-                    )
-                )
-                affected_orders[order.id] = order
-
-    for order in affected_orders.values():
-        if order.class_id is None:
-            order.class_id = class_id
-            order.school_class = await session.get(SchoolClass, class_id)
-
-    await _settle_registration_orders(session, affected_orders.values())
-    return await _get_class_member_orders(session, user.id, class_ids)
-
-
 async def apply_registration_promotion(
     session: AsyncSession,
     user: User,
@@ -1221,206 +994,6 @@ async def _assert_product_registration_open(
             raise ValueError("您的班級已結單，無法修改商品登記，請聯繫班級幹部")
 
 
-async def set_current_registration_product(
-    session: AsyncSession,
-    user: User,
-    product_id: uuid.UUID,
-    *,
-    data: CurrentRegistrationUpdate,
-    actor: User | None = None,
-    delegation: ShopDelegationLink | None = None,
-) -> Order | None:
-    """立即登記某商品的規格數量，並以目前有效訂單保存。"""
-    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
-    await session.execute(
-        select(Product)
-        .where(Product.id == product_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    product = await get_product(session, product_id)
-    if product is None:
-        raise ValueError("找不到此商品")
-
-    testing = product.status == ProductStatus.TESTING
-    actor = actor or user
-    if testing:
-        if (
-            delegation is not None
-            or actor.id != user.id
-            or not await can_test_products(session, actor)
-        ):
-            raise PermissionError("需要權限：shop:test")
-    else:
-        await _assert_buyer_eligible(session, user)
-
-    activity_id, category_id = _product_order_scope(product)
-    order = await get_current_registration(
-        session,
-        user.id,
-        activity_id=activity_id,
-        category_id=category_id,
-        match_activity=True,
-        lock=True,
-        reuse_cancelled=True,
-        test_product_id=product.id if testing else None,
-    )
-    if order is not None:
-        if order.is_paid or order.is_class_collected:
-            raise ValueError("班級幹部已登記收款，商品登記已鎖定")
-        if order.status not in (
-            OrderStatus.PENDING,
-            OrderStatus.CONFIRMED,
-            OrderStatus.CANCELLED,
-        ):
-            raise ValueError("目前登記狀態無法修改")
-        if any(
-            _product_order_scope(item.product) != (activity_id, category_id) for item in order.items
-        ):
-            raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
-
-    school_class = await class_svc.resolve_user_class(session, user)
-    class_id = school_class.id if school_class else None
-    if order is not None and order.class_id != class_id:
-        if order.class_id is None and school_class is not None:
-            order.class_id = school_class.id
-            order.school_class = school_class
-        else:
-            raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
-
-    actor = actor or user
-    source_id = delegation.id if delegation else None
-    if delegation is not None and delegation.user_id != user.id:
-        raise ValueError("代訂連結不屬於此學生")
-    cancelled = order is not None and order.status == OrderStatus.CANCELLED
-    product_items = [
-        item
-        for item in (order.items if order is not None and not cancelled else [])
-        if item.product_id == product.id
-    ]
-    existing_items = [item for item in product_items if item.delegation_link_id == source_id]
-    other_quantity = sum(
-        item.quantity for item in product_items if item.delegation_link_id != source_id
-    )
-    existing_quantity = sum(item.quantity for item in existing_items)
-    await _assert_product_registration_open(
-        session,
-        product,
-        class_id=class_id,
-        allow_sold_out=existing_quantity + other_quantity > 0,
-        allow_testing=testing,
-    )
-
-    variants: dict[str, tuple[int, list[dict]]] = {}
-    for variant in data.variants:
-        if len(set(variant.option_ids)) != len(variant.option_ids):
-            raise ValueError("同一規格不能重複選擇選項")
-        selected = _resolve_selected_options(product, variant.option_ids)
-        signature = _options_signature(selected)
-        if signature in variants:
-            raise ValueError("相同規格不能重複登記")
-        variants[signature] = (variant.quantity, selected)
-
-    requested_total = sum(quantity for quantity, _ in variants.values())
-    await _assert_purchase_limit(
-        session,
-        product,
-        user.id,
-        requested_total + other_quantity,
-        excluding_order_id=order.id if order is not None else None,
-    )
-
-    if (order is None or cancelled) and requested_total == 0:
-        return None
-
-    if not product.is_unlimited:
-        quantity_delta = requested_total - existing_quantity
-        if quantity_delta > product.stock_quantity:
-            raise ValueError(f"商品「{product.name}」庫存不足（剩餘 {product.stock_quantity} 件）")
-        product.stock_quantity -= quantity_delta
-        if product.stock_quantity == 0 and not testing:
-            product.status = ProductStatus.SOLD_OUT
-        elif product.status == ProductStatus.SOLD_OUT:
-            product.status = ProductStatus.ACTIVE
-
-    if order is None:
-        order = Order(
-            serial_number=await generate_order_serial(session),
-            user_id=user.id,
-            test_product_id=product.id if testing else None,
-            activity_id=activity_id,
-            category_id=category_id,
-            class_id=class_id,
-            status=OrderStatus.PENDING,
-            payment_method="school_collection" if _is_school_email(user) else "cash_on_pickup",
-            subtotal_price=0,
-            discount_amount=0,
-            total_price=0,
-            items=[],
-            applied_promotions=[],
-        )
-        session.add(order)
-        await session.flush()
-    elif cancelled:
-        # 取消時庫存已歸還；重新登記只保留這次的品項，沿用原單與應收款。
-        for item in list(order.items):
-            order.items.remove(item)
-            await session.delete(item)
-        order.status = OrderStatus.PENDING
-
-    old_subtotal = order.subtotal_price
-    existing_by_signature: dict[str, list[OrderItem]] = {}
-    for item in existing_items:
-        signature = _options_signature(item.selected_options or [])
-        existing_by_signature.setdefault(signature, []).append(item)
-
-    for signature, items in existing_by_signature.items():
-        replacement = variants.get(signature)
-        if replacement is None:
-            for item in items:
-                order.items.remove(item)
-                await session.delete(item)
-            continue
-
-        quantity, selected = replacement
-        keep, *duplicates = items
-        keep.quantity = quantity
-        keep.unit_price = product.price + _options_delta(selected)
-        keep.selected_options = selected
-        if keep.ordered_by_id is None:
-            keep.ordered_by_id = actor.id
-            keep.ordered_by_name = actor.display_name
-        for item in duplicates:
-            order.items.remove(item)
-            await session.delete(item)
-
-    for signature, (quantity, selected) in variants.items():
-        if signature in existing_by_signature:
-            continue
-        order.items.append(
-            OrderItem(
-                product_id=product.id,
-                quantity=quantity,
-                unit_price=product.price + _options_delta(selected),
-                selected_options=selected,
-                ordered_by_id=actor.id,
-                ordered_by_name=actor.display_name,
-                delegation_link_id=source_id,
-                delegation_name=delegation.name if delegation else None,
-            )
-        )
-
-    await _settle_registration_orders(session, (order,))
-    logger.info(
-        "商品登記更新 serial=%s product=%s quantity=%d subtotal_before=%d",
-        order.serial_number,
-        product.id,
-        requested_total,
-        old_subtotal,
-    )
-    return order
-
-
 async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
     result = await session.execute(
         select(Order)
@@ -1441,85 +1014,6 @@ async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
         .where(Order.id == order_id)
     )
     return result.scalar_one_or_none()
-
-
-async def _reconcile_unassigned_class_orders(
-    session: AsyncSession, class_ids: list[uuid.UUID]
-) -> None:
-    """補齊班級成員尚未歸班的有效訂單，保留既有班級快照。"""
-    today = local_today()
-    member_user_ids = union(
-        select(Person.user_id)
-        .join(PersonAffiliation, PersonAffiliation.person_id == Person.id)
-        .where(
-            Person.user_id.is_not(None),
-            PersonAffiliation.class_id.in_(class_ids),
-            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
-            PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
-            PersonAffiliation.start_date <= today,
-            (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
-        ),
-        select(ClassManualMember.user_id).where(ClassManualMember.class_id.in_(class_ids)),
-        select(ClassRosterEntry.user_id).where(
-            ClassRosterEntry.class_id.in_(class_ids),
-            ClassRosterEntry.user_id.is_not(None),
-        ),
-        select(User.id)
-        .join(ClassRosterEntry, ClassRosterEntry.student_id == User.student_id)
-        .where(
-            ClassRosterEntry.class_id.in_(class_ids),
-            User.student_id.is_not(None),
-        ),
-    )
-    unassigned_orders = (
-        select(Order)
-        .options(selectinload(Order.user))
-        .where(
-            Order.class_id.is_(None),
-            Order.test_product_id.is_(None),
-            Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
-        )
-        .order_by(Order.id)
-        .with_for_update(of=Order)
-        .execution_options(populate_existing=True)
-    )
-    orders = list(
-        (await session.scalars(unassigned_orders.where(Order.user_id.in_(member_user_ids)))).all()
-    )
-
-    range_result = await session.execute(
-        select(ClassStudentRange.student_id_start, ClassStudentRange.student_id_end)
-        .join(SchoolClass, SchoolClass.id == ClassStudentRange.class_id)
-        .where(SchoolClass.id.in_(class_ids), SchoolClass.is_active.is_(True))
-    )
-    class_ranges = list(range_result.tuples())
-    if class_ranges:
-        range_orders = await session.scalars(
-            unassigned_orders.join(Order.user).where(
-                Order.user_id.not_in(member_user_ids),
-                User.student_id.is_not(None),
-            )
-        )
-        orders.extend(
-            order
-            for order in range_orders
-            if order.user is not None
-            and any(
-                class_svc.student_id_in_range(order.user.student_id or "", start, end)
-                for start, end in class_ranges
-            )
-        )
-
-    classes_by_user: dict[uuid.UUID, SchoolClass | None] = {}
-    for order in orders:
-        if order.user_id not in classes_by_user:
-            classes_by_user[order.user_id] = await class_svc.resolve_user_class(session, order.user)
-        school_class = classes_by_user[order.user_id]
-        if school_class is None or school_class.id not in class_ids:
-            continue
-        order.class_id = school_class.id
-        order.school_class = school_class
-        await receivable_svc.sync_shop_order(session, order)
 
 
 async def list_orders(
@@ -1607,203 +1101,6 @@ async def list_orders(
     q = q.limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().unique().all())
-
-
-async def class_order_summary(
-    session: AsyncSession,
-    *,
-    class_ids: list[uuid.UUID],
-    activity_id: uuid.UUID | None = None,
-    category_id: uuid.UUID | None = None,
-    general_only: bool = False,
-    product_id: uuid.UUID | None = None,
-    is_class_collected: bool | None = None,
-    assistance_scope: str | None = None,
-) -> ShopClassSummaryOut:
-    orders: list[Order] = []
-    while True:
-        page = await list_orders(
-            session,
-            class_ids=class_ids,
-            activity_id=activity_id,
-            category_id=category_id,
-            general_only=general_only,
-            assistance_scope=assistance_scope,
-            product_id=product_id,
-            is_class_collected=is_class_collected,
-            limit=500,
-            offset=len(orders),
-        )
-        orders.extend(page)
-        if len(page) < 500:
-            break
-
-    active_orders = [
-        order
-        for order in orders
-        if order.status not in (OrderStatus.CANCELLED, OrderStatus.REFUNDED)
-    ]
-    product_totals: dict[uuid.UUID, ShopClassProductSummaryRow] = {}
-    item_count = 0
-    amount_by_order_id: dict[uuid.UUID, int] = {}
-    for order in active_orders:
-        order_amount = 0
-        order_product_ids: set[uuid.UUID] = set()
-        subtotal = order.subtotal_price or sum(
-            item.quantity * item.unit_price for item in order.items
-        )
-        for item in order.items:
-            if product_id and item.product_id != product_id:
-                continue
-            quantity = item.quantity
-            gross = item.quantity * item.unit_price
-            amount = (
-                max(0, gross - round(order.discount_amount * gross / subtotal)) if subtotal else 0
-            )
-            item_count += quantity
-            order_amount += amount
-            row = product_totals.get(item.product_id)
-            if row is None:
-                row = ShopClassProductSummaryRow(
-                    product_id=item.product_id,
-                    product_name=item.product.name if item.product else "未命名商品",
-                    quantity=0,
-                    total_amount=0,
-                )
-                product_totals[item.product_id] = row
-            row.quantity += quantity
-            row.total_amount += amount
-            if order.is_class_collected:
-                row.collected_quantity += quantity
-                row.collected_amount += amount
-                if item.product_id not in order_product_ids:
-                    row.collected_order_count += 1
-            else:
-                row.uncollected_quantity += quantity
-                row.uncollected_amount += amount
-                if item.product_id not in order_product_ids:
-                    row.uncollected_order_count += 1
-            order_product_ids.add(item.product_id)
-        amount_by_order_id[order.id] = order_amount if product_id else order.total_price
-    paid_orders = [order for order in active_orders if order.is_class_collected]
-    unpaid_orders = [order for order in active_orders if not order.is_class_collected]
-    return ShopClassSummaryOut(
-        class_count=len(set(class_ids)),
-        order_count=len(active_orders),
-        item_count=item_count,
-        total_amount=sum(amount_by_order_id[order.id] for order in active_orders),
-        paid_amount=sum(amount_by_order_id[order.id] for order in paid_orders),
-        unpaid_amount=sum(amount_by_order_id[order.id] for order in unpaid_orders),
-        paid_order_count=len(paid_orders),
-        unpaid_order_count=len(unpaid_orders),
-        assisted_order_count=sum(
-            1 for order in active_orders if order.assistance_scope == "class_assisted"
-        ),
-        product_rows=sorted(
-            product_totals.values(), key=lambda row: (-row.quantity, row.product_name)
-        ),
-    )
-
-
-def serialize_order_item(item: OrderItem) -> OrderItemOut:
-    return OrderItemOut(
-        id=item.id,
-        product_id=item.product_id,
-        product_name=item.product.name if item.product else None,
-        quantity=item.quantity,
-        unit_price=item.unit_price,
-        subtotal=item.quantity * item.unit_price,
-        selected_options=item.selected_options or [],
-        ordered_by_id=item.ordered_by_id,
-        ordered_by_name=item.ordered_by_name,
-        delegation_link_id=item.delegation_link_id,
-        delegation_name=item.delegation_name,
-    )
-
-
-def serialize_order(order: Order) -> OrderOut:
-    activity = order.__dict__.get("activity")
-    category = _order_category(order)
-    return OrderOut(
-        id=order.id,
-        test_product_id=order.test_product_id,
-        serial_number=order.serial_number,
-        user_id=order.user_id,
-        activity_id=_order_activity_id(order),
-        activity_name=activity.name if activity else None,
-        category_id=category.id if category else None,
-        category_name=category.name
-        if category
-        else (
-            "跨活動歷史訂單"
-            if len({_product_order_scope(item.product) for item in order.items}) > 1
-            else None
-        ),
-        status=order.status,
-        subtotal_price=order.subtotal_price,
-        discount_amount=order.discount_amount,
-        total_price=order.total_price,
-        promotion_id=order.promotion_id,
-        promotion_code=order.promotion_code,
-        applied_promotions=[
-            OrderPromotionOut(
-                promotion_id=row.promotion_id,
-                name=row.promotion.name if row.promotion else "優惠",
-                code=row.promotion.code if row.promotion else None,
-                discount_amount=row.discount_amount,
-            )
-            for row in order.applied_promotions
-        ],
-        payment_method=order.payment_method,
-        notes=order.notes,
-        class_id=order.class_id,
-        class_label=class_svc.class_display_label(order.school_class),
-        assistance_scope=order.assistance_scope,
-        assisted_by_id=order.assisted_by_id,
-        is_paid=order.is_paid,
-        is_class_collected=order.is_class_collected,
-        class_collected_at=order.class_collected_at,
-        paid_at=order.paid_at,
-        created_at=order.created_at,
-        updated_at=order.updated_at,
-        items=[serialize_order_item(it) for it in order.items],
-    )
-
-
-def serialize_order_list_item(order: Order) -> OrderListItem:
-    activity = order.__dict__.get("activity")
-    category = _order_category(order)
-    return OrderListItem(
-        id=order.id,
-        test_product_id=order.test_product_id,
-        serial_number=order.serial_number,
-        user_id=order.user_id,
-        user_name=order.user.display_name if order.user else None,
-        activity_id=_order_activity_id(order),
-        activity_name=activity.name if activity else None,
-        category_id=category.id if category else None,
-        category_name=category.name
-        if category
-        else (
-            "跨活動歷史訂單"
-            if len({_product_order_scope(item.product) for item in order.items}) > 1
-            else None
-        ),
-        status=order.status,
-        subtotal_price=order.subtotal_price,
-        discount_amount=order.discount_amount,
-        total_price=order.total_price,
-        promotion_code=order.promotion_code,
-        payment_method=order.payment_method,
-        class_id=order.class_id,
-        class_label=class_svc.class_display_label(order.school_class),
-        assistance_scope=order.assistance_scope,
-        assisted_by_id=order.assisted_by_id,
-        is_paid=order.is_paid,
-        is_class_collected=order.is_class_collected,
-        created_at=order.created_at,
-        items=[serialize_order_item(item) for item in order.items],
-    )
 
 
 async def cancel_order(
@@ -1963,185 +1260,6 @@ async def set_order_paid(
     return order
 
 
-async def set_class_collected(
-    session: AsyncSession, order: Order, *, collected: bool, actor_id: uuid.UUID
-) -> Order:
-    order.is_class_collected = collected
-    order.class_collected_at = datetime.now(UTC) if collected else None
-    order.class_collected_by_id = actor_id if collected else None
-    await session.flush()
-    return order
-
-
-async def set_class_paid(
-    session: AsyncSession,
-    class_id: uuid.UUID,
-    *,
-    is_paid: bool,
-    actor_id: uuid.UUID,
-    activity_id: uuid.UUID | None,
-) -> list[Order]:
-    activity_filter = (
-        Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
-    )
-    orders = list(
-        (
-            await session.execute(
-                select(Order)
-                .where(
-                    Order.class_id == class_id,
-                    activity_filter,
-                    Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
-                )
-                .order_by(Order.id)
-                .with_for_update()
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for order in orders:
-        if order.is_paid != is_paid:
-            await set_order_paid(session, order, is_paid=is_paid, actor_id=actor_id)
-    return orders
-
-
-async def order_summary(
-    session: AsyncSession,
-    *,
-    group_by: str,
-    activity_id: uuid.UUID | None = None,
-    product_id: uuid.UUID | None = None,
-    category_id: uuid.UUID | None = None,
-    grade: int | None = None,
-    class_id: uuid.UUID | None = None,
-    user_id: uuid.UUID | None = None,
-    status: OrderStatus | None = None,
-    is_paid: bool | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-) -> OrderSummaryOut:
-    if group_by not in ("class", "grade", "user"):
-        raise ValueError("group_by 必須為 class / grade / user")
-
-    q = select(Order).options(
-        selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
-        selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.series),
-        selectinload(Order.school_class),
-        selectinload(Order.user),
-    )
-    q = q.where(Order.test_product_id.is_(None))
-    if status is not None:
-        q = q.where(Order.status == status)
-    else:
-        q = q.where(Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]))
-    if activity_id is not None:
-        q = q.where(Order.activity_id == activity_id)
-    if product_id:
-        q = q.where(Order.items.any(OrderItem.product_id == product_id))
-    if category_id:
-        q = q.where(Order.items.any(OrderItem.product.has(_product_category_filter(category_id))))
-    if grade is not None:
-        q = q.where(Order.school_class.has(grade=grade))
-    if class_id:
-        q = q.where(Order.class_id == class_id)
-    if user_id:
-        q = q.where(Order.user_id == user_id)
-    if is_paid is not None:
-        q = q.where(Order.is_paid.is_(is_paid))
-    if date_from:
-        q = q.where(Order.created_at >= date_from)
-    if date_to:
-        q = q.where(Order.created_at <= date_to)
-    orders = (await session.execute(q)).scalars().unique().all()
-
-    groups: dict[str, OrderSummaryRow] = {}
-    class_sort_keys: dict[str, tuple[bool, int, str]] = {}
-    for order in orders:
-        if group_by == "class":
-            key = str(order.class_id) if order.class_id else "none"
-            school_class = order.school_class
-            label = class_svc.class_display_label(school_class) or "未分班"
-            class_sort_keys[key] = (
-                school_class is None,
-                -school_class.academic_year if school_class is not None else 0,
-                school_class.class_code if school_class is not None else "",
-            )
-        elif group_by == "grade":
-            sc = order.school_class
-            key = str(sc.grade) if sc else "none"
-            label = f"{sc.grade} 年級" if sc else "未分班"
-        else:
-            key = str(order.user_id)
-            label = order.user.display_name if order.user else key
-
-        row = groups.get(key)
-        if row is None:
-            row = OrderSummaryRow(
-                key=key,
-                label=label,
-                order_count=0,
-                item_count=0,
-                total_amount=0,
-                paid_amount=0,
-                unpaid_amount=0,
-            )
-            groups[key] = row
-        matched_items = [
-            item
-            for item in order.items
-            if (product_id is None or item.product_id == product_id)
-            and (
-                category_id is None
-                or (
-                    item.product is not None
-                    and (
-                        item.product.category_id == category_id
-                        or (
-                            item.product.series is not None
-                            and item.product.series.category_id == category_id
-                        )
-                    )
-                )
-            )
-        ]
-        if not matched_items and (product_id is not None or category_id is not None):
-            continue
-        item_count = sum(item.quantity for item in matched_items)
-        if product_id is None and category_id is None:
-            amount = order.total_price
-        else:
-            gross = sum(item.quantity * item.unit_price for item in matched_items)
-            subtotal = order.subtotal_price or sum(
-                item.quantity * item.unit_price for item in order.items
-            )
-            amount = (
-                max(0, gross - round(order.discount_amount * gross / subtotal)) if subtotal else 0
-            )
-        row.order_count += 1
-        row.item_count += item_count
-        row.total_amount += amount
-        if order.is_paid:
-            row.paid_amount += amount
-        else:
-            row.unpaid_amount += amount
-
-    if group_by == "class":
-        rows = sorted(
-            groups.values(),
-            key=lambda row: class_sort_keys.get(row.key, (True, 0, "")),
-        )
-    else:
-        rows = sorted(groups.values(), key=lambda row: row.label)
-    return OrderSummaryOut(
-        group_by=group_by,
-        rows=rows,
-        total_amount=sum(r.total_amount for r in rows),
-        paid_amount=sum(r.paid_amount for r in rows),
-        unpaid_amount=sum(r.unpaid_amount for r in rows),
-    )
-
-
 # ── 結單服務 ───────────────────────────────────────────────────────────────────
 
 
@@ -2194,148 +1312,45 @@ def _serialize_close(row: ShopOrderClose) -> ShopOrderCloseOut:
     )
 
 
-async def close_category_for_class(
-    session: AsyncSession,
-    *,
-    category_id: uuid.UUID,
-    class_id: uuid.UUID | None,
-    closed_by_id: uuid.UUID,
-    notes: str | None = None,
-) -> ShopOrderClose:
-    # 確認沒有重複有效結單
-    existing_q = select(ShopOrderClose).where(
-        ShopOrderClose.category_id == category_id,
-        ShopOrderClose.is_active.is_(True),
-        ShopOrderClose.class_id == class_id if class_id else ShopOrderClose.class_id.is_(None),
-    )
-    existing = (await session.execute(existing_q)).scalar_one_or_none()
-    if existing:
-        raise ValueError("此分類已結單，請先重新開單再結單")
-    close = ShopOrderClose(
-        category_id=category_id,
-        class_id=class_id,
-        closed_by_id=closed_by_id,
-        notes=notes,
-        is_active=True,
-    )
-    session.add(close)
-    await session.flush()
-    await session.refresh(close)
-    return close
-
-
-async def reopen_category_for_class(
-    session: AsyncSession,
-    *,
-    category_id: uuid.UUID,
-    class_id: uuid.UUID | None,
-    reopened_by_id: uuid.UUID,
-) -> ShopOrderClose:
-    existing_q = select(ShopOrderClose).where(
-        ShopOrderClose.category_id == category_id,
-        ShopOrderClose.is_active.is_(True),
-        ShopOrderClose.class_id == class_id if class_id else ShopOrderClose.class_id.is_(None),
-    )
-    existing = (await session.execute(existing_q)).scalar_one_or_none()
-    if not existing:
-        raise ValueError("此分類目前未結單")
-    existing.is_active = False
-    existing.reopened_by_id = reopened_by_id
-    existing.reopened_at = now_local()
-    await session.flush()
-    return existing
-
-
-# ── 商品規格數量彙總 ────────────────────────────────────────────────────────────
-
-
-async def order_quantities(
-    session: AsyncSession,
-    *,
-    activity_id: uuid.UUID | None = None,
-    grade: int | None = None,
-    class_id: uuid.UUID | None = None,
-    category_id: uuid.UUID | None = None,
-    product_id: uuid.UUID | None = None,
-    is_paid: bool | None = None,
-    status: OrderStatus | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-) -> list[OrderQuantityRow]:
-    """回傳各商品規格組合的訂購數量（用於採購彙總）。"""
-
-    q = (
-        select(Order)
-        .options(
-            selectinload(Order.items)
-            .selectinload(OrderItem.product)
-            .selectinload(Product.category),
-            selectinload(Order.items)
-            .selectinload(OrderItem.product)
-            .selectinload(Product.series)
-            .selectinload(ProductSeries.category),
-            selectinload(Order.school_class),
-        )
-        .where(
-            Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED])
-            if status is None
-            else Order.status == status
-        )
-    )
-    q = q.where(Order.test_product_id.is_(None))
-    if grade is not None:
-        q = q.where(Order.school_class.has(grade=grade))
-    if activity_id is not None:
-        q = q.where(Order.activity_id == activity_id)
-    if class_id:
-        q = q.where(Order.class_id == class_id)
-    if is_paid is not None:
-        q = q.where(Order.is_paid.is_(is_paid))
-    if date_from:
-        q = q.where(Order.created_at >= date_from)
-    if date_to:
-        q = q.where(Order.created_at <= date_to)
-    if product_id:
-        q = q.where(Order.items.any(OrderItem.product_id == product_id))
-    if category_id:
-        q = q.where(Order.items.any(OrderItem.product.has(_product_category_filter(category_id))))
-    orders = (await session.execute(q)).scalars().unique().all()
-
-    # 逐 item 展開 variant key
-    tally: dict[tuple, dict] = {}
-    for order in orders:
-        for item in order.items:
-            if product_id and item.product_id != product_id:
-                continue
-            p = item.product
-            if p is None:
-                continue
-            if category_id and not (
-                p.category_id == category_id
-                or (p.series is not None and p.series.category_id == category_id)
-            ):
-                continue
-            variant_key = (
-                " / ".join(
-                    f"{opt['group_name']}:{opt['value']}"
-                    for opt in sorted(item.selected_options, key=lambda x: x.get("group_name", ""))
-                )
-                if item.selected_options
-                else "—"
-            )
-            key = (item.product_id, variant_key)
-            if key not in tally:
-                series_name = p.series.name if p.series else ""
-                tally[key] = {
-                    "product_id": item.product_id,
-                    "product_name": p.name,
-                    "series_name": series_name,
-                    "variant_key": variant_key,
-                    "qty_total": 0,
-                    "qty_paid": 0,
-                }
-            tally[key]["qty_total"] += item.quantity
-            if order.is_paid:
-                tally[key]["qty_paid"] += item.quantity
-
-    return [OrderQuantityRow(**v) for v in sorted(tally.values(), key=lambda x: x["product_name"])]
+from api.services.shop._class_settlement import (  # noqa: E402
+    _settle_registration_orders as _settle_registration_orders,
+)
+from api.services.shop._class_settlement import (  # noqa: E402
+    close_category_for_class as close_category_for_class,
+)
+from api.services.shop._class_settlement import (  # noqa: E402
+    reopen_category_for_class as reopen_category_for_class,
+)
+from api.services.shop._class_settlement import (  # noqa: E402
+    set_class_collected as set_class_collected,
+)
+from api.services.shop._class_settlement import (  # noqa: E402
+    set_class_member_product as set_class_member_product,
+)
+from api.services.shop._class_settlement import (  # noqa: E402
+    set_class_paid as set_class_paid,
+)
+from api.services.shop._order_queries import (  # noqa: E402
+    _reconcile_unassigned_class_orders as _reconcile_unassigned_class_orders,
+)
+from api.services.shop._order_queries import (  # noqa: E402
+    class_order_summary as class_order_summary,
+)
+from api.services.shop._order_queries import (  # noqa: E402
+    order_quantities as order_quantities,
+)
+from api.services.shop._order_queries import (  # noqa: E402
+    order_summary as order_summary,
+)
+from api.services.shop._order_serialization import (  # noqa: E402
+    serialize_order as serialize_order,
+)
+from api.services.shop._order_serialization import (  # noqa: E402
+    serialize_order_item as serialize_order_item,
+)
+from api.services.shop._order_serialization import (  # noqa: E402
+    serialize_order_list_item as serialize_order_list_item,
+)
+from api.services.shop._registration import (  # noqa: E402
+    set_current_registration_product as set_current_registration_product,
+)

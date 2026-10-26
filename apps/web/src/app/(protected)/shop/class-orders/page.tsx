@@ -11,9 +11,9 @@ import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
 import { mergeDraftItems, summarizeOrderItems } from "@/lib/shop-order-items";
+import { flattenCatalog, money } from "@/lib/shop-class-orders";
 import type {
   CatalogCategoryOut,
-  CatalogProductOut,
   ClassMemberOut,
   CloseStatusItem,
   OrderListItem,
@@ -25,12 +25,6 @@ import type {
 type PaidFilter = "all" | "paid" | "unpaid";
 type AssistedFilter = "all" | "assisted";
 
-type CatalogChoice = CatalogProductOut & {
-  activity_id: string | null;
-  category: string;
-  series: string;
-  categoryId: string;
-};
 type ClassOrderQuery = NonNullable<Parameters<typeof shopApi.listClassOrders>[0]>;
 type AssistedItemDraft = {
   scope_key: string;
@@ -66,9 +60,6 @@ const emptySummary: ShopClassSummaryOut = {
   assisted_order_count: 0, product_rows: [],
 };
 
-function money(value: number) {
-  return `NT$${value.toLocaleString("zh-TW")}`;
-}
 
 function isCollectableOrder(order: Pick<OrderListItem, "status">) {
   return order.status !== "cancelled" && order.status !== "refunded";
@@ -79,20 +70,6 @@ function scrollToSection(id: string) {
   window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior, block: "start" }));
 }
 
-function flattenCatalog(catalog: CatalogCategoryOut[]): CatalogChoice[] {
-  return catalog.flatMap((cat) => [
-    ...cat.products.map((product) => ({
-      ...product, activity_id: cat.activity_id ?? null,
-      category: cat.name, series: "單一商品", categoryId: cat.id,
-    })),
-    ...cat.series.flatMap((series) =>
-      series.products.map((product) => ({
-        ...product, activity_id: cat.activity_id ?? null,
-        category: cat.name, series: series.name, categoryId: cat.id,
-      })),
-    ),
-  ]);
-}
 
 async function listAllClassOrders(params: ClassOrderQuery = {}): Promise<OrderListItem[]> {
   const orders: OrderListItem[] = [];

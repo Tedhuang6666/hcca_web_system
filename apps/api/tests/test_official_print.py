@@ -10,7 +10,7 @@ from PIL import Image
 from pypdf import PageObject, PdfReader
 
 from api.models.petition import PetitionAttachmentVisibility
-from api.services import official_print, petition_print
+from api.services import official_print, official_print_common, petition_print
 from api.services.official_print import (
     _BUNDLED_KAI_FONT,
     _BUNDLED_LISHU_FONT,
@@ -79,7 +79,11 @@ def test_official_document_title_preserves_explicit_full_org_title() -> None:
 
 
 def test_official_print_supports_container_source_layout(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(official_print, "__file__", "/app/src/api/services/official_print.py")
+    monkeypatch.setattr(
+        official_print_common,
+        "__file__",
+        "/app/src/api/services/official_print_common.py",
+    )
 
     candidates = official_print._bundled_font_candidates(_BUNDLED_KAI_FONT)
 
@@ -340,7 +344,7 @@ async def test_final_signature_uses_approver_position_on_decision_date(
         seen_dates.append(on_date)
         return "設計長"
 
-    monkeypatch.setattr(official_print, "_position_title", fake_position_title)
+    monkeypatch.setattr(official_print_common, "_position_title", fake_position_title)
 
     signature = await _final_signature_html(SimpleNamespace(), doc)
 
