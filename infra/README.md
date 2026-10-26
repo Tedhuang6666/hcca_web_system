@@ -3,11 +3,11 @@
 正式環境的 reverse proxy。監控設定與 dashboard 採用共用的
 [observability 設定](../observability/README.md)，由各環境 Compose 掛載。
 
-| 子目錄 | 內容 | 對應 ADR |
-|---|---|---|
-| `caddy/` | reverse proxy + LB 設定 | [ADR-002](../docs/adr/002-ha-two-replica.md) |
-| `../observability/prometheus/` | Prometheus 環境設定與 alert rules | — |
-| `../observability/grafana/` | Grafana dashboard 與 datasource provisioning | — |
+| 子目錄 | 內容 |
+|---|---|
+| `caddy/` | reverse proxy + LB 設定 |
+| `../observability/prometheus/` | Prometheus 環境設定與 alert rules |
+| `../observability/grafana/` | Grafana dashboard 與 datasource provisioning |
 
 ## 套用方式
 
