@@ -928,7 +928,7 @@ async def test_create_message_send_exceeding_daily_quota_returns_429(
 ) -> None:
     user = await _seed_user(db_session, "quota-user@school.edu", ["email:send"])
     _override_user(user)
-    monkeypatch.setattr("api.routers.email.settings.EMAIL_DAILY_QUOTA_PER_USER", 1)
+    monkeypatch.setattr("api.services.email_dispatch.settings.EMAIL_DAILY_QUOTA_PER_USER", 1)
     monkeypatch.setattr("api.routers.email.enqueue_rendered", lambda *args, **kwargs: ["task-id"])
 
     resp = await client.post(

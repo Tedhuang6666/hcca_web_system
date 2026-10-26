@@ -14,8 +14,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pytest
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, RouteContext, iter_route_contexts
+from starlette.routing import BaseRoute
 
 from api.dependencies.api_key_auth import ApiScopeChecker, api_key_required
 from api.dependencies.auth import get_current_active_user
@@ -226,7 +229,7 @@ def _flatten_deps(dependant, seen: set | None = None) -> list:
     return result
 
 
-def _classify_route(route: APIRoute) -> str:
+def _classify_route(route: RouteContext) -> str:
     """回傳路由的保護等級字串。"""
     calls = _flatten_deps(route.dependant)
     if any(
@@ -244,20 +247,13 @@ def _classify_route(route: APIRoute) -> str:
     return "PUBLIC"
 
 
-def _iter_api_routes(routes: list[object]) -> list[APIRoute]:
-    """遞迴展開 FastAPI include_router 產生的巢狀 router。"""
-    found: list[APIRoute] = []
-    for route in routes:
-        if isinstance(route, APIRoute):
-            found.append(route)
-            continue
-        children = getattr(route, "routes", None)
-        if not children:
-            original_router = getattr(route, "original_router", None)
-            children = getattr(original_router, "routes", None)
-        if isinstance(children, list):
-            found.extend(_iter_api_routes(children))
-    return found
+def _iter_api_routes(routes: Sequence[BaseRoute | RouteContext]) -> list[RouteContext]:
+    """列出 include_router 展開後的 API 路由，保留實際掛載路徑與依賴。"""
+    return [
+        route_context
+        for route_context in iter_route_contexts(routes)
+        if isinstance(route_context.original_route, APIRoute)
+    ]
 
 
 def test_all_public_routes_are_declared() -> None:
