@@ -1,0 +1,251 @@
+[
+  {
+    "id": "cotton",
+    "name": "棉踢",
+    "photos": [
+      {
+        "id": "cotton-01",
+        "alt": "白色棉踢正面實穿",
+        "position": "50% 40%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "cotton-02",
+        "alt": "白色棉踢背面實穿",
+        "position": "50% 45%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "cotton-03",
+        "alt": "白色棉踢背面圖案",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "cotton-04",
+        "alt": "白色棉踢草地實拍",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "cotton-05",
+        "alt": "黑色棉踢側面實穿",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 1951,
+        "orientation": "portrait"
+      },
+      {
+        "id": "cotton-06",
+        "alt": "黑色棉踢正面實穿",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2308,
+        "orientation": "portrait"
+      },
+      {
+        "id": "cotton-07",
+        "alt": "黑色棉踢背面實穿",
+        "position": "50% 40%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "cotton-08",
+        "alt": "黑色棉踢胸前圖案",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      }
+    ],
+    "dm": {
+      "id": "cotton-dm",
+      "width": 2000,
+      "height": 381
+    }
+  },
+  {
+    "id": "hoodie",
+    "name": "刷毛帽踢",
+    "photos": [
+      {
+        "id": "hoodie-01",
+        "alt": "刷毛帽踢正面實穿",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2161,
+        "orientation": "portrait"
+      },
+      {
+        "id": "hoodie-02",
+        "alt": "刷毛帽踢雙人實拍",
+        "position": "50% 45%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "hoodie-03",
+        "alt": "刷毛帽踢背面圖案",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "hoodie-04",
+        "alt": "刷毛帽踢背面近照",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "hoodie-05",
+        "alt": "刷毛帽踢胸前印花",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "hoodie-06",
+        "alt": "刷毛帽踢雙人背面實穿",
+        "position": "50% 40%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "hoodie-07",
+        "alt": "刷毛帽踢雙人正面實穿",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2159,
+        "orientation": "portrait"
+      },
+      {
+        "id": "hoodie-08",
+        "alt": "刷毛帽踢校園實拍",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2161,
+        "orientation": "portrait"
+      },
+      {
+        "id": "hoodie-09",
+        "alt": "刷毛帽踢戶外實拍",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 1920,
+        "orientation": "portrait"
+      }
+    ],
+    "dm": {
+      "id": "hoodie-dm",
+      "width": 1998,
+      "height": 333
+    }
+  },
+  {
+    "id": "windbreaker",
+    "name": "風衣外套",
+    "photos": [
+      {
+        "id": "windbreaker-01",
+        "alt": "風衣外套正面實穿",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "windbreaker-02",
+        "alt": "風衣外套正反面對照",
+        "position": "50% 45%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "windbreaker-03",
+        "alt": "風衣外套雙人實穿",
+        "position": "50% 45%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "windbreaker-04",
+        "alt": "風衣外套正面近照",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "windbreaker-05",
+        "alt": "風衣外套連帽實穿",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "windbreaker-06",
+        "alt": "風衣外套帽款細節",
+        "position": "50% 35%",
+        "width": 1440,
+        "height": 2160,
+        "orientation": "portrait"
+      },
+      {
+        "id": "windbreaker-07",
+        "alt": "風衣外套背面印花",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "windbreaker-08",
+        "alt": "風衣外套背面近照",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      },
+      {
+        "id": "windbreaker-09",
+        "alt": "風衣外套胸前印花",
+        "position": "50% 50%",
+        "width": 1440,
+        "height": 915,
+        "orientation": "landscape"
+      },
+      {
+        "id": "windbreaker-10",
+        "alt": "風衣外套校園雙人實拍",
+        "position": "50% 45%",
+        "width": 1440,
+        "height": 960,
+        "orientation": "landscape"
+      }
+    ],
+    "dm": {
+      "id": "windbreaker-dm",
+      "width": 2000,
+      "height": 266
+    }
+  }
+]

@@ -48,6 +48,8 @@ import { productOfferPrice } from "@/lib/shop-promotion-price";
 import ProductCardOffers from "@/components/shop/ProductCardOffers";
 import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
 import { categoryOrderable, defaultShopCategory, productDeadline } from "@/lib/shop-deadlines";
+import ShopLookbook from "@/components/shop/ShopLookbook";
+import { hasShopLookbook, lookbookPhotoUrl, productLookbook } from "@/lib/shop-lookbook";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -340,9 +342,15 @@ function ProductModal({
   const variantGroups = product?.variant_groups ?? [];
   const media = product
     ? [
-        ...(product.image_url ? [{ image_url: product.image_url, kind: "cover" as const }] : []),
+        ...(productLookbook(product.name)?.photos ?? []).map((photo) => ({
+          image_url: lookbookPhotoUrl(photo.id),
+          thumbnail_url: lookbookPhotoUrl(photo.id, 480),
+          kind: "model" as const,
+        })),
+        ...(product.image_url ? [{ image_url: product.image_url, thumbnail_url: product.image_url, kind: "cover" as const }] : []),
         ...(product.media ?? []).map((item) => ({
           image_url: item.image_url,
+          thumbnail_url: item.image_url,
           kind: item.kind,
         })),
       ]
@@ -557,7 +565,7 @@ function ProductModal({
                     aria-pressed={selected}
                     className="shop-product-dialog-gallery-item">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={uploadUrl(item.image_url)} alt="" />
+                    <img src={uploadUrl(item.thumbnail_url)} alt="" loading="lazy" />
                   </button>
                 );
               })}
@@ -827,14 +835,20 @@ function ProductCard({
           : null;
   const className = "shop-public-product-card group";
   const style = { opacity: disabled ? 0.6 : 1 };
+  const lookbookCover = productLookbook(product.name)?.photos.find((photo) => photo.orientation === "portrait");
+  const coverUrl = lookbookCover ? lookbookPhotoUrl(lookbookCover.id) : product.image_url;
   const content = (
     <>
-      <div className="shop-public-product-media">
-        {product.image_url ? (
+      <div className="shop-public-product-media" style={lookbookCover ? { aspectRatio: "3 / 4" } : undefined}>
+        {coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={uploadUrl(product.image_url)}
+            src={uploadUrl(coverUrl)}
+            srcSet={lookbookCover ? `${lookbookPhotoUrl(lookbookCover.id, 480)} 480w, ${lookbookPhotoUrl(lookbookCover.id)} 1440w` : undefined}
+            sizes={lookbookCover ? "(max-width: 759px) 50vw, 33vw" : undefined}
             alt={product.name}
+            loading="lazy"
+            style={lookbookCover ? { objectPosition: lookbookCover.position } : undefined}
             className="h-full w-full object-cover"
           />
         ) : (
@@ -1692,6 +1706,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               <h2>{selectedCategory.name}</h2>
               <p>{visibleProductCount} 件商品</p>
             </header>
+            {hasShopLookbook(selectedCategory) && <ShopLookbook key={selectedCategory.id} />}
+            <div id="shop-product-selection" tabIndex={-1} />
             {selectedCategory.order_closes_at && <p className="shop-public-product-deadline">
               活動結單：{new Date(selectedCategory.order_closes_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}（單品另設期限時以商品標示為準）
             </p>}

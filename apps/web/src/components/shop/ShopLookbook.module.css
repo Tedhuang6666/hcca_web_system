@@ -1,0 +1,254 @@
+.lookbook {
+  margin-block: 2rem 3rem;
+  color: var(--public-text);
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.heading h3 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.heading p {
+  margin-top: 0.75rem;
+  color: var(--public-secondary);
+  font-size: 0.875rem;
+}
+
+.shopLink,
+.dmLink,
+.footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  color: var(--public-accent-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.shopLink { text-decoration: underline; text-underline-offset: 0.3em; }
+.shopLink:hover, .dmLink:hover, .footer button:hover { color: var(--public-text); }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--public-border);
+}
+
+.collections {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.collections button {
+  min-height: 48px;
+  padding-block: 0.75rem;
+  border-bottom: 2px solid transparent;
+  color: var(--public-secondary);
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.collections button:hover { color: var(--public-text); }
+.collections button[aria-pressed="true"] {
+  color: var(--public-text);
+  border-color: var(--public-accent);
+  font-weight: 700;
+}
+
+.featured {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.featured > :first-child { grid-row: span 2; }
+
+.photo {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--public-soft);
+  cursor: zoom-in;
+}
+
+.photo[data-orientation="portrait"] { aspect-ratio: 3 / 4; }
+.photo[data-orientation="landscape"] { aspect-ratio: 6 / 4; }
+
+.photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photoCaption {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgb(18 22 21 / 85%);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.photoCaption svg { flex-shrink: 0; }
+.imageError {
+  display: grid;
+  height: 100%;
+  min-height: 8rem;
+  place-items: center;
+  padding: 1rem;
+  color: var(--public-secondary);
+  font-size: 0.875rem;
+}
+
+.morePhotos {
+  columns: 3;
+  column-gap: 1rem;
+  margin-top: 1rem;
+}
+.morePhotos[hidden] { display: none; }
+.morePhotos > * { margin-bottom: 1rem; break-inside: avoid; }
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.75rem;
+  border-bottom: 1px solid var(--public-border);
+  font-size: 0.875rem;
+}
+.footer span { color: var(--public-secondary); }
+
+.lookbook :is(button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: 4px;
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  width: min(100% - 2rem, 90rem);
+  height: min(100dvh - 2rem, 64rem);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: var(--public-surface);
+  color: var(--public-text);
+  overflow: hidden;
+}
+.viewer[open] { display: flex; flex-direction: column; }
+.viewer::backdrop { background: rgb(10 14 13 / 88%); }
+
+.viewerHeader, .viewerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+}
+.viewerHeader { border-bottom: 1px solid var(--public-border); }
+.viewerHeader p { font-weight: 650; }
+.viewerHeader span, .viewerFooter span {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--public-secondary);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+.viewer :is(button) {
+  display: grid;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  cursor: pointer;
+}
+.viewer button:hover { background: var(--public-soft); }
+.viewerImage {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  background: var(--public-soft);
+}
+.viewerImage img { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.imageLoading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--public-soft);
+  color: var(--public-secondary);
+  font-size: 0.875rem;
+}
+.viewerFooter { border-top: 1px solid var(--public-border); text-align: center; }
+.viewerFooter p { font-size: 0.875rem; }
+.viewerFooter span { font-variant-numeric: tabular-nums; }
+
+.dmScroll {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--public-secondary) var(--public-soft);
+}
+.dmScroll img { display: block; width: max(100%, 100rem); max-width: none; height: auto; flex-shrink: 0; }
+
+@media (max-width: 639px) {
+  .lookbook { margin-block: 1.5rem 2rem; }
+  .heading { align-items: start; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }
+  .heading p { line-height: 1.6; }
+  .toolbar { align-items: start; flex-direction: column; gap: 0; }
+  .collections { justify-content: space-between; gap: 1rem; width: 100%; }
+  .dmLink { align-self: flex-end; }
+  .featured { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+  .featured > :first-child { grid-row: auto; grid-column: 1 / -1; }
+  .featured > :not(:first-child) .photoCaption span { display: none; }
+  .featured > :not(:first-child) .photoCaption { left: auto; padding: 0.5rem; }
+  .morePhotos { columns: 2; column-gap: 0.75rem; margin-top: 0.75rem; }
+  .morePhotos > * { margin-bottom: 0.75rem; }
+  .morePhotos .photoCaption span { display: none; }
+  .morePhotos .photoCaption { left: auto; padding: 0.5rem; }
+  .footer { gap: 0.5rem; font-size: 0.8125rem; }
+  .footer button { font-size: inherit; }
+  .viewer { width: 100%; height: 100dvh; }
+  .viewerHeader { padding: max(0.5rem, env(safe-area-inset-top)) 1rem 0.5rem; }
+  .viewerFooter { padding: 0.5rem 1rem max(0.5rem, env(safe-area-inset-bottom)); }
+}
