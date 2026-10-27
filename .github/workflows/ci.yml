@@ -36,11 +36,14 @@ jobs:
       - name: Install dependencies (dev)
         run: uv sync --locked --project apps/api
 
+      - name: Verify API worker recycling behavior
+        run: uv run --locked --project apps/api python -m unittest discover -s scripts/tests -p 'test_gunicorn_runtime.py'
+
       - name: Run Ruff linter
-        run: uv run --locked --project apps/api ruff check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py
+        run: uv run --locked --project apps/api ruff check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py apps/api/gunicorn.conf.py scripts/tests/test_gunicorn_runtime.py
 
       - name: Run Ruff formatter check
-        run: uv run --locked --project apps/api ruff format --check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py
+        run: uv run --locked --project apps/api ruff format --check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py apps/api/gunicorn.conf.py scripts/tests/test_gunicorn_runtime.py
 
       # 型別檢查 gate（漸進式採用）：範圍由 pyproject [tool.mypy] files 控制，
       # 清乾淨一個模組就加進清單，逐步擴大覆蓋面。

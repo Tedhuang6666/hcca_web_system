@@ -40,9 +40,11 @@ graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30"))
 # 共用 fork 前的 async 資源，造成 Redis/DB 連線異常與 worker boot timeout。
 preload_app = False
 
-# 最大請求數後自動重啟 worker（防止記憶體洩漏）
-max_requests = int(os.getenv("GUNICORN_MAX_REQUESTS", "1000"))
-max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "100"))
+# 預設不按請求數回收：健康檢查與前端輪詢也會計數，原本 1000 次的門檻
+# 會頻繁重啟；worker 啟動約需十多秒，回收重疊時單一 API 容器會無法服務。
+# 若確認有記憶體洩漏，可明確設定回收門檻與 jitter，並監測重啟空窗。
+max_requests = int(os.getenv("GUNICORN_MAX_REQUESTS", "0"))
+max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "0"))
 
 # ── 日誌 ─────────────────────────────────────────────────────────────────────
 
