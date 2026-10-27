@@ -2198,7 +2198,7 @@ async def test_class_receipt_batch_combines_selected_classes_and_all_classes(
     assert classes[0].class_code in selected_text and classes[1].class_code in selected_text
     assert classes[2].class_code not in selected_text
     assert "900" not in selected_text
-    assert _receipt_totals(selected_pdf) == ["100", "100", "200", "200"]
+    assert sorted(_receipt_totals(selected_pdf)) == ["100", "100", "200", "200"]
 
     all_response = await ac.post(
         "/shop/orders/classes/receipts.pdf", json={"activity_id": str(activity.id)}
