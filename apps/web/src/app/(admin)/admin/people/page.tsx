@@ -2,19 +2,16 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
 import { PeopleManagementEmbedProvider } from "@/components/admin/PeopleManagementEmbedContext";
 import {
   BadgeCheck,
   BookUser,
-  BriefcaseBusiness,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   CircleSlash,
-  GraduationCap,
   Link2,
   Plus,
   RefreshCcw,
@@ -32,8 +29,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { adminApi, ApiError, classApi, orgsApi, peopleApi, withFallback } from "@/lib/api";
 import { getPeopleDirectoryStats } from "@/lib/api/people";
 import { today } from "@/lib/dateUtils";
-import { AccountDetailPanel } from "@/components/admin/AccountDetailPanel";
 import { AccountDirectoryPanel } from "@/components/admin/AccountDirectoryPanel";
+import MobileBackToList from "@/components/ui/MobileBackToList";
+import styles from "@/components/admin/PeopleManagement.module.css";
 import PersonClassRosterEditor from "@/components/admin/PersonClassRosterEditor";
 import type {
   AdminUserDetail,
@@ -188,7 +186,7 @@ export default function PeopleAdminPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-col xl:h-full">
+    <div className="flex min-h-0 min-w-0 flex-col xl:h-full">
       <AdminWorkbenchTabs />
       <main className="xl:min-h-0 xl:flex-1 xl:overflow-auto" aria-label="人員與使用者防護工作區">
         <PeopleManagementEmbedProvider>
@@ -208,6 +206,10 @@ function PersonDirectoryPanel() {
   const canAssignClass = isAdmin || can("admin:all") || can("class:manage");
   const canManageAccounts = isAdmin || can("admin:all");
   const [directoryView, setDirectoryView] = useState<"people" | "accounts">("people");
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [people, setPeople] = useState<PersonListItem[]>([]);
   const [stats, setStats] = useState<PersonDirectoryStats | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -316,6 +318,15 @@ function PersonDirectoryPanel() {
   const pageCount = Math.max(1, Math.ceil((matchedCount ?? 0) / PEOPLE_PAGE_SIZE));
   const rangeStart = matchedCount ? pageIndex * PEOPLE_PAGE_SIZE + 1 : 0;
   const rangeEnd = pageIndex * PEOPLE_PAGE_SIZE + people.length;
+  const showingPersonDetail = directoryView === "people" && mobileDetailOpen;
+
+  const openPerson = (id: string) => {
+    setSelectedId(id);
+    setMobileDetailOpen(true);
+    window.requestAnimationFrame(() => {
+      if (window.innerWidth < 1280) detailRef.current?.focus();
+    });
+  };
 
   if (!allowed) {
     return (
@@ -326,14 +337,14 @@ function PersonDirectoryPanel() {
   }
 
   return (
-    <div className="mx-auto flex min-h-0 max-w-7xl flex-col gap-4 p-4 md:p-5 xl:h-full xl:flex-1">
-      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div className="mx-auto flex min-h-0 min-w-0 w-full max-w-7xl flex-col gap-4 p-3 sm:p-5 xl:h-full xl:flex-1">
+      <header className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} flex-col gap-3 md:flex-row md:items-end md:justify-between`}>
         <div>
           <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
             人員與身分
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            人員主檔與平台帳號集中管理；選取人員可查看學號、班級座號、身分，並在帳號詳情管理學籍、幹部任期與安全設定。
+            查找人員、調整班級與身分，或切換至平台帳號管理登入與安全設定。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -354,7 +365,7 @@ function PersonDirectoryPanel() {
       </header>
 
       {canManageAccounts && (
-        <div className="flex gap-2 overflow-x-auto" role="group" aria-label="人員與帳號檢視">
+        <div className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} gap-2`} role="group" aria-label="人員與帳號檢視">
           {([
             ["people", "人員資料"],
             ["accounts", "平台帳號"],
@@ -363,7 +374,7 @@ function PersonDirectoryPanel() {
               key={view}
               type="button"
               aria-pressed={directoryView === view}
-              onClick={() => setDirectoryView(view)}
+              onClick={() => { setAccountId(null); setMobileDetailOpen(false); setDirectoryView(view); }}
               className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium"
               style={{
                 color: directoryView === view ? "var(--primary)" : "var(--text-muted)",
@@ -379,27 +390,32 @@ function PersonDirectoryPanel() {
 
       {directoryView === "people" ? (
         <>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+      <details className={`${showingPersonDetail ? "hidden xl:block" : ""} rounded-lg border px-3`} style={{ borderColor: "var(--border)" }}>
+        <summary className="min-h-11 cursor-pointer py-3 text-xs" style={{ color: "var(--text-muted)" }}>名冊統計</summary>
+      <div className="grid grid-cols-2 gap-2 pb-3 md:grid-cols-3 xl:grid-cols-5">
         <Stat icon={<UsersRound size={15} />} label="平台帳號" value={stats?.account_count ?? null} />
         <Stat icon={<UserRound size={15} />} label="人員主檔" value={stats?.people_count ?? null} />
         <Stat icon={<Link2 size={15} />} label="已連帳號" value={stats?.linked_count ?? null} />
         <Stat icon={<BookUser size={15} />} label="有分班" value={stats?.classed_count ?? null} />
         <Stat icon={<CircleSlash size={15} />} label="待連帳號" value={stats?.pending_link_count ?? null} />
       </div>
+      </details>
 
-      <div className="grid grid-cols-1 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[24rem_1fr]">
-        <Panel className="flex min-h-0 max-h-[38dvh] flex-col overflow-hidden xl:max-h-none">
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
+        <Panel className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} min-w-0 min-h-0 flex-col overflow-hidden`}>
           <div className="space-y-2 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="flex items-center gap-2">
-              <div className="flex flex-1 items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
                 <Search size={15} style={{ color: "var(--text-muted)" }} />
                 <input
+                  ref={searchRef}
                   value={query}
                   onChange={(event) => {
                     setPageIndex(0);
                     setQuery(event.target.value);
                   }}
-                  className="w-full bg-transparent text-sm outline-none"
+                  className="min-h-7 min-w-0 w-full bg-transparent text-sm outline-none"
+                  aria-label="搜尋人員"
                   placeholder="搜尋姓名、學號、Email"
                   style={{ color: "var(--text-primary)" }}
                 />
@@ -407,7 +423,7 @@ function PersonDirectoryPanel() {
               <button
                 type="button"
                 onClick={() => setFilterOpen((v) => !v)}
-                className="md:hidden inline-flex flex-shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium"
+                className="md:hidden inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium"
                 style={{
                   border: "1px solid var(--border)",
                   color: (status || classId) ? "var(--primary)" : "var(--text-muted)",
@@ -420,7 +436,7 @@ function PersonDirectoryPanel() {
               </button>
             </div>
             <div className={`grid grid-cols-2 gap-2 ${filterOpen ? "" : "hidden md:grid"}`}>
-              <SelectInput value={status} onChange={(event) => {
+              <SelectInput aria-label="依人員狀態篩選" value={status} onChange={(event) => {
                 setPageIndex(0);
                 setStatus(event.target.value as PersonStatus | "");
               }}>
@@ -429,7 +445,7 @@ function PersonDirectoryPanel() {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </SelectInput>
-              <SelectInput value={classId} onChange={(event) => {
+              <SelectInput aria-label="依班級篩選人員" value={classId} onChange={(event) => {
                 setPageIndex(0);
                 setClassId(event.target.value);
               }}>
@@ -452,7 +468,8 @@ function PersonDirectoryPanel() {
                 <button
                   key={person.id}
                   type="button"
-                  onClick={() => setSelectedId(person.id)}
+                  onClick={() => openPerson(person.id)}
+                  aria-current={selectedId === person.id ? "true" : undefined}
                   className="w-full cursor-pointer px-4 py-3 text-left transition-colors"
                   style={{
                     borderBottom: "1px solid var(--border)",
@@ -468,7 +485,7 @@ function PersonDirectoryPanel() {
                         {person.student_id ?? "無學號"} · {person.email ?? "未填 Email"}
                       </p>
                     </div>
-                    <span className="rounded px-2 py-0.5 text-[11px]" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                    <span className="shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px]" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                       {STATUS_LABEL[person.status]}
                     </span>
                   </div>
@@ -516,11 +533,19 @@ function PersonDirectoryPanel() {
           </div>
         </Panel>
 
-        <Panel className="flex min-w-0 flex-col overflow-visible xl:min-h-0 xl:overflow-hidden">
+        <Panel className={`${showingPersonDetail ? "flex" : "hidden xl:flex"} min-w-0 flex-col xl:min-h-0 xl:overflow-hidden`}>
+          <div ref={detailRef} tabIndex={-1} className="min-w-0 outline-none xl:contents">
+            <div className="p-3 xl:hidden">
+              <MobileBackToList label="返回人員清單" className="min-h-11" onBack={() => {
+                setMobileDetailOpen(false);
+                window.requestAnimationFrame(() => searchRef.current?.focus());
+              }} />
+            </div>
           {detailLoading ? (
             <div className="p-8 text-sm" style={{ color: "var(--text-muted)" }}>載入人員詳情...</div>
           ) : detail ? (
             <PersonDetailPanel
+              key={detail.id}
               person={detail}
               classes={classes}
               users={users}
@@ -528,12 +553,14 @@ function PersonDirectoryPanel() {
               canManageAccounts={canManageAccounts}
               onChanged={refreshAll}
               onAssign={() => setShowAffiliation(true)}
+              onOpenAccount={(id) => { setAccountId(id); setDirectoryView("accounts"); }}
             />
           ) : (
             <div className="p-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>
               請先選擇一位人員。
             </div>
           )}
+          </div>
         </Panel>
       </div>
 
@@ -574,6 +601,7 @@ function PersonDirectoryPanel() {
         </>
       ) : (
         <AccountDirectoryPanel
+          initialSelectedId={accountId}
           users={users}
           loading={usersLoading}
           classes={classes}
@@ -615,6 +643,7 @@ function PersonDetailPanel({
   canManageAccounts,
   onChanged,
   onAssign,
+  onOpenAccount,
 }: {
   person: PersonDetailOut;
   classes: SchoolClassListItem[];
@@ -623,12 +652,10 @@ function PersonDetailPanel({
   canManageAccounts: boolean;
   onChanged: () => Promise<void>;
   onAssign: () => void;
+  onOpenAccount: (id: string) => void;
 }) {
   const [quickClassId, setQuickClassId] = useState("");
   const [classSaving, setClassSaving] = useState(false);
-  const [linkedAccount, setLinkedAccount] = useState<AdminUserDetail | null>(null);
-  const [accountLoading, setAccountLoading] = useState(false);
-  const [accountLoadError, setAccountLoadError] = useState(false);
   const [edit, setEdit] = useState({
     display_name: person.display_name,
     legal_name: person.legal_name ?? "",
@@ -650,33 +677,6 @@ function PersonDetailPanel({
       note: person.note ?? "",
     });
   }, [person]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!person.user_id || !canManageAccounts) {
-      setLinkedAccount(null);
-      setAccountLoading(false);
-      setAccountLoadError(false);
-      return;
-    }
-
-    setAccountLoading(true);
-    setAccountLoadError(false);
-    void adminApi.getUser(person.user_id)
-      .then((account) => {
-        if (!cancelled) setLinkedAccount(account);
-      })
-      .catch(() => {
-        if (!cancelled) setAccountLoadError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setAccountLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [person, canManageAccounts]);
 
   const active = person.affiliations.filter((item) => item.status !== "ended");
   const ended = person.affiliations.filter((item) => item.status === "ended");
@@ -737,47 +737,35 @@ function PersonDetailPanel({
   };
 
   return (
-    <div className="flex min-h-0 flex-col xl:h-full">
+    <div className={styles.person}>
       <div className="flex-shrink-0 p-5" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 flex-col gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <UserRound size={22} style={{ color: "var(--primary)" }} />
-              <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            <div className="flex min-w-0 items-start gap-2">
+              <UserRound size={22} className="shrink-0" style={{ color: "var(--primary)" }} />
+              <h2 className="min-w-0 break-words text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
                 {person.display_name}
               </h2>
             </div>
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
               {person.student_id ?? "無學號"} · {person.user_id ? "已連結平台帳號" : "尚未連結平台帳號"}
             </p>
+            {person.email && <p className="mt-1 break-all text-xs" style={{ color: "var(--text-muted)" }}>{person.email}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
-            {canAssignClass && (
-              <SelectInput
-                aria-label={`快速設定 ${person.display_name} 的班級`}
-                className="min-h-11 min-w-40 max-w-56"
-                value={classSaving ? quickClassId : ""}
-                onChange={(event) => void assignClass(event.target.value)}
-                disabled={classSaving || classes.length === 0}
-                style={{ width: "auto" }}
-              >
-                <option value="">{classSaving ? "設定中…" : "快速設定班級"}</option>
-                {classes.map((item) => (
-                  <option key={item.id} value={item.id}>{classLabel(item)}</option>
-                ))}
-              </SelectInput>
-            )}
-            <IconButton onClick={syncPending} disabled={!person.user_id}>
+            {person.user_id && active.some((item) => item.status === "pending_user") && <IconButton onClick={syncPending}>
               <BadgeCheck size={14} /> 同步待生效
-            </IconButton>
+            </IconButton>}
             <IconButton onClick={onAssign} tone="primary">
               <Plus size={14} /> 新增身分
             </IconButton>
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <label className="text-xs xl:col-span-2" style={{ color: "var(--text-muted)" }}>
+        <details className="mt-4 border-t" style={{ borderColor: "var(--border)" }}>
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>編輯基本資料</summary>
+        <div className={styles.personForm}>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
             顯示姓名
             <TextInput className="mt-1" value={edit.display_name} onChange={(event) => setEdit({ ...edit, display_name: event.target.value })} />
           </label>
@@ -797,17 +785,12 @@ function PersonDetailPanel({
               ))}
             </SelectInput>
           </label>
-          <div className="flex items-end">
-            <IconButton onClick={save} tone="primary">
-              <ShieldCheck size={14} /> 儲存
-            </IconButton>
-          </div>
-          <label className="text-xs md:col-span-2 xl:col-span-3" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
             Email
             <TextInput className="mt-1" value={edit.email} onChange={(event) => setEdit({ ...edit, email: event.target.value })} />
           </label>
-          <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
-            連結 User 帳號
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            連結平台帳號
             <SelectInput className="mt-1" value={edit.user_id} onChange={(event) => setEdit({ ...edit, user_id: event.target.value })}>
               <option value="">尚未連結</option>
               {users.map((user) => (
@@ -817,30 +800,27 @@ function PersonDetailPanel({
               ))}
             </SelectInput>
           </label>
-          <label className="text-xs md:col-span-2 xl:col-span-5" style={{ color: "var(--text-muted)" }}>
+          <label className={`text-xs ${styles.fullRow}`} style={{ color: "var(--text-muted)" }}>
             管理備註
             <textarea className="input mt-1 min-h-20 w-full resize-y" value={edit.note} onChange={(event) => setEdit({ ...edit, note: event.target.value })} placeholder="人員管理備註" />
           </label>
+          <div className="flex items-end">
+            <IconButton onClick={save} tone="primary">
+              <ShieldCheck size={14} /> 儲存
+            </IconButton>
+          </div>
         </div>
+        </details>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 overflow-visible p-4 sm:p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:grid-cols-[1fr_18rem] xl:[touch-action:pan-y]">
-        <div className="space-y-4">
-          <AffiliationSection title="有效身分" items={active} onChanged={onChanged} />
-          <AffiliationSection title="歷史紀錄" items={ended} onChanged={onChanged} muted />
-        </div>
-        <Panel className="h-fit p-4">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>資料索引</h3>
-          <div className="mt-3 space-y-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-            <IndexRow icon={<GraduationCap size={14} />} label="分班" value={active.filter((item) => item.kind === "class_member").map((item) => item.class_label ?? "未命名").join("、") || "無"} />
-            <IndexRow icon={<BookUser size={14} />} label="班級職務" value={active.filter((item) => item.kind === "class_role").map((item) => item.title ?? item.role_key ?? "班級職務").join("、") || "無"} />
-            <IndexRow icon={<BriefcaseBusiness size={14} />} label="自治職務" value={active.filter((item) => item.kind === "org_position").map((item) => `${item.org_name ?? ""}${item.position_name ? ` / ${item.position_name}` : ""}`).join("、") || "無"} />
-            <IndexRow icon={<CalendarDays size={14} />} label="建立時間" value={new Date(person.created_at).toLocaleDateString("zh-TW")} />
-          </div>
-          <div className="mt-4 rounded-md p-3 text-xs" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-            新身分表是資料來源；需要權限的身分會同步成 UserPosition，供既有 RBAC 使用。
-          </div>
-        </Panel>
+      <div className="min-w-0 space-y-4 p-4 sm:p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+        <AffiliationSection title="有效身分" items={active} onChanged={onChanged} />
+        {ended.length > 0 && (
+          <details className="min-w-0 rounded-md border" style={{ borderColor: "var(--border)" }}>
+            <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>歷史身分（{ended.length} 筆）</summary>
+            <AffiliationSection title="歷史紀錄" items={ended} onChanged={onChanged} muted />
+          </details>
+        )}
         <Panel className="h-fit p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級與座號</h3>
@@ -848,6 +828,20 @@ function PersonDetailPanel({
               管理<ChevronRight size={14} />
             </Link>
           </div>
+            {canAssignClass && (
+              <SelectInput
+                aria-label={`快速設定 ${person.display_name} 的班級`}
+                className="min-h-11 w-full"
+                value={classSaving ? quickClassId : ""}
+                onChange={(event) => void assignClass(event.target.value)}
+                disabled={classSaving || classes.length === 0}
+              >
+                <option value="">{classSaving ? "設定中…" : "快速設定班級"}</option>
+                {classes.map((item) => (
+                  <option key={item.id} value={item.id}>{classLabel(item)}</option>
+                ))}
+              </SelectInput>
+            )}
           {(person.class_roster ?? []).length === 0 ? (
             <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>尚無班級座號名冊資料。</p>
           ) : (
@@ -869,52 +863,17 @@ function PersonDetailPanel({
             person={person} classes={classes} onChanged={onChanged}
           />}
         </Panel>
-        {person.user_id && (
-          <div className="xl:col-span-2">
-            <details className="rounded-md" style={{ border: "1px solid var(--border)" }}>
-              <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                <span className="min-w-0">帳號詳情：學籍、幹部任期與安全設定</span>
-                <span className="min-w-0 truncate text-xs font-normal" style={{ color: "var(--text-muted)" }}>
-                  {linkedAccount?.email ?? person.email ?? "已連結平台帳號"}
-                </span>
-              </summary>
-              {!canManageAccounts ? (
-                <p className="border-t p-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
-                  帳號安全與登入維護需要帳號管理權限。
-                </p>
-              ) : accountLoading ? (
-                <p className="border-t p-4 text-sm" role="status" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
-                  載入帳號資料…
-                </p>
-              ) : accountLoadError ? (
-                <p className="border-t p-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--danger)" }}>
-                  無法載入帳號詳情，請重新整理人員資料後再試。
-                </p>
-              ) : linkedAccount ? (
-                <div className="border-t" style={{ borderColor: "var(--border)" }}>
-                  <AccountDetailPanel
-                    key={linkedAccount.id}
-                    user={linkedAccount}
-                    users={users}
-                    classes={classes}
-                    canManageClasses={canAssignClass}
-                    onChanged={onChanged}
-                  />
-                </div>
-              ) : null}
-            </details>
-          </div>
+        {person.user_id && canManageAccounts && (
+          <button type="button" onClick={() => { if (person.user_id) onOpenAccount(person.user_id); }}
+            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left"
+            style={{ borderColor: "var(--border)", color: "var(--primary)" }}>
+            <span className="min-w-0"><span className="block text-sm font-medium">管理連結帳號</span>
+              <span className="mt-1 block break-all text-xs" style={{ color: "var(--text-muted)" }}>學籍、幹部任期、登入與安全設定</span>
+            </span>
+            <ChevronRight size={18} className="shrink-0" />
+          </button>
         )}
       </div>
-    </div>
-  );
-}
-
-function IndexRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="grid grid-cols-[5rem_1fr] gap-2">
-      <span className="inline-flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>{icon}{label}</span>
-      <span className="min-w-0 break-words">{value}</span>
     </div>
   );
 }
