@@ -82,14 +82,16 @@ describe("我的預購", () => {
     expect(screen.queryByRole("region", { name: "校慶預購" })).not.toBeInTheDocument();
   });
 
-  it("connects the class correction request to the student's order page", async () => {
+  it("does not show class correction or load class correction data on the order page", async () => {
+    api.myClass.mockResolvedValue({ id: "class", label: "二年一班" });
     render(<OrdersPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "申請加入班級" }));
-    expect(await screen.findByLabelText("你目前就讀的班級")).toBeVisible();
-    expect(api.myClass).toHaveBeenCalledOnce();
-    expect(api.recipientOptions).toHaveBeenCalledOnce();
-    expect(api.myCorrectionRequests).toHaveBeenCalledOnce();
+    expect(await screen.findByText("目前沒有預購品項，先到商品頁挑選商品。")).toBeVisible();
+    expect(screen.queryByText("班級有誤？申請更正")).not.toBeInTheDocument();
+    expect(screen.queryByText("申請加入班級")).not.toBeInTheDocument();
+    expect(api.myClass).not.toHaveBeenCalled();
+    expect(api.recipientOptions).not.toHaveBeenCalled();
+    expect(api.myCorrectionRequests).not.toHaveBeenCalled();
   });
 
   it("includes student orders where the current user added delegated items", async () => {
