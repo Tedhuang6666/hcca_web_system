@@ -640,6 +640,8 @@ async def preview_promotion(
 async def create_promotion(
     session: AsyncSession, *, data: ShopPromotionCreate, created_by: uuid.UUID
 ) -> ShopPromotion:
+    from api.services.shop._promotion_orders import lock_promotion_orders, refresh_promotion_orders
+
     code = normalize_promotion_code(data.code)
     identifiers = list(data.target_identifiers)
     if data.target_email:
@@ -692,6 +694,9 @@ async def create_promotion(
     )
     session.add(promotion)
     await session.flush()
+    if promotion.code is None:
+        orders = await lock_promotion_orders(session, activity_ids={promotion.activity_id})
+        await refresh_promotion_orders(session, promotion=promotion, orders=orders)
     return await get_promotion(session, promotion.id) or promotion
 
 
@@ -786,6 +791,10 @@ async def delete_promotion(session: AsyncSession, promotion: ShopPromotion) -> N
 async def update_promotion(
     session: AsyncSession, promotion: ShopPromotion, *, data: ShopPromotionUpdate
 ) -> ShopPromotion:
+    from api.services.shop._promotion_orders import lock_promotion_orders, refresh_promotion_orders
+
+    previous_activity_id = promotion.activity_id
+    was_automatic = promotion.code is None
     payload = data.model_dump(exclude_unset=True)
     activity_was_explicit = "activity_id" in payload
     target_products_changed = "target_product_ids" in payload
@@ -823,15 +832,7 @@ async def update_promotion(
             )
         ):
             raise ValueError("優惠碼已存在")
-    if target_users is not None:
-        promotion.target_users = target_users
-        promotion.target_user_id = target_users[0].id if len(target_users) == 1 else None
-    if target_student_ids is not None:
-        promotion.student_id_targets = [
-            ShopPromotionStudentTarget(student_id=student_id) for student_id in target_student_ids
-        ]
-    if target_products is not None:
-        promotion.target_products = target_products
+    activity_id = promotion.activity_id
     if activity_was_explicit or target_products_changed:
         effective_products = target_products
         if effective_products is None:
@@ -847,7 +848,23 @@ async def update_promotion(
         )
         if activity_id is not None and await session.get(Activity, activity_id) is None:
             raise ValueError("找不到指定活動")
-        promotion.activity_id = activity_id
+
+    # 商品登記先鎖訂單、再鎖優惠；更新優惠沿用相同順序，避免與登記／收款互鎖。
+    orders = (
+        await lock_promotion_orders(session, activity_ids={previous_activity_id, activity_id})
+        if was_automatic or payload.get("code", promotion.code) is None
+        else []
+    )
+    promotion.activity_id = activity_id
+    if target_users is not None:
+        promotion.target_users = target_users
+        promotion.target_user_id = target_users[0].id if len(target_users) == 1 else None
+    if target_student_ids is not None:
+        promotion.student_id_targets = [
+            ShopPromotionStudentTarget(student_id=student_id) for student_id in target_student_ids
+        ]
+    if target_products is not None:
+        promotion.target_products = target_products
 
     effective_discount_type = payload.get("discount_type", promotion.discount_type)
     effective_target_products = (
@@ -881,6 +898,8 @@ async def update_promotion(
     if promotion.starts_at and promotion.ends_at and promotion.starts_at >= promotion.ends_at:
         raise ValueError("優惠開始時間必須早於結束時間")
     await session.flush()
+    if was_automatic or promotion.code is None:
+        await refresh_promotion_orders(session, promotion=promotion, orders=orders)
     await session.refresh(promotion, attribute_names=["target_user"])
     return promotion
 

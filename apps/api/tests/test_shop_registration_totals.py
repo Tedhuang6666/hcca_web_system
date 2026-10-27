@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import delete, func, select
@@ -13,6 +14,7 @@ from api.models.activity import Activity, ActivityStatus
 from api.models.receivable import Receivable
 from api.models.shop import (
     Order,
+    OrderStatus,
     Product,
     ProductCategory,
     ProductStatus,
@@ -25,6 +27,7 @@ from api.schemas.shop import (
     OrderItemCreate,
     RegistrationVariantCreate,
     ShopPromotionCreate,
+    ShopPromotionUpdate,
 )
 from api.services import shop as shop_svc
 
@@ -71,6 +74,202 @@ async def _append(session, buyer, product, quantity=1, *, actor=None):
             ),
         )
     )[0]
+
+
+async def test_new_automatic_promotion_reprices_existing_orders_and_receivables(
+    db_session, registration_setup, make_user
+):
+    buyer, actor, activity, products = registration_setup
+    order = await _append(db_session, buyer, products[0], 2)
+    other = await make_user(student_id="310002")
+    other_order = await _append(db_session, other, products[0], 2)
+    original_stock = products[0].stock_quantity
+
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="追加帳號優惠",
+            activity_id=activity.id,
+            target_identifiers=[buyer.student_id],
+            target_product_ids=[products[0].id],
+            min_quantity=2,
+            discount_type="fixed",
+            discount_value=30,
+        ),
+        created_by=actor.id,
+    )
+
+    await db_session.refresh(order, attribute_names=["total_price", "discount_amount"])
+    assert (order.discount_amount, order.total_price) == (30, 170)
+    assert other_order.total_price == 200
+    assert promotion.used_count == 1
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+    assert receivable.amount == 170
+    assert products[0].stock_quantity == original_stock
+
+    await shop_svc.update_promotion(
+        db_session, promotion, data=ShopPromotionUpdate(discount_value=50)
+    )
+    assert order.total_price == 150
+    assert receivable.amount == 150
+    assert promotion.used_count == 1
+    await shop_svc.update_promotion(
+        db_session, promotion, data=ShopPromotionUpdate(target_identifiers=[other.student_id])
+    )
+    assert order.total_price == 200
+    assert other_order.total_price == 150
+    assert receivable.amount == 200
+    assert promotion.used_count == 1
+
+
+@pytest.mark.parametrize("lock", ["is_paid", "is_class_collected", "cancelled", "refunded"])
+async def test_new_automatic_promotion_preserves_collected_and_historical_orders(
+    db_session, registration_setup, lock
+):
+    buyer, actor, activity, products = registration_setup
+    order = await _append(db_session, buyer, products[0], 2)
+    if lock in {"cancelled", "refunded"}:
+        order.status = OrderStatus(lock)
+    else:
+        setattr(order, lock, True)
+    await db_session.flush()
+
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="追加優惠",
+            activity_id=activity.id,
+            discount_type="fixed",
+            discount_value=30,
+        ),
+        created_by=actor.id,
+    )
+    assert order.total_price == 200
+    assert order.discount_amount == 0
+    assert promotion.used_count == 0
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+    assert receivable.amount == 200
+
+
+async def test_automatic_promotion_preserves_applied_coupon_and_usage_limit(
+    db_session, registration_setup, make_user
+):
+    buyer, actor, activity, products = registration_setup
+    coupon = await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="優惠碼",
+            code="KEEP30",
+            activity_id=activity.id,
+            discount_type="fixed",
+            discount_value=30,
+        ),
+        created_by=actor.id,
+    )
+    order = await _append(db_session, buyer, products[0], 2)
+    await shop_svc.apply_registration_promotion(
+        db_session, buyer, code=coupon.code, activity_id=activity.id
+    )
+    # PostgreSQL 的 now() 在同一 transaction 固定，明確建立先登記者的順序。
+    order.created_at -= timedelta(minutes=1)
+    coupon.ends_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db_session.flush()
+    other = await make_user(student_id="310002")
+    other_order = await _append(db_session, other, products[0], 2)
+
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="限一單追加優惠",
+            activity_id=activity.id,
+            discount_type="fixed",
+            discount_value=20,
+            max_uses=1,
+        ),
+        created_by=actor.id,
+    )
+    assert (order.promotion_code, order.discount_amount, order.total_price) == ("KEEP30", 50, 150)
+    assert other_order.total_price == 200
+    assert (coupon.used_count, promotion.used_count) == (1, 1)
+    assert {row.promotion_id: row.discount_amount for row in order.applied_promotions} == {
+        coupon.id: 30,
+        promotion.id: 20,
+    }
+    await shop_svc.update_promotion(db_session, promotion, data=ShopPromotionUpdate(name="改名"))
+    assert (coupon.used_count, promotion.used_count) == (1, 1)
+    assert order.total_price == 150
+    assert other_order.total_price == 200
+
+
+async def test_limited_promotion_releases_ineligible_usage_before_retargeting(
+    db_session, registration_setup, make_user
+):
+    buyer, actor, activity, products = registration_setup
+    earlier = await _append(db_session, buyer, products[0])
+    earlier.created_at -= timedelta(minutes=1)
+    other = await make_user(student_id="310002")
+    later = await _append(db_session, other, products[0])
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="限一單帳號優惠",
+            activity_id=activity.id,
+            target_identifiers=[other.student_id],
+            discount_type="fixed",
+            discount_value=20,
+            max_uses=1,
+        ),
+        created_by=actor.id,
+    )
+    assert (earlier.total_price, later.total_price, promotion.used_count) == (100, 80, 1)
+
+    await shop_svc.update_promotion(
+        db_session, promotion, data=ShopPromotionUpdate(target_identifiers=[buyer.student_id])
+    )
+    assert (earlier.total_price, later.total_price, promotion.used_count) == (80, 100, 1)
+
+
+async def test_promotion_activity_change_reprices_both_scopes_and_deactivation_removes_discount(
+    db_session, registration_setup
+):
+    buyer, actor, activity, products = registration_setup
+    original = await _append(db_session, buyer, products[0])
+    other_activity = Activity(name="畢業季", status=ActivityStatus.ACTIVE)
+    db_session.add(other_activity)
+    await db_session.flush()
+    category = ProductCategory(name="畢業商品", activity_id=other_activity.id, created_by=actor.id)
+    db_session.add(category)
+    await db_session.flush()
+    product = Product(
+        name="紀念品",
+        category_id=category.id,
+        price=100,
+        stock_quantity=20,
+        status=ProductStatus.ACTIVE,
+        created_by=actor.id,
+    )
+    db_session.add(product)
+    await db_session.flush()
+    other = await _append(db_session, buyer, product)
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        data=ShopPromotionCreate(
+            name="活動優惠",
+            activity_id=activity.id,
+            discount_type="fixed",
+            discount_value=20,
+        ),
+        created_by=actor.id,
+    )
+    assert (original.total_price, other.total_price) == (80, 100)
+    await shop_svc.update_promotion(
+        db_session, promotion, data=ShopPromotionUpdate(activity_id=other_activity.id)
+    )
+    assert (original.total_price, other.total_price, promotion.used_count) == (100, 80, 1)
+    await shop_svc.update_promotion(
+        db_session, promotion, data=ShopPromotionUpdate(is_active=False)
+    )
+    assert (original.total_price, other.total_price, promotion.used_count) == (100, 100, 0)
 
 
 async def test_repeated_assistance_accumulates_same_activity_and_receivable(

@@ -916,6 +916,45 @@ async def test_registration_automatically_applies_account_item_quantity_promotio
     assert outsider_order.json()["discount_amount"] == 0
 
 
+async def test_new_promotion_updates_existing_registration_without_resubmitting(
+    db_session, client, authed_client_factory
+) -> None:
+    manager = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    product = await _make_active_product(db_session, manager, price=100, stock=20)
+    await _grant_permission(db_session, manager, "shop:manage")
+    buyer_client = authed_client_factory(buyer)
+    order = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"option_ids": [], "quantity": 2}]},
+    )
+    assert order.status_code == 200
+    assert order.json()["total_price"] == 200
+    payload = {
+        "name": "登記後追加優惠",
+        "target_product_ids": [str(product.id)],
+        "discount_type": "fixed",
+        "discount_value": 30,
+    }
+    assert (await client.post("/shop/promotions", json=payload)).status_code == 401
+    assert (await buyer_client.post("/shop/promotions", json=payload)).status_code == 403
+    manager_client = authed_client_factory(manager)
+    created = await manager_client.post("/shop/promotions", json=payload)
+    assert created.status_code == 201
+    assert created.json()["used_count"] == 1
+    fetched = await buyer_client.get(f"/shop/orders/{order.json()['id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["total_price"] == 170
+    assert fetched.json()["discount_amount"] == 30
+
+    updated = await manager_client.patch(
+        f"/shop/promotions/{created.json()['id']}", json={"discount_value": 50}
+    )
+    assert updated.status_code == 200
+    fetched = await buyer_client.get(f"/shop/orders/{order.json()['id']}")
+    assert fetched.json()["total_price"] == 150
+
+
 async def test_unregistered_student_id_promotion_applies_after_account_registration(
     db_session, client, authed_client_factory
 ) -> None:

@@ -75,22 +75,23 @@ describe("商品工作導覽", () => {
 
     const entry = await screen.findByRole("link", { name: "班代代訂與收款" });
     expect(entry).toHaveAttribute("href", "/shop/class-orders");
+    expect(entry).toBeVisible();
+    expect(entry.closest("details")).toBeNull();
     expect(authCache.cacheCurrentUser).toHaveBeenCalledWith({
       id: "representative",
       permissions: ["class:shop_collect"],
     });
   });
 
-  it("keeps representative tools in a discoverable menu on the catalog", () => {
+  it.each(["/shop", "/shop/orders"])("shows representative tools directly on %s", (pathname) => {
+    state.pathname = pathname;
     state.permissions = ["class:shop_collect"];
     render(<ShopLayout><p>商品</p></ShopLayout>);
     const nav = within(screen.getByRole("navigation", { name: "商品工作區" }));
     const entry = nav.getByRole("link", { name: "班代代訂與收款" });
-    expect(entry).not.toBeVisible();
-    fireEvent.click(nav.getByText("其他工具", { exact: true }));
     expect(entry).toBeVisible();
     expect(entry).toHaveAttribute("href", "/shop/class-orders");
-    expect(entry.closest("details")).toHaveAttribute("open");
+    expect(entry.closest("details")).toBeNull();
   });
 
   it("gives students the catalog and their preorders without management shortcuts", () => {
