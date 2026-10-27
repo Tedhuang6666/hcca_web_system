@@ -366,6 +366,26 @@ async def persist_client_error_incident(
         return None
     if scope == "securitypolicyviolation" and diagnostics.get("csp_disposition") == "report":
         return None
+    if scope == "resource:style" and message == "資源載入失敗":
+        return None
+    if (
+        scope in {"api.network", "api.timeout", "api.refresh-network"}
+        and str(diagnostics.get("request_method") or "").upper() == "POST"
+        and _normalize_client_request_path(diagnostics.get("request_path"))
+        in {
+            "/analytics/page-views",
+            "/analytics/client-metrics/batch",
+            "/analytics/component-metrics/batch",
+        }
+    ):
+        return None
+    if scope in {"window.error", "unhandledrejection"} and (
+        message == "Script error."
+        or re.search(r"window\.ethereum\.selectedAddress\s*=\s*undefined", message, re.IGNORECASE)
+        or re.search(r"Error invoking postMessage:\s*Java object is gone", message, re.IGNORECASE)
+        or re.search(r"window\.webkit\.messageHandlers", message, re.IGNORECASE)
+    ):
+        return None
     if context.get("online") is False and (
         scope in {"api.network", "api.timeout", "api.refresh-network"}
         or scope.startswith("resource:")
@@ -444,6 +464,7 @@ async def auto_resolve_stale_incidents(
                 select(SystemIncident)
                 .where(
                     SystemIncident.status.in_(_AUTO_RESOLVABLE_STATUSES),
+                    SystemIncident.assigned_to.is_(None),
                     SystemIncident.last_seen_at < cutoff,
                 )
                 .order_by(SystemIncident.last_seen_at.asc())

@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from io import StringIO
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.system_incident import IncidentSeverity, IncidentStatus, SystemIncident
@@ -347,6 +348,124 @@ async def test_offline_client_error_does_not_create_an_incident(monkeypatch) -> 
 
     assert result is None
     assert not persisted
+
+
+@pytest.mark.parametrize(
+    "scope,message,diagnostics,filtered",
+    [
+        ("resource:style", "資源載入失敗", {}, True),
+        ("securitypolicyviolation", "CSP blocked style-src-elem: inline", {}, False),
+        (
+            "api.timeout",
+            "Timeout",
+            {"request_method": "POST", "request_path": "/analytics/page-views"},
+            True,
+        ),
+        (
+            "api.network",
+            "Failed to fetch",
+            {"request_method": "POST", "request_path": "/analytics/client-metrics/batch"},
+            True,
+        ),
+        (
+            "api.timeout",
+            "Timeout",
+            {"request_method": "POST", "request_path": "/shop/registrations"},
+            False,
+        ),
+        (
+            "api.network",
+            "Failed to fetch",
+            {"request_method": "GET", "request_path": "/analytics/page-views"},
+            False,
+        ),
+    ],
+)
+async def test_optional_client_observations_keep_real_failures(
+    monkeypatch, scope, message, diagnostics, filtered
+) -> None:
+    calls = []
+
+    async def persist(**kwargs):
+        calls.append(kwargs)
+        return "incident"
+
+    monkeypatch.setattr("api.services.incident.persist_error_incident", persist)
+    await persist_client_error_incident(
+        error_id="optional-observation",
+        message=message,
+        stack="",
+        scope=scope,
+        path="/shop",
+        context={"diagnostics": diagnostics},
+        trace_id=None,
+        request_id=None,
+        client_ip=None,
+        user_agent=None,
+    )
+    assert len(calls) == (0 if filtered else 1)
+
+
+async def test_auto_resolve_preserves_assigned_incidents(db_session, member_user) -> None:
+    old = datetime.now(UTC) - timedelta(days=2)
+    row = SystemIncident(
+        error_id="assigned-incident",
+        fingerprint="assigned-fingerprint",
+        severity="P3",
+        status=IncidentStatus.OPEN,
+        service="web",
+        environment="test",
+        title="Assigned issue",
+        first_seen_at=old,
+        last_seen_at=old,
+        occurrence_count=1,
+        assigned_to=member_user.id,
+    )
+    db_session.add(row)
+    await db_session.flush()
+    assert await auto_resolve_stale_incidents(db_session, inactivity_hours=24) == []
+    assert row.status == IncidentStatus.OPEN
+
+
+@pytest.mark.parametrize(
+    "message,filtered",
+    [
+        ("Script error.", True),
+        (
+            "undefined is not an object (evaluating 'window.ethereum.selectedAddress = undefined')",
+            True,
+        ),
+        ("Error invoking postMessage: Java object is gone", True),
+        ("undefined is not an object (evaluating 'window.webkit.messageHandlers')", True),
+        ("Cannot read properties of undefined (reading 'classList')", False),
+        ("Minified React error #419", False),
+    ],
+)
+async def test_client_runtime_noise_filter_keeps_application_failures(
+    monkeypatch, message: str, filtered: bool
+) -> None:
+    calls = []
+
+    async def persist(**kwargs):
+        calls.append(kwargs)
+        return "incident"
+
+    monkeypatch.setattr("api.services.incident.persist_error_incident", persist)
+    result = await persist_client_error_incident(
+        error_id="runtime-filter",
+        message=message,
+        stack="",
+        scope="window.error",
+        path="/shop",
+        context={},
+        trace_id=None,
+        request_id=None,
+        client_ip=None,
+        user_agent=None,
+    )
+
+    assert len(calls) == (0 if filtered else 1)
+    assert result == (None if filtered else "incident")
 
 
 async def test_offline_network_and_resource_errors_do_not_create_incidents(monkeypatch) -> None:

@@ -125,10 +125,15 @@ if [[ "${DEPLOY_STRATEGY:-bluegreen}" == "bluegreen" ]]; then
     ./scripts/zero-downtime-deploy.sh "${DEPLOY_SLOT:-auto}"
 
   # 流量切換成功後，在不影響 HTTP 的情況下更新專責寄信 worker，
-  # 再停止舊的單槽 API/Web/一般 worker/beat，避免 legacy beat 與 blue-green beat 雙重排程。
+  # 再停止舊的單槽 API/Web/一般 worker。beat 在同一 Compose project 中共用，
+  # 啟用 workers 時必須保留新版 scheduler；依賴服務已由 blue-green 驗證並啟動。
   legacy_compose=(docker compose --env-file "$env_file" -f "$compose_file")
-  "${legacy_compose[@]}" --profile email up -d email-worker 2>/dev/null || true
-  "${legacy_compose[@]}" stop api web celery-worker celery-beat 2>/dev/null || true
+  "${legacy_compose[@]}" --profile email up -d --no-deps email-worker 2>/dev/null || true
+  legacy_services=(api web celery-worker)
+  if [[ "$with_workers" != "1" ]]; then
+    legacy_services+=(celery-beat)
+  fi
+  "${legacy_compose[@]}" stop "${legacy_services[@]}" 2>/dev/null || true
   exit 0
 fi
 

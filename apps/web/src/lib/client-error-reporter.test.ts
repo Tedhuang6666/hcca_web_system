@@ -3,6 +3,95 @@ import { describe, expect, it, vi } from "vitest";
 import { installGlobalClientErrorReporter, reportClientError } from "./client-error-reporter";
 
 describe("client error reporter", () => {
+  it("filters optional telemetry failures while preserving business requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    for (const scope of ["api.network", "api.timeout", "api.refresh-network"]) {
+      await reportClientError({
+        scope, message: `Optional telemetry ${scope}`,
+        diagnostics: { request_method: "POST", request_path: "/analytics/page-views?source=test" },
+      });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    await reportClientError({
+      scope: "api.timeout", message: "Business request timed out",
+      diagnostics: { request_method: "POST", request_path: "/shop/registrations" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the enforced CSP report without duplicating the inline style resource error", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    const style = document.createElement("style");
+    document.head.append(style);
+    try {
+      style.dispatchEvent(new Event("error"));
+      expect(fetchMock).not.toHaveBeenCalled();
+      const event = new Event("securitypolicyviolation");
+      Object.defineProperties(event, {
+        disposition: { value: "enforce" },
+        effectiveDirective: { value: "style-src-elem" },
+        blockedURI: { value: "inline" },
+      });
+      window.dispatchEvent(event);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).scope)
+        .toBe("securitypolicyviolation");
+    } finally {
+      uninstall();
+      style.remove();
+    }
+  });
+
+  it.each([
+    { scope: "api.offline", diagnostics: undefined },
+    { scope: "api.network", diagnostics: { failure_kind: "offline" as const } },
+    { scope: "securitypolicyviolation", diagnostics: { csp_disposition: "report" as const } },
+  ])("does not send expected observations: $scope", async (input) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(reportClientError({ message: "Expected observation", ...input })).resolves.toBeNull();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("filters offline connection failures but still reports runtime errors and online failures", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      for (const scope of ["api.network", "api.timeout", "api.refresh-network", "resource:img"]) {
+        await reportClientError({ scope, message: `Offline ${scope}` });
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      await reportClientError({ scope: "window.error", message: "Runtime error while offline" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      online.mockReturnValue(true);
+      await reportClientError({ scope: "api.network", message: "Online network failure" });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      online.mockRestore();
+    }
+  });
+
+  it("attributes errors to the commit supplied by the production build", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BUILD_COMMIT", "build-commit-for-error-report");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await reportClientError({ scope: "window.error", message: "Version attribution regression" });
+      expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).context.release)
+        .toBe("build-commit-for-error-report");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("filters known third-party, optional asset, and WebView noise", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
