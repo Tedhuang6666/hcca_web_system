@@ -297,9 +297,9 @@ async def delete_credential(db: AsyncSession, user: User, credential_id: str) ->
 
 
 async def requires_mfa(db: AsyncSession, user: User) -> bool:
-    if user.mfa_enabled:
-        return True
-    return bool(await db.scalar(select(exists().where(PasskeyCredential.user_id == user.id))))
+    # Passkey 是可選的快速登入方式；註冊 Passkey 不代表同意啟用登入 2FA。
+    # 已明確啟用 2FA 的帳號仍可在挑戰頁使用 Passkey 完成驗證。
+    return bool(user.mfa_enabled)
 
 
 async def resolve_mfa_challenge_user(db: AsyncSession, challenge_token: str) -> User | None:
