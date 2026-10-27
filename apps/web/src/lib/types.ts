@@ -1,5 +1,8 @@
 /** Generated from api-bridge.ts. */
-import type { ClassRosterSummary } from "./api-bridge";
+import type { ClassRosterSummary, CloseStatusItem as ApiCloseStatusItem } from "./api-bridge";
+
+// 家人代訂等既有本地狀態只提供 is_closed，未提供全域資訊時沿用 false。
+export type CloseStatusItem = Omit<ApiCloseStatusItem, "is_global"> & { is_global?: boolean };
 
 export type {
   AccessBlockStatus,
@@ -127,7 +130,6 @@ export type {
   ClassUserBrief,
   ClientErrorContext,
   ClientErrorReport,
-  CloseStatusItem,
   CloseStatusOut,
   ConditionRule,
   ContextLink,

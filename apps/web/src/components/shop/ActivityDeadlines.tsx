@@ -54,7 +54,7 @@ function ActivityDeadline({ activity, onSaved }: { activity: ActivityOut; onSave
         <p className="min-w-0 text-sm" style={{ color: "var(--text-secondary)" }}>
           {closedAt
             ? `已結單（${new Date(closedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}），訂單保留、收款繼續。`
-            : "立即結單會鎖定整個活動訂購並隱藏商品頁資訊，單品延長也不會開放。"}
+            : "立即結單會全域停止活動訂購，班代也無法代訂；商品頁資訊會隱藏，單品延長也不會開放。"}
         </p>
         <button type="button" disabled={saving} onClick={() => void toggleClosure()}
           aria-label={`${closedAt ? "重新開放" : "立即結單"}${activity.name}`}

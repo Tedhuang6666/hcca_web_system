@@ -15343,8 +15343,15 @@ export interface components {
             closed_at?: string | null;
             /** Closed By Name */
             closed_by_name?: string | null;
+            /** Closes At */
+            closes_at?: string | null;
             /** Is Closed */
             is_closed: boolean;
+            /**
+             * Is Global
+             * @default false
+             */
+            is_global: boolean;
         };
         /** CloseStatusOut */
         CloseStatusOut: {
@@ -29356,6 +29363,11 @@ export interface components {
         ShopOrderCloseCreate: {
             /** Class Id */
             class_id?: string | null;
+            /**
+             * Closes At
+             * @description 班級截止時間；留空立即截止
+             */
+            closes_at?: string | null;
             /** Notes */
             notes?: string | null;
         };
@@ -29375,6 +29387,8 @@ export interface components {
             closed_at: string;
             /** Closed By Name */
             closed_by_name?: string | null;
+            /** Closes At */
+            closes_at?: string | null;
             /**
              * Id
              * Format: uuid

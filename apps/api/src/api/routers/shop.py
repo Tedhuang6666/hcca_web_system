@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -1491,13 +1491,17 @@ async def update_order_items(
     current_user: CurrentUser,
 ) -> OrderOut:
     order = await _get_order_or_404(order_id, session, current_user)
-    if order.user_id != current_user.id and not current_user.is_superuser:
-        cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-        is_cadre_of_class = order.class_id is not None and order.class_id in cadre_ids
-        if not is_cadre_of_class:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權修改此訂單")
+    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    is_cadre_of_class = order.class_id is not None and order.class_id in cadre_ids
+    if order.user_id != current_user.id and not current_user.is_superuser and not is_cadre_of_class:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權修改此訂單")
     try:
-        order = await shop_svc.replace_order_items(session, order, data=payload)
+        order = await shop_svc.replace_order_items(
+            session,
+            order,
+            data=payload,
+            allow_class_closed=current_user.is_superuser or is_cadre_of_class,
+        )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except StaleDataError as e:
@@ -1797,6 +1801,7 @@ async def close_category(
             class_id=payload.class_id,
             closed_by_id=current_user.id,
             notes=payload.notes,
+            closes_at=payload.closes_at,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
@@ -1807,7 +1812,10 @@ async def close_category(
         action="shop.order_close",
         actor_id=str(current_user.id),
         actor_email=current_user.email,
-        meta={"class_id": str(payload.class_id) if payload.class_id else None},
+        meta={
+            "class_id": str(payload.class_id) if payload.class_id else None,
+            "closes_at": payload.closes_at.isoformat() if payload.closes_at else None,
+        },
         summary=f"結單：商品分類「{category_id}」{'全局' if not payload.class_id else '班級'}",
     )
     return shop_svc._serialize_close(close)
@@ -1865,7 +1873,9 @@ async def get_close_status(
         school_class = await class_svc_inner.resolve_user_class(session, current_user)
         class_id = school_class.id if school_class else None
 
-    close_map = await shop_svc.get_close_status(session, category_ids, class_id)
+    close_map = await shop_svc.get_close_status(
+        session, category_ids, class_id, include_scheduled=True
+    )
     statuses: dict[str, dict] = {}
     for cid, row in close_map.items():
         if row is None:
@@ -1875,8 +1885,10 @@ async def get_close_status(
             if row.closed_by:
                 closed_by_name = getattr(row.closed_by, "display_name", None)
             statuses[str(cid)] = {
-                "is_closed": True,
-                "closed_at": row.created_at,
+                "is_closed": row.closes_at is None or row.closes_at <= datetime.now(UTC),
+                "is_global": row.class_id is None,
+                "closes_at": row.closes_at,
+                "closed_at": row.closes_at or row.created_at,
                 "closed_by_name": closed_by_name,
             }
     return CloseStatusOut(statuses=statuses)
