@@ -11,12 +11,12 @@ import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirec
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
 import { today } from "@/lib/dateUtils";
 import Modal from "@/components/ui/Modal";
+import { AccountMergeSection } from "@/components/admin/AccountMergeSection";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, apiErrorMessage, authApi, classApi, orgsApi, withFallback } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import type { OrgRead } from "@/lib/api";
 import type {
-  AccountMergeConflict,
   AdminUserDetail,
   PermissionCodeInfo,
   PositionCategory,
@@ -1152,12 +1152,6 @@ function UserPanel({
   const [classId, setClassId] = useState("");
   const [asCadre, setAsCadre] = useState(false);
   const [emailAlias, setEmailAlias] = useState("");
-  const [mergePrimaryId, setMergePrimaryId] = useState(user.id);
-  const [mergeSourceIds, setMergeSourceIds] = useState<string[]>([]);
-  const [mergeConflicts, setMergeConflicts] = useState<AccountMergeConflict[]>([]);
-  const [mergeChoices, setMergeChoices] = useState<Record<string, string>>({});
-  const [mergeConflictOpen, setMergeConflictOpen] = useState(false);
-  const [mergePreviewing, setMergePreviewing] = useState(false);
   const [start, setStart] = useState(today());
   const [end, setEnd] = useState("");
   const available = uniquePositionsById(positions)
@@ -1204,45 +1198,6 @@ function UserPanel({
     body: `確定清除「${user.display_name}」的 TOTP 2FA 設定？使用者下次登入後可重新註冊；既有 Passkey 不受影響。`,
     action: () => adminApi.clearUserMfa(user.id),
   });
-  const mergePrimary = users.find((candidate) => candidate.id === mergePrimaryId) ?? user;
-  const mergeSources = users.filter(
-    (candidate) => candidate.id !== mergePrimaryId && mergeSourceIds.includes(candidate.id),
-  );
-  const selectedSourceIds = mergeSources.map((source) => source.id);
-  const openMergeConfirmation = (conflictResolutions: Record<string, string>) => {
-    const sourceNames = mergeSources.map((source) => `「${source.display_name}」`).join("、");
-    onConfirm({
-      title: "合併帳戶並歸戶歷史資料",
-      body: `確定將${sourceNames}合併到主要帳戶「${mergePrimary.display_name}」？名稱、UUID、學號等帳號資料會沿用主要帳戶；次要帳戶會停用。此操作不可逆。`,
-      action: () => adminApi.mergeUserAccounts(mergePrimaryId, selectedSourceIds, conflictResolutions),
-    });
-  };
-  const mergeAccount = async () => {
-    if (selectedSourceIds.length === 0) return;
-    setMergePreviewing(true);
-    try {
-      const preview = await adminApi.previewUserMerge(mergePrimaryId, selectedSourceIds);
-      if (preview.conflicts.length === 0) {
-        openMergeConfirmation({});
-        return;
-      }
-      setMergeConflicts(preview.conflicts);
-      setMergeChoices(Object.fromEntries(
-        preview.conflicts
-          .filter((conflict) => conflict.resolvable)
-          .map((conflict) => [
-            conflict.key,
-            conflict.records.find((record) => record.side === "target")?.id
-              ?? conflict.records[0]?.id,
-          ]),
-      ));
-      setMergeConflictOpen(true);
-    } catch (e) {
-      displayError(e, "預覽帳戶合併失敗");
-    } finally {
-      setMergePreviewing(false);
-    }
-  };
   return (
     <div className="w-full p-5 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1306,96 +1261,7 @@ function UserPanel({
           </SmallButton>
         </div>
       </section>
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid rgba(245,158,11,0.35)" }}>
-        <div>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            合併其他帳戶
-          </h3>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            先選擇保留名稱、UUID、學號與內部帳號資料的主要帳戶，再選擇最多 20 個次要帳戶；投稿等明確業務衝突會停止合併並通知管理員。
-          </p>
-        </div>
-        <div className="space-y-2">
-          <label className="block text-xs" style={{ color: "var(--text-muted)" }}>
-            主要帳戶（沿用其帳號資料）
-            <SelectInput
-              className="mt-1"
-              value={mergePrimaryId}
-              onChange={(event) => {
-                const nextId = event.target.value;
-                setMergePrimaryId(nextId);
-                setMergeSourceIds((current) => current.filter((id) => id !== nextId));
-              }}
-            >
-              {users.filter((candidate) => candidate.is_active).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.display_name} · {candidate.student_id ?? candidate.email}</option>)}
-            </SelectInput>
-          </label>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>選擇要併入主要帳戶的次要帳戶：</p>
-          <div className="max-h-44 overflow-y-auto rounded-lg p-2 space-y-1" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-            {users
-              .filter((candidate) => candidate.id !== mergePrimaryId && candidate.is_active)
-              .map((candidate) => (
-                <label key={candidate.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer hover:bg-white/5" style={{ color: "var(--text-secondary)" }}>
-                  <input
-                    type="checkbox"
-                    checked={mergeSourceIds.includes(candidate.id)}
-                    onChange={(event) => setMergeSourceIds((current) => event.target.checked
-                      ? [...current, candidate.id]
-                      : current.filter((id) => id !== candidate.id))}
-                  />
-                  <span className="min-w-0 truncate">{candidate.display_name} · {candidate.student_id ?? candidate.email}</span>
-                </label>
-              ))}
-          </div>
-          <SmallButton onClick={mergeAccount} tone="warning" disabled={selectedSourceIds.length === 0 || mergePreviewing}>
-            {mergePreviewing ? "檢查衝突中…" : `合併並歸戶${selectedSourceIds.length ? `（${selectedSourceIds.length}）` : ""}`}
-          </SmallButton>
-        </div>
-      </section>
-      {mergeConflictOpen && (
-        <Modal title="選擇要保留的資料" onClose={() => setMergeConflictOpen(false)}>
-          <div className="space-y-4">
-            <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-              可安全去重的資料請選擇要保留的紀錄；政策同意等冪等資料會由系統自動保留主要帳戶的紀錄。投稿等業務資料仍需先在原模組處理。
-            </p>
-            <div className="max-h-[60vh] space-y-4 overflow-y-auto">
-              {mergeConflicts.map((conflict) => (
-                <fieldset key={conflict.key} className="space-y-2 rounded-lg p-3" style={{ border: "1px solid var(--border)" }}>
-                  <legend className="px-1 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{conflict.title}</legend>
-                  <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{conflict.message}</p>
-                  {conflict.resolvable ? conflict.records.map((record) => (
-                    <label key={record.id} className="flex cursor-pointer items-start gap-2 rounded-md p-2" style={{ background: mergeChoices[conflict.key] === record.id ? "var(--primary-dim)" : "var(--bg-elevated)" }}>
-                      <input
-                        type="radio"
-                        name={conflict.key}
-                        checked={mergeChoices[conflict.key] === record.id}
-                        onChange={() => setMergeChoices((current) => ({ ...current, [conflict.key]: record.id }))}
-                        className="mt-1 h-4 w-4 accent-[var(--primary)]"
-                      />
-                      <span className="text-xs leading-5" style={{ color: "var(--text-secondary)" }}>
-                        <span className="font-medium" style={{ color: "var(--text-primary)" }}>{record.side === "target" ? "主要帳戶" : "次要帳戶"}：{record.owner_name}</span>
-                        <br />{record.label}
-                      </span>
-                    </label>
-                  )) : (
-                    <p className="rounded-md p-2 text-xs leading-5" style={{ background: "var(--warning-dim)", color: "var(--text-secondary)" }}>
-                      這類資料不能在帳戶合併時直接刪除，請先在對應業務模組處理。
-                    </p>
-                  )}
-                </fieldset>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2">
-              <SmallButton onClick={() => setMergeConflictOpen(false)}>關閉</SmallButton>
-              {!mergeConflicts.some((conflict) => !conflict.resolvable) && (
-                <SmallButton onClick={() => { setMergeConflictOpen(false); openMergeConfirmation(mergeChoices); }} tone="warning">
-                  選擇後繼續合併
-                </SmallButton>
-              )}
-            </div>
-          </div>
-        </Modal>
-      )}
+      <AccountMergeSection key={user.id} user={user} users={users} onChanged={onRefresh} />
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
