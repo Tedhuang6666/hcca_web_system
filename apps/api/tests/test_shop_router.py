@@ -1981,7 +1981,9 @@ async def test_council_class_payment_emails_cadres_full_class_orders_once(
     )
     assert confirmation is not None
     assert confirmation.payload["cadre_emails"] == [cadre.email]
-    assert confirmation.payload["class_label"] == (school_class.label or school_class.class_code)
+    assert confirmation.payload["class_label"] == (
+        f"{school_class.academic_year} 學年度 {school_class.class_code} 班"
+    )
     assert confirmation.payload["activity_name"] == "校慶商品"
     orders_by_serial = {item["serial_number"]: item for item in confirmation.payload["orders"]}
     assert set(orders_by_serial) == {collected.serial_number, not_collected.serial_number}
