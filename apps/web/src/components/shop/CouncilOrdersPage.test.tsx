@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 
 const api = vi.hoisted(() => ({
-  catalog: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
+  catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
   cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(),
 }));
@@ -24,6 +24,10 @@ beforeEach(() => {
     { id: "shirts", name: "衣服", activity_id: "festival", activity_name: "校慶", series: [], products: [{ id: "shirt", name: "紀念衫" }] },
     { id: "bags", name: "袋子", activity_id: "festival", activity_name: "校慶", series: [], products: [] },
     { id: "cards", name: "卡片", activity_id: "winter", activity_name: "冬季活動", series: [], products: [] },
+  ]);
+  api.listActivities.mockResolvedValue([
+    { id: "festival", name: "校慶" },
+    { id: "winter", name: "冬季活動" },
   ]);
   api.recipientOptions.mockResolvedValue([]);
   api.orderSummary.mockResolvedValue(summary());
