@@ -719,6 +719,7 @@ export type {
   ShopDiscountType,
   ShopOrderCloseCreate,
   ShopActivityDeadlineUpdate,
+  ShopActivityOrderClosureUpdate,
   ShopOrderCloseOut,
   ShopOrdersClearOut,
   ShopPromotionCreate,

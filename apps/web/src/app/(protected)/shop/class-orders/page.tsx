@@ -148,8 +148,9 @@ export default function ClassOrdersPage() {
 
   const catalogProducts = useMemo(() => flattenCatalog(catalog), [catalog]);
   const activeProducts = useMemo(
-    () => catalogProducts.filter((p) => p.status === "active"),
-    [catalogProducts],
+    () => catalogProducts.filter((p) => p.status === "active"
+      && !catalog.find((category) => category.id === p.categoryId)?.order_closed_at),
+    [catalogProducts, catalog],
   );
   const formProducts = useMemo(
     () => activeProducts.filter((product) =>
@@ -486,7 +487,7 @@ export default function ClassOrdersPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    shopApi.catalog()
+    shopApi.catalog(undefined, true)
       .then((cats) => { setCatalog(cats); return cats; })
       .catch(() => { setCatalogFailed(true); setCatalog([]); return []; });
   }, []);

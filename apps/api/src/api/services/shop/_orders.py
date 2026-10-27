@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.config import settings
+from api.models.activity import Activity, ActivityStatus
 from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.receivable import Receivable, ReceivableSource
@@ -367,6 +368,9 @@ async def clear_cart(session: AsyncSession, user_id: uuid.UUID) -> Cart:
 
 def _cart_item_availability(product: Product, quantity: int) -> tuple[bool, str | None]:
     now = datetime.now(UTC)
+    category = product.category or (product.series.category if product.series else None)
+    if category and category.activity and category.activity.order_closed_at:
+        return False, "活動已結單，訂購已鎖定"
     if product.status != ProductStatus.ACTIVE:
         return False, "商品已下架"
     sale_start = product.sale_start
@@ -412,17 +416,25 @@ def serialize_cart(cart: Cart) -> CartOut:
     return CartOut(id=cart.id, items=items_out, total_price=total)
 
 
-async def _assert_activity_open(session: AsyncSession, product: Product) -> None:
-    from api.models.activity import Activity, ActivityStatus
-
-    category = getattr(product, "category", None)
-    series = getattr(product, "series", None)
-    if category is None and series is not None:
-        category = getattr(series, "category", None)
-    activity_id = getattr(category, "activity_id", None) if category else None
+async def _assert_activity_order_unlocked(
+    session: AsyncSession, activity_id: uuid.UUID | None
+) -> Activity | None:
     if not activity_id:
-        return
-    activity = await session.get(Activity, activity_id)
+        return None
+    # 與手動結單互斥；結單完成後的登記不可讀到 identity map 中的舊狀態。
+    activity = await session.scalar(
+        select(Activity)
+        .where(Activity.id == activity_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    if activity is not None and activity.order_closed_at is not None:
+        raise ValueError("活動已結單，訂購已鎖定；既有訂單仍可收款")
+    return activity
+
+
+async def _assert_activity_open(session: AsyncSession, product: Product) -> None:
+    activity = await _assert_activity_order_unlocked(session, _product_activity_id(product))
     if activity is not None and activity.status in (
         ActivityStatus.ENDED,
         ActivityStatus.ARCHIVED,
@@ -951,6 +963,7 @@ async def apply_registration_promotion(
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
     if category_id is not None and order.category_id != category_id:
         raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
+    await _assert_activity_order_unlocked(session, _order_activity_id(order))
     await _apply_order_promotion(session, order, code=code)
     await receivable_svc.sync_shop_order(session, order)
     await session.flush()
@@ -966,7 +979,9 @@ async def _assert_product_registration_open(
     allow_testing: bool = False,
 ) -> None:
     if allow_testing and product.status == ProductStatus.TESTING:
+        await _assert_activity_order_unlocked(session, _product_activity_id(product))
         return
+    await _assert_activity_open(session, product)
     if product.status != ProductStatus.ACTIVE and not (
         allow_sold_out and product.status == ProductStatus.SOLD_OUT
     ):
@@ -983,8 +998,6 @@ async def _assert_product_registration_open(
         raise ValueError(f"商品「{product.name}」尚未開放登記")
     if sale_end and now >= sale_end:
         raise ValueError(f"商品「{product.name}」已截止登記")
-    await _assert_activity_open(session, product)
-
     category_id = product.category_id
     if category_id is None and product.series is not None:
         category_id = product.series.category_id
@@ -1129,6 +1142,7 @@ async def cancel_order(
         raise ValueError(f"訂單狀態 {order.status} 無法取消")
     if order.is_paid or order.is_class_collected:
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+    await _assert_activity_order_unlocked(session, _order_activity_id(order))
     if not bypass_registration_window:
         for item in order.items:
             product = await get_product(session, item.product_id)

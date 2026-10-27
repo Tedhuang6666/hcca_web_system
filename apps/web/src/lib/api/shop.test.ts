@@ -3,6 +3,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { shopApi } from "./shop";
 
 describe("shop quantity API", () => {
+  it("收款用目錄明確保留已結單活動，一般商品目錄沿用隱藏預設", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("[]", {
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    await shopApi.catalog();
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("include_closed");
+    await shopApi.catalog("activity-1", true);
+    const url = new URL(String(fetchMock.mock.calls[1][0]), "http://localhost");
+    expect(url.searchParams.get("include_closed")).toBe("true");
+    expect(url.searchParams.get("activity_id")).toBe("activity-1");
+  });
+
   it("downloads a class receipt for one activity and preserves server errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("%PDF-1.7", {
       headers: { "Content-Type": "application/pdf" },

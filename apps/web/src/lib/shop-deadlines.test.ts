@@ -29,6 +29,11 @@ describe("活動結單與多活動預購", () => {
     expect(productOrderable({ ...product, sale_start: future }, now)).toBe(false);
     expect(categoryOrderable({ ...category("ended", [product]), activity_status: "ended" }, now)).toBe(false);
   });
+  it("手動結單優先於單品延長，收款用目錄仍可判定活動不可訂購", () => {
+    const closed = { ...category("closed", [{ ...product, effective_sale_end: future }]), order_closed_at: past };
+    expect(categoryOrderable(closed, now)).toBe(false);
+    expect(defaultShopCategory([closed, category("other", [product])], "closed", now)?.id).toBe("other");
+  });
   it("全部結單保留可查看的活動，空目錄安全回傳 null", () => {
     const closed = category("closed", [{ ...product, effective_sale_end: past }]);
     expect(defaultShopCategory([closed], "closed", now)).toBe(closed);

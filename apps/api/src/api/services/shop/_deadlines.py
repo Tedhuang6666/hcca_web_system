@@ -1,13 +1,32 @@
 """活動的商品訂購期限。"""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity
 from api.models.shop import Product, ProductCategory, ProductSeries, ProductStatus
+
+
+async def set_activity_order_closure(
+    session: AsyncSession, activity_id: uuid.UUID, *, is_closed: bool
+) -> Activity | None:
+    """只鎖定訂購，保留活動、商品、訂單與收款資料。"""
+    activity = await session.scalar(
+        select(Activity)
+        .where(Activity.id == activity_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if activity is not None:
+        if is_closed:
+            activity.order_closed_at = activity.order_closed_at or datetime.now(UTC)
+        else:
+            activity.order_closed_at = None
+        await session.flush()
+    return activity
 
 
 async def set_activity_order_deadline(

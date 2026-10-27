@@ -18,7 +18,8 @@ export function productOrderable(product: CatalogProductOut, now: number): boole
 export function categoryOrderable(
   category: CatalogCategoryOut, now: number, classClosed = false,
 ): boolean {
-  return !classClosed && category.activity_status !== "ended" && category.activity_status !== "archived"
+  return !classClosed && !category.order_closed_at
+    && category.activity_status !== "ended" && category.activity_status !== "archived"
     && [...category.products, ...category.series.flatMap((series) => series.products)]
       .some((product) => productOrderable(product, now));
 }
