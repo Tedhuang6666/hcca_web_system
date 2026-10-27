@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -92,6 +92,7 @@ from api.schemas.shop import (
     ShopPromotionPublicOut,
     ShopPromotionUpdate,
 )
+from api.schemas.shop_analytics import ShopSalesAnalyticsOut
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import school_class as class_svc
@@ -100,6 +101,7 @@ from api.services.permission import get_user_permission_codes
 from api.services.realtime_events import broadcast_order_updated
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _delegation_codes as delegation_code_svc
+from api.services.shop._analytics import sales_analytics
 from api.services.shop._deadlines import set_activity_order_closure, set_activity_order_deadline
 from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.storage import get_storage
@@ -1373,6 +1375,44 @@ async def clear_all_order_data(session: DbDep, current_user: CurrentUser) -> Sho
         summary=f"清除全部商品訂購資料（{deleted_order_count} 筆訂單）",
     )
     return ShopOrdersClearOut(deleted_order_count=deleted_order_count)
+
+
+@router.get(
+    "/orders/analytics",
+    response_model=ShopSalesAnalyticsOut,
+    summary="活動與品項銷售分析（台北時間、最多 366 天）",
+    dependencies=[Depends(require_any(*_ADMIN_VIEW_CODES))],
+)
+async def order_sales_analytics(
+    session: DbDep,
+    _: CurrentUser,
+    date_from: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
+    date_to: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
+    compare: bool = Query(True),
+    compare_from: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
+    activity_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    product_id: uuid.UUID | None = Query(None),
+    grade: int | None = Query(None, ge=0),
+    class_id: uuid.UUID | None = Query(None),
+    is_paid: bool | None = Query(None),
+) -> ShopSalesAnalyticsOut:
+    try:
+        return await sales_analytics(
+            session,
+            date_from=date_from,
+            date_to=date_to,
+            compare=compare,
+            compare_from=compare_from,
+            activity_id=activity_id,
+            category_id=category_id,
+            product_id=product_id,
+            grade=grade,
+            class_id=class_id,
+            is_paid=is_paid,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get(

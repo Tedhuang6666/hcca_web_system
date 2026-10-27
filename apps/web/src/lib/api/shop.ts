@@ -1,4 +1,5 @@
 import type {
+  ShopSalesAnalyticsOut,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
@@ -7,6 +8,8 @@ import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
+  salesAnalytics: (params: Record<string, string>) =>
+    get<ShopSalesAnalyticsOut>(`/shop/orders/analytics?${new URLSearchParams(params)}`),
   updateActivityDeadline: (id: string, orderClosesAt: string | null) =>
     patch<ActivityOut>(`/shop/activities/${id}/order-deadline`, { order_closes_at: orderClosesAt }),
   updateActivityOrderClosure: (id: string, isClosed: boolean) =>

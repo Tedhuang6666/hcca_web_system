@@ -10574,6 +10574,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 活動與品項銷售分析（台北時間、最多 366 天） */
+        get: operations["order_sales_analytics_shop_orders_analytics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/class": {
         parameters: {
             query?: never;
@@ -29730,6 +29747,185 @@ export interface components {
             target_identifiers?: string[] | null;
             /** Target Product Ids */
             target_product_ids?: string[] | null;
+        };
+        /** ShopSalesAnalyticsOut */
+        ShopSalesAnalyticsOut: {
+            current: components["schemas"]["ShopSalesPeriod"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            previous: components["schemas"]["ShopSalesPeriod"] | null;
+            /**
+             * Timezone
+             * @default Asia/Taipei
+             */
+            timezone: string;
+        };
+        /** ShopSalesDay */
+        ShopSalesDay: {
+            /**
+             * Buyer Count
+             * @default 0
+             */
+            buyer_count: number;
+            /**
+             * Cumulative Amount
+             * @default 0
+             */
+            cumulative_amount: number;
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Order Count
+             * @default 0
+             */
+            order_count: number;
+            /**
+             * Paid Amount
+             * @default 0
+             */
+            paid_amount: number;
+            /**
+             * Total Amount
+             * @default 0
+             */
+            total_amount: number;
+        };
+        /** ShopSalesMetrics */
+        ShopSalesMetrics: {
+            /**
+             * Average Items Per Order
+             * @default 0
+             */
+            average_items_per_order: number;
+            /**
+             * Average Order Amount
+             * @default 0
+             */
+            average_order_amount: number;
+            /**
+             * Buyer Count
+             * @default 0
+             */
+            buyer_count: number;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /**
+             * Discounted Order Count
+             * @default 0
+             */
+            discounted_order_count: number;
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
+            /**
+             * Order Count
+             * @default 0
+             */
+            order_count: number;
+            /**
+             * Paid Amount
+             * @default 0
+             */
+            paid_amount: number;
+            /**
+             * Payment Rate
+             * @default 0
+             */
+            payment_rate: number;
+            /**
+             * Promotion Usage Rate
+             * @default 0
+             */
+            promotion_usage_rate: number;
+            /**
+             * Total Amount
+             * @default 0
+             */
+            total_amount: number;
+            /**
+             * Unpaid Amount
+             * @default 0
+             */
+            unpaid_amount: number;
+        };
+        /** ShopSalesPeriod */
+        ShopSalesPeriod: {
+            /** Amount Bands */
+            amount_bands: components["schemas"]["ShopSalesRow"][];
+            /** Classes */
+            classes: components["schemas"]["ShopSalesRow"][];
+            /** Daily */
+            daily: components["schemas"]["ShopSalesDay"][];
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /** Grades */
+            grades: components["schemas"]["ShopSalesRow"][];
+            /** Hours */
+            hours: components["schemas"]["ShopSalesRow"][];
+            /** Item Bands */
+            item_bands: components["schemas"]["ShopSalesRow"][];
+            metrics: components["schemas"]["ShopSalesMetrics"];
+            /** Products */
+            products: components["schemas"]["ShopSalesRow"][];
+            /** Sources */
+            sources: components["schemas"]["ShopSalesRow"][];
+            /** Variants */
+            variants: components["schemas"]["ShopSalesRow"][];
+        };
+        /** ShopSalesRow */
+        ShopSalesRow: {
+            /**
+             * Buyer Count
+             * @default 0
+             */
+            buyer_count: number;
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Order Count
+             * @default 0
+             */
+            order_count: number;
+            /**
+             * Paid Amount
+             * @default 0
+             */
+            paid_amount: number;
+            /**
+             * Total Amount
+             * @default 0
+             */
+            total_amount: number;
         };
         /** ShortLinkCreate */
         ShortLinkCreate: {
@@ -55291,6 +55487,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopOrdersClearOut"];
+                };
+            };
+        };
+    };
+    order_sales_analytics_shop_orders_analytics_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                compare?: boolean;
+                compare_from?: string | null;
+                activity_id?: string | null;
+                category_id?: string | null;
+                product_id?: string | null;
+                grade?: number | null;
+                class_id?: string | null;
+                is_paid?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSalesAnalyticsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
