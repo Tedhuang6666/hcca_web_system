@@ -139,7 +139,8 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
   const visibleGroups = storefront
     ? [
       { label: "預購", tabs: preorderTabs },
-      { label: "其他工具", tabs: groups.filter((group) => group.label !== "預購").flatMap((group) => group.tabs) },
+      ...groups.filter((group) => group.label === "班代工作"),
+      { label: "其他工具", tabs: groups.filter((group) => !["預購", "班代工作"].includes(group.label)).flatMap((group) => group.tabs) },
     ].filter((group) => group.tabs.length > 0)
     : managementPage
     ? groups.filter((group) => group.label !== "預購").map((group) => group.label === "其他工具"
