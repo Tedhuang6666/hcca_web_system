@@ -179,7 +179,7 @@ function ShopWorkspaceNavigation({ groups }: { groups: ShopNavigationGroup[] }) 
     >
       {visibleGroups.map((group) => group.label !== "其他工具" ? (
         <section key={group.label} className={`shop-workspace-group${group.label === "班代工作" ? " shop-representative-entry" : group.label === "班聯工作" ? " shop-council-entry" : ""}`} aria-label={`${group.label}功能`}>
-          <h2 className="sr-only">{group.label}</h2>
+          <h2 className="shop-workspace-group-label sr-only md:not-sr-only">{group.label}</h2>
           {links(group)}
         </section>
       ) : (
