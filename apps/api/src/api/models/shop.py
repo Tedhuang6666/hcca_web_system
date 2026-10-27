@@ -569,7 +569,8 @@ class ShopOrderPromotion(Base):
 class ShopOrderClose(Base, TimestampMixin):
     """班級訂購結單紀錄（per category × per class）。
 
-    is_active=True 表示目前有效結單；重新開單時設為 False（保留歷程）。
+    is_active=True 表示設定有效；closes_at 有值時到點才截止，空值立即截止。
+    重新開單時設為 False（保留歷程）。
     class_id=None 表示全局關閉（僅管理員使用）。
     """
 
@@ -601,6 +602,7 @@ class ShopOrderClose(Base, TimestampMixin):
         index=True,
     )
     reopened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True

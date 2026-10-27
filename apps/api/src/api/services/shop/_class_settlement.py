@@ -10,8 +10,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import now_local
+from api.models.activity import Activity
 from api.models.school_class import SchoolClass
-from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductStatus, ShopOrderClose
+from api.models.shop import (
+    Order,
+    OrderItem,
+    OrderStatus,
+    Product,
+    ProductCategory,
+    ProductStatus,
+    ShopOrderClose,
+)
 from api.models.user import User
 from api.schemas.shop import CurrentRegistrationUpdate
 from api.services import receivable as receivable_svc
@@ -90,6 +99,7 @@ async def set_class_member_product(
         product,
         class_id=class_id,
         allow_sold_out=existing_quantity > 0,
+        allow_class_closed=True,
     )
 
     locked_quantities: dict[str, int] = {}
@@ -283,7 +293,31 @@ async def close_category_for_class(
     class_id: uuid.UUID | None,
     closed_by_id: uuid.UUID,
     notes: str | None = None,
+    closes_at: datetime | None = None,
 ) -> ShopOrderClose:
+    # 同分類的截止設定互斥，避免重複的有效紀錄。
+    category = await session.scalar(
+        select(ProductCategory).where(ProductCategory.id == category_id).with_for_update()
+    )
+    if category is None:
+        raise ValueError("找不到此商品分類")
+    now = datetime.now(UTC)
+    if closes_at is not None:
+        if class_id is None:
+            raise ValueError("預約截止必須指定班級")
+        if closes_at.tzinfo is None or closes_at <= now:
+            raise ValueError("班級截止時間必須是含時區的未來時間")
+        activity = (
+            await session.get(Activity, category.activity_id) if category.activity_id else None
+        )
+        if activity is not None:
+            if activity.order_closed_at:
+                raise ValueError("活動已全域停止訂購，無法設定班級截止時間")
+            deadline = activity.order_closes_at
+            if deadline is not None:
+                deadline = deadline.replace(tzinfo=UTC) if deadline.tzinfo is None else deadline
+                if closes_at > deadline:
+                    raise ValueError("班級截止時間不得晚於班聯會設定的活動停止訂購時間")
     # 確認沒有重複有效結單
     existing_q = select(ShopOrderClose).where(
         ShopOrderClose.category_id == category_id,
@@ -292,12 +326,20 @@ async def close_category_for_class(
     )
     existing = (await session.execute(existing_q)).scalar_one_or_none()
     if existing:
-        raise ValueError("此分類已結單，請先重新開單再結單")
+        scheduled = existing.closes_at
+        if scheduled is not None and scheduled.tzinfo is None:
+            scheduled = scheduled.replace(tzinfo=UTC)
+        if scheduled is None or scheduled <= now:
+            raise ValueError("此分類已結單，請先重新開單再結單")
+        existing.is_active = False
+        existing.reopened_by_id = closed_by_id
+        existing.reopened_at = now
     close = ShopOrderClose(
         category_id=category_id,
         class_id=class_id,
         closed_by_id=closed_by_id,
         notes=notes,
+        closes_at=closes_at,
         is_active=True,
     )
     session.add(close)

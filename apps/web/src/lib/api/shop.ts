@@ -216,7 +216,7 @@ export const shopApi = {
   deleteVariantOption: (optionId: string) => del<void>(`/shop/variant-options/${optionId}`),
 
   // 結單管理
-  closeCategory: (categoryId: string, body: { class_id?: string; notes?: string }) =>
+  closeCategory: (categoryId: string, body: { class_id?: string; notes?: string; closes_at?: string | null }) =>
     post<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close`, body),
   reopenCategory: (categoryId: string, classId?: string) => {
     const qs = classId ? `?class_id=${classId}` : "";

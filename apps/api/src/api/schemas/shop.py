@@ -771,6 +771,7 @@ class ImageUploadOut(BaseModel):
 class ShopOrderCloseCreate(BaseModel):
     class_id: uuid.UUID | None = None
     notes: str | None = None
+    closes_at: AwareDatetime | None = Field(None, description="班級截止時間；留空立即截止")
 
 
 class ShopOrderCloseOut(BaseModel):
@@ -781,6 +782,7 @@ class ShopOrderCloseOut(BaseModel):
     class_id: uuid.UUID | None
     closed_by_name: str | None = None
     closed_at: datetime
+    closes_at: datetime | None = None
     reopened_at: datetime | None
     notes: str | None
     is_active: bool
@@ -788,6 +790,8 @@ class ShopOrderCloseOut(BaseModel):
 
 class CloseStatusItem(BaseModel):
     is_closed: bool
+    is_global: bool = False
+    closes_at: datetime | None = None
     closed_at: datetime | None = None
     closed_by_name: str | None = None
 

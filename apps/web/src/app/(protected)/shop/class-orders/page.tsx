@@ -1,10 +1,11 @@
 "use client";
 
 import NumberInput from "@/components/ui/NumberInput";
+import ClassDeadlineControls from "@/components/shop/ClassDeadlineControls";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckSquare, Edit2, Lock, LockOpen, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckSquare, Edit2, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
@@ -111,7 +112,6 @@ export default function ClassOrdersPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [closeBusy, setCloseBusy] = useState<string | null>(null);
   const [paidFilter, setPaidFilter] = useState<PaidFilter>("all");
   const [assistedFilter, setAssistedFilter] = useState<AssistedFilter>("all");
   const [activityFilter, setActivityFilter] = useState("all");
@@ -149,8 +149,9 @@ export default function ClassOrdersPage() {
   const catalogProducts = useMemo(() => flattenCatalog(catalog), [catalog]);
   const activeProducts = useMemo(
     () => catalogProducts.filter((p) => p.status === "active"
-      && !catalog.find((category) => category.id === p.categoryId)?.order_closed_at),
-    [catalogProducts, catalog],
+      && !catalog.find((category) => category.id === p.categoryId)?.order_closed_at
+      && !(closeStatus[p.categoryId]?.is_global && closeStatus[p.categoryId]?.is_closed)),
+    [catalogProducts, catalog, closeStatus],
   );
   const formProducts = useMemo(
     () => activeProducts.filter((product) =>
@@ -965,32 +966,6 @@ export default function ClassOrdersPage() {
       toast.error(apiErrorMessage(e, "取消失敗"));
     } finally {
       setBusy(null);
-    }
-  };
-
-  const toggleActivityClose = async (
-    group: { key: string; label: string; categories: CatalogCategoryOut[] },
-    isCurrentlyClosed: boolean,
-  ) => {
-    if (!myClassId) { toast.error("無法取得班級資訊"); return; }
-    setCloseBusy(group.key);
-    try {
-      for (const category of group.categories) {
-        const categoryClosed = closeStatus[category.id]?.is_closed ?? false;
-        if (isCurrentlyClosed && categoryClosed) {
-          await shopApi.reopenCategory(category.id, myClassId);
-        } else if (!isCurrentlyClosed && !categoryClosed) {
-          await shopApi.closeCategory(category.id, { class_id: myClassId });
-        }
-      }
-      toast.success(isCurrentlyClosed
-        ? `「${group.label}」已重新開放`
-        : `「${group.label}」已結單`);
-      await loadCloseStatus(catalog.map((c) => c.id), myClassId);
-    } catch (e) {
-      toast.error(apiErrorMessage(e, isCurrentlyClosed ? "重新開單失敗" : "結單失敗"));
-    } finally {
-      setCloseBusy(null);
     }
   };
 
@@ -2162,40 +2137,14 @@ export default function ClassOrdersPage() {
         <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>結單管理</summary>
         <section aria-labelledby="close-management-heading" className="rounded-lg p-4"
           style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-          <h2 id="close-management-heading" className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品結單管理</h2>
+          <h2 id="close-management-heading" className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級截止設定</h2>
+          <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>班級截止後，同學與家人無法再自行訂購，班代仍可代訂；班聯會全域停止後，班代也無法代訂。</p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {closeActivityGroups.map((group) => {
-              const statuses = group.categories
-                .map((category) => closeStatus[category.id])
-                .filter((status) => status?.is_closed);
-              const isClosed = statuses.length === group.categories.length;
-              const isPartiallyClosed = statuses.length > 0 && !isClosed;
-              const status = statuses[0];
-              const isBusy = closeBusy === group.key;
-              return (
-                <div key={group.key} className="flex items-center justify-between gap-3 rounded-md px-3 py-2"
-                  style={{ border: `1px solid ${isClosed || isPartiallyClosed ? "var(--danger-border)" : "var(--border)"}`, background: isClosed || isPartiallyClosed ? "var(--danger-dim)" : "transparent" }}>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{group.label}</p>
-                    <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                      分類：{group.categories.map((category) => category.name).join("、")}
-                    </p>
-                    {isClosed && status?.closed_at && (
-                      <p className="text-xs" style={{ color: "var(--danger)" }}>
-                        已結單 {new Date(status.closed_at).toLocaleDateString("zh-TW")} {status.closed_by_name ? `· ${status.closed_by_name}` : ""}
-                      </p>
-                    )}
-                    {isPartiallyClosed && <p className="text-xs" style={{ color: "var(--danger)" }}>部分結單 {statuses.length}/{group.categories.length} 個分類</p>}
-                    {!isClosed && !isPartiallyClosed && <p className="text-xs" style={{ color: "var(--text-muted)" }}>開放中</p>}
-                  </div>
-                  <button type="button" onClick={() => toggleActivityClose(group, isClosed)} disabled={isBusy || !myClassId}
-                    className="flex min-h-11 shrink-0 items-center gap-1 rounded-md px-3 text-xs font-medium disabled:opacity-50"
-                    style={{ border: "1px solid var(--border)", color: isClosed ? "var(--success)" : "var(--danger)" }}>
-                    {isBusy ? "處理中" : isClosed ? <><LockOpen size={12} /> 重新開單</> : <><Lock size={12} /> 結單</>}
-                  </button>
-                </div>
-              );
-            })}
+            {closeActivityGroups.map((group) => (
+              <ClassDeadlineControls key={group.key} label={group.label} categories={group.categories}
+                classId={myClassId} statuses={closeStatus}
+                onSaved={async () => { if (myClassId) await loadCloseStatus(catalog.map((category) => category.id), myClassId); }} />
+            ))}
           </div>
         </section>
         </details>
