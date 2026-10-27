@@ -9,6 +9,11 @@ const STATIC_CACHE_NAME = "hcca-static-v5";
 const CHUNK_RELOAD_KEY = "hcca:chunk-reload-at";
 const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
 const MAX_RECENT_REPORTS = 1_000;
+const OPTIONAL_TELEMETRY_PATHS = new Set([
+  "/analytics/page-views",
+  "/analytics/client-metrics/batch",
+  "/analytics/component-metrics/batch",
+]);
 
 const IGNORED_RESOURCE_HOSTS = new Set([
   "connect.facebook.net",
@@ -79,7 +84,8 @@ function apiOrigin(): string {
 
 function diagnosticContext(): Record<string, string | boolean> {
   const navigatorWithConnection = navigator as Navigator & { connection?: BrowserConnection };
-  const release = process.env.NEXT_PUBLIC_APP_RELEASE
+  const release = process.env.NEXT_PUBLIC_BUILD_COMMIT
+    || process.env.NEXT_PUBLIC_APP_RELEASE
     || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA
     || process.env.NEXT_PUBLIC_APP_VERSION;
   return {
@@ -126,6 +132,20 @@ function safeDiagnostics(input: ClientErrorDiagnostics | undefined): ClientError
 /** 將瀏覽器錯誤送到後端；回報失敗絕不能再製造一個未處理 rejection。 */
 export function reportClientError(input: ClientErrorInput): Promise<ClientErrorReceipt | null> {
   if (typeof window === "undefined") return Promise.resolve(null);
+  const scope = input.scope ?? "runtime";
+  const connectionFailure = ["api.network", "api.timeout", "api.refresh-network"].includes(scope)
+    || scope.startsWith("resource:");
+  const optionalTelemetryFailure = scope.startsWith("api.")
+    && connectionFailure
+    && input.diagnostics?.request_method?.toUpperCase() === "POST"
+    && OPTIONAL_TELEMETRY_PATHS.has(input.diagnostics?.request_path?.split(/[?#]/, 1)[0] ?? "");
+  if (scope === "api.offline"
+    || input.diagnostics?.failure_kind === "offline"
+    || (navigator.onLine === false && connectionFailure)
+    || optionalTelemetryFailure
+    || (scope === "securitypolicyviolation" && input.diagnostics?.csp_disposition === "report")) {
+    return Promise.resolve(null);
+  }
   if (recoverFromChunkFailure(chunkFailureUrl(input.message))) return Promise.resolve(null);
 
   const fingerprint = `${input.dedupeKey ?? input.message}|${input.pathname ?? window.location.pathname}`;
@@ -273,6 +293,18 @@ function isNextChunk(url: string | null): boolean {
   }
 }
 
+function isNextStylesheet(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.origin === window.location.origin
+      && parsed.pathname.startsWith("/_next/static/")
+      && parsed.pathname.endsWith(".css");
+  } catch {
+    return false;
+  }
+}
+
 function chunkFailureUrl(message: string): string | null {
   if (!/Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(message)) {
     return null;
@@ -281,7 +313,7 @@ function chunkFailureUrl(message: string): string | null {
 }
 
 function recoverFromChunkFailure(url: string | null): boolean {
-  if (!isNextChunk(url) || navigator.onLine === false) return false;
+  if ((!isNextChunk(url) && !isNextStylesheet(url)) || navigator.onLine === false) return false;
   if (chunkReloadPending) return true;
 
   try {
@@ -383,10 +415,13 @@ export function installGlobalClientErrorReporter(): () => void {
     const details = errorDetails(event.error ?? event.message);
     const resource = target instanceof Element;
     const failedResource = resource ? resourceUrl(target) : null;
+    // Inline style failures already have a CSP event with the blocked directive.
+    if (target instanceof HTMLStyleElement && !failedResource) return;
     if (isIgnoredWindowError(details.message) || isIgnoredResource(failedResource)) return;
     if (
       resource
-      && target instanceof HTMLScriptElement
+      && (target instanceof HTMLScriptElement
+        || (target instanceof HTMLLinkElement && target.relList.contains("stylesheet")))
       && recoverFromChunkFailure(failedResource)
     ) {
       return;

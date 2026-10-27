@@ -19,6 +19,49 @@ async function setupReporter() {
 }
 
 describe("chunk recovery", () => {
+  it.each(["/_next/static/css/stale.css", "/_next/static/chunks/stale.css"])(
+    "recovers a stale stylesheet and reports it if the reload does not fix it: %s",
+    async (href) => {
+      const { installGlobalClientErrorReporter, fetchMock, deleteCache } = await setupReporter();
+      const uninstall = installGlobalClientErrorReporter();
+      const stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = href;
+      document.head.append(stylesheet);
+      try {
+        stylesheet.dispatchEvent(new Event("error"));
+        expect(deleteCache).toHaveBeenCalledTimes(1);
+        expect(fetchMock).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(50);
+
+        stylesheet.dispatchEvent(new Event("error"));
+        expect(deleteCache).toHaveBeenCalledTimes(1);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).scope).toBe("resource:link");
+      } finally {
+        uninstall();
+        stylesheet.remove();
+      }
+    },
+  );
+
+  it("reports an external stylesheet failure without reloading", async () => {
+    const { installGlobalClientErrorReporter, fetchMock, deleteCache } = await setupReporter();
+    const uninstall = installGlobalClientErrorReporter();
+    const stylesheet = document.createElement("link");
+    stylesheet.rel = "stylesheet";
+    stylesheet.href = "https://external.example/_next/static/css/site.css";
+    document.head.append(stylesheet);
+    try {
+      stylesheet.dispatchEvent(new Event("error"));
+      expect(deleteCache).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      uninstall();
+      stylesheet.remove();
+    }
+  });
+
   it.each(["global-error", "global.error", "protected.error", "route:商品訂購", "unhandledrejection"])(
     "recovers %s through the same cache and reload guard",
     async (scope) => {
