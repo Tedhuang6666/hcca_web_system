@@ -325,6 +325,38 @@ describe("班代工作流程", () => {
     }));
   });
 
+  it("lists non-cancelled class orders by seat number", async () => {
+    api.members.mockResolvedValue([
+      { id: "student-12", display_name: "十二號同學", seat_number: 12 },
+      { id: "student-2", display_name: "二號同學", seat_number: 2 },
+      { id: "student-unseated", display_name: "未編座號同學", seat_number: null },
+    ]);
+    api.listClassOrders.mockResolvedValue([
+      { id: "order-12", serial_number: "ORD-12", user_id: "student-12", user_name: "十二號同學",
+        status: "pending", total_price: 100, is_class_collected: false },
+      { id: "cancelled-order", serial_number: "ORD-CANCELLED", user_id: "student-2",
+        user_name: "二號同學", status: "cancelled", total_price: 100, is_class_collected: false },
+      { id: "order-2", serial_number: "ORD-2", user_id: "student-2", user_name: "二號同學",
+        status: "pending", total_price: 100, is_class_collected: false },
+      { id: "refunded-order", serial_number: "ORD-2-REFUNDED", user_id: "student-2",
+        user_name: "二號同學", status: "refunded", total_price: 100, is_class_collected: false },
+      { id: "unseated-order", serial_number: "ORD-UNSEATED", user_id: "student-unseated",
+        user_name: "未編座號同學", status: "pending", total_price: 100, is_class_collected: false },
+    ]);
+    render(<ClassOrdersPage />);
+    fireEvent.click(screen.getByRole("button", { name: "查詢／修改訂單" }));
+
+    await screen.findAllByRole("link", { name: "ORD-2" });
+    const table = screen.getAllByRole("table").find((candidate) =>
+      within(candidate).queryByRole("link", { name: "ORD-2" }),
+    )!;
+    expect(within(table).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "ORD-2", "ORD-2-REFUNDED", "ORD-12", "ORD-UNSEATED",
+    ]);
+    expect(screen.queryByText("ORD-CANCELLED")).not.toBeInTheDocument();
+    expect(screen.getByText("4 筆")).toBeInTheDocument();
+  });
+
   it("defaults collection to the activity with the most uncollected orders", async () => {
     api.catalog.mockResolvedValue([
       { id: "empty-category", name: "空活動", activity_id: "empty", series: [], products: [] },

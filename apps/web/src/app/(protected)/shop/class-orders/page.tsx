@@ -749,15 +749,19 @@ export default function ClassOrdersPage() {
 
   const visibleOrders = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return orders.filter((o) =>
-      (activityFilter === "all"
-        || orderScopeKey(o) === activityFilter)
-      && (!needle
-        || o.serial_number.toLowerCase().includes(needle)
-        || (o.user_name ?? "").toLowerCase().includes(needle)
-        || (o.class_label ?? "").toLowerCase().includes(needle)),
-    );
-  }, [activityFilter, orders, query]);
+    const seatByMemberId = new Map(members.map((member) => [member.id, member.seat_number]));
+    return orders
+      .filter((order) => order.status !== "cancelled"
+        && (activityFilter === "all" || orderScopeKey(order) === activityFilter)
+        && (!needle
+          || order.serial_number.toLowerCase().includes(needle)
+          || (order.user_name ?? "").toLowerCase().includes(needle)
+          || (order.class_label ?? "").toLowerCase().includes(needle)))
+      .sort((a, b) => (seatByMemberId.get(a.user_id) ?? Number.POSITIVE_INFINITY)
+        - (seatByMemberId.get(b.user_id) ?? Number.POSITIVE_INFINITY)
+        || (a.user_name ?? "").localeCompare(b.user_name ?? "", "zh-Hant")
+        || (a.serial_number ?? "").localeCompare(b.serial_number ?? ""));
+  }, [activityFilter, members, orders, query]);
 
   const selectedSet = new Set(selectedIds);
   const selectedOrders = visibleOrders.filter((order) =>
