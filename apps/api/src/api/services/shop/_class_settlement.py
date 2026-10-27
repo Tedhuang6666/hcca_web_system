@@ -280,9 +280,23 @@ async def set_class_paid(
         .scalars()
         .all()
     )
+    newly_paid_orders: list[Order] = []
     for order in orders:
         if order.is_paid != is_paid:
             await set_order_paid(session, order, is_paid=is_paid, actor_id=actor_id)
+            if is_paid:
+                newly_paid_orders.append(order)
+    if newly_paid_orders:
+        from api.services.shop._class_payment_notifications import (
+            queue_class_payment_confirmation,
+        )
+
+        await queue_class_payment_confirmation(
+            session,
+            class_id=class_id,
+            activity_id=activity_id,
+            order_ids=[order.id for order in orders],
+        )
     return orders
 
 

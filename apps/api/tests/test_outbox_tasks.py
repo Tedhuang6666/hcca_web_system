@@ -11,6 +11,7 @@ from api.models.outbox import OutboxEvent
 from api.services.outbox import (
     _dispatch,
     _handle_petition_external_notify,
+    _handle_shop_class_payment_confirmed,
     _handle_shop_order_confirmed,
 )
 from api.services.outbox_tasks import process_outbox
@@ -133,3 +134,49 @@ def test_shop_order_confirmation_preserves_item_line_breaks(
     assert "規格：大盒</p>" in rendered
     assert "商品小計：NT$ 802<br>優惠折抵：− NT$ 20<br>" in rendered
     assert "應付總額：NT$ 782" in rendered
+
+
+def test_shop_class_payment_confirmation_emails_cadre_with_escaped_order_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages: list[tuple[object, ...]] = []
+
+    def fake_enqueue_email(*args: object, **kwargs: object) -> None:
+        messages.append(args)
+
+    monkeypatch.setattr("api.services.mail.enqueue_email", fake_enqueue_email)
+    _handle_shop_class_payment_confirmed(
+        {
+            "cadre_emails": ["cadre@example.com"],
+            "class_label": "<115 班>",
+            "activity_name": "校慶商品",
+            "orders": [
+                {
+                    "serial_number": "ORD-TEST-001",
+                    "student_name": "<小明>",
+                    "student_id": "11510",
+                    "total_price": 100,
+                    "is_class_collected": False,
+                    "items": [
+                        {
+                            "product_name": "紀念衫<script>",
+                            "quantity": 2,
+                            "subtotal": 100,
+                            "selected_options": [{"group_name": "尺寸", "value": "M"}],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert len(messages) == 1
+    assert messages[0][0] == "cadre@example.com"
+    assert "班聯收款確認" in str(messages[0][1])
+    body = str(messages[0][2])
+    assert "ORD-TEST-001" in body
+    assert "紀念衫&lt;script&gt; × 2（尺寸：M），NT$ 100" in body
+    assert "&lt;小明&gt;（11510）" in body
+    assert "班代尚未收款" in body
+    assert "&lt;115 班&gt;" in body
+    assert "<script>" not in body

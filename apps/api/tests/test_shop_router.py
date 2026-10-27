@@ -1909,6 +1909,111 @@ async def test_council_can_confirm_whole_class_without_changing_cadre_notes(
     assert first.is_class_collected is True and second.is_class_collected is False
 
 
+async def test_council_class_payment_emails_cadres_full_class_orders_once(
+    db_session, authed_client_factory
+) -> None:
+    school_class = await _make_class(db_session)
+    other_class = await _make_class(db_session, start="21501", end="21540")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, school_class, user_id=cadre.id)
+    manager = await _bare_user(db_session)
+    buyer_one = await _bare_user(db_session, student_id="11510")
+    buyer_two = await _bare_user(db_session, student_id="11511")
+    outsider = await _bare_user(db_session, student_id="21510")
+    activity = Activity(name="校慶商品", status=ActivityStatus.ACTIVE)
+    other_activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE)
+    db_session.add_all([activity, other_activity])
+    await db_session.flush()
+    product = await _make_active_product(db_session, manager, price=50)
+    product.name = "紀念衫"
+
+    collected = await _seed_order(
+        db_session,
+        buyer_one,
+        class_id=school_class.id,
+        total_price=100,
+        is_class_collected=True,
+    )
+    collected.activity_id = activity.id
+    db_session.add(
+        OrderItem(
+            order_id=collected.id,
+            product_id=product.id,
+            quantity=2,
+            unit_price=50,
+            selected_options=[{"group_name": "尺寸", "value": "M"}],
+        )
+    )
+    not_collected = await _seed_order(
+        db_session, buyer_two, class_id=school_class.id, total_price=150
+    )
+    not_collected.activity_id = activity.id
+    db_session.add(
+        OrderItem(
+            order_id=not_collected.id,
+            product_id=product.id,
+            quantity=3,
+            unit_price=50,
+        )
+    )
+    another_activity_order = await _seed_order(
+        db_session, buyer_two, class_id=school_class.id, total_price=900
+    )
+    another_activity_order.activity_id = other_activity.id
+    another_class_order = await _seed_order(
+        db_session, outsider, class_id=other_class.id, total_price=800
+    )
+    another_class_order.activity_id = activity.id
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    await db_session.flush()
+
+    ac = authed_client_factory(manager)
+    path = f"/shop/orders/classes/{school_class.id}/payment"
+    payload = {"is_paid": True, "activity_id": str(activity.id)}
+    response = await ac.patch(path, json=payload)
+    assert response.status_code == 200
+    assert response.json()["updated_orders"] == 2
+    assert collected.is_paid is True and not_collected.is_paid is True
+    assert another_activity_order.is_paid is False and another_class_order.is_paid is False
+
+    confirmation = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "shop.class_payment_confirmed")
+    )
+    assert confirmation is not None
+    assert confirmation.payload["cadre_emails"] == [cadre.email]
+    assert confirmation.payload["class_label"] == (school_class.label or school_class.class_code)
+    assert confirmation.payload["activity_name"] == "校慶商品"
+    orders_by_serial = {item["serial_number"]: item for item in confirmation.payload["orders"]}
+    assert set(orders_by_serial) == {collected.serial_number, not_collected.serial_number}
+    first_details = orders_by_serial[collected.serial_number]
+    assert first_details["student_name"] == buyer_one.display_name
+    assert first_details["student_id"] == buyer_one.student_id
+    assert first_details["total_price"] == 100
+    assert first_details["is_class_collected"] is True
+    assert first_details["items"][0]["product_name"] == "紀念衫"
+    assert first_details["items"][0]["selected_options"] == [{"group_name": "尺寸", "value": "M"}]
+    assert orders_by_serial[not_collected.serial_number]["is_class_collected"] is False
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.event_type == "shop.order_confirmed")
+        )
+        == 0
+    )
+
+    repeated = await ac.patch(path, json=payload)
+    assert repeated.status_code == 200
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.event_type == "shop.class_payment_confirmed")
+        )
+        == 1
+    )
+
+
 # ── 班級幹部檢視 ──────────────────────────────────────────────────────────────
 
 

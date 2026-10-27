@@ -164,6 +164,8 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
         await _handle_regulation_published(db, payload)
     elif etype == "shop.order_confirmed":
         _handle_shop_order_confirmed(payload)
+    elif etype == "shop.class_payment_confirmed":
+        _handle_shop_class_payment_confirmed(payload)
     elif etype == "announcement.published":
         await _handle_announcement_published(db, payload)
     elif etype == "petition.external_notify":
@@ -275,6 +277,89 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
         enqueue_email(buyer_email, subject, html)
     except Exception as exc:
         logger.warning("shop.order_confirmed email failed: %s", exc)
+
+
+def _handle_shop_class_payment_confirmed(payload: dict) -> None:
+    """班聯確認整班收款後，將該班訂購明細寄給班代。"""
+    from api.core.config import settings
+    from api.services.mail import enqueue_email
+
+    cadre_emails = payload.get("cadre_emails", [])
+    orders = payload.get("orders", [])
+    if not isinstance(cadre_emails, list) or not isinstance(orders, list) or not orders:
+        return
+
+    raw_class_label = str(payload.get("class_label") or "班級")
+    raw_activity_name = str(payload.get("activity_name") or "一般商品")
+    total_amount = 0
+    collected_count = 0
+    order_rows = []
+    for order in orders:
+        if not isinstance(order, dict):
+            continue
+        total_price = int(order.get("total_price", 0) or 0)
+        total_amount += total_price
+        is_class_collected = bool(order.get("is_class_collected"))
+        collected_count += int(is_class_collected)
+        student_name = html_escape(str(order.get("student_name") or "同學"))
+        student_id = html_escape(str(order.get("student_id") or ""))
+        student_label = f"{student_name}（{student_id}）" if student_id else student_name
+        serial_number = html_escape(str(order.get("serial_number") or ""))
+        item_rows = []
+        for item in order.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            product_name = html_escape(str(item.get("product_name") or "商品"))
+            quantity = int(item.get("quantity", 0) or 0)
+            subtotal = int(item.get("subtotal", 0) or 0)
+            options = []
+            for option in item.get("selected_options", []):
+                if not isinstance(option, dict) or not option.get("value"):
+                    continue
+                value = html_escape(str(option["value"]))
+                group_name = option.get("group_name")
+                options.append(f"{html_escape(str(group_name))}：{value}" if group_name else value)
+            option_text = f"（{'、'.join(options)}）" if options else ""
+            item_rows.append(f"{product_name} × {quantity}{option_text}，NT$ {subtotal:,}")
+        items_html = "<br>".join(item_rows) or "無商品明細"
+        collection_status = "班代已收款" if is_class_collected else "班代尚未收款"
+        order_rows.append(
+            "<tr>"
+            f"<td>{student_label}</td>"
+            f"<td>{serial_number}</td>"
+            f"<td>{items_html}</td>"
+            f"<td>NT$ {total_price:,}</td>"
+            f"<td>{collection_status}</td>"
+            "</tr>"
+        )
+    if not order_rows:
+        return
+
+    subject_label = " ".join(f"【{value}】" for value in (raw_class_label, raw_activity_name))
+    subject_label = subject_label.replace("\r", " ").replace("\n", " ")
+    subject = f"【班聯收款確認】{subject_label}"
+    class_label = html_escape(raw_class_label)
+    activity_name = html_escape(raw_activity_name)
+    base = html_escape(settings.FRONTEND_BASE_URL.rstrip("/"), quote=True)
+    html = (
+        f"<p>班聯會已確認<strong>{class_label}</strong>的「{activity_name}」款項。</p>"
+        f"<p>有效訂單 {len(order_rows)} 筆，訂購總額 NT$ {total_amount:,}；"
+        f"班代已登記收款 {collected_count} 筆，尚未登記 {len(order_rows) - collected_count} 筆。</p>"
+        '<table style="border-collapse:collapse;width:100%">'
+        "<thead><tr><th>學生</th><th>訂單編號</th><th>訂購品項</th>"
+        "<th>金額</th><th>班代收款</th></tr></thead>"
+        f"<tbody>{''.join(order_rows)}</tbody></table>"
+        f'<p><a href="{base}/shop/class-orders">查看班級訂單</a></p>'
+    )
+    for email in cadre_emails:
+        if not isinstance(email, str) or not email.strip():
+            continue
+        try:
+            enqueue_email(email.strip(), subject, html)
+        except Exception:
+            logger.warning(
+                "shop.class_payment_confirmed email failed class=%s", class_label, exc_info=True
+            )
 
 
 async def _handle_announcement_published(db: AsyncSession, payload: dict) -> None:
