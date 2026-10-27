@@ -1,0 +1,217 @@
+.shop-sales {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.shop-sales h2 {
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+.shop-sales h3 {
+  font-size: 1.05rem;
+  font-weight: 650;
+  margin-bottom: 1rem;
+}
+.sales-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+.sales-toolbar h2 {
+  margin-right: auto;
+}
+.sales-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  font-size: 0.875rem;
+}
+.sales-toolbar input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+.sales-toolbar input[type="date"] {
+  width: 155px;
+}
+.sales-muted {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  margin-top: 0.5rem;
+}
+.sales-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 1.5rem 0;
+  font-size: 0.875rem;
+}
+.sales-period span {
+  color: var(--text-secondary);
+}
+.sales-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-block: 1px solid var(--border);
+}
+.sales-metrics > div {
+  padding: 1.25rem 0.75rem;
+}
+.sales-metrics dt {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+.sales-metrics dd {
+  font-size: 1.5rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  margin-top: 0.375rem;
+}
+.sales-trend {
+  margin-top: 2.5rem;
+}
+.sales-measures {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.sales-measures button[aria-pressed="true"] {
+  background: var(--bg-elevated);
+  color: var(--primary-text);
+  font-weight: 650;
+}
+.sales-trend svg {
+  width: 100%;
+  min-height: 140px;
+  margin: 1rem 0;
+}
+.sales-trend svg text {
+  fill: var(--text-secondary);
+  font-size: 16px;
+}
+.sales-distributions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.5rem;
+  margin-top: 2.5rem;
+}
+.sales-distribution {
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+.sales-bars {
+  display: grid;
+  gap: 1rem;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  scrollbar-color: var(--border) transparent;
+}
+.sales-bar-label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+}
+.sales-bar-label > span:first-child {
+  overflow-wrap: anywhere;
+}
+.sales-bar-track {
+  height: 8px;
+  background: var(--bg-elevated);
+  margin-top: 0.5rem;
+  border-radius: 2px;
+}
+.sales-bar-track > div {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+}
+.sales-bar-row .sales-muted {
+  margin-top: 0.2rem;
+}
+.sales-detail {
+  border-top: 1px solid var(--border);
+  margin-top: 1.5rem;
+}
+.shop-sales summary {
+  min-height: 48px;
+  display: list-item;
+  align-content: center;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+.sales-table-scroll {
+  overflow-x: auto;
+  margin-block: 0.5rem 1rem;
+}
+.shop-sales table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+.shop-sales th,
+.shop-sales td {
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem;
+}
+.shop-sales th:first-child {
+  text-align: left;
+}
+.shop-sales thead th {
+  color: var(--text-secondary);
+  font-weight: 550;
+}
+.sales-notes {
+  max-width: 75ch;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+.sales-notes p {
+  margin-bottom: 0.75rem;
+}
+.sales-error {
+  color: var(--danger);
+  margin-top: 1rem;
+}
+.sales-empty {
+  padding: 1rem 0;
+  color: var(--text-secondary);
+}
+.shop-sales :is(button, input, summary):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.shop-sales ::selection {
+  background: var(--primary);
+  color: var(--card-bg);
+}
+@media (max-width: 640px) {
+  .sales-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sales-metrics > div {
+    padding: 1rem 0.375rem;
+  }
+  .sales-metrics dd {
+    font-size: 1.25rem;
+  }
+  .sales-distributions {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
+  }
+  .sales-toolbar input[type="date"] {
+    font-size: 16px;
+  }
+  .sales-toolbar h2 {
+    flex-basis: 100%;
+  }
+}

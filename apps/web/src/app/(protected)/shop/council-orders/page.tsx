@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
+import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart2, Lock, LockOpen, RefreshCw } from "lucide-react";
@@ -21,7 +22,7 @@ import type {
   SchoolClassListItem,
 } from "@/lib/types";
 
-type Tab = "summary" | "quantities" | "orders";
+type Tab = "summary" | "quantities" | "orders" | "analytics";
 
 function money(v: number) {
   return `NT$${v.toLocaleString("zh-TW")}`;
@@ -59,6 +60,7 @@ export default function CouncilOrdersPage() {
   const canManageOrderClosures = canConfirmClassPayment || permissions.has("shop:view_all");
   const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
   const [tab, setTab] = useState<Tab>("summary");
+  const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
   const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
 
   // 篩選
@@ -288,7 +290,7 @@ export default function CouncilOrdersPage() {
     const pendingRequests = requestVersion;
     if (tab === "summary") loadSummary();
     else if (tab === "quantities") loadQuantities();
-    else loadOrders();
+    else if (tab === "orders") loadOrders();
     return () => { pendingRequests.current++; };
   }, [tab, loadSummary, loadQuantities, loadOrders]);
 
@@ -421,8 +423,8 @@ export default function CouncilOrdersPage() {
     catalog.find((item) => item.id === categoryId)?.name,
     allProducts.find((item) => item.id === productId)?.name,
     isPaid === "true" ? "班聯已確認" : isPaid === "false" ? "班聯未確認" : "全部收款狀態",
-    statusFilter ? { pending: "待確認訂單", confirmed: "已確認訂單", cancelled: "已取消訂單", refunded: "已退款訂單" }[statusFilter] : tab === "orders" ? "全部訂單狀態" : "排除取消與退款",
-    (dateFrom || dateTo) && `${dateFrom || "不限起日"} 至 ${dateTo || "不限迄日"}`,
+    statusFilter && tab !== "analytics" ? { pending: "待確認訂單", confirmed: "已確認訂單", cancelled: "已取消訂單", refunded: "已退款訂單" }[statusFilter] : tab === "orders" ? "全部訂單狀態" : "排除取消與退款",
+    (dateFrom || dateTo) && `${dateFrom || (tab === "analytics" ? "迄日前 29 天" : "不限起日")} 至 ${dateTo || (tab === "analytics" ? "今天" : "不限迄日")}`,
     tab === "orders" && search && `搜尋：${search}`,
   ].filter(Boolean);
 
@@ -439,15 +441,15 @@ export default function CouncilOrdersPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canViewAdvancedStats && <Link href="/shop/admin?view=stats" className="btn btn-ghost min-h-11">進階訂購統計</Link>}
-          <button type="button" onClick={() => { if (tab === "summary") loadSummary(); else if (tab === "quantities") loadQuantities(); else loadOrders(); }}
-            disabled={loading || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
+          <button type="button" onClick={() => { if (tab === "summary") loadSummary(); else if (tab === "quantities") loadQuantities(); else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1); else loadOrders(); }}
+            disabled={(tab !== "analytics" && loading) || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
           </button>
         </div>
       </header>
 
       <nav className="shop-task-switch" aria-label="班聯統籌工作">
-        {([["summary", "班級繳款"], ["quantities", "商品總量"], ["orders", "查找訂單"]] as const).map(([key, label]) => (
+        {([["summary", "班級繳款"], ["quantities", "商品總量"], ["orders", "查找訂單"], ["analytics", "銷售分析"]] as const).map(([key, label]) => (
           <button key={key} type="button" disabled={mutationBusy} aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>
         ))}
       </nav>
@@ -471,6 +473,13 @@ export default function CouncilOrdersPage() {
               ))}
             </select>
           </label>
+          {tab === "analytics" && <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>商品</span>
+            <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
+              <option value="">全部商品</option>
+              {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>}
           {hasFilters && <button type="button" className="btn btn-ghost" onClick={resetFilters}>清除篩選</button>}
         </div>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>目前範圍：{scopeLabels.join(" · ")}</p>
@@ -510,13 +519,13 @@ export default function CouncilOrdersPage() {
               {catalog.filter((category) => visibleCategoryIds.has(category.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          <label className="grid gap-1 text-sm">
+          {tab !== "analytics" && <label className="grid gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>商品</span>
               <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
                 <option value="">全部商品</option>
                 {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-          </label>
+          </label>}
           <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>班聯收款狀態</span>
             <select className="input" value={isPaid} onChange={(e) => setIsPaid(e.target.value)}>
@@ -525,7 +534,7 @@ export default function CouncilOrdersPage() {
               <option value="false">班聯未確認</option>
             </select>
           </label>
-          <label className="grid gap-1 text-sm">
+          {tab !== "analytics" && <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>訂單狀態</span>
             <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">{tab === "orders" ? "全部訂單狀態" : "排除取消與退款"}</option>
@@ -534,7 +543,7 @@ export default function CouncilOrdersPage() {
               <option value="cancelled">已取消</option>
               <option value="refunded">已退款</option>
             </select>
-          </label>
+          </label>}
           <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>訂購起日</span>
             <input className="input" type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
@@ -553,8 +562,15 @@ export default function CouncilOrdersPage() {
       </section>
       {batchResult && <p role="status" className="rounded-lg p-3 text-sm" style={{ background: "var(--bg-elevated)" }}>{batchResult}</p>}
 
-      {loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
-      <div hidden={Boolean(loadError)}>
+      {tab === "analytics" && <ShopSalesAnalytics refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
+        ...(activityId !== "all" ? { activity_id: activityId } : {}),
+        ...(grade ? { grade } : {}), ...(classId ? { class_id: classId } : {}),
+        ...(categoryId ? { category_id: categoryId } : {}), ...(productId ? { product_id: productId } : {}),
+        ...(isPaid ? { is_paid: isPaid } : {}), ...(dateFrom ? { date_from: dateFrom } : {}),
+        ...(dateTo ? { date_to: dateTo } : {}),
+      }} />}
+      {tab !== "analytics" && loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
+      <div hidden={tab !== "analytics" && Boolean(loadError)}>
       {/* Tab 1：班級彙總 */}
       {tab === "summary" && (
         <section>
