@@ -105,6 +105,20 @@ def running_server(
                 else:
                     log.seek(0)
                     raise AssertionError(f"Gunicorn failed to reload:\n{log.read()}")
+                # HUP starts the replacement before the previous worker finishes
+                # graceful shutdown; exclude that expected overlap from recycling checks.
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline and process.poll() is None:
+                    try:
+                        os.kill(initial_worker, 0)
+                    except ProcessLookupError:
+                        break
+                    time.sleep(0.05)
+                else:
+                    log.seek(0)
+                    raise AssertionError(
+                        f"Gunicorn did not retire the previous worker:\n{log.read()}"
+                    )
             yield port
         finally:
             if process.poll() is None:
