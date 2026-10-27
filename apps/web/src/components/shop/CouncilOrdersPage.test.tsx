@@ -5,7 +5,7 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 const api = vi.hoisted(() => ({
   catalog: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
-  cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(),
+  cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(),
 }));
 const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -60,6 +60,27 @@ describe("全校收款與訂單", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
     await screen.findByText("批次管理訂購");
     expect(screen.queryByRole("button", { name: /下載.*簽收單/ })).not.toBeInTheDocument();
+  });
+
+  it("downloads selected classes or every class for the selected activity without confirming payment", async () => {
+    api.orderSummary.mockResolvedValue({
+      ...summary(),
+      rows: [
+        { key: "class-1", label: "一年一班", order_count: 1, item_count: 1, total_amount: 100, paid_amount: 0, unpaid_amount: 100 },
+        { key: "class-2", label: "一年二班", order_count: 1, item_count: 1, total_amount: 200, paid_amount: 0, unpaid_amount: 200 },
+      ],
+    });
+    api.downloadClassReceipts.mockResolvedValue(new Blob(["%PDF-1.7"], { type: "application/pdf" }));
+    await openPage();
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "選取一年一班收據" }));
+    fireEvent.click(screen.getByRole("button", { name: "下載所選 1 班 PDF" }));
+    await waitFor(() => expect(api.downloadClassReceipts).toHaveBeenCalledWith("festival", ["class-1"]));
+
+    fireEvent.click(screen.getByRole("button", { name: "下載全部班級 PDF" }));
+    await waitFor(() => expect(api.downloadClassReceipts).toHaveBeenCalledWith("festival"));
+    expect(api.setClassPaid).not.toHaveBeenCalled();
   });
 
   const order = {

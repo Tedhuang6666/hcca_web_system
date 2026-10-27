@@ -27,10 +27,39 @@ describe("shop quantity API", () => {
     expect(url.searchParams.get("activity_id")).toBe("activity-1");
     await shopApi.downloadClassReceipt("class-1", null);
     expect(String(fetchMock.mock.calls[1][0])).not.toContain("activity_id");
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "請先確認收款" }), {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "此活動尚無有效訂單可產生收據" }), {
       status: 400, headers: { "Content-Type": "application/json" },
     }));
-    await expect(shopApi.downloadClassReceipt("class-1", null)).rejects.toThrow("請先確認收款");
+    await expect(shopApi.downloadClassReceipt("class-1", null)).rejects.toThrow("此活動尚無有效訂單可產生收據");
+  });
+
+  it("downloads selected class receipts in one request or all classes for an activity", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("%PDF-1.7", {
+      headers: { "Content-Type": "application/pdf" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await shopApi.downloadClassReceipts("activity-1", ["class-1", "class-2"]);
+    const selectedRequest = fetchMock.mock.calls[0];
+    expect(String(selectedRequest[0])).toMatch(/\/shop\/orders\/classes\/receipts\.pdf$/);
+    expect(selectedRequest[1].method).toBe("POST");
+    expect(new Headers(selectedRequest[1].headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(selectedRequest[1].body)).toEqual({
+      activity_id: "activity-1",
+      class_ids: ["class-1", "class-2"],
+    });
+
+    await shopApi.downloadClassReceipts("activity-1");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      activity_id: "activity-1",
+      class_ids: null,
+    });
+
+    await shopApi.downloadClassReceipts(null);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({
+      activity_id: null,
+      class_ids: null,
+    });
   });
 
   afterEach(() => {

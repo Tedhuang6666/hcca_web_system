@@ -10643,6 +10643,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/classes/receipts.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批次下載班級收款簽收單 */
+        post: operations["download_class_receipts_shop_orders_classes_receipts_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/classes/{class_id}/payment": {
         parameters: {
             query?: never;
@@ -14884,6 +14901,19 @@ export interface components {
              * @description 班聯會是否已收到款項
              */
             is_paid: boolean;
+        };
+        /** ClassReceiptBatchCreate */
+        ClassReceiptBatchCreate: {
+            /**
+             * Activity Id
+             * @description 收據活動；null 代表一般商品
+             */
+            activity_id: string | null;
+            /**
+             * Class Ids
+             * @description 指定班級；未提供時匯出此活動所有有有效訂單的班級
+             */
+            class_ids?: string[] | null;
         };
         /** ClassRepresentativeOverviewItemOut */
         ClassRepresentativeOverviewItemOut: {
@@ -55440,6 +55470,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopClassSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_class_receipts_shop_orders_classes_receipts_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassReceiptBatchCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             /** @description Validation Error */

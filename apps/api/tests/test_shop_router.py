@@ -2033,7 +2033,7 @@ def _receipt_totals(pdf) -> list[str]:
 
 
 @pytest.mark.parametrize("permission", [None, "shop:view_all", "class:shop_collect"])
-async def test_class_receipt_rejects_users_without_payment_permission(
+async def test_class_receipt_rejects_users_without_shop_manage_permission(
     db_session, client, authed_client_factory, permission
 ) -> None:
     sc = await _make_class(db_session)
@@ -2042,10 +2042,17 @@ async def test_class_receipt_rejects_users_without_payment_permission(
     user = await _bare_user(db_session)
     if permission:
         await _grant_permission(db_session, user, permission)
-    assert (await authed_client_factory(user).get(url)).status_code == 403
+    ac = authed_client_factory(user)
+    assert (await ac.get(url)).status_code == 403
+    assert (
+        await ac.post(
+            "/shop/orders/classes/receipts.pdf",
+            json={"activity_id": None, "class_ids": [str(sc.id)]},
+        )
+    ).status_code == 403
 
 
-async def test_class_receipt_contains_only_paid_active_orders_in_class_and_activity(
+async def test_class_receipt_contains_all_active_orders_in_class_and_activity(
     db_session, authed_client_factory, monkeypatch
 ) -> None:
     from io import BytesIO
@@ -2066,9 +2073,9 @@ async def test_class_receipt_contains_only_paid_active_orders_in_class_and_activ
     await db_session.flush()
     product = await _make_active_product(db_session, manager, price=999)
     product.name = "紀念衫"
-    for quantity, amount in [(3, 270), (1, 100)]:
+    for quantity, amount, is_paid in [(3, 270, True), (1, 100, False)]:
         order = await _seed_order(
-            db_session, buyer, class_id=sc.id, total_price=amount, is_paid=True
+            db_session, buyer, class_id=sc.id, total_price=amount, is_paid=is_paid
         )
         order.activity_id = activity.id
         order.subtotal_price = quantity * 100
@@ -2082,9 +2089,8 @@ async def test_class_receipt_contains_only_paid_active_orders_in_class_and_activ
                 selected_options=[{"group_name": "尺寸", "value": "L"}],
             )
         )
-    # 同班未繳、取消、退款、其他活動、一般商品，以及另一班均不得列入。
+    # 取消、退款、其他活動、一般商品，以及另一班均不得列入。
     for class_id, activity_id, paid, order_status in [
-        (sc.id, activity.id, False, OrderStatus.PENDING),
         (sc.id, activity.id, True, OrderStatus.CANCELLED),
         (sc.id, activity.id, True, OrderStatus.REFUNDED),
         (sc.id, other_activity.id, True, OrderStatus.PENDING),
@@ -2133,7 +2139,7 @@ async def test_class_receipt_contains_only_paid_active_orders_in_class_and_activ
     assert "9,999" not in text
 
 
-async def test_class_receipt_requires_council_payment_and_does_not_mark_paid(
+async def test_class_receipt_download_does_not_require_or_mark_paid(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session)
@@ -2142,10 +2148,65 @@ async def test_class_receipt_requires_council_payment_and_does_not_mark_paid(
     await _grant_permission(db_session, manager, "shop:manage")
     order = await _seed_order(db_session, buyer, class_id=sc.id, is_class_collected=True)
     response = await authed_client_factory(manager).get(f"/shop/orders/classes/{sc.id}/receipt.pdf")
-    assert response.status_code == 400
-    assert "請先確認收款" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
     await db_session.refresh(order)
     assert order.is_paid is False and order.is_class_collected is True
+
+
+async def test_class_receipt_batch_combines_selected_classes_and_all_classes(
+    db_session, authed_client_factory
+) -> None:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    classes = [
+        await _make_class(db_session),
+        await _make_class(db_session, start="21501", end="21540"),
+        await _make_class(db_session, start="31501", end="31540"),
+    ]
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    activity = Activity(name="批次收據活動", status=ActivityStatus.ACTIVE)
+    other_activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE)
+    db_session.add_all([activity, other_activity])
+    await db_session.flush()
+    for school_class, amount, is_paid in zip(
+        classes, (100, 200, 300), (False, True, False), strict=True
+    ):
+        order = await _seed_order(
+            db_session, buyer, class_id=school_class.id, total_price=amount, is_paid=is_paid
+        )
+        order.activity_id = activity.id
+    other_order = await _seed_order(db_session, buyer, class_id=classes[2].id, total_price=900)
+    other_order.activity_id = other_activity.id
+    await db_session.flush()
+    ac = authed_client_factory(manager)
+
+    selected_response = await ac.post(
+        "/shop/orders/classes/receipts.pdf",
+        json={"activity_id": str(activity.id), "class_ids": [str(item.id) for item in classes[:2]]},
+    )
+    assert selected_response.status_code == 200
+    selected_pdf = PdfReader(BytesIO(selected_response.content))
+    selected_text = "".join(page.extract_text() for page in selected_pdf.pages)
+    assert len(selected_pdf.pages) == 2
+    assert classes[0].class_code in selected_text and classes[1].class_code in selected_text
+    assert classes[2].class_code not in selected_text
+    assert "900" not in selected_text
+    assert _receipt_totals(selected_pdf) == ["100", "100", "200", "200"]
+
+    all_response = await ac.post(
+        "/shop/orders/classes/receipts.pdf", json={"activity_id": str(activity.id)}
+    )
+    assert all_response.status_code == 200
+    all_pdf = PdfReader(BytesIO(all_response.content))
+    all_text = "".join(page.extract_text() for page in all_pdf.pages)
+    assert len(all_pdf.pages) == 3
+    assert all(school_class.class_code in all_text for school_class in classes)
+    assert "900" not in all_text
 
 
 async def test_class_receipt_missing_class_and_activity(db_session, authed_client_factory) -> None:
@@ -2188,6 +2249,15 @@ async def test_class_receipt_without_activity_includes_only_general_goods(
     assert text.count("一般商品") == 2
     assert _receipt_totals(pdf) == ["100", "100"]
     assert "9,999" not in text
+
+    batch_response = await authed_client_factory(admin_user).post(
+        "/shop/orders/classes/receipts.pdf",
+        json={"activity_id": None, "class_ids": [str(sc.id)]},
+    )
+    assert batch_response.status_code == 200
+    batch_pdf = PdfReader(BytesIO(batch_response.content))
+    assert len(batch_pdf.pages) == 1
+    assert "一般商品" in batch_pdf.pages[0].extract_text()
 
 
 async def _add_person_class_member(db, user, school_class):

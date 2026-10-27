@@ -96,12 +96,13 @@ from api.services.shop._promotions import (
     serialize_public_promotion,
     update_promotion,
 )
-from api.services.shop._receipts import export_class_receipt_pdf
+from api.services.shop._receipts import export_class_receipt_pdf, export_class_receipts_pdf
 from api.services.shop._registration_preview import preview_registration_promotion
 
 __all__ = [
     "preview_registration_promotion",
     "export_class_receipt_pdf",
+    "export_class_receipts_pdf",
     # catalog
     "generate_order_serial",
     "get_category",

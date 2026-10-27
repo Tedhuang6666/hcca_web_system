@@ -66,6 +66,7 @@ export default function CouncilOrdersPage() {
   const [classId, setClassId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [activityId, setActivityId] = useState("all");
+  const [receiptActivityKey, setReceiptActivityKey] = useState("");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -85,6 +86,7 @@ export default function CouncilOrdersPage() {
   const [closeBusy, setCloseBusy] = useState<string | null>(null);
   const [paymentBusy, setPaymentBusy] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState("");
+  const [selectedReceiptClasses, setSelectedReceiptClasses] = useState<Set<string>>(new Set());
   const requestVersion = useRef(0);
   const [optionsError, setOptionsError] = useState(false);
   const [optionsRetry, setOptionsRetry] = useState(0);
@@ -397,11 +399,20 @@ export default function CouncilOrdersPage() {
   const visibleActivityGroups = activityGroups.filter((group) => activityId === "all" || group.activityId === activityId);
   const paymentActivityGroups = visibleActivityGroups;
   const actionActivityGroups = activityId === "all" ? [] : visibleActivityGroups;
+  const canBatchDownloadReceipts = canConfirmClassPayment && groupBy === "class";
+  const batchReceiptActivityId = receiptActivityKey && receiptActivityKey !== "__general__"
+    ? receiptActivityKey
+    : null;
+  const receiptRows = summary?.rows.filter((row) => row.key !== "none") ?? [];
+  const allReceiptRowsSelected = receiptRows.length > 0
+    && receiptRows.every((row) => selectedReceiptClasses.has(row.key));
   const visibleCategoryIds = new Set(visibleActivityGroups.flatMap((group) => group.categories.map((category) => category.id)));
   const hasFilters = activityId !== "all" || Boolean(grade || classId || categoryId || productId || isPaid || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
   const resetFilters = () => {
     setActivityId("all"); setGrade(""); setClassId(""); setCategoryId(""); setProductId("");
     setIsPaid(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); setSearch("");
+    setReceiptActivityKey("");
+    setSelectedReceiptClasses(new Set());
   };
   const scopeLabels = [
     activityId === "all" ? "全部活動" : activityGroups.find((group) => group.activityId === activityId)?.label,
@@ -447,7 +458,13 @@ export default function CouncilOrdersPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>活動</span>
-            <select className="input" value={activityId} onChange={(e) => { setActivityId(e.target.value); setCategoryId(""); setProductId(""); }}>
+            <select className="input" value={activityId} onChange={(e) => {
+              setActivityId(e.target.value);
+              setCategoryId("");
+              setProductId("");
+              setReceiptActivityKey(e.target.value === "all" ? "" : e.target.value);
+              setSelectedReceiptClasses(new Set());
+            }}>
               <option value="all">全部活動</option>
               {activityGroups.filter((group) => group.activityId).map((group) => (
                 <option key={group.key} value={group.activityId ?? ""}>{group.label}</option>
@@ -589,10 +606,64 @@ export default function CouncilOrdersPage() {
 
           {groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 && (
             <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              各班操作只處理標示活動中的有效訂單，不受商品、日期或收款篩選影響。確認收款後，可下載該班列印用簽收單 PDF（收執聯、存根聯及簽名欄）。
+              各班操作只處理標示活動中的有效訂單，不受商品、日期或收款篩選影響。簽收單可在收款確認前下載，也可選取多班合併成一份 PDF。
             </p>
           )}
           {receiptError && <p role="alert" className="mb-3 text-sm" style={{ color: "var(--danger)" }}>{receiptError}</p>}
+          {canBatchDownloadReceipts && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3"
+              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+              <div>
+                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>班級簽收單</p>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  選擇活動或一般商品後，可勾選多班，或下載該範圍所有有有效訂單的班級；全部班級不受目前篩選影響。
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="grid gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  收據範圍
+                  <select
+                    className="input min-h-11"
+                    aria-label="收據活動"
+                    value={receiptActivityKey}
+                    onChange={(event) => {
+                      setReceiptActivityKey(event.target.value);
+                      setSelectedReceiptClasses(new Set());
+                    }}
+                  >
+                    <option value="">請選擇活動或一般商品</option>
+                    <option value="__general__">一般商品</option>
+                    {activityGroups.filter((group) => group.activityId).map((group) => (
+                      <option key={group.key} value={group.key}>{group.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  已選 {selectedReceiptClasses.size} 班
+                </span>
+                <AnimatedDownloadButton
+                  request={() => {
+                    setReceiptError("");
+                    return shopApi.downloadClassReceipts(batchReceiptActivityId, [...selectedReceiptClasses]);
+                  }}
+                  label={`下載所選 ${selectedReceiptClasses.size} 班 PDF`}
+                  disabled={mutationBusy || loading || !receiptActivityKey || selectedReceiptClasses.size === 0}
+                  className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50"
+                  onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
+                />
+                <AnimatedDownloadButton
+                  request={() => {
+                    setReceiptError("");
+                    return shopApi.downloadClassReceipts(batchReceiptActivityId);
+                  }}
+                  label="下載全部班級 PDF"
+                  disabled={mutationBusy || loading || !receiptActivityKey}
+                  className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50"
+                  onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
+                />
+              </div>
+            </div>
+          )}
           <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
             {loading ? (
               <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
@@ -603,6 +674,22 @@ export default function CouncilOrdersPage() {
                 <table className="shop-mobile-table w-full min-w-[720px] text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      {canBatchDownloadReceipts && <th className="px-3 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          aria-label="選取目前列表所有班級"
+                          checked={allReceiptRowsSelected}
+                          disabled={loading || mutationBusy || receiptRows.length === 0}
+                          onChange={(event) => setSelectedReceiptClasses((current) => {
+                            const next = new Set(current);
+                            for (const row of receiptRows) {
+                              if (event.target.checked) next.add(row.key);
+                              else next.delete(row.key);
+                            }
+                            return next;
+                          })}
+                        />
+                      </th>}
                       {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canManageOrderClosures && (actionActivityGroups.length > 0 || canConfirmClassPayment && paymentActivityGroups.length > 0) ? ["班聯操作"] : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
@@ -611,6 +698,20 @@ export default function CouncilOrdersPage() {
                   <tbody>
                     {summary.rows.map((row, idx) => (
                       <tr key={row.key} style={idx < summary.rows.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                        {canBatchDownloadReceipts && <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`選取${row.label}收據`}
+                            checked={selectedReceiptClasses.has(row.key)}
+                            disabled={loading || mutationBusy || row.key === "none"}
+                            onChange={(event) => setSelectedReceiptClasses((current) => {
+                              const next = new Set(current);
+                              if (event.target.checked) next.add(row.key);
+                              else next.delete(row.key);
+                              return next;
+                            })}
+                          />
+                        </td>}
                         <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</td>
                         <td data-label="訂單數" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{row.order_count}</td>
                         <td data-label="應繳" className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
