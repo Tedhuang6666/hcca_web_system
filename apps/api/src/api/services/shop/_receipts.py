@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import re
 import unicodedata
 import uuid
 from datetime import date
@@ -28,7 +29,7 @@ _RECEIPT_ROW_TOPS = (159.1, 182.0, 204.9, 228.0, 250.9, 273.9, 296.9)
 _RECEIPT_COPY_OFFSET = 345.77
 
 
-def _receipt_text_lines(value: str, width: float, font_size: float = 9) -> list[str]:
+def _receipt_text_lines(value: str, width: float, font_size: float = 12) -> list[str]:
     """依字寬保守換行，長品名與規格接續到下一列，避免壓到原表格線。"""
     lines: list[str] = []
     for paragraph in value.split("\n"):
@@ -46,12 +47,19 @@ def _receipt_text_lines(value: str, width: float, font_size: float = 9) -> list[
 
 
 def _receipt_field(
-    value: str, x: float, y: float, width: float, *, font_size: float = 9, align: str = "left"
+    value: str,
+    x: float,
+    y: float,
+    width: float,
+    *,
+    font_size: float = 12,
+    align: str = "left",
+    height: float = 12,
 ) -> str:
     escaped = html.escape(value).replace("\n", "<br>")
     return (
-        f'<div class="field" style="left:{x}pt;top:{y}pt;width:{width}pt;'
-        f'font-size:{font_size}pt;text-align:{align}">{escaped}</div>'
+        f'<div class="field" style="left:{x}pt;top:{y}pt;width:{width}pt;height:{height}pt;'
+        f'font-size:{font_size}pt;text-align:{align}"><div>{escaped}</div></div>'
     )
 
 
@@ -82,38 +90,49 @@ def _render_class_receipt_pdf(
         amount = unit_price * quantity
         subtotal += amount
         remarks = "、".join(f"{group}：{value}" if group else value for group, value in options)
-        if not rows:
+        if not rows and activity_name != "一般商品":
             remarks = f"{activity_name}\n{remarks}".rstrip()
         names = _receipt_text_lines(name, _RECEIPT_COLUMNS[0][1])
         notes = _receipt_text_lines(remarks, _RECEIPT_COLUMNS[4][1])
-        for index in range(0, max(len(names), len(notes)), 2):
+        for index in range(max(len(names), len(notes))):
             rows.append(
                 (
-                    "\n".join(names[index : index + 2]),
+                    names[index] if index < len(names) else "",
                     f"{quantity:,}" if index == 0 else "",
                     f"{unit_price:,}" if index == 0 else "",
                     f"{amount:,}" if index == 0 else "",
-                    "\n".join(notes[index : index + 2]),
+                    notes[index] if index < len(notes) else "",
                 )
             )
     total = sum(order.total_price for order in orders)
     discount = subtotal - total
     if discount:
         rows.append(("優惠折抵", "", "", f"{-discount:,}", ""))
-    page_count = max(1, (len(rows) + 6) // 7)
+    # 備註欄只有前五列；其下的合併儲存格整塊留給蓋章。
+    pages: list[list[tuple[str, str, str, str, str]]] = [[]]
+    for row in rows:
+        if len(pages[-1]) == 7 or (len(pages[-1]) >= 5 and row[4]):
+            pages.append([])
+        pages[-1].append(row)
+    page_count = len(pages)
+    buyer = class_label
+    if not re.search(rf"(?<!\d){academic_year}\s*學年度", buyer):
+        buyer = f"{buyer}（{academic_year} 學年度）"
+    buyer_font_size = 12
+    while buyer_font_size > 7 and len(_receipt_text_lines(buyer, 394, buyer_font_size)) > 1:
+        buyer_font_size -= 1
     sections = []
-    for page_index in range(page_count):
+    for page_index, page_rows in enumerate(pages):
         fields = []
         for offset in (0.0, _RECEIPT_COPY_OFFSET):
-            buyer = f"{class_label}（{academic_year} 學年度）"
-            buyer_lines = _receipt_text_lines(buyer, 394, font_size=7 if len(buyer) > 45 else 11)
+            buyer_lines = _receipt_text_lines(buyer, 394, buyer_font_size)
             fields.append(
                 _receipt_field(
                     "\n".join(buyer_lines),
                     85,
-                    96 + offset,
+                    97.93 + offset,
                     394,
-                    font_size=7 if len(buyer) > 45 else 11,
+                    font_size=buyer_font_size,
                 )
             )
             for value, x, width in (
@@ -121,10 +140,7 @@ def _render_class_receipt_pdf(
                 (str(issued_on.month), 162, 17),
                 (str(issued_on.day), 198, 17),
             ):
-                fields.append(
-                    _receipt_field(value, x, 116 + offset, width, font_size=11, align="center")
-                )
-            page_rows = rows[page_index * 7 : (page_index + 1) * 7]
+                fields.append(_receipt_field(value, x, 117.61 + offset, width, align="center"))
             for row, y in zip(page_rows, _RECEIPT_ROW_TOPS, strict=False):
                 for column, (value, (x, width)) in enumerate(
                     zip(row, _RECEIPT_COLUMNS, strict=True)
@@ -135,28 +151,29 @@ def _render_class_receipt_pdf(
                             x,
                             y + offset,
                             width,
-                            font_size=7.5 if column in (1, 2, 3) and len(value) > 10 else 9,
+                            font_size=(
+                                min(12, width / (len(value) * 0.65))
+                                if column in (1, 2, 3) and value
+                                else 12
+                            ),
                             align="right" if column in (1, 2, 3) else "left",
+                            height=22.9,
                         )
                     )
-            fields.append(
-                _receipt_field(f"{total:,}", 306, 325 + offset, 99, font_size=12, align="right")
-            )
-            # 範本的大寫欄為六位數；超過時在原有備註區寫完整金額，不截去高位數。
+            fields.append(_receipt_field(f"{total:,}", 306, 326.56 + offset, 99, align="right"))
+            # 範本的大寫欄為六位數；超過時在表格下方寫完整金額，不截去高位數。
             if 0 <= total < 1_000_000:
                 digits = "零壹貳參肆伍陸柒捌玖"
-                for digit, x in zip(f"{total:06d}", (59, 118, 177, 236, 295, 354), strict=True):
+                for digit, x in zip(
+                    f"{total:06d}", (58.78, 117.58, 176.41, 235.21, 294.03, 352.83), strict=True
+                ):
                     fields.append(
-                        _receipt_field(
-                            digits[int(digit)], x, 354 + offset, 20, font_size=12, align="center"
-                        )
+                        _receipt_field(digits[int(digit)], x, 356.32 + offset, 20, align="center")
                     )
                 page_note = f"第 {page_index + 1}/{page_count} 頁，總額為整份收據合計"
             else:
                 page_note = f"第 {page_index + 1}/{page_count} 頁，新台幣 {total:,} 元整"
-            fields.append(_receipt_field(page_note, 414, 321 + offset, 158, font_size=8))
-            fields.append(_receipt_field("繳款人簽名：____________", 414, 343 + offset, 158))
-            fields.append(_receipt_field("班聯收款人簽名：________", 414, 361 + offset, 158))
+            fields.append(_receipt_field(page_note, 36, 380 + offset, 540, font_size=8))
         sections.append(f'<section class="page">{"".join(fields)}</section>')
     markup = f"""<!doctype html><html lang="zh-TW"><head><meta charset="UTF-8">
 <style>
@@ -164,7 +181,8 @@ def _render_class_receipt_pdf(
 @page {{ size: 612pt 792pt; margin: 0; }}
 body {{ margin: 0; font-family: "OfficialKai", serif; color: #000; }}
 .page {{ position: relative; width: 612pt; height: 792pt; break-after: page; }}
-.field {{ position: absolute; line-height: 10.5pt; overflow-wrap: anywhere; }}
+.field {{ position: absolute; display: flex; align-items: center; line-height: 1; }}
+.field > div {{ width: 100%; overflow-wrap: anywhere; }}
 </style></head><body>{"".join(sections)}</body></html>"""
     overlay = PdfReader(BytesIO(render_print_pdf(markup)))
     template = PdfReader(_RECEIPT_TEMPLATE)
