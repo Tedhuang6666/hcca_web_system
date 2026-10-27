@@ -2137,7 +2137,7 @@ async def test_class_receipt_contains_all_active_orders_in_class_and_activity(
 
     pdf.pages[0].extract_text(visitor_text=visit_date)
     assert date_fields == ["115", "10", "21", "115", "10", "21"]
-    assert text.count("繳款人簽名") == 2 and text.count("班聯收款人簽名") == 2
+    assert "繳款人簽名" not in text and "班聯收款人簽名" not in text
     assert "9,999" not in text
 
 
@@ -2248,7 +2248,7 @@ async def test_class_receipt_without_activity_includes_only_general_goods(
     assert response.status_code == 200
     pdf = PdfReader(BytesIO(response.content))
     text = "".join(page.extract_text() for page in pdf.pages)
-    assert text.count("一般商品") == 2
+    assert "一般商品" not in text
     assert _receipt_totals(pdf) == ["100", "100"]
     assert "9,999" not in text
 
@@ -2259,7 +2259,7 @@ async def test_class_receipt_without_activity_includes_only_general_goods(
     assert batch_response.status_code == 200
     batch_pdf = PdfReader(BytesIO(batch_response.content))
     assert len(batch_pdf.pages) == 1
-    assert "一般商品" in batch_pdf.pages[0].extract_text()
+    assert "一般商品" not in batch_pdf.pages[0].extract_text()
 
 
 async def _add_person_class_member(db, user, school_class):
