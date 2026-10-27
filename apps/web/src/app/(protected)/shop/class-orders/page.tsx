@@ -89,7 +89,7 @@ async function listAllClassOrders(params: ClassOrderQuery = {}): Promise<OrderLi
 }
 
 export default function ClassOrdersPage() {
-  const [workspace, setWorkspace] = useState<"order" | "collect" | "details">("order");
+  const [workspace, setWorkspace] = useState<"order" | "collect" | "details" | "deadline">("order");
   const [seatFilter, setSeatFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [seatSearch, setSeatSearch] = useState("");
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -99,6 +99,7 @@ export default function ClassOrdersPage() {
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersLoadFailed, setMembersLoadFailed] = useState(false);
   const [catalogFailed, setCatalogFailed] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [submitMessage, setSubmitMessage] = useState("");
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [myClassId, setMyClassId] = useState<string | null>(null);
@@ -487,11 +488,20 @@ export default function ClassOrdersPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    shopApi.catalog(undefined, true)
-      .then((cats) => { setCatalog(cats); return cats; })
-      .catch(() => { setCatalogFailed(true); setCatalog([]); return []; });
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    setCatalogFailed(false);
+    try {
+      setCatalog(await shopApi.catalog(undefined, true));
+    } catch {
+      setCatalogFailed(true);
+      setCatalog([]);
+    } finally {
+      setCatalogLoading(false);
+    }
   }, []);
+
+  useEffect(() => { void loadCatalog(); }, [loadCatalog]);
 
   useEffect(() => {
     if (myClassId && catalog.length) void loadCloseStatus(catalog.map((cat) => cat.id), myClassId);
@@ -1030,10 +1040,10 @@ export default function ClassOrdersPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-3">
-      <nav className="shop-task-switch min-w-0 flex-1" aria-label="班代工作">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <nav className="shop-task-switch w-full min-w-0 sm:w-auto sm:flex-1" aria-label="班代工作">
         {([
-          ["order", "代訂"], ["collect", "確認收款"],
+          ["order", "代訂"], ["collect", "確認收款"], ["deadline", "班級截止"],
         ] as const).map(([key, label]) => (
           <button key={key} type="button" aria-pressed={workspace === key}
             onClick={() => { setWorkspace(key); if (key === "order") setFormOpen(true); }}>
@@ -1041,11 +1051,32 @@ export default function ClassOrdersPage() {
           </button>
         ))}
       </nav>
-        <button type="button" className="btn btn-ghost min-h-11 text-sm"
+        <button type="button" className="btn btn-ghost ml-auto min-h-11 text-sm"
           aria-pressed={workspace === "details"} onClick={() => setWorkspace("details")}>
           查詢／修改訂單
         </button>
       </div>
+
+      {workspace === "deadline" && (
+        <section aria-labelledby="close-management-heading" className="rounded-lg p-4"
+          style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+          <h2 id="close-management-heading" className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級截止設定</h2>
+          <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>班級截止後，同學與家人無法再自行訂購，班代仍可代訂；班聯會全域停止後，班代也無法代訂。</p>
+          {catalogLoading ? <p role="status">正在載入班級截止設定…</p>
+            : catalogFailed ? <div role="alert">
+              <p>無法載入班級截止設定，請重新載入後再試。</p>
+              <button type="button" className="btn btn-ghost min-h-11" onClick={() => void loadCatalog()}>重新載入截止設定</button>
+            </div>
+              : catalog.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {closeActivityGroups.map((group) => (
+                  <ClassDeadlineControls key={group.key} label={group.label} categories={group.categories}
+                    classId={myClassId} statuses={closeStatus}
+                    onSaved={async () => { if (myClassId) await loadCloseStatus(catalog.map((category) => category.id), myClassId); }} />
+                ))}
+              </div>
+                : <p style={{ color: "var(--text-secondary)" }}>目前沒有可設定截止時間的活動或商品。</p>}
+        </section>
+      )}
 
       {workspace === "details" && (
         <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
@@ -2135,24 +2166,6 @@ export default function ClassOrdersPage() {
         )}
       </section>
       </details>
-
-      {catalog.length > 0 && (
-        <details>
-        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>結單管理</summary>
-        <section aria-labelledby="close-management-heading" className="rounded-lg p-4"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-          <h2 id="close-management-heading" className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級截止設定</h2>
-          <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>班級截止後，同學與家人無法再自行訂購，班代仍可代訂；班聯會全域停止後，班代也無法代訂。</p>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {closeActivityGroups.map((group) => (
-              <ClassDeadlineControls key={group.key} label={group.label} categories={group.categories}
-                classId={myClassId} statuses={closeStatus}
-                onSaved={async () => { if (myClassId) await loadCloseStatus(catalog.map((category) => category.id), myClassId); }} />
-            ))}
-          </div>
-        </section>
-        </details>
-      )}
 
       </div>
 
