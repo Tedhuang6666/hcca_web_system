@@ -309,7 +309,8 @@ async def list_categories(
 
 @router.get("/activities", response_model=list[ActivityOut], summary="列出可供商品分類使用的活動")
 async def list_shop_activities(session: DbDep, current_user: CurrentUser) -> list[ActivityOut]:
-    if await _has_shop_manage(session, current_user):
+    permission_codes = await get_user_permission_codes(session, current_user.id)
+    if any(str(code) in permission_codes for code in _ADMIN_VIEW_CODES):
         activities = await activity_svc.list_activities(session, active_only=True)
     else:
         activities = await activity_svc.list_user_convener_activities(
