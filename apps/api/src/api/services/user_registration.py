@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy import and_, case, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.schema import UniqueConstraint
@@ -28,6 +28,7 @@ from api.models.school_class import (
     ClassManualMember,
     ClassMembership,
     ClassRosterEntry,
+    SchoolClass,
 )
 from api.models.user import User
 from api.models.user_identity import UserIdentity
@@ -63,6 +64,7 @@ _ACCOUNT_MERGE_EXCLUDED_TABLES = frozenset(
         "class_manual_members",
         "class_memberships",
         "class_roster_entries",
+        "carts",
     }
 )
 _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
@@ -73,27 +75,36 @@ _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
         "meal_vendor_managers",
         # 同一政策版本的同意是冪等資料；合併帳戶時保留主要帳戶那筆即可。
         "policy_consents",
+        "announcement_reads",
+        "shop_promotion_users",
+        # 裝置訂閱與通知偏好沿用主要帳戶，不要求使用者比較內部金鑰。
+        "web_push_subscriptions",
+        "discord_notification_preferences",
     }
 )
-_ACCOUNT_MERGE_BUSINESS_TABLES = {
-    "council_proposals": {
-        "user_column": "submitter_id",
-        "title": "議案投稿",
-        "message": "兩個帳戶各有議案投稿，投稿內容與聯絡資料可能需要人工確認。",
-        "fields": ("serial_number", "title", "status"),
-    },
-    "merchandise_submissions": {
-        "user_column": "user_id",
-        "title": "校商投稿",
-        "message": "兩個帳戶各有校商投稿，投稿快照與審核流程需要人工確認。",
-        "fields": ("item_id", "status", "submitted_at"),
-    },
-    "partner_submissions": {
-        "user_column": "submitted_by",
-        "title": "特約店家投稿",
-        "message": "兩個帳戶各有特約店家投稿，投稿內容需要人工確認。",
-        "fields": ("name", "status", "business_id"),
-    },
+_ACCOUNT_MERGE_TABLE_LABELS = {
+    "discord_account_links": "Discord 綁定",
+    "line_account_links": "LINE 綁定",
+    "user_google_tasks_configs": "Google Tasks 連結",
+    "partner_business_accounts": "店家管理身分",
+    "activity_conveners": "活動總召任期",
+    "class_correction_requests": "待審核的班級更正申請",
+    "meal_orders": "同餐期訂單",
+}
+_ACCOUNT_MERGE_FIELD_LABELS = {
+    "username": "使用者名稱",
+    "global_name": "顯示名稱",
+    "line_display_name": "LINE 名稱",
+    "authorized_email": "授權 Email",
+    "sync_enabled": "啟用同步",
+    "is_active": "啟用狀態",
+    "start_date": "開始日期",
+    "end_date": "結束日期",
+    "status": "狀態",
+    "message": "申請說明",
+    "review_note": "審核備註",
+    "student_id": "學號",
+    "seat_number": "座號",
 }
 
 
@@ -133,14 +144,69 @@ def _user_fk_columns(table):
 
 
 def _unique_column_sets(table):
-    unique_sets = []
+    # user_id 本身是主鍵的偏好設定、複合主鍵關聯也必須納入。
+    unique_sets = [(tuple(table.primary_key.columns), None)]
     for constraint in table.constraints:
         if isinstance(constraint, UniqueConstraint):
-            unique_sets.append(tuple(constraint.columns))
+            unique_sets.append((tuple(constraint.columns), None))
     for index in table.indexes:
         if index.unique:
-            unique_sets.append(tuple(index.columns))
-    return unique_sets
+            predicate = index.dialect_options["postgresql"].get("where")
+            unique_sets.append((tuple(index.columns), predicate))
+    seen = set()
+    for columns, predicate in unique_sets:
+        key = (tuple(column.name for column in columns), str(predicate))
+        if key not in seen:
+            seen.add(key)
+            yield columns, predicate
+
+
+async def _merge_collision_groups(db, table, *, target_user_id, user_ids):
+    user_columns = _user_fk_columns(table)
+    names = {column.name for column in user_columns}
+    for columns, predicate in _unique_column_sets(table):
+        if not names.intersection(column.name for column in columns):
+            continue
+        statement = select(table).where(or_(*(c.in_(user_ids) for c in user_columns)))
+        # 部分唯一索引只約束符合條件的紀錄；已審核申請仍應完整保留。
+        if predicate is not None:
+            statement = statement.where(predicate)
+        rows = (await db.execute(statement)).all()
+        groups = {}
+        for row in rows:
+            values = tuple(
+                target_user_id
+                if c.name in names and _row_value(row, c) in user_ids
+                else _row_value(row, c)
+                for c in columns
+            )
+            if not any(value is None for value in values):
+                groups.setdefault(values, []).append(row)
+        for grouped_rows in groups.values():
+            if len(grouped_rows) > 1:
+                yield columns, grouped_rows
+
+
+def _merge_rows_are_automatic(table, rows):
+    if table.name in _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES:
+        return True
+    if table.name == "user_google_tasks_configs":
+        # 同一授權帳號及清單的 token／同步時間只是內部狀態。
+        return all(
+            row.authorized_email == rows[0].authorized_email
+            and row.google_tasklist_id == rows[0].google_tasklist_id
+            for row in rows[1:]
+        )
+    ignored = (
+        {c.name for c in table.primary_key.columns}
+        | {c.name for c in _user_fk_columns(table)}
+        | {"created_at", "updated_at"}
+    )
+    fields = [c for c in table.c if c.name not in ignored]
+    # UUID 與建立時間不同，但實際內容相同的重複關聯自動去重。
+    return all(
+        all(_row_value(row, c) == _row_value(rows[0], c) for c in fields) for row in rows[1:]
+    )
 
 
 def _row_value(row, column):
@@ -165,20 +231,27 @@ def _merge_record_descriptor(
         _row_value(row, column) for column in user_columns if _row_value(row, column) is not None
     ]
     owner_user_id = next(
-        (user_id for user_id in user_ids if user_id != target_user_id),
+        (user_id for user_id in user_ids if user_id in user_names and user_id != target_user_id),
         target_user_id,
     )
     side = "target" if owner_user_id == target_user_id else "source"
     record_id = _merge_record_id(table.name, primary_key_columns, row)
     field_values = {
-        column.name: _serialize_merge_value(_row_value(row, column)) for column in fields
+        _ACCOUNT_MERGE_FIELD_LABELS.get(column.name, column.name): (
+            "是" if _row_value(row, column) else "否"
+        )
+        if isinstance(_row_value(row, column), bool)
+        else _serialize_merge_value(_row_value(row, column))
+        for column in fields
+        if column.name in _ACCOUNT_MERGE_FIELD_LABELS
     }
     return {
         "id": record_id,
         "side": side,
         "owner_user_id": str(owner_user_id),
         "owner_name": user_names.get(owner_user_id, "帳戶"),
-        "label": "、".join(f"{name}={value}" for name, value in field_values.items()),
+        "label": "、".join(f"{name}：{value}" for name, value in field_values.items())
+        or "保留此帳戶的紀錄",
         "fields": field_values,
         "_table": table,
         "_primary_key": _row_key(row, primary_key_columns),
@@ -192,65 +265,51 @@ async def _collect_table_merge_conflicts(
     target_user_id: uuid.UUID,
     user_ids: set[uuid.UUID],
     user_names: dict[uuid.UUID, str],
-    require_user_column: bool = True,
 ) -> list[dict[str, Any]]:
     user_columns = _user_fk_columns(table)
-    if not user_columns:
-        return []
-    rows = (
-        await db.execute(
-            select(table).where(or_(*(column.in_(user_ids) for column in user_columns)))
-        )
-    ).all()
-    if not rows:
-        return []
-
-    user_column_names = {column.name for column in user_columns}
-    conflicts: list[dict[str, Any]] = []
-    for unique_columns in _unique_column_sets(table):
-        if require_user_column and not {column.name for column in unique_columns}.intersection(
-            user_column_names
-        ):
+    conflicts = []
+    async for columns, rows in _merge_collision_groups(
+        db, table, target_user_id=target_user_id, user_ids=user_ids
+    ):
+        if _merge_rows_are_automatic(table, rows):
             continue
-        groups: dict[tuple[Any, ...], list[Any]] = {}
-        for row in rows:
-            projected_values = tuple(
-                target_user_id
-                if column.name in user_column_names and _row_value(row, column) in user_ids
-                else _row_value(row, column)
-                for column in unique_columns
+        descriptors = [
+            _merge_record_descriptor(
+                table,
+                row,
+                [c for c in user_columns if c.name in {column.name for column in columns}],
+                target_user_id=target_user_id,
+                user_names=user_names,
+                fields=table.c,
             )
-            if any(value is None for value in projected_values):
-                continue
-            groups.setdefault(projected_values, []).append(row)
-
-        for grouped_rows in groups.values():
-            if len(grouped_rows) < 2 or table.name in _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES:
-                continue
-            descriptors = [
-                _merge_record_descriptor(
-                    table,
-                    row,
-                    user_columns,
-                    target_user_id=target_user_id,
-                    user_names=user_names,
-                    fields=unique_columns,
-                )
-                for row in grouped_rows
-            ]
-            descriptors.sort(key=lambda item: item["id"])
-            constraint_name = ",".join(column.name for column in unique_columns)
-            record_ids = "|".join(item["id"] for item in descriptors)
-            conflicts.append(
-                {
-                    "key": f"records:{table.name}:{constraint_name}:{record_ids}",
-                    "category": "record",
-                    "resolvable": True,
-                    "title": f"{table.name} 的重複資料",
-                    "message": f"唯一欄位：{constraint_name}",
-                    "records": descriptors,
-                }
-            )
+            for row in rows
+        ]
+        if table.name == "class_correction_requests":
+            class_ids = {_row_value(row, table.c.requested_class_id) for row in rows}
+            classes = (
+                await db.scalars(select(SchoolClass).where(SchoolClass.id.in_(class_ids)))
+            ).all()
+            labels = {
+                item.id: f"{item.academic_year} 學年度 {item.label or item.class_code} 班"
+                for item in classes
+            }
+            for descriptor, row in zip(descriptors, rows, strict=True):
+                label = labels.get(_row_value(row, table.c.requested_class_id), "班級")
+                descriptor["fields"]["申請班級"] = label
+                descriptor["label"] = f"申請班級：{label}、{descriptor['label']}"
+        descriptors.sort(key=lambda item: item["id"])
+        constraint_name = ",".join(column.name for column in columns)
+        record_ids = "|".join(item["id"] for item in descriptors)
+        conflicts.append(
+            {
+                "key": f"records:{table.name}:{constraint_name}:{record_ids}",
+                "category": "record",
+                "resolvable": True,
+                "title": _ACCOUNT_MERGE_TABLE_LABELS.get(table.name, "重複的業務資料"),
+                "message": "合併後只能保留一筆，請選擇要保留哪個帳戶的資料。",
+                "records": descriptors,
+            }
+        )
     return conflicts
 
 
@@ -285,6 +344,7 @@ def _field_conflict(
     return {
         "key": key,
         "category": "field",
+        "resolvable": True,
         "title": title,
         "message": f"欄位：{field}，請選擇要保留的值",
         "records": records,
@@ -353,37 +413,12 @@ async def _collect_profile_conflicts(
     users = [target_user, *source_users]
     user_names = {item.id: item.display_name for item in users}
     conflicts: list[dict[str, Any]] = []
-    for field, label in (("display_name", "顯示名稱"),):
-        values = {item.display_name for item in users if getattr(item, field)}
-        if len(values) > 1:
-            records = [
-                _field_record(
-                    record_id=f"user:{item.id}:{field}",
-                    side="target" if item.id == target_user.id else "source",
-                    owner_user_id=item.id,
-                    owner_name=item.display_name,
-                    field=label,
-                    value=getattr(item, field),
-                )
-                for item in users
-            ]
-            records.sort(key=lambda item: item["id"])
-            conflicts.append(
-                _field_conflict(
-                    key=f"field:user:{field}:" + "|".join(item["id"] for item in records),
-                    title=f"{label}衝突",
-                    field=field,
-                    records=records,
-                )
-            )
-
+    # 帳號名稱、Email 與學號已由主要帳戶決定；人員業務欄位才需要取捨。
     people = (
         await db.scalars(select(Person).where(Person.user_id.in_([item.id for item in users])))
     ).all()
     for field, label in (
         ("legal_name", "法定姓名"),
-        ("display_name", "人員顯示名稱"),
-        ("email", "人員 Email"),
         ("note", "人員備註"),
         ("status", "人員狀態"),
     ):
@@ -435,7 +470,15 @@ async def _collect_class_merge_conflicts(
     conflicts: list[dict[str, Any]] = []
     fields = [table.c[name] for name in ("class_id", "seat_number", "student_id")]
     for class_rows in grouped.values():
-        if len({_row_value(row, student_column) for row in class_rows}) < 2:
+        if (
+            len(
+                {
+                    (_row_value(row, student_column), _row_value(row, table.c.seat_number))
+                    for row in class_rows
+                }
+            )
+            < 2
+        ):
             continue
         descriptors = [
             _merge_record_descriptor(
@@ -455,52 +498,8 @@ async def _collect_class_merge_conflicts(
                 + "|".join(item["id"] for item in descriptors),
                 "category": "record",
                 "resolvable": True,
-                "title": "班級名冊身分衝突",
-                "message": "同一班級存在不同學號，無法自動判定應保留哪一筆名冊資料。",
-                "records": descriptors,
-            }
-        )
-    return conflicts
-
-
-async def _collect_business_data_conflicts(
-    db: AsyncSession,
-    *,
-    target_user: User,
-    source_users: list[User],
-) -> list[dict[str, Any]]:
-    """只列出需要人工確認的業務資料，不把一般帳號欄位當成衝突。"""
-    user_ids = {target_user.id, *(item.id for item in source_users)}
-    user_names = {item.id: item.display_name for item in [target_user, *source_users]}
-    conflicts: list[dict[str, Any]] = []
-    for table_name, definition in _ACCOUNT_MERGE_BUSINESS_TABLES.items():
-        table = Base.metadata.tables.get(table_name)
-        if table is None:
-            continue
-        user_column = table.c[definition["user_column"]]
-        rows = (await db.execute(select(table).where(user_column.in_(user_ids)))).all()
-        if not rows:
-            continue
-        fields = [table.c[name] for name in definition["fields"] if name in table.c]
-        descriptors = [
-            _merge_record_descriptor(
-                table,
-                row,
-                [user_column],
-                target_user_id=target_user.id,
-                user_names=user_names,
-                fields=fields,
-            )
-            for row in rows
-        ]
-        descriptors.sort(key=lambda item: item["id"])
-        conflicts.append(
-            {
-                "key": f"business:{table_name}:" + "|".join(item["id"] for item in descriptors),
-                "category": "record",
-                "resolvable": False,
-                "title": f"{definition['title']}資料衝突",
-                "message": definition["message"] + "請先由管理員處理後再合併。",
+                "title": "班級名冊資料衝突",
+                "message": "同一班級的學號或座號不同，請選擇要保留的名冊資料。",
                 "records": descriptors,
             }
         )
@@ -519,12 +518,8 @@ async def collect_merge_conflicts(
     user_ids = {item.id for item in users}
     user_names = {item.id: item.display_name for item in users}
     conflicts = [
+        *await _collect_profile_conflicts(db, target_user=target_user, source_users=sources),
         *await _collect_class_merge_conflicts(
-            db,
-            target_user=target_user,
-            source_users=sources,
-        ),
-        *await _collect_business_data_conflicts(
             db,
             target_user=target_user,
             source_users=sources,
@@ -652,59 +647,34 @@ async def _preflight_user_record_reparenting(
     target_user_id: uuid.UUID,
     source_user_id: uuid.UUID,
 ) -> None:
-    """確認所有 User 外鍵都能安全轉移，避免合併途中才遇到唯一鍵衝突。"""
+    """確認所有 User 外鍵都能安全轉移，與預覽共用唯一鍵及部分索引規則。"""
     for table in Base.metadata.sorted_tables:
         if table.name in _ACCOUNT_MERGE_EXCLUDED_TABLES or table.name == "users":
             continue
-        user_columns = _user_fk_columns(table)
-        if not user_columns:
-            continue
+        async for _, rows in _merge_collision_groups(
+            db, table, target_user_id=target_user_id, user_ids={target_user_id, source_user_id}
+        ):
+            if not _merge_rows_are_automatic(table, rows):
+                raise UserRegistrationError(409, "資料已變更，請重新檢查衝突並選擇要保留的資料")
 
-        source_rows = (
-            await db.execute(
-                select(table).where(or_(*(column == source_user_id for column in user_columns)))
-            )
-        ).all()
-        if not source_rows:
-            continue
 
-        primary_key_columns = tuple(table.primary_key.columns)
-        user_column_names = {column.name for column in user_columns}
-        for unique_columns in _unique_column_sets(table):
-            if not {column.name for column in unique_columns}.intersection(user_column_names):
-                continue
-            for source_row in source_rows:
-                unique_values = [
-                    target_user_id
-                    if column.name in user_column_names
-                    else _row_value(source_row, column)
-                    for column in unique_columns
-                ]
-                if any(value is None for value in unique_values):
-                    continue
-                target_row = (
-                    await db.execute(
-                        select(*primary_key_columns).where(
-                            and_(
-                                *(
-                                    column == value
-                                    for column, value in zip(
-                                        unique_columns, unique_values, strict=True
-                                    )
-                                )
-                            )
-                        )
-                    )
-                ).first()
-                if target_row is None or tuple(target_row) == _row_key(
-                    source_row, primary_key_columns
-                ):
-                    continue
-                if table.name not in _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES:
-                    raise UserRegistrationError(
-                        409,
-                        f"兩個帳戶在 {table.name} 有無法自動合併的重複歷史資料，請先處理後再合併",
-                    )
+async def _merge_carts(db, *, target_user_id, source_user_id):
+    # 購物車 UUID 沒有業務意義，但明細必須全部保留。
+    carts = Base.metadata.tables["carts"]
+    items = Base.metadata.tables["cart_items"]
+    source_cart = await db.scalar(select(carts.c.id).where(carts.c.user_id == source_user_id))
+    if source_cart is None:
+        return
+    target_cart = await db.scalar(select(carts.c.id).where(carts.c.user_id == target_user_id))
+    if target_cart is None:
+        await db.execute(
+            update(carts).where(carts.c.id == source_cart).values(user_id=target_user_id)
+        )
+    else:
+        await db.execute(
+            update(items).where(items.c.cart_id == source_cart).values(cart_id=target_cart)
+        )
+        await db.execute(delete(carts).where(carts.c.id == source_cart))
 
 
 async def _reparent_user_records(
@@ -713,73 +683,38 @@ async def _reparent_user_records(
     target_user_id: uuid.UUID,
     source_user_id: uuid.UUID,
 ) -> None:
-    """將所有 ORM metadata 中指向 users.id 的歷史關聯轉到主要帳戶。"""
+    """只轉移屬於次要帳戶的外鍵，保留其他建立者、審核者與付款者。"""
+    await _merge_carts(db, target_user_id=target_user_id, source_user_id=source_user_id)
     for table in Base.metadata.sorted_tables:
         if table.name in _ACCOUNT_MERGE_EXCLUDED_TABLES or table.name == "users":
             continue
         user_columns = _user_fk_columns(table)
         if not user_columns:
             continue
-
-        source_rows = (
-            await db.execute(
-                select(table).where(or_(*(column == source_user_id for column in user_columns)))
-            )
-        ).all()
-        if not source_rows:
-            continue
-
-        user_column_names = {column.name for column in user_columns}
         duplicate_keys = set()
-        for unique_columns in _unique_column_sets(table):
-            if not {column.name for column in unique_columns}.intersection(user_column_names):
-                continue
-            for source_row in source_rows:
-                unique_values = [
-                    target_user_id
-                    if column.name in user_column_names
-                    else _row_value(source_row, column)
-                    for column in unique_columns
-                ]
-                if any(value is None for value in unique_values):
-                    continue
-                target_row = (
-                    await db.execute(
-                        select(*table.primary_key.columns).where(
-                            and_(
-                                *(
-                                    column == value
-                                    for column, value in zip(
-                                        unique_columns, unique_values, strict=True
-                                    )
-                                )
-                            )
-                        )
-                    )
-                ).first()
-                if target_row is not None and tuple(target_row) != _row_key(
-                    source_row, table.primary_key.columns
-                ):
-                    duplicate_keys.add(_row_key(source_row, table.primary_key.columns))
-
-        if duplicate_keys:
-            delete_conditions = [
-                and_(
-                    *(
-                        column == value
-                        for column, value in zip(
-                            table.primary_key.columns, primary_key, strict=True
+        async for columns, rows in _merge_collision_groups(
+            db, table, target_user_id=target_user_id, user_ids={target_user_id, source_user_id}
+        ):
+            if not _merge_rows_are_automatic(table, rows):
+                raise UserRegistrationError(409, "資料已變更，請重新檢查衝突")
+            for row in rows:
+                if any(_row_value(row, c) == source_user_id for c in columns if c in user_columns):
+                    duplicate_keys.add(_row_key(row, table.primary_key.columns))
+        for key in duplicate_keys:
+            await db.execute(
+                delete(table).where(
+                    and_(
+                        *(
+                            c == value
+                            for c, value in zip(table.primary_key.columns, key, strict=True)
                         )
                     )
                 )
-                for primary_key in duplicate_keys
-            ]
-            await db.execute(delete(table).where(or_(*delete_conditions)))
-
+            )
         await db.execute(
             update(table)
-            .where(or_(*(column == source_user_id for column in user_columns)))
-            .values({column: target_user_id for column in user_columns})
+            .where(or_(*(c == source_user_id for c in user_columns)))
+            .values({c: case((c == source_user_id, target_user_id), else_=c) for c in user_columns})
         )
 
 
@@ -1382,6 +1317,13 @@ async def merge_user_accounts(
 
     await _apply_record_conflict_resolutions(
         db,
+        conflicts=resolvable_conflicts,
+        resolutions=resolutions,
+    )
+    await _apply_field_conflict_resolutions(
+        db,
+        target_user=user,
+        source_users=sources,
         conflicts=resolvable_conflicts,
         resolutions=resolutions,
     )

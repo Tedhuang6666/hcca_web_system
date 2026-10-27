@@ -14,6 +14,7 @@ from api.core.clock import local_today
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.council_proposal import CouncilProposal
+from api.models.discord_account import DiscordAccountLink
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.person import (
     Person,
@@ -26,7 +27,6 @@ from api.models.policy import PolicyConsent, PolicyDocument
 from api.models.school_class import ClassCadre, ClassMembership, ClassRosterEntry, SchoolClass
 from api.models.user import User
 from api.models.user_identity import UserIdentity
-from api.models.web_push import WebPushSubscription
 from api.routers import auth as auth_router
 
 
@@ -797,23 +797,20 @@ async def test_admin_can_choose_record_to_keep_for_merge_duplicate(
     )
     db_session.add(source)
     await db_session.flush()
-    target_subscription = WebPushSubscription(
+    target_subscription = DiscordAccountLink(
         user_id=member.id,
-        endpoint="https://push.example.test/shared-endpoint",
-        p256dh="target-key",
-        auth="target-auth",
+        discord_user_id="111111111111111111",
+        username="primary-discord",
     )
-    source_subscription = WebPushSubscription(
+    source_subscription = DiscordAccountLink(
         user_id=source.id,
-        endpoint=target_subscription.endpoint,
-        p256dh="source-key",
-        auth="source-auth",
+        discord_user_id="222222222222222222",
+        username="secondary-discord",
     )
     db_session.add_all([target_subscription, source_subscription])
     await db_session.flush()
     member_id = member.id
     source_id = source.id
-    endpoint = target_subscription.endpoint
     source_subscription_id = source_subscription.id
     _override_user(admin)
 
@@ -822,12 +819,20 @@ async def test_admin_can_choose_record_to_keep_for_merge_duplicate(
         json={"source_user_ids": [str(source_id)]},
     )
     assert preview.status_code == 200, preview.text
-    conflict = next(
-        item
-        for item in preview.json()["conflicts"]
-        if item["title"].startswith("web_push_subscriptions")
-    )
+    conflict = next(item for item in preview.json()["conflicts"] if item["title"] == "Discord 綁定")
     assert conflict["resolvable"] is True
+    assert "secondary-discord" in str(conflict["records"])
+    for record in conflict["records"]:
+        assert str(member_id) not in record["label"]
+        assert str(source_id) not in record["label"]
+        assert "user_id" not in record["fields"]
+    unresolved = await client.post(
+        f"/admin/users/{member_id}/merge",
+        json={"source_user_ids": [str(source_id)]},
+    )
+    assert unresolved.status_code == 409
+    assert unresolved.json()["detail"]["conflicts"][0]["resolvable"] is True
+    await db_session.refresh(admin)
     source_record_id = next(
         record["id"] for record in conflict["records"] if record["side"] == "source"
     )
@@ -841,14 +846,11 @@ async def test_admin_can_choose_record_to_keep_for_merge_duplicate(
     )
     assert response.status_code == 200, response.text
     subscription = await db_session.scalar(
-        select(WebPushSubscription).where(
-            WebPushSubscription.user_id == member_id,
-            WebPushSubscription.endpoint == endpoint,
-        )
+        select(DiscordAccountLink).where(DiscordAccountLink.user_id == member_id)
     )
     assert subscription is not None
     assert subscription.id == source_subscription_id
-    assert subscription.p256dh == "source-key"
+    assert subscription.username == "secondary-discord"
 
 
 @pytest.mark.asyncio
@@ -933,49 +935,38 @@ async def test_admin_account_merge_reparents_profile_roles_classes_and_history(
     )
     assert preview_response.status_code == 200
     preview = preview_response.json()
-    assert any(conflict["title"] == "議案投稿資料衝突" for conflict in preview["conflicts"])
+    assert preview["conflicts"] == []
     response = await client.post(
         f"/admin/users/{member.id}/merge",
-        json={
-            "source_user_ids": [str(source.id)],
-        },
+        json={"source_user_ids": [str(source.id)]},
     )
-
-    assert response.status_code == 409, response.text
-    assert "業務資料衝突" in response.json()["detail"]["message"]
-
+    assert response.status_code == 200, response.text
     await db_session.refresh(source)
-    assert source.is_active is True
-    assert source.email == "school-account@gmail.com"
+    assert source.is_active is False
     assert (
         await db_session.scalar(
             select(CouncilProposal.submitter_id).where(
                 CouncilProposal.serial_number == "CP-MERGE-001"
             )
         )
-        == source.id
+        == member.id
     )
     assert (
         await db_session.scalar(
             select(ClassMembership.user_id).where(ClassMembership.class_id == school_class_id)
         )
-        == source.id
+        == member.id
     )
-    assert (
-        await db_session.scalar(
-            select(ClassCadre.user_id).where(
-                ClassCadre.class_id == school_class_id,
-                ClassCadre.user_id == source.id,
-            )
-        )
-        == source.id
-    )
-    people = (
-        await db_session.scalars(select(Person).where(Person.student_id == school_student_id))
+    cadres = (
+        await db_session.scalars(select(ClassCadre).where(ClassCadre.class_id == school_class_id))
     ).all()
+    assert len(cadres) == 1
+    assert cadres[0].user_id == member.id
+    people = (await db_session.scalars(select(Person).where(Person.user_id == member.id))).all()
     assert len(people) == 1
-    assert people[0].user_id == source.id
     assert people[0].legal_name == "校務正式姓名"
+    assert people[0].display_name == member.display_name
+    assert await db_session.scalar(select(Person).where(Person.user_id == source.id)) is None
 
 
 @pytest.mark.asyncio

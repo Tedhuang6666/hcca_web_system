@@ -17,6 +17,8 @@ export interface ComboboxOption {
 interface ComboboxProps {
   value: string;
   onChange: (value: string) => void;
+  /** 搜尋時通知呼叫端補載遠端選項，仍保留本地篩選。 */
+  onSearch?: (keyword: string) => void;
   options: ComboboxOption[];
   placeholder?: string;
   /** 是否允許清空 */
@@ -43,6 +45,7 @@ interface ComboboxProps {
 export default function Combobox({
   value,
   onChange,
+  onSearch,
   options,
   placeholder = "搜尋或選擇",
   clearable = false,
@@ -78,6 +81,7 @@ export default function Combobox({
 
   const commit = (opt: ComboboxOption) => {
     onChange(opt.value);
+    onSearch?.("");
     setKeyword("");
     setOpen(false);
     inputRef.current?.blur();
@@ -111,8 +115,8 @@ export default function Combobox({
         disabled={disabled}
         value={open ? keyword : (selectedLabel || "")}
         placeholder={selectedLabel ? "" : placeholder}
-        onChange={(e) => { setKeyword(e.target.value); setOpen(true); }}
-        onFocus={() => { setOpen(true); setKeyword(""); }}
+        onChange={(e) => { setKeyword(e.target.value); setOpen(true); onSearch?.(e.target.value); }}
+        onFocus={() => { setOpen(true); setKeyword(""); onSearch?.(""); }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (!open && e.key !== "Tab") setOpen(true);

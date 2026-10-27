@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user
 from api.main import app
-from api.models.council_proposal import CouncilProposal
+from api.models.discord_account import DiscordAccountLink
 from api.models.notification import Notification
 from api.models.user import User
 from api.models.user_identity import UserIdentity
@@ -223,17 +223,15 @@ async def test_self_merge_with_business_conflict_stops_and_notifies_admin(
             linked_at=datetime.now(UTC),
         )
     )
-    db_session.add(
-        CouncilProposal(
-            serial_number="CP-SELF-MERGE-001",
-            submitter_id=other.id,
-            contact_email=other.email,
-            proposer_name=other.display_name,
-            title="待人工處理的投稿",
-            summary="測試摘要",
-            proposal_text="測試內容",
-            rationale="測試理由",
-        )
+    db_session.add_all(
+        [
+            DiscordAccountLink(
+                user_id=user.id, discord_user_id="111111111111111111", username="first"
+            ),
+            DiscordAccountLink(
+                user_id=other.id, discord_user_id="222222222222222222", username="second"
+            ),
+        ]
     )
     await db_session.flush()
     admin_id = admin.id
@@ -268,6 +266,6 @@ async def test_self_merge_with_business_conflict_stops_and_notifies_admin(
         )
     )
     assert notification is not None
-    assert "議案投稿資料衝突" in (notification.body or "")
+    assert "Discord 綁定" in (notification.body or "")
     await db_session.refresh(other)
     assert other.is_active is True
