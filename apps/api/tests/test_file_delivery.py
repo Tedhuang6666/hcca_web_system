@@ -100,7 +100,10 @@ async def test_remote_file_signs_disposition_and_preserves_domain_headers(s3_sto
 
     assert isinstance(response, RedirectResponse)
     assert response.status_code == 307
-    assert response.headers["location"].startswith("https://hcca-files.s3.ap-northeast-1.")
+    assert response.headers["location"] == (
+        "https://hcca-files.s3.ap-northeast-1.amazonaws.com/"
+        "documents/stored.pdf?sig=test"
+    )
     assert response.headers["cache-control"] == "private, no-store"
     assert response.headers["x-frame-options"] == "SAMEORIGIN"
     assert client.params["ResponseContentDisposition"] == (

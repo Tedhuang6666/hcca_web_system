@@ -35,20 +35,36 @@ def presigned_storage_redirect(
         allowed_hosts.update({f"{bucket}.s3.amazonaws.com", "s3.amazonaws.com"})
     try:
         parsed = urlsplit(url)
+        trusted_host = next(
+            (host for host in allowed_hosts if parsed.hostname == host),
+            None,
+        )
         trusted = (
             parsed.scheme == "https"
-            and parsed.hostname in allowed_hosts
+            and trusted_host is not None
             and parsed.username is None
             and parsed.password is None
             and parsed.port in {None, 443}
         )
     except ValueError:
         trusted = False
-    if not trusted:
+        trusted_host = None
+    if not trusted or trusted_host is None:
         # 不記錄完整 URL，以免將短效存取憑證寫入日誌。
         logger.error("Rejected untrusted presigned storage URL")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="無效的檔案儲存網址")
-    return RedirectResponse(url, status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers=headers)
+    redirect_suffix = parsed.path
+    if parsed.query:
+        redirect_suffix = f"{redirect_suffix}?{parsed.query}"
+    if parsed.fragment:
+        redirect_suffix = f"{redirect_suffix}#{parsed.fragment}"
+    # 以設定中的可信 S3 主機為前綴，輸入只能提供物件路徑與預簽查詢。
+    redirect_url = f"https://{trusted_host}" + redirect_suffix
+    return RedirectResponse(
+        redirect_url,
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        headers=headers,
+    )
 
 
 async def deliver_stored_file(
