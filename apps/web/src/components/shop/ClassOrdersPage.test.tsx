@@ -229,6 +229,47 @@ describe("班代工作流程", () => {
     expect(within(table).queryByRole("columnheader", { name: "訂單" })).not.toBeInTheDocument();
   });
 
+  it("shows the selected activity's whole-class due and collected totals regardless of roster filters", async () => {
+    api.listClassOrders.mockResolvedValue([
+      {
+        id: "collected-order", user_id: "a", user_name: "示範甲", status: "pending",
+        category_id: "category", activity_id: null, total_price: 150,
+        is_paid: false, is_class_collected: true, items: [],
+      },
+      {
+        id: "uncollected-order", user_id: "b", user_name: "示範乙", status: "pending",
+        category_id: "category", activity_id: null, total_price: 250,
+        is_paid: false, is_class_collected: false, items: [],
+      },
+      {
+        id: "cancelled-order", user_id: "a", user_name: "示範甲", status: "cancelled",
+        category_id: "category", activity_id: null, total_price: 50,
+        is_paid: false, is_class_collected: false, items: [],
+      },
+      {
+        id: "refunded-order", user_id: "b", user_name: "示範乙", status: "refunded",
+        category_id: "category", activity_id: null, total_price: 70,
+        is_paid: false, is_class_collected: false, items: [],
+      },
+    ]);
+    render(<ClassOrdersPage />);
+
+    openCollectWorkspace();
+    const totals = await screen.findByRole("group", { name: "全班收款統計" });
+    expect(within(totals).getByText("全班應收").parentElement?.textContent).toContain("NT$400");
+    expect(within(totals).getByText("班代目前已收").parentElement?.textContent).toContain("NT$150");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "搜尋收款同學" }), {
+      target: { value: "示範甲" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "名冊收款狀態" }), {
+      target: { value: "paid" },
+    });
+
+    expect(within(totals).getByText("全班應收").parentElement?.textContent).toContain("NT$400");
+    expect(within(totals).getByText("班代目前已收").parentElement?.textContent).toContain("NT$150");
+  });
+
   it("shows a clear message when there are no activities to collect", async () => {
     api.catalog.mockResolvedValue([]);
     render(<ClassOrdersPage />);

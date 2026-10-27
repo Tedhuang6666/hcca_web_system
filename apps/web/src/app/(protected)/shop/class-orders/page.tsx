@@ -336,6 +336,10 @@ export default function ClassOrdersPage() {
     && (seatFilter === "all" || (seatFilter === "unpaid"
       ? row.amount > row.collected : row.orders.length > 0 && row.amount === row.collected)),
   );
+  const seatCollectionTotals = useMemo(() => seatRows.reduce((totals, row) => ({
+    amount: totals.amount + row.amount,
+    collected: totals.collected + row.collected,
+  }), { amount: 0, collected: 0 }), [seatRows]);
 
   const selectedActivityLabel = activityFilter === "all"
     ? "全部活動"
@@ -1653,6 +1657,38 @@ export default function ClassOrdersPage() {
               </label>
             )}
           </div>
+          {activityRows.length > 0 && (loading ? (
+            <p className="rounded-lg px-4 py-3 text-sm" role="status"
+              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+              正在載入全班收款統計…
+            </p>
+          ) : loadFailed ? (
+            <p className="rounded-lg px-4 py-3 text-sm" role="alert"
+              style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>
+              無法載入全班收款統計，請重新整理後再試。
+            </p>
+          ) : (
+            <div className="rounded-lg px-4 py-3" role="group" aria-label="全班收款統計"
+              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                統計所選活動的全班有效訂單，不受名冊搜尋或狀態篩選影響。
+              </p>
+              <dl className="grid gap-y-2 text-sm sm:grid-cols-2 sm:gap-x-6">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt style={{ color: "var(--text-secondary)" }}>全班應收</dt>
+                  <dd className="font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                    {money(seatCollectionTotals.amount)}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt style={{ color: "var(--text-secondary)" }}>班代目前已收</dt>
+                  <dd className="font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+                    {money(seatCollectionTotals.collected)}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ))}
           {activityRows.length === 0 ? (
             <p className="rounded-lg px-4 py-6 text-sm" role={loadFailed ? "alert" : "status"}
               style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
