@@ -13,6 +13,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import Modal from "@/components/ui/Modal";
 import type {
+  ActivityOut,
   CatalogCategoryOut,
   CloseStatusItem,
   OrderListItem,
@@ -78,6 +79,7 @@ export default function CouncilOrdersPage() {
 
   // 資料
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
+  const [activities, setActivities] = useState<ActivityOut[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
   const [quantities, setQuantities] = useState<OrderQuantityRow[]>([]);
@@ -112,10 +114,15 @@ export default function CouncilOrdersPage() {
   useEffect(() => {
     let cancelled = false;
     setOptionsError(false);
-    Promise.all([shopApi.catalog(undefined, true), classApi.recipientOptions()]).then(([nextCatalog, nextClasses]) => {
+    Promise.all([
+      shopApi.catalog(undefined, true),
+      classApi.recipientOptions(),
+      shopApi.listActivities(),
+    ]).then(([nextCatalog, nextClasses, nextActivities]) => {
       if (cancelled) return;
       setCatalog(nextCatalog);
       setClasses(nextClasses);
+      setActivities(nextActivities);
     }).catch(() => { if (!cancelled) setOptionsError(true); });
     return () => { cancelled = true; };
   }, [optionsRetry]);
@@ -133,6 +140,14 @@ export default function CouncilOrdersPage() {
       categories: CatalogCategoryOut[];
     };
     const groups = new Map<string, ActivityGroup>();
+    for (const activity of activities) {
+      groups.set(activity.id, {
+        key: activity.id,
+        activityId: activity.id,
+        label: activity.name,
+        categories: [],
+      });
+    }
     for (const category of catalog) {
       const key = category.activity_id ?? "__general__";
       const group = groups.get(key) ?? {
@@ -148,7 +163,7 @@ export default function CouncilOrdersPage() {
       groups.set(key, group);
     }
     return [...groups.values()];
-  }, [catalog]);
+  }, [activities, catalog]);
 
   const loadSummary = useCallback(async () => {
     const version = ++requestVersion.current;
