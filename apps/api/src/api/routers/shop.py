@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
@@ -42,6 +43,7 @@ from api.schemas.shop import (
     ClassOrderUpsert,
     ClassPaymentOut,
     ClassPaymentUpdate,
+    ClassReceiptBatchCreate,
     CloseStatusOut,
     CurrentRegistrationUpdate,
     ImageUploadOut,
@@ -541,6 +543,57 @@ async def list_promotions(
         include_testing=await can_test_products(session, current_user),
     )
     return [shop_svc.serialize_promotion(promotion) for promotion in promotions]
+
+
+@router.post(
+    "/orders/classes/receipts.pdf",
+    summary="批次下載班級收款簽收單",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}}
+    },
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def download_class_receipts(
+    payload: ClassReceiptBatchCreate,
+    session: DbDep,
+) -> Response:
+    school_classes: list[SchoolClass] | None = None
+    if payload.class_ids is not None:
+        school_classes = list(
+            (
+                await session.scalars(
+                    select(SchoolClass)
+                    .where(SchoolClass.id.in_(payload.class_ids))
+                    .order_by(SchoolClass.class_code, SchoolClass.id)
+                )
+            ).all()
+        )
+        if len(school_classes) != len(set(payload.class_ids)):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定班級")
+    try:
+        pdf = await shop_svc.export_class_receipts_pdf(
+            session, school_classes, activity_id=payload.activity_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    filename = "班聯收款簽收單-多班.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get(

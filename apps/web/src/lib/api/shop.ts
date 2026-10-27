@@ -164,6 +164,16 @@ export const shopApi = {
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
     return response;
   },
+  downloadClassReceipts: async (activityId: string | null, classIds?: string[]) => {
+    const response = await authFetch(`${BASE}/shop/orders/classes/receipts.pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
+      body: JSON.stringify({ activity_id: activityId, class_ids: classIds ?? null }),
+      credentials: "include",
+    });
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
+  },
   downloadReport: (format: "xlsx" | "csv", params?: { activity_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.activity_id) q.set("activity_id", params.activity_id);

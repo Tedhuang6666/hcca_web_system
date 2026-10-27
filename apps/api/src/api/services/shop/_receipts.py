@@ -185,35 +185,57 @@ async def export_class_receipt_pdf(
     *,
     activity_id: uuid.UUID | None,
 ) -> bytes:
-    """僅匯出班聯已確認的有效訂單；不受清單篩選或分頁影響，也不修改收款狀態。"""
+    """匯出單一班級有效訂單；不受收款狀態、清單篩選或分頁影響。"""
+    return await export_class_receipts_pdf(session, [school_class], activity_id=activity_id)
+
+
+async def export_class_receipts_pdf(
+    session: AsyncSession,
+    school_classes: list[SchoolClass] | None,
+    *,
+    activity_id: uuid.UUID | None,
+) -> bytes:
+    """依班級順序合併多份收據；未指定班級時匯出此活動所有有有效訂單的班級。"""
     activity = await session.get(Activity, activity_id) if activity_id else None
     if activity_id and activity is None:
         raise ValueError("找不到此活動")
-    orders = list(
-        (
-            await session.scalars(
-                select(Order)
-                .where(
-                    Order.class_id == school_class.id,
-                    Order.test_product_id.is_(None),
-                    Order.activity_id == activity_id
-                    if activity_id is not None
-                    else Order.activity_id.is_(None),
-                    Order.is_paid.is_(True),
-                    Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
-                )
-                .options(selectinload(Order.items).selectinload(OrderItem.product))
-                .order_by(Order.created_at, Order.id)
-            )
-        ).all()
+    statement = (
+        select(SchoolClass, Order)
+        .join(Order, Order.class_id == SchoolClass.id)
+        .where(
+            Order.test_product_id.is_(None),
+            Order.activity_id == activity_id
+            if activity_id is not None
+            else Order.activity_id.is_(None),
+            Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
+        )
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .order_by(SchoolClass.class_code, SchoolClass.id, Order.created_at, Order.id)
     )
-    if not orders:
-        raise ValueError("此班此活動尚無班聯已確認收款的有效訂單，請先確認收款")
-    return await asyncio.to_thread(
-        _render_class_receipt_pdf,
-        school_class.label or school_class.class_code,
-        school_class.academic_year,
-        activity.name if activity else "一般商品",
-        orders,
-        local_today(),
-    )
+    if school_classes is not None:
+        selected_class_ids = [school_class.id for school_class in school_classes]
+        statement = statement.where(Order.class_id.in_(selected_class_ids))
+    rows = (await session.execute(statement)).all()
+    orders_by_class: dict[uuid.UUID, tuple[SchoolClass, list[Order]]] = {}
+    for school_class, order in rows:
+        entry = orders_by_class.setdefault(school_class.id, (school_class, []))
+        entry[1].append(order)
+    if not orders_by_class:
+        raise ValueError("此活動尚無有效訂單可產生收據")
+
+    writer = PdfWriter()
+    issued_on = local_today()
+    for school_class, orders in orders_by_class.values():
+        receipt = await asyncio.to_thread(
+            _render_class_receipt_pdf,
+            school_class.label or school_class.class_code,
+            school_class.academic_year,
+            activity.name if activity else "一般商品",
+            orders,
+            issued_on,
+        )
+        for page in PdfReader(BytesIO(receipt)).pages:
+            writer.add_page(page)
+    result = BytesIO()
+    writer.write(result)
+    return result.getvalue()

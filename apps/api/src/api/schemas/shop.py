@@ -568,6 +568,16 @@ class ClassPaymentUpdate(BaseModel):
     activity_id: uuid.UUID | None = Field(description="本次更新的活動；null 代表一般商品")
 
 
+class ClassReceiptBatchCreate(BaseModel):
+    activity_id: uuid.UUID | None = Field(description="收據活動；null 代表一般商品")
+    class_ids: list[uuid.UUID] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="指定班級；未提供時匯出此活動所有有有效訂單的班級",
+    )
+
+
 class ClassCollectionUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
