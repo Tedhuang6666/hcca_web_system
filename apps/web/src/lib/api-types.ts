@@ -10259,6 +10259,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/activities/{activity_id}/order-closure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 結單或重新開放活動訂購；保留訂單與收款 */
+        patch: operations["update_shop_activity_order_closure_shop_activities__activity_id__order_closure_patch"];
+        trace?: never;
+    };
     "/shop/activities/{activity_id}/order-deadline": {
         parameters: {
             query?: never;
@@ -12581,6 +12598,8 @@ export interface components {
             is_active: boolean;
             /** Name */
             name: string;
+            /** Order Closed At */
+            order_closed_at?: string | null;
             /** Order Closes At */
             order_closes_at?: string | null;
             /** Org Id */
@@ -14413,6 +14432,8 @@ export interface components {
             image_url?: string | null;
             /** Name */
             name: string;
+            /** Order Closed At */
+            order_closed_at?: string | null;
             /** Order Closes At */
             order_closes_at?: string | null;
             /**
@@ -29104,6 +29125,14 @@ export interface components {
              * @description 活動商品停止訂購時間；null 表示取消活動統一期限
              */
             order_closes_at: string | null;
+        };
+        /** ShopActivityOrderClosureUpdate */
+        ShopActivityOrderClosureUpdate: {
+            /**
+             * Is Closed
+             * @description 結單鎖定活動訂購；false 重新開放，仍受原期限限制
+             */
+            is_closed: boolean;
         };
         /** ShopClassProductSummaryRow */
         ShopClassProductSummaryRow: {
@@ -54438,6 +54467,41 @@ export interface operations {
             };
         };
     };
+    update_shop_activity_order_closure_shop_activities__activity_id__order_closure_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopActivityOrderClosureUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_shop_activity_deadline_shop_activities__activity_id__order_deadline_patch: {
         parameters: {
             query?: never;
@@ -54477,6 +54541,8 @@ export interface operations {
         parameters: {
             query?: {
                 activity_id?: string | null;
+                /** @description 包含已結單活動，供登入後查詢與收款 */
+                include_closed?: boolean;
             };
             header?: never;
             path?: never;

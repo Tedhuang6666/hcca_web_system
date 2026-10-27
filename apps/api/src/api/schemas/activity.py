@@ -51,6 +51,7 @@ class ActivityOut(BaseModel):
     starts_at: datetime | None
     ends_at: datetime | None
     order_closes_at: datetime | None = None
+    order_closed_at: datetime | None = None
     status: ActivityStatus
     is_active: bool
     created_at: datetime

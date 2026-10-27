@@ -70,6 +70,10 @@ class ShopActivityDeadlineUpdate(BaseModel):
     )
 
 
+class ShopActivityOrderClosureUpdate(BaseModel):
+    is_closed: bool = Field(..., description="結單鎖定活動訂購；false 重新開放，仍受原期限限制")
+
+
 class ProductCategoryCreate(BaseModel):
     activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
     name: str = Field(..., min_length=1, max_length=200, description="主題名稱，如「商品」")
@@ -253,6 +257,7 @@ class CatalogCategoryOut(BaseModel):
     activity_id: uuid.UUID | None = None
     activity_name: str | None = None
     order_closes_at: datetime | None = None
+    order_closed_at: datetime | None = None
     activity_status: str | None = None
     image_url: str | None = None
     sort_order: int = 0

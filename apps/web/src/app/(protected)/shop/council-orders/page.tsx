@@ -108,7 +108,7 @@ export default function CouncilOrdersPage() {
   useEffect(() => {
     let cancelled = false;
     setOptionsError(false);
-    Promise.all([shopApi.catalog(), classApi.recipientOptions()]).then(([nextCatalog, nextClasses]) => {
+    Promise.all([shopApi.catalog(undefined, true), classApi.recipientOptions()]).then(([nextCatalog, nextClasses]) => {
       if (cancelled) return;
       setCatalog(nextCatalog);
       setClasses(nextClasses);

@@ -68,6 +68,7 @@ from api.schemas.shop import (
     ProductVariantOptionOut,
     ProductVariantOptionUpdate,
     ShopActivityDeadlineUpdate,
+    ShopActivityOrderClosureUpdate,
     ShopClassSummaryOut,
     ShopDelegatedOrderOut,
     ShopDelegationAccess,
@@ -97,7 +98,7 @@ from api.services.permission import get_user_permission_codes
 from api.services.realtime_events import broadcast_order_updated
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _delegation_codes as delegation_code_svc
-from api.services.shop._deadlines import set_activity_order_deadline
+from api.services.shop._deadlines import set_activity_order_closure, set_activity_order_deadline
 from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.storage import get_storage
 
@@ -331,6 +332,39 @@ async def update_shop_activity_deadline(
     return ActivityOut.model_validate(or_404(activity, "找不到此活動"))
 
 
+@router.patch(
+    "/activities/{activity_id}/order-closure",
+    response_model=ActivityOut,
+    summary="結單或重新開放活動訂購；保留訂單與收款",
+)
+async def update_shop_activity_order_closure(
+    activity_id: uuid.UUID,
+    payload: ShopActivityOrderClosureUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> ActivityOut:
+    await _require_shop_manager(session, current_user, activity_id)
+    activity = or_404(
+        await set_activity_order_closure(session, activity_id, is_closed=payload.is_closed),
+        "找不到此活動",
+    )
+    await audit_svc.record(
+        session,
+        entity_type="activity",
+        entity_id=str(activity_id),
+        action="shop.activity_order_close" if payload.is_closed else "shop.activity_order_reopen",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "order_closed_at": activity.order_closed_at.isoformat()
+            if activity.order_closed_at
+            else None
+        },
+        summary=f"活動「{activity.name}」{'結單' if payload.is_closed else '重新開放訂購'}",
+    )
+    return ActivityOut.model_validate(activity)
+
+
 @router.post(
     "/categories",
     response_model=ProductCategoryOut,
@@ -442,11 +476,15 @@ async def get_catalog(
     session: DbDep,
     current_user: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
+    include_closed: bool = Query(False, description="包含已結單活動，供登入後查詢與收款"),
 ) -> list[CatalogCategoryOut]:
+    if include_closed and current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="請先登入")
     return await shop_svc.build_catalog_tree(
         session,
         activity_id=activity_id,
         include_testing=await can_test_products(session, current_user),
+        include_closed=include_closed,
     )
 
 

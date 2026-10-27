@@ -509,6 +509,7 @@ async def build_catalog_tree(
     *,
     activity_id: uuid.UUID | None = None,
     include_testing: bool = False,
+    include_closed: bool = False,
 ) -> list[CatalogCategoryOut]:
     q = (
         select(ProductCategory)
@@ -535,6 +536,8 @@ async def build_catalog_tree(
         visible.add(ProductStatus.TESTING)
     tree: list[CatalogCategoryOut] = []
     for category in categories:
+        if not include_closed and category.activity and category.activity.order_closed_at:
+            continue
         category_products = [
             CatalogProductOut(
                 id=product.id,
@@ -595,6 +598,7 @@ async def build_catalog_tree(
                 activity_id=category.activity_id,
                 activity_name=category.activity.name if category.activity else None,
                 order_closes_at=category.activity.order_closes_at if category.activity else None,
+                order_closed_at=category.activity.order_closed_at if category.activity else None,
                 activity_status=category.activity.status if category.activity else None,
                 image_url=category.image_url,
                 sort_order=category.sort_order,

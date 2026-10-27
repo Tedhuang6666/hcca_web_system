@@ -73,6 +73,24 @@ function openCollectWorkspace() {
 }
 
 describe("班代工作流程", () => {
+  it("已結單活動保留收款名冊與收款操作", async () => {
+    api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: "festival",
+      activity_name: "園遊會", order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] }]);
+    api.listClassOrders.mockResolvedValue([
+      { id: "closed-order", serial_number: "1", user_id: "a", status: "pending", total_price: 100,
+        activity_id: "festival", is_class_collected: false, items: [] },
+    ]);
+    api.setClassCollected.mockResolvedValue({});
+    render(<ClassOrdersPage />);
+    openCollectWorkspace();
+    const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
+    const collect = within(table).getAllByRole("button", { name: "設為已收" })
+      .find((button) => !button.hasAttribute("disabled"))!;
+    fireEvent.click(collect);
+    await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledWith("closed-order", true));
+    expect(api.catalog).toHaveBeenCalledWith(undefined, true);
+  });
+
   it("代訂與清單數量都能先刪空再輸入，並送出實際填寫的數量", async () => {
     const user = userEvent.setup();
     render(<ClassOrdersPage />);

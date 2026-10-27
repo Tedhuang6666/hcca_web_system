@@ -10,6 +10,22 @@ function ActivityDeadline({ activity, onSaved }: { activity: ActivityOut; onSave
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [closedAt, setClosedAt] = useState(activity.order_closed_at ?? null);
+
+  async function toggleClosure() {
+    setSaving(true); setError(""); setMessage("");
+    try {
+      const updated = await shopApi.updateActivityOrderClosure(activity.id, !closedAt);
+      setClosedAt(updated.order_closed_at ?? null);
+      setMessage(updated.order_closed_at
+        ? "活動已結單並從商品頁隱藏，既有訂單保留且可繼續收款。"
+        : "已重新開放活動，訂購仍依原有期限與商品狀態判定。");
+      onSaved();
+    } catch (cause) {
+      setError(apiErrorMessage(cause, "活動結單狀態更新失敗，請再試一次。"));
+    } finally { setSaving(false); }
+  }
+
   return (
     <form className="grid min-w-0 grid-cols-2 items-end gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]" onSubmit={async (event) => {
       event.preventDefault();
@@ -34,6 +50,18 @@ function ActivityDeadline({ activity, onSaved }: { activity: ActivityOut; onSave
       </button>
       {value && <button type="button" disabled={saving} className="btn btn-ghost min-h-11"
         onClick={() => { setValue(""); setMessage("請按儲存結單時間，套用取消設定。"); }}>清除時間</button>}
+      <div className="col-span-full flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 text-sm" style={{ color: "var(--text-secondary)" }}>
+          {closedAt
+            ? `已結單（${new Date(closedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}），訂單保留、收款繼續。`
+            : "立即結單會鎖定整個活動訂購並隱藏商品頁資訊，單品延長也不會開放。"}
+        </p>
+        <button type="button" disabled={saving} onClick={() => void toggleClosure()}
+          aria-label={`${closedAt ? "重新開放" : "立即結單"}${activity.name}`}
+          className="btn btn-secondary min-h-11 shrink-0">
+          {saving ? "更新中…" : closedAt ? "重新開放訂購" : "立即結單"}
+        </button>
+      </div>
       {message && <p role="status" className="col-span-full text-sm" style={{ color: "var(--text-secondary)" }}>{message}</p>}
       {error && <p role="alert" className="col-span-full text-sm" style={{ color: "var(--danger)" }}>{error}</p>}
     </form>
@@ -56,7 +84,7 @@ export default function ActivityDeadlines({ onSaved }: { onSaved: () => void }) 
   return (
     <details className="card p-4">
       <summary className="min-h-11 cursor-pointer content-center font-semibold"
-        style={{ color: "var(--text-primary)" }}>活動結單時間</summary>
+        style={{ color: "var(--text-primary)" }}>活動結單與期限</summary>
       <p className="my-2 text-sm" style={{ color: "var(--text-secondary)" }}>
         時間以台北時間顯示。同一活動下所有主題與系列共用結單時間；單品另設截止時間時優先適用，可針對該商品延長。留空表示不設活動統一期限。
       </p>
