@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Search, SlidersHorizontal, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { adminApi, apiErrorMessage } from "@/lib/api";
 import type { AdminUserDetail, ClassRosterSummary, SchoolClassListItem } from "@/lib/types";
 import { AccountDetailPanel } from "./AccountDetailPanel";
+import MobileBackToList from "@/components/ui/MobileBackToList";
 
 function rosterClassLabel(entry: ClassRosterSummary) {
   return entry.class_label ?? (entry.academic_year + " 學年度 " + entry.class_code + " 班");
@@ -36,12 +37,14 @@ export function AccountDirectoryPanel({
   onRefresh,
   classes,
   canManageClasses,
+  initialSelectedId = null,
 }: {
   users: AdminUserDetail[];
   loading: boolean;
   onRefresh: () => Promise<void>;
   classes: SchoolClassListItem[];
   canManageClasses: boolean;
+  initialSelectedId?: string | null;
 }) {
   const [query, setQuery] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
@@ -51,7 +54,10 @@ export function AccountDirectoryPanel({
     users: AdminUserDetail[];
   } | null>(null);
   const [searchErrorKey, setSearchErrorKey] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(Boolean(initialSelectedId));
+  const searchRef = useRef<HTMLInputElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(false);
@@ -63,6 +69,10 @@ export function AccountDirectoryPanel({
   const searchResolved = !shouldSearchRemote
     || searchData?.key === searchKey
     || searchErrorKey === searchKey;
+
+  useEffect(() => {
+    if (initialSelectedId && window.innerWidth < 1280) detailRef.current?.focus();
+  }, [initialSelectedId]);
 
   useEffect(() => {
     if (!shouldSearchRemote) return;
@@ -118,11 +128,11 @@ export function AccountDirectoryPanel({
   useEffect(() => {
     if (!searchResolved) return;
     setSelectedId((current) => (
-      current && filteredUsers.some((user) => user.id === current)
+      current && ((!shouldSearchRemote && !activeOnly) || filteredUsers.some((user) => user.id === current))
         ? current
         : filteredUsers[0]?.id ?? null
     ));
-  }, [filteredUsers, searchResolved]);
+  }, [activeOnly, filteredUsers, searchResolved, shouldSearchRemote]);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,21 +190,22 @@ export function AccountDirectoryPanel({
   };
 
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[23rem_1fr]">
-      <section className="flex min-h-0 max-h-[38dvh] flex-col overflow-hidden rounded-xl xl:max-h-none" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+    <div className="grid min-h-0 min-w-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
+      <section className={`${mobileDetailOpen ? "hidden xl:flex" : "flex"} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl`} style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
         <div className="space-y-3 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
           <div className="flex items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
             <Search size={15} className="shrink-0" style={{ color: "var(--text-muted)" }} />
             <input
+              ref={searchRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="w-full bg-transparent text-sm outline-none"
+              className="min-h-7 min-w-0 w-full bg-transparent text-sm outline-none"
               placeholder="搜尋姓名、學號、Email、班級或座號"
               aria-label="搜尋平台帳號"
               style={{ color: "var(--text-primary)" }}
             />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2">
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               {loading && !normalizedQuery
                 ? "載入帳號中…"
@@ -202,11 +213,11 @@ export function AccountDirectoryPanel({
                   ? "搜尋中…"
                   : "顯示 " + filteredUsers.length + " 個帳號"}
             </p>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:items-center">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <select
                 value={classFilter}
                 onChange={(event) => setClassFilter(event.target.value)}
-                className="min-h-11 min-w-0 rounded-lg px-2.5 text-xs sm:w-44"
+                className="min-h-11 min-w-0 rounded-lg px-2.5 text-xs"
                 aria-label="依班級篩選帳號"
                 style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
               >
@@ -254,7 +265,13 @@ export function AccountDirectoryPanel({
             <button
               key={user.id}
               type="button"
-              onClick={() => setSelectedId(user.id)}
+              onClick={() => {
+                setSelectedId(user.id);
+                setMobileDetailOpen(true);
+                window.requestAnimationFrame(() => {
+                  if (window.innerWidth < 1280) detailRef.current?.focus();
+                });
+              }}
               className="flex min-h-[88px] w-full items-center gap-3 border-t px-4 py-3 text-left transition-colors hover:bg-[var(--bg-hover)]"
               aria-current={selectedId === user.id ? "true" : undefined}
               style={{
@@ -287,7 +304,13 @@ export function AccountDirectoryPanel({
         </div>
       </section>
 
-      <section className="flex min-w-0 flex-col overflow-visible rounded-xl xl:min-h-0 xl:overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <section ref={detailRef} tabIndex={-1} className={`${mobileDetailOpen ? "flex" : "hidden xl:flex"} min-w-0 flex-col rounded-xl outline-none xl:min-h-0 xl:overflow-hidden`} style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+        <div className="p-3 xl:hidden">
+          <MobileBackToList label="返回帳號清單" className="min-h-11" onBack={() => {
+            setMobileDetailOpen(false);
+            window.requestAnimationFrame(() => searchRef.current?.focus());
+          }} />
+        </div>
         {detailLoading ? (
           <div className="p-6 text-sm" role="status" style={{ color: "var(--text-muted)" }}>載入帳號詳情…</div>
         ) : detailError ? (

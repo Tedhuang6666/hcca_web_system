@@ -1,0 +1,37 @@
+.person {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-wrap: anywhere;
+}
+
+.person input,
+.person select,
+.person textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.personForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  padding-block: 0.5rem;
+}
+
+.personForm > * {
+  min-width: 0;
+}
+
+.fullRow {
+  grid-column: 1 / -1;
+}
+
+@container (min-width: 32rem) {
+  .personForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,100 @@
+.root {
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+  max-width: 64rem;
+  margin-inline: auto;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.root > * + * {
+  margin-top: 1rem;
+}
+
+.root input,
+.root select,
+.root textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.section {
+  min-width: 0;
+  border-radius: 0.75rem;
+}
+
+.section summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: 0.75rem;
+}
+
+.twoColumns,
+.rosterForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.twoColumns > *,
+.rosterForm > * {
+  min-width: 0;
+}
+
+.emailForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.channels {
+  display: grid;
+  clear: both;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem 0.75rem;
+}
+
+.governance {
+  display: grid;
+  min-width: 0;
+  gap: 1.5rem;
+}
+
+/* 內嵌區塊沿用原本行為，外層收合區提供共同的邊界。 */
+.governance > section {
+  min-width: 0;
+  padding: 0;
+  border: 0 !important;
+}
+
+.governance > section + section {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border) !important;
+}
+
+.governance :global(.grid) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 30rem) {
+  .twoColumns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emailForm {
+    flex-direction: row;
+  }
+
+  .channels {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 40rem) {
+  .rosterForm {
+    grid-template-columns: minmax(0, 1fr) 7rem auto;
+    align-items: end;
+  }
+}

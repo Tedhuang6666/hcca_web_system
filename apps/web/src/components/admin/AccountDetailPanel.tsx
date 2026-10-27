@@ -25,6 +25,7 @@ import type {
   SchoolClassListItem,
 } from "@/lib/types";
 import { AccountLifecycleSection, AccountTenureSection } from "./AccountGovernanceSections";
+import styles from "./AccountDetailPanel.module.css";
 
 function classOptionLabel(item: SchoolClassListItem) {
   return item.academic_year + " 學年度 " + (item.label ?? (item.class_code + " 班"));
@@ -115,7 +116,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`min-h-11 w-full rounded-lg px-3 text-sm outline-none ${props.className ?? ""}`}
+      className={`min-h-11 min-w-0 w-full rounded-lg px-3 text-sm outline-none ${props.className ?? ""}`}
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
@@ -130,7 +131,7 @@ function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`min-h-11 w-full rounded-lg px-3 text-sm outline-none ${props.className ?? ""}`}
+      className={`min-h-11 min-w-0 w-full rounded-lg px-3 text-sm outline-none ${props.className ?? ""}`}
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
@@ -146,27 +147,30 @@ function Section({
   description,
   children,
   tone = "default",
+  defaultOpen = false,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
   tone?: "default" | "warning";
+  defaultOpen?: boolean;
 }) {
   return (
-    <section
-      className="rounded-xl p-4 sm:p-5"
+    <details
+      open={defaultOpen || undefined}
+      className={styles.section}
       style={{
         border: tone === "warning"
           ? "1px solid color-mix(in srgb, var(--warning) 35%, var(--border))"
           : "1px solid var(--border)",
       }}
     >
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h3>
-        {description && <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>{description}</p>}
+      <summary className="min-h-12 cursor-pointer p-4 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</summary>
+      <div className="min-w-0 px-4 pb-4">
+        {description && <p className="mb-4 text-xs leading-5" style={{ color: "var(--text-muted)" }}>{description}</p>}
+        {children}
       </div>
-      {children}
-    </section>
+    </details>
   );
 }
 
@@ -449,8 +453,8 @@ function AccountDetail({
 
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 p-4 sm:p-6">
-      <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-start sm:justify-between" style={{ borderColor: "var(--border)" }}>
+    <div className={styles.root}>
+      <header className="flex min-w-0 flex-col gap-4 border-b pb-5" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}><UserRound size={22} /></div>
           <div className="min-w-0">
@@ -460,30 +464,32 @@ function AccountDetail({
               {user.is_verified && <StatusBadge label="已驗證" tone="success" />}
             </div>
             <p className="mt-1 break-all text-sm" style={{ color: "var(--text-secondary)" }}>{user.email}</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>建立於 {new Date(user.created_at).toLocaleDateString("zh-TW")} · ID {user.id}</p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>建立於 {new Date(user.created_at).toLocaleDateString("zh-TW")}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
-          <Button onClick={toggleSuperuser} tone="warning" disabled={user.is_owner && user.is_superuser}><KeyRound size={15} />{user.is_superuser ? "取消超管" : "設定超管"}</Button>
           <Button onClick={saveSettings} tone="primary" disabled={saving || !displayName.trim()}><Check size={16} />{saving ? "儲存中…" : "儲存設定"}</Button>
         </div>
       </header>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="min-w-0 space-y-3">
         <div className="space-y-4">
-          <AccountLifecycleSection user={user} onChanged={onChanged} />
-          <AccountTenureSection user={user} onChanged={onChanged} />
-
-          <Section title="基本資料與帳號設定" description="可調整管理資料與登入偏好；主要登入 Email 僅供識別，請透過連結登入身分處理帳號歸戶。">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <Section defaultOpen title="基本資料與帳號設定" description="可調整管理資料與登入偏好；主要登入 Email 僅供識別，請透過連結登入身分處理帳號歸戶。">
+            <div className={styles.twoColumns}>
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>顯示姓名<TextInput className="mt-1" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>學號<TextInput className="mt-1" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="留白可清除" /></label>
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>介面主題<SelectInput className="mt-1" value={theme} onChange={(event) => setTheme(event.target.value as AdminUserDetail["ui_theme"])}><option value="auto">跟隨系統</option><option value="light">淺色</option><option value="dark">深色</option></SelectInput></label>
-              <label className="text-xs" style={{ color: "var(--text-muted)" }}>介面語言<SelectInput className="mt-1" value={user.ui_locale} disabled><option value="zh-TW">繁體中文</option></SelectInput></label>
             </div>
             <div className="mt-3 grid gap-1 rounded-lg" style={{ background: "var(--bg-elevated)" }}>
               <ToggleRow label="Email 已驗證" hint="調整外部帳號的信任狀態；請確認來源後再變更。" checked={isVerified} onChange={setIsVerified} />
               <ToggleRow label="允許對外顯示 Email" hint="影響公開人員資料與承辦人資訊的 Email 顯示。" checked={showEmail} onChange={setShowEmail} />
+            </div>
+          </Section>
+
+          <Section title="學籍與幹部任期">
+            <div className={styles.governance}>
+              <AccountLifecycleSection user={user} onChanged={onChanged} />
+              <AccountTenureSection user={user} onChanged={onChanged} />
             </div>
           </Section>
 
@@ -511,7 +517,7 @@ function AccountDetail({
             )}
             {canManageClasses && (
               <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+                <div className={styles.rosterForm}>
                   <label className="text-xs" style={{ color: "var(--text-muted)" }}>
                     班級
                     <SelectInput
@@ -593,28 +599,48 @@ function AccountDetail({
             <div className="space-y-2">
               {user.linked_emails.map((email, index) => <div key={email} className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}><Mail size={15} style={{ color: "var(--text-muted)" }} /><span className="min-w-0 flex-1 break-all">{email}</span>{index === 0 && <StatusBadge label="主要" tone="success" />}</div>)}
             </div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <div className={styles.emailForm}>
               <TextInput value={emailAlias} onChange={(event) => setEmailAlias(event.target.value)} placeholder="name@gmail.com，可用逗號分隔多筆" />
               <Button onClick={linkEmails} tone="primary" disabled={working || !emailAlias.trim()} className="shrink-0"><Link2 size={15} />連結 Email</Button>
             </div>
           </Section>
 
-          <Section title="通知偏好" description="可代替使用者調整站內、Email、LINE 與 Discord 通知；儲存後立即生效。">
-            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <Section title="通知偏好" description="調整通知管道後，按上方「儲存設定」套用。">
+            <div className={`${styles.twoColumns} mb-4`}>
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>Email 摘要頻率<SelectInput className="mt-1" value={digest} onChange={(event) => setDigest(event.target.value as typeof digest)}><option value="off">關閉摘要</option><option value="daily">每日摘要</option><option value="weekly">每週摘要</option></SelectInput></label>
-              <div className="text-xs" style={{ color: "var(--text-muted)" }}>已靜音模組<div className="mt-1 flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg px-3" style={{ border: "1px solid var(--border)" }}>{Object.entries(MODULE_LABELS).map(([key, label]) => <button type="button" key={key} onClick={() => setMutedModules((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} className="rounded-full px-2 py-1 text-[11px]" style={{ background: mutedModules.includes(key) ? "var(--warning-dim)" : "var(--bg-elevated)", color: mutedModules.includes(key) ? "var(--warning)" : "var(--text-muted)" }}>{label}</button>)}</div></div>
+              <div className="text-xs" style={{ color: "var(--text-muted)" }}>已靜音模組<div className="mt-1 flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg px-3" style={{ border: "1px solid var(--border)" }}>{Object.entries(MODULE_LABELS).map(([key, label]) => <button type="button" key={key} onClick={() => setMutedModules((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} aria-pressed={mutedModules.includes(key)} aria-label={`${label}通知靜音`} className="min-h-11 rounded-lg px-2 py-1 text-xs" style={{ background: mutedModules.includes(key) ? "var(--warning-dim)" : "var(--bg-elevated)", color: mutedModules.includes(key) ? "var(--warning)" : "var(--text-muted)" }}>{label}</button>)}</div></div>
             </div>
-            <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid var(--border)" }}>
-              <table className="w-full min-w-[640px] text-left text-xs"><thead style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}><tr><th className="px-3 py-2 font-medium">通知類型</th><th className="px-3 py-2 text-center font-medium">站內</th><th className="px-3 py-2 text-center font-medium">Email</th><th className="px-3 py-2 text-center font-medium">LINE</th><th className="px-3 py-2 text-center font-medium">Discord</th></tr></thead><tbody>{Object.entries(preferences).map(([type, channels]) => <tr key={type} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2.5" style={{ color: "var(--text-primary)" }}>{NOTIFICATION_LABELS[type] ?? type}</td>{(["inapp", "email", "line", "discord"] as const).map((channel) => <td key={channel} className="px-3 py-2.5 text-center"><input type="checkbox" checked={channels[channel]} onChange={(event) => updatePreference(type, channel, event.target.checked)} className="h-4 w-4 accent-[var(--primary)]" aria-label={`${NOTIFICATION_LABELS[type] ?? type} ${channel}`} /></td>)}</tr>)}</tbody></table>
+            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {Object.entries(preferences).map(([type, channels]) => (
+                <fieldset key={type} className="min-w-0 py-3" style={{ borderColor: "var(--border)" }}>
+                  <legend className="float-left mb-2 w-full break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{NOTIFICATION_LABELS[type] ?? type}</legend>
+                  <div className={styles.channels}>
+                    {([ ["inapp", "站內"], ["email", "Email"], ["line", "LINE"], ["discord", "Discord"] ] as const).map(([channel, label]) => (
+                      <label key={channel} className="flex min-h-11 min-w-0 cursor-pointer items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                        <input type="checkbox" checked={channels[channel]} onChange={(event) => updatePreference(type, channel, event.target.checked)} className="h-5 w-5 shrink-0 accent-[var(--primary)]" aria-label={`${NOTIFICATION_LABELS[type] ?? type} ${label}`} />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
             </div>
           </Section>
 
-          <AccountMergeSection key={user.id} user={user} users={users} onChanged={onChanged} />
+          <Section title="合併重複帳號" tone="warning">
+            <div className={styles.governance}>
+              <AccountMergeSection key={user.id} user={user} users={users} onChanged={onChanged} />
+            </div>
+          </Section>
         </div>
 
         <aside className="space-y-4">
           <Section title="安全維護" description="這些操作會影響登入或驗證狀態，系統會寫入稽核日誌。">
             <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm" style={{ color: "var(--text-primary)" }}>超級管理員權限</p>
+                <Button onClick={toggleSuperuser} tone="warning" disabled={user.is_owner && user.is_superuser}><KeyRound size={15} />{user.is_superuser ? "取消超管" : "設定超管"}</Button>
+              </div>
               <div className="flex items-start gap-3"><ShieldCheck size={17} className="mt-0.5" style={{ color: user.mfa_enabled ? "var(--success)" : "var(--text-muted)" }} /><div className="min-w-0 flex-1"><p className="text-sm" style={{ color: "var(--text-primary)" }}>兩步驟驗證</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{user.mfa_enabled ? "TOTP 已啟用" : "目前未啟用"}</p><Button onClick={clearMfa} tone="danger" disabled={!user.mfa_enabled} className="mt-2 w-full"><ShieldAlert size={15} />清除 2FA</Button></div></div>
               <div className="flex items-start gap-3 border-t pt-3" style={{ borderColor: "var(--border)" }}><LogOut size={17} className="mt-0.5" style={{ color: "var(--warning)" }} /><div className="min-w-0 flex-1"><p className="text-sm" style={{ color: "var(--text-primary)" }}>全部登入工作階段</p><p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>撤銷目前所有裝置的登入憑證，使用者需重新登入。</p><Button onClick={revokeSessions} tone="warning" className="mt-2 w-full"><LogOut size={15} />清除全部登入</Button></div></div>
             </div>
