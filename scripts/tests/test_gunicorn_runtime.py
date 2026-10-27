@@ -44,7 +44,9 @@ def request_worker(port: int) -> int:
 
 
 @contextmanager
-def running_server(**settings: str):
+def running_server(
+    *, extra_args: tuple[str, ...] = (), reload_on_start: bool = False, **settings: str
+):
     # Bind before launching Gunicorn so parallel test runs cannot steal the port.
     with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile(mode="w+") as log:
         Path(directory, "runtime_app.py").write_text(APP)
@@ -69,6 +71,7 @@ def running_server(**settings: str):
                     "1",
                     "--access-logfile",
                     os.devnull,
+                    *extra_args,
                     "runtime_app:app",
                 ],
                 cwd=directory,
@@ -82,13 +85,26 @@ def running_server(**settings: str):
             deadline = time.monotonic() + 15
             while time.monotonic() < deadline and process.poll() is None:
                 try:
-                    request_worker(port)
+                    initial_worker = request_worker(port)
                     break
                 except (OSError, http.client.HTTPException):
                     time.sleep(0.05)
             else:
                 log.seek(0)
                 raise AssertionError(f"Gunicorn failed to start:\n{log.read()}")
+            if reload_on_start:
+                process.send_signal(signal.SIGHUP)
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline and process.poll() is None:
+                    try:
+                        if request_worker(port) != initial_worker:
+                            break
+                    except (OSError, http.client.HTTPException):
+                        pass
+                    time.sleep(0.05)
+                else:
+                    log.seek(0)
+                    raise AssertionError(f"Gunicorn failed to reload:\n{log.read()}")
             yield port
         finally:
             if process.poll() is None:
@@ -106,16 +122,28 @@ class GunicornRuntimeTests(unittest.TestCase):
             worker_pids = {request_worker(port) for _ in range(1200)}
         self.assertEqual(len(worker_pids), 1, "Routine polling must not recycle the API worker")
 
-    def test_explicit_request_limit_still_recycles_workers(self) -> None:
-        with running_server(GUNICORN_MAX_REQUESTS="5", GUNICORN_MAX_REQUESTS_JITTER="0") as port:
-            worker_pids = {request_worker(port)}
-            deadline = time.monotonic() + 10
-            while len(worker_pids) < 2 and time.monotonic() < deadline:
-                try:
-                    worker_pids.add(request_worker(port))
-                except (OSError, http.client.HTTPException):
-                    time.sleep(0.05)
-        self.assertGreater(len(worker_pids), 1, "Explicit recycling must remain available")
+    def test_request_limit_overrides_cannot_reenable_recycling(self) -> None:
+        cases = (
+            (
+                "environment",
+                {"GUNICORN_MAX_REQUESTS": "5", "GUNICORN_MAX_REQUESTS_JITTER": "1"},
+                (),
+            ),
+            ("command environment", {"GUNICORN_CMD_ARGS": "--max-requests 5"}, ()),
+            ("command line", {}, ("--max-requests", "5", "--max-requests-jitter", "1")),
+        )
+        for name, environment, arguments in cases:
+            with self.subTest(source=name):
+                with running_server(extra_args=arguments, **environment) as port:
+                    worker_pids = {request_worker(port) for _ in range(1200)}
+                self.assertEqual(
+                    len(worker_pids), 1, "Overrides must not reenable worker recycling"
+                )
+
+    def test_reload_keeps_request_count_recycling_disabled(self) -> None:
+        with running_server(extra_args=("--max-requests", "500"), reload_on_start=True) as port:
+            worker_pids = {request_worker(port) for _ in range(1200)}
+        self.assertEqual(len(worker_pids), 1, "Reload must not reenable worker recycling")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,10 @@
 """Gunicorn 生產設定 — UvicornWorker + 效能調優"""
 
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from gunicorn.arbiter import Arbiter
 
 # ── Worker 設定 ───────────────────────────────────────────────────────────────
 
@@ -42,9 +46,23 @@ preload_app = False
 
 # 預設不按請求數回收：健康檢查與前端輪詢也會計數，原本 1000 次的門檻
 # 會頻繁重啟；worker 啟動約需十多秒，回收重疊時單一 API 容器會無法服務。
-# 若確認有記憶體洩漏，可明確設定回收門檻與 jitter，並監測重啟空窗。
+# 下方 hooks 也會在最終設定載入後強制歸零，避免環境或 CLI 覆寫重新啟用。
 max_requests = int(os.getenv("GUNICORN_MAX_REQUESTS", "0"))
 max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "0"))
+
+
+def _disable_request_count_recycling(server: "Arbiter") -> None:
+    """啟動與 reload 都禁止請求配額回收；設定變更透過 blue-green 切換。"""
+    if server.cfg.max_requests or server.cfg.max_requests_jitter:
+        server.log.warning(
+            "Request-count worker recycling is disabled; forcing max_requests and jitter to 0"
+        )
+    server.cfg.set("max_requests", 0)
+    server.cfg.set("max_requests_jitter", 0)
+
+
+on_starting = _disable_request_count_recycling
+on_reload = _disable_request_count_recycling
 
 # ── 日誌 ─────────────────────────────────────────────────────────────────────
 
