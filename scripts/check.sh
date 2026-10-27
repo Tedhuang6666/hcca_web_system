@@ -22,10 +22,11 @@ case "$mode" in
     run bash -n scripts/check.sh scripts/update-openapi.sh scripts/refresh-code-index.sh
     ;;
   api)
-    run uv run --locked --project apps/api ruff check apps/api/src libs/shared/src
-    run uv run --locked --project apps/api ruff format --check apps/api/src libs/shared/src
+    run uv run --locked --project apps/api ruff check apps/api/src libs/shared/src apps/api/gunicorn.conf.py scripts/tests/test_gunicorn_runtime.py
+    run uv run --locked --project apps/api ruff format --check apps/api/src libs/shared/src apps/api/gunicorn.conf.py scripts/tests/test_gunicorn_runtime.py
     run uv run --locked --project apps/api mypy
     run python3 scripts/validate-celery-topology.py
+    run uv run --locked --project apps/api python -m unittest discover -s scripts/tests -p 'test_gunicorn_runtime.py'
     ;;
   api-test)
     # conftest 會 CREATE/DROP 測試 schema；不要誤用應用資料庫。
