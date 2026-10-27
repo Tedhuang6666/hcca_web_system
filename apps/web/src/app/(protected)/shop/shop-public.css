@@ -2572,6 +2572,93 @@
 .shop-storefront-navigation .shop-workspace-menu > summary { min-height: 44px; }
 .shop-storefront-navigation .shop-workspace-menu[open] { flex-basis: 100%; }
 
+@media (min-width: 768px) {
+  .shop-workspace-navigation {
+    align-items: flex-end;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    padding-top: 1.25rem;
+  }
+
+  .shop-workspace-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .shop-workspace-group-label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+
+  .shop-workspace-navigation .shop-workspace-links { gap: 0.5rem; }
+
+  .shop-workspace-navigation .shop-workspace-tab,
+  .shop-workspace-navigation .shop-workspace-menu > summary {
+    min-height: 56px;
+    gap: 0.625rem;
+    padding: 0.75rem 1.25rem;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 650;
+  }
+
+  .shop-workspace-navigation .shop-workspace-tab {
+    border-color: var(--border);
+    background: var(--bg-surface);
+  }
+
+  .shop-workspace-navigation .shop-workspace-tab svg,
+  .shop-workspace-navigation .shop-workspace-menu > summary svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .shop-workspace-navigation .shop-workspace-tab:hover,
+  .shop-workspace-navigation .shop-workspace-menu > summary:hover {
+    background: var(--bg-hover);
+  }
+
+  .shop-workspace-navigation .shop-workspace-tab.is-active,
+  .shop-representative-entry .shop-workspace-tab {
+    border-color: var(--primary);
+    background: var(--primary-dim);
+    color: var(--primary-text);
+  }
+
+  .shop-workspace-navigation .shop-workspace-menu,
+  .shop-workspace-navigation .shop-workspace-menu[open] {
+    position: relative;
+    flex: 0 1 auto;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+
+  .shop-workspace-navigation .shop-workspace-menu > .shop-workspace-links {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 30;
+    display: grid;
+    width: max-content;
+    max-width: calc(100vw - 2rem);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+  }
+}
+
+@media (min-width: 1024px) {
+  .shop-workspace-navigation .shop-workspace-tab,
+  .shop-workspace-navigation .shop-workspace-menu > summary { font-size: 1.125rem; }
+}
+
 .shop-class-summary { margin-block: 0.25rem 1rem; border-bottom: 1px solid var(--public-border); }
 .shop-class-summary > summary,
 .shop-product-description > summary {
