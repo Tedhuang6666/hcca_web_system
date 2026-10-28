@@ -1790,6 +1790,7 @@ async def prepare_roster_order_recipient(
     roster_entry_id: uuid.UUID,
     actor: User,
     allow_all_classes: bool = False,
+    product_ids: list[uuid.UUID] | None = None,
 ) -> tuple[User, SchoolClass]:
     """代購時才預建帳號；跨班操作須由 router 確認訂單管理權限。"""
     from api.services.user_registration import pre_register_user
@@ -1815,6 +1816,17 @@ async def prepare_roster_order_recipient(
     if user is None:
         user = await session.scalar(select(User).where(User.student_id == entry.student_id))
     if user is None:
+        # 預建帳號會持有稽核鏈交易鎖。先依固定順序鎖住本次商品，避免
+        # 與「持有商品鎖、等待稽核鎖」的訂單交易形成循環等待。
+        from api.models.shop import Product
+
+        if product_ids:
+            await session.execute(
+                select(Product.id)
+                .where(Product.id.in_(product_ids))
+                .order_by(Product.id)
+                .with_for_update()
+            )
         user = await pre_register_user(
             session,
             student_id=entry.student_id,

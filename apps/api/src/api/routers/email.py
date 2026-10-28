@@ -692,6 +692,7 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
     resend_attachments, link_blocks = await _render_attachments(list(attachments))
     render_context = dict(msg.context or {})
     render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
+    already_rendered = render_context.get("body_format") == "rendered"
     dispatches: list[tuple[EmailCampaignRecipient, str, str]] = []
     for recipient in rows:
         personal = build_personalization_context(
@@ -701,12 +702,17 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
             student_id=None,
             custom_variables=dict(recipient.variables or {}),
         )
-        subject = render_generic_subject(msg.subject, personal)
-        html = render_generic_message(msg.subject, msg.body, render_context, personal)
+        subject = msg.subject if already_rendered else render_generic_subject(msg.subject, personal)
+        html = (
+            msg.body
+            if already_rendered
+            else render_generic_message(msg.subject, msg.body, render_context, personal)
+        )
+        dispatches.append((recipient, subject, html))
+    for recipient, _, _ in dispatches:
         recipient.status = EmailRecipientStatus.QUEUED
         recipient.error_detail = None
         recipient.next_retry_at = None
-        dispatches.append((recipient, subject, html))
     msg.status = EmailStatus.QUEUED
     msg.error_detail = None
     await db.commit()
@@ -1244,7 +1250,10 @@ async def resend_message(message_id: uuid.UUID, db: DbDep, user: EmailUser) -> E
             status_code=status.HTTP_409_CONFLICT,
             detail="草稿 / 預約 / 已取消的郵件請改用「送出」，無法重新寄送",
         )
-    requeued = await _requeue_unsent(db, msg)
+    try:
+        requeued = await _requeue_unsent(db, msg)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if requeued == 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

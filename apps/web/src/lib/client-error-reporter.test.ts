@@ -3,6 +3,49 @@ import { describe, expect, it, vi } from "vitest";
 import { installGlobalClientErrorReporter, reportClientError } from "./client-error-reporter";
 
 describe("client error reporter", () => {
+  it("records exact resource paths and browser timing without retaining URL queries", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("performance", { getEntriesByName: vi.fn().mockReturnValue([{
+      responseStatus: 404, duration: 125, transferSize: 380, encodedBodySize: 80,
+      nextHopProtocol: "h2",
+    }]) });
+    const uninstall = installGlobalClientErrorReporter();
+    const img = document.createElement("img");
+    img.src = "/shop/104/evidence-01.webp?token=private#section";
+    document.body.append(img);
+    try {
+      img.dispatchEvent(new Event("error"));
+      const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+      expect(payload.context.diagnostics).toEqual(expect.objectContaining({
+        resource_path: "/shop/104/evidence-01.webp", resource_status: 404,
+        resource_duration_ms: 125, resource_timing_available: true,
+        resource_transfer_bytes: 380, resource_encoded_bytes: 80, resource_protocol: "h2",
+      }));
+      expect(JSON.stringify(payload)).not.toContain("private");
+    } finally {
+      uninstall(); img.remove(); vi.unstubAllGlobals();
+    }
+  });
+
+  it("marks missing resource timing explicitly without inventing an HTTP status", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("performance", { getEntriesByName: vi.fn().mockReturnValue([]) });
+    const uninstall = installGlobalClientErrorReporter();
+    const img = document.createElement("img");
+    img.src = "/shop/104/no-timing.webp";
+    document.body.append(img);
+    try {
+      img.dispatchEvent(new Event("error"));
+      const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+      expect(payload.context.diagnostics.resource_timing_available).toBe(false);
+      expect(payload.context.diagnostics.resource_status).toBeUndefined();
+    } finally {
+      uninstall(); img.remove(); vi.unstubAllGlobals();
+    }
+  });
+
   it("filters optional telemetry failures while preserving business requests", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);

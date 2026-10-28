@@ -54,7 +54,9 @@ async def _persist_background_incident(
             details={
                 "task_name": task_name,
                 "task_id": task_id,
-                "traceback_head": sanitize_incident_text(traceback_text),
+                "traceback_head": sanitize_incident_text(traceback_text, len(traceback_text))[
+                    -6000:
+                ],
             },
         )
         await session.commit()

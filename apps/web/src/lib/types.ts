@@ -137,6 +137,7 @@ export type {
   ClassStudentRangeTemplate,
   ClassUserBrief,
   ClientErrorContext,
+  ClientErrorDiagnostics,
   ClientErrorReport,
   CloseStatusOut,
   ConditionRule,

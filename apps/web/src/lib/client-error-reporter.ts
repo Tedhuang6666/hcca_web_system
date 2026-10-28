@@ -40,6 +40,16 @@ export interface ClientErrorDiagnostics {
   request_path?: string;
   request_attempts?: number;
   request_timeout_ms?: number;
+  request_elapsed_ms?: number;
+  request_trace_id?: string;
+  request_phase?: "headers" | "body";
+  online_at_start?: boolean;
+  visibility_at_start?: "visible" | "hidden" | "prerender";
+  error_name?: string;
+  error_source?: string;
+  error_line?: number;
+  error_column?: number;
+  response_request_id?: string;
   csp_directive?: string;
   csp_disposition?: "enforce" | "report";
   csp_blocked_source?: string;
@@ -47,6 +57,13 @@ export interface ClientErrorDiagnostics {
   csp_line_number?: number;
   csp_column_number?: number;
   resource_origin?: string;
+  resource_path?: string;
+  resource_timing_available?: boolean;
+  resource_status?: number;
+  resource_duration_ms?: number;
+  resource_transfer_bytes?: number;
+  resource_encoded_bytes?: number;
+  resource_protocol?: string;
 }
 
 export interface ClientErrorReceipt {
@@ -125,6 +142,12 @@ function safeDiagnostics(input: ClientErrorDiagnostics | undefined): ClientError
       : {}),
     ...(input.request_path !== undefined
       ? { request_path: input.request_path.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
+      : {}),
+    ...(input.resource_path !== undefined
+      ? { resource_path: input.resource_path.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
+      : {}),
+    ...(input.error_source !== undefined
+      ? { error_source: input.error_source.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
       : {}),
   };
 }
@@ -387,6 +410,30 @@ function safeHttpOrigin(value: string | null): string | undefined {
   }
 }
 
+function resourceEvidence(url: string | null): ClientErrorDiagnostics {
+  if (!url) return {};
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (!["http:", "https:"].includes(parsed.protocol)) return {};
+    const entries = typeof performance.getEntriesByName === "function"
+      ? performance.getEntriesByName(parsed.href, "resource") : [];
+    const timing = entries.at(-1) as PerformanceResourceTiming | undefined;
+    return {
+      resource_path: parsed.pathname.slice(0, MAX_PATH_LENGTH),
+      resource_timing_available: Boolean(timing),
+      ...(timing ? {
+        ...(typeof timing.responseStatus === "number" ? { resource_status: timing.responseStatus } : {}),
+        resource_duration_ms: timing.duration,
+        resource_transfer_bytes: timing.transferSize,
+        resource_encoded_bytes: timing.encodedBodySize,
+        resource_protocol: timing.nextHopProtocol.slice(0, 32),
+      } : {}),
+    };
+  } catch {
+    return { resource_timing_available: false };
+  }
+}
+
 /** 安裝 window error / unhandledrejection 入口，涵蓋未經 React boundary 的錯誤。 */
 export function installGlobalClientErrorReporter(): () => void {
   if (typeof window === "undefined") return () => undefined;
@@ -440,9 +487,17 @@ export function installGlobalClientErrorReporter(): () => void {
             diagnostics: {
               failure_kind: "resource" as const,
               ...(resourceOrigin ? { resource_origin: resourceOrigin } : {}),
+              ...resourceEvidence(failedResource),
             },
           }
-        : {}),
+        : {
+            diagnostics: {
+              ...(event.filename ? { error_source: event.filename.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) } : {}),
+              error_line: event.lineno,
+              error_column: event.colno,
+              ...(event.error instanceof Error ? { error_name: event.error.name.slice(0, 100) } : {}),
+            },
+          }),
     });
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => {

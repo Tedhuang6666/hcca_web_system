@@ -309,6 +309,65 @@ async def test_resend_commits_recipient_before_enqueue(
 
 
 @pytest.mark.asyncio
+async def test_resend_preserves_already_rendered_automatic_email(client, db_session, monkeypatch):
+    user = await _seed_user(db_session, "rendered-resend@school.edu", ["email:send"])
+    html = "<html><style>@media(max-width:600px){p{color:red}}</style><p>{{ literal }}</p></html>"
+    message = EmailMessage(
+        sender_id=user.id,
+        subject="Rendered {{ literal }}",
+        body=html,
+        context={"body_format": "rendered"},
+        status="failed",
+        recipient_count=1,
+    )
+    db_session.add(message)
+    await db_session.flush()
+    db_session.add(
+        EmailCampaignRecipient(
+            message_id=message.id,
+            email="retry@example.org",
+            status="failed",
+        )
+    )
+    await db_session.commit()
+    _override_user(user)
+    sent = []
+    monkeypatch.setattr(
+        "api.routers.email.enqueue_rendered", lambda *args: sent.append(args) or ["retry-task"]
+    )
+    response = await client.post(f"/email/messages/{message.id}/resend")
+    assert response.status_code == 200
+    assert sent[0][1:3] == (message.subject, html)
+
+
+@pytest.mark.asyncio
+async def test_resend_invalid_template_returns_422_without_enqueue(client, db_session, monkeypatch):
+    user = await _seed_user(db_session, "invalid-resend@school.edu", ["email:send"])
+    message = EmailMessage(
+        sender_id=user.id, subject="test", body="{{ broken }", status="failed", recipient_count=1
+    )
+    db_session.add(message)
+    await db_session.flush()
+    recipient = EmailCampaignRecipient(
+        message_id=message.id,
+        email="retry@example.org",
+        status="failed",
+        error_detail="original failure",
+    )
+    db_session.add(recipient)
+    await db_session.commit()
+    _override_user(user)
+    sent = []
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", lambda *args: sent.append(args))
+    response = await client.post(f"/email/messages/{message.id}/resend")
+    assert response.status_code == 422
+    assert not sent
+    await db_session.refresh(recipient)
+    assert recipient.status == "failed"
+    assert recipient.error_detail == "original failure"
+
+
+@pytest.mark.asyncio
 async def test_recipient_table_overrides_name_and_uses_chinese_placeholder(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

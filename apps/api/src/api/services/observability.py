@@ -627,7 +627,10 @@ async def ensure_release(
 
 
 async def collect_pagespeed(
-    session: AsyncSession, release: ObservabilityRelease | None = None
+    session: AsyncSession,
+    release: ObservabilityRelease | None = None,
+    *,
+    collection_timeout: float = 240,
 ) -> dict:
     if not settings.GOOGLE_PAGESPEED_API_KEY:
         return {"created": 0, "failed": 0, "skipped": "GOOGLE_PAGESPEED_API_KEY 未設定"}
@@ -659,13 +662,23 @@ async def collect_pagespeed(
                 results.append((url, strategy, None, _provider_error(exc)))
 
     async with httpx.AsyncClient(timeout=60) as client:
-        await asyncio.gather(
-            *(
-                fetch_one(client, url, strategy)
+        try:
+            async with asyncio.timeout(collection_timeout):
+                await asyncio.gather(
+                    *(
+                        fetch_one(client, url, strategy)
+                        for url in urls
+                        for strategy in ("mobile", "desktop")
+                    )
+                )
+        except TimeoutError:
+            completed = {(url, strategy) for url, strategy, _, _ in results}
+            results.extend(
+                (url, strategy, None, "collection_deadline_exceeded")
                 for url in urls
                 for strategy in ("mobile", "desktop")
+                if (url, strategy) not in completed
             )
-        )
 
     created = failed = 0
     for url, strategy, raw, error in results:

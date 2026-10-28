@@ -1717,6 +1717,16 @@ class ClientErrorDiagnostics(BaseModel):
     request_path: str | None = Field(None, max_length=500)
     request_attempts: int | None = Field(None, ge=0, le=10)
     request_timeout_ms: int | None = Field(None, ge=0, le=120_000)
+    request_elapsed_ms: float | None = Field(None, ge=0, le=86_400_000, allow_inf_nan=False)
+    request_trace_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$")
+    request_phase: Literal["headers", "body"] | None = None
+    online_at_start: bool | None = None
+    visibility_at_start: Literal["visible", "hidden", "prerender"] | None = None
+    error_name: str | None = Field(None, max_length=100)
+    error_source: str | None = Field(None, max_length=500)
+    error_line: int | None = Field(None, ge=0)
+    error_column: int | None = Field(None, ge=0)
+    response_request_id: str | None = Field(None, max_length=100)
     csp_directive: str | None = Field(None, max_length=100)
     csp_disposition: Literal["enforce", "report"] | None = None
     csp_blocked_source: str | None = Field(None, max_length=256)
@@ -1724,8 +1734,15 @@ class ClientErrorDiagnostics(BaseModel):
     csp_line_number: int | None = Field(None, ge=0)
     csp_column_number: int | None = Field(None, ge=0)
     resource_origin: str | None = Field(None, max_length=256)
+    resource_path: str | None = Field(None, max_length=500)
+    resource_timing_available: bool | None = None
+    resource_status: int | None = Field(None, ge=0, le=599)
+    resource_duration_ms: float | None = Field(None, ge=0, le=86_400_000, allow_inf_nan=False)
+    resource_transfer_bytes: int | None = Field(None, ge=0)
+    resource_encoded_bytes: int | None = Field(None, ge=0)
+    resource_protocol: str | None = Field(None, max_length=32)
 
-    @field_validator("request_path", mode="before")
+    @field_validator("request_path", "resource_path", "error_source", mode="before")
     @classmethod
     def remove_request_query_and_fragment(cls, value: object) -> object:
         if not isinstance(value, str):

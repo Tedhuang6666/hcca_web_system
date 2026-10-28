@@ -7,7 +7,11 @@ from api.core.database import task_session
 from api.services.observability import collect_crux_daily, collect_pagespeed
 
 
-@shared_task(name="api.services.observability_tasks.collect_pagespeed_scheduled")
+@shared_task(
+    name="api.services.observability_tasks.collect_pagespeed_scheduled",
+    soft_time_limit=300,
+    time_limit=330,
+)
 def collect_pagespeed_scheduled() -> dict:
     async def run():
         async with task_session() as session:

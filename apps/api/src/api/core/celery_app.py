@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import os
+import traceback as traceback_module
 from datetime import UTC, datetime
 
 from celery import Celery
@@ -375,11 +376,16 @@ def _record_task_failure(
         },
     )
     if exception is not None:
+        # Celery supplies a traceback object; str(tb) discards every frame.
+        # Keep the exception end when bounding the report so the failing call survives.
+        traceback_text = "".join(
+            traceback_module.format_exception(type(exception), exception, traceback)
+        )[-6000:]
         record_background_error(
             task=task_name,
             task_id=payload.get("task_id") or task_id,
             exc=exception,
-            traceback_text=str(traceback or "")[:6000],
+            traceback_text=traceback_text,
             trace_id=(getattr(request, "headers", {}) or {}).get("trace_id")
             if request is not None
             else None,
@@ -393,7 +399,7 @@ def _record_task_failure(
                     task_id=payload.get("task_id") or task_id,
                     exception_type=payload.get("exception_type") or "UnknownError",
                     message=str(exception)[:1000],
-                    traceback_text=str(traceback or "")[:6000],
+                    traceback_text=traceback_text,
                     trace_id=(getattr(request, "headers", {}) or {}).get("trace_id")
                     if request is not None
                     else None,
