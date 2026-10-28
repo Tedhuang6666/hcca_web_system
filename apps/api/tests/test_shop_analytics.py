@@ -91,6 +91,7 @@ async def test_sales_analytics_snapshot_distributions_and_taipei_boundaries(db_s
         date_from=date(2026, 10, 22),
         date_to=date(2026, 10, 23),
         activity_id=activity.id,
+        compare=True,
     )
     current = result.current
     assert current.metrics.order_count == 3
@@ -154,6 +155,7 @@ async def test_sales_comparison_empty_days_and_no_order_limit(db_session, sales_
         date_from=date(2026, 10, 22),
         date_to=date(2026, 10, 24),
         compare_from=date(2025, 10, 22),
+        compare=True,
         activity_id=activity.id,
     )
     assert result.previous.metrics.order_count == 501
@@ -216,3 +218,155 @@ async def test_sales_endpoint_accepts_existing_global_view_permissions(
     response = await authed_client_factory(user).get("/shop/orders/analytics")
     assert response.status_code == 200
     assert response.json()["current"]["metrics"]["order_count"] == 0
+
+
+async def test_sales_deep_analysis_cross_cells_statuses_and_buyer_depth(db_session, sales_data):
+    activity, _, shirt, bag, school_class, _ = sales_data
+    result = await sales_analytics(
+        db_session,
+        date_from=date(2026, 10, 22),
+        date_to=date(2026, 10, 23),
+        activity_id=activity.id,
+    )
+    current = result.current
+    assert current.metrics.median_order_amount == 175
+    assert current.metrics.average_buyer_amount == 175
+    assert current.metrics.repeat_buyer_count == 1
+    assert current.metrics.repeat_buyer_rate == 50
+    assert {row.key: row.buyer_count for row in current.buyer_segments} == {"1": 1, "2": 1}
+    cells = {row.key: row for row in current.grade_products}
+    assert cells[f"1:{shirt.id}"].item_count == 2
+    assert cells[f"1:{shirt.id}"].total_amount == 167
+    assert cells[f"1:{shirt.id}"].discount_amount == 33
+    assert cells[f"1:{bag.id}"].total_amount == 83
+    assert cells[f"none:{shirt.id}"].buyer_count == 1
+    assert sum(row.total_amount for row in current.class_products) == 350
+    assert (
+        next(
+            row for row in current.class_products if row.key == f"{school_class.id}:{shirt.id}"
+        ).total_amount
+        == 167
+    )
+    statuses = {row.key: row.order_count for row in current.statuses}
+    assert statuses == {"pending": 3, "cancelled": 1, "refunded": 1}
+    assert current.weekdays[3].order_count == 1
+    assert current.weekdays[4].order_count == 2
+    assert current.weekday_hours[3 * 24].order_count == 1
+    assert current.weekday_hours[4 * 24 + 23].order_count == 1
+    assert len(current.weekday_hours) == 168
+    assert any("2026-10-22" in insight.detail for insight in result.insights)
+
+
+@pytest.mark.parametrize("report_format", ["pdf", "xlsx"])
+async def test_sales_report_download_contains_scoped_values_and_details(
+    db_session, sales_data, admin_user, authed_client_factory, report_format
+):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+    from pypdf import PdfReader
+
+    activity, _, shirt, _, _, _ = sales_data
+    response = await authed_client_factory(admin_user).post(
+        "/shop/orders/analytics/report",
+        json={
+            "format": report_format,
+            "date_from": "2026-10-22",
+            "date_to": "2026-10-23",
+            "activity_id": str(activity.id),
+            "product_id": str(shirt.id),
+            "compare": True,
+        },
+    )
+    assert response.status_code == 200
+    assert "attachment; filename*=UTF-8''" in response.headers["content-disposition"]
+    assert response.headers["cache-control"] == "private, no-store"
+    if report_format == "pdf":
+        assert response.content.startswith(b"%PDF-")
+        reader = PdfReader(BytesIO(response.content))
+        assert len(reader.pages) > 2
+        text = "".join(page.extract_text() for page in reader.pages)
+        assert "銷售分析報告" in text
+        assert "2026-10-22" in text
+        assert "267" in text
+        assert "統計口徑" in text
+        assert "比較期" not in text
+    else:
+        workbook = load_workbook(BytesIO(response.content))
+        assert {
+            "報告說明",
+            "關鍵指標",
+            "每日明細",
+            "年級與商品",
+            "星期與時段",
+        } <= set(workbook.sheetnames)
+        assert workbook["關鍵指標"]["B2"].value == 267
+        assert workbook["商品"].max_row == 2
+        assert workbook["商品"]["A2"].value == "紀念衫"
+        assert len(workbook["每日明細"]._charts) == 3
+        assert workbook["每日明細"].freeze_panes == "B2"
+
+
+async def test_sales_report_rejects_unauthorized_invalid_and_cross_scope_requests(
+    client, authed_client_factory, make_user, admin_user
+):
+    assert (await client.post("/shop/orders/analytics/report", json={})).status_code == 401
+    for _ in range(2):
+        user = await make_user()
+        assert (
+            await authed_client_factory(user).post("/shop/orders/analytics/report", json={})
+        ).status_code == 403
+    ac = authed_client_factory(admin_user)
+    for payload in [
+        {"format": "exe"},
+        {"format": "pdf", "date_from": "2026-10-23", "date_to": "2026-10-22"},
+        {"format": "xlsx", "date_from": "2020-01-01", "date_to": "2026-01-01"},
+    ]:
+        assert (await ac.post("/shop/orders/analytics/report", json=payload)).status_code == 422
+
+
+async def test_sales_excel_report_handles_empty_and_formula_like_names(db_session, sales_data):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from api.schemas.shop_analytics import ShopSalesReportCreate
+    from api.services.shop._analytics_report import create_sales_report
+
+    activity, _, shirt, _, _, _ = sales_data
+    shirt.name = '=HYPERLINK("https://example.test")'
+    await db_session.flush()
+    content, _, _ = await create_sales_report(
+        db_session,
+        ShopSalesReportCreate(
+            format="xlsx",
+            date_from=date(2026, 10, 22),
+            date_to=date(2026, 10, 23),
+            activity_id=activity.id,
+            product_id=shirt.id,
+            compare=False,
+        ),
+    )
+    workbook = load_workbook(BytesIO(content))
+    cell = workbook["商品"]["A2"]
+    assert cell.value == shirt.name
+    assert cell.data_type == "s"
+    assert "比較期每日" not in workbook.sheetnames
+    empty, _, _ = await create_sales_report(
+        db_session,
+        ShopSalesReportCreate(
+            format="xlsx", date_from=date(2024, 1, 1), date_to=date(2024, 1, 1), compare=False
+        ),
+    )
+    assert load_workbook(BytesIO(empty))["關鍵指標"]["B2"].value == 0
+
+
+async def test_sales_analysis_defaults_to_selected_period_only(
+    admin_user, authed_client_factory, sales_data
+):
+    response = await authed_client_factory(admin_user).get(
+        "/shop/orders/analytics", params={"date_from": "2026-10-22", "date_to": "2026-10-23"}
+    )
+    assert response.status_code == 200
+    assert response.json()["previous"] is None
+    assert all("比較期" not in item["detail"] for item in response.json()["insights"])

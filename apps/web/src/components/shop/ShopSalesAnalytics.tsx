@@ -4,24 +4,14 @@ import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
-import type {
-  ShopSalesAnalyticsOut,
-  ShopSalesMetrics,
-  ShopSalesRow,
-} from "@/lib/types";
+import type { ShopSalesAnalyticsOut, ShopSalesMetrics } from "@/lib/types";
+import ShopSalesTrend from "./ShopSalesTrend";
+import ShopSalesDeepAnalysis from "./ShopSalesDeepAnalysis";
 import "./shop-sales-analytics.css";
 
 const number = (value: number) =>
   value.toLocaleString("zh-TW", { maximumFractionDigits: 2 });
 const money = (value: number) => `NT$${number(value)}`;
-type Measure =
-  "order_count" | "item_count" | "total_amount" | "cumulative_amount";
-const measures: [Measure, string][] = [
-  ["order_count", "每日訂單"],
-  ["item_count", "每日件數"],
-  ["total_amount", "每日金額"],
-  ["cumulative_amount", "累積金額"],
-];
 const metrics: [
   keyof ShopSalesMetrics,
   string,
@@ -38,59 +28,15 @@ const metrics: [
   ["promotion_usage_rate", "優惠使用率", "percent"],
   ["discount_amount", "優惠折抵", "money"],
   ["payment_rate", "款項確認率", "percent"],
+  ["median_order_amount", "客單價中位數", "money"],
+  ["average_buyer_amount", "每人平均訂購金額", "money"],
+  ["repeat_buyer_count", "多筆訂單人數", "number"],
+  ["repeat_buyer_rate", "多筆訂單人數占比", "percent"],
 ];
 const format = (value: number, kind: "money" | "number" | "percent") =>
   kind === "money"
     ? money(value)
     : `${number(value)}${kind === "percent" ? "%" : ""}`;
-
-function Distribution({
-  title,
-  rows,
-  total,
-  basis = "item_count",
-}: {
-  title: string;
-  rows: ShopSalesRow[];
-  total: number;
-  basis?: "item_count" | "order_count" | "buyer_count";
-}) {
-  const maximum = Math.max(1, ...rows.map((row) => row[basis]));
-  return (
-    <section className="sales-distribution">
-      <h3>{title}</h3>
-      {!rows.length ? (
-        <p className="sales-muted">此範圍沒有資料。</p>
-      ) : (
-        <div className="sales-bars">
-          {rows.map((row) => (
-            <div className="sales-bar-row" key={row.key}>
-              <div className="sales-bar-label">
-                <span>{row.label}</span>
-                <span>
-                  {number(row[basis])}{" "}
-                  {basis === "item_count"
-                    ? "件"
-                    : basis === "buyer_count"
-                      ? "人"
-                      : "筆"}{" "}
-                  · {total ? number((row[basis] / total) * 100) : 0}%
-                </span>
-              </div>
-              <div className="sales-bar-track" aria-hidden="true">
-                <div style={{ width: `${(row[basis] / maximum) * 100}%` }} />
-              </div>
-              <p className="sales-muted">
-                {row.buyer_count} 人 · {row.order_count} 筆訂單 ·{" "}
-                {money(row.total_amount)}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
 
 function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
   const rows: (string | number)[][] = [
@@ -102,14 +48,9 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
       data.timezone,
       data.generated_at,
     ],
-    ["比較期", data.previous?.date_from ?? "", data.previous?.date_to ?? ""],
     ["統計範圍", scope],
-    ["指標", "本期", "比較期"],
-    ...metrics.map(([key, label]) => [
-      label,
-      data.current.metrics[key],
-      data.previous?.metrics[key] ?? "",
-    ]),
+    ["指標", "數值"],
+    ...metrics.map(([key, label]) => [label, data.current.metrics[key]]),
     [
       "期間",
       "分布",
@@ -122,10 +63,7 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
       "累積金額",
     ],
   ];
-  for (const [name, period] of [
-    ["本期", data.current],
-    ["比較期", data.previous],
-  ] as const) {
+  for (const [name, period] of [["選定區間", data.current]] as const) {
     if (!period) continue;
     for (const [key, label] of [
       ["daily", "每日"],
@@ -135,6 +73,12 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
       ["products", "商品"],
       ["variants", "規格"],
       ["sources", "訂購方式"],
+      ["weekdays", "星期"],
+      ["weekday_hours", "星期與時段"],
+      ["statuses", "訂單狀態（含取消退款）"],
+      ["buyer_segments", "訂購頻次"],
+      ["grade_products", "年級與商品"],
+      ["class_products", "班級與商品"],
       ["amount_bands", "金額區間"],
       ["item_bands", "每單件數"],
     ] as const) {
@@ -185,9 +129,10 @@ export default function ShopSalesAnalytics({
   scope?: string;
 }) {
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [compare, setCompare] = useState(true);
-  const [compareFrom, setCompareFrom] = useState("");
-  const [measure, setMeasure] = useState<Measure>("order_count");
+  const [reportFormat, setReportFormat] = useState<"pdf" | "xlsx">("pdf");
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [reportMessage, setReportMessage] = useState("");
   const [result, setResult] = useState<{
     query: string;
     data: ShopSalesAnalyticsOut;
@@ -200,8 +145,7 @@ export default function ShopSalesAnalytics({
   });
   const query = new URLSearchParams({
     ...filters,
-    compare: String(compare),
-    ...(compare && compareFrom ? { compare_from: compareFrom } : {}),
+    compare: "false",
   }).toString();
 
   useEffect(() => {
@@ -242,17 +186,49 @@ export default function ShopSalesAnalytics({
 
   const data = result?.query === query ? result.data : null;
   const current = data?.current;
-  const previous = data?.previous;
-  const values = current?.daily.map((day) => day[measure]) ?? [];
-  const oldValues = previous?.daily.map((day) => day[measure]) ?? [];
-  const maximum = Math.max(1, ...values, ...oldValues);
-  const points = (numbers: number[]) =>
-    numbers
-      .map(
-        (value, index) =>
-          `${40 + (index / Math.max(1, numbers.length - 1)) * 910},${200 - (value / maximum) * 170}`,
-      )
-      .join(" ");
+  const downloadReport = async () => {
+    if (!data || reportBusy) return;
+    setReportBusy(true);
+    setReportError("");
+    setReportMessage("");
+    try {
+      const response = await shopApi.downloadSalesReport({
+        format: reportFormat,
+        date_from: data.current.date_from,
+        date_to: data.current.date_to,
+        activity_id: filters.activity_id || null,
+        category_id: filters.category_id || null,
+        product_id: filters.product_id || null,
+        class_id: filters.class_id || null,
+        grade: filters.grade ? Number(filters.grade) : null,
+        is_paid:
+          filters.is_paid === "true"
+            ? true
+            : filters.is_paid === "false"
+              ? false
+              : null,
+      });
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const encoded = response.headers
+        .get("Content-Disposition")
+        ?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      link.download = encoded
+        ? decodeURIComponent(encoded)
+        : `銷售分析_${data.current.date_from}_${data.current.date_to}.${reportFormat}`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setReportMessage(
+        `${reportFormat === "pdf" ? "PDF" : "Excel"} 報告已產生並開始下載，包含產生時的篩選範圍與時間。`,
+      );
+    } catch (err) {
+      setReportError(apiErrorMessage(err, "報告產生失敗，請重試。"));
+    } finally {
+      setReportBusy(false);
+    }
+  };
 
   return (
     <section className="shop-sales" aria-label="銷售分析">
@@ -266,26 +242,6 @@ export default function ShopSalesAnalytics({
           />
           每 30 秒更新
         </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={compare}
-            onChange={(event) => setCompare(event.target.checked)}
-          />
-          比較等長期間
-        </label>
-        {compare && (
-          <label>
-            比較起日
-            <input
-              className="input"
-              type="date"
-              aria-label="比較起日"
-              value={compareFrom}
-              onChange={(event) => setCompareFrom(event.target.value)}
-            />
-          </label>
-        )}
         <button
           type="button"
           className="btn btn-ghost"
@@ -296,9 +252,47 @@ export default function ShopSalesAnalytics({
           匯出分析 CSV
         </button>
       </div>
+      <div className="sales-report-tools" aria-label="下載分析報告">
+        <div>
+          <strong>產生分析報告</strong>
+          <p className="sales-muted">
+            依目前篩選重新產生完整圖表、分析摘要、交叉分析與明細。PDF
+            適合閱讀，Excel 含各分析工作表與可編輯圖表。
+          </p>
+        </div>
+        <label>
+          報告格式
+          <select
+            className="input"
+            aria-label="報告格式"
+            value={reportFormat}
+            disabled={reportBusy}
+            onChange={(event) =>
+              setReportFormat(event.target.value as "pdf" | "xlsx")
+            }
+          >
+            <option value="pdf">PDF 報告</option>
+            <option value="xlsx">Excel 分析活頁簿</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!data || busy || Boolean(error) || reportBusy}
+          onClick={downloadReport}
+        >
+          <Download size={16} />
+          {reportBusy ? "正在產生報告…" : "產生並下載報告"}
+        </button>
+      </div>
+      {reportError && (
+        <p role="alert" className="sales-error">
+          {reportError}
+        </p>
+      )}
+      {reportMessage && <p role="status">{reportMessage}</p>}
       <p className="sales-muted">
-        日期與時段以台北時間計算。未指定日期時顯示近 30 天；每次最多 366
-        天。比較起日留空時，使用緊接本期之前的等長期間。
+        日期與時段以台北時間計算。未指定日期時顯示近 30 天；每次最多 366 天。
         {live && autoRefresh && "收到訂單更新時會立即重查，並每 30 秒同步。"}
       </p>
       {error && (
@@ -324,250 +318,39 @@ export default function ShopSalesAnalytics({
       {current && (
         <>
           <p className="sales-period">
-            本期 {current.date_from} — {current.date_to}
-            {previous && (
-              <span>
-                比較期 {previous.date_from} — {previous.date_to}
-              </span>
-            )}
+            資料區間 {current.date_from} — {current.date_to}
           </p>
           {!current.metrics.order_count && (
             <p className="sales-empty">
-              此範圍沒有有效訂單。可調整活動、品項或日期；比較期資料仍可查看。
+              此範圍沒有有效訂單。可調整活動、品項或日期。
             </p>
           )}
           <dl className="sales-metrics">
             {metrics.map(([key, label, kind]) => {
               const value = current.metrics[key];
-              const old = previous?.metrics[key];
-              const delta =
-                old === undefined
-                  ? ""
-                  : kind === "percent"
-                    ? `${number(value - old)} 個百分點`
-                    : old === 0
-                      ? value === 0
-                        ? "持平"
-                        : "比較期為 0"
-                      : `${number(((value - old) / old) * 100)}%`;
               return (
                 <div key={key}>
                   <dt>{label}</dt>
                   <dd>{format(value, kind)}</dd>
-                  {old !== undefined && (
-                    <p className="sales-muted">
-                      比較期 {format(old, kind)}
-                      <br />
-                      變化 {delta}
-                    </p>
-                  )}
                 </div>
               );
             })}
           </dl>
-          <section className="sales-trend" aria-label="每日訂購趨勢">
-            <h3>每日訂購趨勢</h3>
-            <div className="sales-measures">
-              {measures.map(([key, label]) => (
-                <button
-                  type="button"
-                  key={key}
-                  className="btn btn-ghost"
-                  aria-pressed={measure === key}
-                  onClick={() => setMeasure(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="sales-muted">
-              本期為金色，比較期為灰色，依期間第幾天對齊。最高值{" "}
-              {measure.includes("amount")
-                ? money(
-                    maximum === 1 &&
-                      !values.some(Boolean) &&
-                      !oldValues.some(Boolean)
-                      ? 0
-                      : maximum,
-                  )
-                : number(Math.max(0, ...values, ...oldValues))}
-              ；精確數值見每日明細。
-            </p>
-            <svg
-              viewBox="0 0 980 240"
-              role="img"
-              aria-label={`${measures.find(([key]) => key === measure)?.[1]}，共 ${values.length} 天`}
-            >
-              {[30, 115, 200].map((y) => (
-                <line
-                  key={y}
-                  x1="40"
-                  x2="950"
-                  y1={y}
-                  y2={y}
-                  stroke="var(--border)"
-                />
-              ))}
-              <text x="40" y="230">
-                第 1 天
-              </text>
-              <text x="950" y="230" textAnchor="end">
-                第 {values.length} 天
-              </text>
-              {!!oldValues.length && (
-                <polyline
-                  points={points(oldValues)}
-                  fill="none"
-                  stroke="var(--text-secondary)"
-                  strokeWidth="3"
-                  strokeDasharray="7 4"
-                />
-              )}
-              <polyline
-                points={points(values)}
-                fill="none"
-                stroke="var(--primary)"
-                strokeWidth="3"
-              />
-              {values.length === 1 && (
-                <circle
-                  cx="40"
-                  cy={200 - (values[0] / maximum) * 170}
-                  r="5"
-                  fill="var(--primary)"
-                />
-              )}
-            </svg>
-            <details>
-              <summary>每日明細與比較</summary>
-              <div className="sales-table-scroll">
-                <table>
-                  <caption className="sr-only">每日訂單、件數與金額</caption>
-                  <thead>
-                    <tr>
-                      {[
-                        "日期",
-                        "訂單",
-                        "件數",
-                        "金額",
-                        "累積金額",
-                        ...(previous
-                          ? ["比較日", "比較訂單", "比較件數", "比較金額"]
-                          : []),
-                      ].map((label) => (
-                        <th key={label} scope="col">
-                          {label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {current.daily.map((day, index) => (
-                      <tr key={day.key}>
-                        <th scope="row">{day.label}</th>
-                        <td>{number(day.order_count)}</td>
-                        <td>{number(day.item_count)}</td>
-                        <td>{money(day.total_amount)}</td>
-                        <td>{money(day.cumulative_amount)}</td>
-                        {previous && (
-                          <>
-                            <td>{previous.daily[index]?.label}</td>
-                            <td>{previous.daily[index]?.order_count}</td>
-                            <td>{previous.daily[index]?.item_count}</td>
-                            <td>
-                              {money(previous.daily[index]?.total_amount ?? 0)}
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </section>
-          <div className="sales-distributions">
-            <Distribution
-              title="年級分布"
-              rows={current.grades}
-              total={current.metrics.buyer_count}
-              basis="buyer_count"
-            />
-            <Distribution
-              title="下單時段"
-              rows={current.hours}
-              total={current.metrics.order_count}
-              basis="order_count"
-            />
-            <Distribution
-              title="商品銷量"
-              rows={current.products}
-              total={current.metrics.item_count}
-            />
-            <Distribution
-              title="訂購方式"
-              rows={current.sources}
-              total={current.metrics.order_count}
-              basis="order_count"
-            />
-            <Distribution
-              title="訂單金額分布"
-              rows={current.amount_bands}
-              total={current.metrics.order_count}
-              basis="order_count"
-            />
-            <Distribution
-              title="每單件數分布"
-              rows={current.item_bands}
-              total={current.metrics.order_count}
-              basis="order_count"
-            />
-          </div>
-          {(
-            [
-              ["classes", "班級明細"],
-              ["variants", "商品規格明細"],
-            ] as const
-          ).map(([key, title]) => (
-            <details className="sales-detail" key={key}>
-              <summary>
-                {title}（{current[key].length} 項）
-              </summary>
-              <div className="sales-table-scroll">
-                <table>
-                  <caption className="sr-only">{title}</caption>
-                  <thead>
-                    <tr>
-                      {[
-                        "項目",
-                        "訂單數",
-                        "訂購人數",
-                        "件數",
-                        "訂購金額",
-                        "班聯已確認",
-                      ].map((label) => (
-                        <th scope="col" key={label}>
-                          {label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {current[key].map((row) => (
-                      <tr key={row.key}>
-                        <th scope="row">{row.label}</th>
-                        <td>{number(row.order_count)}</td>
-                        <td>{number(row.buyer_count)}</td>
-                        <td>{number(row.item_count)}</td>
-                        <td>{money(row.total_amount)}</td>
-                        <td>{money(row.paid_amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          ))}
+          {!!data?.insights.length && (
+            <section className="sales-insights" aria-label="分析摘要">
+              <h3>分析摘要</h3>
+              <dl>
+                {data.insights.map((item) => (
+                  <div key={item.title}>
+                    <dt>{item.title}</dt>
+                    <dd>{item.detail}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
+          <ShopSalesTrend current={current} />
+          <ShopSalesDeepAnalysis current={current} />
           <details className="sales-detail">
             <summary>統計口徑與資料限制</summary>
             <div className="sales-notes">
@@ -582,7 +365,7 @@ export default function ShopSalesAnalytics({
               </p>
               <p>
                 平均客單價排除 NT$0
-                訂單；優惠使用率為選取範圍內有折抵的訂單占比。年級依訂單保存的班級及該班目前年級，無班級資料列為未分班。比較期使用相同活動、商品與收款篩選，可指定去年或其他活動期間的起日。
+                訂單；優惠使用率為選取範圍內有折抵的訂單占比。年級依訂單保存的班級及該班目前年級，無班級資料列為未分班。中位數排除零元訂單；多筆訂單是同帳號於所選範圍的多張訂單，追加原單不增加筆數，不能直接解讀為回購率。
               </p>
             </div>
           </details>

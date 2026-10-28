@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
+from statistics import median
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,12 +15,14 @@ from api.core.clock import TAIPEI, local_today
 from api.models.shop import Order, OrderItem, OrderStatus, Product
 from api.schemas.shop_analytics import (
     ShopSalesAnalyticsOut,
+    ShopSalesCrossRow,
     ShopSalesDay,
     ShopSalesMetrics,
     ShopSalesPeriod,
     ShopSalesRow,
 )
 from api.services.school_class import class_display_label
+from api.services.shop._analytics_insights import build_sales_insights
 
 
 def _allocate_amounts(order: Order) -> dict[uuid.UUID, int]:
@@ -49,7 +52,7 @@ async def sales_analytics(
     *,
     date_from: date | None = None,
     date_to: date | None = None,
-    compare: bool = True,
+    compare: bool = False,
     compare_from: date | None = None,
     activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
@@ -78,7 +81,6 @@ async def sales_analytics(
             )
             .where(
                 Order.test_product_id.is_(None),
-                Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
                 Order.created_at >= datetime.combine(period_start, time.min, TAIPEI),
                 Order.created_at
                 < datetime.combine(period_end + timedelta(days=1), time.min, TAIPEI),
@@ -107,8 +109,12 @@ async def sales_analytics(
             )
         orders = (await session.scalars(query)).unique().all()
         periods.append(_summarize(orders, period_start, period_end, product_id, category_id))
+    previous = periods[1] if compare else None
     return ShopSalesAnalyticsOut(
-        generated_at=datetime.now(UTC), current=periods[0], previous=periods[1] if compare else None
+        generated_at=datetime.now(UTC),
+        current=periods[0],
+        previous=previous,
+        insights=build_sales_insights(periods[0], previous),
     )
 
 
@@ -125,8 +131,19 @@ def _summarize(
     group_buyers: dict[tuple[str, str], set[uuid.UUID]] = defaultdict(set)
     buyers: set[uuid.UUID] = set()
     positive_amounts: list[int] = []
+    buyer_orders: dict[uuid.UUID, int] = defaultdict(int)
+    active_records: list[tuple[Order, int, int, int]] = []
+    cross_meta: dict[str, dict[str, dict]] = defaultdict(dict)
 
-    def add(kind: str, key: str, label: str, order: Order, quantity: int, amount: int) -> None:
+    def add(
+        kind: str,
+        key: str,
+        label: str,
+        order: Order,
+        quantity: int,
+        amount: int,
+        gross: int | None = None,
+    ) -> None:
         row = groups[kind].setdefault(key, ShopSalesRow(key=key, label=label))
         if order.id not in seen[kind, key]:
             row.order_count += 1
@@ -136,6 +153,8 @@ def _summarize(
         row.item_count += quantity
         row.total_amount += amount
         row.paid_amount += amount if order.is_paid else 0
+        row.gross_amount += amount if gross is None else gross
+        row.discount_amount += 0 if gross is None else gross - amount
 
     for order in orders:
         items = [
@@ -154,6 +173,26 @@ def _summarize(
         amount = sum(amounts[item.id] for item in items)
         quantity = sum(item.quantity for item in items)
         discount = sum(item.quantity * item.unit_price for item in items) - amount
+        gross = amount + discount
+        status_labels = {
+            "pending": "待確認",
+            "confirmed": "已確認",
+            "cancelled": "已取消",
+            "refunded": "已退款",
+        }
+        add(
+            "statuses",
+            order.status.value,
+            status_labels.get(order.status.value, order.status.value),
+            order,
+            quantity,
+            amount,
+            gross,
+        )
+        if order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
+            continue
+        active_records.append((order, quantity, amount, gross))
+        buyer_orders[order.user_id] += 1
         metrics.order_count += 1
         metrics.item_count += quantity
         metrics.total_amount += amount
@@ -170,6 +209,12 @@ def _summarize(
         for kind, key, label in [
             ("daily", local.date().isoformat(), local.date().isoformat()),
             ("hours", str(local.hour), f"{local.hour:02d}:00"),
+            ("weekdays", str(local.weekday()), f"週{'一二三四五六日'[local.weekday()]}"),
+            (
+                "weekday_hours",
+                str(local.weekday() * 24 + local.hour),
+                f"週{'一二三四五六日'[local.weekday()]} {local.hour:02d}:00",
+            ),
             ("grades", str(sc.grade) if sc else "none", f"{sc.grade} 年級" if sc else "未分班"),
             ("classes", str(sc.id) if sc else "none", class_display_label(sc) or "未分班"),
             (
@@ -186,10 +231,47 @@ def _summarize(
                 "",
             ),
         ]:
-            add(kind, key, label, order, quantity, amount)
+            add(kind, key, label, order, quantity, amount, gross)
         for item in items:
             product = item.product
-            add("products", str(product.id), product.name, order, item.quantity, amounts[item.id])
+            item_gross = item.quantity * item.unit_price
+            add(
+                "products",
+                str(product.id),
+                product.name,
+                order,
+                item.quantity,
+                amounts[item.id],
+                item_gross,
+            )
+            for kind, dimension_key, dimension_label in [
+                (
+                    "grade_products",
+                    str(sc.grade) if sc else "none",
+                    f"{sc.grade} 年級" if sc else "未分班",
+                ),
+                (
+                    "class_products",
+                    str(sc.id) if sc else "none",
+                    class_display_label(sc) or "未分班",
+                ),
+            ]:
+                key = f"{dimension_key}:{product.id}"
+                add(
+                    kind,
+                    key,
+                    f"{dimension_label} · {product.name}",
+                    order,
+                    item.quantity,
+                    amounts[item.id],
+                    item_gross,
+                )
+                cross_meta[kind][key] = dict(
+                    dimension_key=dimension_key,
+                    dimension_label=dimension_label,
+                    product_id=product.id,
+                    product_name=product.name,
+                )
             options = (
                 " / ".join(
                     f"{option['group_name']}：{option['value']}"
@@ -206,9 +288,20 @@ def _summarize(
                 order,
                 item.quantity,
                 amounts[item.id],
+                item_gross,
             )
 
     metrics.buyer_count = len(buyers)
+    metrics.median_order_amount = float(median(positive_amounts)) if positive_amounts else 0
+    metrics.average_buyer_amount = round(metrics.total_amount / len(buyers), 2) if buyers else 0
+    metrics.repeat_buyer_count = sum(count > 1 for count in buyer_orders.values())
+    metrics.repeat_buyer_rate = (
+        round(metrics.repeat_buyer_count / len(buyers) * 100, 2) if buyers else 0
+    )
+    for order, quantity, amount, gross in active_records:
+        count = buyer_orders[order.user_id]
+        key = str(count) if count < 3 else "3+"
+        add("buyer_segments", key, f"{key} 筆訂單", order, quantity, amount, gross)
     metrics.unpaid_amount = metrics.total_amount - metrics.paid_amount
     metrics.average_order_amount = (
         round(sum(positive_amounts) / len(positive_amounts), 2) if positive_amounts else 0
@@ -263,5 +356,30 @@ def _summarize(
         hours=[
             groups["hours"].get(str(hour), ShopSalesRow(key=str(hour), label=f"{hour:02d}:00"))
             for hour in range(24)
+        ],
+        weekdays=[
+            groups["weekdays"].get(
+                str(day), ShopSalesRow(key=str(day), label=f"週{'一二三四五六日'[day]}")
+            )
+            for day in range(7)
+        ],
+        weekday_hours=[
+            groups["weekday_hours"].get(
+                str(cell),
+                ShopSalesRow(
+                    key=str(cell), label=f"週{'一二三四五六日'[cell // 24]} {cell % 24:02d}:00"
+                ),
+            )
+            for cell in range(168)
+        ],
+        statuses=rows("statuses"),
+        buyer_segments=rows("buyer_segments"),
+        grade_products=[
+            ShopSalesCrossRow(**row.model_dump(), **cross_meta["grade_products"][row.key])
+            for row in rows("grade_products")
+        ],
+        class_products=[
+            ShopSalesCrossRow(**row.model_dump(), **cross_meta["class_products"][row.key])
+            for row in rows("class_products")
         ],
     )
