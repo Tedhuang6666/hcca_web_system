@@ -1180,8 +1180,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 1rem;
+}
+
+.shop-product-dialog-overlay.public-site {
+  /* 公開頁的 100vh 最小高度會在 Safari 工具列展開時撐出可視範圍。 */
+  height: 100dvh;
+  min-height: 0;
 }
 
 .shop-product-dialog {
@@ -1319,6 +1325,10 @@
   background: var(--public-surface);
   padding: 0.9rem var(--shop-product-dialog-content-padding-inline)
     var(--shop-product-dialog-content-padding-block);
+}
+
+.shop-product-registration-status[role="alert"] {
+  color: var(--danger);
 }
 
 .shop-product-dialog-section.shop-product-quantity-section {

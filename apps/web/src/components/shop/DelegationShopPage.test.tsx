@@ -238,7 +238,7 @@ describe("原商品頁的家人代訂模式", () => {
     expect(screen.getByText("請先選擇尺寸，再繼續下一步。")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "M" }));
     fireEvent.click(next);
-    expect(await screen.findByText("更新失敗，登記數量維持原值。")).toBeVisible();
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("連線失敗");
     expect(screen.getByRole("heading", { name: "紀念袋", level: 3 })).toBeVisible();
     fireEvent.click(next);
     fireEvent.click(next);

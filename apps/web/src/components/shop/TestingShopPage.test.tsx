@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ShopPage from "@/app/(protected)/shop/page";
 import type { OrderOut } from "@/lib/types";
 
@@ -37,6 +37,8 @@ const formalOrder: OrderOut = {
   items: [{ id: "formal-item", product_id: "formal", product_name: "正式商品", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
+
+afterEach(() => { vi.unstubAllGlobals(); });
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -202,4 +204,45 @@ it("opens products in place while retaining links for a separate tab", async () 
   fireEvent.click(product);
   expect(await screen.findByRole("dialog")).toBeVisible();
   expect(window.location.pathname).toBe("/shop");
+});
+
+it("submits a Christmas card without options and shows failure and success beside the action", async () => {
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+  const card = { ...formalProduct, id: "card", name: "卡片", price: 40,
+    is_unlimited: true, stock_quantity: 0 };
+  api.me.mockResolvedValue({ id: "student", student_id: "synthetic", display_name: "測試學生" });
+  api.catalog.mockResolvedValue([{ id: "christmas", name: "聖誕傳情", activity_id: null,
+    sort_order: 0, products: [card], series: [] }]);
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.getProduct.mockResolvedValue({ ...card, variant_groups: [], media: [] });
+  let rejectSave!: (error: Error) => void;
+  api.setCurrentRegistrationProduct.mockImplementationOnce(() => new Promise((_, reject) => {
+    rejectSave = reject;
+  }));
+  const saved: OrderOut = { ...formalOrder, activity_id: null, category_id: "christmas", total_price: 40, subtotal_price: 40, items: [
+    { ...formalOrder.items[0], product_id: "card", product_name: "卡片", quantity: 1,
+      unit_price: 40, subtotal: 40 },
+  ] };
+  api.setCurrentRegistrationProduct.mockResolvedValue(saved);
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：卡片" }));
+
+  const dialog = within(await screen.findByRole("dialog"));
+  const purchase = await dialog.findByRole("button", { name: "登記購買 · NT$40" });
+  await waitFor(() => expect(purchase).toBeEnabled());
+  fireEvent.click(purchase);
+  expect(dialog.getByRole("button", { name: "處理中…" })).toBeDisabled();
+  expect(dialog.getByRole("status")).toHaveTextContent("正在更新登記數量…");
+  await act(async () => { rejectSave(new Error("庫存不足，請調整數量。")); });
+
+  expect(await dialog.findByRole("alert")).toHaveTextContent("庫存不足，請調整數量。");
+  expect(dialog.queryByText(/已登記/)).not.toBeInTheDocument();
+  fireEvent.click(dialog.getByRole("button", { name: "登記購買 · NT$40" }));
+  expect(await dialog.findByRole("button", { name: "完成" })).toBeEnabled();
+  expect(dialog.getByRole("status")).toHaveTextContent("已登記 1 件。");
+  expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+  expect(api.setCurrentRegistrationProduct).toHaveBeenCalledTimes(2);
+  expect(api.setCurrentRegistrationProduct).toHaveBeenLastCalledWith("card", {
+    variants: [{ option_ids: [], quantity: 1 }],
+  });
 });

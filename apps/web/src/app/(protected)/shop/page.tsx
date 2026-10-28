@@ -215,6 +215,7 @@ function ProductModal({
   const [productLoadError, setProductLoadError] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [registrationUpdateMessage, setRegistrationUpdateMessage] = useState("");
+  const [registrationUpdateError, setRegistrationUpdateError] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mediaSwipeRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
@@ -230,6 +231,7 @@ function ProductModal({
     setSelectedMediaIndex(null);
     setQty(1);
     setRegistrationUpdateMessage("");
+    setRegistrationUpdateError(false);
     setProductLoading(true);
     setProductLoadError(false);
     try {
@@ -457,13 +459,19 @@ function ProductModal({
     }
     registrationUpdateInFlightRef.current = true;
     setLoading(true);
+    setRegistrationUpdateError(false);
     setRegistrationUpdateMessage("正在更新登記數量…");
     try {
       const key = [...optionIds].sort().join(",");
       const wasRegistered = registeredItems.some((item) =>
         registrationVariantKey(item.selected_options) === key && item.quantity > 0);
       const saved = await saveVariant(product.id, optionIds, quantity);
-      if (!saved || activeProductRef.current !== product.id) return false;
+      if (activeProductRef.current !== product.id) return false;
+      if (!saved) {
+        setRegistrationUpdateError(true);
+        setRegistrationUpdateMessage("尚未確認登記結果，請先重新載入頁面並查看我的預購。");
+        return false;
+      }
       if (saved.added) onProductAdded();
       if (key === selectedOptionIds.join(",")) setQty(quantity > 0 ? quantity : 1);
       setRegistrationUpdateMessage(quantity > 0
@@ -471,8 +479,10 @@ function ProductModal({
         : "已從登記移除這個規格。");
       return true;
     } catch (e) {
-      setRegistrationUpdateMessage("更新失敗，登記數量維持原值。");
-      toast.error(apiErrorMessage(e, "商品登記更新失敗"));
+      const message = apiErrorMessage(e, "商品登記更新失敗，請稍後再試。");
+      setRegistrationUpdateError(true);
+      setRegistrationUpdateMessage(message);
+      toast.error(message);
       return false;
     } finally {
       registrationUpdateInFlightRef.current = false;
@@ -679,7 +689,7 @@ function ProductModal({
               </div>
               <div className="shop-product-purchase-bar">
                 {registrationUpdateMessage ? (
-                  <p className="shop-product-registration-status" role="status" aria-live="polite">
+                  <p className="shop-product-registration-status" role={registrationUpdateError ? "alert" : "status"}>
                     {registrationUpdateMessage}
                   </p>
                 ) : null}
