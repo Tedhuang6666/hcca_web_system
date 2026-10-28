@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
@@ -36,6 +36,20 @@ if TYPE_CHECKING:
 
 
 # ── 狀態枚舉 ──────────────────────────────────────────────────────────────────
+
+
+def effective_product_deadline(
+    sale_end: datetime | None, activity_end: datetime | None
+) -> datetime | None:
+    deadlines = [value for value in (sale_end, activity_end) if value is not None]
+    return (
+        min(
+            deadlines,
+            key=lambda value: value.replace(tzinfo=UTC) if value.tzinfo is None else value,
+        )
+        if deadlines
+        else None
+    )
 
 
 class ProductStatus(enum.StrEnum):
@@ -230,13 +244,12 @@ class Product(Base, TimestampMixin):
 
     @property
     def effective_sale_end(self) -> datetime | None:
-        """單品截止時間優先；未設定時沿用所屬活動的結單時間。"""
-        if self.sale_end is not None:
-            return self.sale_end
+        """單品可提前截止，不能晚於班聯統一期限。"""
         category = self.category
         if category is None and self.series is not None:
             category = self.series.category
-        return category.activity.order_closes_at if category and category.activity else None
+        activity_end = category.activity.order_closes_at if category and category.activity else None
+        return effective_product_deadline(self.sale_end, activity_end)
 
 
 class ProductMedia(Base):

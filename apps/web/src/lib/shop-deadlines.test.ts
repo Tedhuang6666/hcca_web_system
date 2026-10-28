@@ -17,11 +17,11 @@ describe("活動結單與多活動預購", () => {
     expect(defaultShopCategory(catalog, null, now)?.id).toBe("open");
     expect(defaultShopCategory(catalog, "open", now)?.id).toBe("open");
   });
-  it("活動截止後有單品延長時，活動仍可預設顯示；系列商品也計入", () => {
+  it("班聯統一截止後，單品延長仍不可訂購", () => {
     const extended = { ...category("extended", []), order_closes_at: past,
       series: [{ id: "series", name: "系列", sort_order: 0, products: [{ ...product, sale_end: future, effective_sale_end: future }] }] };
-    expect(categoryOrderable(extended, now)).toBe(true);
-    expect(defaultShopCategory([extended, category("other", [product])], "extended", now)?.id).toBe("extended");
+    expect(categoryOrderable(extended, now)).toBe(false);
+    expect(defaultShopCategory([extended, category("other", [product])], "extended", now)?.id).toBe("other");
     expect(defaultShopCategory([extended, category("other", [product])], "extended", now, { extended: { is_closed: true } })?.id).toBe("other");
   });
   it("截止當下停止訂購，尚未開售及已結束活動不選為預設", () => {

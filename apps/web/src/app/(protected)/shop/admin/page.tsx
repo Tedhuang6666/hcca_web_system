@@ -434,7 +434,7 @@ function ProductFormModal({
           <input type="datetime-local" value={saleEnd} onChange={(e) => setSaleEnd(e.target.value)}
             className="input w-full" />
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            留空沿用活動結單時間；需要延長此品項時，設定較晚的時間。清空並儲存可恢復沿用活動設定。
+            留空沿用班聯統一截止時間；單品可提前截止，設定較晚時間仍受統一期限限制。
           </p>
           {initial?.effective_sale_end && <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
             目前有效截止：{new Date(initial.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}

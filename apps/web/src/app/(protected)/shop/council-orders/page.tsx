@@ -6,7 +6,7 @@ import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
 import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart2, Lock, LockOpen, RefreshCw } from "lucide-react";
+import { BarChart2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
@@ -59,7 +59,6 @@ export default function CouncilOrdersPage() {
   const canConfirmClassPayment = hasAdminPermission
     || permissions.has("shop:manage")
     || permissions.has("shop:manage_orders");
-  const canManageOrderClosures = canConfirmClassPayment || permissions.has("shop:view_all");
   const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
   const [tab, setTab] = useState<Tab>("summary");
   const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
@@ -87,7 +86,6 @@ export default function CouncilOrdersPage() {
   const [closeStatus, setCloseStatus] = useState<Record<string, Record<string, CloseStatusItem>>>({});
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [closeBusy, setCloseBusy] = useState<string | null>(null);
   const [paymentBusy, setPaymentBusy] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState("");
   const [selectedReceiptClasses, setSelectedReceiptClasses] = useState<Set<string>>(new Set());
@@ -95,22 +93,12 @@ export default function CouncilOrdersPage() {
   const [optionsError, setOptionsError] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsRetry, setOptionsRetry] = useState(0);
-  const [batchResult, setBatchResult] = useState("");
-  const [batchBusy, setBatchBusy] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<OrderListItem | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [cancelResult, setCancelResult] = useState("");
-  const mutationBusy = batchBusy || paymentBusy !== null || closeBusy !== null || cancelBusy;
-
-  // 班聯結單選擇
-  const [closeTarget, setCloseTarget] = useState<{
-    categoryIds: string[];
-    classId: string;
-    label: string;
-    busyKey: string;
-  } | null>(null);
+  const mutationBusy = paymentBusy !== null || cancelBusy;
 
   useEffect(() => {
     let cancelled = false;
@@ -287,7 +275,7 @@ export default function CouncilOrdersPage() {
   ) => {
     if (row.key === "none") return;
     const action = paid ? "確認已繳費" : "撤銷繳費確認";
-    if (!window.confirm(`要為「${row.label}」的「${activity.label}」${action}嗎？會更新該班這個活動的所有有效訂單，不受商品、日期或收款篩選限制。`)) return;
+    if (!window.confirm(`要為「${row.label}」的「${activity.label}」${action}嗎？會更新該班這個活動的所有有效訂單，不受商品、日期或收款篩選限制。${paid ? "確認後將鎖定本班此活動的訂購。" : "撤銷後仍須遵守班聯統一截止時間。"}`)) return;
     const busyKey = `${row.key}:${activity.activityId ?? "__general__"}`;
     setPaymentBusy(busyKey);
     try {
@@ -308,98 +296,6 @@ export default function CouncilOrdersPage() {
     else if (tab === "orders") loadOrders();
     return () => { pendingRequests.current++; };
   }, [tab, loadSummary, loadQuantities, loadOrders]);
-
-  const handleToggleClose = async (
-    group: { key: string; activityId: string | null; label: string; categories: CatalogCategoryOut[] },
-    targetClassId: string,
-    isCurrentlyClosed: boolean,
-    label: string,
-  ) => {
-    if (!isCurrentlyClosed) {
-      setCloseTarget({
-        categoryIds: group.categories
-          .filter((category) => !closeStatus[targetClassId]?.[category.id]?.is_closed)
-          .map((category) => category.id),
-        classId: targetClassId,
-        label: `${label} · ${group.label}`,
-        busyKey: `${group.key}:${targetClassId}`,
-      });
-      return;
-    }
-    await doReopen(group, targetClassId);
-  };
-
-  const doClose = async () => {
-    if (!closeTarget) return;
-    setCloseBusy(closeTarget.busyKey);
-    try {
-      for (const categoryId of closeTarget.categoryIds) {
-        await shopApi.closeCategory(categoryId, { class_id: closeTarget.classId });
-      }
-      toast.success(`已為「${closeTarget.label}」結單`);
-      setCloseTarget(null);
-      await loadSummary();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "結單失敗"));
-    } finally {
-      setCloseBusy(null);
-    }
-  };
-
-  const doReopen = async (
-    group: { key: string; label: string; categories: CatalogCategoryOut[] },
-    targetClassId: string,
-  ) => {
-    setCloseBusy(`${group.key}:${targetClassId}`);
-    try {
-      for (const category of group.categories) {
-        if (closeStatus[targetClassId]?.[category.id]?.is_closed) {
-          await shopApi.reopenCategory(category.id, targetClassId);
-        }
-      }
-      toast.success(`已重新開放「${group.label}」`);
-      await loadSummary();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "重新開單失敗"));
-    } finally {
-      setCloseBusy(null);
-    }
-  };
-
-  const batchClose = async (
-    rows: OrderSummaryRow[],
-    group: { key: string; label: string; categories: CatalogCategoryOut[] },
-    open: boolean,
-  ) => {
-    if (!group.categories.length) return;
-    const classCount = rows.filter((row) => row.key !== "none").length;
-    if (!window.confirm(`要${open ? "重新開放" : "停止"}目前清單中 ${classCount} 個班級的「${group.label}」訂購嗎？這會影響這些班級在此活動的所有商品。`)) return;
-    setBatchResult("");
-    setBatchBusy(true);
-    setLoading(true);
-    let count = 0;
-    let failed = 0;
-    for (const row of rows) {
-      if (row.key === "none") continue;
-      for (const category of group.categories) {
-        const status = closeStatus[row.key]?.[category.id];
-        if (!status) { failed++; continue; }
-        const isClosed = status.is_closed;
-        if (open && isClosed) {
-          try { await shopApi.reopenCategory(category.id, row.key); count++; } catch { failed++; }
-        } else if (!open && !isClosed) {
-          try { await shopApi.closeCategory(category.id, { class_id: row.key }); count++; } catch { failed++; }
-        }
-      }
-    }
-    const message = `「${group.label}」已${open ? "重新開放" : "停止訂購"} ${count} 項班級商品主題${failed ? `；${failed} 項未完成，請重新整理後再試。` : "。"}`;
-    setBatchResult(message);
-    if (failed) toast.error(message);
-    else toast.success(message);
-    await loadSummary();
-    setLoading(false);
-    setBatchBusy(false);
-  };
 
   const allProducts = useMemo(() =>
     catalog.flatMap((c) => [
@@ -576,7 +472,6 @@ export default function CouncilOrdersPage() {
       </details>
         </fieldset>
       </section>
-      {batchResult && <p role="status" className="rounded-lg p-3 text-sm" style={{ background: "var(--bg-elevated)" }}>{batchResult}</p>}
 
       {tab === "analytics" && <ShopSalesAnalytics refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
         ...(grade ? { grade } : {}), ...(classId ? { class_id: classId } : {}),
@@ -605,30 +500,7 @@ export default function CouncilOrdersPage() {
             </div>
           )}
 
-          {canManageOrderClosures && !loading && groupBy === "class" && summary && summary.rows.length > 0 && actionActivityGroups.length > 0 && (
-            <details className="mb-3 rounded-lg px-3 py-2" style={{ border: "1px solid var(--border)" }}>
-              <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">批次管理訂購</summary>
-              <p className="mb-3 text-xs" style={{ color: "var(--text-secondary)" }}>只影響目前清單中的班級；執行前會再次確認。</p>
-              <div className="flex flex-wrap gap-2">
-              {actionActivityGroups.map((group) => (
-                <div key={group.key} className="flex flex-wrap items-center gap-1.5 rounded-md px-2 py-1"
-                  style={{ border: "1px solid var(--border)" }}>
-                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{group.label}</span>
-                  <button type="button" onClick={() => batchClose(summary.rows, group, false)} disabled={loading || mutationBusy}
-                    className="flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-medium disabled:opacity-50"
-                    style={{ border: "1px solid var(--border)", color: "#ef4444" }}>
-                    <Lock size={12} /> 整批停止訂購
-                  </button>
-                  <button type="button" onClick={() => batchClose(summary.rows, group, true)} disabled={loading || mutationBusy}
-                    className="flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-medium disabled:opacity-50"
-                    style={{ border: "1px solid var(--border)", color: "#16a34a" }}>
-                    <LockOpen size={12} /> 整批重新開放
-                  </button>
-                </div>
-              ))}
-              </div>
-            </details>
-          )}
+
           {groupBy === "class" && !categoryId && summary && summary.rows.length > 0 && (
             <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
               目前顯示全部活動彙總；每班操作都會標示活動名稱，確認收款與簽收單只套用該班該活動。
@@ -721,7 +593,7 @@ export default function CouncilOrdersPage() {
                           })}
                         />
                       </th>}
-                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canManageOrderClosures && (actionActivityGroups.length > 0 || canConfirmClassPayment && paymentActivityGroups.length > 0) ? ["班聯操作"] : [])].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 ? ["班聯操作"] : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
                     </tr>
@@ -759,14 +631,9 @@ export default function CouncilOrdersPage() {
                             />
                           </td>
                         );})}
-                        {groupBy === "class" && canManageOrderClosures && (actionActivityGroups.length > 0 || canConfirmClassPayment && paymentActivityGroups.length > 0) && <td className="px-4 py-3">
+                        {groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 && <td className="px-4 py-3">
                           <div className="flex min-w-56 flex-col gap-2">
                             {paymentActivityGroups.map((group) => {
-                              const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
-                              const closedCount = statuses.filter((item) => item?.is_closed).length;
-                              const isClosed = closedCount === group.categories.length;
-                              const isBusy = closeBusy === `${group.key}:${row.key}`;
-                              const canManageThisActivity = actionActivityGroups.some((item) => item.key === group.key);
                               return (
                                 <div key={group.key} className="flex flex-wrap items-center gap-1 border-t pt-1.5 first:border-t-0 first:pt-0"
                                   style={{ borderColor: "var(--border)" }}>
@@ -799,13 +666,7 @@ export default function CouncilOrdersPage() {
                                           className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
                                           撤銷收款確認
                                         </button>}
-                                        {canManageThisActivity && group.categories.length > 0 && <button type="button" disabled={mutationBusy || !statuses.every(Boolean)}
-                                          onClick={() => handleToggleClose(group, row.key, isClosed, row.label)}
-                                          className="btn btn-ghost flex min-h-11 items-center gap-1 px-3 text-xs disabled:opacity-50"
-                                          title={`${isClosed ? "重新開放訂購" : "停止訂購"}：${group.label}`}>
-                                          {isBusy ? "處理中" : isClosed ? <LockOpen size={14} /> : <Lock size={14} />}
-                                          {isClosed ? "重新開放訂購" : "停止訂購"}
-                                        </button>}
+
                                       </div>
                                     </details>
                                   </>}
@@ -936,23 +797,6 @@ export default function CouncilOrdersPage() {
           </div>
         </form>
       </Modal>}
-      {/* 結單確認 Modal */}
-      {closeTarget && (
-        <Modal title="停止這個班級的訂購？" size="md" onClose={() => { if (!closeBusy) setCloseTarget(null); }}>
-            <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
-              即將停止「<strong>{closeTarget.label}</strong>」的訂購。
-              <br />停止後，該班學生無法再訂購這個活動的商品。需要追加時可重新開放。
-            </p>
-            <div className="mt-4 flex gap-2 justify-end">
-              <button type="button" onClick={() => setCloseTarget(null)} disabled={closeBusy !== null} className="btn btn-ghost">取消</button>
-              <button type="button" onClick={doClose} disabled={closeBusy !== null}
-                className="btn disabled:opacity-50"
-                style={{ background: "#ef4444", color: "white", border: "none" }}>
-                {closeBusy ? "處理中…" : "確認停止訂購"}
-              </button>
-            </div>
-        </Modal>
-      )}
     </main>
   );
 }

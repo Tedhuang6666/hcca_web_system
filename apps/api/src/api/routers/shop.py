@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -45,6 +45,7 @@ from api.schemas.shop import (
     ClassPaymentOut,
     ClassPaymentUpdate,
     ClassReceiptBatchCreate,
+    CloseStatusItem,
     CloseStatusOut,
     CurrentRegistrationUpdate,
     ImageUploadOut,
@@ -1669,7 +1670,6 @@ async def update_order_items(
             session,
             order,
             data=payload,
-            allow_class_closed=current_user.is_superuser or is_cadre_of_class,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
@@ -1786,6 +1786,8 @@ async def update_class_payment(
 ) -> ClassPaymentOut:
     if await session.get(SchoolClass, class_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
+    if payload.activity_id is not None:
+        or_404(await activity_svc.get_activity(session, payload.activity_id), "找不到此活動")
     orders = await shop_svc.set_class_paid(
         session,
         class_id,
@@ -1928,25 +1930,15 @@ async def _assert_close_permission(
     current_user: User,
     target_class_id: uuid.UUID | None,
 ) -> None:
-    """確認結單權限：
-    - 超管或 council codes → 任意班
-    - ClassCadre → 只能操作自己班
-    """
+    """分類全域結單僅由班聯管理；不提供班代截止。"""
+    if target_class_id is not None:
+        raise HTTPException(status_code=403, detail="班級改由班聯統一期限或確認收款鎖單")
     if current_user.is_superuser:
         return
     codes = await get_user_permission_codes(session, current_user.id)
     if _COUNCIL_CODES & set(codes):
         return
-    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-    if target_class_id is not None and target_class_id in cadre_ids:
-        return
-    if target_class_id is None and cadre_ids:
-        # 幹部只能指定 class_id，不可全局結單
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="僅系統管理員可執行全局結單，班級幹部請指定班級",
-        )
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無結單權限")
+    raise HTTPException(status_code=403, detail="無結單權限")
 
 
 @router.post(
@@ -2042,25 +2034,12 @@ async def get_close_status(
         school_class = await class_svc_inner.resolve_user_class(session, current_user)
         class_id = school_class.id if school_class else None
 
-    close_map = await shop_svc.get_close_status(
-        session, category_ids, class_id, include_scheduled=True
+    close_map = await shop_svc.get_close_status(session, category_ids, class_id)
+    return CloseStatusOut(
+        statuses={
+            str(cid): item or CloseStatusItem(is_closed=False) for cid, item in close_map.items()
+        }
     )
-    statuses: dict[str, dict] = {}
-    for cid, row in close_map.items():
-        if row is None:
-            statuses[str(cid)] = {"is_closed": False}
-        else:
-            closed_by_name = None
-            if row.closed_by:
-                closed_by_name = getattr(row.closed_by, "display_name", None)
-            statuses[str(cid)] = {
-                "is_closed": row.closes_at is None or row.closes_at <= datetime.now(UTC),
-                "is_global": row.class_id is None,
-                "closes_at": row.closes_at,
-                "closed_at": row.closes_at or row.created_at,
-                "closed_by_name": closed_by_name,
-            }
-    return CloseStatusOut(statuses=statuses)
 
 
 # ── 學生授權的家人代訂 ────────────────────────────────────────────────────────

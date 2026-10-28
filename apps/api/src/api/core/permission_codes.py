@@ -108,7 +108,6 @@ class PermissionCode(StrEnum):
     CLASS_MANAGE_MEMBERS = "class:manage_members"
     CLASS_MANAGE_ROLES = "class:manage_roles"
     CLASS_SHOP_COLLECT = "class:shop_collect"
-    CLASS_SHOP_CLOSE = "class:shop_close"
     ANNOUNCEMENT_CREATE = "announcement:create"
     ANNOUNCEMENT_PUBLISH = "announcement:publish"
     ANNOUNCEMENT_EDIT = "announcement:edit"
@@ -693,12 +692,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.CLASS_MANAGE_ROLES,
         "label": "管理本班職位",
         "desc": "任命或調整任職班級的職位",
-    },
-    {
-        "group": "班級管理",
-        "code": PermissionCode.CLASS_SHOP_CLOSE,
-        "label": "本班商品結單",
-        "desc": "處理本班商品結單彙整",
     },
     {
         "group": "公告系統",

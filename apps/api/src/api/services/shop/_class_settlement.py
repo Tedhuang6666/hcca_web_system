@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import now_local
-from api.models.activity import Activity
 from api.models.school_class import SchoolClass
 from api.models.shop import (
     Order,
@@ -21,6 +20,7 @@ from api.models.shop import (
     ProductStatus,
     ShopOrderClose,
 )
+from api.models.shop_class_payment import ShopClassPayment
 from api.models.user import User
 from api.schemas.shop import CurrentRegistrationUpdate
 from api.services import receivable as receivable_svc
@@ -32,6 +32,7 @@ from api.services.shop._orders import (
     _assert_purchase_limit,
     _get_class_member_orders,
     _is_school_email,
+    _lock_class_orders,
     _options_delta,
     _options_signature,
     _product_order_scope,
@@ -78,6 +79,7 @@ async def set_class_member_product(
         raise PermissionError("無權修改此學生的商品登記")
     await _assert_buyer_eligible(session, user)
 
+    await _lock_class_orders(session, class_id)
     await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     await session.execute(
         select(Product)
@@ -99,7 +101,6 @@ async def set_class_member_product(
         product,
         class_id=class_id,
         allow_sold_out=existing_quantity > 0,
-        allow_class_closed=True,
     )
 
     locked_quantities: dict[str, int] = {}
@@ -261,6 +262,25 @@ async def set_class_paid(
     actor_id: uuid.UUID,
     activity_id: uuid.UUID | None,
 ) -> list[Order]:
+    await session.execute(
+        select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update()
+    )
+    payment = await session.scalar(
+        select(ShopClassPayment)
+        .where(
+            ShopClassPayment.class_id == class_id,
+            ShopClassPayment.activity_id == activity_id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    if payment is None:
+        payment = ShopClassPayment(class_id=class_id, activity_id=activity_id)
+        session.add(payment)
+    if payment.is_paid != is_paid:
+        payment.is_paid = is_paid
+        payment.confirmed_at = datetime.now(UTC) if is_paid else None
+        payment.confirmed_by_id = actor_id if is_paid else None
+    await session.flush()
     activity_filter = (
         Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
     )
@@ -315,23 +335,9 @@ async def close_category_for_class(
     )
     if category is None:
         raise ValueError("找不到此商品分類")
+    if class_id is not None or closes_at is not None:
+        raise ValueError("班級改由班聯統一期限或確認收款鎖單，不提供班級截止設定")
     now = datetime.now(UTC)
-    if closes_at is not None:
-        if class_id is None:
-            raise ValueError("預約截止必須指定班級")
-        if closes_at.tzinfo is None or closes_at <= now:
-            raise ValueError("班級截止時間必須是含時區的未來時間")
-        activity = (
-            await session.get(Activity, category.activity_id) if category.activity_id else None
-        )
-        if activity is not None:
-            if activity.order_closed_at:
-                raise ValueError("活動已全域停止訂購，無法設定班級截止時間")
-            deadline = activity.order_closes_at
-            if deadline is not None:
-                deadline = deadline.replace(tzinfo=UTC) if deadline.tzinfo is None else deadline
-                if closes_at > deadline:
-                    raise ValueError("班級截止時間不得晚於班聯會設定的活動停止訂購時間")
     # 確認沒有重複有效結單
     existing_q = select(ShopOrderClose).where(
         ShopOrderClose.category_id == category_id,
@@ -369,6 +375,8 @@ async def reopen_category_for_class(
     class_id: uuid.UUID | None,
     reopened_by_id: uuid.UUID,
 ) -> ShopOrderClose:
+    if class_id is not None:
+        raise ValueError("請由班聯撤銷該班收款確認；仍須遵守統一截止時間")
     existing_q = select(ShopOrderClose).where(
         ShopOrderClose.category_id == category_id,
         ShopOrderClose.is_active.is_(True),

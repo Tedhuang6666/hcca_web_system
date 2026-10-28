@@ -14,7 +14,7 @@ export function registrationLockMessage({
   deadlinePassed: boolean;
 }) {
   if (registrationLocked) return "班級幹部已登記收款，商品登記已鎖定";
-  if (classClosed) return "本班已停止訂購，如需更改請聯繫班代";
+  if (classClosed) return "本班此活動已截止或班聯已確認收款，訂購已鎖定";
   if (deadlinePassed) return "商品登記已截止";
   return "登入後即可登記商品";
 }

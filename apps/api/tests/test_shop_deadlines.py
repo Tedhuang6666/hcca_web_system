@@ -1,4 +1,4 @@
-"""活動統一結單、單品延長與訂購入口的資料庫回歸。"""
+"""活動統一結單優先於單品延長，所有訂購入口一致。"""
 
 from datetime import UTC, date, datetime, timedelta
 
@@ -91,7 +91,7 @@ async def test_activity_deadline_permissions_scope_null_and_timezone(
     assert cleared.json()["order_closes_at"] is None
 
 
-async def test_all_categories_inherit_deadline_and_one_product_can_extend(
+async def test_unified_deadline_caps_categories_and_product_extensions(
     client,
     admin_user,
     authed_client_factory,
@@ -114,7 +114,7 @@ async def test_all_categories_inherit_deadline_and_one_product_can_extend(
         f"/shop/products/{extended.id}", json={"sale_end": later.isoformat()}
     )
     assert response.status_code == 200
-    assert datetime.fromisoformat(response.json()["effective_sale_end"]) == later
+    assert datetime.fromisoformat(response.json()["effective_sale_end"]) == activity.order_closes_at
     catalog = (await client.get("/shop/catalog")).json()
     first = next(row for row in catalog if row["id"] == str(categories[0].id))
     second = next(row for row in catalog if row["id"] == str(categories[1].id))
@@ -123,15 +123,18 @@ async def test_all_categories_inherit_deadline_and_one_product_can_extend(
         == activity.order_closes_at
     )
     assert first["products"][0]["sale_end"] is None
-    assert datetime.fromisoformat(second["series"][0]["products"][0]["effective_sale_end"]) == later
-    for product in [extended, products[2]]:
+    assert (
+        datetime.fromisoformat(second["series"][0]["products"][0]["effective_sale_end"])
+        == activity.order_closes_at
+    )
+    for product, expected in [(extended, 409), (products[2], 200)]:
         response = await ac.put(
             f"/shop/registrations/current/products/{product.id}",
             json={"variants": [{"option_ids": [], "quantity": 1}]},
         )
-        assert response.status_code == 200
+        assert response.status_code == expected
     orders = (await ac.get("/shop/registrations")).json()
-    assert len(orders) == 2
+    assert len(orders) == 1
     # 舊資料未填 category_id 的系列商品也必須沿用活動期限。
     extended.category_id = None
     await manager.patch(f"/shop/products/{extended.id}", json={"sale_end": None})
@@ -145,7 +148,7 @@ async def test_all_categories_inherit_deadline_and_one_product_can_extend(
     assert blocked.status_code == 409
 
 
-async def test_fresh_cart_uses_activity_deadline_and_extension(db_session, deadline_setup):
+async def test_cart_remains_unavailable_after_unified_deadline(db_session, deadline_setup):
     buyer, _, _, _, products = deadline_setup
     buyer_id = buyer.id
     product = products[0]
@@ -159,10 +162,10 @@ async def test_fresh_cart_uses_activity_deadline_and_extension(db_session, deadl
     assert shop_svc.serialize_cart(cart).items[0].available is False
     cart.items[0].product.sale_end = datetime.now(UTC) + timedelta(days=1)
     await db_session.flush()
-    assert shop_svc.serialize_cart(cart).items[0].available is True
+    assert shop_svc.serialize_cart(cart).items[0].available is False
 
 
-async def test_parent_link_remains_open_for_extended_item(
+async def test_parent_link_cannot_extend_past_unified_deadline(
     db_session,
     admin_user,
     authed_client_factory,
@@ -183,25 +186,28 @@ async def test_parent_link_remains_open_for_extended_item(
     access = await parent.post(
         "/shop/delegation/access", json={"token": link.json()["token"], "claim": True}
     )
-    assert access.status_code == 200
+    assert access.status_code == 410
     saved = await parent.post(
         f"/shop/delegation/products/{products[0].id}",
         json={"token": link.json()["token"], "variants": [{"option_ids": [], "quantity": 1}]},
     )
-    assert saved.status_code == 200
+    assert saved.status_code == 410
     products[0].sale_end = None
     await db_session.flush()
     expired = await parent.post("/shop/delegation/access", json={"token": link.json()["token"]})
     assert expired.status_code == 410
 
 
-async def test_deadline_notifications_exclude_extended_products(db_session, deadline_setup):
+async def test_unified_deadline_notifies_all_products(db_session, deadline_setup):
     _, activity, _, _, products = deadline_setup
     now = datetime.now(UTC)
     activity.order_closes_at = now
     products[1].sale_end = now + timedelta(days=1)
     await db_session.flush()
-    assert await recently_closed_product_ids(db_session, now=now) == [products[0].id]
+    assert set(await recently_closed_product_ids(db_session, now=now)) == {
+        products[0].id,
+        products[1].id,
+    }
     products[1].sale_end = None
     products[1].category_id = None
     await db_session.flush()
@@ -211,9 +217,7 @@ async def test_deadline_notifications_exclude_extended_products(db_session, dead
     }
 
 
-async def test_assisted_checkout_respects_activity_deadline_and_product_extension(
-    db_session, deadline_setup
-):
+async def test_assisted_checkout_cannot_extend_past_unified_deadline(db_session, deadline_setup):
     buyer, _, _, _, products = deadline_setup
     product = products[0]
     data = ClassOrderUpsert(
@@ -223,8 +227,5 @@ async def test_assisted_checkout_respects_activity_deadline_and_product_extensio
         await shop_svc.create_direct_order(db_session, user_id=buyer.id, class_id=None, data=data)
     product.sale_end = datetime.now(UTC) + timedelta(days=1)
     await db_session.flush()
-    orders = await shop_svc.create_direct_order(
-        db_session, user_id=buyer.id, class_id=None, data=data
-    )
-    assert len(orders) == 1
-    assert orders[0].total_price == 100
+    with pytest.raises(ValueError, match="已截止販售"):
+        await shop_svc.create_direct_order(db_session, user_id=buyer.id, class_id=None, data=data)

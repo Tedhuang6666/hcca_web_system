@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.activity import Activity
@@ -40,8 +40,13 @@ async def set_activity_order_deadline(
 
 
 async def recently_closed_product_ids(session: AsyncSession, *, now: datetime) -> list[uuid.UUID]:
-    """通知沿用同一有效期限，已延長的品項不提前通知結單。"""
-    deadline = func.coalesce(Product.sale_end, Activity.order_closes_at)
+    """單品提前截止或班聯統一期限到達時通知。"""
+    deadline = case(
+        (Activity.order_closes_at.is_(None), Product.sale_end),
+        (Product.sale_end.is_(None), Activity.order_closes_at),
+        (Product.sale_end < Activity.order_closes_at, Product.sale_end),
+        else_=Activity.order_closes_at,
+    )
     result = await session.scalars(
         select(Product.id)
         .outerjoin(ProductSeries, Product.series_id == ProductSeries.id)

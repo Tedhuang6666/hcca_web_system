@@ -181,7 +181,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
           <label className="grid gap-1 text-sm">代訂備註（選填）
             <textarea className="input text-base" rows={2} maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </label>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>仍須遵守商品截止、庫存及收款限制；班級結單後仍可代訂，全域停止訂購後無法代訂。</p>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>到達班聯統一截止時間或班聯確認該班收款後，無法再代訂；另須遵守商品截止與庫存限制。</p>
           <button type="submit" className="btn btn-primary min-h-11" disabled={!student || !items.length || saving}>{saving ? "代訂送出中…" : "送出代訂"}</button>
         </fieldset>
         {error && <p role="alert" className="mt-3">{error}</p>}

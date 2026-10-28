@@ -779,9 +779,9 @@ class ImageUploadOut(BaseModel):
 
 
 class ShopOrderCloseCreate(BaseModel):
-    class_id: uuid.UUID | None = None
+    class_id: None = None
     notes: str | None = None
-    closes_at: AwareDatetime | None = Field(None, description="班級截止時間；留空立即截止")
+    closes_at: None = None
 
 
 class ShopOrderCloseOut(BaseModel):

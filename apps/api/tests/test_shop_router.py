@@ -3350,7 +3350,7 @@ async def test_close_category_global_by_manager_then_conflict_on_repeat(
     assert second.status_code == 409
 
 
-async def test_close_category_by_cadre_for_own_class_succeeds(
+async def test_close_category_by_cadre_for_own_class_rejected(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session)
@@ -3360,8 +3360,7 @@ async def test_close_category_by_cadre_for_own_class_succeeds(
 
     ac = authed_client_factory(cadre)
     resp = await ac.post(f"/shop/categories/{category.id}/close", json={"class_id": str(sc.id)})
-    assert resp.status_code == 201
-    assert resp.json()["class_id"] == str(sc.id)
+    assert resp.status_code == 422
 
 
 async def test_close_category_globally_by_cadre_returns_403(
@@ -3377,7 +3376,7 @@ async def test_close_category_globally_by_cadre_returns_403(
     assert resp.status_code == 403
 
 
-async def test_close_category_by_cadre_for_other_class_returns_403(
+async def test_close_category_by_cadre_for_other_class_returns_422(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session, start="11501", end="11540")
@@ -3390,7 +3389,7 @@ async def test_close_category_by_cadre_for_other_class_returns_403(
     resp = await ac.post(
         f"/shop/categories/{category.id}/close", json={"class_id": str(other_sc.id)}
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 422
 
 
 async def test_reopen_category_when_not_closed_returns_409(
