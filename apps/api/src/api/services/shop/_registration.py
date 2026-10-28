@@ -30,6 +30,7 @@ from api.services.shop._orders import (
     _assert_product_registration_open,
     _assert_purchase_limit,
     _is_school_email,
+    _lock_class_orders,
     _options_delta,
     _options_signature,
     _product_order_scope,
@@ -53,6 +54,8 @@ async def set_current_registration_product(
     delegation: ShopDelegationLink | None = None,
 ) -> Order | None:
     """立即登記某商品的規格數量，並以目前有效訂單保存。"""
+    school_class = await class_svc.resolve_user_class(session, user)
+    await _lock_class_orders(session, school_class.id if school_class else None)
     await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     await session.execute(
         select(Product)

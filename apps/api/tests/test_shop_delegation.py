@@ -788,11 +788,19 @@ async def test_delegate_uses_students_class_for_closure_and_order(delegation_set
     result = await _set(pc, product, 1, link["token"])
     assert result.status_code == 200
     assert result.json()["class_id"] == str(student_class.id)
-    await shop_svc.close_category_for_class(
-        db_session, category_id=category.id, class_id=parent_class.id, closed_by_id=student.id
+    await shop_svc.set_class_paid(
+        db_session,
+        parent_class.id,
+        is_paid=True,
+        actor_id=student.id,
+        activity_id=category.activity_id,
     )
     assert (await _set(pc, product, 2, link["token"])).status_code == 200
-    await shop_svc.close_category_for_class(
-        db_session, category_id=category.id, class_id=student_class.id, closed_by_id=student.id
+    await shop_svc.set_class_paid(
+        db_session,
+        student_class.id,
+        is_paid=True,
+        actor_id=student.id,
+        activity_id=category.activity_id,
     )
     assert (await _set(pc, product, 3, link["token"])).status_code == 410

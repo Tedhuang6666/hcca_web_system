@@ -15,6 +15,7 @@ from api.models.activity import Activity, ActivityStatus
 from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.receivable import Receivable, ReceivableSource
+from api.models.school_class import SchoolClass
 from api.models.shop import (
     Cart,
     CartItem,
@@ -29,12 +30,14 @@ from api.models.shop import (
     ShopOrderPromotion,
     ShopPromotion,
 )
+from api.models.shop_class_payment import ShopClassPayment
 from api.models.user import User
 from api.schemas.shop import (
     CartItemCreate,
     CartItemOut,
     CartOut,
     ClassOrderUpsert,
+    CloseStatusItem,
     OrderItemCreate,
     ShopOrderCloseOut,
 )
@@ -435,6 +438,12 @@ async def _assert_activity_order_unlocked(
 
 async def _assert_activity_open(session: AsyncSession, product: Product) -> None:
     activity = await _assert_activity_order_unlocked(session, _product_activity_id(product))
+    if activity is not None and activity.order_closes_at is not None:
+        deadline = activity.order_closes_at
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=UTC)
+        if datetime.now(UTC) >= deadline:
+            raise ValueError("已到班聯統一截止時間，商品已截止登記")
     if activity is not None and activity.status in (
         ActivityStatus.ENDED,
         ActivityStatus.ARCHIVED,
@@ -475,10 +484,10 @@ async def _create_order_from_items(
     coupon_code: str | None = None,
     payment_method: str = "cash_on_pickup",
     replace_order: Order | None = None,
-    allow_class_closed: bool = False,
 ) -> Order:
     if replace_order is not None and replace_order.test_product_id is not None:
         raise ValueError("測試訂購請至商品頁調整")
+    await _lock_class_orders(session, class_id)
     # 與學生／家人即時登記共用使用者鎖，避免不同商品同時送出時各自建單。
     await session.execute(select(User.id).where(User.id == user_id).with_for_update())
     buyer = await session.get(User, user_id)
@@ -569,7 +578,6 @@ async def _create_order_from_items(
             session,
             product,
             class_id=class_id,
-            allow_class_closed=allow_class_closed,
         )
 
         option_ids = [uuid.UUID(str(o["option_id"])) for o in (cart_item.selected_options or [])]
@@ -700,7 +708,6 @@ async def create_direct_order(
             notes=data.notes,
             assistance_scope=assistance_scope,
             assisted_by_id=assisted_by_id,
-            allow_class_closed=assistance_scope == "class_assisted",
         )
         await receivable_svc.sync_shop_order(session, order)
         orders.append(order)
@@ -960,6 +967,8 @@ async def apply_registration_promotion(
     activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
 ) -> Order:
+    school_class = await class_svc.resolve_user_class(session, user)
+    await _lock_class_orders(session, school_class.id if school_class else None)
     order = await get_current_registration(
         session,
         user.id,
@@ -976,6 +985,10 @@ async def apply_registration_promotion(
     if category_id is not None and order.category_id != category_id:
         raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
     await _assert_activity_order_unlocked(session, _order_activity_id(order))
+    for item in order.items:
+        await _assert_product_registration_open(
+            session, item.product, class_id=order.class_id, allow_sold_out=True
+        )
     await _apply_order_promotion(session, order, code=code)
     await receivable_svc.sync_shop_order(session, order)
     await session.flush()
@@ -989,12 +1002,12 @@ async def _assert_product_registration_open(
     class_id: uuid.UUID | None,
     allow_sold_out: bool = False,
     allow_testing: bool = False,
-    allow_class_closed: bool = False,
 ) -> None:
     if allow_testing and product.status == ProductStatus.TESTING:
         await _assert_activity_order_unlocked(session, _product_activity_id(product))
         return
     await _assert_activity_open(session, product)
+    await _assert_class_order_unlocked(session, class_id, _product_activity_id(product))
     if product.status != ProductStatus.ACTIVE and not (
         allow_sold_out and product.status == ProductStatus.SOLD_OUT
     ):
@@ -1015,13 +1028,11 @@ async def _assert_product_registration_open(
     if category_id is None and product.series is not None:
         category_id = product.series.category_id
     if category_id is not None:
-        closes = await get_close_status(
-            session, [category_id], None if allow_class_closed else class_id
-        )
+        closes = await get_close_status(session, [category_id], class_id)
         if closes.get(category_id) is not None:
-            if closes[category_id].class_id is None:
+            if closes[category_id].is_global:
                 raise ValueError("班聯會已全域停止此分類訂購，班代亦無法代訂")
-            raise ValueError("您的班級已結單，無法修改商品登記，請聯繫班級幹部")
+            raise ValueError("班聯已確認本班收款，商品登記已鎖定")
 
 
 async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
@@ -1142,6 +1153,7 @@ async def cancel_order(
     bypass_owner_check: bool = False,
     bypass_registration_window: bool = False,
 ) -> Order:
+    await _lock_class_orders(session, order.class_id)
     await session.execute(select(User.id).where(User.id == order.user_id).with_for_update())
     await session.execute(
         select(Order)
@@ -1199,8 +1211,8 @@ async def replace_order_items(
     order: Order,
     *,
     data: ClassOrderUpsert,
-    allow_class_closed: bool = False,
 ) -> Order:
+    await _lock_class_orders(session, order.class_id)
     await session.execute(select(User.id).where(User.id == order.user_id).with_for_update())
     await session.execute(
         select(Order)
@@ -1232,7 +1244,6 @@ async def replace_order_items(
                 product,
                 class_id=order.class_id,
                 allow_sold_out=True,
-                allow_class_closed=allow_class_closed,
             )
     for item in data.items:
         product = await get_product(session, item.product_id)
@@ -1244,7 +1255,6 @@ async def replace_order_items(
             product,
             class_id=order.class_id,
             allow_sold_out=any(existing.product_id == product.id for existing in order.items),
-            allow_class_closed=allow_class_closed,
         )
     if len(requested_scopes) > 1 or (
         requested_scopes and order.items and next(iter(requested_scopes)) != original_scope
@@ -1271,7 +1281,6 @@ async def replace_order_items(
         assisted_by_id=order.assisted_by_id,
         payment_method=order.payment_method,
         replace_order=order,
-        allow_class_closed=allow_class_closed,
     )
     order.notes = data.notes
     await receivable_svc.sync_shop_order(session, order)
@@ -1298,41 +1307,99 @@ async def set_order_paid(
 # ── 結單服務 ───────────────────────────────────────────────────────────────────
 
 
+async def _lock_class_orders(session: AsyncSession, class_id: uuid.UUID | None) -> None:
+    if class_id is not None:
+        await session.execute(
+            select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update(read=True)
+        )
+
+
+async def _assert_class_order_unlocked(
+    session: AsyncSession, class_id: uuid.UUID | None, activity_id: uuid.UUID | None
+) -> None:
+    if class_id is None:
+        return
+    # 收款確認取排他鎖，登記取共享鎖，避免確認完成後仍有新單寫入。
+    await session.execute(
+        select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update(read=True)
+    )
+    payment = await session.scalar(
+        select(ShopClassPayment.id).where(
+            ShopClassPayment.class_id == class_id,
+            ShopClassPayment.activity_id == activity_id,
+            ShopClassPayment.is_paid.is_(True),
+        )
+    )
+    if payment is not None:
+        raise ValueError("班聯已確認本班收款，商品登記已鎖定")
+
+
 async def get_close_status(
     session: AsyncSession,
     category_ids: list[uuid.UUID],
     class_id: uuid.UUID | None,
-    *,
-    include_scheduled: bool = False,
-) -> dict[uuid.UUID, ShopOrderClose | None]:
-    """回傳各 category 目前有效結單紀錄（or None）。
-    全局結單優先於班級結單；預約紀錄只在時間到後生效。
-    """
+) -> dict[uuid.UUID, CloseStatusItem | None]:
+    """統一期限、班聯收款或全域停止；舊班代截止紀錄不再生效。"""
     if not category_ids:
         return {}
+    categories = list(
+        await session.scalars(
+            select(ProductCategory)
+            .where(ProductCategory.id.in_(category_ids))
+            .options(selectinload(ProductCategory.activity))
+        )
+    )
+    payments = (
+        list(
+            await session.scalars(
+                select(ShopClassPayment).where(
+                    ShopClassPayment.class_id == class_id,
+                    ShopClassPayment.is_paid.is_(True),
+                )
+            )
+        )
+        if class_id is not None
+        else []
+    )
+    paid_scopes = {payment.activity_id: payment for payment in payments}
     q = (
         select(ShopOrderClose)
         .options(selectinload(ShopOrderClose.closed_by))
         .where(
             ShopOrderClose.is_active.is_(True),
             ShopOrderClose.category_id.in_(category_ids),
-            or_(
-                ShopOrderClose.class_id == class_id,
-                ShopOrderClose.class_id.is_(None),
-            ),
+            ShopOrderClose.class_id.is_(None),
         )
     )
-    if not include_scheduled:
-        q = q.where(
-            or_(ShopOrderClose.closes_at.is_(None), ShopOrderClose.closes_at <= datetime.now(UTC))
-        )
+    q = q.where(
+        or_(ShopOrderClose.closes_at.is_(None), ShopOrderClose.closes_at <= datetime.now(UTC))
+    )
     rows = (await session.execute(q)).scalars().all()
-    result: dict[uuid.UUID, ShopOrderClose | None] = {cid: None for cid in category_ids}
+    result: dict[uuid.UUID, CloseStatusItem | None] = {cid: None for cid in category_ids}
+    for category in categories:
+        activity = category.activity
+        deadline = activity.order_closes_at if activity else None
+        if deadline is not None and deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=UTC)
+        if activity and (activity.order_closed_at or (deadline and deadline <= datetime.now(UTC))):
+            result[category.id] = CloseStatusItem(
+                is_closed=True,
+                is_global=True,
+                closes_at=deadline,
+                closed_at=activity.order_closed_at or deadline,
+            )
+        elif payment := paid_scopes.get(category.activity_id):
+            result[category.id] = CloseStatusItem(
+                is_closed=True,
+                closed_at=payment.confirmed_at,
+            )
     for row in rows:
-        cid = row.category_id
-        existing = result.get(cid)
-        if existing is None or row.class_id is None:
-            result[cid] = row
+        result[row.category_id] = CloseStatusItem(
+            is_closed=True,
+            is_global=True,
+            closed_at=row.created_at,
+            closed_by_name=row.closed_by.display_name if row.closed_by else None,
+        )
     return result
 
 

@@ -23,6 +23,7 @@ from api.models.shop import (
     ProductVariantOption,
     ShopDelegationLink,
     ShopPromotion,
+    effective_product_deadline,
 )
 from api.schemas.shop import (
     CatalogCategoryOut,
@@ -549,8 +550,10 @@ async def build_catalog_tree(
                 is_unlimited=product.is_unlimited,
                 sale_start=product.sale_start,
                 sale_end=product.sale_end,
-                effective_sale_end=product.sale_end
-                or (category.activity.order_closes_at if category.activity else None),
+                effective_sale_end=effective_product_deadline(
+                    product.sale_end,
+                    category.activity.order_closes_at if category.activity else None,
+                ),
                 has_variants=len(product.variant_groups) > 0,
                 requires_seating=product.requires_seating,
                 seating_mode=product.seating_mode,
@@ -573,8 +576,9 @@ async def build_catalog_tree(
                     is_unlimited=p.is_unlimited,
                     sale_start=p.sale_start,
                     sale_end=p.sale_end,
-                    effective_sale_end=p.sale_end
-                    or (category.activity.order_closes_at if category.activity else None),
+                    effective_sale_end=effective_product_deadline(
+                        p.sale_end, category.activity.order_closes_at if category.activity else None
+                    ),
                     has_variants=len(p.variant_groups) > 0,
                     requires_seating=p.requires_seating,
                     seating_mode=p.seating_mode,

@@ -29460,12 +29460,9 @@ export interface components {
         /** ShopOrderCloseCreate */
         ShopOrderCloseCreate: {
             /** Class Id */
-            class_id?: string | null;
-            /**
-             * Closes At
-             * @description 班級截止時間；留空立即截止
-             */
-            closes_at?: string | null;
+            class_id?: null;
+            /** Closes At */
+            closes_at?: null;
             /** Notes */
             notes?: string | null;
         };

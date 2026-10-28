@@ -109,45 +109,18 @@ describe("班代工作流程", () => {
     await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({}));
   });
 
-  it("主切換列直接提供班級截止，可設定時間與立即截止", async () => {
+  it("班代沒有班級截止控制，並說明兩個鎖單時機", async () => {
     render(<ClassOrdersPage />);
-    const entry = within(taskSwitch()).getByRole("button", { name: "班級截止" });
-    expect(entry).toBeVisible();
-    fireEvent.click(entry);
-    const settings = await screen.findByRole("region", { name: "班級截止設定" });
-    expect(settings).toBeVisible();
-    const input = await within(settings).findByLabelText(/班級截止時間（台北時間）/);
-    await waitFor(() => expect(input).toBeEnabled());
-    fireEvent.change(input, { target: { value: "2030-10-29T18:00" } });
-    fireEvent.click(within(settings).getByRole("button", { name: "儲存班級截止時間" }));
-    await waitFor(() => expect(api.closeCategory).toHaveBeenCalledWith("category", {
-      class_id: "class", closes_at: "2030-10-29T10:00:00.000Z",
-    }));
-    await waitFor(() => expect(within(settings).getByRole("button", { name: "立即截止本班" })).toBeEnabled());
-    fireEvent.click(within(settings).getByRole("button", { name: "立即截止本班" }));
-    await waitFor(() => expect(api.closeCategory).toHaveBeenCalledWith("category", {
-      class_id: "class", closes_at: null,
-    }));
+    await screen.findByRole("navigation", { name: "班代工作" });
+    expect(screen.queryByRole("button", { name: "班級截止" })).not.toBeInTheDocument();
+    expect(screen.getByText(/到達班聯統一截止時間，或班聯確認本班收款後/)).toBeVisible();
   });
 
-  it("截止設定載入中仍顯示入口與載入狀態", () => {
-    api.catalog.mockImplementationOnce(() => new Promise(() => {}));
+  it("班聯確認本班收款後不提供該活動代訂商品", async () => {
+    api.getCloseStatus.mockResolvedValue({ statuses: { category: { is_closed: true, is_global: false } } });
     render(<ClassOrdersPage />);
-    fireEvent.click(within(taskSwitch()).getByRole("button", { name: "班級截止" }));
-    const settings = screen.getByRole("region", { name: "班級截止設定" });
-    expect(within(settings).getByRole("status")).toHaveTextContent("正在載入班級截止設定");
-    expect(within(settings).queryByText("目前沒有可設定截止時間的活動或商品。")).not.toBeInTheDocument();
-  });
-
-  it("截止設定載入失敗能重試，空目錄也有說明", async () => {
-    api.catalog.mockRejectedValueOnce(new Error("failed")).mockResolvedValueOnce([]);
-    render(<ClassOrdersPage />);
-    fireEvent.click(within(taskSwitch()).getByRole("button", { name: "班級截止" }));
-    const settings = screen.getByRole("region", { name: "班級截止設定" });
-    expect(await within(settings).findByRole("alert")).toHaveTextContent("無法載入班級截止設定");
-    fireEvent.click(within(settings).getByRole("button", { name: "重新載入截止設定" }));
-    expect(await within(settings).findByText("目前沒有可設定截止時間的活動或商品。")).toBeVisible();
-    expect(api.catalog).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(api.getCloseStatus).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole("button", { name: /紀念袋/ })).not.toBeInTheDocument());
   });
 
   it("已結單活動保留收款名冊與收款操作", async () => {
@@ -193,12 +166,12 @@ describe("班代工作流程", () => {
     }));
   });
 
-  it("主要切換列提供代訂、確認收款與班級截止", async () => {
+  it("主要切換列提供代訂與確認收款", async () => {
     render(<ClassOrdersPage />);
 
     const navigation = taskSwitch();
     expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "代訂", "確認收款", "班級截止",
+      "代訂", "確認收款",
     ]);
     fireEvent.click(within(navigation).getByRole("button", { name: "確認收款" }));
     expect(await screen.findByRole("heading", { name: "確認收款" })).toBeVisible();

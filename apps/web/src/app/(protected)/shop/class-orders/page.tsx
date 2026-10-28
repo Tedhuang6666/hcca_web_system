@@ -1,7 +1,6 @@
 "use client";
 
 import NumberInput from "@/components/ui/NumberInput";
-import ClassDeadlineControls from "@/components/shop/ClassDeadlineControls";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -89,7 +88,7 @@ async function listAllClassOrders(params: ClassOrderQuery = {}): Promise<OrderLi
 }
 
 export default function ClassOrdersPage() {
-  const [workspace, setWorkspace] = useState<"order" | "collect" | "details" | "deadline">("order");
+  const [workspace, setWorkspace] = useState<"order" | "collect" | "details">("order");
   const [seatFilter, setSeatFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [seatSearch, setSeatSearch] = useState("");
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -99,7 +98,6 @@ export default function ClassOrdersPage() {
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersLoadFailed, setMembersLoadFailed] = useState(false);
   const [catalogFailed, setCatalogFailed] = useState(false);
-  const [catalogLoading, setCatalogLoading] = useState(true);
   const [submitMessage, setSubmitMessage] = useState("");
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [myClassId, setMyClassId] = useState<string | null>(null);
@@ -149,9 +147,12 @@ export default function ClassOrdersPage() {
 
   const catalogProducts = useMemo(() => flattenCatalog(catalog), [catalog]);
   const activeProducts = useMemo(
-    () => catalogProducts.filter((p) => p.status === "active"
-      && !catalog.find((category) => category.id === p.categoryId)?.order_closed_at
-      && !(closeStatus[p.categoryId]?.is_global && closeStatus[p.categoryId]?.is_closed)),
+    () => catalogProducts.filter((product) => {
+      const category = catalog.find((item) => item.id === product.categoryId);
+      return product.status === "active" && !category?.order_closed_at
+        && !closeStatus[product.categoryId]?.is_closed
+        && (!category?.order_closes_at || new Date(category.order_closes_at).getTime() > Date.now());
+    }),
     [catalogProducts, catalog, closeStatus],
   );
   const formProducts = useMemo(
@@ -216,25 +217,6 @@ export default function ClassOrdersPage() {
     if (!activityId || activityId === "none") return "一般商品";
     return activityLabels.get(activityId) ?? `已結束活動 · ${activityId.slice(0, 6)}`;
   }, [activityLabels]);
-
-  const closeActivityGroups = useMemo(() => {
-    const groups = new Map<string, {
-      key: string;
-      label: string;
-      categories: CatalogCategoryOut[];
-    }>();
-    for (const category of catalog) {
-      const key = catalogScopeKey(category);
-      const group = groups.get(key) ?? {
-        key,
-        label: activityLabel(key),
-        categories: [],
-      };
-      group.categories.push(category);
-      groups.set(key, group);
-    }
-    return [...groups.values()];
-  }, [catalog, activityLabel]);
 
   const activityRows = useMemo(() => {
     const rows = new Map<string, ActivityOptionRow>();
@@ -492,7 +474,6 @@ export default function ClassOrdersPage() {
   useEffect(() => { load(); }, [load]);
 
   const loadCatalog = useCallback(async () => {
-    setCatalogLoading(true);
     setCatalogFailed(false);
     try {
       setCatalog(await shopApi.catalog(undefined, true));
@@ -500,7 +481,6 @@ export default function ClassOrdersPage() {
       setCatalogFailed(true);
       setCatalog([]);
     } finally {
-      setCatalogLoading(false);
     }
   }, []);
 
@@ -1045,7 +1025,7 @@ export default function ClassOrdersPage() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <nav className="shop-task-switch w-full min-w-0 sm:w-auto sm:flex-1" aria-label="班代工作">
         {([
-          ["order", "代訂"], ["collect", "確認收款"], ["deadline", "班級截止"],
+          ["order", "代訂"], ["collect", "確認收款"],
         ] as const).map(([key, label]) => (
           <button key={key} type="button" aria-pressed={workspace === key}
             onClick={() => { setWorkspace(key); if (key === "order") setFormOpen(true); }}>
@@ -1059,26 +1039,9 @@ export default function ClassOrdersPage() {
         </button>
       </div>
 
-      {workspace === "deadline" && (
-        <section aria-labelledby="close-management-heading" className="rounded-lg p-4"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-          <h2 id="close-management-heading" className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級截止設定</h2>
-          <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>班級截止後，同學與家人無法再自行訂購，班代仍可代訂；班聯會全域停止後，班代也無法代訂。</p>
-          {catalogLoading ? <p role="status">正在載入班級截止設定…</p>
-            : catalogFailed ? <div role="alert">
-              <p>無法載入班級截止設定，請重新載入後再試。</p>
-              <button type="button" className="btn btn-ghost min-h-11" onClick={() => void loadCatalog()}>重新載入截止設定</button>
-            </div>
-              : catalog.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {closeActivityGroups.map((group) => (
-                  <ClassDeadlineControls key={group.key} label={group.label} categories={group.categories}
-                    classId={myClassId} statuses={closeStatus}
-                    onSaved={async () => { if (myClassId) await loadCloseStatus(catalog.map((category) => category.id), myClassId); }} />
-                ))}
-              </div>
-                : <p style={{ color: "var(--text-secondary)" }}>目前沒有可設定截止時間的活動或商品。</p>}
-        </section>
-      )}
+      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+        到達班聯統一截止時間，或班聯確認本班收款後，該活動的訂購即鎖定。
+      </p>
 
       {workspace === "details" && (
         <label className="flex flex-wrap items-center gap-3 text-sm font-medium">

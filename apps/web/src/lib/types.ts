@@ -1,7 +1,7 @@
 /** Generated from api-bridge.ts. */
 import type { ClassRosterSummary, CloseStatusItem as ApiCloseStatusItem } from "./api-bridge";
 
-// 家人代訂等既有本地狀態只提供 is_closed，未提供全域資訊時沿用 false。
+// 班級鎖單涵蓋統一期限與班聯收款；家人代訂等本地狀態未提供全域資訊時沿用 false。
 export type CloseStatusItem = Omit<ApiCloseStatusItem, "is_global"> & { is_global?: boolean };
 
 export type {

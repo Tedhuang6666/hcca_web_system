@@ -243,12 +243,10 @@ export const shopApi = {
   deleteVariantOption: (optionId: string) => del<void>(`/shop/variant-options/${optionId}`),
 
   // 結單管理
-  closeCategory: (categoryId: string, body: { class_id?: string; notes?: string; closes_at?: string | null }) =>
+  closeCategory: (categoryId: string, body: { notes?: string }) =>
     post<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close`, body),
-  reopenCategory: (categoryId: string, classId?: string) => {
-    const qs = classId ? `?class_id=${classId}` : "";
-    return del<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close${qs}`);
-  },
+  reopenCategory: (categoryId: string) =>
+    del<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close`),
   getCloseStatus: (categoryIds: string[], classId?: string) => {
     const p = new URLSearchParams();
     categoryIds.forEach((id) => p.append("category_ids", id));
