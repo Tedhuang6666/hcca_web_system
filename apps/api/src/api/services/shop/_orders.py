@@ -502,6 +502,18 @@ async def _create_order_from_items(
     if len(scopes) != 1 or next(iter(scopes))[0] != activity_id:
         raise ValueError("同一筆訂單只能包含同一活動的商品")
     order_scope = next(iter(scopes))
+    if assisted_by_id is not None and replace_order is None:
+        paid_orders = await get_current_registrations(session, user_id)
+        paid_product_ids = {
+            item.product_id
+            for order in paid_orders
+            if (order.is_paid or order.is_class_collected)
+            and _order_activity_id(order) == activity_id
+            for item in order.items
+        }
+        requested_product_ids = {item.product_id for item in cart_items}
+        if paid_product_ids and not requested_product_ids.issubset(paid_product_ids):
+            raise ValueError("班級幹部已登記收款，商品登記已鎖定")
     order = replace_order
     if order is None:
         order = await get_current_registration(
