@@ -161,6 +161,17 @@ async def class_order_summary(
         for item in order.items:
             if product_id and item.product_id != product_id:
                 continue
+            if category_id and not (
+                item.product is not None
+                and (
+                    item.product.category_id == category_id
+                    or (
+                        item.product.series is not None
+                        and item.product.series.category_id == category_id
+                    )
+                )
+            ):
+                continue
             quantity = item.quantity
             gross = item.quantity * item.unit_price
             amount = (
@@ -190,7 +201,9 @@ async def class_order_summary(
                 if item.product_id not in order_product_ids:
                     row.uncollected_order_count += 1
             order_product_ids.add(item.product_id)
-        amount_by_order_id[order.id] = order_amount if product_id else order.total_price
+        amount_by_order_id[order.id] = (
+            order_amount if product_id or category_id else order.total_price
+        )
     paid_orders = [order for order in active_orders if order.is_class_collected]
     unpaid_orders = [order for order in active_orders if not order.is_class_collected]
     return ShopClassSummaryOut(

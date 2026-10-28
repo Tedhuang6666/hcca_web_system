@@ -30,6 +30,12 @@ beforeEach(() => {
 });
 
 async function openStats() {
+  api.listCategories.mockResolvedValue([
+    { id: "shirts", name: "校慶", activity_id: "festival" },
+    { id: "bags", name: "袋子", activity_id: "festival" },
+    { id: "cards", name: "冬季活動", activity_id: "winter" },
+    { id: "general", name: "一般主題", activity_id: null },
+  ]);
   navigation.search = "view=stats";
   render(<ShopAdminPage />);
   await screen.findByRole("option", { name: "校慶" });
@@ -98,26 +104,49 @@ describe("商品管理與統計", () => {
   it("keeps the newest activity result when earlier requests finish last", async () => {
     await openStats();
     let resolveOld!: (value: ReturnType<typeof summary>) => void;
-    api.orderSummary.mockImplementation((params: { activity_id?: string }) => params.activity_id === "festival"
+    api.orderSummary.mockImplementation((params: { category_id?: string }) => params.category_id === "shirts"
       ? new Promise((resolve) => { resolveOld = resolve; })
       : Promise.resolve(summary("冬季班級")));
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "winter" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "cards" } });
     await screen.findAllByText("冬季班級");
     await act(async () => resolveOld(summary("過期班級")));
     expect(screen.queryByText("過期班級")).not.toBeInTheDocument();
     expect(screen.getByText(/統計範圍：冬季活動/)).toBeVisible();
   });
 
+  it("活動選單列出每個主題，並用主題 ID 篩選直屬與系列商品", async () => {
+    api.listProducts.mockResolvedValue([
+      { id: "shirt", name: "紀念衫", category_id: "shirts" },
+      { id: "bag", name: "紀念袋", category_id: null, series_id: "bag-series" },
+    ]);
+    api.listSeries.mockResolvedValue([{ id: "bag-series", category_id: "bags" }]);
+    await openStats();
+    const select = screen.getByRole("combobox", { name: "活動" });
+    expect(select).toContainElement(screen.getByRole("option", { name: "袋子" }));
+    expect(select).toContainElement(screen.getByRole("option", { name: "一般主題" }));
+    expect(api.listActivities).not.toHaveBeenCalled();
+    fireEvent.change(select, { target: { value: "shirts" } });
+    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "shirts" })));
+    expect(api.orderSummary.mock.lastCall?.[0]).not.toHaveProperty("activity_id");
+    fireEvent.click(screen.getByRole("button", { name: "更多篩選" }));
+    expect(screen.getByRole("option", { name: "紀念衫" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "紀念袋" })).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "bags" } });
+    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "bags" })));
+    expect(screen.getByRole("option", { name: "紀念袋" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "紀念衫" })).not.toBeInTheDocument();
+  });
+
   it("retries failed statistics and clears the activity together with other filters", async () => {
     await openStats();
     api.orderSummary.mockRejectedValueOnce(new Error("offline"));
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
     expect(await screen.findByRole("alert")).toHaveTextContent("統計載入失敗");
     fireEvent.click(screen.getByRole("button", { name: "重新載入統計" }));
     await screen.findAllByText("初始班級");
     fireEvent.click(screen.getByRole("button", { name: "清除篩選" }));
-    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ activity_id: "", product_id: "", is_paid: "" })));
+    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "", product_id: "", is_paid: "" })));
     expect(screen.getByRole("combobox", { name: "活動" })).toHaveValue("");
   });
 
