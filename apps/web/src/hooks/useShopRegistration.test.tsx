@@ -83,6 +83,38 @@ it("preserves collected quantities and uses the classmate response without chang
   expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
 });
 
+it("lets the student add after collection and retains collected orders through save, promotion and removal", async () => {
+  const collected: OrderOut = { ...order, id: "collected", is_class_collected: true,
+    items: [order.items[0]] };
+  const addition: OrderOut = { ...order, id: "addition", items: [{ ...order.items[0], quantity: 2 }] };
+  const { result } = setup({ registrations: [collected] });
+  expect(result.current.registrationLocked).toBe(false);
+  expect(result.current.lockedVariantQuantities.get("")).toBe(1);
+  await expect(result.current.saveVariant("shirt", [], 0)).rejects.toThrow("必須保留");
+  api.setCurrentRegistrationProduct.mockResolvedValue(addition);
+  await act(async () => { await result.current.saveVariant("shirt", [], 3); });
+  expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("shirt", {
+    variants: [{ option_ids: [], quantity: 3 }],
+  });
+  expect(result.current.orders.map((row) => row.id)).toEqual(["collected", "addition"]);
+  expect(result.current.registration?.items.reduce((total, item) => total + item.quantity, 0)).toBe(3);
+  api.applyCurrentPromotion.mockResolvedValue({ ...addition, discount_amount: 10 });
+  await act(async () => { await result.current.applyPromotion("SAVE"); });
+  expect(result.current.orders.map((row) => row.id)).toEqual(["collected", "addition"]);
+  api.setCurrentRegistrationProduct.mockResolvedValue({ ...addition, status: "cancelled" });
+  await act(async () => { await result.current.saveVariant("shirt", [], 1); });
+  expect(result.current.orders).toEqual([collected]);
+});
+
+it("preserves only the student's collected quantities while displaying all own orders", () => {
+  const collected = { ...order, id: "collected", is_paid: true };
+  const addition = { ...order, id: "addition", items: [order.items[0]] };
+  const { result } = setup({ registrations: [collected, addition] });
+  expect(result.current.registration?.items.map((item) => item.id)).toEqual(["own", "own"]);
+  expect(result.current.lockedVariantQuantities.get("")).toBe(1);
+  expect(result.current.registrationLocked).toBe(false);
+});
+
 it("preserves sibling variants, other activities and test orders when replacing a registration", async () => {
   const selected = (id: string) => [{ group_id: "size", group_name: "尺寸", option_id: id, value: id, price_delta: 0 }];
   const variants: OrderOut = { ...order, items: [

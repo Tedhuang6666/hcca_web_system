@@ -63,6 +63,34 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("原商品頁的家人代訂模式", () => {
+  it("一般同學收款後可加購，且數量下限保留本人已收款品項", async () => {
+    window.history.replaceState({}, "", "/shop?product=bag");
+    const collected = { ...order, is_class_collected: true, items: [order.items[0]],
+      subtotal_price: 200, total_price: 200 };
+    api.me.mockResolvedValue({ id: "student", display_name: "學生", student_id: "S001" });
+    api.catalog.mockResolvedValue(context.catalog);
+    api.listAvailablePromotions.mockResolvedValue([]);
+    api.getCurrentRegistrations.mockResolvedValue([collected]);
+    api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
+    api.setCurrentRegistrationProduct.mockResolvedValue({ ...order, id: "addition",
+      items: [{ ...order.items[0], quantity: 1 }], subtotal_price: 100, total_price: 100 });
+    render(<ShopPage />);
+    await screen.findByRole("heading", { name: "紀念袋", level: 3 });
+    expect(screen.getByText(/已收款或鎖定 2 件/)).toBeVisible();
+    expect(screen.getByText("可繼續加購，加購後由班代補收差額。")).toBeVisible();
+    const quantity = screen.getByRole("button", { name: "增加數量" }).parentElement!;
+    await waitFor(() => expect(within(quantity).getByText("2")).toBeVisible());
+    expect(screen.getByRole("button", { name: "減少數量" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "已保留鎖定數量" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "增加數量" }));
+    await waitFor(() => expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("bag", {
+      variants: [{ option_ids: [], quantity: 3 }],
+    }));
+    expect(await within(quantity).findByText("3")).toBeVisible();
+    expect(screen.getByRole("button", { name: "移除可調整數量" })).toBeEnabled();
+    expect(screen.getByText("目前登記合計").closest('[role="status"]')).toHaveTextContent("NT$300");
+  });
+
   it("一般單品登記後立即提示加購、折抵與商品描邊，能直接開啟缺少的品項", async () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     const promotion = {

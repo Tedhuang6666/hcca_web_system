@@ -356,12 +356,10 @@ function ProductModal({
   const selectedRegistrationQuantity = registeredItems
     .filter((item) => registrationVariantKey(item.selected_options) === selectedOptionIds.join(","))
     .reduce((total, item) => total + item.quantity, 0);
-  const lockedSelectedQuantity = adjustingClassMember
-    ? lockedVariantQuantities.get(selectedOptionIds.join(",")) ?? 0
-    : 0;
-  const minimumSelectedQuantity = adjustingClassMember
-    ? Math.max(lockedSelectedQuantity, selectedRegistrationQuantity > 0 ? 0 : 1)
-    : selectedRegistrationQuantity > 0 ? 0 : 1;
+  const lockedSelectedQuantity = lockedVariantQuantities.get(selectedOptionIds.join(",")) ?? 0;
+  const minimumSelectedQuantity = Math.max(
+    lockedSelectedQuantity, selectedRegistrationQuantity > 0 ? 0 : 1,
+  );
   const remainingForUser = product?.max_quantity_per_user == null
     ? null
     : adjustingClassMember
@@ -616,10 +614,13 @@ function ProductModal({
                       {remainingForUser != null && ` · ${adjustingClassMember ? "此同學" : "此帳號"}尚可選 ${remainingForUser} 件`}
                     </p>
                   )}
-                  {adjustingClassMember && lockedSelectedQuantity > 0 && (
-                    <p className="shop-product-purchase-hint">
-                      已收款或鎖定 {lockedSelectedQuantity} 件，調整時會保留這個數量。
-                    </p>
+                  {lockedSelectedQuantity > 0 && (
+                    <>
+                      <p className="shop-product-purchase-hint">
+                        已收款或鎖定 {lockedSelectedQuantity} 件，調整時會保留這個數量。
+                      </p>
+                      {!adjustingClassMember && <p className="shop-product-purchase-hint">可繼續加購，加購後由班代補收差額。</p>}
+                    </>
                   )}
                 </div>
 
@@ -731,13 +732,13 @@ function ProductModal({
                       type="button"
                       onClick={() => void setVariantQuantity(
                         selectedOptionIds,
-                        adjustingClassMember ? lockedSelectedQuantity : 0,
+                        lockedSelectedQuantity,
                       )}
                       disabled={!canEdit || loading || (
-                        Boolean(adjustingClassMember) && selectedRegistrationQuantity <= lockedSelectedQuantity
+                        selectedRegistrationQuantity <= lockedSelectedQuantity
                       )}
                       className="shop-product-remove">
-                      {adjustingClassMember && lockedSelectedQuantity > 0
+                      {lockedSelectedQuantity > 0
                         ? selectedRegistrationQuantity > lockedSelectedQuantity
                           ? "移除可調整數量"
                           : "已保留鎖定數量"
@@ -1358,6 +1359,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   ]).some((product) => product.id === openProduct && product.status === "testing");
   const {
     scopeRegistration: selectedCategoryRegistration,
+    scopeTotalRegistration: selectedCategoryTotals,
     registration: productRegistration,
     lockedVariantQuantities,
     registrationLocked,
@@ -1816,15 +1818,15 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 </section>
               ))}
             </div>
-            {selectedCategoryRegistration && selectedCategoryRegistration.items.length > 0 && (
+            {selectedCategoryTotals && selectedCategoryTotals.items.length > 0 && (
               <div className="shop-registration-price" role="status" aria-live="polite">
                 <div><strong>目前登記合計</strong>
-                  {selectedCategoryRegistration.discount_amount > 0 && <p>
-                    {selectedCategoryRegistration.applied_promotions?.map((promotion) => promotion.name).join("、") || "已套用優惠"}
-                    {` · 共省 NT$${selectedCategoryRegistration.discount_amount.toLocaleString()}`}
+                  {selectedCategoryTotals.discount_amount > 0 && <p>
+                    {selectedCategoryTotals.applied_promotions?.map((promotion) => promotion.name).join("、") || "已套用優惠"}
+                    {` · 共省 NT$${selectedCategoryTotals.discount_amount.toLocaleString()}`}
                   </p>}
                 </div>
-                <ShopPrice original={selectedCategoryRegistration.subtotal_price} current={selectedCategoryRegistration.total_price} />
+                <ShopPrice original={selectedCategoryTotals.subtotal_price} current={selectedCategoryTotals.total_price} />
               </div>
             )}
             {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">

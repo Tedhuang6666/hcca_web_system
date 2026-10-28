@@ -30,6 +30,7 @@ async def preview_registration_promotion(
         activity_id=activity_id,
         category_id=category_id,
         match_activity=True,
+        editable_only=True,
     )
     subtotal = order.subtotal_price if order else 0
     result = await _promotions.preview_promotion(
