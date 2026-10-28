@@ -1,4 +1,5 @@
 import type {
+  ClassMemberOut,
   ShopSalesAnalyticsOut,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
@@ -141,6 +142,8 @@ export const shopApi = {
   getOrder: (id: string) => get<OrderOut>(`/shop/orders/${id}`),
   clearAllOrders: () => del<ShopOrdersClearOut>("/shop/orders"),
   createClassOrder: (body: ClassOrderCreate) => post<OrderOut[]>("/shop/orders/class", body),
+  listOrderRecipients: (classId: string) => get<ClassMemberOut[]>(`/shop/orders/recipients/${classId}`),
+  createAdminAssistedOrder: (body: ClassOrderCreate) => post<OrderOut[]>("/shop/orders/assisted", body),
   updateOrder: (id: string, body: {
     user_id: string;
     items: { product_id: string; quantity: number; option_ids: string[] }[];

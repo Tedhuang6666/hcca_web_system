@@ -10591,6 +10591,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/assisted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 訂單管理員替任意班級學生代訂 */
+        post: operations["create_admin_assisted_order_shop_orders_assisted_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/class": {
         parameters: {
             query?: never;
@@ -10737,6 +10754,23 @@ export interface paths {
         };
         /** 商品規格訂購數量彙總（採購用） */
         get: operations["order_quantities_shop_orders_quantities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/orders/recipients/{class_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 訂單管理員查詢代訂學生名冊 */
+        get: operations["list_order_recipients_shop_orders_recipients__class_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55531,6 +55565,39 @@ export interface operations {
             };
         };
     };
+    create_admin_assisted_order_shop_orders_assisted_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassOrderCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_class_orders_shop_orders_class_get: {
         parameters: {
             query?: {
@@ -55880,6 +55947,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderQuantityRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_order_recipients_shop_orders_recipients__class_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassMemberOut"][];
                 };
             };
             /** @description Validation Error */

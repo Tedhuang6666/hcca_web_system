@@ -36,6 +36,7 @@ from api.models.shop import (
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.activity import ActivityOut
+from api.schemas.school_class import ClassMemberOut
 from api.schemas.shop import (
     CatalogCategoryOut,
     ClassCollectionUpdate,
@@ -1306,21 +1307,64 @@ async def create_class_order(
     session: DbDep,
     current_user: CurrentUser,
 ) -> list[OrderOut]:
+    return await _create_assisted_orders(payload, session, current_user)
+
+
+@router.get(
+    "/orders/recipients/{class_id}",
+    response_model=list[ClassMemberOut],
+    summary="訂單管理員查詢代訂學生名冊",
+    dependencies=[Depends(require_any(*_PAYMENT_WRITE_CODES))],
+)
+async def list_order_recipients(class_id: uuid.UUID, session: DbDep) -> list[ClassMemberOut]:
+    sc = await class_svc.get_class(session, class_id)
+    if sc is None or not sc.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
+    return await class_svc.list_class_members(session, sc)
+
+
+@router.post(
+    "/orders/assisted",
+    response_model=list[OrderOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="訂單管理員替任意班級學生代訂",
+    dependencies=[Depends(require_any(*_PAYMENT_WRITE_CODES))],
+)
+async def create_admin_assisted_order(
+    payload: ClassOrderCreate, session: DbDep, current_user: CurrentUser
+) -> list[OrderOut]:
+    return await _create_assisted_orders(payload, session, current_user, allow_all_classes=True)
+
+
+async def _create_assisted_orders(
+    payload: ClassOrderCreate,
+    session: AsyncSession,
+    current_user: User,
+    *,
+    allow_all_classes: bool = False,
+) -> list[OrderOut]:
     from api.services.user_registration import UserRegistrationError
 
     try:
         if payload.roster_entry_id is not None:
             target, target_class = await class_svc.prepare_roster_order_recipient(
-                session, roster_entry_id=payload.roster_entry_id, actor=current_user
+                session,
+                roster_entry_id=payload.roster_entry_id,
+                actor=current_user,
+                allow_all_classes=allow_all_classes,
             )
         else:
             target = await session.get(User, payload.user_id)
             if target is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
+            if not target.is_active:
+                raise PermissionError("此學生帳號已停用")
             target_class = await class_svc.resolve_user_class(session, target)
             cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
             if target_class is None or (
-                not current_user.is_superuser and target_class.id not in cadre_ids
+                not allow_all_classes
+                and not current_user.is_superuser
+                and target_class.id not in cadre_ids
             ):
                 raise PermissionError("無權替此學生訂購")
         orders = await shop_svc.create_direct_order(

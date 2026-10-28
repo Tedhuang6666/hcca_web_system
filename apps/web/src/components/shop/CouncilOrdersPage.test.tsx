@@ -45,6 +45,17 @@ async function openPage() {
   fireEvent.click(screen.getByText(/更多篩選：/));
 }
 
+it("only offers school-wide assisted ordering to order managers", async () => {
+  access.isAdmin = false;
+  access.permissions = new Set(["shop:view_all"]);
+  const view = render(<CouncilOrdersPage />);
+  await screen.findByText("一年一班");
+  expect(screen.queryByText("幫同學代訂")).not.toBeInTheDocument();
+  access.permissions = new Set(["shop:manage_orders"]);
+  view.rerender(<CouncilOrdersPage />);
+  expect(screen.getByText("幫同學代訂")).toBeVisible();
+});
+
 describe("全校收款與訂單", () => {
   it("downloads the chosen class and activity and shows a retryable receipt error", async () => {
     await openPage();
