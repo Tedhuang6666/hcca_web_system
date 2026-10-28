@@ -1643,10 +1643,64 @@ async def test_class_collection_locks_user_registration(db_session, authed_clien
 
     locked = await ac.put(
         f"/shop/registrations/current/products/{product.id}",
-        json={"variants": [{"option_ids": [], "quantity": 2}]},
+        json={"variants": []},
     )
     assert locked.status_code == 409
-    assert "登記收款" in locked.json()["detail"]
+    assert "已收款或鎖定" in locked.json()["detail"]
+
+
+@pytest.mark.parametrize("paid", [False, True])
+async def test_student_adds_after_collection_and_cadre_sees_only_supplement(
+    db_session, authed_client_factory, paid
+) -> None:
+    school_class = await _make_class(db_session, start="11501", end="11540")
+    buyer = await _bare_user(db_session, student_id="11510")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, school_class, user_id=cadre.id)
+    product = await _make_active_product(db_session, cadre, price=50)
+    product.max_quantity_per_user = 4
+    ac = authed_client_factory(buyer)
+    endpoint = f"/shop/registrations/current/products/{product.id}"
+    initial = await ac.put(endpoint, json={"variants": [{"option_ids": [], "quantity": 1}]})
+    assert initial.status_code == 200
+    original = await shop_svc.get_order(db_session, uuid.UUID(initial.json()["id"]))
+    await shop_svc.set_class_collected(db_session, original, collected=True, actor_id=cadre.id)
+    if paid:
+        await shop_svc.set_order_paid(db_session, original, is_paid=True, actor_id=cadre.id)
+    collected_at = original.class_collected_at
+
+    addition = await ac.put(endpoint, json={"variants": [{"option_ids": [], "quantity": 3}]})
+    assert addition.status_code == 200
+    extra = addition.json()
+    assert extra["id"] != str(original.id)
+    assert extra["total_price"] == 100
+    assert extra["items"][0]["quantity"] == 2
+    assert extra["is_class_collected"] is False and extra["is_paid"] is False
+    # 重送總量不會重複加購，限購仍計入先前已收款品項。
+    repeated = await ac.put(endpoint, json={"variants": [{"option_ids": [], "quantity": 3}]})
+    assert repeated.status_code == 200 and repeated.json()["id"] == extra["id"]
+    assert (await ac.put(endpoint, json={"variants": [{"quantity": 5}]})).status_code == 422
+    current = (await ac.get("/shop/registrations")).json()
+    assert {row["id"] for row in current} == {str(original.id), extra["id"]}
+    assert (await db_session.get(Product, product.id, populate_existing=True)).stock_quantity == 47
+
+    cadre_client = authed_client_factory(cadre)
+    summary = (await cadre_client.get("/shop/orders/class/summary")).json()
+    assert summary["total_amount"] == 150
+    assert summary["paid_amount"] == 50 and summary["unpaid_amount"] == 100
+    collected = await cadre_client.patch(
+        f"/shop/orders/{extra['id']}/collection", json={"is_class_collected": True}
+    )
+    assert collected.status_code == 200
+    summary = (await cadre_client.get("/shop/orders/class/summary")).json()
+    assert summary["paid_amount"] == 150 and summary["unpaid_amount"] == 0
+    # 再次補收後還能繼續加購，舊單的金額、收款時間及正式入帳狀態不變。
+    next_addition = await ac.put(endpoint, json={"variants": [{"quantity": 4}]})
+    assert next_addition.status_code == 200
+    assert next_addition.json()["total_price"] == 50
+    await db_session.refresh(original)
+    assert original.total_price == 50 and original.class_collected_at == collected_at
+    assert original.is_paid is paid
 
 
 # ── 訂單 ──────────────────────────────────────────────────────────────────────

@@ -33,22 +33,25 @@ class SupersededRegistration extends Error {}
 function registrationView(options: RegistrationOptions) {
   const orders = options.registrations.filter((order) =>
     !order.test_product_id && orderScopeKey(order) === options.scopeKey);
+  const scopeTotalRegistration = aggregateRegistrationOrders(orders);
   const scopeRegistration = options.classMemberUserId
-    ? aggregateRegistrationOrders(orders) : orders[0] ?? null;
+    ? scopeTotalRegistration
+    : orders.find((order) => !order.is_paid && !order.is_class_collected) ?? orders[0] ?? null;
   const productRegistration = options.testingProduct
     ? options.registrations.find((order) => order.test_product_id === options.productId) ?? null
-    : scopeRegistration;
+    : options.delegationToken ? scopeRegistration : scopeTotalRegistration;
   const registration = productRegistration ? {
     ...productRegistration,
     items: options.classMemberUserId ? productRegistration.items : productRegistration.items.filter((item) =>
       (item.delegation_link_id ?? null) === (options.delegationToken ? options.delegationContext?.link.id : null)),
   } : null;
   const lockedVariantQuantities = new Map<string, number>();
-  if (options.classMemberUserId) {
+  if (!options.testingProduct && !options.delegationToken) {
     for (const order of orders) {
       if (!order.is_paid && !order.is_class_collected) continue;
       for (const item of order.items) {
         if (item.product_id !== options.productId) continue;
+        if (!options.classMemberUserId && item.delegation_link_id) continue;
         const key = item.selected_options.map((option) => option.option_id).sort().join(",");
         lockedVariantQuantities.set(key, (lockedVariantQuantities.get(key) ?? 0) + item.quantity);
       }
@@ -56,10 +59,10 @@ function registrationView(options: RegistrationOptions) {
   }
   const registrationLocked = Boolean(
     (options.delegationToken && !options.delegationContext?.can_edit)
-    || (!options.classMemberUserId && productRegistration
+    || ((options.delegationToken || options.testingProduct) && productRegistration
       && (productRegistration.is_paid || productRegistration.is_class_collected)),
   );
-  return { scopeRegistration, registration, lockedVariantQuantities, registrationLocked };
+  return { scopeRegistration, scopeTotalRegistration, registration, lockedVariantQuantities, registrationLocked };
 }
 
 /** Owns the complete write protocol; callers never pair identity routes and response callbacks. */
@@ -133,7 +136,7 @@ export function useShopRegistration(options: RegistrationOptions) {
       : shopApi.applyCurrentPromotion(code, scope.activity_id ?? null, scope.category_id));
     assertCurrent();
     commit((orders) => [
-      ...orders.filter((order) => order.test_product_id || orderScopeKey(order) !== scopeKey), updated,
+      ...orders.filter((order) => order.id !== updated.id), updated,
     ]);
     note(preview.reason ?? "優惠已套用。");
   }
@@ -187,7 +190,9 @@ export function useShopRegistration(options: RegistrationOptions) {
             .filter((promotion) => !promotionRequirementsMet(promotion, previous) && promotionRequirementsMet(promotion, order))
             .map((promotion) => promotion.id));
           commit((orders) => [
-            ...orders.filter((existing) => existing.test_product_id || orderScopeKey(existing) !== snapshot.scopeKey),
+            ...orders.filter((existing) => existing.test_product_id
+              || orderScopeKey(existing) !== snapshot.scopeKey
+              || existing.is_paid || existing.is_class_collected),
             ...(order ? [order] : []),
           ]);
           const code = snapshot.couponCode.trim();
@@ -216,7 +221,8 @@ export function useShopRegistration(options: RegistrationOptions) {
       note("目前無法修改這份商品登記，請重新確認登入與授權。");
       return;
     }
-    const order = snapshot.registrations.find((row) => !row.test_product_id && orderScopeKey(row) === scopeKey);
+    const order = snapshot.registrations.find((row) => !row.test_product_id
+      && orderScopeKey(row) === scopeKey && !row.is_paid && !row.is_class_collected);
     if (!order) {
       note(code ? "優惠碼已帶入；登記符合條件的商品後即可檢查並套用。" : "先登記商品；符合條件時系統會自動套用優惠。");
       return;

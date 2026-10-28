@@ -503,6 +503,7 @@ async def _create_order_from_items(
             match_activity=True,
             lock=True,
             reuse_cancelled=True,
+            editable_only=True,
         )
     if order is not None:
         if order.is_paid or order.is_class_collected:
@@ -860,6 +861,7 @@ async def get_current_registration(
     lock: bool = False,
     reuse_cancelled: bool = False,
     test_product_id: uuid.UUID | None = None,
+    editable_only: bool = False,
 ) -> Order | None:
     statuses = [OrderStatus.PENDING, OrderStatus.CONFIRMED]
     if reuse_cancelled:
@@ -869,6 +871,8 @@ async def get_current_registration(
         Order.status.in_(statuses),
         Order.test_product_id == test_product_id,
     )
+    if editable_only:
+        query = query.where(Order.is_paid.is_(False), Order.is_class_collected.is_(False))
     if match_activity:
         query = query.where(
             Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
@@ -963,6 +967,7 @@ async def apply_registration_promotion(
         category_id=category_id,
         match_activity=True,
         lock=True,
+        editable_only=True,
     )
     if order is None or not order.items:
         raise ValueError("請先登記商品，再套用優惠")

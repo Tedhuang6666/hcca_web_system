@@ -36,6 +36,7 @@ from api.services.shop._orders import (
     _resolve_selected_options,
     _settle_registration_orders,
     get_current_registration,
+    get_current_registrations,
 )
 from api.services.shop._testing import can_test_products
 
@@ -85,9 +86,10 @@ async def set_current_registration_product(
         lock=True,
         reuse_cancelled=True,
         test_product_id=product.id if testing else None,
+        editable_only=not testing and delegation is None,
     )
     if order is not None:
-        if order.is_paid or order.is_class_collected:
+        if (order.is_paid or order.is_class_collected) and (testing or delegation is not None):
             raise ValueError("班級幹部已登記收款，商品登記已鎖定")
         if order.status not in (
             OrderStatus.PENDING,
@@ -113,6 +115,24 @@ async def set_current_registration_product(
     source_id = delegation.id if delegation else None
     if delegation is not None and delegation.user_id != user.id:
         raise ValueError("代訂連結不屬於此學生")
+
+    # 本人以規格總量加購；已收款品項保留原單，只將差額寫入未收款訂單。
+    locked_quantities: dict[str, int] = {}
+    if not testing and delegation is None:
+        for existing_order in await get_current_registrations(session, user.id):
+            if not existing_order.is_paid and not existing_order.is_class_collected:
+                continue
+            if any(item.product_id == product.id for item in existing_order.items) and any(
+                _product_order_scope(item.product) != (activity_id, category_id)
+                for item in existing_order.items
+            ):
+                raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
+            for item in existing_order.items:
+                if item.product_id == product.id and item.delegation_link_id is None:
+                    signature = _options_signature(item.selected_options or [])
+                    locked_quantities[signature] = (
+                        locked_quantities.get(signature, 0) + item.quantity
+                    )
     cancelled = order is not None and order.status == OrderStatus.CANCELLED
     product_items = [
         item
@@ -141,6 +161,15 @@ async def set_current_registration_product(
         if signature in variants:
             raise ValueError("相同規格不能重複登記")
         variants[signature] = (variant.quantity, selected)
+
+    for signature, locked_quantity in locked_quantities.items():
+        quantity, selected = variants.get(signature, (0, []))
+        if quantity < locked_quantity:
+            raise ValueError("已收款或鎖定的登記數量必須保留")
+        if quantity == locked_quantity:
+            variants.pop(signature, None)
+        else:
+            variants[signature] = (quantity - locked_quantity, selected)
 
     requested_total = sum(quantity for quantity, _ in variants.values())
     await _assert_purchase_limit(
