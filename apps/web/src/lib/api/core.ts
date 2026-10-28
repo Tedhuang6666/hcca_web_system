@@ -120,8 +120,9 @@ export async function request<T>(
       let retry: Response;
       try {
         ({ response: retry } = await fetchWithRetry(path, init, trace, 0));
-      } catch {
-        reportClientError({
+      } catch (error) {
+        if (isRequestAborted(error, init.signal)) throw error;
+        if (!(error instanceof NetworkRequestError)) reportClientError({
           scope: "api.refresh-network",
           message: "刷新後重試失敗",
           diagnostics: {

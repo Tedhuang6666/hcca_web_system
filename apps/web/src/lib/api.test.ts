@@ -173,6 +173,9 @@ describe("API helpers", () => {
         request_path: "/test/stalled-request",
         request_attempts: 1,
         request_timeout_ms: 15_000,
+        request_elapsed_ms: expect.any(Number),
+        request_phase: "headers",
+        error_name: "AbortError",
       }),
     }));
 
@@ -215,6 +218,8 @@ describe("API helpers", () => {
         request_path: "/test/stalled-body",
         request_attempts: 1,
         request_timeout_ms: 15_000,
+        request_phase: "body",
+        error_name: "AbortError",
       }),
     }));
 
@@ -232,13 +237,16 @@ describe("API helpers", () => {
 
     expect(reportClientError).toHaveBeenCalledWith(expect.objectContaining({
       scope: "api.network",
-      diagnostics: {
+      diagnostics: expect.objectContaining({
         failure_kind: "network",
         request_method: "POST",
         request_path: "/shop/products",
         request_attempts: 1,
         request_timeout_ms: 30_000,
-      },
+        request_elapsed_ms: expect.any(Number),
+        request_phase: "headers",
+        error_name: "TypeError",
+      }),
     }));
     vi.unstubAllGlobals();
   });
@@ -292,6 +300,26 @@ describe("API helpers", () => {
     await expect(request("/auth-me-retry")).rejects.toMatchObject({ status: 401 });
     expect(fetchMock).toHaveBeenCalledTimes(3);
     localStorage.removeItem("user_id");
+  });
+
+  it("reports a failed request after refresh once with its transport evidence", async () => {
+    localStorage.setItem("user_id", "user-refresh-network");
+    vi.mocked(reportClientError).mockClear();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(request("/refresh-network-once")).rejects.toMatchObject({ status: 0 });
+      expect(reportClientError).toHaveBeenCalledTimes(1);
+      expect(reportClientError).toHaveBeenCalledWith(expect.objectContaining({
+        scope: "api.network",
+        diagnostics: expect.objectContaining({ request_phase: "headers", error_name: "TypeError" }),
+      }));
+    } finally {
+      localStorage.removeItem("user_id");
+    }
   });
 
   it("does not refresh a 401 for a visitor without a local session", async () => {

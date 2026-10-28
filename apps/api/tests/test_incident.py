@@ -18,6 +18,7 @@ from api.services.incident import (
     normalize_client_incident_message,
     normalize_error_message,
     persist_client_error_incident,
+    sanitize_incident_details,
     upsert_incident,
 )
 
@@ -247,6 +248,55 @@ async def test_export_incidents_csv_contains_event_timeline(
     assert slow_query["slow_query_template"] == "SELECT * FROM survey_answers WHERE survey_id = ?"
     assert slow_query["slow_query_max_ms"] == "1234.5"
     assert slow_query["severity"] == IncidentSeverity.P2
+
+
+async def test_export_excludes_closed_history_before_applying_limit(db_session) -> None:
+    active = await _create_incident(db_session)
+    active.last_seen_at = datetime.now(UTC) - timedelta(days=1)
+    for closed_status in (IncidentStatus.RESOLVED, IncidentStatus.IGNORED):
+        db_session.add(
+            SystemIncident(
+                id=uuid4(),
+                error_id=str(uuid4()),
+                fingerprint=str(uuid4()),
+                severity=IncidentSeverity.P3,
+                status=closed_status,
+                service="web",
+                environment="test",
+                title="Closed historical incident",
+                first_seen_at=datetime.now(UTC),
+                last_seen_at=datetime.now(UTC),
+            )
+        )
+    await db_session.flush()
+    rows = list(csv.DictReader(StringIO(await export_incidents_csv(db_session, limit=1))))
+    assert [row["incident_id"] for row in rows] == [str(active.id)]
+    assert not list(
+        csv.DictReader(
+            StringIO(await export_incidents_csv(db_session, status=IncidentStatus.RESOLVED))
+        )
+    )
+
+
+def test_react_error_codes_remain_distinct_in_incident_fingerprints() -> None:
+    first = "Minified React error #419; visit https://react.dev/errors/419"
+    second = first.replace("419", "423")
+    assert "#419" in normalize_error_message(first)
+    assert normalize_error_message(first) != normalize_error_message(second)
+
+
+def test_traceback_keeps_root_cause_and_long_client_stack() -> None:
+    details = sanitize_incident_details(
+        {
+            "traceback_head": "middleware frame\n" * 1000 + "ValueError: root cause",
+            "stack_head": "client frame\n" * 400,
+            "message": "ordinary message" * 300,
+        }
+    )
+    assert len(details["traceback_head"]) == 6000
+    assert details["traceback_head"].endswith("ValueError: root cause")
+    assert len(details["stack_head"]) > 2000
+    assert len(details["message"]) == 2000
 
 
 def test_normalize_client_incident_message_groups_cache_busted_resources() -> None:

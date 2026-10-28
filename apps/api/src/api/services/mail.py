@@ -89,14 +89,28 @@ async def _send_via_resend(
             json=payload,
         )
     if response.is_error:
+        provider_code = "unknown"
         try:
-            detail = str(response.json().get("message") or "").strip()
-        except (TypeError, ValueError):
+            error = response.json()
+            detail = str(error.get("message") or "").strip()
+            provider_code = re.sub(r"[^a-z0-9_-]", "", str(error.get("name") or "").lower())[:64]
+        except (AttributeError, TypeError, ValueError):
             detail = ""
         if response.status_code == 401:
             detail = "Resend API 金鑰無效或已撤銷，請更新 RESEND_API_KEY 並重啟 email worker"
         elif response.status_code == 403:
-            detail = "Resend API 金鑰沒有寄信權限，請檢查金鑰權限與寄件網域"
+            explanation = detail.lower()
+            if "domain" in explanation and "not verified" in explanation:
+                detail = "Resend 寄件網域尚未驗證，請完成寄件網域驗證"
+            elif "testing emails" in explanation:
+                detail = "Resend 僅允許測試收件人，請驗證寄件網域並使用該網域寄件"
+            elif provider_code == "suspended_api_key":
+                detail = "Resend API 金鑰已停權，請檢查供應商帳戶狀態"
+            elif "not active" in explanation:
+                detail = "Resend API 金鑰未啟用，請檢查供應商金鑰狀態"
+            else:
+                detail = "Resend 拒絕寄信，請檢查金鑰權限與寄件網域"
+            detail += f"（HTTP 403；provider_code={provider_code or 'unknown'}）"
         elif not detail:
             detail = f"Resend API 回應 HTTP {response.status_code}"
         raise ResendAPIError(response.status_code, detail)

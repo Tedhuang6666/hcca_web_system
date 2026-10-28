@@ -1,5 +1,5 @@
 import { API_BASE } from "../config";
-import { reportClientError } from "../client-error-reporter";
+import { reportClientError, type ClientErrorDiagnostics } from "../client-error-reporter";
 
 export type HccaRequestInit = RequestInit;
 
@@ -76,6 +76,11 @@ function clientRequestPath(path: string): string {
   return path.split(/[?#]/, 1)[0].slice(0, 500);
 }
 
+function transportErrorName(error: unknown): string {
+  return typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
+    ? error.name.slice(0, 100) : "UnknownError";
+}
+
 function createRequestTimeout(signal: AbortSignal | null | undefined, timeoutMs: number) {
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal?.reason);
@@ -106,6 +111,7 @@ function responseWithBodyTimeout(
   attempts: number,
   timeoutMs: number,
   cleanup: () => void,
+  evidence: () => ClientErrorDiagnostics,
 ): Response {
   if (NULL_BODY_STATUS_CODES.has(response.status) || !response.body) {
     cleanup();
@@ -142,6 +148,10 @@ function responseWithBodyTimeout(
               request_path: clientRequestPath(path),
               request_attempts: attempts,
               request_timeout_ms: timeoutMs,
+              ...evidence(),
+              request_phase: "body",
+              response_request_id: response.headers.get("X-Request-ID")?.slice(0, 100),
+              error_name: transportErrorName(error),
             },
           });
           controller.error(new NetworkRequestError(message));
@@ -200,6 +210,15 @@ export async function fetchWithRetry(
   const method = (init.method ?? "GET").toUpperCase();
   const timeoutMs = requestTimeoutMs(init);
   const requestPath = clientRequestPath(path);
+  const startedAt = performance.now();
+  const onlineAtStart = typeof navigator === "undefined" ? undefined : navigator.onLine;
+  const visibilityAtStart = typeof document === "undefined" ? undefined : document.visibilityState;
+  const evidence = (): ClientErrorDiagnostics => ({
+    request_elapsed_ms: Math.min(86_400_000, Math.max(0, performance.now() - startedAt)),
+    online_at_start: onlineAtStart,
+    visibility_at_start: visibilityAtStart,
+    ...(/^[0-9a-f]{32}$/.test(trace["X-Trace-ID"] ?? "") ? { request_trace_id: trace["X-Trace-ID"] } : {}),
+  });
   const timeout = createRequestTimeout(init.signal, timeoutMs);
   let attempts = 0;
   let timeoutTransferredToBody = false;
@@ -219,6 +238,7 @@ export async function fetchWithRetry(
           attempts + 1,
           timeoutMs,
           timeout.cleanup,
+          evidence,
         );
         timeoutTransferredToBody = Boolean(response.body);
         return { response: timedResponse, attempts };
@@ -236,13 +256,16 @@ export async function fetchWithRetry(
               request_path: requestPath,
               request_attempts: attempts + 1,
               request_timeout_ms: timeoutMs,
+              ...evidence(),
+              request_phase: "headers",
+              error_name: transportErrorName(error),
             },
           });
           throw new NetworkRequestError(message);
         }
         if (isRequestAborted(error, init.signal)) throw error;
         if (attempts >= maxRetries) {
-          const failureName = error instanceof Error ? error.name : "UnknownError";
+          const failureName = transportErrorName(error);
           const message = `${failureName}: API request failed`;
           reportClientError({
             scope: "api.network",
@@ -254,6 +277,9 @@ export async function fetchWithRetry(
               request_path: requestPath,
               request_attempts: attempts + 1,
               request_timeout_ms: timeoutMs,
+              ...evidence(),
+              request_phase: "headers",
+              error_name: failureName.slice(0, 100),
             },
           });
           throw new NetworkRequestError(`無法連線至後端 API：${API_BASE}`);

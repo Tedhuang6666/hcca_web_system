@@ -1354,6 +1354,7 @@ async def _create_assisted_orders(
                 roster_entry_id=payload.roster_entry_id,
                 actor=current_user,
                 allow_all_classes=allow_all_classes,
+                product_ids=[item.product_id for item in payload.items],
             )
         else:
             target = await session.get(User, payload.user_id)

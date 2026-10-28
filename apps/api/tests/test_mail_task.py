@@ -9,6 +9,39 @@ import pytest
 from api.services.mail import ResendAPIError, enqueue_email, send_email, send_email_now
 
 
+@pytest.mark.parametrize(
+    "code,message,expected",
+    [
+        ("validation_error", "The example.test domain is not verified", "寄件網域尚未驗證"),
+        (
+            "validation_error",
+            "You can only send testing emails to your own email address",
+            "僅允許測試收件人",
+        ),
+        ("suspended_api_key", "This API key is suspended", "金鑰已停權"),
+        ("restricted_api_key", "API key is not active", "金鑰未啟用"),
+        ("invalid_permission", "Access token is missing required scopes", "檢查金鑰權限"),
+    ],
+)
+async def test_resend_403_distinguishes_provider_failures(monkeypatch, code, message, expected):
+    import httpx
+
+    from api.services import mail
+
+    monkeypatch.setattr(mail.settings, "RESEND_API_KEY", "test-key")
+    client_class = httpx.AsyncClient
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(403, json={"name": code, "message": message})
+    )
+    monkeypatch.setattr(
+        mail.httpx, "AsyncClient", lambda **kwargs: client_class(transport=transport)
+    )
+    with pytest.raises(ResendAPIError, match=expected) as caught:
+        await mail._send_via_resend(["recipient@example.org"], "test", "<p>test</p>")
+    assert caught.value.retryable is False
+    assert f"provider_code={code}" in str(caught.value)
+
+
 def _close_coro_and_return(coro, value: str = "email-id") -> str:  # noqa: ANN001
     coro.close()
     return value

@@ -69,7 +69,13 @@ def sanitize_incident_details(value: Any, *, depth: int = 0) -> Any:
         return value
     if isinstance(value, dict):
         return {
-            str(key)[:100]: sanitize_incident_details(item, depth=depth + 1)
+            str(key)[:100]: (
+                sanitize_incident_text(item, len(item))[-6000:]
+                if key == "traceback_head" and isinstance(item, str)
+                else sanitize_incident_text(item, 6000)
+                if key == "stack_head" and isinstance(item, str)
+                else sanitize_incident_details(item, depth=depth + 1)
+            )
             for key, item in list(value.items())[:50]
         }
     if isinstance(value, (list, tuple)):
@@ -79,6 +85,7 @@ def sanitize_incident_details(value: Any, *, depth: int = 0) -> Any:
 
 def normalize_error_message(message: str) -> str:
     """Remove request-specific values before generating an incident fingerprint."""
+    react_error = re.search(r"Minified React error #(\d+)\b", message)
     normalized = _ASYNCPG_PREPARED_STATEMENT_RE.sub(
         "__asyncpg_stmt_{name}__",
         sanitize_incident_text(message, 1000),
@@ -86,6 +93,10 @@ def normalize_error_message(message: str) -> str:
     normalized = _PYTHON_OBJECT_ADDRESS_RE.sub(r"\1{address}", normalized)
     normalized = _UUID_RE.sub("{uuid}", normalized)
     normalized = _NUMBER_RE.sub("{id}", normalized)
+    if react_error:
+        code = react_error.group(1)
+        normalized = normalized.replace("React error #{id}", f"React error #{code}")
+        normalized = normalized.replace("react.dev/errors/{id}", f"react.dev/errors/{code}")
     return _WHITESPACE_RE.sub(" ", normalized).strip()[:500]
 
 
@@ -587,9 +598,10 @@ async def export_incidents_csv(
     limit: int = 1_000,
     slow_queries: list[dict[str, object]] | None = None,
 ) -> str:
-    """Build a spreadsheet-safe incident report with its current slow-query snapshot."""
+    """Export actionable incidents and the current slow-query snapshot; retain history in DB."""
     stmt = (
         select(SystemIncident)
+        .where(SystemIncident.status.in_(_ACTIVE_STATUSES))
         .order_by(desc(SystemIncident.last_seen_at))
         .limit(min(max(limit, 1), 1_000))
     )
