@@ -75,6 +75,40 @@ function openCollectWorkspace() {
 }
 
 describe("班代工作流程", () => {
+  it("整理與篩選活動列出同活動下各個主題，並傳送主題篩選", async () => {
+    api.catalog.mockResolvedValue([
+      { id: "shirts", name: "衣服", activity_id: "festival", activity_name: "校慶", series: [], products: [
+        { id: "shirt", name: "紀念衫", status: "active", price: 200 },
+      ] },
+      { id: "bags", name: "袋子", activity_id: "festival", activity_name: "校慶", series: [], products: [
+        { id: "bag", name: "紀念袋", status: "active", price: 100 },
+      ] },
+    ]);
+    api.listClassOrders.mockImplementation(async (params: { category_id?: string }) => params.category_id === "shirts"
+      ? [{ id: "shirt-order", serial_number: "SHIRT-1", user_id: "a", status: "pending", activity_id: "festival", total_price: 200, items: [] }]
+      : []);
+    render(<ClassOrdersPage />);
+    fireEvent.click(screen.getByRole("button", { name: "查詢／修改訂單" }));
+    const select = await screen.findByRole("combobox", { name: "整理活動" });
+    await within(select).findByRole("option", { name: "衣服" });
+    expect(within(select).getByRole("option", { name: "袋子" })).toBeInTheDocument();
+    expect(within(select).queryByRole("option", { name: "校慶" })).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "category:shirts" } });
+    await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({ category_id: "shirts" }));
+    expect(api.listClassOrders).toHaveBeenCalledWith(expect.objectContaining({ category_id: "shirts" }));
+    expect(await screen.findAllByText("SHIRT-1")).not.toHaveLength(0);
+    const productSelect = screen.getByRole("combobox", { name: "依商品篩選" });
+    expect(within(productSelect).getByRole("option", { name: "紀念衫" })).toBeInTheDocument();
+    expect(within(productSelect).queryByRole("option", { name: "紀念袋" })).not.toBeInTheDocument();
+    const detailSelect = screen.getByRole("combobox", { name: "依活動篩選" });
+    fireEvent.change(detailSelect, { target: { value: "category:bags" } });
+    await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({ category_id: "bags" }));
+    expect(select).toHaveValue("category:bags");
+    expect(within(productSelect).getByRole("option", { name: "紀念袋" })).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "all" } });
+    await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({}));
+  });
+
   it("主切換列直接提供班級截止，可設定時間與立即截止", async () => {
     render(<ClassOrdersPage />);
     const entry = within(taskSwitch()).getByRole("button", { name: "班級截止" });

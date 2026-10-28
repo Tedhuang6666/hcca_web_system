@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
+from api.models.activity import Activity
 from api.models.electronic_credential import ElectronicCredentialSettings
 from api.models.person import PersonAffiliationKind, PersonAffiliationStatus
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductMedia
@@ -929,3 +930,54 @@ async def test_filtered_shop_statistics_use_discounted_amount(db_session: AsyncS
     assert class_summary.paid_amount == 90
     assert council_summary.total_amount == 90
     assert council_summary.paid_amount == 90
+
+
+@pytest.mark.parametrize("collected", [False, True])
+async def test_class_summary_category_excludes_other_themes_in_shared_activity(
+    db_session: AsyncSession, collected: bool
+) -> None:
+    school_class = await _make_class(db_session)
+    buyer = await _make_user(db_session)
+    product_a = await _make_product(db_session, price=100)
+    product_b = await _make_product(db_session, price=200)
+    category_a = product_a.series.category
+    category_b = product_b.series.category
+    activity = Activity(name="同一活動")
+    db_session.add(activity)
+    await db_session.flush()
+    category_a.activity_id = category_b.activity_id = activity.id
+    # 同時涵蓋直屬主題與放在系列內的商品。
+    product_a.category_id = category_a.id
+    product_a.series_id = None
+    order = Order(
+        serial_number="ORD-CATEGORY-SUMMARY",
+        user_id=buyer.id,
+        class_id=school_class.id,
+        activity_id=activity.id,
+        status=OrderStatus.PENDING,
+        subtotal_price=300,
+        discount_amount=30,
+        total_price=270,
+        is_class_collected=collected,
+    )
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            OrderItem(order_id=order.id, product_id=product_a.id, quantity=1, unit_price=100),
+            OrderItem(order_id=order.id, product_id=product_b.id, quantity=1, unit_price=200),
+        ]
+    )
+    await db_session.flush()
+    for category, product, amount in [(category_a, product_a, 90), (category_b, product_b, 180)]:
+        result = await shop_svc.class_order_summary(
+            db_session, class_ids=[school_class.id], category_id=category.id
+        )
+        assert result.order_count == 1
+        assert result.item_count == 1
+        assert result.total_amount == amount
+        assert result.paid_amount == (amount if collected else 0)
+        assert result.unpaid_amount == (0 if collected else amount)
+        assert [
+            (row.product_id, row.quantity, row.total_amount) for row in result.product_rows
+        ] == [(product.id, 1, amount)]

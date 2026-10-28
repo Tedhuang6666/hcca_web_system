@@ -72,7 +72,7 @@ describe("全校收款與訂單", () => {
     access.isAdmin = false;
     access.permissions = new Set(["shop:view_all"]);
     await openPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
     await screen.findByText("批次管理訂購");
     expect(screen.queryByRole("button", { name: /下載.*簽收單/ })).not.toBeInTheDocument();
   });
@@ -87,7 +87,7 @@ describe("全校收款與訂單", () => {
     });
     api.downloadClassReceipts.mockResolvedValue(new Blob(["%PDF-1.7"], { type: "application/pdf" }));
     await openPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "選取一年一班收據" }));
     fireEvent.click(screen.getByRole("button", { name: "下載所選 1 班 PDF" }));
@@ -184,32 +184,50 @@ describe("全校收款與訂單", () => {
     fireEvent.click(festivalPayment);
     await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledWith("class", true, "festival"));
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("一年一班"));
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
     await screen.findByText("批次管理訂購");
     fireEvent.click(screen.getAllByText("其他操作")[0]);
     expect(screen.getAllByRole("button", { name: "停止訂購" }).length).toBeGreaterThan(0);
   });
 
-  it("clears dependent product and category filters when changing activity", async () => {
+  it("活動選單逐一列出主題，切換主題會清除商品並在各分頁用主題篩選", async () => {
+    api.catalog.mockResolvedValue([
+      ...await api.catalog(),
+      { id: "general", name: "一般主題", activity_id: null, series: [], products: [] },
+    ]);
     await openPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "商品主題" }), { target: { value: "shirts" } });
+    const select = screen.getByRole("combobox", { name: "活動" });
+    expect(select).toHaveTextContent("衣服");
+    expect(select).toHaveTextContent("袋子");
+    expect(select).toHaveTextContent("一般主題");
+    expect(select).not.toHaveTextContent("校慶");
+    expect(screen.queryByRole("combobox", { name: "商品主題" })).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "shirts" } });
     fireEvent.change(screen.getByRole("combobox", { name: "商品" }), { target: { value: "shirt" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "winter" } });
-    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ activity_id: "winter" })));
+    fireEvent.change(select, { target: { value: "bags" } });
+    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "bags" })));
     expect(api.orderSummary.mock.lastCall?.[0]).not.toHaveProperty("product_id");
-    expect(api.orderSummary.mock.lastCall?.[0]).not.toHaveProperty("category_id");
-    expect(screen.getByRole("combobox", { name: "商品主題" })).toHaveValue("");
-    expect(screen.queryByRole("option", { name: "衣服" })).not.toBeInTheDocument();
+    expect(api.orderSummary.mock.lastCall?.[0]).not.toHaveProperty("activity_id");
+    expect(screen.getByRole("combobox", { name: "商品" })).toHaveValue("");
+    expect(screen.queryByRole("option", { name: "紀念衫" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "商品總量" }));
+    await waitFor(() => expect(api.orderQuantities).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "bags" })));
+    fireEvent.click(screen.getByRole("button", { name: "查找訂單" }));
+    await waitFor(() => expect(api.listOrders).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "bags" })));
+    fireEvent.change(select, { target: { value: "general" } });
+    await waitFor(() => expect(api.listOrders).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "general" })));
+    fireEvent.click(screen.getByRole("button", { name: "清除篩選" }));
+    await waitFor(() => expect(api.listOrders.mock.lastCall?.[0]).not.toHaveProperty("category_id"));
   });
 
   it("ignores an older response after switching activity", async () => {
     await openPage();
     let resolveOld!: (value: ReturnType<typeof summary>) => void;
-    api.orderSummary.mockImplementation((params: { activity_id?: string }) => params.activity_id === "festival"
+    api.orderSummary.mockImplementation((params: { category_id?: string }) => params.category_id === "shirts"
       ? new Promise((resolve) => { resolveOld = resolve; })
       : Promise.resolve(summary("最新班級")));
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "winter" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "cards" } });
     await screen.findByText("最新班級");
     await act(async () => resolveOld(summary("過期班級")));
     expect(screen.queryByText("過期班級")).not.toBeInTheDocument();
@@ -217,7 +235,7 @@ describe("全校收款與訂單", () => {
 
   it("requires batch confirmation and reports a partial failure", async () => {
     await openPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
     fireEvent.click(await screen.findByText("批次管理訂購"));
     const stop = await screen.findByRole("button", { name: "整批停止訂購" });
     vi.mocked(window.confirm).mockReturnValueOnce(false);
@@ -228,13 +246,14 @@ describe("全校收款與訂單", () => {
     expect(await screen.findByText(/1 項未完成/)).toHaveAttribute("role", "status");
     expect(notifications.success).not.toHaveBeenCalled();
     expect(notifications.error).toHaveBeenCalledWith(expect.stringContaining("1 項未完成"));
-    expect(api.closeCategory).toHaveBeenCalledTimes(2);
+    expect(api.closeCategory).toHaveBeenCalledTimes(1);
+    expect(api.closeCategory).toHaveBeenCalledWith("shirts", { class_id: "class" });
   });
 
   it("does not present an unavailable closure status as open", async () => {
     api.getCloseStatus.mockRejectedValue(new Error("offline"));
     await openPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
     await screen.findByText("批次管理訂購");
     fireEvent.click(screen.getAllByText("其他操作")[0]);
     expect(screen.getAllByText("狀態待確認").length).toBeGreaterThan(0);

@@ -1021,8 +1021,9 @@ function StatsView() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [activities, setActivities] = useState<ActivityOut[]>([]);
-  const [activityId, setActivityId] = useState("");
+  const [categories, setCategories] = useState<ProductCategoryOut[]>([]);
+  const [series, setSeries] = useState<ProductSeriesOut[]>([]);
+  const [categoryId, setCategoryId] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const [optionsError, setOptionsError] = useState(false);
 
@@ -1033,12 +1034,14 @@ function StatsView() {
       listProductChoices(),
       classApi.recipientOptions(),
       shopApi.orderSummary({ group_by: "user" }),
-      shopApi.listActivities(),
-    ]).then(([loadedProducts, loadedClasses, userSummary, loadedActivities]) => {
+      shopApi.listCategories(),
+      shopApi.listSeries(),
+    ]).then(([loadedProducts, loadedClasses, userSummary, loadedCategories, loadedSeries]) => {
       if (cancelled) return;
       setProducts(loadedProducts);
       setClasses(loadedClasses);
-      setActivities(loadedActivities);
+      setCategories(loadedCategories);
+      setSeries(loadedSeries);
       setUserOptions(
         userSummary?.rows
           .filter((row) => row.key !== "none")
@@ -1054,7 +1057,7 @@ function StatsView() {
     setError(null);
     shopApi.orderSummary({
       group_by: groupBy,
-      activity_id: activityId,
+      category_id: categoryId,
       product_id: productId,
       grade,
       class_id: classId,
@@ -1072,7 +1075,7 @@ function StatsView() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [activityId, classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId, retryKey]);
+  }, [categoryId, classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId, retryKey]);
 
   const groupOptions = [
     ["class", "依班級"],
@@ -1086,7 +1089,7 @@ function StatsView() {
     (!grade || String(schoolClass.grade) === grade)
   );
   const resetFilters = () => {
-    setActivityId("");
+    setCategoryId("");
     setProductId("");
     setGrade("");
     setClassId("");
@@ -1097,10 +1100,10 @@ function StatsView() {
     setDateTo("");
   };
   const hasAdvancedFilters = Boolean(
-    activityId || productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
+    categoryId || productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
   );
   const scopeLabels = [
-    activities.find((activity) => activity.id === activityId)?.name || "全部活動",
+    categories.find((category) => category.id === categoryId)?.name || "全部活動",
     products.find((product) => product.id === productId)?.name,
     grade && `${grade} 年級`,
     classes.find((schoolClass) => schoolClass.id === classId)?.label,
@@ -1115,9 +1118,9 @@ function StatsView() {
       <div className="card p-4 space-y-4">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="活動">
-            <select className="input min-h-11 w-full" value={activityId} onChange={(event) => { setActivityId(event.target.value); setProductId(""); }}>
+            <select className="input min-h-11 w-full" value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setProductId(""); }}>
               <option value="">全部活動</option>
-              {activities.map((activity) => <option key={activity.id} value={activity.id}>{activity.name}</option>)}
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
           <Field label="統計方式">
@@ -1141,7 +1144,8 @@ function StatsView() {
             <Field label="商品">
               <select value={productId} onChange={(e) => setProductId(e.target.value)} className="input w-full">
                 <option value="">全部商品</option>
-                {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+                {products.filter((product) => !categoryId || (product.category_id
+                  ?? series.find((item) => item.id === product.series_id)?.category_id) === categoryId).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
               </select>
             </Field>
             <Field label="年級">

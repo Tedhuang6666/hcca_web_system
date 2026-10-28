@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
-import { orderScopeKey, catalogScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
+import { orderScopeKey, catalogScopeKey } from "@/lib/shop-order-scope";
 import { mergeDraftItems, summarizeOrderItems } from "@/lib/shop-order-items";
 import { flattenCatalog, money } from "@/lib/shop-class-orders";
 import type {
@@ -173,7 +173,7 @@ export default function ClassOrdersPage() {
   const productRows = useMemo(() => {
     const rows = new Map(productSummary.product_rows.map((row) => [row.product_id, row]));
     for (const product of activeProducts) {
-      if (activityFilter !== "all" && orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) !== activityFilter) continue;
+      if (activityFilter !== "all" && `category:${product.categoryId}` !== activityFilter) continue;
       if (rows.has(product.id)) continue;
       rows.set(product.id, {
         product_id: product.id,
@@ -193,7 +193,7 @@ export default function ClassOrdersPage() {
   const productFilterOptions = useMemo(() => {
     const byId = new Map<string, string>();
     for (const p of catalogProducts) {
-      if (activityFilter === "all" || orderScopeKey({ activity_id: p.activity_id, category_id: p.categoryId }) === activityFilter) byId.set(p.id, p.name);
+      if (activityFilter === "all" || `category:${p.categoryId}` === activityFilter) byId.set(p.id, p.name);
     }
     for (const row of productRows) byId.set(row.product_id, row.product_name);
     return Array.from(byId.entries()).sort((a, b) => a[1].localeCompare(b[1], "zh-Hant"));
@@ -344,12 +344,13 @@ export default function ClassOrdersPage() {
     collected: totals.collected + row.collected,
   }), { amount: 0, collected: 0 }), [seatRows]);
 
+  const filterActivityRows = catalog.map((category) => ({
+    key: `category:${category.id}`, label: category.name,
+  }));
   const selectedActivityLabel = activityFilter === "all"
     ? "全部活動"
-    : activityFilter === "none"
-      ? "一般商品"
-      : activityRows.find((row) => row.key === activityFilter)?.label
-        ?? `已結束活動 · ${activityFilter.slice(0, 6)}`;
+    : activityFilter === "none" ? "一般商品"
+      : filterActivityRows.find((row) => row.key === activityFilter)?.label ?? "所選主題";
 
   const currentOptionIds = productDetail?.variant_groups
     .map((group) => optionIds[group.id])
@@ -440,7 +441,9 @@ export default function ClassOrdersPage() {
     const version = ++loadVersion.current;
     setLoading(true);
     setLoadFailed(false);
-    const scope = activityFilter === "all" ? {} : orderScopeParams(activityFilter);
+    const scope = activityFilter === "all" ? {}
+      : activityFilter === "none" ? { general_only: "true" }
+        : { category_id: activityFilter.slice("category:".length) };
     const params: ClassOrderQuery = { ...scope };
     if (paidFilter !== "all") params.is_class_collected = paidFilter === "paid" ? "true" : "false";
     if (assistedFilter === "assisted") params.assisted_only = "true";
@@ -762,7 +765,6 @@ export default function ClassOrdersPage() {
     const seatByMemberId = new Map(members.map((member) => [member.id, member.seat_number]));
     return orders
       .filter((order) => order.status !== "cancelled"
-        && (activityFilter === "all" || orderScopeKey(order) === activityFilter)
         && (!needle
           || order.serial_number.toLowerCase().includes(needle)
           || (order.user_name ?? "").toLowerCase().includes(needle)
@@ -771,7 +773,7 @@ export default function ClassOrdersPage() {
         - (seatByMemberId.get(b.user_id) ?? Number.POSITIVE_INFINITY)
         || (a.user_name ?? "").localeCompare(b.user_name ?? "", "zh-Hant")
         || (a.serial_number ?? "").localeCompare(b.serial_number ?? ""));
-  }, [activityFilter, members, orders, query]);
+  }, [members, orders, query]);
 
   const selectedSet = new Set(selectedIds);
   const selectedOrders = visibleOrders.filter((order) =>
@@ -987,7 +989,7 @@ export default function ClassOrdersPage() {
     setWorkspace("details");
     const product = catalogProducts.find((item) => item.id === productId);
     const category = catalog.find((item) => item.id === product?.categoryId);
-    setActivityFilter(category ? catalogScopeKey(category) : "none");
+    setActivityFilter(category ? `category:${category.id}` : "none");
     setProductFilter(productId);
     setPaidFilter(hasUncollectedOrders ? "unpaid" : "all");
     setAssistedFilter("all");
@@ -1084,7 +1086,7 @@ export default function ClassOrdersPage() {
           <select className="input min-h-11 w-full sm:w-auto" aria-label="整理活動" value={activityFilter}
             onChange={(event) => { setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
             <option value="all">全部活動</option>
-            {activityRows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
+            {filterActivityRows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
           </select>
           <span style={{ color: "var(--text-muted)" }}>商品統計與訂單清單依所選活動整理</span>
         </label>
@@ -1864,7 +1866,7 @@ export default function ClassOrdersPage() {
               <select className="input min-h-11" value={activityFilter} onChange={(e) => { setActivityFilter(e.target.value); setProductFilter(""); setSelectedIds([]); }} aria-label="依活動篩選">
                 <option value="all">全部活動</option>
                 <option value="none">一般商品</option>
-                {activityRows.filter((row) => row.key !== "none").map((row) => (
+                {filterActivityRows.map((row) => (
                   <option key={row.key} value={row.key}>{row.label}</option>
                 ))}
               </select>

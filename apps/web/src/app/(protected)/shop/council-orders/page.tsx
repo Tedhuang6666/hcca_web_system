@@ -69,7 +69,6 @@ export default function CouncilOrdersPage() {
   const [grade, setGrade] = useState("");
   const [classId, setClassId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [activityId, setActivityId] = useState("all");
   const [receiptActivityKey, setReceiptActivityKey] = useState("");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
@@ -175,7 +174,6 @@ export default function CouncilOrdersPage() {
     setLoadError("");
     try {
       const params: Parameters<typeof shopApi.orderSummary>[0] = { group_by: groupBy, ...dateParams };
-      if (activityId !== "all" && activityId !== "__general__") params.activity_id = activityId;
       if (grade) params.grade = grade;
       if (classId) params.class_id = classId;
       if (isPaid) params.is_paid = isPaid;
@@ -209,7 +207,7 @@ export default function CouncilOrdersPage() {
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
-  }, [groupBy, grade, classId, activityId, isPaid, productId, categoryId, statusFilter, catalog, dateParams]);
+  }, [groupBy, grade, classId, isPaid, productId, categoryId, statusFilter, catalog, dateParams]);
 
   const loadQuantities = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -217,7 +215,6 @@ export default function CouncilOrdersPage() {
     setLoadError("");
     try {
       const params: Parameters<typeof shopApi.orderQuantities>[0] = { ...dateParams };
-      if (activityId !== "all" && activityId !== "__general__") params!.activity_id = activityId;
       if (grade) params!.grade = grade;
       if (classId) params!.class_id = classId;
       if (categoryId) params!.category_id = categoryId;
@@ -233,7 +230,7 @@ export default function CouncilOrdersPage() {
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
-  }, [activityId, grade, classId, categoryId, productId, isPaid, statusFilter, dateParams]);
+  }, [grade, classId, categoryId, productId, isPaid, statusFilter, dateParams]);
 
   const loadOrders = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -241,7 +238,6 @@ export default function CouncilOrdersPage() {
     setLoadError("");
     try {
       const params: Record<string, string> = { my_only: "false", limit: "500" };
-      if (activityId !== "all" && activityId !== "__general__") params.activity_id = activityId;
       if (grade) params.grade = grade;
       if (classId) params.class_id = classId;
       if (isPaid) params.is_paid = isPaid;
@@ -265,7 +261,7 @@ export default function CouncilOrdersPage() {
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
-  }, [activityId, grade, classId, isPaid, productId, categoryId, statusFilter, search, dateParams]);
+  }, [grade, classId, isPaid, productId, categoryId, statusFilter, search, dateParams]);
 
   const cancelOrder = async () => {
     if (!cancelTarget || cancelBusy) return;
@@ -417,9 +413,14 @@ export default function CouncilOrdersPage() {
     return [1, 2, 3, 4, 5, 6].map((g) => ({ value: String(g), label: `${g} 年級` }));
   }, []);
 
-  const visibleActivityGroups = activityGroups.filter((group) => activityId === "all" || group.activityId === activityId);
+  const selectedCategory = catalog.find((category) => category.id === categoryId);
+  const visibleActivityGroups = activityGroups.filter((group) => !categoryId
+    || group.categories.some((category) => category.id === categoryId));
   const paymentActivityGroups = visibleActivityGroups;
-  const actionActivityGroups = activityId === "all" ? [] : visibleActivityGroups;
+  const actionActivityGroups = !categoryId ? [] : visibleActivityGroups.map((group) => ({
+    ...group, label: selectedCategory?.name ?? group.label,
+    categories: group.categories.filter((category) => category.id === categoryId),
+  }));
   const canBatchDownloadReceipts = canConfirmClassPayment && groupBy === "class";
   const batchReceiptActivityId = receiptActivityKey && receiptActivityKey !== "__general__"
     ? receiptActivityKey
@@ -428,18 +429,17 @@ export default function CouncilOrdersPage() {
   const allReceiptRowsSelected = receiptRows.length > 0
     && receiptRows.every((row) => selectedReceiptClasses.has(row.key));
   const visibleCategoryIds = new Set(visibleActivityGroups.flatMap((group) => group.categories.map((category) => category.id)));
-  const hasFilters = activityId !== "all" || Boolean(grade || classId || categoryId || productId || isPaid || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
+  const hasFilters = Boolean(grade || classId || categoryId || productId || isPaid || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
   const resetFilters = () => {
-    setActivityId("all"); setGrade(""); setClassId(""); setCategoryId(""); setProductId("");
+    setGrade(""); setClassId(""); setCategoryId(""); setProductId("");
     setIsPaid(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); setSearch("");
     setReceiptActivityKey("");
     setSelectedReceiptClasses(new Set());
   };
   const scopeLabels = [
-    activityId === "all" ? "全部活動" : activityGroups.find((group) => group.activityId === activityId)?.label,
+    selectedCategory?.name ?? "全部活動",
     grade && `${grade} 年級`,
     classes.find((item) => item.id === classId)?.label,
-    catalog.find((item) => item.id === categoryId)?.name,
     allProducts.find((item) => item.id === productId)?.name,
     isPaid === "true" ? "班聯已確認" : isPaid === "false" ? "班聯未確認" : "全部收款狀態",
     statusFilter && tab !== "analytics" ? { pending: "待確認訂單", confirmed: "已確認訂單", cancelled: "已取消訂單", refunded: "已退款訂單" }[statusFilter] : tab === "orders" ? "全部訂單狀態" : "排除取消與退款",
@@ -483,16 +483,16 @@ export default function CouncilOrdersPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>活動</span>
-            <select className="input" value={activityId} onChange={(e) => {
-              setActivityId(e.target.value);
-              setCategoryId("");
+            <select className="input" value={categoryId} onChange={(e) => {
+              setCategoryId(e.target.value);
               setProductId("");
-              setReceiptActivityKey(e.target.value === "all" ? "" : e.target.value);
+              setReceiptActivityKey(e.target.value
+                ? catalog.find((category) => category.id === e.target.value)?.activity_id ?? "__general__" : "");
               setSelectedReceiptClasses(new Set());
             }}>
-              <option value="all">全部活動</option>
-              {activityGroups.filter((group) => group.activityId).map((group) => (
-                <option key={group.key} value={group.activityId ?? ""}>{group.label}</option>
+              <option value="">全部活動</option>
+              {catalog.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
               ))}
             </select>
           </label>
@@ -533,13 +533,6 @@ export default function CouncilOrdersPage() {
               {classes.filter((item) => !grade || item.grade === Number(grade)).map((item) => (
                 <option key={item.id} value={item.id}>{item.label ?? item.class_code}</option>
               ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>商品主題</span>
-            <select className="input" value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setProductId(""); }}>
-              <option value="">全部商品主題</option>
-              {catalog.filter((category) => visibleCategoryIds.has(category.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
           {tab !== "analytics" && <label className="grid gap-1 text-sm">
@@ -586,7 +579,6 @@ export default function CouncilOrdersPage() {
       {batchResult && <p role="status" className="rounded-lg p-3 text-sm" style={{ background: "var(--bg-elevated)" }}>{batchResult}</p>}
 
       {tab === "analytics" && <ShopSalesAnalytics refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
-        ...(activityId !== "all" ? { activity_id: activityId } : {}),
         ...(grade ? { grade } : {}), ...(classId ? { class_id: classId } : {}),
         ...(categoryId ? { category_id: categoryId } : {}), ...(productId ? { product_id: productId } : {}),
         ...(isPaid ? { is_paid: isPaid } : {}), ...(dateFrom ? { date_from: dateFrom } : {}),
@@ -637,7 +629,7 @@ export default function CouncilOrdersPage() {
               </div>
             </details>
           )}
-          {groupBy === "class" && activityId === "all" && summary && summary.rows.length > 0 && (
+          {groupBy === "class" && !categoryId && summary && summary.rows.length > 0 && (
             <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
               目前顯示全部活動彙總；每班操作都會標示活動名稱，確認收款與簽收單只套用該班該活動。
             </p>
