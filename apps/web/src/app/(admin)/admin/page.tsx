@@ -208,7 +208,7 @@ export default function AdminDashboardPage() {
         <StatCard
           href="/admin/modules"
           icon={<Puzzle size={13} />}
-          label="異常模組"
+          label="關閉模組"
           value={loading ? null : downModules}
           warn
         />
