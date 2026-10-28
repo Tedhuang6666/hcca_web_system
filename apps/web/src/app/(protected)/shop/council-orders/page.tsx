@@ -4,6 +4,7 @@ import Link from "next/link";
 import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
 import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
 import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
+import ActivityOrderClosure from "@/components/shop/ActivityOrderClosure";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart2, RefreshCw } from "lucide-react";
@@ -362,6 +363,9 @@ export default function CouncilOrdersPage() {
           </button>
         </div>
       </header>
+
+      {canConfirmClassPayment && <ActivityOrderClosure categories={catalog} disabled={mutationBusy || optionsLoading}
+        onSaved={() => setOptionsRetry((value) => value + 1)} />}
 
       {canConfirmClassPayment && <AdminAssistedOrder catalog={catalog} classes={classes} optionsError={optionsError} optionsLoading={optionsLoading}
         onRetry={() => setOptionsRetry((value) => value + 1)}

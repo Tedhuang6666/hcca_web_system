@@ -20,7 +20,6 @@ import type {
   OrderSummaryOut,
 } from "@/lib/types";
 import ShopPromotionPanel from "./ShopPromotionPanel";
-import ActivityDeadlines from "@/components/shop/ActivityDeadlines";
 import { deadlineFromInput, deadlineInputValue } from "@/lib/shop-deadlines";
 import { parseSmartOptionsText, uniqueSmartOptions } from "@/lib/shop-admin-options";
 import type { SmartOptionDraft, SmartSourceGroup } from "@/lib/shop-admin-options";
@@ -1633,17 +1632,11 @@ export default function ShopAdminPage() {
         <div className="flex flex-wrap gap-2">
           {tab !== "catalog" && <Link href="/shop/admin" className="btn btn-secondary min-h-11">返回商品設定</Link>}
           {tab === "catalog" && <Link href="/shop/admin?view=promotions" className="btn btn-secondary min-h-11">設定優惠</Link>}
+          {tab === "catalog" && <Link href="/shop/council-orders#activity-order-closure-title" className="btn btn-secondary min-h-11">活動鎖單</Link>}
           {tab === "catalog" && <Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link>}
           {tab === "stats" && <Link href="/shop/council-orders" className="btn btn-ghost min-h-11">返回班聯工作</Link>}
         </div>
       </div>
-
-      {tab === "catalog" && <ActivityDeadlines onSaved={() => {
-        loadAllProducts();
-        if (productId) loadProduct(productId);
-        if (cat) loadDirectProducts(cat.id);
-        if (series) loadProducts(series.id);
-      }} />}
 
       {tab === "stats" ? (
         <StatsView key={statsRefreshKey} />

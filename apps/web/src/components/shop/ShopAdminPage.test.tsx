@@ -43,6 +43,15 @@ async function openStats() {
 }
 
 describe("商品管理與統計", () => {
+  it("以直接入口取代商品頁的活動期限區塊", async () => {
+    render(<ShopAdminPage />);
+    await screen.findByText(/尚未建立商品主題/);
+    expect(screen.getByRole("link", { name: "活動鎖單" })).toHaveAttribute("href", "/shop/council-orders#activity-order-closure-title");
+    expect(screen.queryByText("活動結單與期限")).not.toBeInTheDocument();
+    expect(screen.queryByText(/目前沒有可設定的活動/)).not.toBeInTheDocument();
+    expect(api.listActivities).not.toHaveBeenCalled();
+  });
+
   it("starts testing and confirms cleanup before launch, keeping the action available after failure", async () => {
     const product = {
       id: "test-product", category_id: "category", series_id: null, name: "測試限定商品",
