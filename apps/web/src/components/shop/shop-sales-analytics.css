@@ -215,3 +215,171 @@
     flex-basis: 100%;
   }
 }
+
+.sales-report-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  padding-block: 1.25rem;
+  margin-block: 1rem;
+  border-block: 1px solid var(--border);
+}
+.sales-report-tools > div {
+  flex: 1 1 360px;
+}
+.sales-report-tools label,
+.sales-analysis-controls label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+.sales-report-tools .input,
+.sales-analysis-controls .input {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.sales-insights {
+  margin-top: 2rem;
+}
+.sales-insights dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 2rem;
+}
+.sales-insights dt {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.sales-insights dd {
+  color: var(--text-secondary);
+  line-height: 1.8;
+  font-size: 0.875rem;
+  margin-top: 0.35rem;
+}
+.sales-chart-scroll {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+  padding: 4px;
+}
+.sales-chart-canvas {
+  position: relative;
+  min-width: 780px;
+}
+.sales-chart-canvas svg {
+  display: block;
+  width: 100%;
+  margin: 0;
+  cursor: crosshair;
+  touch-action: pan-x pan-y;
+}
+.sales-chart-canvas svg:focus-visible {
+  outline: 2px solid var(--primary-text);
+  outline-offset: -2px;
+}
+.sales-chart-tooltip {
+  position: absolute;
+  top: 0.5rem;
+  width: 260px;
+  padding: 0.75rem;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  pointer-events: none;
+  z-index: 1;
+}
+.sales-chart-tooltip hr {
+  border-color: var(--border);
+  margin-block: 0.5rem;
+}
+.sales-chart-legend {
+  display: flex;
+  gap: 1.5rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  margin: 0.5rem 0;
+}
+.sales-analysis-section {
+  padding-top: 1.5rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+.sales-analysis-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+}
+.sales-analysis-controls .sales-muted {
+  max-width: 65ch;
+}
+.sales-deep-analysis th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--card-bg);
+  z-index: 1;
+  min-width: 140px;
+  max-width: 260px;
+  white-space: normal;
+}
+.sales-cross-table th:not(:first-child) {
+  min-width: 110px;
+  max-width: 180px;
+  white-space: normal;
+  text-align: center;
+}
+.sales-cross-cell {
+  display: block;
+  min-width: 72px;
+  min-height: 44px;
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+.sales-cross-cell[aria-pressed="true"] {
+  outline: 2px solid var(--primary-text);
+  outline-offset: 2px;
+}
+.sales-cross-detail {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--bg-elevated);
+  line-height: 1.8;
+  font-size: 0.875rem;
+}
+.shop-sales .sales-heatmap td {
+  padding: 2px;
+}
+.sales-heatmap button {
+  width: 46px;
+  min-height: 44px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+}
+.sales-heatmap th:not(:first-child) {
+  min-width: 46px;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .sales-insights dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sales-report-tools label,
+  .sales-report-tools > button {
+    flex: 1 1 100%;
+  }
+  .sales-analysis-controls label {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  .sales-analysis-controls input {
+    min-width: 0;
+    width: 100%;
+  }
+}

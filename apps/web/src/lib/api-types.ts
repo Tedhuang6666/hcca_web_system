@@ -10591,6 +10591,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/analytics/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 產生銷售分析 PDF 或 Excel 報告 */
+        post: operations["sales_analysis_report_shop_orders_analytics_report_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/assisted": {
         parameters: {
             query?: never;
@@ -29790,12 +29807,67 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
+            /** Insights */
+            insights: components["schemas"]["ShopSalesInsight"][];
             previous: components["schemas"]["ShopSalesPeriod"] | null;
             /**
              * Timezone
              * @default Asia/Taipei
              */
             timezone: string;
+        };
+        /** ShopSalesCrossRow */
+        ShopSalesCrossRow: {
+            /**
+             * Buyer Count
+             * @default 0
+             */
+            buyer_count: number;
+            /** Dimension Key */
+            dimension_key: string;
+            /** Dimension Label */
+            dimension_label: string;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /**
+             * Gross Amount
+             * @default 0
+             */
+            gross_amount: number;
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Order Count
+             * @default 0
+             */
+            order_count: number;
+            /**
+             * Paid Amount
+             * @default 0
+             */
+            paid_amount: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /**
+             * Total Amount
+             * @default 0
+             */
+            total_amount: number;
         };
         /** ShopSalesDay */
         ShopSalesDay: {
@@ -29809,6 +29881,16 @@ export interface components {
              * @default 0
              */
             cumulative_amount: number;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /**
+             * Gross Amount
+             * @default 0
+             */
+            gross_amount: number;
             /**
              * Item Count
              * @default 0
@@ -29834,8 +29916,20 @@ export interface components {
              */
             total_amount: number;
         };
+        /** ShopSalesInsight */
+        ShopSalesInsight: {
+            /** Detail */
+            detail: string;
+            /** Title */
+            title: string;
+        };
         /** ShopSalesMetrics */
         ShopSalesMetrics: {
+            /**
+             * Average Buyer Amount
+             * @default 0
+             */
+            average_buyer_amount: number;
             /**
              * Average Items Per Order
              * @default 0
@@ -29867,6 +29961,11 @@ export interface components {
              */
             item_count: number;
             /**
+             * Median Order Amount
+             * @default 0
+             */
+            median_order_amount: number;
+            /**
              * Order Count
              * @default 0
              */
@@ -29887,6 +29986,16 @@ export interface components {
              */
             promotion_usage_rate: number;
             /**
+             * Repeat Buyer Count
+             * @default 0
+             */
+            repeat_buyer_count: number;
+            /**
+             * Repeat Buyer Rate
+             * @default 0
+             */
+            repeat_buyer_rate: number;
+            /**
              * Total Amount
              * @default 0
              */
@@ -29901,6 +30010,10 @@ export interface components {
         ShopSalesPeriod: {
             /** Amount Bands */
             amount_bands: components["schemas"]["ShopSalesRow"][];
+            /** Buyer Segments */
+            buyer_segments: components["schemas"]["ShopSalesRow"][];
+            /** Class Products */
+            class_products: components["schemas"]["ShopSalesCrossRow"][];
             /** Classes */
             classes: components["schemas"]["ShopSalesRow"][];
             /** Daily */
@@ -29915,6 +30028,8 @@ export interface components {
              * Format: date
              */
             date_to: string;
+            /** Grade Products */
+            grade_products: components["schemas"]["ShopSalesCrossRow"][];
             /** Grades */
             grades: components["schemas"]["ShopSalesRow"][];
             /** Hours */
@@ -29926,8 +30041,39 @@ export interface components {
             products: components["schemas"]["ShopSalesRow"][];
             /** Sources */
             sources: components["schemas"]["ShopSalesRow"][];
+            /** Statuses */
+            statuses: components["schemas"]["ShopSalesRow"][];
             /** Variants */
             variants: components["schemas"]["ShopSalesRow"][];
+            /** Weekday Hours */
+            weekday_hours: components["schemas"]["ShopSalesRow"][];
+            /** Weekdays */
+            weekdays: components["schemas"]["ShopSalesRow"][];
+        };
+        /** ShopSalesReportCreate */
+        ShopSalesReportCreate: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Class Id */
+            class_id?: string | null;
+            /** Date From */
+            date_from?: string | null;
+            /** Date To */
+            date_to?: string | null;
+            /**
+             * Format
+             * @default pdf
+             * @enum {string}
+             */
+            format: "pdf" | "xlsx";
+            /** Grade */
+            grade?: number | null;
+            /** Is Paid */
+            is_paid?: boolean | null;
+            /** Product Id */
+            product_id?: string | null;
         };
         /** ShopSalesRow */
         ShopSalesRow: {
@@ -29936,6 +30082,16 @@ export interface components {
              * @default 0
              */
             buyer_count: number;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /**
+             * Gross Amount
+             * @default 0
+             */
+            gross_amount: number;
             /**
              * Item Count
              * @default 0
@@ -55552,6 +55708,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopSalesAnalyticsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sales_analysis_report_shop_orders_analytics_report_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopSalesReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/pdf": unknown;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
                 };
             };
             /** @description Validation Error */

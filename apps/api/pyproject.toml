@@ -58,6 +58,7 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.52b0",
     "webauthn>=3.0.0",
     "argon2-cffi>=25.1.0",
+    "pygal>=3.0.5,<4",
 ]
 
 [build-system]

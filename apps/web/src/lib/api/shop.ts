@@ -1,6 +1,7 @@
 import type {
   ClassMemberOut,
   ShopSalesAnalyticsOut,
+  ShopSalesReportCreate,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
@@ -11,6 +12,16 @@ import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh
 export const shopApi = {
   salesAnalytics: (params: Record<string, string>) =>
     get<ShopSalesAnalyticsOut>(`/shop/orders/analytics?${new URLSearchParams(params)}`),
+  downloadSalesReport: async (body: ShopSalesReportCreate) => {
+    const response = await authFetch(`${BASE}/shop/orders/analytics/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
+  },
   updateActivityDeadline: (id: string, orderClosesAt: string | null) =>
     patch<ActivityOut>(`/shop/activities/${id}/order-deadline`, { order_closes_at: orderClosesAt }),
   updateActivityOrderClosure: (id: string, isClosed: boolean) =>

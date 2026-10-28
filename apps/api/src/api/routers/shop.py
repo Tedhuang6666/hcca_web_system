@@ -93,7 +93,7 @@ from api.schemas.shop import (
     ShopPromotionPublicOut,
     ShopPromotionUpdate,
 )
-from api.schemas.shop_analytics import ShopSalesAnalyticsOut
+from api.schemas.shop_analytics import ShopSalesAnalyticsOut, ShopSalesReportCreate
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import school_class as class_svc
@@ -103,6 +103,7 @@ from api.services.realtime_events import broadcast_order_updated
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _delegation_codes as delegation_code_svc
 from api.services.shop._analytics import sales_analytics
+from api.services.shop._analytics_report import create_sales_report
 from api.services.shop._deadlines import set_activity_order_closure, set_activity_order_deadline
 from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.storage import get_storage
@@ -1433,7 +1434,7 @@ async def order_sales_analytics(
     _: CurrentUser,
     date_from: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
     date_to: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
-    compare: bool = Query(True),
+    compare: bool = Query(False),
     compare_from: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
     activity_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
@@ -1458,6 +1459,36 @@ async def order_sales_analytics(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/orders/analytics/report",
+    summary="產生銷售分析 PDF 或 Excel 報告",
+    dependencies=[Depends(require_any(*_ADMIN_VIEW_CODES))],
+    responses={
+        200: {
+            "content": {
+                "application/pdf": {},
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {},
+            }
+        }
+    },
+)
+async def sales_analysis_report(
+    session: DbDep, _: CurrentUser, data: ShopSalesReportCreate
+) -> Response:
+    try:
+        content, media_type, filename = await create_sales_report(session, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.get(
