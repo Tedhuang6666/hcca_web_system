@@ -1785,9 +1785,13 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
 
 
 async def prepare_roster_order_recipient(
-    session: AsyncSession, *, roster_entry_id: uuid.UUID, actor: User
+    session: AsyncSession,
+    *,
+    roster_entry_id: uuid.UUID,
+    actor: User,
+    allow_all_classes: bool = False,
 ) -> tuple[User, SchoolClass]:
-    """在本班代購時才預建帳號；鎖住名冊，避免同時替同一座號重複建帳。"""
+    """代購時才預建帳號；跨班操作須由 router 確認訂單管理權限。"""
     from api.services.user_registration import pre_register_user
 
     entry = await session.scalar(
@@ -1797,7 +1801,11 @@ async def prepare_roster_order_recipient(
         raise LookupError("找不到此座號名冊資料")
     sc = await session.get(SchoolClass, entry.class_id)
     cadre_ids = await get_cadre_class_ids(session, actor.id)
-    if sc is None or not sc.is_active or (not actor.is_superuser and sc.id not in cadre_ids):
+    if (
+        sc is None
+        or not sc.is_active
+        or (not allow_all_classes and not actor.is_superuser and sc.id not in cadre_ids)
+    ):
         raise PermissionError("無權替此學生訂購")
 
     person = await session.scalar(select(Person).where(Person.student_id == entry.student_id))

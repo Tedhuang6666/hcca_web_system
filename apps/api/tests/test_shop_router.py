@@ -52,6 +52,133 @@ from api.services import shop as shop_svc
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n data"
 
 
+@pytest.mark.parametrize("code", ["shop:manage", "shop:manage_orders", "admin:all"])
+async def test_admin_assisted_order_across_classes(db_session, authed_client_factory, code):
+    own_class = await _make_class(db_session)
+    other_class = await _make_class(db_session, start="11601", end="11640")
+    manager = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, own_class, user_id=manager.id)
+    await _grant_permission(db_session, manager, code)
+    student = await _bare_user(db_session, student_id="11620")
+    product = await _make_active_product(db_session, manager, price=50)
+    ac = authed_client_factory(manager)
+    recipients = await ac.get(f"/shop/orders/recipients/{other_class.id}")
+    assert recipients.status_code == 200
+    assert student.id.hex in {uuid.UUID(row["user_id"]).hex for row in recipients.json()}
+    payload = {
+        "user_id": str(student.id),
+        "items": [{"product_id": str(product.id), "quantity": 2}],
+        "notes": "班聯協助",
+    }
+    assert (await ac.post("/shop/orders/class", json=payload)).status_code == 403
+    response = await ac.post("/shop/orders/assisted", json=payload)
+    assert response.status_code == 201
+    order = response.json()[0]
+    assert order["user_id"] == str(student.id)
+    assert order["class_id"] == str(other_class.id)
+    assert order["assisted_by_id"] == str(manager.id)
+    assert order["total_price"] == 100
+    assert order["notes"] == "班聯協助"
+    assert not order["is_paid"]
+
+
+async def test_admin_assisted_roster_student_before_login(db_session, authed_client_factory):
+    sc = await _make_class(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    entry = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=20, student_id="11520")
+    )
+    product = await _make_active_product(db_session, manager, price=25)
+    ac = authed_client_factory(manager)
+    members = (await ac.get(f"/shop/orders/recipients/{sc.id}")).json()
+    assert members[0]["user_id"] is None
+    assert members[0]["roster_entry_id"] == str(entry.id)
+    response = await ac.post(
+        "/shop/orders/assisted",
+        json={
+            "roster_entry_id": str(entry.id),
+            "items": [{"product_id": str(product.id), "quantity": 1}],
+        },
+    )
+    assert response.status_code == 201
+    order = response.json()[0]
+    assert order["class_id"] == str(sc.id)
+    assert order["assisted_by_id"] == str(manager.id)
+    linked_user = await db_session.get(User, uuid.UUID(order["user_id"]))
+    assert linked_user.student_id == "11520"
+
+
+@pytest.mark.parametrize("code", [None, "shop:view_all", "class:shop_collect"])
+async def test_admin_assisted_endpoints_deny_non_managers(
+    db_session, client, authed_client_factory, code
+):
+    sc = await _make_class(db_session)
+    actor = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=actor.id)
+    if code:
+        await _grant_permission(db_session, actor, code)
+    student = await _bare_user(db_session, student_id="11520")
+    product = await _make_active_product(db_session, actor)
+    payload = {
+        "user_id": str(student.id),
+        "items": [{"product_id": str(product.id), "quantity": 1}],
+    }
+    assert (await client.get(f"/shop/orders/recipients/{sc.id}")).status_code == 401
+    assert (await client.post("/shop/orders/assisted", json=payload)).status_code == 401
+    ac = authed_client_factory(actor)
+    assert (await ac.get(f"/shop/orders/recipients/{sc.id}")).status_code == 403
+    assert (await ac.post("/shop/orders/assisted", json=payload)).status_code == 403
+
+
+async def test_admin_assisted_order_rejects_inactive_and_unassigned_students(
+    db_session, admin_user, authed_client_factory
+):
+    await _make_class(db_session)
+    student = await _bare_user(db_session, student_id="11520")
+    student.is_active = False
+    unassigned = await _bare_user(db_session)
+    product = await _make_active_product(db_session, admin_user)
+    ac = authed_client_factory(admin_user)
+    for target in (student, unassigned):
+        response = await ac.post(
+            "/shop/orders/assisted",
+            json={
+                "user_id": str(target.id),
+                "items": [{"product_id": str(product.id), "quantity": 1}],
+            },
+        )
+        assert response.status_code == 403
+    assert (await ac.get(f"/shop/orders/recipients/{uuid.uuid4()}")).status_code == 404
+
+
+@pytest.mark.parametrize("constraint", ["stock", "deadline", "global_close"])
+async def test_admin_assisted_order_keeps_order_constraints(
+    db_session, admin_user, authed_client_factory, constraint
+):
+    await _make_class(db_session)
+    student = await _bare_user(db_session, student_id="11520")
+    product = await _make_active_product(db_session, admin_user, stock=1)
+    ac = authed_client_factory(admin_user)
+    if constraint == "deadline":
+        product.sale_end = datetime.now(UTC) - timedelta(minutes=1)
+        await db_session.flush()
+    elif constraint == "global_close":
+        closed = await ac.post(f"/shop/categories/{product.category_id}/close", json={})
+        assert closed.status_code == 201
+    response = await ac.post(
+        "/shop/orders/assisted",
+        json={
+            "user_id": str(student.id),
+            "items": [
+                {"product_id": str(product.id), "quantity": 2 if constraint == "stock" else 1}
+            ],
+        },
+    )
+    assert response.status_code == 422
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
+
+
 @pytest.fixture(autouse=True)
 async def current_shop_student_prefixes(db_session):
     db_session.add(

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
 import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
+import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart2, Lock, LockOpen, RefreshCw } from "lucide-react";
@@ -93,6 +94,7 @@ export default function CouncilOrdersPage() {
   const [selectedReceiptClasses, setSelectedReceiptClasses] = useState<Set<string>>(new Set());
   const requestVersion = useRef(0);
   const [optionsError, setOptionsError] = useState(false);
+  const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsRetry, setOptionsRetry] = useState(0);
   const [batchResult, setBatchResult] = useState("");
   const [batchBusy, setBatchBusy] = useState(false);
@@ -113,6 +115,7 @@ export default function CouncilOrdersPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setOptionsLoading(true);
     setOptionsError(false);
     Promise.all([
       shopApi.catalog(undefined, true),
@@ -123,7 +126,8 @@ export default function CouncilOrdersPage() {
       setCatalog(nextCatalog);
       setClasses(nextClasses);
       setActivities(nextActivities);
-    }).catch(() => { if (!cancelled) setOptionsError(true); });
+    }).catch(() => { if (!cancelled) setOptionsError(true); })
+      .finally(() => { if (!cancelled) setOptionsLoading(false); });
     return () => { cancelled = true; };
   }, [optionsRetry]);
 
@@ -462,6 +466,10 @@ export default function CouncilOrdersPage() {
           </button>
         </div>
       </header>
+
+      {canConfirmClassPayment && <AdminAssistedOrder catalog={catalog} classes={classes} optionsError={optionsError} optionsLoading={optionsLoading}
+        onRetry={() => setOptionsRetry((value) => value + 1)}
+        onCreated={() => { if (tab === "summary") void loadSummary(); else if (tab === "quantities") void loadQuantities(); else if (tab === "orders") void loadOrders(); else setAnalyticsRefresh((value) => value + 1); }} />}
 
       <nav className="shop-task-switch" aria-label="班聯統籌工作">
         {([["summary", "班級繳款"], ["quantities", "商品總量"], ["orders", "查找訂單"], ["analytics", "銷售分析"]] as const).map(([key, label]) => (
