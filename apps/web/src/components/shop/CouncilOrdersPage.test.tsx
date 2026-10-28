@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 
@@ -57,6 +57,42 @@ it("only offers school-wide assisted ordering to order managers", async () => {
 });
 
 describe("全校收款與訂單", () => {
+  it("沒有另外建立活動也能在頁面上方全域鎖單商品批次", async () => {
+    api.listActivities.mockResolvedValue([]);
+    render(<CouncilOrdersPage />);
+    const closure = await screen.findByRole("region", { name: "活動鎖單" });
+    expect(closure).toBeVisible();
+    expect(closure.closest("details")).toBeNull();
+    expect(closure.compareDocumentPosition(screen.getByRole("navigation", { name: "班聯統籌工作" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const lock = within(closure).getByRole("button", { name: "鎖單衣服" });
+    await waitFor(() => expect(lock).toBeEnabled());
+    api.closeCategory.mockImplementationOnce(async () => {
+      api.getCloseStatus.mockResolvedValue({ statuses: { shirts: { is_closed: true, is_global: true }, bags: { is_closed: false }, cards: { is_closed: false } } });
+      return {};
+    });
+    fireEvent.click(lock);
+    expect(await within(closure).findByRole("status")).toHaveTextContent("學生與班代皆無法再訂購");
+    expect(api.closeCategory).toHaveBeenCalledWith("shirts", {});
+    expect(api.getCloseStatus).toHaveBeenCalledWith(["shirts", "bags", "cards"]);
+    await waitFor(() => expect(api.catalog).toHaveBeenCalledTimes(2));
+    expect(await within(closure).findByRole("button", { name: "重新開放衣服" })).toBeVisible();
+  });
+
+  it("唯讀班聯不顯示全域鎖單", async () => {
+    access.isAdmin = false;
+    access.permissions = new Set(["shop:view_all"]);
+    render(<CouncilOrdersPage />);
+    await screen.findByText("一年一班");
+    expect(screen.queryByRole("region", { name: "活動鎖單" })).not.toBeInTheDocument();
+  });
+
+  it.each(["shop:manage", "shop:manage_orders"])("具 %s 權限可直接找到全域鎖單", async (permission) => {
+    access.isAdmin = false;
+    access.permissions = new Set([permission]);
+    render(<CouncilOrdersPage />);
+    expect(await screen.findByRole("button", { name: "鎖單衣服" })).toBeVisible();
+  });
+
   it("downloads the chosen class and activity and shows a retryable receipt error", async () => {
     await openPage();
     const download = await screen.findByRole("button", { name: "下載一年一班的校慶簽收單 PDF" });
