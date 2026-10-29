@@ -1,7 +1,6 @@
 "use client";
 
 import NumberInput from "@/components/ui/NumberInput";
-import SupplementOrders from "@/components/shop/SupplementOrders";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ClassOrderDeadline from "@/components/shop/ClassOrderDeadline";
 
@@ -105,7 +104,6 @@ export default function ClassOrdersPage() {
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [myClassId, setMyClassId] = useState<string | null>(null);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
-  const [supplementRefresh, setSupplementRefresh] = useState(0);
   const [productDetail, setProductDetail] = useState<ProductOut | null>(null);
   const [productDetailFailed, setProductDetailFailed] = useState(false);
   const loadVersion = useRef(0);
@@ -903,7 +901,6 @@ export default function ClassOrdersPage() {
               notes: draft.notes || null,
             });
             completedStudentIds.add(draft.student_id);
-            setSupplementRefresh((value) => value + 1);
           } catch (error) {
             failedRequest = error;
             break;
@@ -932,7 +929,7 @@ export default function ClassOrdersPage() {
           return;
         }
 
-        setSubmitMessage(`已完成 ${draftsToSubmit.length} 位同學的訂購。已繳款後的追加會另列補收款，請由代訂班代另行繳交，班聯確認後歸回原班級。`);
+        setSubmitMessage(`已完成 ${draftsToSubmit.length} 位同學的訂購。已繳款後的追加會另列補收款，由該筆訂購同學自行付款，班聯確認後歸回原班級。`);
         toast.success(`已完成 ${draftsToSubmit.length} 位同學、${draftsToSubmit.reduce((count, draft) => count + draft.items.length, 0)} 項商品登記`);
         setAssistedOrderDrafts([]);
       }
@@ -1045,9 +1042,8 @@ export default function ClassOrdersPage() {
       </div>
 
       <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-        班級繳款後、班聯結單前仍可協助加購；追加由代訂班代另行繳款，收款後取得收據並歸回原班級。到達班聯統一截止時間或班聯結單後，班代停止代購。
+        班級繳款後、班聯結單前仍可協助加購；追加款由該筆訂購同學自行付款，班代不代墊。班聯確認收款後提供收據並歸回原班級。到達班聯統一截止時間或班聯結單後，班代停止代購。
       </p>
-      <SupplementOrders refreshKey={supplementRefresh} />
       {myClassId && <ClassOrderDeadline classId={myClassId} categories={catalog} onSaved={() => void loadCloseStatus(catalog.map((category) => category.id), myClassId)} />}
 
       {workspace === "details" && (
@@ -1944,7 +1940,7 @@ export default function ClassOrdersPage() {
                             <button type="button" onClick={() => openEdit(order)} className="min-h-11 rounded-md px-3 text-xs"
                             style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>修改</button>
                           )}
-                          <SeparateOrderButton order={order} onSeparated={() => { setSupplementRefresh((value) => value + 1); void load(); }} />
+                          <SeparateOrderButton order={order} onSeparated={() => { void load(); }} />
                           <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} className="min-h-11 rounded-md px-3 text-xs"
                             style={{ border: "1px solid var(--border)", color: "#ef4444" }}>取消</button>
                         </>
@@ -2016,7 +2012,7 @@ export default function ClassOrdersPage() {
                                   <Edit2 size={14} />
                                   </button>
                                 )}
-                                <SeparateOrderButton order={order} onSeparated={() => { setSupplementRefresh((value) => value + 1); void load(); }} />
+                                <SeparateOrderButton order={order} onSeparated={() => { void load(); }} />
                                 <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} title="取消訂單"
                                   className="rounded-md p-1 hover:opacity-70" style={{ color: "#ef4444" }}>
                                   <Trash2 size={14} />

@@ -69,7 +69,7 @@ export default function ActivityOrderClosure({ categories, disabled = false, onS
         <Lock size={18} aria-hidden="true" /> 班聯結單與公開入口
       </h2>
       <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-        班級繳款後、班聯結單前，班代可協助加購並另行補繳。結單或到達統一截止時間後，學生與班代停止加購；班聯仍可代訂，但一律獨立補收款，確認收款後提供收據並歸回原班級。結單會隱藏公開商品入口，既有訂單仍可收款。
+        班級繳款後、班聯結單前，班代可協助加購，追加款由該筆訂購同學自行繳交。結單或到達統一截止時間後，學生與班代停止加購；班聯仍可代訂，但追加款仍由該筆訂購同學付款，班聯確認收款後提供收據並歸回原班級。結單會隱藏公開商品入口，既有訂單仍可收款。
       </p>
       {loadError && <div role="alert" className="mt-2 text-sm" style={{ color: "var(--danger)" }}>
         <p>{loadError}</p>
