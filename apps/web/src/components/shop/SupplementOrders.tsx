@@ -5,11 +5,13 @@ import { apiErrorMessage, shopApi } from "@/lib/api";
 import { money } from "@/lib/shop-class-orders";
 import type { OrderListItem, SchoolClassListItem } from "@/lib/types";
 
-export default function SupplementOrders({ canCollect = false, refreshKey = 0, classes = [], onCollected }: {
+export default function SupplementOrders({ canCollect = false, canRejoin = false, refreshKey = 0, classes = [], onCollected, onRejoined }: {
   canCollect?: boolean;
+  canRejoin?: boolean;
   refreshKey?: number;
   classes?: SchoolClassListItem[];
   onCollected?: () => void;
+  onRejoined?: () => void;
 }) {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +80,25 @@ export default function SupplementOrders({ canCollect = false, refreshKey = 0, c
     }
   }
 
+  async function rejoin(order: OrderListItem) {
+    if (busyRef.current || !window.confirm(`確定將 ${order.serial_number} 併回原班訂單？班代收款紀錄會保留，班聯繳款仍維持未確認。`)) return;
+    busyRef.current = true;
+    setBusy(order.id);
+    setError("");
+    setMessage("");
+    try {
+      await shopApi.rejoinSupplementOrder(order.id);
+      setOrders((rows) => rows.filter((row) => row.id !== order.id));
+      setMessage(`已將 ${order.serial_number} 併回原班，班代收款紀錄保留，仍待班聯確認繳款。`);
+      onRejoined?.();
+    } catch (cause) {
+      setError(apiErrorMessage(cause, "歸回班級失敗，請重試。"));
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
+  }
+
   const pending = orders.filter((order) => !order.is_paid);
   const visible = showPaid ? orders : pending;
   return <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }} aria-labelledby="supplement-orders-title">
@@ -94,11 +115,18 @@ export default function SupplementOrders({ canCollect = false, refreshKey = 0, c
         {visible.map((order) => <li key={order.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
           <div className="min-w-0">
             <p className="break-words font-medium">{order.user_name ?? "同學"} · {order.activity_name ?? order.category_name ?? "一般商品"}</p>
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{classes.find((item) => item.id === order.supplement_class_id)?.label ?? order.class_label ?? "原班級"} · {order.serial_number} · {money(order.total_price)} · {order.is_paid ? "已收款並歸班" : "待訂購同學自行繳款"}</p>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              {classes.find((item) => item.id === order.supplement_class_id)?.label ?? order.class_label ?? "原班級"} · {order.serial_number} · {money(order.total_price)} · {order.is_paid ? "已收款並歸班" : order.is_class_collected ? "班代已收、待班聯確認繳款" : "待訂購同學自行繳款"}
+            </p>
           </div>
-          {(order.is_paid || canCollect) && <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void act(order)}>
-            {busy === order.id ? "處理中…" : order.is_paid ? "下載補收款收據" : "確認收款並下載收據"}
-          </button>}
+          <div className="flex flex-wrap gap-2">
+            {(order.is_paid || canCollect) && <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void act(order)}>
+              {busy === order.id ? "處理中…" : order.is_paid ? "下載補收款收據" : "確認收款並下載收據"}
+            </button>}
+            {!order.is_paid && canRejoin && <button type="button" className="btn btn-ghost min-h-11" disabled={busy !== null} onClick={() => void rejoin(order)}>
+              {busy === order.id ? "處理中…" : "併回班級"}
+            </button>}
+          </div>
         </li>)}
       </ul>}
     </>}

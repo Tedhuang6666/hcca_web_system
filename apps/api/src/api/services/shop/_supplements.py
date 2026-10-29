@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import now_local
@@ -17,14 +17,22 @@ from api.services.shop._receipts import (
 
 
 async def list_supplements(
-    session: AsyncSession, *, actor_id: uuid.UUID | None, limit: int, offset: int
+    session: AsyncSession,
+    *,
+    actor_id: uuid.UUID | None,
+    class_ids: set[uuid.UUID] | None = None,
+    limit: int,
+    offset: int,
 ) -> list[Order]:
     query = select(Order.id).where(
         Order.supplement_class_id.is_not(None),
         Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
     )
     if actor_id is not None:
-        query = query.where(Order.assisted_by_id == actor_id)
+        scopes = [Order.assisted_by_id == actor_id]
+        if class_ids:
+            scopes.append(Order.supplement_class_id.in_(class_ids))
+        query = query.where(or_(*scopes))
     ids = await session.scalars(
         query.order_by(Order.is_paid, Order.created_at.desc(), Order.id).limit(limit).offset(offset)
     )
@@ -77,3 +85,33 @@ async def separate_order(session: AsyncSession, order: Order, *, actor_id: uuid.
     await receivable_svc.sync_shop_order(session, order)
     await session.flush()
     return await get_order(session, order.id) or order
+
+
+async def rejoin_class_order(session: AsyncSession, order: Order) -> Order:
+    """將未繳費的補收訂單歸回原班，保留班代的收款紀錄。"""
+    class_id = order.supplement_class_id
+    if class_id is None:
+        raise ValueError("此訂單不是獨立補收款")
+    await _lock_class_orders(session, class_id)
+    await session.execute(
+        select(Order)
+        .where(Order.id == order.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    refreshed = await get_order(session, order.id)
+    if refreshed is None or refreshed.supplement_class_id is None:
+        raise ValueError("此訂單已不在補收款清單")
+    if refreshed.is_paid:
+        raise ValueError("已繳費訂單已歸回原班")
+    if refreshed.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
+        raise ValueError("已取消或退款的訂單無法歸回班級")
+    school_class = await session.get(SchoolClass, refreshed.supplement_class_id)
+    if school_class is None:
+        raise ValueError("找不到原班級")
+    refreshed.class_id = school_class.id
+    refreshed.school_class = school_class
+    refreshed.supplement_class_id = None
+    await receivable_svc.sync_shop_order(session, refreshed)
+    await session.flush()
+    return await get_order(session, refreshed.id) or refreshed

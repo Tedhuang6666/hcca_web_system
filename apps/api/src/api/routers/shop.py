@@ -1411,6 +1411,38 @@ async def separate_order_collection(
     return shop_svc.serialize_order(order)
 
 
+@router.post(
+    "/orders/{order_id}/rejoin-class", response_model=OrderOut, summary="將補收訂單歸回原班"
+)
+async def rejoin_supplement_order(
+    order_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> OrderOut:
+    order = await shop_svc.get_order(session, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="找不到此訂單")
+    codes = await get_user_permission_codes(session, current_user.id)
+    can_manage = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if not can_manage and order.supplement_class_id not in cadre_ids:
+        raise HTTPException(status_code=403, detail="僅班聯或原班班代可將訂單歸回班級")
+    try:
+        order = await supplement_svc.rejoin_class_order(session, order)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    await audit_svc.record(
+        session,
+        entity_type="order",
+        entity_id=str(order.id),
+        action="shop.order_rejoin_class",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"class_id": str(order.class_id), "is_class_collected": order.is_class_collected},
+        summary=f"將訂單「{order.serial_number}」歸回原班級",
+    )
+    await _broadcast_shop_order(order)
+    return shop_svc.serialize_order(order)
+
+
 @router.get("/orders/supplements", response_model=list[OrderListItem], summary="補收款清單")
 async def list_supplement_orders(
     session: DbDep,
@@ -1420,8 +1452,15 @@ async def list_supplement_orders(
 ) -> list[OrderListItem]:
     codes = await get_user_permission_codes(session, current_user.id)
     can_manage = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    cadre_ids = (
+        None if can_manage else await class_svc.get_cadre_class_ids(session, current_user.id)
+    )
     orders = await supplement_svc.list_supplements(
-        session, actor_id=None if can_manage else current_user.id, limit=limit, offset=offset
+        session,
+        actor_id=None if can_manage else current_user.id,
+        class_ids=cadre_ids,
+        limit=limit,
+        offset=offset,
     )
     return [shop_svc.serialize_order_list_item(order) for order in orders]
 

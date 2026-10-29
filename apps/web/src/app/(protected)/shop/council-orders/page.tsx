@@ -521,8 +521,9 @@ export default function CouncilOrdersPage() {
       {canConfirmClassPayment && <AdminAssistedOrder catalog={catalog} classes={classes} optionsError={optionsError} optionsLoading={optionsLoading}
         onRetry={() => setOptionsRetry((value) => value + 1)}
         onCreated={() => { setSupplementRefresh((value) => value + 1); if (tab === "summary") void loadSummary(); else if (tab === "quantities") void loadQuantities(); else if (tab === "orders") void loadOrders(); else setAnalyticsRefresh((value) => value + 1); }} />}
-      {canConfirmClassPayment && <SupplementOrders canCollect classes={classes} refreshKey={supplementRefresh}
-        onCollected={() => { void loadSummary(); void loadClassPayments(); }} />}
+      {canConfirmClassPayment && <SupplementOrders canCollect canRejoin classes={classes} refreshKey={supplementRefresh}
+        onCollected={() => { void loadSummary(); void loadClassPayments(); }}
+        onRejoined={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />}
 
       <nav className="shop-task-switch" aria-label="班聯統籌工作">
         {([["summary", "班級繳款"], ["quantities", "商品總量"], ["orders", "查找訂單"], ["analytics", "銷售分析"]] as const).map(([key, label]) => (

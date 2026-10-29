@@ -3,6 +3,7 @@
 import NumberInput from "@/components/ui/NumberInput";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ClassOrderDeadline from "@/components/shop/ClassOrderDeadline";
+import SupplementOrders from "@/components/shop/SupplementOrders";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -1045,6 +1046,7 @@ export default function ClassOrdersPage() {
         班級繳款後、班聯結單前仍可協助加購；追加款由該筆訂購同學自行付款，班代不代墊。班聯確認收款後提供收據並歸回原班級。到達班聯統一截止時間或班聯結單後，班代停止代購。
       </p>
       {myClassId && <ClassOrderDeadline classId={myClassId} categories={catalog} onSaved={() => void loadCloseStatus(catalog.map((category) => category.id), myClassId)} />}
+      {myClassId && <SupplementOrders canRejoin onRejoined={() => { void load(); }} />}
 
       {workspace === "details" && (
         <label className="flex flex-wrap items-center gap-3 text-sm font-medium">

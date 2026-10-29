@@ -365,6 +365,65 @@ async def test_manually_separate_order_checks_class_scope_and_preserves_amounts(
     assert (await ac.post(f"/shop/orders/{paid.id}/separate")).status_code == 409
 
 
+@pytest.mark.parametrize("manager", [False, True])
+async def test_supplement_can_rejoin_class_without_changing_collection_status(
+    db_session, client, authed_client_factory, manager
+):
+    sc = await _make_class(db_session)
+    actor = await _bare_user(db_session, student_id="11501")
+    if manager:
+        await _grant_permission(db_session, actor, "shop:manage_orders")
+    else:
+        await class_svc.add_cadre(db_session, sc, user_id=actor.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    order = await _seed_order(db_session, buyer, total_price=123, is_class_collected=True)
+    order.class_id = None
+    order.supplement_class_id = sc.id
+    order.assistance_scope = "supplement"
+    ac = authed_client_factory(actor)
+    path = f"/shop/orders/{order.id}/rejoin-class"
+
+    assert (await client.post(path)).status_code == 401
+    supplements = await ac.get("/shop/orders/supplements")
+    assert [row["id"] for row in supplements.json()] == [str(order.id)]
+    response = await ac.post(path)
+    assert response.status_code == 200, response.text
+    assert response.json()["class_id"] == str(sc.id)
+    assert response.json()["supplement_class_id"] is None
+    assert response.json()["is_class_collected"] is True
+    assert response.json()["is_paid"] is False
+    assert response.json()["total_price"] == 123
+    assert [row.id for row in await shop_svc.list_orders(db_session, class_ids=[sc.id])] == [
+        order.id
+    ]
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+    assert receivable.class_id == sc.id
+
+
+async def test_supplement_rejoin_denies_other_class_cadre_and_paid_orders(
+    db_session, authed_client_factory
+):
+    sc = await _make_class(db_session)
+    other_class = await _make_class(db_session, start="11601", end="11640")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    other_cadre = await _bare_user(db_session, student_id="11601")
+    await class_svc.add_cadre(db_session, other_class, user_id=other_cadre.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    order = await _seed_order(db_session, buyer, total_price=123)
+    order.supplement_class_id = sc.id
+    order.assistance_scope = "supplement"
+    denied = await authed_client_factory(other_cadre).post(f"/shop/orders/{order.id}/rejoin-class")
+    assert denied.status_code == 403
+    assert (await authed_client_factory(other_cadre).get("/shop/orders/supplements")).json() == []
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    order.is_paid = True
+    conflict = await authed_client_factory(manager).post(f"/shop/orders/{order.id}/rejoin-class")
+    assert conflict.status_code == 409
+    assert order.class_id is None and order.supplement_class_id == sc.id
+
+
 async def test_receivable_payment_rejoins_supplement_only_after_full_collection(
     db_session, authed_client_factory
 ):

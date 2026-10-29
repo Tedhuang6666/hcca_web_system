@@ -2,17 +2,36 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import SupplementOrders from "./SupplementOrders";
 
-const api = vi.hoisted(() => ({ listSupplementOrders: vi.fn(), setOrderPaid: vi.fn(), downloadSupplementReceipt: vi.fn() }));
+const api = vi.hoisted(() => ({ listSupplementOrders: vi.fn(), setOrderPaid: vi.fn(), rejoinSupplementOrder: vi.fn(), downloadSupplementReceipt: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
-const order = { id: "extra", serial_number: "EXTRA-1", user_name: "測試同學", total_price: 120, is_paid: false, supplement_class_id: "class" };
+const order = { id: "extra", serial_number: "EXTRA-1", user_name: "測試同學", total_price: 120, is_paid: false, is_class_collected: true, supplement_class_id: "class" };
 beforeEach(() => {
   vi.clearAllMocks();
   api.listSupplementOrders.mockResolvedValue([order]);
   api.setOrderPaid.mockResolvedValue({ ...order, is_paid: true, class_id: "class" });
+  api.rejoinSupplementOrder.mockResolvedValue({ ...order, class_id: "class", is_paid: false });
   api.downloadSupplementReceipt.mockResolvedValue({ blob: async () => new Blob(["receipt"]) });
   URL.createObjectURL = vi.fn(() => "blob:receipt");
   URL.revokeObjectURL = vi.fn();
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+});
+
+it("lets cadres return an unpaid supplement while preserving its class collection state", async () => {
+  const onRejoined = vi.fn();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<SupplementOrders canRejoin onRejoined={onRejoined} />);
+  fireEvent.click(await screen.findByRole("button", { name: "併回班級" }));
+  await waitFor(() => expect(api.rejoinSupplementOrder).toHaveBeenCalledWith("extra"));
+  expect(await screen.findByText(/班代收款紀錄保留，仍待班聯確認繳款/)).toBeVisible();
+  expect(onRejoined).toHaveBeenCalledOnce();
+  expect(api.setOrderPaid).not.toHaveBeenCalled();
+});
+
+it("does not rejoin when the cadre cancels confirmation", async () => {
+  vi.spyOn(window, "confirm").mockReturnValue(false);
+  render(<SupplementOrders canRejoin />);
+  fireEvent.click(await screen.findByRole("button", { name: "併回班級" }));
+  expect(api.rejoinSupplementOrder).not.toHaveBeenCalled();
 });
 
 it("confirms a supplement, returns it to the class and downloads its receipt", async () => {
@@ -38,6 +57,6 @@ it("keeps confirmed payment when receipt download fails and retries only the rec
 
 it("shows cadres their outstanding supplements without allowing self confirmation", async () => {
   render(<SupplementOrders />);
-  expect(await screen.findByText(/待訂購同學自行繳款/)).toBeVisible();
+  expect(await screen.findByText(/班代已收、待班聯確認繳款/)).toBeVisible();
   expect(screen.queryByRole("button", { name: "確認收款並下載收據" })).not.toBeInTheDocument();
 });
