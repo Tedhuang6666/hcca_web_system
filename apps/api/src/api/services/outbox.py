@@ -164,6 +164,8 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
         await _handle_regulation_published(db, payload)
     elif etype == "shop.order_confirmed":
         _handle_shop_order_confirmed(payload)
+    elif etype == "shop.order_payment_required":
+        _handle_shop_order_payment_required(payload)
     elif etype == "shop.class_payment_confirmed":
         _handle_shop_class_payment_confirmed(payload)
     elif etype == "announcement.published":
@@ -277,6 +279,41 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
         enqueue_email(buyer_email, subject, html)
     except Exception as exc:
         logger.warning("shop.order_confirmed email failed: %s", exc)
+
+
+def _handle_shop_order_payment_required(payload: dict) -> None:
+    """提醒獨立收款的訂購人按期繳費；寄送失敗交由 outbox 重試。"""
+    from api.core.config import settings
+    from api.services.mail import enqueue_email
+
+    buyer_email = payload.get("buyer_email")
+    serial = str(payload.get("serial_number") or "")
+    if not buyer_email or not serial:
+        return
+    reason = (
+        "您的訂單已移出班級統一收款，需改為自行繳費。"
+        if payload.get("reason") == "separated_from_class"
+        else "您的代訂訂單已成立，這筆訂單需額外繳費。"
+    )
+    deadline = payload.get("payment_deadline")
+    deadline_text = (
+        f"請於 {html_escape(str(deadline))} 前完成繳費。"
+        if deadline
+        else "請於班聯會公告的繳費期限內完成繳費。"
+    )
+    total = int(payload.get("total_price", 0) or 0)
+    buyer_name = html_escape(str(payload.get("buyer_name") or "同學"))
+    base = html_escape(settings.FRONTEND_BASE_URL.rstrip("/"), quote=True)
+    subject = f"【訂單繳費通知】{serial}".replace("\r", " ").replace("\n", " ")
+    html = (
+        f"<p>親愛的 {buyer_name}：</p>"
+        f"<p>{reason}請自行向班聯會繳費。</p>"
+        f"<p><strong>訂單編號</strong>：{html_escape(serial)}<br>"
+        f"<strong>應繳金額</strong>：NT$ {total:,}</p>"
+        f"<p>{deadline_text}<strong>逾期未繳，班聯會將取消您的訂單。</strong></p>"
+        f'<p><a href="{base}/shop/orders">查看訂單</a></p>'
+    )
+    enqueue_email(buyer_email, subject, html)
 
 
 def _handle_shop_class_payment_confirmed(payload: dict) -> None:
