@@ -581,8 +581,16 @@ class ClassReceiptBatchCreate(BaseModel):
         default=None,
         min_length=1,
         max_length=200,
-        description="指定班級；未提供時匯出此活動所有有有效訂單的班級",
+        description="指定班級；未提供時依匯出選項選取班級",
     )
+    unpaid_only: bool = Field(
+        default=False,
+        description="僅匯出尚未由班聯確認收款的班級；只適用於未指定班級時",
+    )
+
+
+class ChangedOrderReceiptCreate(BaseModel):
+    activity_id: uuid.UUID | None = Field(description="收據活動；null 代表一般商品")
 
 
 class ClassCollectionUpdate(BaseModel):

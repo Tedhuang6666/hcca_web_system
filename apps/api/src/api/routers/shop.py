@@ -40,6 +40,7 @@ from api.schemas.school_class import ClassMemberOut
 from api.schemas.shop import (
     AdminAssistedOrderCreate,
     CatalogCategoryOut,
+    ChangedOrderReceiptCreate,
     ClassCollectionUpdate,
     ClassOrderCreate,
     ClassOrderUpsert,
@@ -599,16 +600,58 @@ async def download_class_receipts(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定班級")
     try:
         pdf = await shop_svc.export_class_receipts_pdf(
-            session, school_classes, activity_id=payload.activity_id
+            session,
+            school_classes,
+            activity_id=payload.activity_id,
+            unpaid_only=payload.unpaid_only and school_classes is None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    filename = "班聯收款簽收單-多班.pdf"
+    filename = "班聯收款簽收單-班級.pdf"
     return Response(
         content=pdf,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post(
+    "/orders/receipts/changed.pdf",
+    summary="批次列印上次列印後有變更的班級與個人訂單收據",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}}
+    },
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def download_changed_order_receipts(
+    payload: ChangedOrderReceiptCreate,
+    session: DbDep,
+) -> Response:
+    try:
+        pdf = await shop_svc.export_changed_order_receipts_pdf(
+            session, activity_id=payload.activity_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename*=UTF-8''{quote('班聯收款簽收單-增量.pdf', safe='')}"
+            ),
             "Cache-Control": "no-store",
         },
     )

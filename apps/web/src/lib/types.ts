@@ -119,6 +119,8 @@ export type {
   ClassOrderUpsert,
   ClassPaymentOut,
   ClassPaymentReportItemOut,
+  ClassReceiptBatchCreate,
+  ChangedOrderReceiptCreate,
   ClassRepresentativeOverviewItemOut,
   ClassRoleAssign,
   ClassRoleBindingOut,

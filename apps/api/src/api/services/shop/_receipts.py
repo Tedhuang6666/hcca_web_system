@@ -7,19 +7,23 @@ import html
 import re
 import unicodedata
 import uuid
-from datetime import date
+from collections.abc import Iterable
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.clock import local_today
+from api.core.clock import TAIPEI, local_today, now_local
 from api.models.activity import Activity
 from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderItem, OrderStatus
+from api.models.shop_class_payment import ShopClassPayment
+from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
 from api.services.official_print import _font_faces, render_print_pdf
 
 _RECEIPT_TEMPLATE = Path(__file__).with_name("templates") / "class_receipt.pdf"
@@ -69,6 +73,7 @@ def _render_class_receipt_pdf(
     activity_name: str,
     orders: list[Order],
     issued_on: date,
+    printed_at: datetime | None = None,
 ) -> bytes:
     # 同商品、規格與成交單價合併；金額只使用訂單快照，不依目前商品價格重算。
     grouped: dict[tuple[uuid.UUID, int, tuple[tuple[str, str], ...]], tuple[str, int]] = {}
@@ -122,8 +127,12 @@ def _render_class_receipt_pdf(
     while buyer_font_size > 7 and len(_receipt_text_lines(buyer, 394, buyer_font_size)) > 1:
         buyer_font_size -= 1
     sections = []
+    print_label = (
+        (printed_at or now_local()).astimezone(TAIPEI).strftime("列印時間：%Y-%m-%d %H:%M")
+    )
     for page_index, page_rows in enumerate(pages):
         fields = []
+        fields.append(_receipt_field(print_label, 8, 5, 150, font_size=6.5, height=8))
         for offset in (0.0, _RECEIPT_COPY_OFFSET):
             buyer_lines = _receipt_text_lines(buyer, 394, buyer_font_size)
             fields.append(
@@ -212,8 +221,11 @@ async def export_class_receipts_pdf(
     school_classes: list[SchoolClass] | None,
     *,
     activity_id: uuid.UUID | None,
+    unpaid_only: bool = False,
+    printed_at: datetime | None = None,
+    record_prints: bool = True,
 ) -> bytes:
-    """依班級順序合併多份收據；未指定班級時匯出此活動所有有有效訂單的班級。"""
+    """依班級順序合併收據，可選擇只匯出尚未確認收款的班級。"""
     activity = await session.get(Activity, activity_id) if activity_id else None
     if activity_id and activity is None:
         raise ValueError("找不到此活動")
@@ -233,13 +245,23 @@ async def export_class_receipts_pdf(
     if school_classes is not None:
         selected_class_ids = [school_class.id for school_class in school_classes]
         statement = statement.where(Order.class_id.in_(selected_class_ids))
+    if unpaid_only:
+        paid_scope = select(ShopClassPayment.id).where(
+            ShopClassPayment.class_id == SchoolClass.id,
+            ShopClassPayment.activity_id.is_not_distinct_from(activity_id),
+            ShopClassPayment.is_paid.is_(True),
+        )
+        statement = statement.where(~paid_scope.exists())
     rows = (await session.execute(statement)).all()
     orders_by_class: dict[uuid.UUID, tuple[SchoolClass, list[Order]]] = {}
     for school_class, order in rows:
         entry = orders_by_class.setdefault(school_class.id, (school_class, []))
         entry[1].append(order)
     if not orders_by_class:
+        if unpaid_only:
+            raise ValueError("此活動沒有尚未確認收款的班級")
         raise ValueError("此活動尚無有效訂單可產生收據")
+    printed_at = printed_at or now_local()
 
     writer = PdfWriter()
     issued_on = local_today()
@@ -251,9 +273,158 @@ async def export_class_receipts_pdf(
             activity.name if activity else "一般商品",
             orders,
             issued_on,
+            printed_at,
         )
         for page in PdfReader(BytesIO(receipt)).pages:
             writer.add_page(page)
     result = BytesIO()
     writer.write(result)
+    if record_prints:
+        await record_order_receipts_printed(
+            session,
+            (order.id for _, orders in orders_by_class.values() for order in orders),
+            printed_at=printed_at,
+        )
+    return result.getvalue()
+
+
+async def record_order_receipts_printed(
+    session: AsyncSession,
+    order_ids: Iterable[uuid.UUID],
+    *,
+    printed_at: datetime,
+) -> None:
+    ids = list(dict.fromkeys(order_ids))
+    if not ids:
+        return
+    statement = pg_insert(ShopOrderReceiptPrint).values(
+        [{"order_id": order_id, "printed_at": printed_at} for order_id in ids]
+    )
+    await session.execute(
+        statement.on_conflict_do_update(
+            index_elements=[ShopOrderReceiptPrint.order_id],
+            set_={"printed_at": statement.excluded.printed_at},
+        )
+    )
+
+
+async def render_individual_order_receipt(
+    session: AsyncSession,
+    order: Order,
+    *,
+    printed_at: datetime,
+) -> bytes:
+    school_class = (
+        await session.get(SchoolClass, order.supplement_class_id)
+        if order.supplement_class_id
+        else None
+    )
+    buyer_name = order.user.display_name if order.user else "個人訂購人"
+    academic_year = printed_at.astimezone(TAIPEI).year - 1911
+    if school_class:
+        class_label = school_class.label or school_class.class_code
+        buyer_name = f"{class_label} {buyer_name} 補收款"
+        academic_year = school_class.academic_year
+    activity_name = order.activity.name if order.activity else "一般商品"
+    return await asyncio.to_thread(
+        _render_class_receipt_pdf,
+        buyer_name,
+        academic_year,
+        f"{activity_name} · {order.serial_number}",
+        [order],
+        local_today(),
+        printed_at,
+    )
+
+
+async def export_changed_order_receipts_pdf(
+    session: AsyncSession,
+    *,
+    activity_id: uuid.UUID | None,
+) -> bytes:
+    """列印上次匯出後新增或更新的班級收據與個人訂單收據。"""
+    activity = await session.get(Activity, activity_id) if activity_id else None
+    if activity_id and activity is None:
+        raise ValueError("找不到此活動")
+    changed_item = select(OrderItem.id).where(
+        OrderItem.order_id == Order.id,
+        OrderItem.updated_at > ShopOrderReceiptPrint.printed_at,
+    )
+    statement = (
+        select(Order)
+        .outerjoin(ShopOrderReceiptPrint, ShopOrderReceiptPrint.order_id == Order.id)
+        .where(
+            Order.test_product_id.is_(None),
+            Order.activity_id.is_(None)
+            if activity_id is None
+            else Order.activity_id == activity_id,
+            Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+            or_(
+                ShopOrderReceiptPrint.order_id.is_(None),
+                Order.updated_at > ShopOrderReceiptPrint.printed_at,
+                exists(changed_item),
+            ),
+        )
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user),
+            selectinload(Order.activity),
+        )
+        .order_by(Order.class_id, Order.created_at, Order.id)
+    )
+    changed_orders = list((await session.scalars(statement)).all())
+    changed_orders = [
+        order
+        for order in changed_orders
+        if order.class_id is not None or order.supplement_class_id is None or order.is_paid
+    ]
+    if not changed_orders:
+        raise ValueError("上次列印後沒有變更的有效訂單")
+    printed_at = now_local()
+
+    writer = PdfWriter()
+    printed_order_ids: list[uuid.UUID] = []
+    class_ids = list(dict.fromkeys(order.class_id for order in changed_orders if order.class_id))
+    if class_ids:
+        school_classes = list(
+            (
+                await session.scalars(
+                    select(SchoolClass)
+                    .where(SchoolClass.id.in_(class_ids))
+                    .order_by(SchoolClass.class_code, SchoolClass.id)
+                )
+            ).all()
+        )
+        receipt = await export_class_receipts_pdf(
+            session,
+            school_classes,
+            activity_id=activity_id,
+            printed_at=printed_at,
+            record_prints=False,
+        )
+        for page in PdfReader(BytesIO(receipt)).pages:
+            writer.add_page(page)
+        class_order_ids = await session.scalars(
+            select(Order.id).where(
+                Order.class_id.in_(class_ids),
+                Order.test_product_id.is_(None),
+                Order.activity_id.is_(None)
+                if activity_id is None
+                else Order.activity_id == activity_id,
+                Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+            )
+        )
+        printed_order_ids.extend(class_order_ids.all())
+
+    for order in changed_orders:
+        if order.class_id is not None:
+            continue
+        receipt = await render_individual_order_receipt(session, order, printed_at=printed_at)
+        for page in PdfReader(BytesIO(receipt)).pages:
+            writer.add_page(page)
+        printed_order_ids.append(order.id)
+
+    result = BytesIO()
+    writer.write(result)
+    await record_order_receipts_printed(session, printed_order_ids, printed_at=printed_at)
     return result.getvalue()

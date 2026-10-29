@@ -1,17 +1,19 @@
 """班級繳款後的獨立補收款與收據。"""
 
-import asyncio
 import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.clock import local_today
+from api.core.clock import now_local
 from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderStatus
 from api.services import receivable as receivable_svc
 from api.services.shop._orders import _lock_class_orders, get_order
-from api.services.shop._receipts import _render_class_receipt_pdf
+from api.services.shop._receipts import (
+    record_order_receipts_printed,
+    render_individual_order_receipt,
+)
 
 
 async def list_supplements(
@@ -39,17 +41,16 @@ async def export_supplement_receipt(session: AsyncSession, order: Order) -> byte
         raise ValueError("補收款確認繳費後才能下載收據")
     if order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
         raise ValueError("已取消或退款的訂單無法下載收據")
-    school_class = await session.get(SchoolClass, order.supplement_class_id)
-    if school_class is None:
+    if await session.get(SchoolClass, order.supplement_class_id) is None:
         raise ValueError("找不到原班級")
-    return await asyncio.to_thread(
-        _render_class_receipt_pdf,
-        f"{school_class.label or school_class.class_code} {order.user.display_name} 補收款",
-        school_class.academic_year,
-        f"{order.activity.name if order.activity else '一般商品'} · {order.serial_number}",
-        [order],
-        local_today(),
+    printed_at = now_local()
+    receipt = await render_individual_order_receipt(session, order, printed_at=printed_at)
+    await record_order_receipts_printed(
+        session,
+        [order.id],
+        printed_at=printed_at,
     )
+    return receipt
 
 
 async def separate_order(session: AsyncSession, order: Order, *, actor_id: uuid.UUID) -> Order:

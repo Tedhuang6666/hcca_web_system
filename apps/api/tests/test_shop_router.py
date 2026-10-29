@@ -2477,6 +2477,12 @@ async def test_class_receipt_rejects_users_without_shop_manage_permission(
             json={"activity_id": None, "class_ids": [str(sc.id)]},
         )
     ).status_code == 403
+    assert (
+        await client.post("/shop/orders/receipts/changed.pdf", json={"activity_id": None})
+    ).status_code == 401
+    assert (
+        await ac.post("/shop/orders/receipts/changed.pdf", json={"activity_id": None})
+    ).status_code == 403
 
 
 async def test_class_receipt_contains_all_active_orders_in_class_and_activity(
@@ -2625,15 +2631,89 @@ async def test_class_receipt_batch_combines_selected_classes_and_all_classes(
     assert "900" not in selected_text
     assert sorted(_receipt_totals(selected_pdf)) == ["100", "100", "200", "200"]
 
+    confirmed = await ac.patch(
+        f"/shop/orders/classes/{classes[1].id}/payment",
+        json={"is_paid": True, "activity_id": str(activity.id)},
+    )
+    assert confirmed.status_code == 200
     all_response = await ac.post(
-        "/shop/orders/classes/receipts.pdf", json={"activity_id": str(activity.id)}
+        "/shop/orders/classes/receipts.pdf",
+        json={"activity_id": str(activity.id), "unpaid_only": True},
     )
     assert all_response.status_code == 200
     all_pdf = PdfReader(BytesIO(all_response.content))
     all_text = "".join(page.extract_text() for page in all_pdf.pages)
-    assert len(all_pdf.pages) == 3
-    assert all(school_class.class_code in all_text for school_class in classes)
+    assert len(all_pdf.pages) == 2
+    assert classes[0].class_code in all_text and classes[2].class_code in all_text
+    assert classes[1].class_code not in all_text
     assert "900" not in all_text
+
+
+async def test_changed_receipts_print_only_updated_classes_and_individual_orders(
+    db_session, authed_client_factory, monkeypatch
+) -> None:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    from api.services.shop import _receipts
+
+    classes = [
+        await _make_class(db_session),
+        await _make_class(db_session, start="21501", end="21540"),
+    ]
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    activity = Activity(name="增量收據活動", status=ActivityStatus.ACTIVE)
+    db_session.add(activity)
+    await db_session.flush()
+    class_orders = [
+        await _seed_order(db_session, buyer, class_id=classes[0].id, total_price=100),
+        await _seed_order(db_session, buyer, class_id=classes[1].id, total_price=200),
+    ]
+    for order in class_orders:
+        order.activity_id = activity.id
+    personal_order = await _seed_order(db_session, buyer, total_price=50)
+    personal_order.activity_id = activity.id
+    await db_session.flush()
+
+    first_print = datetime.now(UTC) + timedelta(seconds=1)
+    monkeypatch.setattr(_receipts, "now_local", lambda: first_print)
+    client = authed_client_factory(manager)
+    initial = await client.post(
+        "/shop/orders/classes/receipts.pdf",
+        json={"activity_id": str(activity.id), "unpaid_only": True},
+    )
+    assert initial.status_code == 200
+    initial_text = "".join(
+        page.extract_text() for page in PdfReader(BytesIO(initial.content)).pages
+    )
+    assert classes[0].class_code in initial_text and classes[1].class_code in initial_text
+
+    class_orders[0].total_price = 125
+    class_orders[0].updated_at = first_print + timedelta(seconds=1)
+    personal_order.updated_at = first_print + timedelta(seconds=1)
+    await db_session.flush()
+    monkeypatch.setattr(_receipts, "now_local", lambda: first_print + timedelta(seconds=2))
+
+    changed = await client.post(
+        "/shop/orders/receipts/changed.pdf", json={"activity_id": str(activity.id)}
+    )
+    assert changed.status_code == 200, changed.text
+    changed_text = "".join(
+        page.extract_text() for page in PdfReader(BytesIO(changed.content)).pages
+    )
+    assert classes[0].class_code in changed_text
+    assert classes[1].class_code not in changed_text
+    assert changed_text.count("測試使用者") == 2
+    assert "列印時間：" in changed_text
+
+    unchanged = await client.post(
+        "/shop/orders/receipts/changed.pdf", json={"activity_id": str(activity.id)}
+    )
+    assert unchanged.status_code == 400
+    assert unchanged.json()["detail"] == "上次列印後沒有變更的有效訂單"
 
 
 async def test_class_receipt_missing_class_and_activity(db_session, authed_client_factory) -> None:
