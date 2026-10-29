@@ -2825,3 +2825,12 @@
 @media (max-width: 767px) and (max-height: 580px) and (orientation: landscape) {
   .shop-product-dialog { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); grid-template-rows: minmax(0, 1fr); }
 }
+
+/* The representative follows one ordering task at a time. */
+.shop-order-steps { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; color: var(--text-secondary); font-size: 0.875rem; }
+.shop-order-steps li { display: flex; align-items: center; gap: 0.4rem; }
+.shop-order-steps li > span { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 1px solid var(--border); border-radius: 50%; font-variant-numeric: tabular-nums; }
+.shop-order-steps [aria-current="step"] { color: var(--primary-text); font-weight: 600; }
+.shop-order-steps [aria-current="step"] > span { border-color: var(--primary); background: var(--primary-dim); }
+.shop-class-tools { border-bottom: 1px solid var(--border); }
+.shop-class-orders-page .input { font-size: 1rem; }

@@ -997,7 +997,8 @@ export default function ClassOrdersPage() {
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代代訂與確認收款</h1>
+          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代工作</h1>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>幫同學訂購，或登記已收到的款項。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={load} className="btn btn-ghost min-h-11 min-w-11" aria-label="重新整理">
@@ -1028,7 +1029,7 @@ export default function ClassOrdersPage() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <nav className="shop-task-switch w-full min-w-0 sm:w-auto sm:flex-1" aria-label="班代工作">
         {([
-          ["order", "代訂"], ["collect", "確認收款"],
+          ["order", "幫同學訂購"], ["collect", "登記收款"],
         ] as const).map(([key, label]) => (
           <button key={key} type="button" aria-pressed={workspace === key}
             onClick={() => { setWorkspace(key); if (key === "order") setFormOpen(true); }}>
@@ -1036,17 +1037,30 @@ export default function ClassOrdersPage() {
           </button>
         ))}
       </nav>
-        <button type="button" className="btn btn-ghost ml-auto min-h-11 text-sm"
-          aria-pressed={workspace === "details"} onClick={() => setWorkspace("details")}>
-          查詢／修改訂單
-        </button>
       </div>
 
-      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-        班級繳款後、班聯結單前仍可協助加購；追加款由該筆訂購同學自行付款，班代不代墊。班聯確認收款後提供收據並歸回原班級。到達班聯統一截止時間或班聯結單後，班代停止代購。
-      </p>
-      {myClassId && <ClassOrderDeadline classId={myClassId} categories={catalog} onSaved={() => void loadCloseStatus(catalog.map((category) => category.id), myClassId)} />}
-      {myClassId && <SupplementOrders canRejoin onRejoined={() => { void load(); }} />}
+      <details className="shop-class-tools">
+        <summary className="min-h-11 cursor-pointer py-3 text-sm" style={{ color: "var(--text-secondary)" }}>訂單查詢與其他工具</summary>
+        <div className="space-y-3 pb-4">
+          <button type="button" className="btn btn-ghost min-h-11 text-sm"
+            aria-pressed={workspace === "details"} onClick={(event) => {
+              setWorkspace("details");
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}>
+            查詢／修改訂單
+          </button>
+          <details>
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">追加訂單與補收款</summary>
+            {myClassId && <SupplementOrders canRejoin onRejoined={() => { void load(); }} />}
+          </details>
+          <details>
+            <summary className="min-h-11 cursor-pointer py-3 text-sm">加購與繳款說明</summary>
+            <p className="max-w-prose text-sm" style={{ color: "var(--text-secondary)" }}>
+              班級繳款後、班聯結單前仍可協助加購；追加款由該筆訂購同學自行付款，班代不代墊。班聯確認收款後提供收據並歸回原班級。到達班聯統一截止時間或班聯結單後，班代停止代購。
+            </p>
+          </details>
+        </div>
+      </details>
 
       {workspace === "details" && (
         <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
@@ -1094,8 +1108,25 @@ export default function ClassOrdersPage() {
           {(editOrder || composerActivityKey) && <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
             {editOrder ? "修改品項與數量後儲存。" : `目前代訂 ${activityRows.find((row) => row.key === composerActivityKey)?.label ?? "所選活動"}`}
           </p>}
+          {!editOrder && <div className="mb-5">
+            <ol className="shop-order-steps" aria-label="代訂步驟">
+              {["選同學", "選商品", "確認送出"].map((label, index) => {
+                const step = !recipientIds.length ? 0 : currentDraftItemCount > 0 && !hasIncompleteCurrentItem ? 2 : 1;
+                return <li key={label} aria-current={step === index ? "step" : undefined}>
+                  <span aria-hidden="true">{index + 1}</span>{label}
+                </li>;
+              })}
+            </ol>
+            <h2 className="mt-4 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+              {!recipientIds.length ? "先選一位同學" : "替同學選商品，確認後送出"}
+            </h2>
+          </div>}
           {!editOrder && (
-            <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="代訂方式">
+            <details className="mb-4">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+              {recipientMode === "batch" ? "正在幫多人訂購相同商品" : "要幫多人訂購相同商品？"}
+            </summary>
+            <div className="flex flex-wrap gap-2 pb-3" role="group" aria-label="代訂方式">
               <button type="button" aria-pressed={recipientMode === "single"}
                 disabled={creating || currentDraftItemCount > 0 || Boolean(orderProductId) || Boolean(notes.trim())}
                 onClick={() => {
@@ -1126,6 +1157,7 @@ export default function ClassOrdersPage() {
                 批次給多人
               </button>
             </div>
+            </details>
           )}
           {!editOrder && composerActivityKey && (
             <button type="button" className="btn btn-ghost mb-3 min-h-11 px-3 text-xs"
@@ -1623,8 +1655,8 @@ export default function ClassOrdersPage() {
         <section aria-labelledby="seat-collection-heading" className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>確認收款</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>依活動與座號核對品項和款項，收到後標記；追加登記會顯示待補收金額。</p>
+              <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>登記收款</h2>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>找到同學，核對金額；真的收到錢後，再按「已收到」。</p>
             </div>
             {activityRows.length > 0 && (
               <label className="grid gap-1 text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -1651,9 +1683,7 @@ export default function ClassOrdersPage() {
           ) : (
             <div className="rounded-lg px-4 py-3" role="group" aria-label="全班收款統計"
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                統計所選活動的全班有效訂單，不受名冊搜尋或狀態篩選影響。
-              </p>
+              <p className="mb-2 text-xs" style={{ color: "var(--text-secondary)" }}>全班進度 · {ledgerActivity?.label}（不受下方篩選影響）</p>
               <dl className="grid gap-y-2 text-sm sm:grid-cols-2 sm:gap-x-6">
                 <div className="flex items-baseline justify-between gap-3">
                   <dt style={{ color: "var(--text-secondary)" }}>全班應收</dt>
@@ -1707,34 +1737,38 @@ export default function ClassOrdersPage() {
                           <p className="text-sm" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
                             {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
                           </p>
-                          <dl className="grid grid-cols-2 gap-2 text-sm">
-                            <div><dt style={{ color: "var(--text-secondary)" }}>應收</dt><dd className="font-semibold tabular-nums">{money(row.amount)}</dd></div>
-                            <div><dt style={{ color: "var(--text-secondary)" }}>{row.collected > 0 && outstanding > 0 ? "待補收" : "待收"}</dt><dd className="font-semibold tabular-nums">{money(outstanding)}</dd></div>
-                            <div><dt style={{ color: "var(--text-secondary)" }}>班代已收</dt><dd className="tabular-nums">{money(row.collected)}</dd></div>
-                            <div><dt style={{ color: "var(--text-secondary)" }}>班聯已確認</dt><dd className="tabular-nums">{money(row.councilPaid)}</dd></div>
-                          </dl>
-                          <div className="flex flex-wrap gap-2">
-                            <button type="button" className="btn btn-secondary min-h-11 px-3 text-xs"
-                              disabled={!outstanding || busy !== null || loadFailed || batchBusy}
-                              onClick={() => void setSeatCollected(row.id, true)}>{seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}</button>
-                            {row.collected > 0 && (
-                              <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
+                          <p className="flex items-baseline justify-between gap-3 text-sm">
+                            <span style={{ color: "var(--text-secondary)" }}>{outstanding > 0 ? row.collected > 0 ? "還要補收" : "還要收" : row.orders.length ? "已收齊" : "尚未訂購"}</span>
+                            <strong className="text-lg tabular-nums" style={{ color: "var(--text-primary)" }}>{money(outstanding)}</strong>
+                          </p>
+                          {outstanding > 0 && <button type="button" className="btn btn-secondary min-h-11 w-full px-3 text-sm"
+                            disabled={busy !== null || loadFailed || batchBusy}
+                            onClick={() => void setSeatCollected(row.id, true)}>{seatBusy ? "處理中" : `已收到 ${money(outstanding)}`}</button>}
+                          <details>
+                            <summary className="min-h-11 cursor-pointer py-3 text-sm" style={{ color: "var(--text-secondary)" }}>收款明細與其他操作</summary>
+                            <dl className="grid grid-cols-2 gap-2 text-sm">
+                              <div><dt>應收</dt><dd className="tabular-nums">{money(row.amount)}</dd></div>
+                              <div><dt>班代已收</dt><dd className="tabular-nums">{money(row.collected)}</dd></div>
+                              <div><dt>班聯已確認</dt><dd className="tabular-nums">{money(row.councilPaid)}</dd></div>
+                            </dl>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {row.collected > 0 && <button type="button" className="btn btn-ghost min-h-11 px-3 text-sm"
                                 disabled={busy !== null || loadFailed || batchBusy}
-                                onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>
-                            )}
-                            <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
-                              disabled={!members.some((member) => member.id === row.id) || loadFailed}
-                              onClick={() => openCreateForSeat(row.id)}>代訂</button>
-                          </div>
+                                onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>}
+                              <button type="button" className="btn btn-ghost min-h-11 px-3 text-sm"
+                                disabled={!members.some((member) => member.id === row.id) || loadFailed}
+                                onClick={() => openCreateForSeat(row.id)}>代訂</button>
+                            </div>
+                          </details>
                         </article>
                       );
                     })}
                   </div>
                   <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full min-w-[980px] text-sm" aria-label={`${ledgerActivity?.label ?? "活動"}各座號收款`}>
+                  <table className="w-full text-sm" aria-label={`${ledgerActivity?.label ?? "活動"}各座號收款`}>
                     <thead style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
                       <tr>
-                        {["座號", "同學", "預購品項", "應收", "班代已收", "待收／補收", "班聯已確認", "快捷操作"].map((heading) => (
+                        {["同學", "預購品項", "還要收", "收款"].map((heading) => (
                           <th key={heading} scope="col" className="px-3 py-3 text-left font-semibold">{heading}</th>
                         ))}
                       </tr>
@@ -1746,35 +1780,37 @@ export default function ClassOrdersPage() {
                         return (
                           <tr key={row.id} style={{ borderTop: "1px solid var(--border)" }}>
                             <th scope="row" className="px-3 py-3 text-left tabular-nums" style={{ color: "var(--text-primary)" }}>
-                              {row.seat == null ? "—" : `${row.seat} 號`}
+                              <span className="block text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{row.seat == null ? "未編座號" : `${row.seat} 號`}</span>
+                              {row.name}
                             </th>
-                            <td className="px-3 py-3" style={{ color: "var(--text-primary)" }}>{row.name}</td>
                             <td className="max-w-64 px-3 py-3" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
                               {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
                             </td>
-                            <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.amount)}</td>
-                            <td className="px-3 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected)}</td>
-                            <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: outstanding ? "var(--warning)" : "var(--text-secondary)" }}>
-                              {row.collected > 0 && outstanding > 0 && <span className="block text-xs">待補收</span>}
-                              {money(outstanding)}
+                            <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                              {outstanding > 0 ? <>{row.collected > 0 && <span className="block text-xs">待補收</span>}{money(outstanding)}</> : row.orders.length ? "已收齊" : "尚未訂購"}
                             </td>
-                            <td className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{money(row.councilPaid)}</td>
                             <td className="px-3 py-2">
-                              <div className="flex flex-wrap gap-2">
-                                <button type="button" className="btn btn-secondary min-h-11 px-3 text-xs"
-                                  disabled={!outstanding || busy !== null || loadFailed || batchBusy}
-                                  onClick={() => void setSeatCollected(row.id, true)}>
-                                  {seatBusy ? "處理中" : row.collected > 0 && outstanding > 0 ? `補收 ${money(outstanding)}` : "設為已收"}
-                                </button>
-                                {row.collected > 0 && (
-                                  <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
+                              {outstanding > 0 && <button type="button" className="btn btn-secondary min-h-11 px-3 text-sm"
+                                disabled={busy !== null || loadFailed || batchBusy}
+                                onClick={() => void setSeatCollected(row.id, true)}>
+                                {seatBusy ? "處理中" : `已收到 ${money(outstanding)}`}
+                              </button>}
+                              <details>
+                                <summary className="min-h-11 cursor-pointer py-3 text-xs" style={{ color: "var(--text-secondary)" }}>明細與其他操作</summary>
+                                <dl className="space-y-1 pb-2 text-xs font-normal">
+                                  <div><dt className="inline">應收：</dt><dd className="inline tabular-nums">{money(row.amount)}</dd></div>
+                                  <div><dt className="inline">班代已收：</dt><dd className="inline tabular-nums">{money(row.collected)}</dd></div>
+                                  <div><dt className="inline">班聯已確認：</dt><dd className="inline tabular-nums">{money(row.councilPaid)}</dd></div>
+                                </dl>
+                                <div className="flex flex-wrap gap-2">
+                                  {row.collected > 0 && <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
                                     disabled={busy !== null || loadFailed || batchBusy}
-                                    onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>
-                                )}
-                                <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
-                                  disabled={!members.some((member) => member.id === row.id) || loadFailed}
-                                  onClick={() => openCreateForSeat(row.id)}>代訂</button>
-                              </div>
+                                    onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>}
+                                  <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
+                                    disabled={!members.some((member) => member.id === row.id) || loadFailed}
+                                    onClick={() => openCreateForSeat(row.id)}>代訂</button>
+                                </div>
+                              </details>
                             </td>
                           </tr>
                         );
@@ -1792,6 +1828,8 @@ export default function ClassOrdersPage() {
         </section>
 
       </div>
+      {myClassId && <ClassOrderDeadline classId={myClassId} categories={catalog} onSaved={() => void loadCloseStatus(catalog.map((category) => category.id), myClassId)} />}
+
       <div hidden={workspace !== "details"} className="space-y-5">
 
       <div className="space-y-5">
