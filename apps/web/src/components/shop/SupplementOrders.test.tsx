@@ -34,29 +34,43 @@ it("does not rejoin when the cadre cancels confirmation", async () => {
   expect(api.rejoinSupplementOrder).not.toHaveBeenCalled();
 });
 
-it("confirms a supplement, returns it to the class and downloads its receipt", async () => {
+it("confirms a supplement and returns it to the class without downloading a receipt", async () => {
   const onCollected = vi.fn();
   render(<SupplementOrders canCollect onCollected={onCollected} />);
-  fireEvent.click(await screen.findByRole("button", { name: "確認收款並下載收據" }));
+  fireEvent.click(await screen.findByRole("button", { name: "登記繳費" }));
   await waitFor(() => expect(api.setOrderPaid).toHaveBeenCalledWith("extra", true));
   expect(await screen.findByText(/已確認 測試同學的補收款，並歸回原班級/)).toBeVisible();
-  expect(api.downloadSupplementReceipt).toHaveBeenCalledWith("extra");
+  expect(api.downloadSupplementReceipt).not.toHaveBeenCalled();
   expect(onCollected).toHaveBeenCalledOnce();
   expect(screen.getByRole("button", { name: "下載補收款收據" })).toBeVisible();
 });
 
-it("keeps confirmed payment when receipt download fails and retries only the receipt", async () => {
+it("downloads an unpaid receipt without confirming payment and retries a failed download", async () => {
   api.downloadSupplementReceipt.mockRejectedValueOnce(new Error("offline"));
-  render(<SupplementOrders canCollect />);
-  fireEvent.click(await screen.findByRole("button", { name: "確認收款並下載收據" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("款項已確認；收據下載失敗");
+  const onCollected = vi.fn();
+  render(<SupplementOrders canCollect onCollected={onCollected} />);
+  fireEvent.click(await screen.findByRole("button", { name: "下載補收款收據" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("收據下載失敗");
   fireEvent.click(screen.getByRole("button", { name: "下載補收款收據" }));
   await waitFor(() => expect(api.downloadSupplementReceipt).toHaveBeenCalledTimes(2));
-  expect(api.setOrderPaid).toHaveBeenCalledOnce();
+  expect(api.setOrderPaid).not.toHaveBeenCalled();
+  expect(onCollected).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "登記繳費" })).toBeVisible();
 });
 
 it("shows cadres their outstanding supplements without allowing self confirmation", async () => {
   render(<SupplementOrders />);
   expect(await screen.findByText(/班代已收、待班聯確認繳款/)).toBeVisible();
-  expect(screen.queryByRole("button", { name: "確認收款並下載收據" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "登記繳費" })).not.toBeInTheDocument();
+});
+
+it("keeps payment registration retryable without downloading when it fails", async () => {
+  api.setOrderPaid.mockRejectedValueOnce(new Error("offline"));
+  render(<SupplementOrders canCollect />);
+  fireEvent.click(await screen.findByRole("button", { name: "登記繳費" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("繳費登記失敗，請重試。");
+  fireEvent.click(screen.getByRole("button", { name: "登記繳費" }));
+  expect(await screen.findByText(/已確認 測試同學的補收款/)).toBeVisible();
+  expect(api.setOrderPaid).toHaveBeenCalledTimes(2);
+  expect(api.downloadSupplementReceipt).not.toHaveBeenCalled();
 });

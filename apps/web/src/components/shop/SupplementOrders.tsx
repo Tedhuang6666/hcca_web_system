@@ -46,13 +46,25 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
   }, [refreshKey, retry]);
 
   async function download(order: OrderListItem) {
-    const response = await shopApi.downloadSupplementReceipt(order.id);
-    const url = URL.createObjectURL(await response.blob());
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `補收款收據-${order.serial_number}.pdf`;
-    link.click();
-    URL.revokeObjectURL(url);
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(order.id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await shopApi.downloadSupplementReceipt(order.id);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `補收款收據-${order.serial_number}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setError(apiErrorMessage(cause, "收據下載失敗，請點「下載補收款收據」重試。"));
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
   }
 
   async function act(order: OrderListItem) {
@@ -61,19 +73,16 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
     setBusy(order.id);
     setError("");
     setMessage("");
-    let collected = order.is_paid;
     try {
       if (!order.is_paid) {
         await shopApi.setOrderPaid(order.id, true);
-        collected = true;
         setOrders((rows) => rows.map((row) => row.id === order.id ? { ...row, is_paid: true, class_id: row.supplement_class_id } : row));
         setShowPaid(true);
         setMessage(`已確認 ${order.user_name ?? "同學"}的補收款，並歸回原班級。`);
         onCollected?.();
       }
-      await download(order);
     } catch (cause) {
-      setError(apiErrorMessage(cause, collected ? "款項已確認；收據下載失敗，請點「下載補收款收據」重試。" : "收款確認失敗，請重試。"));
+      setError(apiErrorMessage(cause, "繳費登記失敗，請重試。"));
     } finally {
       busyRef.current = false;
       setBusy(null);
@@ -103,13 +112,13 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
   const visible = showPaid ? orders : pending;
   return <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }} aria-labelledby="supplement-orders-title">
     <h2 id="supplement-orders-title" className="font-semibold">追加訂單補收款</h2>
-    <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>追加款由該筆訂購同學自行繳款，班代不代墊，暫不列入班級金額。班聯確認收款後，提供本筆收據並自動歸回原班級；結單不影響既有訂單收款。</p>
+    <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>追加款由該筆訂購同學自行繳款，班代不代墊，暫不列入班級金額。收據可隨時下載，下載不會登記繳費；班聯登記繳費後，訂單自動歸回原班級。結單不影響既有訂單收款。</p>
     {loading ? <p role="status" className="mt-3">載入補收款中…</p> : loadError ? <div role="alert" className="mt-3">
       <p>{loadError}</p><button type="button" className="btn btn-ghost min-h-11" onClick={() => setRetry((value) => value + 1)}>重新載入補收款</button>
     </div> : <>
       <div className="my-3 flex flex-wrap items-center justify-between gap-2">
         <p>待補收 {money(pending.reduce((sum, order) => sum + order.total_price, 0))}</p>
-        <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={showPaid} onChange={(event) => setShowPaid(event.target.checked)} />顯示已收款與收據</label>
+        <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={showPaid} onChange={(event) => setShowPaid(event.target.checked)} />顯示已收款訂單</label>
       </div>
       {!visible.length ? <p className="text-sm" style={{ color: "var(--text-secondary)" }}>目前沒有{showPaid ? "補收款訂單" : "待補收款項"}。</p> : <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
         {visible.map((order) => <li key={order.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
@@ -120,8 +129,11 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(order.is_paid || canCollect) && <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void act(order)}>
-              {busy === order.id ? "處理中…" : order.is_paid ? "下載補收款收據" : "確認收款並下載收據"}
+            <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void download(order)}>
+              {busy === order.id ? "處理中…" : "下載補收款收據"}
+            </button>
+            {!order.is_paid && canCollect && <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void act(order)}>
+              {busy === order.id ? "處理中…" : "登記繳費"}
             </button>}
             {!order.is_paid && canRejoin && <button type="button" className="btn btn-ghost min-h-11" disabled={busy !== null} onClick={() => void rejoin(order)}>
               {busy === order.id ? "處理中…" : "併回班級"}

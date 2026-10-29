@@ -208,7 +208,7 @@ describe("全校收款與訂單", () => {
     fireEvent.click(screen.getByRole("button", { name: "下載所選 1 班 PDF" }));
     await waitFor(() => expect(api.downloadClassReceipts).toHaveBeenCalledWith("festival", ["class-1"]));
 
-    fireEvent.click(screen.getByRole("button", { name: "列印所有未繳款班級收據" }));
+    fireEvent.click(screen.getByRole("button", { name: "列印所有未繳款班級／個人收據" }));
     await waitFor(() => expect(api.downloadClassReceipts).toHaveBeenCalledWith("festival", undefined, true));
 
     fireEvent.click(screen.getByRole("button", { name: "列印上次列印後有變更的班級／個人訂單" }));
