@@ -5,11 +5,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, union
+from sqlalchemy import and_, func, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import local_today
+from api.models.activity import Activity
 from api.models.person import (
     Person,
     PersonAffiliation,
@@ -23,8 +24,10 @@ from api.models.school_class import (
     SchoolClass,
 )
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductSeries
+from api.models.shop_class_payment import ShopClassPayment
 from api.models.user import User
 from api.schemas.shop import (
+    ClassPaymentReportItemOut,
     OrderQuantityRow,
     OrderSummaryOut,
     OrderSummaryRow,
@@ -358,6 +361,77 @@ async def order_summary(
         paid_amount=sum(r.paid_amount for r in rows),
         unpaid_amount=sum(r.unpaid_amount for r in rows),
     )
+
+
+async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReportItemOut]:
+    """列出班聯目前確認收款的班級／活動及其有效已繳訂單金額。"""
+    result = await session.execute(
+        select(
+            ShopClassPayment.class_id,
+            SchoolClass,
+            ShopClassPayment.activity_id,
+            Activity.name,
+            ShopClassPayment.confirmed_at,
+            func.coalesce(func.sum(Order.total_price), 0),
+            func.count(Order.id),
+        )
+        .join(SchoolClass, SchoolClass.id == ShopClassPayment.class_id)
+        .outerjoin(Activity, Activity.id == ShopClassPayment.activity_id)
+        .outerjoin(
+            Order,
+            and_(
+                Order.class_id == ShopClassPayment.class_id,
+                Order.activity_id.is_not_distinct_from(ShopClassPayment.activity_id),
+                Order.test_product_id.is_(None),
+                Order.is_paid.is_(True),
+                Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+            ),
+        )
+        .where(
+            ShopClassPayment.is_paid.is_(True),
+            ShopClassPayment.confirmed_at.is_not(None),
+        )
+        .group_by(
+            ShopClassPayment.id,
+            ShopClassPayment.class_id,
+            ShopClassPayment.activity_id,
+            ShopClassPayment.confirmed_at,
+            SchoolClass.id,
+            SchoolClass.academic_year,
+            SchoolClass.class_code,
+            SchoolClass.grade,
+            SchoolClass.label,
+            Activity.id,
+            Activity.name,
+        )
+        .order_by(
+            ShopClassPayment.confirmed_at.desc(),
+            SchoolClass.grade,
+            SchoolClass.class_code,
+        )
+    )
+    return [
+        ClassPaymentReportItemOut(
+            class_id=class_id,
+            class_label=class_svc.class_display_label(school_class) or "未命名班級",
+            grade=school_class.grade,
+            activity_id=activity_id,
+            activity_label=activity_name or "一般商品",
+            confirmed_at=confirmed_at,
+            amount=int(amount),
+            order_count=int(order_count),
+        )
+        for (
+            class_id,
+            school_class,
+            activity_id,
+            activity_name,
+            confirmed_at,
+            amount,
+            order_count,
+        ) in result.all()
+        if confirmed_at is not None
+    ]
 
 
 async def order_quantities(

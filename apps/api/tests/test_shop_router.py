@@ -2090,6 +2090,49 @@ async def test_council_can_confirm_whole_class_without_changing_cadre_notes(
     assert first.is_class_collected is True and second.is_class_collected is False
 
 
+async def test_class_payment_report_summarizes_confirmed_valid_orders(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    school_class = await _make_class(db_session)
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    await _seed_order(db_session, buyer, class_id=school_class.id, total_price=100)
+    cancelled_order = await _seed_order(db_session, buyer, class_id=school_class.id, total_price=200)
+
+    client = authed_client_factory(manager)
+    confirmed = await client.patch(
+        f"/shop/orders/classes/{school_class.id}/payment",
+        json={"is_paid": True, "activity_id": None},
+    )
+    assert confirmed.status_code == 200
+    cancelled_order.status = OrderStatus.CANCELLED
+    await db_session.flush()
+
+    response = await client.get("/shop/orders/class-payments")
+
+    assert response.status_code == 200
+    rows = response.json()
+    assert len(rows) == 1
+    assert rows[0]["class_id"] == str(school_class.id)
+    assert rows[0]["class_label"] == class_svc.class_display_label(school_class)
+    assert rows[0]["grade"] == school_class.grade
+    assert rows[0]["activity_id"] is None
+    assert rows[0]["activity_label"] == "一般商品"
+    assert rows[0]["confirmed_at"] is not None
+    assert rows[0]["amount"] == 100
+    assert rows[0]["order_count"] == 1
+
+
+async def test_class_payment_report_requires_global_shop_read_permission(
+    db_session: AsyncSession, client, authed_client_factory
+) -> None:
+    viewer = await _bare_user(db_session)
+
+    assert (await client.get("/shop/orders/class-payments")).status_code == 401
+    assert (await authed_client_factory(viewer).get("/shop/orders/class-payments")).status_code == 403
+
+
 async def test_council_class_payment_emails_cadres_full_class_orders_once(
     db_session, authed_client_factory
 ) -> None:

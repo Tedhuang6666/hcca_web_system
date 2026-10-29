@@ -593,6 +593,17 @@ class ClassPaymentOut(BaseModel):
     is_paid: bool
 
 
+class ClassPaymentReportItemOut(BaseModel):
+    class_id: uuid.UUID
+    class_label: str
+    grade: int
+    activity_id: uuid.UUID | None = None
+    activity_label: str
+    confirmed_at: datetime
+    amount: int
+    order_count: int
+
+
 class ShopPromotionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
@@ -858,6 +869,7 @@ __all__ = [
     "ClassPaymentUpdate",
     "ClassCollectionUpdate",
     "ClassPaymentOut",
+    "ClassPaymentReportItemOut",
     "OrderSummaryOut",
     "OrderSummaryRow",
     "ShopOrdersClearOut",

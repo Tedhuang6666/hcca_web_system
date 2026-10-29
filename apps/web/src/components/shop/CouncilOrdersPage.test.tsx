@@ -4,6 +4,7 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 
 const api = vi.hoisted(() => ({
   catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
+  classPaymentReport: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
   cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(),
 }));
@@ -31,6 +32,7 @@ beforeEach(() => {
   ]);
   api.recipientOptions.mockResolvedValue([]);
   api.orderSummary.mockResolvedValue(summary());
+  api.classPaymentReport.mockResolvedValue([]);
   api.orderQuantities.mockResolvedValue([]);
   api.listOrders.mockResolvedValue([]);
   api.getCloseStatus.mockResolvedValue({ statuses: { shirts: { is_closed: false }, bags: { is_closed: false }, cards: { is_closed: false } } });
@@ -41,7 +43,7 @@ beforeEach(() => {
 
 async function openPage() {
   render(<CouncilOrdersPage />);
-  await screen.findByText("一年一班");
+  await screen.findByRole("table", { name: "班級訂購與收款彙總" });
   fireEvent.click(screen.getByText(/更多篩選：/));
 }
 
@@ -57,6 +59,81 @@ it("only offers school-wide assisted ordering to order managers", async () => {
 });
 
 describe("全校收款與訂單", () => {
+  it("依日期、活動、年級與班級搜尋每日收款明細", async () => {
+    const now = new Date();
+    api.classPaymentReport.mockResolvedValue([
+      {
+        class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "festival",
+        activity_label: "校慶", confirmed_at: now.toISOString(), amount: 100, order_count: 2,
+      },
+      {
+        class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "winter",
+        activity_label: "冬季活動", confirmed_at: now.toISOString(), amount: 50, order_count: 1,
+      },
+      {
+        class_id: "class-two", class_label: "二年一班", grade: 2, activity_id: "festival",
+        activity_label: "校慶", confirmed_at: now.toISOString(), amount: 300, order_count: 3,
+      },
+      {
+        class_id: "class-old", class_label: "三年一班", grade: 3, activity_id: "festival",
+        activity_label: "校慶", confirmed_at: new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString(),
+        amount: 900, order_count: 4,
+      },
+    ]);
+    await openPage();
+
+    const report = screen.getByRole("region", { name: "每日收款" });
+    const statistics = within(report).getByRole("group", { name: "收款統計" });
+    expect(within(statistics).getByText("NT$450")).toBeVisible();
+    expect(within(statistics).getByText("2 班")).toBeVisible();
+    fireEvent.change(within(report).getByRole("combobox", { name: "收款活動" }), {
+      target: { value: "festival" },
+    });
+    fireEvent.change(within(report).getByRole("combobox", { name: "收款年級" }), {
+      target: { value: "1" },
+    });
+    fireEvent.change(within(report).getByRole("searchbox", { name: "搜尋班級" }), {
+      target: { value: "一年一班" },
+    });
+
+    expect(within(statistics).getByText("NT$100")).toBeVisible();
+    expect(within(statistics).getByText("1 班")).toBeVisible();
+    const details = within(report).getByRole("table", { name: "收款班級明細" });
+    expect(details).toHaveTextContent("校慶");
+    expect(within(details).queryByText("冬季活動")).not.toBeInTheDocument();
+  });
+
+  it("已確認收款的班級顯示狀態，不再顯示確認按鈕", async () => {
+    api.classPaymentReport.mockResolvedValue([{
+      class_id: "class", class_label: "一年一班", grade: 1, activity_id: "festival",
+      activity_label: "校慶", confirmed_at: new Date().toISOString(), amount: 100, order_count: 1,
+    }]);
+    await openPage();
+
+    expect(screen.queryByRole("button", { name: "確認一年一班的校慶收款" })).not.toBeInTheDocument();
+    expect(await screen.findByText("已確認收款")).toBeVisible();
+    expect(screen.getByRole("button", { name: "確認一年一班的冬季活動收款" })).toBeVisible();
+  });
+
+  it("全校唯讀者可查看收款統計但不能確認收款", async () => {
+    access.isAdmin = false;
+    access.permissions = new Set(["shop:view_all"]);
+    await openPage();
+
+    expect(screen.getByRole("region", { name: "每日收款" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /確認.*收款/ })).not.toBeInTheDocument();
+  });
+
+  it("無法取得收款狀態時不提供確認按鈕，並可重試", async () => {
+    api.classPaymentReport.mockRejectedValue(new Error("offline"));
+    await openPage();
+
+    expect(await screen.findAllByText("收款狀態無法確認")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "確認一年一班的校慶收款" })).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("region", { name: "每日收款" })).getByRole("button", { name: "重試" }));
+    await waitFor(() => expect(api.classPaymentReport).toHaveBeenCalledTimes(2));
+  });
+
   it("沒有另外建立活動也能在頁面上方全域鎖單商品批次", async () => {
     api.listActivities.mockResolvedValue([]);
     render(<CouncilOrdersPage />);

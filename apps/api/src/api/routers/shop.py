@@ -43,6 +43,7 @@ from api.schemas.shop import (
     ClassOrderCreate,
     ClassOrderUpsert,
     ClassPaymentOut,
+    ClassPaymentReportItemOut,
     ClassPaymentUpdate,
     ClassReceiptBatchCreate,
     CloseStatusItem,
@@ -1546,6 +1547,29 @@ async def order_summary(
         date_from=date_from,
         date_to=date_to,
     )
+
+
+@router.get(
+    "/orders/class-payments",
+    response_model=list[ClassPaymentReportItemOut],
+    summary="班聯目前確認收款的班級明細",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.SHOP_VIEW_ALL,
+                PermissionCode.FINANCE_VIEW,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def class_payment_report(
+    session: DbDep,
+    _: CurrentUser,
+) -> list[ClassPaymentReportItemOut]:
+    return await shop_svc.class_payment_report(session)
 
 
 # ── 商品規格數量彙總（班聯採購視圖）──────────────────────────────────────────────
