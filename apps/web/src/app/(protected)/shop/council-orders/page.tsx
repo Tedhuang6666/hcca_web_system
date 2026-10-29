@@ -13,6 +13,11 @@ import { BarChart2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
+import {
+  planClassStatusRefresh,
+  type ClassStatusCache,
+  type StatusRefreshOptions,
+} from "@/lib/shop-close-status-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import Modal from "@/components/ui/Modal";
@@ -30,6 +35,9 @@ import type {
 } from "@/lib/types";
 
 type Tab = "summary" | "quantities" | "orders" | "analytics";
+type LoadSummaryOptions = StatusRefreshOptions;
+
+const CLOSE_STATUS_CACHE_TTL_MS = 30_000;
 
 function money(v: number) {
   return `NT$${v.toLocaleString("zh-TW")}`;
@@ -127,6 +135,7 @@ export default function CouncilOrdersPage() {
   const [selectedReceiptClasses, setSelectedReceiptClasses] = useState<Set<string>>(new Set());
   const requestVersion = useRef(0);
   const classPaymentRequestVersion = useRef(0);
+  const closeStatusCache = useRef<ClassStatusCache<Record<string, CloseStatusItem>> | null>(null);
   const [optionsError, setOptionsError] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsRetry, setOptionsRetry] = useState(0);
@@ -253,7 +262,7 @@ export default function CouncilOrdersPage() {
     return paymentsByScope;
   }, [classPayments]);
 
-  const loadSummary = useCallback(async () => {
+  const loadSummary = useCallback(async (options?: LoadSummaryOptions) => {
     const version = ++requestVersion.current;
     setLoading(true);
     setLoadError("");
@@ -269,21 +278,42 @@ export default function CouncilOrdersPage() {
       if (version !== requestVersion.current) return;
       setSummary(data);
 
-      // 批次查詢每個 row 的結單狀態
+      // 結單狀態只依班級與分類變化；短時間快取，避免切換分頁或篩選時重複查詢。
       if (groupBy === "class" && data.rows.length && catalog.length) {
         const catIds = catalog.map((c) => c.id);
-        const statusMap: Record<string, Record<string, CloseStatusItem>> = {};
-        await Promise.all(
-          data.rows.map(async (row) => {
+        const catalogKey = catalog
+          .map((category) => `${category.id}:${category.activity_id ?? ""}`)
+          .sort()
+          .join("|");
+        const { byClass, classIdsToRefresh } = planClassStatusRefresh(
+          closeStatusCache.current,
+          catalogKey,
+          data.rows.filter((row) => row.key !== "none").map((row) => row.key),
+          Date.now(),
+          CLOSE_STATUS_CACHE_TTL_MS,
+          options,
+        );
+        const statusMap: Record<string, Record<string, CloseStatusItem>> = Object.fromEntries(
+          Object.entries(byClass).map(([key, entry]) => [key, entry.statuses]),
+        );
+        if (data.rows.some((row) => row.key === "none")) statusMap.none = {};
+        const refreshedStatuses = await Promise.all(
+          classIdsToRefresh.map(async (classId) => {
             try {
-              const res = await shopApi.getCloseStatus(catIds, row.key);
-              statusMap[row.key] = res.statuses;
+              const res = await shopApi.getCloseStatus(catIds, classId);
+              return [classId, res.statuses] as const;
             } catch {
-              statusMap[row.key] = {};
+              return [classId, {}] as const;
             }
           }),
         );
         if (version !== requestVersion.current) return;
+        const fetchedAt = Date.now();
+        for (const [key, statuses] of refreshedStatuses) {
+          byClass[key] = { fetchedAt, statuses };
+          statusMap[key] = statuses;
+        }
+        closeStatusCache.current = { catalogKey, byClass };
         setCloseStatus(statusMap);
       }
     } catch (e) {
@@ -428,7 +458,7 @@ export default function CouncilOrdersPage() {
     try {
       const result = await shopApi.setClassPaid(row.key, paid, activity.activityId);
       toast.success(`已更新「${activity.label}」${result.updated_orders} 筆訂單`);
-      await Promise.all([loadSummary(), loadClassPayments()]);
+      await Promise.all([loadSummary({ refreshClassId: row.key }), loadClassPayments()]);
     } catch (e) {
       toast.error(apiErrorMessage(e, "更新整班繳費狀態失敗"));
     } finally {
@@ -508,7 +538,7 @@ export default function CouncilOrdersPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canViewAdvancedStats && <Link href="/shop/admin?view=stats" className="btn btn-ghost min-h-11">進階訂購統計</Link>}
-          <button type="button" onClick={() => { if (tab === "summary") { void loadSummary(); if (canViewClassPaymentReport) void loadClassPayments(); } else if (tab === "quantities") loadQuantities(); else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1); else loadOrders(); }}
+          <button type="button" onClick={() => { if (tab === "summary") { void loadSummary({ refreshCloseStatus: true }); if (canViewClassPaymentReport) void loadClassPayments(); } else if (tab === "quantities") loadQuantities(); else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1); else loadOrders(); }}
             disabled={(tab !== "analytics" && loading) || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
           </button>
@@ -516,7 +546,7 @@ export default function CouncilOrdersPage() {
       </header>
 
       {canConfirmClassPayment && <ActivityOrderClosure categories={catalog} disabled={mutationBusy || optionsLoading}
-        onSaved={() => setOptionsRetry((value) => value + 1)} />}
+        onSaved={() => { closeStatusCache.current = null; setOptionsRetry((value) => value + 1); }} />}
 
       {canConfirmClassPayment && <AdminAssistedOrder catalog={catalog} classes={classes} optionsError={optionsError} optionsLoading={optionsLoading}
         onRetry={() => setOptionsRetry((value) => value + 1)}
