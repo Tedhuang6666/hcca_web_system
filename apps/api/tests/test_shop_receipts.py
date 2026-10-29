@@ -1,9 +1,10 @@
 """班聯原始雙聯收據的版面與續頁回歸。"""
 
 import re
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from pypdf import PdfReader
@@ -145,6 +146,29 @@ def test_filled_fields_match_the_template_font_size_and_baselines():
         assert {text for text, _, _ in row} == {"紀念商品00", "1", "100", "校慶預購"}
         assert all(size == pytest.approx(12) for _, _, size in row)
         assert all(top == pytest.approx(row[0][1], abs=0.05) for _, top, _ in row)
+
+
+def test_print_time_is_small_and_placed_at_the_page_upper_left():
+    printed_at = datetime(2026, 10, 21, 15, 30, tzinfo=ZoneInfo("Asia/Taipei"))
+    pdf = PdfReader(
+        BytesIO(
+            _render_class_receipt_pdf(
+                "一年十五班",
+                115,
+                "校慶預購",
+                [_order(1)],
+                date(2026, 10, 21),
+                printed_at,
+            )
+        )
+    )
+    text_positions = _text_positions(pdf.pages[0])
+    timestamp = [item for item in text_positions if "列印時間" in item[0]]
+    assert len(timestamp) == 1
+    assert timestamp[0][0] == "列印時間：2026-10-21 15:30"
+    assert 7 < timestamp[0][1] < 10
+    assert 4 < timestamp[0][2] < 12
+    assert timestamp[0][3] == pytest.approx(6.5, abs=0.01)
 
 
 def test_rows_without_remarks_use_all_seven_left_cells_and_keep_stamp_area_blank():

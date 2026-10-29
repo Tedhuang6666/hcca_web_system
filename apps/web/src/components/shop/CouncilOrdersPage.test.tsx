@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
   classPaymentReport: vi.fn(),
   listSupplementOrders: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
-  cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(),
+  cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(), downloadChangedOrderReceipts: vi.fn(),
 }));
 const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -192,7 +192,7 @@ describe("全校收款與訂單", () => {
     expect(screen.queryByRole("button", { name: /下載.*簽收單/ })).not.toBeInTheDocument();
   });
 
-  it("downloads selected classes or every class for the selected activity without confirming payment", async () => {
+  it("downloads selected classes, all unpaid classes, or changed orders without confirming payment", async () => {
     api.orderSummary.mockResolvedValue({
       ...summary(),
       rows: [
@@ -208,8 +208,11 @@ describe("全校收款與訂單", () => {
     fireEvent.click(screen.getByRole("button", { name: "下載所選 1 班 PDF" }));
     await waitFor(() => expect(api.downloadClassReceipts).toHaveBeenCalledWith("festival", ["class-1"]));
 
-    fireEvent.click(screen.getByRole("button", { name: "下載全部班級 PDF" }));
-    await waitFor(() => expect(api.downloadClassReceipts).toHaveBeenCalledWith("festival"));
+    fireEvent.click(screen.getByRole("button", { name: "列印所有未繳款班級收據" }));
+    await waitFor(() => expect(api.downloadClassReceipts).toHaveBeenCalledWith("festival", undefined, true));
+
+    fireEvent.click(screen.getByRole("button", { name: "列印上次列印後有變更的班級／個人訂單" }));
+    await waitFor(() => expect(api.downloadChangedOrderReceipts).toHaveBeenCalledWith("festival"));
     expect(api.setClassPaid).not.toHaveBeenCalled();
   });
 

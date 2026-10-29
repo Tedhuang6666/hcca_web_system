@@ -51,18 +51,32 @@ describe("shop quantity API", () => {
     expect(JSON.parse(selectedRequest[1].body)).toEqual({
       activity_id: "activity-1",
       class_ids: ["class-1", "class-2"],
+      unpaid_only: false,
     });
 
     await shopApi.downloadClassReceipts("activity-1");
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
       activity_id: "activity-1",
       class_ids: null,
+      unpaid_only: false,
     });
 
-    await shopApi.downloadClassReceipts(null);
+    await shopApi.downloadClassReceipts("activity-1", undefined, true);
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({
+      activity_id: "activity-1",
+      class_ids: null,
+      unpaid_only: true,
+    });
+
+    await shopApi.downloadChangedOrderReceipts("activity-1");
+    expect(String(fetchMock.mock.calls[3][0])).toMatch(/\/shop\/orders\/receipts\/changed\.pdf$/);
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({ activity_id: "activity-1" });
+
+    await shopApi.downloadClassReceipts(null);
+    expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({
       activity_id: null,
       class_ids: null,
+      unpaid_only: false,
     });
   });
 

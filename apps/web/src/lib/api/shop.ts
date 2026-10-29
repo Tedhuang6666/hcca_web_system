@@ -1,5 +1,7 @@
 import type {
   AdminAssistedOrderCreate,
+  ChangedOrderReceiptCreate,
+  ClassReceiptBatchCreate,
   ClassMemberOut,
   ShopSalesAnalyticsOut,
   ShopSalesReportCreate,
@@ -191,11 +193,21 @@ export const shopApi = {
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
     return response;
   },
-  downloadClassReceipts: async (activityId: string | null, classIds?: string[]) => {
+  downloadClassReceipts: async (activityId: string | null, classIds?: string[], unpaidOnly = false) => {
     const response = await authFetch(`${BASE}/shop/orders/classes/receipts.pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
-      body: JSON.stringify({ activity_id: activityId, class_ids: classIds ?? null }),
+      body: JSON.stringify({ activity_id: activityId, class_ids: classIds ?? null, unpaid_only: unpaidOnly } satisfies ClassReceiptBatchCreate),
+      credentials: "include",
+    });
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
+  },
+  downloadChangedOrderReceipts: async (activityId: string | null) => {
+    const response = await authFetch(`${BASE}/shop/orders/receipts/changed.pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
+      body: JSON.stringify({ activity_id: activityId } satisfies ChangedOrderReceiptCreate),
       credentials: "include",
     });
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));

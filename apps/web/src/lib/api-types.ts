@@ -10813,6 +10813,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/receipts/changed.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批次列印上次列印後有變更的班級與個人訂單收據 */
+        post: operations["download_changed_order_receipts_shop_orders_receipts_changed_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/recipients/{class_id}": {
         parameters: {
             query?: never;
@@ -14726,6 +14743,14 @@ export interface components {
             /** Queues */
             queues: components["schemas"]["CeleryQueueView"][];
         };
+        /** ChangedOrderReceiptCreate */
+        ChangedOrderReceiptCreate: {
+            /**
+             * Activity Id
+             * @description 收據活動；null 代表一般商品
+             */
+            activity_id: string | null;
+        };
         /**
          * ChannelPref
          * @description 單一通知類型的接收管道設定。
@@ -15112,9 +15137,15 @@ export interface components {
             activity_id: string | null;
             /**
              * Class Ids
-             * @description 指定班級；未提供時匯出此活動所有有有效訂單的班級
+             * @description 指定班級；未提供時依匯出選項選取班級
              */
             class_ids?: string[] | null;
+            /**
+             * Unpaid Only
+             * @description 僅匯出尚未由班聯確認收款的班級；只適用於未指定班級時
+             * @default false
+             */
+            unpaid_only: boolean;
         };
         /** ClassRepresentativeOverviewItemOut */
         ClassRepresentativeOverviewItemOut: {
@@ -56365,6 +56396,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderQuantityRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_changed_order_receipts_shop_orders_receipts_changed_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangedOrderReceiptCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             /** @description Validation Error */

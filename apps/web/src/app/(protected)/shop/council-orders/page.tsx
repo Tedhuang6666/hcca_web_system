@@ -787,7 +787,7 @@ export default function CouncilOrdersPage() {
               <div>
                 <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>班級簽收單</p>
                 <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                  選擇活動或一般商品後，可勾選多班，或下載該範圍所有有有效訂單的班級；全部班級不受目前篩選影響。
+                  可勾選班級列印；全部列印只包含未確認收款的班級。增量列印會重印有變更的整班收據，個人訂單則各印一張。
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -825,9 +825,19 @@ export default function CouncilOrdersPage() {
                 <AnimatedDownloadButton
                   request={() => {
                     setReceiptError("");
-                    return shopApi.downloadClassReceipts(batchReceiptActivityId);
+                    return shopApi.downloadClassReceipts(batchReceiptActivityId, undefined, true);
                   }}
-                  label="下載全部班級 PDF"
+                  label="列印所有未繳款班級收據"
+                  disabled={mutationBusy || loading || !receiptActivityKey}
+                  className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50"
+                  onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
+                />
+                <AnimatedDownloadButton
+                  request={() => {
+                    setReceiptError("");
+                    return shopApi.downloadChangedOrderReceipts(batchReceiptActivityId);
+                  }}
+                  label="列印上次列印後有變更的班級／個人訂單"
                   disabled={mutationBusy || loading || !receiptActivityKey}
                   className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50"
                   onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
