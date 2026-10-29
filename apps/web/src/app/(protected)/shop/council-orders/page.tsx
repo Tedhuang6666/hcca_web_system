@@ -8,7 +8,7 @@ import SupplementOrders from "@/components/shop/SupplementOrders";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ActivityOrderClosure from "@/components/shop/ActivityOrderClosure";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import Modal from "@/components/ui/Modal";
+import NumberInput from "@/components/ui/NumberInput";
 import type {
   ActivityOut,
   CatalogCategoryOut,
@@ -134,7 +135,12 @@ export default function CouncilOrdersPage() {
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [cancelResult, setCancelResult] = useState("");
-  const mutationBusy = paymentBusy !== null || cancelBusy;
+  const [quantityTarget, setQuantityTarget] = useState<OrderListItem | null>(null);
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, number>>({});
+  const [quantityBusy, setQuantityBusy] = useState<string | null>(null);
+  const [quantityError, setQuantityError] = useState("");
+  const [quantityResult, setQuantityResult] = useState("");
+  const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null;
 
   useEffect(() => {
     let cancelled = false;
@@ -350,12 +356,62 @@ export default function CouncilOrdersPage() {
     try {
       await shopApi.cancelOrder(cancelTarget.id, cancelReason.trim() || undefined);
       setCancelTarget(null);
+      setQuantityTarget(null);
       setCancelResult(`訂單 ${cancelTarget.serial_number} 已取消。`);
       await loadOrders();
     } catch (e) {
       setCancelError(apiErrorMessage(e, "取消失敗，請稍後再試。"));
     } finally {
       setCancelBusy(false);
+    }
+  };
+
+  const toggleQuantityEditor = (order: OrderListItem) => {
+    if (quantityTarget?.id === order.id) {
+      setQuantityTarget(null);
+      setQuantityError("");
+      return;
+    }
+    setQuantityTarget(order);
+    setQuantityDrafts(Object.fromEntries((order.items ?? []).map((item) => [item.id, item.quantity])));
+    setQuantityError("");
+    setQuantityResult("");
+  };
+
+  const saveOrderItemQuantity = async (itemId: string) => {
+    if (!quantityTarget || quantityBusy) return;
+    const quantity = quantityDrafts[itemId];
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100) {
+      setQuantityError("數量請輸入 0 至 100 的整數。");
+      return;
+    }
+    setQuantityBusy(itemId);
+    setQuantityError("");
+    setQuantityResult("");
+    try {
+      const updated = await shopApi.updateOrderItemQuantity(quantityTarget.id, itemId, quantity);
+      if (!updated) throw new Error("訂單數量更新未回傳資料，請重新載入後確認。");
+      const updatedTarget = {
+        ...quantityTarget,
+        items: updated.items,
+        subtotal_price: updated.subtotal_price,
+        discount_amount: updated.discount_amount,
+        total_price: updated.total_price,
+      };
+      setQuantityTarget(updatedTarget);
+      setQuantityDrafts(Object.fromEntries(updated.items.map((item) => [item.id, item.quantity])));
+      setOrders((current) => current.map((order) => order.id === updated.id
+        ? { ...order, ...updatedTarget }
+        : order));
+      setQuantityResult(`已更新「${quantityTarget.user_name ?? "訂購人"}」的訂購數量。`);
+      await loadOrders();
+      await loadQuantities();
+      await loadSummary();
+      setAnalyticsRefresh((value) => value + 1);
+    } catch (error) {
+      setQuantityError(apiErrorMessage(error, "數量更新失敗，請檢查庫存與訂單狀態後重試。"));
+    } finally {
+      setQuantityBusy(null);
     }
   };
 
@@ -1006,6 +1062,7 @@ export default function CouncilOrdersPage() {
       {tab === "orders" && (
         <section>
           {cancelResult && <p role="status" className="mb-3 text-sm">{cancelResult}</p>}
+          {quantityResult && <p role="status" className="mb-3 text-sm">{quantityResult}</p>}
           {(
             <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               {loading ? (
@@ -1025,46 +1082,113 @@ export default function CouncilOrdersPage() {
                     </thead>
                     <tbody>
                       {orders.map((order, idx) => (
-                        <tr key={order.id} style={idx < orders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-                          <td className="px-4 py-3">
-                            <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
-                          </td>
-                          <td data-label="訂購人" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
-                          <td data-label="班級" className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.class_label ?? "-"}</td>
-                          <td className="px-4 py-3">
-                            <OrderStatusBadge status={order.status} />
-                          </td>
-                          <td data-label="金額" className="px-4 py-3 text-xs font-medium">{money(order.total_price)}</td>
-                          <td className="px-4 py-3">
-                            <span className="rounded-full px-2 py-0.5 text-xs"
-                              style={order.is_paid
-                                ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
-                                : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                              {order.is_paid ? "班聯已確認" : "班聯未確認"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
-                            {new Date(order.created_at).toLocaleDateString("zh-TW")}
-                          </td>
-                          {canConfirmClassPayment && <td data-label="操作" className="px-4 py-3">
-                            <SeparateOrderButton order={order} onSeparated={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />
-                            {(order.status === "pending" || order.status === "confirmed") && (
-                              order.is_paid || order.is_class_collected
-                                ? <span className="text-xs" style={{ color: "var(--text-secondary)" }}>已收款，請先撤銷收款再取消</span>
-                                : <button
-                                  type="button"
-                                  className="btn btn-danger-ghost min-h-11 whitespace-nowrap"
-                                  aria-label={`取消訂單 ${order.serial_number}`}
-                                  disabled={mutationBusy}
-                                  onClick={() => {
-                                    setCancelTarget(order);
-                                    setCancelReason("");
-                                    setCancelError("");
-                                  }}
-                                >取消訂單</button>
-                            )}
-                          </td>}
-                        </tr>
+                        <Fragment key={order.id}>
+                          <tr style={idx < orders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                            <td className="px-4 py-3">
+                              <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
+                            </td>
+                            <td data-label="訂購人" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
+                            <td data-label="班級" className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.class_label ?? "-"}</td>
+                            <td className="px-4 py-3">
+                              <OrderStatusBadge status={order.status} />
+                            </td>
+                            <td data-label="金額" className="px-4 py-3 text-xs font-medium">{money(order.total_price)}</td>
+                            <td className="px-4 py-3">
+                              <span className="rounded-full px-2 py-0.5 text-xs"
+                                style={order.is_paid
+                                  ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
+                                  : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                                {order.is_paid ? "班聯已確認" : "班聯未確認"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                              {new Date(order.created_at).toLocaleDateString("zh-TW")}
+                            </td>
+                            {canConfirmClassPayment && <td data-label="操作" className="px-4 py-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <SeparateOrderButton order={order} onSeparated={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />
+                                {(order.status === "pending" || order.status === "confirmed") && !order.is_paid && !order.is_class_collected && (order.items?.length ?? 0) > 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost min-h-11 whitespace-nowrap"
+                                    aria-expanded={quantityTarget?.id === order.id}
+                                    aria-controls={quantityTarget?.id === order.id ? `quantity-editor-${order.id}` : undefined}
+                                    disabled={mutationBusy}
+                                    onClick={() => toggleQuantityEditor(order)}
+                                  >{quantityTarget?.id === order.id ? "收起調整" : "調整數量"}</button>
+                                )}
+                                {(order.status === "pending" || order.status === "confirmed") && (
+                                  order.is_paid || order.is_class_collected
+                                    ? <span className="text-xs" style={{ color: "var(--text-secondary)" }}>已收款，請先撤銷收款再調整或取消</span>
+                                    : <button
+                                      type="button"
+                                      className="btn btn-danger-ghost min-h-11 whitespace-nowrap"
+                                      aria-label={`取消訂單 ${order.serial_number}`}
+                                      disabled={mutationBusy}
+                                      onClick={() => {
+                                        setCancelTarget(order);
+                                        setCancelReason("");
+                                        setCancelError("");
+                                      }}
+                                    >取消訂單</button>
+                                )}
+                              </div>
+                            </td>}
+                          </tr>
+                          {quantityTarget?.id === order.id && (
+                            <tr id={`quantity-editor-${order.id}`} style={{ borderBottom: "1px solid var(--border)" }}>
+                              <td colSpan={canConfirmClassPayment ? 8 : 7} className="px-4 py-4" style={{ background: "var(--bg-elevated)" }}>
+                                <fieldset className="space-y-3">
+                                  <legend className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                                    調整 {order.user_name ?? "訂購人"} 的訂購數量
+                                  </legend>
+                                  {(quantityTarget.items ?? []).map((item) => {
+                                    const quantity = quantityDrafts[item.id] ?? item.quantity;
+                                    const canRemove = (quantityTarget.items?.length ?? 0) > 1;
+                                    return (
+                                      <div key={item.id} className="flex flex-col gap-3 rounded-md p-3 sm:flex-row sm:items-center sm:justify-between" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.product_name ?? "商品"}</p>
+                                          {item.selected_options.length > 0 && (
+                                            <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                                              {item.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")}
+                                            </p>
+                                          )}
+                                          <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                                            原訂單單價 {money(item.unit_price)} · 目前 {item.quantity} 件
+                                          </p>
+                                        </div>
+                                        <div className="flex items-end gap-2">
+                                          <label className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                            訂購數量
+                                            <NumberInput
+                                              className="input mt-1 block min-h-11 w-24"
+                                              min={canRemove ? 0 : 1}
+                                              max={100}
+                                              value={quantity}
+                                              disabled={mutationBusy}
+                                              onChange={(event) => setQuantityDrafts((drafts) => ({ ...drafts, [item.id]: Number(event.target.value) }))}
+                                            />
+                                          </label>
+                                          <button
+                                            type="button"
+                                            className="btn btn-primary min-h-11 whitespace-nowrap"
+                                            disabled={mutationBusy || quantity === item.quantity || !Number.isInteger(quantity)}
+                                            onClick={() => void saveOrderItemQuantity(item.id)}
+                                          >{quantityBusy === item.id ? "更新中…" : quantity === 0 ? "移除品項" : "更新數量"}</button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                    修改會沿用原訂單單價並更新庫存與應收款；數量設為 0 可移除品項。已收款訂單需先撤銷收款。
+                                  </p>
+                                  {quantityError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{quantityError}</p>}
+                                </fieldset>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>

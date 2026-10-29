@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
   classPaymentReport: vi.fn(),
   listSupplementOrders: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
-  cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(), downloadChangedOrderReceipts: vi.fn(),
+  cancelOrder: vi.fn(), updateOrderItemQuantity: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(), downloadChangedOrderReceipts: vi.fn(),
 }));
 const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -222,8 +222,8 @@ describe("全校收款與訂單", () => {
     created_at: "2026-10-21T00:00:00Z",
   };
 
-  async function openOrders() {
-    api.listOrders.mockResolvedValue([order]);
+  async function openOrders(row = order) {
+    api.listOrders.mockResolvedValue([row]);
     await openPage();
     fireEvent.click(screen.getByRole("button", { name: "查找訂單" }));
     await screen.findByText("ORD-TEST");
@@ -241,6 +241,31 @@ describe("全校收款與訂單", () => {
     await waitFor(() => expect(api.cancelOrder).toHaveBeenCalledWith("old-order", "非在校生"));
     expect(await screen.findByText("訂單 ORD-TEST 已取消。")).toHaveAttribute("role", "status");
     await waitFor(() => expect(screen.queryByRole("button", { name: "取消訂單 ORD-TEST" })).not.toBeInTheDocument());
+  });
+
+  it("lets order managers change one item quantity in the order list", async () => {
+    const item = {
+      id: "item-1", product_id: "shirt", product_name: "紀念衫", quantity: 2,
+      unit_price: 100, subtotal: 200, selected_options: [],
+    };
+    const orderWithItem = { ...order, items: [item] };
+    api.listOrders.mockResolvedValue([orderWithItem]);
+    api.updateOrderItemQuantity.mockResolvedValue({
+      ...orderWithItem,
+      items: [{ ...item, quantity: 3, subtotal: 300 }],
+      subtotal_price: 300,
+      discount_amount: 0,
+      total_price: 300,
+    });
+    await openOrders(orderWithItem);
+
+    fireEvent.click(screen.getByRole("button", { name: "調整數量" }));
+    const quantity = screen.getByRole("spinbutton", { name: "訂購數量" });
+    fireEvent.change(quantity, { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "更新數量" }));
+
+    await waitFor(() => expect(api.updateOrderItemQuantity).toHaveBeenCalledWith("old-order", "item-1", 3));
+    expect(await screen.findByText("已更新「測試訂購人」的訂購數量。")).toHaveAttribute("role", "status");
   });
 
   it("keeps the reason and allows retry after cancellation fails", async () => {
@@ -285,7 +310,7 @@ describe("全校收款與訂單", () => {
     api.listOrders.mockResolvedValue([{ ...order, is_class_collected: true }]);
     await openPage();
     fireEvent.click(screen.getByRole("button", { name: "查找訂單" }));
-    expect(await screen.findByText("已收款，請先撤銷收款再取消")).toBeVisible();
+    expect(await screen.findByText("已收款，請先撤銷收款再調整或取消")).toBeVisible();
     expect(screen.queryByRole("button", { name: "取消訂單 ORD-TEST" })).not.toBeInTheDocument();
   });
 
