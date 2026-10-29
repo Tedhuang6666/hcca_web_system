@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.audit_log import AuditLog
+from api.models.receivable import Receivable
 from api.models.school_class import ClassManualMember, SchoolClass
 from api.models.shop import Order, Product, ProductCategory
 from api.models.shop_class_payment import ShopClassPayment
@@ -261,9 +262,8 @@ async def test_closed_activity_locks_registration_cancel_promotion_and_preserves
             )
             assert blocked.status_code == 409
             assert "活動已結單" in blocked.json()["detail"]
-    for actor in [ac, manager]:
-        cancel = await actor.post(f"/shop/orders/{order['id']}/cancel", json={})
-        assert cancel.status_code == 409
+    cancel = await ac.post(f"/shop/orders/{order['id']}/cancel", json={})
+    assert cancel.status_code == 409
     promotion = await ac.put(
         "/shop/registrations/current/promotion",
         json={"activity_id": str(activity.id), "code": None},
@@ -290,6 +290,58 @@ async def test_closed_activity_locks_registration_cancel_promotion_and_preserves
             json={"variants": [{"option_ids": [], "quantity": 2}]},
         )
     ).status_code == 200
+
+
+@pytest.mark.parametrize("collection_flag", [None, "is_paid", "is_class_collected"])
+async def test_closed_activity_manager_cancellation_preserves_collection_lock(
+    db_session, admin_user, authed_client_factory, closure_setup, collection_flag
+):
+    buyer, activity, _, _, products = closure_setup
+    product = products[0]
+    buyer_client = authed_client_factory(buyer)
+    response = await buyer_client.put(
+        f"/shop/registrations/current/products/{product.id}",
+        json={"variants": [{"quantity": 1}]},
+    )
+    assert response.status_code == 200
+    order_id = uuid.UUID(response.json()["id"])
+    order = await db_session.get(Order, order_id)
+    if collection_flag:
+        setattr(order, collection_flag, True)
+        await db_session.flush()
+    manager = authed_client_factory(admin_user)
+    closed = await manager.patch(
+        f"/shop/activities/{activity.id}/order-closure", json={"is_closed": True}
+    )
+    assert closed.status_code == 200
+    path = f"/shop/orders/{order_id}/cancel"
+    assert (await buyer_client.post(path, json={})).status_code == 409
+    cancelled = await manager.post(path, json={"reason": "逾期未繳"})
+    await db_session.refresh(product)
+    await db_session.refresh(order)
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order_id))
+    if collection_flag:
+        assert cancelled.status_code == 409
+        assert "已鎖定" in cancelled.json()["detail"]
+        assert order.status == "pending"
+        assert product.stock_quantity == 19
+        assert receivable.status != "canceled"
+        return
+
+    assert cancelled.status_code == 200, cancelled.text
+    assert order.status == "cancelled"
+    assert "逾期未繳" in order.notes
+    assert product.stock_quantity == 20
+    assert receivable.status == "canceled"
+    audit = await db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.action == "shop.order_cancel", AuditLog.entity_id == str(order_id)
+        )
+    )
+    assert audit is not None and audit.actor_id == str(admin_user.id)
+    assert (await manager.post(path, json={})).status_code == 409
+    await db_session.refresh(product)
+    assert product.stock_quantity == 20
 
 
 async def test_closed_activity_blocks_assisted_checkout_and_existing_cart(
