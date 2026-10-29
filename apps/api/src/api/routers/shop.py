@@ -38,6 +38,7 @@ from api.routers._common import or_404
 from api.schemas.activity import ActivityOut
 from api.schemas.school_class import ClassMemberOut
 from api.schemas.shop import (
+    AdminAssistedOrderCreate,
     CatalogCategoryOut,
     ClassCollectionUpdate,
     ClassOrderCreate,
@@ -102,8 +103,10 @@ from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 from api.services.permission import get_user_permission_codes
 from api.services.realtime_events import broadcast_order_updated
+from api.services.shop import _class_settlement as class_settlement_svc
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _delegation_codes as delegation_code_svc
+from api.services.shop import _supplements as supplement_svc
 from api.services.shop._analytics import sales_analytics
 from api.services.shop._analytics_report import create_sales_report
 from api.services.shop._deadlines import set_activity_order_closure, set_activity_order_deadline
@@ -1334,6 +1337,76 @@ async def list_order_recipients(class_id: uuid.UUID, session: DbDep) -> list[Cla
     return await class_svc.list_class_members(session, sc)
 
 
+@router.post("/orders/{order_id}/separate", response_model=OrderOut, summary="將個別訂單獨立收款")
+async def separate_order_collection(
+    order_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> OrderOut:
+    order = await shop_svc.get_order(session, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="找不到此訂單")
+    codes = await get_user_permission_codes(session, current_user.id)
+    can_manage = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if not can_manage and (order.supplement_class_id or order.class_id) not in cadre_ids:
+        raise HTTPException(status_code=403, detail="僅班聯或該班班代可獨立收款")
+    try:
+        order = await supplement_svc.separate_order(session, order, actor_id=current_user.id)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    await audit_svc.record(
+        session,
+        entity_type="order",
+        entity_id=str(order.id),
+        action="shop.order_separate",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"supplement_class_id": str(order.supplement_class_id)},
+        summary=f"將訂單「{order.serial_number}」獨立收款",
+    )
+    await _broadcast_shop_order(order)
+    return shop_svc.serialize_order(order)
+
+
+@router.get("/orders/supplements", response_model=list[OrderListItem], summary="補收款清單")
+async def list_supplement_orders(
+    session: DbDep,
+    current_user: CurrentUser,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[OrderListItem]:
+    codes = await get_user_permission_codes(session, current_user.id)
+    can_manage = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    orders = await supplement_svc.list_supplements(
+        session, actor_id=None if can_manage else current_user.id, limit=limit, offset=offset
+    )
+    return [shop_svc.serialize_order_list_item(order) for order in orders]
+
+
+@router.get("/orders/{order_id}/supplement-receipt.pdf", summary="下載單筆補收款收據")
+async def download_supplement_receipt(
+    order_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> Response:
+    order = await shop_svc.get_order(session, order_id)
+    codes = await get_user_permission_codes(session, current_user.id)
+    can_manage = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    if order is None or not (
+        can_manage or current_user.id in {order.user_id, order.assisted_by_id}
+    ):
+        raise HTTPException(status_code=404, detail="找不到此補收款訂單")
+    try:
+        pdf = await supplement_svc.export_supplement_receipt(session, order)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="supplement-{order.serial_number}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.post(
     "/orders/assisted",
     response_model=list[OrderOut],
@@ -1342,9 +1415,16 @@ async def list_order_recipients(class_id: uuid.UUID, session: DbDep) -> list[Cla
     dependencies=[Depends(require_any(*_PAYMENT_WRITE_CODES))],
 )
 async def create_admin_assisted_order(
-    payload: ClassOrderCreate, session: DbDep, current_user: CurrentUser
+    payload: AdminAssistedOrderCreate, session: DbDep, current_user: CurrentUser
 ) -> list[OrderOut]:
-    return await _create_assisted_orders(payload, session, current_user, allow_all_classes=True)
+    return await _create_assisted_orders(
+        payload,
+        session,
+        current_user,
+        allow_all_classes=True,
+        separate_payment=payload.collection_mode == "separate",
+        payment_method=payload.payment_method,
+    )
 
 
 async def _create_assisted_orders(
@@ -1353,6 +1433,8 @@ async def _create_assisted_orders(
     current_user: User,
     *,
     allow_all_classes: bool = False,
+    separate_payment: bool = False,
+    payment_method: str = "cash_on_pickup",
 ) -> list[OrderOut]:
     from api.services.user_registration import UserRegistrationError
 
@@ -1385,6 +1467,10 @@ async def _create_assisted_orders(
             class_id=target_class.id,
             data=ClassOrderUpsert(user_id=target.id, items=payload.items, notes=payload.notes),
             assisted_by_id=current_user.id,
+            assistance_scope=("council_separate" if separate_payment else "council_assisted")
+            if allow_all_classes
+            else "class_assisted",
+            payment_method=payment_method if separate_payment else "school_collection",
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
@@ -1963,15 +2049,27 @@ async def _assert_close_permission(
     current_user: User,
     target_class_id: uuid.UUID | None,
 ) -> None:
-    """分類全域結單僅由班聯管理；不提供班代截止。"""
-    if target_class_id is not None:
-        raise HTTPException(status_code=403, detail="班級改由班聯統一期限或確認收款鎖單")
+    """班代僅設定本班期限；班聯管理全域結單。"""
     if current_user.is_superuser:
         return
     codes = await get_user_permission_codes(session, current_user.id)
     if _COUNCIL_CODES & set(codes):
         return
+    if target_class_id is not None:
+        cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+        if target_class_id in cadre_ids:
+            return
     raise HTTPException(status_code=403, detail="無結單權限")
+
+
+@router.get("/categories/{category_id}/class-deadline", response_model=ShopOrderCloseOut | None)
+async def read_class_deadline(
+    category_id: uuid.UUID, class_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> ShopOrderCloseOut | None:
+    await _get_category_or_404(category_id, session)
+    await _assert_close_permission(session, current_user, class_id)
+    close = await class_settlement_svc.get_class_deadline(session, category_id, class_id)
+    return shop_svc._serialize_close(close) if close is not None else None
 
 
 @router.post(

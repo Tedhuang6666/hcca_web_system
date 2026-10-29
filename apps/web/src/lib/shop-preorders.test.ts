@@ -13,6 +13,15 @@ const order: OrderListItem = {
 };
 
 describe("依活動彙整預購", () => {
+  it("separates pending supplements and merges them after payment returns them to the class", () => {
+    const supplement = { ...order, id: "extra", class_id: null, supplement_class_id: "class", is_class_collected: false };
+    const groups = groupActivityPreorders([order, supplement]);
+    expect(groups).toHaveLength(2);
+    expect(groups[1].label).toContain("額外收款");
+    const rejoined = groupActivityPreorders([order, { ...supplement, class_id: "class", is_paid: true }]);
+    expect(rejoined).toHaveLength(1);
+    expect(rejoined[0].received).toBe(360);
+  });
   it("merges later additions into the items while retaining only the uncollected amount", () => {
     const [group] = groupActivityPreorders([order, {
       ...order, id: "added", is_class_collected: false,

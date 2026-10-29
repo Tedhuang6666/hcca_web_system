@@ -4,6 +4,8 @@ import Link from "next/link";
 import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
 import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
 import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
+import SupplementOrders from "@/components/shop/SupplementOrders";
+import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ActivityOrderClosure from "@/components/shop/ActivityOrderClosure";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -86,6 +88,7 @@ export default function CouncilOrdersPage() {
   const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
   const [tab, setTab] = useState<Tab>("summary");
   const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
+  const [supplementRefresh, setSupplementRefresh] = useState(0);
   const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
 
   // 篩選
@@ -461,7 +464,9 @@ export default function CouncilOrdersPage() {
 
       {canConfirmClassPayment && <AdminAssistedOrder catalog={catalog} classes={classes} optionsError={optionsError} optionsLoading={optionsLoading}
         onRetry={() => setOptionsRetry((value) => value + 1)}
-        onCreated={() => { if (tab === "summary") void loadSummary(); else if (tab === "quantities") void loadQuantities(); else if (tab === "orders") void loadOrders(); else setAnalyticsRefresh((value) => value + 1); }} />}
+        onCreated={() => { setSupplementRefresh((value) => value + 1); if (tab === "summary") void loadSummary(); else if (tab === "quantities") void loadQuantities(); else if (tab === "orders") void loadOrders(); else setAnalyticsRefresh((value) => value + 1); }} />}
+      {canConfirmClassPayment && <SupplementOrders canCollect classes={classes} refreshKey={supplementRefresh}
+        onCollected={() => { void loadSummary(); void loadClassPayments(); }} />}
 
       <nav className="shop-task-switch" aria-label="班聯統籌工作">
         {([["summary", "班級繳款"], ["quantities", "商品總量"], ["orders", "查找訂單"], ["analytics", "銷售分析"]] as const).map(([key, label]) => (
@@ -1032,6 +1037,7 @@ export default function CouncilOrdersPage() {
                             {new Date(order.created_at).toLocaleDateString("zh-TW")}
                           </td>
                           {canConfirmClassPayment && <td data-label="操作" className="px-4 py-3">
+                            <SeparateOrderButton order={order} onSeparated={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />
                             {(order.status === "pending" || order.status === "confirmed") && (
                               order.is_paid || order.is_class_collected
                                 ? <span className="text-xs" style={{ color: "var(--text-secondary)" }}>已收款，請先撤銷收款再取消</span>

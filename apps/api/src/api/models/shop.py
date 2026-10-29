@@ -426,6 +426,10 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     assisted_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # 補收款暫不歸入 class_id；確認收款後依此快照歸回原班級。
+    supplement_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="RESTRICT"), nullable=True
+    )
     # 班代個人收款備忘；正式入帳仍由班聯會設定 is_paid。
     is_class_collected: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false", index=True

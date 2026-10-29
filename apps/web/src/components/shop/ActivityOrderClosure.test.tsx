@@ -22,7 +22,7 @@ describe("商品批次全域鎖單", () => {
   it("直接鎖住商品批次，重新開放不傳班級或改動期限", async () => {
     const onSaved = vi.fn();
     render(<ClosureSettings onSaved={onSaved} />);
-    expect(screen.getByRole("heading", { name: "活動結單與公開入口" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "班聯結單與公開入口" })).toBeVisible();
     await screen.findByText("尚未結單");
     expect(api.getCloseStatus).toHaveBeenCalledWith(["a"]);
     fireEvent.click(screen.getByRole("button", { name: "結單並隱藏入口校慶預購" }));

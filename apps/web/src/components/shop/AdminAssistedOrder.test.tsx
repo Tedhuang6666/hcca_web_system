@@ -49,7 +49,7 @@ it("selects another class and an unregistered student, locks the recipient and s
   expect(screen.getByText(/紀念衫（L） × 2/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "送出代訂" }));
   await waitFor(() => expect(api.createAdminAssistedOrder).toHaveBeenCalledWith({
-    roster_entry_id: "roster", items: [{ product_id: "shirt", quantity: 2, option_ids: ["large"] }], notes: null,
+    roster_entry_id: "roster", items: [{ product_id: "shirt", quantity: 2, option_ids: ["large"] }], notes: null, collection_mode: "class", payment_method: "cash_on_pickup",
   }));
   expect(await screen.findByText(/已為 二年二班 名冊同學 完成代訂，合計 NT\$240/)).toBeVisible();
   expect(onCreated).toHaveBeenCalledOnce();

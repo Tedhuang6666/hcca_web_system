@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   listClassOrders: vi.fn(), classSummary: vi.fn(), catalog: vi.fn(), getCloseStatus: vi.fn(),
   getProduct: vi.fn(), getOrder: vi.fn(), updateOrder: vi.fn(), createClassOrder: vi.fn(), myClass: vi.fn(), members: vi.fn(),
   setClassCollected: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(),
+  listSupplementOrders: vi.fn(), getClassDeadline: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({ shopApi: api, classApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
@@ -16,6 +17,8 @@ beforeEach(() => {
   Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true }) });
   Element.prototype.scrollIntoView = vi.fn();
   api.listClassOrders.mockResolvedValue([]);
+  api.listSupplementOrders.mockResolvedValue([]);
+  api.getClassDeadline.mockResolvedValue(null);
   api.classSummary.mockResolvedValue({ product_rows: [] });
   api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: null, series: [], products: [
     { id: "product", name: "紀念袋", status: "active", price: 100 },
@@ -109,18 +112,21 @@ describe("班代工作流程", () => {
     await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({}));
   });
 
-  it("班代沒有班級截止控制，並說明兩個鎖單時機", async () => {
+  it("提供本班截止設定並說明加購與補收款規則", async () => {
     render(<ClassOrdersPage />);
     await screen.findByRole("navigation", { name: "班代工作" });
-    expect(screen.queryByRole("button", { name: "班級截止" })).not.toBeInTheDocument();
-    expect(screen.getByText(/到達班聯統一截止時間，或班聯確認本班收款後/)).toBeVisible();
+    expect(await screen.findByText("本班截止時間")).toBeVisible();
+    expect(screen.getByText(/班級繳款後、班聯結單前仍可協助加購/)).toBeVisible();
   });
 
-  it("班聯確認本班收款後不提供該活動代訂商品", async () => {
+  it("班聯確認本班收款後仍提供該活動代訂商品", async () => {
     api.getCloseStatus.mockResolvedValue({ statuses: { category: { is_closed: true, is_global: false } } });
     render(<ClassOrdersPage />);
     await waitFor(() => expect(api.getCloseStatus).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByRole("button", { name: /紀念袋/ })).not.toBeInTheDocument());
+    openOrderWorkspace();
+    await chooseStudent();
+    await chooseProduct();
+    expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled();
   });
 
   it("已結單活動保留收款名冊與收款操作", async () => {
@@ -548,7 +554,7 @@ describe("班代工作流程", () => {
     api.setClassCollected.mockResolvedValue({});
     render(<ClassOrdersPage />);
     openCollectWorkspace();
-    await screen.findByRole("option", { name: "園遊會" });
+    await within(await screen.findByRole("combobox", { name: "收款活動" })).findByRole("option", { name: "園遊會" });
     fireEvent.change(screen.getByRole("combobox", { name: "收款活動" }), { target: { value: "none" } });
     const collectButtons = await screen.findAllByRole("button", { name: "設為已收" });
     fireEvent.click(collectButtons.find((button) => !button.hasAttribute("disabled"))!);
@@ -573,7 +579,7 @@ describe("班代工作流程", () => {
     api.setClassCollected.mockResolvedValue({});
     render(<ClassOrdersPage />);
     openCollectWorkspace();
-    await screen.findByRole("option", { name: "園遊會" });
+    await within(await screen.findByRole("combobox", { name: "收款活動" })).findByRole("option", { name: "園遊會" });
     fireEvent.change(screen.getByRole("combobox", { name: "收款活動" }), { target: { value: "category:category" } });
     await screen.findAllByText("紀念袋 × 3");
     fireEvent.click(screen.getAllByRole("button", { name: "補收 NT$100" })[0]);

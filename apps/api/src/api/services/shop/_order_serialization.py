@@ -41,6 +41,7 @@ def serialize_order(order: Order) -> OrderOut:
     category = _order_category(order)
     return OrderOut(
         id=order.id,
+        supplement_class_id=order.supplement_class_id,
         test_product_id=order.test_product_id,
         serial_number=order.serial_number,
         user_id=order.user_id,
@@ -90,6 +91,7 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
     category = _order_category(order)
     return OrderListItem(
         id=order.id,
+        supplement_class_id=order.supplement_class_id,
         test_product_id=order.test_product_id,
         serial_number=order.serial_number,
         user_id=order.user_id,

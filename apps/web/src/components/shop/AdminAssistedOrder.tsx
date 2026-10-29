@@ -39,6 +39,8 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
   const [quantity, setQuantity] = useState(1);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [notes, setNotes] = useState("");
+  const [collectionMode, setCollectionMode] = useState<"class" | "separate">("class");
+  const [paymentMethod, setPaymentMethod] = useState<"cash_on_pickup" | "bank_transfer">("cash_on_pickup");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState("");
@@ -70,8 +72,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
     return () => { cancelled = true; };
   }, [productId, retry]);
 
-  const choices = useMemo(() => flattenCatalog(catalog).filter((p) => p.status === "active"
-    && !catalog.find((c) => c.id === p.categoryId)?.order_closed_at), [catalog]);
+  const choices = useMemo(() => flattenCatalog(catalog).filter((p) => p.status === "active"), [catalog]);
   const student = members.find((member) => member.id === studentId);
   const visibleMembers = members.filter((member) => (member.user_id || member.roster_entry_id)
     && (member.id === studentId || [member.display_name, member.student_id, member.seat_number]
@@ -94,8 +95,10 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
         ...(student.user_id ? { user_id: student.user_id } : { roster_entry_id: student.roster_entry_id }),
         items: items.map(({ product_id, quantity, option_ids }) => ({ product_id, quantity, option_ids })),
         notes: notes.trim() || null,
+        collection_mode: collectionMode,
+        payment_method: paymentMethod,
       });
-      setResult(`已為 ${classes.find((c) => c.id === classId)?.label ?? ""} ${student.display_name} 完成代訂，合計 ${money(orders.reduce((sum, order) => sum + order.total_price, 0))}。`);
+      setResult(`已為 ${classes.find((c) => c.id === classId)?.label ?? ""} ${student.display_name} 完成代訂，合計 ${money(orders.reduce((sum, order) => sum + order.total_price, 0))}。${orders.some((order) => order.supplement_class_id) ? "追加款項已列入補收款，確認收款後歸回原班級。" : "已併入班級收款。"}`);
       setItems([]);
       setNotes("");
       onCreated();
@@ -110,7 +113,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
   return (
     <details className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }}>
       <summary className="min-h-11 cursor-pointer content-center font-semibold">幫同學代訂</summary>
-      <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>可選擇全校任一班級的同學，包含尚未登入的座號名冊學生。代訂後由該同學繳款與領取。</p>
+      <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>可替全校同學代訂，包含尚未登入的名冊學生。班聯可在結單後協助代訂，仍須符合庫存及商品規格；結單後的追加一律獨立補收款。</p>
       {optionsLoading ? <p role="status">載入班級與商品中…</p>
         : optionsError ? <div role="alert">班級與商品載入失敗。<button type="button" className="btn btn-ghost" onClick={onRetry}>重新載入班級與商品</button></div>
         : !classes.length ? <p role="status">目前沒有可代訂的班級，請先建立班級名冊。</p> : null}
@@ -178,10 +181,28 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
             </ul>
             <p>商品小計 {money(items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0))}，優惠與最終金額依送出結果計算。</p>
           </section>}
+          <label className="grid gap-1 text-sm">收款安排
+            <select className="input min-h-11 text-base" value={collectionMode} onChange={(event) => {
+              setCollectionMode(event.target.value as "class" | "separate");
+            }}>
+              <option value="class">併入班級收款</option>
+              <option value="separate">獨立補收款</option>
+            </select>
+          </label>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            {collectionMode === "class" ? "尚未繳款時併入班級；班級已繳款、同學已交班代或班聯已結單時，自動另列補收款。" : "本筆由代訂人另行繳款，暫不列入班級金額；班聯確認收款後可下載收據，並自動歸回原班級。"}
+          </p>
+          {collectionMode === "separate" && <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">額外收款方式
+              <select className="input min-h-11 text-base" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "cash_on_pickup" | "bank_transfer")}>
+                <option value="cash_on_pickup">現金</option>
+                <option value="bank_transfer">銀行轉帳</option>
+              </select>
+            </label>
+          </div>}
           <label className="grid gap-1 text-sm">代訂備註（選填）
             <textarea className="input text-base" rows={2} maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </label>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>到達班聯統一截止時間或班聯確認該班收款後，無法再代訂；另須遵守商品截止與庫存限制。</p>
           <button type="submit" className="btn btn-primary min-h-11" disabled={!student || !items.length || saving}>{saving ? "代訂送出中…" : "送出代訂"}</button>
         </fieldset>
         {error && <p role="alert" className="mt-3">{error}</p>}

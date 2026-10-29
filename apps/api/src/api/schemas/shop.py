@@ -431,6 +431,11 @@ class ClassOrderCreate(BaseModel):
         return self
 
 
+class AdminAssistedOrderCreate(ClassOrderCreate):
+    collection_mode: Literal["class", "separate"] = "class"
+    payment_method: Literal["cash_on_pickup", "bank_transfer"] = "cash_on_pickup"
+
+
 class OrderPromotionOut(BaseModel):
     promotion_id: uuid.UUID
     name: str
@@ -440,6 +445,7 @@ class OrderPromotionOut(BaseModel):
 
 class OrderOut(BaseModel):
     id: uuid.UUID
+    supplement_class_id: uuid.UUID | None = None
     test_product_id: uuid.UUID | None = None
     serial_number: str
     user_id: uuid.UUID
@@ -471,6 +477,7 @@ class OrderOut(BaseModel):
 
 class OrderListItem(BaseModel):
     id: uuid.UUID
+    supplement_class_id: uuid.UUID | None = None
     test_product_id: uuid.UUID | None = None
     serial_number: str
     user_id: uuid.UUID
@@ -790,9 +797,15 @@ class ImageUploadOut(BaseModel):
 
 
 class ShopOrderCloseCreate(BaseModel):
-    class_id: None = None
+    class_id: uuid.UUID | None = None
     notes: str | None = None
-    closes_at: None = None
+    closes_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_deadline_scope(self) -> Self:
+        if self.class_id is None and self.closes_at is not None:
+            raise ValueError("班聯統一截止時間請在活動設定調整")
+        return self
 
 
 class ShopOrderCloseOut(BaseModel):

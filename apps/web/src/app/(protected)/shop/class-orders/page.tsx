@@ -1,6 +1,9 @@
 "use client";
 
 import NumberInput from "@/components/ui/NumberInput";
+import SupplementOrders from "@/components/shop/SupplementOrders";
+import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
+import ClassOrderDeadline from "@/components/shop/ClassOrderDeadline";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -102,6 +105,7 @@ export default function ClassOrdersPage() {
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [myClassId, setMyClassId] = useState<string | null>(null);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
+  const [supplementRefresh, setSupplementRefresh] = useState(0);
   const [productDetail, setProductDetail] = useState<ProductOut | null>(null);
   const [productDetailFailed, setProductDetailFailed] = useState(false);
   const loadVersion = useRef(0);
@@ -150,7 +154,7 @@ export default function ClassOrdersPage() {
     () => catalogProducts.filter((product) => {
       const category = catalog.find((item) => item.id === product.categoryId);
       return product.status === "active" && !category?.order_closed_at
-        && !closeStatus[product.categoryId]?.is_closed
+        && !(closeStatus[product.categoryId]?.is_closed && closeStatus[product.categoryId]?.is_global)
         && (!category?.order_closes_at || new Date(category.order_closes_at).getTime() > Date.now());
     }),
     [catalogProducts, catalog, closeStatus],
@@ -899,6 +903,7 @@ export default function ClassOrdersPage() {
               notes: draft.notes || null,
             });
             completedStudentIds.add(draft.student_id);
+            setSupplementRefresh((value) => value + 1);
           } catch (error) {
             failedRequest = error;
             break;
@@ -927,7 +932,7 @@ export default function ClassOrdersPage() {
           return;
         }
 
-        setSubmitMessage(`已完成 ${draftsToSubmit.length} 位同學的訂購，可切換「班內收款」登記繳款。`);
+        setSubmitMessage(`已完成 ${draftsToSubmit.length} 位同學的訂購。已繳款後的追加會另列補收款，請由代訂班代另行繳交，班聯確認後歸回原班級。`);
         toast.success(`已完成 ${draftsToSubmit.length} 位同學、${draftsToSubmit.reduce((count, draft) => count + draft.items.length, 0)} 項商品登記`);
         setAssistedOrderDrafts([]);
       }
@@ -1040,8 +1045,10 @@ export default function ClassOrdersPage() {
       </div>
 
       <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-        到達班聯統一截止時間，或班聯確認本班收款後，該活動的訂購即鎖定。
+        班級繳款後、班聯結單前仍可協助加購；追加由代訂班代另行繳款，收款後取得收據並歸回原班級。到達班聯統一截止時間或班聯結單後，班代停止代購。
       </p>
+      <SupplementOrders refreshKey={supplementRefresh} />
+      {myClassId && <ClassOrderDeadline classId={myClassId} categories={catalog} onSaved={() => void loadCloseStatus(catalog.map((category) => category.id), myClassId)} />}
 
       {workspace === "details" && (
         <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
@@ -1937,6 +1944,7 @@ export default function ClassOrdersPage() {
                             <button type="button" onClick={() => openEdit(order)} className="min-h-11 rounded-md px-3 text-xs"
                             style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>修改</button>
                           )}
+                          <SeparateOrderButton order={order} onSeparated={() => { setSupplementRefresh((value) => value + 1); void load(); }} />
                           <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} className="min-h-11 rounded-md px-3 text-xs"
                             style={{ border: "1px solid var(--border)", color: "#ef4444" }}>取消</button>
                         </>
@@ -2008,6 +2016,7 @@ export default function ClassOrdersPage() {
                                   <Edit2 size={14} />
                                   </button>
                                 )}
+                                <SeparateOrderButton order={order} onSeparated={() => { setSupplementRefresh((value) => value + 1); void load(); }} />
                                 <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} title="取消訂單"
                                   className="rounded-md p-1 hover:opacity-70" style={{ color: "#ef4444" }}>
                                   <Trash2 size={14} />

@@ -17,11 +17,12 @@ export function groupActivityPreorders(orders: readonly OrderListItem[]): Activi
   const groups = new Map<string, ActivityPreorder>();
   for (const order of orders) {
     if (order.status === "cancelled" || order.status === "refunded") continue;
-    const key = orderScopeKey(order);
+    const separate = Boolean(order.supplement_class_id && !order.is_paid);
+    const key = separate ? `separate:${order.id}` : orderScopeKey(order);
     const group = groups.get(key) ?? {
       key,
-      label: order.activity_name ?? order.category_name
-        ?? (order.activity_id ? "已結束的活動" : "一般商品"),
+      label: (order.activity_name ?? order.category_name
+        ?? (order.activity_id ? "已結束的活動" : "一般商品")) + (separate ? "（額外收款）" : ""),
       orders: [], items: [], amount: 0, received: 0, outstanding: 0, hasClassOrders: false,
     };
     group.orders.push(order);
