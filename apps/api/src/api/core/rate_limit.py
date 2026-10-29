@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
@@ -82,6 +83,7 @@ class SimpleRateLimitMiddleware:
         self.enabled = enabled
         self.requests = requests
         self.window_seconds = window_seconds
+        self._route_patterns: dict[str, list[tuple[re.Pattern[str], str]]] | None = None
 
         self._overrides: list[tuple[str, int, int]] = [
             ("/auth/refresh", 20, 60),
@@ -135,10 +137,58 @@ class SimpleRateLimitMiddleware:
         return enabled, req_limit, win
 
     @staticmethod
-    def _route_template(path: str) -> str:
-        """將高基數 URL 歸併成有限的路由模板，避免每個資源 ID 建立新 key。"""
-        if path == "/email/preview":
-            return path
+    def _route_prefix(path: str) -> str:
+        """取前兩個固定路徑片段，縮小待比對的路由集合。"""
+        segments = [segment for segment in path.split("/") if segment]
+        prefix: list[str] = []
+        for segment in segments:
+            if "{" in segment:
+                break
+            prefix.append(segment)
+            if len(prefix) == 2:
+                break
+        return "/" + "/".join(prefix) if prefix else ""
+
+    @staticmethod
+    def _route_specificity(route_path: str) -> tuple[int, int, int]:
+        segments = [segment for segment in route_path.split("/") if segment]
+        static_segments = sum("{" not in segment for segment in segments)
+        return static_segments, len(segments), len(route_path)
+
+    def _route_template(self, path: str, app: object | None = None) -> str:
+        """使用 FastAPI 路由模板分桶，避免不同端點共用同一限流額度。"""
+        if self._route_patterns is None and app is not None:
+            router = getattr(app, "router", None)
+            routes = getattr(router, "routes", None)
+            if routes:
+                patterns: dict[str, list[tuple[re.Pattern[str], str]]] = {}
+                for route in routes:
+                    route_path = getattr(route, "path", None)
+                    path_regex = getattr(route, "path_regex", None)
+                    if not isinstance(route_path, str) or path_regex is None:
+                        continue
+                    prefix = self._route_prefix(route_path)
+                    patterns.setdefault(prefix, []).append((path_regex, route_path))
+                for candidates in patterns.values():
+                    candidates.sort(
+                        key=lambda item: self._route_specificity(item[1]),
+                        reverse=True,
+                    )
+                self._route_patterns = patterns
+
+        if self._route_patterns is not None:
+            segments = [segment for segment in path.split("/") if segment]
+            prefixes = ["/" + "/".join(segments[:2]), "/" + segments[0] if segments else "", ""]
+            candidates = [
+                candidate
+                for prefix in dict.fromkeys(prefixes)
+                for candidate in self._route_patterns.get(prefix, ())
+            ]
+            for path_regex, route_path in candidates:
+                if path_regex.fullmatch(path):
+                    return route_path
+
+        # 未匹配的路徑（例如掃描器試探的不存在端點）維持低基數 fallback。
         segments = [segment for segment in path.split("/") if segment]
         if not segments:
             return "/"
@@ -191,7 +241,7 @@ class SimpleRateLimitMiddleware:
             return
         now = int(time.time())
         bucket = now - (now % win)
-        route_template = self._route_template(request.url.path)
+        route_template = self._route_template(request.url.path, scope.get("app"))
         key = f"rate_limit:{client_host}:{request.method}:{route_template}:{bucket}"
 
         if not redis_usable:
