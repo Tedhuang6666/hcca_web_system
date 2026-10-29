@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { emailApi, apiErrorMessage } from "@/lib/api";
+import { authApi, emailApi, apiErrorMessage } from "@/lib/api";
 import { prepareEmailPreviewHtml } from "@/lib/email-preview";
 import type {
   EmailAnalyticsOut,
@@ -182,6 +182,7 @@ export default function EmailLogsPage() {
   const resendRecent = async () => {
     setBatchResending(true);
     try {
+      const user = await authApi.me();
       const dateFrom = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
       const messageGroups = await Promise.all(
         RESENDABLE_STATUSES.map(async (status) => {
@@ -193,7 +194,7 @@ export default function EmailLogsPage() {
               date_from: dateFrom,
               limit: RESEND_PAGE_SIZE,
               offset,
-              mine: true,
+              mine: !user.is_superuser,
             });
             messages.push(...page);
             if (page.length < RESEND_PAGE_SIZE) break;
@@ -205,12 +206,12 @@ export default function EmailLogsPage() {
       const messages = messageGroups.flat();
 
       if (messages.length === 0) {
-        toast.info("近三天沒有需要重新寄送的郵件");
+        toast.info("近三天沒有你可重新寄送的未送達郵件");
         return;
       }
       if (
         !confirm(
-          `找到你近三天寄出的 ${messages.length} 封仍有未送達收件人的郵件。確定批次重新寄送？已送達者不會重寄；仍在處理中的郵件也會重新排入，原佇列若仍運作可能造成重複寄送。`,
+          `找到近三天內 ${messages.length} 封你可重新寄送、仍有未送達收件人的郵件。確定批次重新寄送？已送達者不會重寄；仍在處理中的郵件也會重新排入，原佇列若仍運作可能造成重複寄送。`,
         )
       ) {
         return;
@@ -338,7 +339,7 @@ export default function EmailLogsPage() {
             className="btn btn-secondary btn-sm"
             disabled={batchResending || busyId !== null}
             onClick={() => void resendRecent()}
-            title="自動尋找你近 72 小時內仍有未送達收件人的郵件"
+            title="尋找近 72 小時內你可重新寄送的未送達郵件，超級管理員包含系統通知"
           >
             {batchResending ? "批次處理中…" : "批次重新寄送近三天"}
           </button>
