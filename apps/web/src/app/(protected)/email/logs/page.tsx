@@ -66,6 +66,10 @@ const TABS: { key: string; label: string }[] = [
   { key: "partial", label: "部分失敗" },
 ];
 
+const RESENDABLE_STATUSES: EmailStatus[] = ["queued", "failed", "retrying", "dead", "partial"];
+const RESEND_PAGE_SIZE = 200;
+const RESEND_CONCURRENCY = 5;
+
 const STATUS_META: Record<EmailStatus, { label: string; color: string }> = {
   draft: { label: "草稿", color: "var(--text-muted)" },
   scheduled: { label: "已排程", color: "var(--primary)" },
@@ -113,6 +117,7 @@ export default function EmailLogsPage() {
   const [detailHtml, setDetailHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [batchResending, setBatchResending] = useState(false);
   const isSystemNotification = detail?.sender_id === null;
 
   const load = useCallback(() => {
@@ -171,6 +176,70 @@ export default function EmailLogsPage() {
       toast.error(apiErrorMessage(e, "重新寄送失敗"));
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const resendRecent = async () => {
+    setBatchResending(true);
+    try {
+      const dateFrom = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const messageGroups = await Promise.all(
+        RESENDABLE_STATUSES.map(async (status) => {
+          const messages: EmailMessageOut[] = [];
+          let offset = 0;
+          while (true) {
+            const page = await emailApi.listMessages({
+              status,
+              date_from: dateFrom,
+              limit: RESEND_PAGE_SIZE,
+              offset,
+              mine: true,
+            });
+            messages.push(...page);
+            if (page.length < RESEND_PAGE_SIZE) break;
+            offset += page.length;
+          }
+          return messages;
+        }),
+      );
+      const messages = messageGroups.flat();
+
+      if (messages.length === 0) {
+        toast.info("近三天沒有需要重新寄送的郵件");
+        return;
+      }
+      if (
+        !confirm(
+          `找到你近三天寄出的 ${messages.length} 封仍有未送達收件人的郵件。確定批次重新寄送？已送達者不會重寄；仍在處理中的郵件也會重新排入，原佇列若仍運作可能造成重複寄送。`,
+        )
+      ) {
+        return;
+      }
+
+      let queuedCount = 0;
+      let failedCount = 0;
+      for (let index = 0; index < messages.length; index += RESEND_CONCURRENCY) {
+        const batch = messages.slice(index, index + RESEND_CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map((message) => emailApi.resendMessage(message.id)),
+        );
+        for (const result of results) {
+          if (result.status === "fulfilled") queuedCount += 1;
+          else failedCount += 1;
+        }
+      }
+
+      if (queuedCount > 0) {
+        toast.success(`已將 ${queuedCount} 封郵件的未送達收件人排入寄送佇列`);
+      }
+      if (failedCount > 0) {
+        toast.error(`${failedCount} 封郵件未能重新排入，可能已全數送達或發生錯誤，請查看各封寄信紀錄`);
+      }
+      load();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "批次重新寄送失敗"));
+    } finally {
+      setBatchResending(false);
     }
   };
 
@@ -256,16 +325,27 @@ export default function EmailLogsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <header className="flex items-center justify-between gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
             EMAIL LOGS
           </p>
           <h1 className="mt-1 text-xl font-semibold">寄信紀錄</h1>
         </div>
-        <Link href="/email" className="btn btn-primary btn-sm">
-          寄送新信件
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={batchResending || busyId !== null}
+            onClick={() => void resendRecent()}
+            title="自動尋找你近 72 小時內仍有未送達收件人的郵件"
+          >
+            {batchResending ? "批次處理中…" : "批次重新寄送近三天"}
+          </button>
+          <Link href="/email" className="btn btn-primary btn-sm">
+            寄送新信件
+          </Link>
+        </div>
       </header>
 
       <div className="flex flex-wrap gap-1.5">
@@ -380,9 +460,7 @@ export default function EmailLogsPage() {
                         取消預約
                       </button>
                     )}
-                    {(["queued", "failed", "retrying", "dead", "partial"] as EmailStatus[]).includes(
-                      m.status as EmailStatus,
-                    ) && (
+                    {RESENDABLE_STATUSES.includes(m.status as EmailStatus) && (
                       <button
                         className="btn btn-secondary btn-sm"
                         disabled={busyId === m.id}
@@ -417,9 +495,7 @@ export default function EmailLogsPage() {
           size="xl"
           footer={
             <>
-              {(["queued", "failed", "retrying", "dead", "partial"] as EmailStatus[]).includes(
-                detail.status as EmailStatus,
-              ) && (
+              {RESENDABLE_STATUSES.includes(detail.status as EmailStatus) && (
                 <button
                   className="btn btn-secondary btn-sm"
                   disabled={busyId === detail.id}
