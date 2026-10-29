@@ -82,7 +82,7 @@ export default function SupplementOrders({ canCollect = false, refreshKey = 0, c
   const visible = showPaid ? orders : pending;
   return <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }} aria-labelledby="supplement-orders-title">
     <h2 id="supplement-orders-title" className="font-semibold">追加訂單補收款</h2>
-    <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>追加訂單由代訂人另行繳款，暫不列入班級金額。班聯確認收款後，提供本筆收據並自動歸回原班級；結單不影響既有訂單收款。</p>
+    <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>追加款由該筆訂購同學自行繳款，班代不代墊，暫不列入班級金額。班聯確認收款後，提供本筆收據並自動歸回原班級；結單不影響既有訂單收款。</p>
     {loading ? <p role="status" className="mt-3">載入補收款中…</p> : loadError ? <div role="alert" className="mt-3">
       <p>{loadError}</p><button type="button" className="btn btn-ghost min-h-11" onClick={() => setRetry((value) => value + 1)}>重新載入補收款</button>
     </div> : <>
@@ -94,7 +94,7 @@ export default function SupplementOrders({ canCollect = false, refreshKey = 0, c
         {visible.map((order) => <li key={order.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
           <div className="min-w-0">
             <p className="break-words font-medium">{order.user_name ?? "同學"} · {order.activity_name ?? order.category_name ?? "一般商品"}</p>
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{classes.find((item) => item.id === order.supplement_class_id)?.label ?? order.class_label ?? "原班級"} · {order.serial_number} · {money(order.total_price)} · {order.is_paid ? "已收款並歸班" : "待代訂人繳款"}</p>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{classes.find((item) => item.id === order.supplement_class_id)?.label ?? order.class_label ?? "原班級"} · {order.serial_number} · {money(order.total_price)} · {order.is_paid ? "已收款並歸班" : "待訂購同學自行繳款"}</p>
           </div>
           {(order.is_paid || canCollect) && <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void act(order)}>
             {busy === order.id ? "處理中…" : order.is_paid ? "下載補收款收據" : "確認收款並下載收據"}

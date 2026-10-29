@@ -38,6 +38,6 @@ it("keeps confirmed payment when receipt download fails and retries only the rec
 
 it("shows cadres their outstanding supplements without allowing self confirmation", async () => {
   render(<SupplementOrders />);
-  expect(await screen.findByText(/待代訂人繳款/)).toBeVisible();
+  expect(await screen.findByText(/待訂購同學自行繳款/)).toBeVisible();
   expect(screen.queryByRole("button", { name: "確認收款並下載收據" })).not.toBeInTheDocument();
 });

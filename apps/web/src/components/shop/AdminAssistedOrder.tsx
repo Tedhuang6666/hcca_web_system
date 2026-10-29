@@ -113,7 +113,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
   return (
     <details className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }}>
       <summary className="min-h-11 cursor-pointer content-center font-semibold">幫同學代訂</summary>
-      <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>可替全校同學代訂，包含尚未登入的名冊學生。班聯可在結單後協助代訂，仍須符合庫存及商品規格；結單後的追加一律獨立補收款。</p>
+      <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>可替全校同學代訂，包含尚未登入的名冊學生。班聯可在結單後協助代訂，仍須符合庫存及商品規格；追加款由該筆訂購同學自行付款，班代不代墊，結單後的追加一律獨立補收款。</p>
       {optionsLoading ? <p role="status">載入班級與商品中…</p>
         : optionsError ? <div role="alert">班級與商品載入失敗。<button type="button" className="btn btn-ghost" onClick={onRetry}>重新載入班級與商品</button></div>
         : !classes.length ? <p role="status">目前沒有可代訂的班級，請先建立班級名冊。</p> : null}
@@ -190,7 +190,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
             </select>
           </label>
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            {collectionMode === "class" ? "尚未繳款時併入班級；班級已繳款、同學已交班代或班聯已結單時，自動另列補收款。" : "本筆由代訂人另行繳款，暫不列入班級金額；班聯確認收款後可下載收據，並自動歸回原班級。"}
+            {collectionMode === "class" ? "尚未繳款時併入班級；班級已繳款、同學已交班代或班聯已結單時，自動另列補收款。" : "追加款由該筆訂購同學自行繳款，班代不代墊；暫不列入班級金額，班聯確認收款後可下載收據，並自動歸回原班級。"}
           </p>
           {collectionMode === "separate" && <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">額外收款方式
